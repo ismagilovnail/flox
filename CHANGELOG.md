@@ -3,6 +3,66 @@
 Format follows [Keep a Changelog](https://keepachangelog.com/). Entries are
 per-phase, matching `CLAUDE.md`'s phase protocol.
 
+## [Phase 7] — Stream Sets
+
+### Added
+
+- Stream Set management (§21) embedded in the campaign detail page's
+  Overview tab, replacing the Phase 6 `EmptyState` stub: priority-ordered
+  cards (`@dnd-kit` drag reorder, persisted via `useStreamSetsStore.reorder`),
+  enable/disable `Switch`, duplicate, and a create/edit `Sheet` form.
+  Semantics are stated explicitly in the UI copy — evaluated top-to-bottom
+  by priority, first match wins, no match falls through to the campaign
+  fallback — matching the explainability goal in §72 (the interactive
+  "why did this match" surface is the Phase 10 simulator; this phase keeps
+  it legible via plain-language copy and the same `FilterChip`/`FilterGroup`
+  components already built in Phase 3 for exactly this purpose).
+- Filters/Flows/Pixels editors are intentionally **flat**, not the final
+  builders: filters are one AND/OR-joined list (no nested groups — that's
+  Phase 8's 13-operator nested rule engine), flows are a weighted list
+  pointing at a destination URL directly (no node graph or offer picker —
+  that's Phase 9 plus the Offers/Landings/PWA entities from Phase 11-12).
+  Same `FilterCondition`/`Flow` field shapes Phase 8-9 will consume, so the
+  data contract doesn't change when the real builders land, per the
+  single-source-of-truth rule in §6-SHARED.
+- Flow weight editor sums live and warns (non-blocking) when weights don't
+  total 100%.
+- `src/lib/mock/stream-sets.ts` — deterministic per-campaign generator
+  (seeded from the campaign id, same pattern as the Phase 6 daily-trend
+  generator) plus the shared `FilterField`/`FilterOperator`/
+  `FlowDestinationType` vocab §22 will reuse.
+- `src/stores/stream-sets.ts` — Zustand store keyed by campaign id
+  (`addStreamSet`, `updateStreamSet`, `setStatus`, `duplicateStreamSet`,
+  `reorder`).
+
+### Fixed
+
+- `listByCampaign` originally lazily generated a campaign's stream sets
+  and called `set()` **inside the selector function itself** — i.e. during
+  React's render phase. Combined with `generateStreamSets` returning a new
+  array reference on every call, this broke `useSyncExternalStore`'s
+  snapshot-stability contract: each render's snapshot read as "changed"
+  from the last, so React kept re-rendering, which kept re-invoking the
+  selector, forever. Confirmed live — a real connected browser tab hit the
+  campaign detail page and spammed ~8k identical `TypeError`s/sec in a
+  reconnect-retry loop before the fix. Fixed by making `listByCampaign` a
+  pure read (no `set()` call) backed by a module-level generation cache
+  keyed by campaign id, so an unmaterialized campaign's snapshot is
+  referentially stable across repeated selector calls; store mutations
+  still go through `set()`, but only ever from event handlers, never from
+  a render-phase selector.
+
+### Known issues
+
+- Stream sets are mock/in-memory like campaigns (Phase 6) — reset on a
+  hard reload.
+- Fallback URL is per-stream-set only in this phase; the campaign-level
+  fallback from Phase 6 is what's actually used when no set matches at
+  all (§73's "no stream set matches → campaign fallback" case). The
+  per-set fallback here covers a narrower case (set matched, no flow
+  resolved) and isn't yet wired into the Phase 10 simulator, since that's
+  real routing evaluation and out of scope until Phase 10/19.
+
 ## [Phase 6] — Campaigns
 
 ### Added

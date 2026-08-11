@@ -9,7 +9,6 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { StatCard } from "@/components/ui/stat-card";
-import { EmptyState } from "@/components/ui/empty-state";
 import { ErrorState } from "@/components/ui/error-state";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
@@ -27,6 +26,7 @@ import { generateCampaignDaily, type CampaignStatus } from "@/lib/mock/campaigns
 import { useCampaignsStore } from "@/stores/campaigns";
 import { CampaignRowActions } from "@/features/campaigns/campaign-row-actions";
 import { CampaignForm, type CampaignFormValues } from "@/features/campaigns/campaign-form";
+import { StreamSetList } from "@/features/stream-sets/stream-set-list";
 
 const STATUS_VARIANT: Record<CampaignStatus, "success" | "warning" | "outline" | "secondary"> = {
   active: "success",
@@ -117,18 +117,7 @@ export function CampaignDetailView({ id }: { id: string }) {
             valueFormatter={(v) => formatUsd(v, 0)}
           />
 
-          <Card>
-            <CardHeader>
-              <CardTitle>Stream Sets</CardTitle>
-              <CardDescription>Priority-ordered rules that route this campaign&apos;s traffic.</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <EmptyState
-                title="Not built yet"
-                description="Stream sets, filters, and flows land in Phase 7-9. Until then, all traffic falls back to the URL configured in Settings."
-              />
-            </CardContent>
-          </Card>
+          <StreamSetList campaignId={campaign.id} />
         </TabsContent>
 
         <TabsContent value="settings" className="flex flex-col gap-6">
