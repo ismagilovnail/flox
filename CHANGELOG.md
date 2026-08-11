@@ -3,6 +3,75 @@
 Format follows [Keep a Changelog](https://keepachangelog.com/). Entries are
 per-phase, matching `CLAUDE.md`'s phase protocol.
 
+## [Phase 10] — Routing Simulator
+
+### Added
+
+- Routing Simulator (§26), a third tab (Overview / **Simulator** / Settings)
+  on the campaign detail page — routing is campaign-scoped, so it lives
+  there rather than as a new top-level sidebar route not in §17's list.
+- `src/lib/routing-simulate.ts` — a pure `simulateRoute(streamSets,
+  campaignFallbackUrl, request) → result` function implementing the exact
+  request/response contract the future `POST /routing/simulate` Go
+  endpoint (Phase 19) will expose, per the §6-SHARED / invariant #1
+  architecture note: not a second permanent routing engine, but the only
+  place this logic *can* live before Phase 19 exists, designed so Phase 27
+  swaps this call for a `fetch` with zero UI changes. Evaluates the real
+  nested filter tree (all 16 operators from §22, reusing Phase 8's exact
+  types), walks stream sets in priority order (first active match wins),
+  weighted-picks a flow among active ones, and resolves flow → stream-set
+  fallback → campaign fallback → none.
+- Input form covers every §26 field, reusing Phase 8's `FIELD_GROUPS`/
+  `FIELD_VOCAB`/`BOOLEAN_FLAG_FIELDS` from `lib/filters.ts` — the simulator
+  and the filter builder share one field vocabulary, not two.
+- Result view: a pipeline stepper (Request → Classification → Campaign →
+  Stream Set → Filters → Flow → Destination per §26), a pass/fail trace
+  per stream set — including *why* non-matching ones didn't match, not
+  just the winner — flow candidates with normalized probabilities and the
+  selected one marked, the resolved destination with copy, and a sticky
+  note that's honest about sticky config not existing in the data model
+  yet rather than faking cookie-based behavior (§80 — no fake APIs that
+  look real).
+- Core evaluator logic (AND/OR/nested-group semantics, `IN`/`IS` matching)
+  spot-checked against the seeded §23 fixture (`country IS US AND device
+  IN [mobile, tablet] AND (OS IS Android OR OS IS iOS)`) via a standalone
+  script mirroring the algorithm, since Jest/Vitest isn't wired up yet —
+  all 5 cases passed.
+
+### Fixed
+
+- `DndContext` (Phase 7, `stream-set-list.tsx`) had no `id` prop, so
+  dnd-kit's internal `useUniqueId` counter — which is module-level, not
+  reset per-mount — produced a different `aria-describedby` id on the
+  client than the server rendered, a confirmed hydration mismatch
+  (dnd-kit's own SSR guidance: pass a stable `id` when using `DndContext`
+  with SSR). Fixed with `id={\`stream-sets-${campaignId}\`}`.
+
+### Known issues
+
+- **Unresolved**: while smoke-testing this phase, a real browser tab
+  connected to the dev server (not one of my own curl requests — curl
+  can't drive client-side navigation) hit a repeating
+  `Uncaught TypeError: Cannot read properties of undefined (reading
+  'length') at Array.map (<anonymous>)` after navigating
+  `/overview → /campaigns → /campaigns/[id]`. The dnd-kit `id` fix above
+  eliminated the hydration-mismatch warning that preceded it the first
+  time, but the crash itself recurred on a second capture without that
+  warning, so it isn't fully explained by that fix. Terminal-forwarded
+  browser errors don't carry source-mapped stack frames, so the exact
+  call site couldn't be pinned down from the dev server log; production
+  builds don't forward console output at all, and curl-only testing can't
+  reproduce a client-side remount. Typecheck/lint/build are clean and a
+  targeted static audit of every `.map()` call added or touched this
+  phase found nothing unsafe. If this recurs, the browser's own DevTools
+  console will have the real stack trace — that's the fastest path to a
+  fix.
+- Sticky assignment is explanatory text only — no real cookie/session
+  state exists to simulate against yet.
+- The weighted flow pick is a live `Math.random()` draw per Simulate
+  click, not deterministic/repeatable — matches real routing behavior,
+  but re-running the same inputs can select a different flow.
+
 ## [Phase 9] — Flow Builder
 
 ### Added

@@ -125,7 +125,7 @@ export function StreamSetList({ campaignId }: { campaignId: string }) {
             description="All traffic falls through to the campaign fallback URL until you add one."
           />
         ) : (
-          <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+          <DndContext id={`stream-sets-${campaignId}`} sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
             <SortableContext items={streamSets.map((s) => s.id)} strategy={verticalListSortingStrategy}>
               <div className="flex flex-col gap-2">
                 {streamSets.map((streamSet) => (

@@ -27,6 +27,7 @@ import { useCampaignsStore } from "@/stores/campaigns";
 import { CampaignRowActions } from "@/features/campaigns/campaign-row-actions";
 import { CampaignForm, type CampaignFormValues } from "@/features/campaigns/campaign-form";
 import { StreamSetList } from "@/features/stream-sets/stream-set-list";
+import { RoutingSimulatorView } from "@/features/routing-simulator/routing-simulator-view";
 
 const STATUS_VARIANT: Record<CampaignStatus, "success" | "warning" | "outline" | "secondary"> = {
   active: "success",
@@ -95,6 +96,7 @@ export function CampaignDetailView({ id }: { id: string }) {
       <Tabs defaultValue="overview">
         <TabsList>
           <TabsTrigger value="overview">Overview</TabsTrigger>
+          <TabsTrigger value="simulator">Simulator</TabsTrigger>
           <TabsTrigger value="settings">Settings</TabsTrigger>
         </TabsList>
 
@@ -118,6 +120,10 @@ export function CampaignDetailView({ id }: { id: string }) {
           />
 
           <StreamSetList campaignId={campaign.id} />
+        </TabsContent>
+
+        <TabsContent value="simulator" className="flex flex-col gap-6">
+          <RoutingSimulatorView campaignId={campaign.id} campaignName={campaign.name} fallbackUrl={campaign.fallbackUrl} />
         </TabsContent>
 
         <TabsContent value="settings" className="flex flex-col gap-6">

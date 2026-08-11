@@ -19,10 +19,10 @@ referenced below as §N).
 ## CURRENT STATE — UPDATE THIS EVERY PHASE
 
 ```
-CURRENT PHASE : PHASE 9 — Flow Builder
-STATUS        : done
-LAST COMMIT   : feat(routing): flow builder
-NEXT          : PHASE 10 — Routing Simulator (§26) — confirm before starting
+CURRENT PHASE : PHASE 10 — Routing Simulator
+STATUS        : done (see CHANGELOG "Known issues" — one unresolved crash-loop report)
+LAST COMMIT   : feat(routing): routing simulator
+NEXT          : PHASE 11 — Sources / Networks / Offers (§27) — confirm before starting
 ```
 
 > At the end of every phase: update the four lines above, add a CHANGELOG entry,
