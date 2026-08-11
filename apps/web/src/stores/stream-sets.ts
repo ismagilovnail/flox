@@ -1,7 +1,8 @@
 import { create } from "zustand";
 
+import { genId } from "@/lib/id";
+import { cloneWithNewIds, type FilterGroupNode } from "@/lib/filters";
 import {
-  genId,
   generateStreamSets,
   type StreamSet,
   type StreamSetStatus,
@@ -10,8 +11,7 @@ import {
 export type StreamSetInput = {
   name: string;
   status: StreamSetStatus;
-  joiner: "AND" | "OR";
-  filters: StreamSet["filters"];
+  rootFilter: FilterGroupNode;
   flows: StreamSet["flows"];
   pixels: string[];
   fallbackUrl: string;
@@ -104,7 +104,7 @@ export const useStreamSetsStore = create<StreamSetsState>()((set, get) => ({
       id: newId,
       name: `${source.name} (Copy)`,
       priority: list.length + 1,
-      filters: source.filters.map((f) => ({ ...f, id: genId() })),
+      rootFilter: cloneWithNewIds(source.rootFilter) as FilterGroupNode,
       flows: source.flows.map((f) => ({ ...f, id: genId() })),
       createdAt: now,
       updatedAt: now,

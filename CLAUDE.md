@@ -19,10 +19,10 @@ referenced below as §N).
 ## CURRENT STATE — UPDATE THIS EVERY PHASE
 
 ```
-CURRENT PHASE : PHASE 7 — Stream Sets
+CURRENT PHASE : PHASE 8 — Filter Builder
 STATUS        : done
-LAST COMMIT   : feat(routing): stream sets
-NEXT          : PHASE 8 — Filter Builder (§22) — confirm before starting
+LAST COMMIT   : feat(routing): filter builder
+NEXT          : PHASE 9 — Flow Builder (§24-25) — confirm before starting
 ```
 
 > At the end of every phase: update the four lines above, add a CHANGELOG entry,

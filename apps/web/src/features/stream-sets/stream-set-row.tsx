@@ -11,12 +11,14 @@ import { FilterGroup } from "@/components/ui/filter-group";
 import { IconButton } from "@/components/ui/icon-button";
 import { Switch } from "@/components/ui/switch";
 import { Tag } from "@/components/ui/tag";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { countConditions, describeFilterTree } from "@/lib/filters";
 import type { StreamSet } from "@/lib/mock/stream-sets";
 
 export function StreamSetRow({
@@ -84,12 +86,30 @@ export function StreamSetRow({
             </div>
           </div>
 
-          {streamSet.filters.length > 0 ? (
-            <FilterGroup joiner={streamSet.joiner}>
-              {streamSet.filters.map((f) => (
-                <FilterChip key={f.id} field={f.field} operator={f.operator.replace(/_/g, " ").toLowerCase()} value={f.value || "—"} />
-              ))}
-            </FilterGroup>
+          {streamSet.rootFilter.children.length > 0 ? (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <div className="w-fit">
+                  <FilterGroup joiner={streamSet.rootFilter.joiner}>
+                    {streamSet.rootFilter.children.map((child) =>
+                      child.type === "condition" ? (
+                        <FilterChip
+                          key={child.id}
+                          field={child.field}
+                          operator={child.operator.replace(/_/g, " ").toLowerCase()}
+                          value={child.operator === "BETWEEN" ? `${child.value}–${child.valueTo}` : child.value || "—"}
+                        />
+                      ) : (
+                        <Badge key={child.id} variant="outline">
+                          {child.joiner === "AND" ? "match all" : "match any"} ({countConditions(child)})
+                        </Badge>
+                      ),
+                    )}
+                  </FilterGroup>
+                </div>
+              </TooltipTrigger>
+              <TooltipContent>{describeFilterTree(streamSet.rootFilter)}</TooltipContent>
+            </Tooltip>
           ) : (
             <p className="text-xs text-muted-foreground">No filters — matches all traffic</p>
           )}

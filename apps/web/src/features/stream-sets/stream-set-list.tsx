@@ -22,27 +22,29 @@ import { Button } from "@/components/ui/button";
 import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { useStreamSetsStore } from "@/stores/stream-sets";
-import { genId, type StreamSet } from "@/lib/mock/stream-sets";
+import { genId } from "@/lib/id";
+import { emptyGroup } from "@/lib/filters";
+import { type StreamSet } from "@/lib/mock/stream-sets";
 import { StreamSetRow } from "@/features/stream-sets/stream-set-row";
 import { StreamSetFormSheet } from "@/features/stream-sets/stream-set-form-sheet";
 import type { StreamSetFormValues } from "@/features/stream-sets/stream-set-schema";
 
-const EMPTY_STREAM_SET: StreamSetFormValues = {
-  name: "",
-  status: "active",
-  joiner: "AND",
-  filters: [],
-  flows: [{ id: genId(), name: "Primary offer", destinationType: "offer", destinationUrl: "", weight: 100, active: true }],
-  pixels: [],
-  fallbackUrl: "",
-};
+function emptyStreamSetForm(): StreamSetFormValues {
+  return {
+    name: "",
+    status: "active",
+    rootFilter: emptyGroup(),
+    flows: [{ id: genId(), name: "Primary offer", destinationType: "offer", destinationUrl: "", weight: 100, active: true }],
+    pixels: [],
+    fallbackUrl: "",
+  };
+}
 
 function toFormValues(streamSet: StreamSet): StreamSetFormValues {
   return {
     name: streamSet.name,
     status: streamSet.status,
-    joiner: streamSet.joiner,
-    filters: streamSet.filters,
+    rootFilter: streamSet.rootFilter,
     flows: streamSet.flows,
     pixels: streamSet.pixels.map((url) => ({ id: genId(), url })),
     fallbackUrl: streamSet.fallbackUrl,
@@ -141,7 +143,7 @@ export function StreamSetList({ campaignId }: { campaignId: string }) {
           onOpenChange={(open) => !open && setTarget(null)}
           title={editingStreamSet ? `Edit ${editingStreamSet.name}` : "New Stream Set"}
           submitLabel={editingStreamSet ? "Save changes" : "Create stream set"}
-          defaultValues={editingStreamSet ? toFormValues(editingStreamSet) : EMPTY_STREAM_SET}
+          defaultValues={editingStreamSet ? toFormValues(editingStreamSet) : emptyStreamSetForm()}
           onSubmit={handleSubmit}
         />
       )}

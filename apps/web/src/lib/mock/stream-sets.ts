@@ -1,3 +1,6 @@
+import { genId } from "@/lib/id";
+import { emptyGroup, type FilterGroupNode } from "@/lib/filters";
+
 function mulberry32(seed: number) {
   return function rand() {
     seed |= 0;
@@ -9,85 +12,6 @@ function mulberry32(seed: number) {
 }
 
 export type StreamSetStatus = "active" | "paused";
-
-/** Subset of §22's full field list — the flat filter editor covers the common
- * routing fields; the remaining fields (sub1-10, browser_version, etc.) land
- * with the nested builder in Phase 8. */
-export type FilterField =
-  | "country"
-  | "device"
-  | "platform"
-  | "os"
-  | "browser"
-  | "language"
-  | "bot"
-  | "proxy"
-  | "connection_type"
-  | "referrer"
-  | "utm_source"
-  | "utm_medium"
-  | "utm_campaign";
-
-export type FilterOperator =
-  | "IS"
-  | "IS_NOT"
-  | "IN"
-  | "NOT_IN"
-  | "CONTAINS"
-  | "NOT_CONTAINS"
-  | "STARTS_WITH"
-  | "ENDS_WITH"
-  | "MATCHES"
-  | "EXISTS"
-  | "NOT_EXISTS"
-  | "GT"
-  | "GTE"
-  | "LT"
-  | "LTE";
-
-export const FILTER_FIELDS: FilterField[] = [
-  "country",
-  "device",
-  "platform",
-  "os",
-  "browser",
-  "language",
-  "bot",
-  "proxy",
-  "connection_type",
-  "referrer",
-  "utm_source",
-  "utm_medium",
-  "utm_campaign",
-];
-
-export const FILTER_OPERATORS: FilterOperator[] = [
-  "IS",
-  "IS_NOT",
-  "IN",
-  "NOT_IN",
-  "CONTAINS",
-  "NOT_CONTAINS",
-  "STARTS_WITH",
-  "ENDS_WITH",
-  "MATCHES",
-  "EXISTS",
-  "NOT_EXISTS",
-  "GT",
-  "GTE",
-  "LT",
-  "LTE",
-];
-
-/** No value input for existence checks — the field alone is the condition. */
-export const OPERATORS_WITHOUT_VALUE: FilterOperator[] = ["EXISTS", "NOT_EXISTS"];
-
-export type FilterCondition = {
-  id: string;
-  field: FilterField;
-  operator: FilterOperator;
-  value: string;
-};
 
 export type FlowDestinationType = "offer" | "landing" | "pwa" | "postlanding";
 
@@ -108,9 +32,7 @@ export type StreamSet = {
   name: string;
   priority: number;
   status: StreamSetStatus;
-  /** Flat AND/OR join across all conditions — nested groups arrive in Phase 8. */
-  joiner: "AND" | "OR";
-  filters: FilterCondition[];
+  rootFilter: FilterGroupNode;
   flows: Flow[];
   pixels: string[];
   fallbackUrl: string;
@@ -118,19 +40,12 @@ export type StreamSet = {
   updatedAt: string;
 };
 
-export function genId(rand: () => number = Math.random) {
-  const chars = "0123456789ABCDEFGHJKMNPQRSTVWXYZ";
-  let out = "";
-  for (let i = 0; i < 12; i++) out += chars[Math.floor(rand() * chars.length)];
-  return out;
-}
-
 const SET_NAMES = ["Mobile — Tier 1 GEOs", "Desktop — Retarget", "Bot & Proxy Block", "Everything Else"];
-const COUNTRY_POOL = ["US", "CA", "GB", "DE", "FR", "AU"];
 
 /** Deterministic per-campaign stream sets, seeded from the campaign id so the
  * set resolves consistently within a session (same pattern as campaign
- * daily-trend generation). */
+ * daily-trend generation). Set 0 mirrors the §23 example tree (AND of two
+ * conditions plus a nested OR group) to demo real nesting out of the box. */
 export function generateStreamSets(campaignId: string): StreamSet[] {
   let seed = 0;
   for (let i = 0; i < campaignId.length; i++) seed = (seed * 31 + campaignId.charCodeAt(i)) | 0;
@@ -138,17 +53,53 @@ export function generateStreamSets(campaignId: string): StreamSet[] {
   const now = new Date("2026-08-11T00:00:00Z").toISOString();
 
   return SET_NAMES.map((name, i) => {
-    const filters: FilterCondition[] =
+    const rootFilter: FilterGroupNode =
       i === 0
-        ? [
-            { id: genId(rand), field: "device", operator: "IS", value: "mobile" },
-            { id: genId(rand), field: "country", operator: "IN", value: COUNTRY_POOL.slice(0, 3).join(", ") },
-          ]
+        ? {
+            id: genId(rand),
+            type: "group",
+            joiner: "AND",
+            children: [
+              { id: genId(rand), type: "condition", field: "country", operator: "IS", value: "US", valueTo: "" },
+              {
+                id: genId(rand),
+                type: "condition",
+                field: "device",
+                operator: "IN",
+                value: "mobile, tablet",
+                valueTo: "",
+              },
+              {
+                id: genId(rand),
+                type: "group",
+                joiner: "OR",
+                children: [
+                  { id: genId(rand), type: "condition", field: "os", operator: "IS", value: "android", valueTo: "" },
+                  { id: genId(rand), type: "condition", field: "os", operator: "IS", value: "ios", valueTo: "" },
+                ],
+              },
+            ],
+          }
         : i === 1
-          ? [{ id: genId(rand), field: "device", operator: "IS", value: "desktop" }]
+          ? {
+              id: genId(rand),
+              type: "group",
+              joiner: "AND",
+              children: [
+                { id: genId(rand), type: "condition", field: "device", operator: "IS", value: "desktop", valueTo: "" },
+              ],
+            }
           : i === 2
-            ? [{ id: genId(rand), field: "bot", operator: "IS", value: "1" }]
-            : [];
+            ? {
+                id: genId(rand),
+                type: "group",
+                joiner: "OR",
+                children: [
+                  { id: genId(rand), type: "condition", field: "bot", operator: "IS", value: "1", valueTo: "" },
+                  { id: genId(rand), type: "condition", field: "proxy", operator: "IS", value: "1", valueTo: "" },
+                ],
+              }
+            : emptyGroup();
 
     const flowCount = 1 + Math.floor(rand() * 2);
     const rawWeights = Array.from({ length: flowCount }, () => rand());
@@ -170,8 +121,7 @@ export function generateStreamSets(campaignId: string): StreamSet[] {
       name,
       priority: i + 1,
       status: i === 2 && rand() > 0.5 ? "paused" : "active",
-      joiner: "AND",
-      filters,
+      rootFilter,
       flows,
       pixels: i === 0 ? [`https://px.floxlink.io/s2s/${genId(rand).slice(0, 8)}.gif`] : [],
       fallbackUrl: "",
@@ -180,4 +130,3 @@ export function generateStreamSets(campaignId: string): StreamSet[] {
     };
   });
 }
-

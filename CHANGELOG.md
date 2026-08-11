@@ -3,6 +3,66 @@
 Format follows [Keep a Changelog](https://keepachangelog.com/). Entries are
 per-phase, matching `CLAUDE.md`'s phase protocol.
 
+## [Phase 8] — Filter Builder
+
+### Added
+
+- Recursive AND/OR filter tree (§22-23) replacing Phase 7's flat placeholder:
+  `MATCH ALL`/`MATCH ANY` group pills, `+ Condition`/`+ Group` at every
+  depth, arbitrary nesting — matches the §23 example structure exactly
+  (`country IS US AND device IN [mobile, tablet] AND (OS IS Android OR OS
+  IS iOS)`), which one of the Phase 7 mock stream sets now demonstrates.
+- Full §22 field list (30 fields, grouped Geo/Device/Fraud/Traffic/Custom
+  in the field picker) and all 16 operators, including `BETWEEN` (two-input
+  range) and `MATCHES` (regex).
+- Typed value inputs instead of one generic text box: `MultiSelect` (reused
+  from Phase 5) for enum-like fields on `IN`/`NOT_IN`, a Yes/No toggle for
+  `bot`/`proxy` (they're boolean-like flags, not free text, per §22's
+  note), a plain Select for enum fields on single-value operators,
+  no input for `EXISTS`/`NOT_EXISTS`.
+- Save-time validation surfaced inline: ISO-3166 alpha-2 country codes
+  (flags the classic `UK` mistake with "use GB"), and a client-side RE2-
+  compatibility heuristic for `MATCHES` patterns (rejects lookaround,
+  backreferences, atomic groups, possessive quantifiers) — a first pass
+  only; real enforcement is Go's `regexp` (RE2) at save time per §5, which
+  is why the check function's own doc comment says not to trust it as the
+  source of truth.
+- `src/lib/filters.ts` — the field/operator vocab, recursive tree types
+  (`FilterNode = FilterCondition | FilterGroupNode`) and pure tree
+  utilities (`addConditionToGroup`, `addGroupToGroup`, `updateCondition`,
+  `updateGroupJoiner`, `removeNode`, `cloneWithNewIds`, `describeFilterTree`)
+  that both the builder UI and the Stream Set row summary share — single
+  implementation, per §6-SHARED.
+- Stream Set row summary now renders top-level conditions as `FilterChip`s
+  (Phase 3) plus a collapsed `(N)` badge per nested group, with the full
+  plain-language tree (`describeFilterTree`) on hover via `Tooltip` — the
+  static half of §72's explainability goal; the interactive "why did this
+  match" surface is still the Phase 10 simulator.
+- `src/lib/id.ts` — extracted the shared `genId` helper (was duplicated
+  inline in `lib/mock/stream-sets.ts`) so `lib/filters.ts` doesn't import
+  from `lib/mock/*`, avoiding a mock→domain→mock import cycle.
+
+### Changed
+
+- `StreamSet.filters: FilterCondition[]` + `joiner` (Phase 7's flat shape)
+  is now `StreamSet.rootFilter: FilterGroupNode`, a real tree. `Campaign`/
+  `Flow` shapes are unaffected.
+
+### Known issues
+
+- `useForm<StreamSetFormValues>`'s resolver needs an explicit `Resolver<T>`
+  cast in `stream-set-form-sheet.tsx` — react-hook-form's `Path<T>` type
+  can't fully resolve a self-referential union
+  (`FilterNode = FilterCondition | FilterGroupNode`), so the zodResolver's
+  inferred generic mismatches the plain type. Compile-time inference gap
+  only, not a runtime issue — the filter tree isn't registered as RHF
+  field paths anyway (it's one `Controller`-managed value mutated via the
+  pure tree utilities above).
+- The RE2 heuristic and country-code check run inline in the value editor,
+  not through react-hook-form's per-field error state — deeply nested
+  union array paths aren't practical to index into for that. The zod
+  `superRefine` still blocks submission as a safety net either way.
+
 ## [Phase 7] — Stream Sets
 
 ### Added

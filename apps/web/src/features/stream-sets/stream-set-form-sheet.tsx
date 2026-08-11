@@ -1,7 +1,6 @@
 "use client";
 
-import * as React from "react";
-import { Controller, useFieldArray, useForm, useWatch } from "react-hook-form";
+import { Controller, useFieldArray, useForm, useWatch, type Resolver } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { PlusIcon, XIcon } from "lucide-react";
 
@@ -19,8 +18,9 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet";
-import { genId } from "@/lib/mock/stream-sets";
-import { FilterConditionRow } from "@/features/stream-sets/filter-condition-row";
+import { genId } from "@/lib/id";
+import type { FilterGroupNode } from "@/lib/filters";
+import { FilterGroupBuilder } from "@/features/stream-sets/filter-group-builder";
 import { FlowRow } from "@/features/stream-sets/flow-row";
 import { streamSetFormSchema, type StreamSetFormValues } from "@/features/stream-sets/stream-set-schema";
 
@@ -42,7 +42,11 @@ export function StreamSetFormSheet({
   onSubmit: (values: StreamSetFormValues) => void;
 }) {
   const form = useForm<StreamSetFormValues>({
-    resolver: zodResolver(streamSetFormSchema),
+    // rootFilter is a self-referential union (FilterCondition | FilterGroupNode); RHF's
+    // Path<T> can't fully resolve that recursion, which makes zodResolver's inferred
+    // type mismatch the plain StreamSetFormValues generic here. Cast — the mismatch is
+    // a compile-time inference limitation only, not a runtime behavior difference.
+    resolver: zodResolver(streamSetFormSchema) as Resolver<StreamSetFormValues>,
     defaultValues,
   });
 
@@ -53,11 +57,9 @@ export function StreamSetFormSheet({
     formState: { errors, isSubmitting },
   } = form;
 
-  const filterArray = useFieldArray({ control, name: "filters" });
   const flowArray = useFieldArray({ control, name: "flows" });
   const pixelArray = useFieldArray({ control, name: "pixels" });
 
-  const joiner = useWatch({ control, name: "joiner" });
   const flows = useWatch({ control, name: "flows" });
   const weightSum = flows.reduce((sum, f) => sum + (f.weight || 0), 0);
 
@@ -105,57 +107,27 @@ export function StreamSetFormSheet({
           <Separator />
 
           <div className="flex flex-col gap-3">
-            <div className="flex items-center justify-between">
-              <div>
-                <h3 className="text-sm font-medium">Filters</h3>
-                <p className="text-xs text-muted-foreground">
-                  No filters = matches all traffic. Nested AND/OR groups and the full field/operator set land in
-                  Phase 8 — this is a flat list joined by one operator.
-                </p>
-              </div>
-              {filterArray.fields.length > 1 && (
-                <Controller
-                  control={control}
-                  name="joiner"
-                  render={({ field }) => (
-                    <Select value={field.value} onValueChange={field.onChange}>
-                      <SelectTrigger size="sm" className="w-20">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="AND">AND</SelectItem>
-                        <SelectItem value="OR">OR</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  )}
+            <div>
+              <h3 className="text-sm font-medium">Filters</h3>
+              <p className="text-xs text-muted-foreground">
+                An empty top-level group matches all traffic. Nest groups to mix AND/OR — e.g. country IS US AND
+                device IN [mobile, tablet] AND (OS IS Android OR OS IS iOS).
+              </p>
+            </div>
+            <Controller
+              control={control}
+              name="rootFilter"
+              render={({ field }) => (
+                <FilterGroupBuilder
+                  root={field.value as FilterGroupNode}
+                  group={field.value as FilterGroupNode}
+                  onRootChange={field.onChange}
                 />
               )}
-            </div>
-
-            <div className="flex flex-col gap-2">
-              {filterArray.fields.map((field, index) => (
-                <React.Fragment key={field.id}>
-                  {index > 0 && (
-                    <span className="text-[0.6875rem] font-semibold uppercase text-muted-foreground">
-                      {joiner}
-                    </span>
-                  )}
-                  <FilterConditionRow control={control} index={index} onRemove={() => filterArray.remove(index)} />
-                </React.Fragment>
-              ))}
-            </div>
-
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="self-start"
-              onClick={() =>
-                filterArray.append({ id: genId(), field: "country", operator: "IS", value: "" })
-              }
-            >
-              <PlusIcon className="size-3.5" /> Add condition
-            </Button>
+            />
+            {errors.rootFilter && (
+              <p className="text-xs text-danger">Fix the highlighted filter condition(s) above before saving.</p>
+            )}
           </div>
 
           <Separator />
