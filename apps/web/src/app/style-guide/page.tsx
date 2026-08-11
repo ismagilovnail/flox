@@ -14,6 +14,7 @@ import {
 import { toast } from "sonner";
 
 import { Section, ColorSwatch } from "./_section";
+import { formatInt } from "@/lib/format";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { Display, H1, H3, Body, Small, Caption, Mono } from "@/components/ui/typography";
 import { Button } from "@/components/ui/button";
@@ -148,7 +149,7 @@ const campaignColumns: ColumnDef<typeof dataTableFeatures, Campaign>[] = [
   {
     accessorKey: "clicks",
     header: "Clicks",
-    cell: ({ getValue }) => <Mono>{(getValue() as number).toLocaleString()}</Mono>,
+    cell: ({ getValue }) => <Mono>{formatInt(getValue() as number)}</Mono>,
   },
   { accessorKey: "cvr", header: "CVR", cell: ({ getValue }) => <Mono>{String(getValue())}</Mono> },
   { accessorKey: "roi", header: "ROI", cell: ({ getValue }) => <Mono>{String(getValue())}</Mono> },

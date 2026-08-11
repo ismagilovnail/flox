@@ -6,13 +6,11 @@ import type { DateRange } from "react-day-picker";
 import { DateRangePicker } from "@/components/ui/date-range-picker";
 import { LineMetricChart } from "@/components/charts/line-metric-chart";
 import { CHART_COLORS } from "@/lib/chart-theme";
+import { formatUsd, formatInt } from "@/lib/format";
 import type { DashboardMock } from "@/lib/mock/dashboard";
 import { KpiGrid } from "@/features/dashboard/kpi-grid";
 import { TopTable } from "@/features/dashboard/top-tables";
 import { aggregate } from "@/features/dashboard/metrics";
-
-const usd = (n: number) =>
-  n.toLocaleString(undefined, { style: "currency", currency: "USD", maximumFractionDigits: 0 });
 
 function toDate(iso: string) {
   return new Date(`${iso}T00:00:00Z`);
@@ -63,25 +61,25 @@ export function DashboardView({ mock }: { mock: DashboardMock }) {
           title="Revenue"
           points={current.map((p) => ({ date: p.date, value: p.revenue }))}
           color={CHART_COLORS.success}
-          valueFormatter={usd}
+          valueFormatter={formatUsd}
         />
         <LineMetricChart
           title="Spend"
           points={current.map((p) => ({ date: p.date, value: p.spend }))}
           color={CHART_COLORS.danger}
-          valueFormatter={usd}
+          valueFormatter={formatUsd}
         />
         <LineMetricChart
           title="Profit"
           points={current.map((p) => ({ date: p.date, value: p.profit }))}
           color={CHART_COLORS.primary}
-          valueFormatter={usd}
+          valueFormatter={formatUsd}
         />
         <LineMetricChart
           title="Conversions"
           points={current.map((p) => ({ date: p.date, value: p.conversions }))}
           color={CHART_COLORS.warning}
-          valueFormatter={(v) => v.toLocaleString()}
+          valueFormatter={formatInt}
         />
       </div>
 

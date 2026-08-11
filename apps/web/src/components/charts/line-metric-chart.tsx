@@ -6,6 +6,7 @@ import { useTheme } from "next-themes";
 
 import { ChartCard } from "@/components/ui/chart-card";
 import { chartBaseOption, type ChartMode } from "@/lib/chart-theme";
+import { formatInt } from "@/lib/format";
 
 /** color is a plain "oklch(L C H)" token — inserts an alpha channel for gradient stops. */
 function withAlpha(color: string, alpha: number) {
@@ -16,7 +17,7 @@ export function LineMetricChart({
   title,
   points,
   color,
-  valueFormatter = (v: number) => v.toLocaleString(),
+  valueFormatter = formatInt,
   action,
 }: {
   title: string;

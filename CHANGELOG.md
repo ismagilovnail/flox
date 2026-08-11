@@ -3,6 +3,42 @@
 Format follows [Keep a Changelog](https://keepachangelog.com/). Entries are
 per-phase, matching `CLAUDE.md`'s phase protocol.
 
+## [Phase 5] — Analytics
+
+### Added
+
+- Analytics explorer (§19) at `/analytics`: controls for date range, timezone,
+  dimensions (16, multi-select), metrics (13, multi-select), filters
+  (dimension = value, AND-joined), group-by, sort, and a compare-to-previous-
+  period toggle. Four views on one shared aggregation: Table (dynamic
+  `DataTable` columns), Line (any selected metric over time), Bar (top-8
+  breakdown by the group-by dimension), and Funnel — the full 8-step event
+  model (§43) `SOURCE_CLICK → ... → CPA_REDEP` with per-step and per-total
+  conversion %, not a generic 3-step funnel.
+- `src/components/ui/multi-select.tsx` — reusable Popover+Command checklist
+  (dimensions/metrics here; the Filter Builder in Phase 8 will likely want it
+  too).
+- `src/features/analytics/registry.ts` — metric formulas match §50 exactly
+  (`roi=(revenue-cost)/cost`, `roas=revenue/cost`, etc.); mock data marks
+  ~15% of slices with no cost at all, so aggregated ROI/CPA/cost render "—"
+  rather than a false $0/0%, at any grouping granularity.
+- `src/lib/format.ts` — `formatUsd`/`formatInt`, both pinned to the `en-US`
+  locale.
+
+### Fixed
+
+- Every `toLocaleString()` currency/number call across the app (Dashboard
+  included, from Phase 4) used the runtime's default locale instead of a
+  fixed one. In this environment that silently rendered USD as
+  `14 655,87 $` instead of `$14,655.87` — locale-dependent formatting for a
+  fixed-locale product. Centralized in `src/lib/format.ts` and fixed
+  everywhere it was called.
+
+### Known issues
+
+- Timezone selector is cosmetic in the mock phase — it doesn't shift
+  aggregation, since slices only carry a date, not a timestamp.
+
 ## [Phase 4] — Dashboard
 
 ### Added

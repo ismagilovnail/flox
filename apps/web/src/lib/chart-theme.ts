@@ -66,3 +66,29 @@ export function chartBaseOption(mode: ChartMode) {
     },
   };
 }
+
+/** Horizontal bar variant: category axis on y (reads long dimension labels better than rotated x labels). */
+export function chartBarOption(mode: ChartMode, categories: string[]) {
+  const t = TOKENS[mode];
+  const base = chartBaseOption(mode);
+  return {
+    ...base,
+    grid: { left: 8, right: 16, top: 8, bottom: 8, containLabel: true },
+    xAxis: {
+      type: "value" as const,
+      axisLine: { show: false },
+      axisTick: { show: false },
+      axisLabel: { color: t.text, fontSize: 11 },
+      splitLine: { lineStyle: { color: t.splitLine } },
+    },
+    yAxis: {
+      type: "category" as const,
+      data: categories,
+      inverse: true,
+      axisLine: { lineStyle: { color: t.axisLine } },
+      axisTick: { show: false },
+      axisLabel: { color: t.text, fontSize: 11, width: 110, overflow: "truncate" as const },
+      splitLine: { show: false },
+    },
+  };
+}

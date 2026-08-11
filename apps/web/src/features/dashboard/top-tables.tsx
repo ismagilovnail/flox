@@ -2,10 +2,8 @@ import type { ColumnDef } from "@tanstack/react-table";
 
 import { DataTable, dataTableFeatures } from "@/components/ui/data-table";
 import { Mono } from "@/components/ui/typography";
+import { formatUsd, formatInt } from "@/lib/format";
 import type { PerformanceRow } from "@/lib/mock/dashboard";
-
-const usd = (n: number) =>
-  n.toLocaleString(undefined, { style: "currency", currency: "USD", maximumFractionDigits: 0 });
 
 function columns(nameHeader: string): ColumnDef<typeof dataTableFeatures, PerformanceRow>[] {
   return [
@@ -13,7 +11,7 @@ function columns(nameHeader: string): ColumnDef<typeof dataTableFeatures, Perfor
     {
       accessorKey: "clicks",
       header: "Clicks",
-      cell: ({ getValue }) => <Mono>{(getValue() as number).toLocaleString()}</Mono>,
+      cell: ({ getValue }) => <Mono>{formatInt(getValue() as number)}</Mono>,
     },
     {
       accessorKey: "cvr",
@@ -23,7 +21,7 @@ function columns(nameHeader: string): ColumnDef<typeof dataTableFeatures, Perfor
     {
       accessorKey: "revenue",
       header: "Revenue",
-      cell: ({ getValue }) => <Mono>{usd(getValue() as number)}</Mono>,
+      cell: ({ getValue }) => <Mono>{formatUsd(getValue() as number)}</Mono>,
     },
     {
       id: "roi",
