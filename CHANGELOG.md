@@ -3,6 +3,39 @@
 Format follows [Keep a Changelog](https://keepachangelog.com/). Entries are
 per-phase, matching `CLAUDE.md`'s phase protocol.
 
+## [Phase 6] — Campaigns
+
+### Added
+
+- Campaign list (§20) at `/campaigns`: `DataTable` with Name/Status/Source/
+  Clicks/Conversions/Revenue/Spend/Profit/ROI/Updated columns, search,
+  sort, pagination. Profit/ROI render "—" (never a false $0/0%) for the
+  ~12% of mock campaigns generated with no spend, per §27-COST.
+- Row actions (§20): Open, Pause/Resume, Duplicate (navigates to the new
+  copy), Copy tracking URL (toast with the composed
+  `https://{trackingDomain}/t/{trackingId}` URL), Archive (confirm dialog,
+  destructive). Duplicate and Archive share `useCampaignsStore` mutations
+  used by both the list row menu and the detail page.
+- Campaign creation at `/campaigns/new` and detail/settings at
+  `/campaigns/[id]` (Overview + Settings tabs). Overview shows the same
+  8 stat cards as the dashboard for one campaign, a 30-day revenue trend
+  chart, and a "Stream Sets" card stubbed as `EmptyState` until Phase 7-9
+  build routing. Settings reuses the creation form (`CampaignForm`,
+  react-hook-form + zod) with an added Status field and a danger-zone
+  Archive action.
+- `src/stores/campaigns.ts` — Zustand store (`addCampaign`,
+  `updateCampaign`, `setStatus`, `duplicateCampaign`, `getById`) seeded
+  from `src/lib/mock/campaigns.ts`'s deterministic generator so the
+  detail page resolves an id consistently within a session.
+
+### Known issues
+
+- Detail page 404s (`ErrorState`, with a link back to the list) if the
+  mock store resets — e.g. a hard reload after `addCampaign` — since
+  campaign data is in-memory only until Phase 16+ wires the real API.
+- Stream Sets/Filters/Flows are not built yet; every campaign routes
+  100% to its fallback URL until Phase 7-9.
+
 ## [Phase 5] — Analytics
 
 ### Added

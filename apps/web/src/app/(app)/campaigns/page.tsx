@@ -1,5 +1,5 @@
-import { PageStub } from "@/components/shell/page-stub";
+import { CampaignList } from "@/features/campaigns/campaign-list";
 
 export default function Page() {
-  return <PageStub title="Campaigns" />;
+  return <CampaignList />;
 }

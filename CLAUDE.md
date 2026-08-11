@@ -19,10 +19,10 @@ referenced below as §N).
 ## CURRENT STATE — UPDATE THIS EVERY PHASE
 
 ```
-CURRENT PHASE : PHASE 5 — Analytics
+CURRENT PHASE : PHASE 6 — Campaigns
 STATUS        : done
-LAST COMMIT   : feat(analytics): explorer
-NEXT          : PHASE 6 — Campaigns (§20) — confirm before starting
+LAST COMMIT   : feat(campaigns): list, detail, creation
+NEXT          : PHASE 7 — Stream Sets (§21) — confirm before starting
 ```
 
 > At the end of every phase: update the four lines above, add a CHANGELOG entry,
