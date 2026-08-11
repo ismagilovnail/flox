@@ -3,6 +3,38 @@
 Format follows [Keep a Changelog](https://keepachangelog.com/). Entries are
 per-phase, matching `CLAUDE.md`'s phase protocol.
 
+## [Phase 4] — Dashboard
+
+### Added
+
+- Overview dashboard (§18) at `/overview`, replacing the stub: 8-card KPI row
+  (Revenue/Spend/Profit/ROI/Clicks/Conversions/CVR/CPA) with period-over-period
+  trend deltas, 4 time-series charts (Revenue/Spend/Profit/Conversions) via
+  Apache ECharts, and 4 top-N tables (Campaigns/Offers/Countries/Flows) on the
+  existing `DataTable`. `DateRangePicker` drives both the charts and the KPI
+  comparison window (current period vs. the equal-length period before it).
+- `src/lib/mock/dashboard.ts` — deterministic (seeded-PRNG, not `Math.random`)
+  mock data generator, so the statically-exported page is reproducible across
+  builds. One campaign carries no spend on purpose, to exercise §27-COST: ROI
+  renders as "—", never a false 0%.
+- `src/lib/chart-theme.ts` — ECharts option tokens reusing the exact design
+  tokens (dark/light), instead of a second hardcoded palette.
+
+### Fixed
+
+- `StatCard`'s value/delta row had no wrap or shrink handling and clipped
+  against the card edge on narrow (mobile) widths; now wraps the delta to its
+  own line instead of overflowing.
+
+### Known issues
+
+- The full ECharts bundle takes ~1.3s to parse and paint on first mount
+  (confirmed deterministic via polling, not flaky) — acceptable for the mock
+  phase; revisit with a lighter `echarts/core` + explicit chart-type imports
+  in Phase 31 (performance).
+- Top-N tables are not filtered by the selected date range (only the KPI row
+  and charts are) — there's no per-row time series in the mock to filter by.
+
 ## [Phase 3] — Application Shell
 
 ### Added

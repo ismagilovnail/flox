@@ -1,5 +1,7 @@
-import { PageStub } from "@/components/shell/page-stub";
+import { DashboardView } from "@/features/dashboard/dashboard-view";
+import { generateDashboardMock } from "@/lib/mock/dashboard";
 
 export default function Page() {
-  return <PageStub title="Overview" />;
+  const mock = generateDashboardMock(60);
+  return <DashboardView mock={mock} />;
 }

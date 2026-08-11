@@ -47,14 +47,14 @@ function StatCard({
       {...props}
     >
       <span className="text-xs text-muted-foreground">{label}</span>
-      <div className="flex items-baseline justify-between gap-2">
+      <div className="flex flex-wrap items-baseline justify-between gap-x-2 gap-y-0.5">
         <span className="font-mono text-2xl font-semibold font-tabular text-foreground">
           {value}
         </span>
         {delta && tone && (
           <span
             className={cn(
-              "flex items-center gap-0.5 text-xs font-medium font-tabular",
+              "flex shrink-0 items-center gap-0.5 text-xs font-medium font-tabular",
               toneClasses[tone],
             )}
           >
