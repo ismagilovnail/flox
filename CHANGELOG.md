@@ -3,6 +3,42 @@
 Format follows [Keep a Changelog](https://keepachangelog.com/). Entries are
 per-phase, matching `CLAUDE.md`'s phase protocol.
 
+## [Phase 2] — Design System
+
+### Added
+
+- Next.js 16 (App Router) + React 19 + TypeScript app scaffold in `apps/web`,
+  Tailwind v4, shadcn/ui (`radix-nova` style, Radix UI primitives).
+- Dark-first FLOX token system in `src/app/globals.css`: neutral surfaces,
+  small radius (0.375rem), one restrained blue accent, semantic
+  success/warning/danger/info tokens (light + dark), tabular-numeral utility.
+  Light theme fully supported via `next-themes` (`ThemeProvider`,
+  `ThemeToggle`), dark is the default (`defaultTheme="dark"`).
+- Typography scale (`Display/H1/H2/H3/Body/Small/Caption/Mono`) in
+  `components/ui/typography.tsx`.
+- Full §16 component library: Button, IconButton, Input, Select, Checkbox,
+  Radio, Switch, Textarea, Dialog, Popover, Tooltip, Dropdown, Command, Tabs,
+  Badge, Tag, Avatar, Card, StatCard, DataTable (TanStack Table v9, sort /
+  paginate / global search / column visibility), EmptyState, ErrorState,
+  LoadingState, Skeleton, DateRangePicker, Breadcrumbs, Pagination, ChartCard
+  (Apache ECharts mount point), FilterChip, FilterGroup, Alert, Toaster.
+- `/style-guide` route showcasing every token and component in one page.
+
+### Fixed
+
+- `radix-ui` was imported by 15 generated shadcn components but never
+  installed (silent gap from the CLI's dependency step); added explicitly.
+  Removed the now-unused `@base-ui/react` dependency left over from the
+  initial scaffold.
+
+### Known issues
+
+- DataTable "virtualize large sets" (UX floor) is satisfied via pagination,
+  not DOM windowing — acceptable for now; revisit with
+  `@tanstack/react-virtual` if a real dataset needs unpaginated scroll.
+- No application shell yet (Phase 3) — `/style-guide` and `/` are standalone
+  routes.
+
 ## [Phase 1] — Product Foundation
 
 ### Added

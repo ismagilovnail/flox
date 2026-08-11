@@ -19,10 +19,10 @@ referenced below as §N).
 ## CURRENT STATE — UPDATE THIS EVERY PHASE
 
 ```
-CURRENT PHASE : PHASE 1 — Product foundation
+CURRENT PHASE : PHASE 2 — Design system
 STATUS        : done
-LAST COMMIT   : feat(foundation): product docs, monorepo skeleton, env template
-NEXT          : PHASE 2 — Design system (§12) — confirm before starting
+LAST COMMIT   : feat(ui): design system
+NEXT          : PHASE 3 — Application shell (§17) — confirm before starting
 ```
 
 > At the end of every phase: update the four lines above, add a CHANGELOG entry,
