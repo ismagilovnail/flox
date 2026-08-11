@@ -20,8 +20,9 @@ import {
 } from "@/components/ui/sheet";
 import { genId } from "@/lib/id";
 import type { FilterGroupNode } from "@/lib/filters";
+import { NETWORKS } from "@/lib/mock/flow-entities";
 import { FilterGroupBuilder } from "@/features/stream-sets/filter-group-builder";
-import { FlowRow } from "@/features/stream-sets/flow-row";
+import { FlowEditor } from "@/features/stream-sets/flow-editor";
 import { streamSetFormSchema, type StreamSetFormValues } from "@/features/stream-sets/stream-set-schema";
 
 export type { StreamSetFormValues };
@@ -61,6 +62,7 @@ export function StreamSetFormSheet({
   const pixelArray = useFieldArray({ control, name: "pixels" });
 
   const flows = useWatch({ control, name: "flows" });
+  const fallbackUrl = useWatch({ control, name: "fallbackUrl" });
   const weightSum = flows.reduce((sum, f) => sum + (f.weight || 0), 0);
 
   function submit(values: StreamSetFormValues) {
@@ -136,21 +138,28 @@ export function StreamSetFormSheet({
             <div>
               <h3 className="text-sm font-medium">Flows</h3>
               <p className="text-xs text-muted-foreground">
-                Weighted destinations for traffic matching this set. The visual flow builder (nodes, offer/landing
-                picker) lands in Phase 9 — for now, point each flow at a destination URL directly.
+                Each flow is a funnel: optional Landing → PWA → Postlanding, then a required Offer or Redirect.
+                Weight is a raw number — the engine normalizes it to a percentage across active flows.
               </p>
             </div>
 
             <div className="flex flex-col gap-2">
-              {flowArray.fields.map((field, index) => (
-                <FlowRow
-                  key={field.id}
-                  control={control}
-                  index={index}
-                  onRemove={() => flowArray.remove(index)}
-                  canRemove={flowArray.fields.length > 1}
-                />
-              ))}
+              {flowArray.fields.map((field, index) => {
+                const flow = flows[index];
+                if (!flow) return null;
+                return (
+                  <FlowEditor
+                    key={field.id}
+                    flow={flow}
+                    normalizedPercent={weightSum > 0 ? (flow.weight / weightSum) * 100 : 0}
+                    fallbackUrl={fallbackUrl}
+                    onChange={(patch) => flowArray.update(index, { ...flow, ...patch })}
+                    onRemove={() => flowArray.remove(index)}
+                    onDuplicate={() => flowArray.insert(index + 1, { ...flow, id: genId(), name: `${flow.name} (Copy)` })}
+                    canRemove={flowArray.fields.length > 1}
+                  />
+                );
+              })}
             </div>
             {errors.flows?.message && <p className="text-xs text-danger">{errors.flows.message}</p>}
 
@@ -163,18 +172,18 @@ export function StreamSetFormSheet({
                   flowArray.append({
                     id: genId(),
                     name: `Flow ${flowArray.fields.length + 1}`,
-                    destinationType: "offer",
-                    destinationUrl: "",
-                    weight: 0,
                     active: true,
+                    weight: 0,
+                    landing: { enabled: false, landingId: "", asPwa: false },
+                    pwa: { enabled: false, pwaId: "", pwaType: "internal" },
+                    postlanding: { enabled: false, postlandingId: "" },
+                    destination: { kind: "offer", networkId: NETWORKS[0].id, offerId: "", offerUrl: "" },
                   })
                 }
               >
                 <PlusIcon className="size-3.5" /> Add flow
               </Button>
-              <span className={`text-xs font-mono ${weightSum === 100 ? "text-muted-foreground" : "text-warning"}`}>
-                {weightSum}% of 100%{weightSum !== 100 && " — weights don't sum to 100"}
-              </span>
+              <span className="text-xs font-mono text-muted-foreground">Total weight: {weightSum}</span>
             </div>
           </div>
 

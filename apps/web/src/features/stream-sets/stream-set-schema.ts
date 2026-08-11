@@ -9,7 +9,7 @@ import {
   type FilterField,
   type FilterOperator,
 } from "@/lib/filters";
-import { FLOW_DESTINATION_TYPES, type FlowDestinationType } from "@/lib/mock/stream-sets";
+import { PWA_TYPES, type PwaType } from "@/lib/mock/flow-entities";
 
 const filterConditionSchema = z
   .object({
@@ -55,14 +55,51 @@ const filterGroupSchema: z.ZodType<FilterNodeFormValue & { type: "group" }> = z.
   }),
 );
 
-const flowSchema = z.object({
-  id: z.string(),
-  name: z.string().min(1, "Name is required"),
-  destinationType: z.enum(FLOW_DESTINATION_TYPES as [FlowDestinationType, ...FlowDestinationType[]]),
-  destinationUrl: z.url("Enter a valid URL"),
-  weight: z.number().min(0, "0-100").max(100, "0-100"),
-  active: z.boolean(),
+const landingStageSchema = z.object({ enabled: z.boolean(), landingId: z.string(), asPwa: z.boolean() });
+const pwaStageSchema = z.object({
+  enabled: z.boolean(),
+  pwaId: z.string(),
+  pwaType: z.enum(PWA_TYPES as [PwaType, ...PwaType[]]),
 });
+const postlandingStageSchema = z.object({ enabled: z.boolean(), postlandingId: z.string() });
+
+const destinationSchema = z.union([
+  z.object({ kind: z.literal("offer"), networkId: z.string(), offerId: z.string(), offerUrl: z.string() }),
+  z.object({ kind: z.literal("redirect"), url: z.string() }),
+]);
+
+const flowSchema = z
+  .object({
+    id: z.string(),
+    name: z.string().min(1, "Name is required"),
+    active: z.boolean(),
+    weight: z.number().min(0, "Weight can't be negative"),
+    landing: landingStageSchema,
+    pwa: pwaStageSchema,
+    postlanding: postlandingStageSchema,
+    destination: destinationSchema,
+  })
+  .superRefine((flow, ctx) => {
+    if (flow.landing.enabled && !flow.landing.landingId) {
+      ctx.addIssue({ code: "custom", message: "Choose a landing", path: ["landing", "landingId"] });
+    }
+    if (flow.pwa.enabled && !flow.pwa.pwaId) {
+      ctx.addIssue({ code: "custom", message: "Choose a PWA", path: ["pwa", "pwaId"] });
+    }
+    if (flow.postlanding.enabled && !flow.postlanding.postlandingId) {
+      ctx.addIssue({ code: "custom", message: "Choose a postlanding", path: ["postlanding", "postlandingId"] });
+    }
+    if (flow.destination.kind === "offer") {
+      if (!flow.destination.offerId) {
+        ctx.addIssue({ code: "custom", message: "Choose an offer", path: ["destination", "offerId"] });
+      }
+      if (!flow.destination.offerUrl || !/^https?:\/\//.test(flow.destination.offerUrl)) {
+        ctx.addIssue({ code: "custom", message: "Enter a valid offer URL", path: ["destination", "offerUrl"] });
+      }
+    } else if (!flow.destination.url || !/^https?:\/\//.test(flow.destination.url)) {
+      ctx.addIssue({ code: "custom", message: "Enter a valid redirect URL", path: ["destination", "url"] });
+    }
+  });
 
 const pixelSchema = z.object({
   id: z.string(),

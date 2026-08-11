@@ -3,6 +3,60 @@
 Format follows [Keep a Changelog](https://keepachangelog.com/). Entries are
 per-phase, matching `CLAUDE.md`'s phase protocol.
 
+## [Phase 9] — Flow Builder
+
+### Added
+
+- Visual per-flow funnel (§24-25) replacing the flat name/URL/weight row
+  from Phase 7-8: optional Landing (+ "show as PWA" toggle) → optional PWA
+  (+ type: internal/external/ios_app) → optional Postlanding → a required
+  terminal step that's either an **Offer** (network + offer + offer-URL
+  carrying the `{click_id}` macro) or a **Redirect** (plain URL, no CPA
+  attribution) — the segmented toggle between them lives on the terminal
+  node itself. A dashed ghost **Fallback** node closes the funnel, showing
+  the Stream Set's existing `fallbackUrl` (Phase 7) rather than a new
+  per-flow field — all six §25 node types, one data source per concept.
+- Every node supports the §25 capability set: enable/disable (optional
+  stages only — the terminal step is always active), inline configuration
+  (picker fields appear directly under the node header when enabled), a
+  status badge (`Skipped`/`Needs setup`/`Configured`), a copyable preview
+  URL, and a small deterministic mock analytics line (seeded per
+  flow+stage — a real per-node metric needs the tracker event stream from
+  Phase 16+, so this is a placeholder demonstrating the capability, not
+  live data).
+- Weight is now an arbitrary raw integer instead of Phase 7's "must sum to
+  100" constraint, matching §24 exactly: the editor shows the raw weight
+  next to the engine-normalized percentage (`weight / Σweights × 100`),
+  and the Stream Set row's flow tags show the normalized % too.
+- Per-flow **Duplicate** (§24's "duplicated" node/flow state), alongside
+  the existing enable/disable and remove.
+- `src/lib/mock/flow-entities.ts` — placeholder Network/Offer/Landing/PWA/
+  Postlanding option lists so the funnel pickers have something to bind
+  to. These become real, team-managed entities in Phase 11-12; the Flow
+  shape (`networkId`/`offerId`/`landingId`/`pwaId`/`postlandingId`) is
+  designed not to change when that happens, only the picker's data source.
+- `src/features/stream-sets/flow-node.tsx` — the generic node card reused
+  by all six node types; `flow-funnel.tsx` composes them per flow;
+  `flow-editor.tsx` wraps one flow's header (name/weight/active/duplicate/
+  remove) around its funnel, collapsible.
+
+### Changed
+
+- `Flow` (in `lib/mock/stream-sets.ts`) went from
+  `{destinationType, destinationUrl}` to the funnel shape described above
+  (`landing`, `pwa`, `postlanding`, `destination: {kind: "offer"|"redirect"}`).
+  Mock stream sets regenerated to exercise it: set 0's first flow uses the
+  full Landing→PWA→Offer chain, set 2 (bot/proxy block) uses a Redirect
+  terminal instead of an Offer.
+
+### Known issues
+
+- Landing/PWA/Postlanding/Network/Offer pickers are the Phase 9 mock lists
+  above, not real entities — real management UI is Phase 11 (Sources/
+  Networks/Offers) and Phase 12 (Landing/PWA/Postlanding).
+- Per-node "analytics summary" is a seeded mock number, not wired to any
+  real event data yet.
+
 ## [Phase 8] — Filter Builder
 
 ### Added

@@ -1,5 +1,6 @@
 import { genId } from "@/lib/id";
 import { emptyGroup, type FilterGroupNode } from "@/lib/filters";
+import { LANDINGS, OFFERS, PWAS, type PwaType } from "@/lib/mock/flow-entities";
 
 function mulberry32(seed: number) {
   return function rand() {
@@ -13,17 +14,27 @@ function mulberry32(seed: number) {
 
 export type StreamSetStatus = "active" | "paused";
 
-export type FlowDestinationType = "offer" | "landing" | "pwa" | "postlanding";
+export type LandingStage = { enabled: boolean; landingId: string; asPwa: boolean };
+export type PwaStage = { enabled: boolean; pwaId: string; pwaType: PwaType };
+export type PostlandingStage = { enabled: boolean; postlandingId: string };
 
-export const FLOW_DESTINATION_TYPES: FlowDestinationType[] = ["offer", "landing", "pwa", "postlanding"];
+/** Terminal step of a flow — always one or the other (§25: Offer / Redirect
+ * node types). Offer carries CPA/network attribution; Redirect is a plain
+ * URL with none. */
+export type Destination =
+  | { kind: "offer"; networkId: string; offerId: string; offerUrl: string }
+  | { kind: "redirect"; url: string };
 
 export type Flow = {
   id: string;
   name: string;
-  destinationType: FlowDestinationType;
-  destinationUrl: string;
-  weight: number;
   active: boolean;
+  /** Arbitrary raw integer — normalized to % for display, per §24. */
+  weight: number;
+  landing: LandingStage;
+  pwa: PwaStage;
+  postlanding: PostlandingStage;
+  destination: Destination;
 };
 
 export type StreamSet = {
@@ -42,10 +53,20 @@ export type StreamSet = {
 
 const SET_NAMES = ["Mobile — Tier 1 GEOs", "Desktop — Retarget", "Bot & Proxy Block", "Everything Else"];
 
+function offerDestination(networkId: string, offerId: string): Destination {
+  const offer = OFFERS.find((o) => o.id === offerId);
+  return { kind: "offer", networkId, offerId, offerUrl: offer?.url ?? "" };
+}
+
+const DISABLED_LANDING: LandingStage = { enabled: false, landingId: "", asPwa: false };
+const DISABLED_PWA: PwaStage = { enabled: false, pwaId: "", pwaType: "internal" };
+const DISABLED_POSTLANDING: PostlandingStage = { enabled: false, postlandingId: "" };
+
 /** Deterministic per-campaign stream sets, seeded from the campaign id so the
  * set resolves consistently within a session (same pattern as campaign
- * daily-trend generation). Set 0 mirrors the §23 example tree (AND of two
- * conditions plus a nested OR group) to demo real nesting out of the box. */
+ * daily-trend generation). Set 0 mirrors the §23 filter example, and its
+ * first flow demos the full Landing → PWA → Offer funnel; set 2 (bot/proxy
+ * block) demos a Redirect terminal step instead of an Offer. */
 export function generateStreamSets(campaignId: string): StreamSet[] {
   let seed = 0;
   for (let i = 0; i < campaignId.length; i++) seed = (seed * 31 + campaignId.charCodeAt(i)) | 0;
@@ -101,19 +122,68 @@ export function generateStreamSets(campaignId: string): StreamSet[] {
               }
             : emptyGroup();
 
-    const flowCount = 1 + Math.floor(rand() * 2);
-    const rawWeights = Array.from({ length: flowCount }, () => rand());
-    const weightSum = rawWeights.reduce((a, b) => a + b, 0);
-    const flows: Flow[] = rawWeights.map((w, fi) => ({
-      id: genId(rand),
-      name: flowCount === 1 ? "Primary offer" : `Split ${fi + 1}`,
-      destinationType: "offer",
-      destinationUrl: `https://track.floxlink.io/offer/${genId(rand).slice(0, 8)}`,
-      weight: Math.round((w / weightSum) * 100),
-      active: true,
-    }));
-    const drift = 100 - flows.reduce((a, f) => a + f.weight, 0);
-    flows[flows.length - 1].weight += drift;
+    const flows: Flow[] =
+      i === 0
+        ? [
+            {
+              id: genId(rand),
+              name: "Primary offer",
+              active: true,
+              weight: 70,
+              landing: { enabled: true, landingId: LANDINGS[0].id, asPwa: false },
+              pwa: { enabled: true, pwaId: PWAS[0].id, pwaType: "internal" },
+              postlanding: DISABLED_POSTLANDING,
+              destination: offerDestination("net_afftrust", "off_sweeps_us"),
+            },
+            {
+              id: genId(rand),
+              name: "Split 2",
+              active: true,
+              weight: 30,
+              landing: DISABLED_LANDING,
+              pwa: DISABLED_PWA,
+              postlanding: DISABLED_POSTLANDING,
+              destination: offerDestination("net_adcombo", "off_nutra_uk"),
+            },
+          ]
+        : i === 1
+          ? [
+              {
+                id: genId(rand),
+                name: "Primary offer",
+                active: true,
+                weight: 100,
+                landing: DISABLED_LANDING,
+                pwa: DISABLED_PWA,
+                postlanding: DISABLED_POSTLANDING,
+                destination: offerDestination("net_direct", "off_crypto_ca"),
+              },
+            ]
+          : i === 2
+            ? [
+                {
+                  id: genId(rand),
+                  name: "Safe redirect",
+                  active: true,
+                  weight: 100,
+                  landing: DISABLED_LANDING,
+                  pwa: DISABLED_PWA,
+                  postlanding: DISABLED_POSTLANDING,
+                  destination: { kind: "redirect", url: "https://example.com/safe" },
+                },
+              ]
+            : [
+                {
+                  id: genId(rand),
+                  name: "Primary offer",
+                  active: true,
+                  weight: 100,
+                  landing: DISABLED_LANDING,
+                  pwa: DISABLED_PWA,
+                  postlanding: DISABLED_POSTLANDING,
+                  destination: offerDestination("net_mylead", "off_dating_de"),
+                },
+              ];
 
     return {
       id: genId(rand),

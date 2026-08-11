@@ -19,6 +19,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { countConditions, describeFilterTree } from "@/lib/filters";
+import { OFFERS } from "@/lib/mock/flow-entities";
 import type { StreamSet } from "@/lib/mock/stream-sets";
 
 export function StreamSetRow({
@@ -35,6 +36,14 @@ export function StreamSetRow({
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: streamSet.id,
   });
+
+  const weightSum = streamSet.flows.reduce((sum, f) => sum + f.weight, 0);
+
+  function destinationLabel(flow: StreamSet["flows"][number]) {
+    const destination = flow.destination;
+    if (destination.kind === "redirect") return "Redirect";
+    return OFFERS.find((o) => o.id === destination.offerId)?.name ?? "No offer";
+  }
 
   return (
     <Card
@@ -116,8 +125,8 @@ export function StreamSetRow({
 
           <div className="flex flex-wrap items-center gap-1.5">
             {streamSet.flows.map((f) => (
-              <Tag key={f.id}>
-                {f.name} · {f.weight}%
+              <Tag key={f.id} title={destinationLabel(f)}>
+                {f.name} · {weightSum > 0 ? ((f.weight / weightSum) * 100).toFixed(0) : 0}%
               </Tag>
             ))}
             {streamSet.pixels.length > 0 && (

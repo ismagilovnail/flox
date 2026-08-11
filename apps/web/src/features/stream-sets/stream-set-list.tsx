@@ -24,6 +24,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { useStreamSetsStore } from "@/stores/stream-sets";
 import { genId } from "@/lib/id";
 import { emptyGroup } from "@/lib/filters";
+import { NETWORKS } from "@/lib/mock/flow-entities";
 import { type StreamSet } from "@/lib/mock/stream-sets";
 import { StreamSetRow } from "@/features/stream-sets/stream-set-row";
 import { StreamSetFormSheet } from "@/features/stream-sets/stream-set-form-sheet";
@@ -34,7 +35,18 @@ function emptyStreamSetForm(): StreamSetFormValues {
     name: "",
     status: "active",
     rootFilter: emptyGroup(),
-    flows: [{ id: genId(), name: "Primary offer", destinationType: "offer", destinationUrl: "", weight: 100, active: true }],
+    flows: [
+      {
+        id: genId(),
+        name: "Primary offer",
+        active: true,
+        weight: 100,
+        landing: { enabled: false, landingId: "", asPwa: false },
+        pwa: { enabled: false, pwaId: "", pwaType: "internal" },
+        postlanding: { enabled: false, postlandingId: "" },
+        destination: { kind: "offer", networkId: NETWORKS[0].id, offerId: "", offerUrl: "" },
+      },
+    ],
     pixels: [],
     fallbackUrl: "",
   };
