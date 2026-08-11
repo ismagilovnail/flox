@@ -19,10 +19,10 @@ referenced below as §N).
 ## CURRENT STATE — UPDATE THIS EVERY PHASE
 
 ```
-CURRENT PHASE : PHASE 2 — Design system
+CURRENT PHASE : PHASE 3 — Application shell
 STATUS        : done
-LAST COMMIT   : feat(ui): design system
-NEXT          : PHASE 3 — Application shell (§17) — confirm before starting
+LAST COMMIT   : feat(ui): application shell
+NEXT          : PHASE 4 — Dashboard (§18) — confirm before starting
 ```
 
 > At the end of every phase: update the four lines above, add a CHANGELOG entry,

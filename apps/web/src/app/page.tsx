@@ -8,13 +8,18 @@ export default function Home() {
       <Caption className="uppercase tracking-widest">FLOX</Caption>
       <Display>Track. Route. Optimize.</Display>
       <Body className="max-w-md text-muted-foreground">
-        Application shell and product surfaces land in later phases. This is
-        the design-system scaffold — see the style guide for tokens,
-        typography, and every reusable component.
+        Product surfaces land in later phases. The application shell (sidebar,
+        topbar, ⌘K) is live — see the style guide for tokens, typography, and
+        every reusable component.
       </Body>
-      <Button asChild>
-        <Link href="/style-guide">Open style guide</Link>
-      </Button>
+      <div className="flex items-center gap-2">
+        <Button asChild>
+          <Link href="/overview">Open app</Link>
+        </Button>
+        <Button asChild variant="outline">
+          <Link href="/style-guide">Open style guide</Link>
+        </Button>
+      </div>
     </div>
   );
 }

@@ -3,6 +3,39 @@
 Format follows [Keep a Changelog](https://keepachangelog.com/). Entries are
 per-phase, matching `CLAUDE.md`'s phase protocol.
 
+## [Phase 3] — Application Shell
+
+### Added
+
+- Persistent app shell (§17) under the `(app)` route group: `Sidebar`
+  (workspace selector, grouped nav, expand/collapse via a persisted Zustand
+  store, active-link highlighting) and `Topbar` (breadcrumbs derived from the
+  route, ⌘K command menu, notifications popover, theme toggle, user menu).
+- Mobile: off-canvas nav via shadcn `Sheet`, triggered from the topbar
+  hamburger; same `NavContent` as desktop so the nav tree has one definition.
+- `src/lib/nav.ts` — single source of truth for the nav tree, consumed by the
+  sidebar, breadcrumbs, and command menu (no duplicated nav data).
+- One stub page per sidebar item (`EmptyState`, "not built yet") so every
+  link resolves — nothing 404s while Phases 4–14 fill in real content.
+
+### Fixed
+
+- `CommandDialog` (shadcn) renders `DialogContent` around `children` directly
+  — it does **not** include an inner `<Command>` root the way older shadcn
+  versions did. Passing `CommandInput`/`CommandList` straight into
+  `CommandDialog` crashed with `Cannot read properties of undefined (reading
+  'subscribe')` (cmdk's internal store context was missing). Fixed by
+  wrapping the palette contents in `<Command>` inside `CommandDialog`.
+- Topbar overflowed and wrapped onto a second line on narrow viewports (the
+  search bar had a fixed `w-56` and breadcrumbs weren't allowed to truncate).
+  Search collapses to an icon-only trigger below `sm`; breadcrumbs truncate
+  instead of wrapping.
+
+### Known issues
+
+- Workspace selector, notifications, and user menu are mock data — wired to
+  real data in Phase 27 (integration) / Phase 28 (auth).
+
 ## [Phase 2] — Design System
 
 ### Added
