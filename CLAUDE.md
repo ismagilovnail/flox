@@ -19,10 +19,11 @@ referenced below as §N).
 ## CURRENT STATE — UPDATE THIS EVERY PHASE
 
 ```
-CURRENT PHASE : PHASE 15 — Frontend Architecture
-STATUS        : done — Phase 10 crash-loop report still unresolved (unrelated)
-LAST COMMIT   : feat(frontend): frontend architecture pass
-NEXT          : PHASE 16 — Go Backend Foundation — confirm before starting
+CURRENT PHASE : PHASE 16 — Go Backend Foundation
+STATUS        : done — Phase 10 crash-loop report still unresolved (unrelated);
+                apps/tracker/apps/worker module topology is an open decision, see apps/api/README.md
+LAST COMMIT   : feat(api): go backend foundation
+NEXT          : PHASE 17 — Database — confirm before starting
 ```
 
 > At the end of every phase: update the four lines above, add a CHANGELOG entry,

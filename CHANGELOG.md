@@ -3,6 +3,77 @@
 Format follows [Keep a Changelog](https://keepachangelog.com/). Entries are
 per-phase, matching `CLAUDE.md`'s phase protocol.
 
+## [Phase 16] — Go Backend Foundation
+
+### Added
+
+- **`apps/api`** (§33): new Go module (`github.com/ismagilovnail/flox/apps/api`,
+  Go 1.26) — the first backend code in this repo. `cmd/api/main.go` wires
+  config → logging → OpenTelemetry → HTTP server → graceful shutdown on
+  SIGINT/SIGTERM.
+- **`internal/config`**: loads every env var already declared in
+  `.env.example` (§7/§17/§33). Only `NODE_ENV`/`API_URL`/`LOG_LEVEL`/OTel
+  vars are actually consumed this phase; `DATABASE_URL`/`CLICKHOUSE_*`/
+  `REDIS_URL`/`S3_*` are parsed onto `Config` now so later phases don't need
+  to touch this file again, but nothing connects to them yet.
+- **`internal/logging`**: `slog.Logger`, JSON handler, level from config.
+- **`internal/telemetry`**: OpenTelemetry `TracerProvider` with an OTLP/HTTP
+  exporter. No-op (not an error) when `OTEL_EXPORTER_OTLP_ENDPOINT` is
+  unset — OTel is observability, not a hard dependency for the API to run.
+  Verified the server starts and serves cleanly both with the endpoint unset
+  and with it pointed at a collector that isn't actually running.
+- **`internal/httpserver`**: chi router — request ID (+ echoed back as an
+  `X-Request-Id` response header for client-side correlation), real IP,
+  structured per-request logging (tagged with the request ID), panic
+  recovery, 30s timeout, OTel HTTP instrumentation.
+- **`GET /health`** — liveness only, always `200`. **`GET /ready`** —
+  readiness; returns `200` unconditionally for now. It does not fake a
+  dependency check: Postgres/ClickHouse/Redis don't exist until Phase 17+,
+  and a check that doesn't check anything is exactly the "fake API that
+  looks real" CLAUDE.md forbids. Starts checking real dependencies once
+  those phases wire them in.
+- **`infra/docker-compose.dev.yml`**: Postgres, ClickHouse, Redis, MinIO
+  (S3-compatible) for local dev, credentials matching `.env.example`
+  exactly so `cp .env.example .env` + `docker compose up` need no edits.
+  Brought the full stack up and verified all four healthchecks pass;
+  caught and fixed one real bug along the way — the ClickHouse healthcheck
+  used `wget http://localhost:8123/ping`, which resolves `localhost` to
+  `::1` inside the container and fails since the image's HTTP server isn't
+  listening on IPv6; changed to `127.0.0.1`.
+- `.env.example`: filled in `S3_ACCESS_KEY_ID`/`S3_SECRET_ACCESS_KEY` with
+  the MinIO root credentials the compose file actually uses (throwaway
+  local-dev values, not real secrets) so the two files stay consistent.
+
+### Scope decision — module topology for `apps/tracker`/`apps/worker` is deferred, not solved
+
+`ARCHITECTURE.md` says `apps/tracker`/`apps/worker` share `internal/routing`/
+`internal/classifier` with `apps/api` as "the same Go module." §33 literally
+places this module's `go.mod` at `apps/api`, and Go's internal-import
+visibility rule means sibling directories (`apps/tracker`, `apps/worker`)
+structurally cannot import `apps/api/internal/...` regardless of module
+setup. Not a Phase 16 problem — routing/classifier logic doesn't exist until
+Phase 19/20 — documented as an open decision in `apps/api/README.md` and
+`docs/architecture.md` for whoever starts Phase 21, with the two concrete
+options already spelled out (move the module root to `apps/`, or keep
+routing/classifier under `pkg/` instead of `internal/`).
+
+### Fixed
+
+- ClickHouse dev-compose healthcheck (`localhost` → `127.0.0.1`), described
+  above — the only defect found during this phase's validation.
+
+### Known issues
+
+- None new. Phase 10's unresolved crash-loop report carries over
+  (unrelated to this phase).
+
+### Files changed
+
+- `apps/api/{go.mod,go.sum,cmd,internal,migrations/README.md,pkg/README.md,README.md}` (new)
+- `infra/docker-compose.dev.yml` (new)
+- `.env.example` (modified — S3 credentials filled in)
+- `docs/architecture.md` (modified — Phase 16 section)
+
 ## [Phase 15] — Frontend Architecture
 
 ### Added

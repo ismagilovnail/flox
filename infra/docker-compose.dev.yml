@@ -1,0 +1,81 @@
+# Local dev infrastructure (§33, Phase 16). Values match .env.example
+# exactly so `cp .env.example .env` + `docker compose -f
+# infra/docker-compose.dev.yml up -d` need no edits to work together.
+#
+# apps/api doesn't connect to any of these yet (Phase 16 has no DB/cache
+# calls) — this file exists now because Postgres (Phase 17), ClickHouse
+# (Phase 22-ish), and Redis (sticky cache, Phase 39-ish) all need somewhere
+# to run locally, and standing the containers up once is easier than
+# re-deriving the compose file service-by-service later.
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: flox
+      POSTGRES_PASSWORD: flox
+      POSTGRES_DB: flox
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U flox -d flox"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  clickhouse:
+    image: clickhouse/clickhouse-server:24-alpine
+    environment:
+      CLICKHOUSE_DB: flox
+      CLICKHOUSE_USER: flox
+      CLICKHOUSE_PASSWORD: ""
+      CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: 1
+    ports:
+      # Only the HTTP interface is exposed to the host — matches
+      # CLICKHOUSE_URL in .env.example. The native protocol port (9000)
+      # stays container-internal to avoid colliding with MinIO's API port
+      # below.
+      - "8123:8123"
+    volumes:
+      - clickhouse_data:/var/lib/clickhouse
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://127.0.0.1:8123/ping || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  minio:
+    image: minio/minio:latest
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: flox-minio-admin
+      MINIO_ROOT_PASSWORD: flox-minio-secret
+    ports:
+      - "9000:9000" # S3 API — matches S3_ENDPOINT in .env.example
+      - "9001:9001" # web console
+    volumes:
+      - minio_data:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  postgres_data:
+  clickhouse_data:
+  redis_data:
+  minio_data:
