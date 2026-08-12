@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Caption, Mono } from "@/components/ui/typography";
 import type { Pwa, PwaStatus } from "@/lib/mock/pwas";
 import { PwaRowActions } from "@/features/pwa/pwa-row-actions";
+import { TagBadgeList } from "@/features/tags/tag-badge-list";
 
 const STATUS_VARIANT: Record<PwaStatus, "success" | "warning" | "secondary"> = {
   active: "success",
@@ -56,6 +57,12 @@ export function pwaColumns(onEdit: (pwa: Pwa) => void): ColumnDef<typeof dataTab
         const status = getValue() as PwaStatus;
         return <Badge variant={STATUS_VARIANT[status]}>{status}</Badge>;
       },
+    },
+    {
+      id: "tags",
+      header: "Tags",
+      enableSorting: false,
+      cell: ({ row }) => <TagBadgeList entityType="pwa" entityId={row.original.id} />,
     },
     {
       accessorKey: "updatedAt",

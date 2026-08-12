@@ -10,6 +10,7 @@ import { Mono } from "@/components/ui/typography";
 import { Switch } from "@/components/ui/switch";
 import type { Flow } from "@/lib/mock/stream-sets";
 import { FlowFunnel } from "@/features/stream-sets/flow-funnel";
+import { TagBadgeList } from "@/features/tags/tag-badge-list";
 
 export function FlowEditor({
   flow,
@@ -56,6 +57,7 @@ export function FlowEditor({
           />
           <Mono className="text-xs text-muted-foreground">weight → {normalizedPercent.toFixed(1)}%</Mono>
         </div>
+        <TagBadgeList entityType="flow" entityId={flow.id} />
         <div className="ml-auto flex items-center gap-1.5">
           <Switch
             size="sm"

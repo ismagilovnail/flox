@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Caption, Mono } from "@/components/ui/typography";
 import type { Landing, LandingStatus } from "@/lib/mock/landings";
 import { LandingRowActions } from "@/features/landings/landing-row-actions";
+import { TagBadgeList } from "@/features/tags/tag-badge-list";
 
 const STATUS_VARIANT: Record<LandingStatus, "success" | "warning" | "secondary"> = {
   active: "success",
@@ -45,6 +46,12 @@ export function landingColumns(onEdit: (landing: Landing) => void): ColumnDef<ty
         const status = getValue() as LandingStatus;
         return <Badge variant={STATUS_VARIANT[status]}>{status}</Badge>;
       },
+    },
+    {
+      id: "tags",
+      header: "Tags",
+      enableSorting: false,
+      cell: ({ row }) => <TagBadgeList entityType="landing" entityId={row.original.id} />,
     },
     {
       accessorKey: "updatedAt",

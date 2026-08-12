@@ -8,6 +8,7 @@ import { Mono, Caption } from "@/components/ui/typography";
 import { formatUsd, formatInt } from "@/lib/format";
 import type { Campaign, CampaignStatus } from "@/lib/mock/campaigns";
 import { CampaignRowActions } from "@/features/campaigns/campaign-row-actions";
+import { TagBadgeList } from "@/features/tags/tag-badge-list";
 
 const STATUS_VARIANT: Record<CampaignStatus, "success" | "warning" | "outline" | "secondary"> = {
   active: "success",
@@ -35,6 +36,12 @@ export const campaignColumns: ColumnDef<typeof dataTableFeatures, Campaign>[] = 
     },
   },
   { accessorKey: "source", header: "Source" },
+  {
+    id: "tags",
+    header: "Tags",
+    enableSorting: false,
+    cell: ({ row }) => <TagBadgeList entityType="campaign" entityId={row.original.id} />,
+  },
   {
     accessorKey: "clicks",
     header: "Clicks",

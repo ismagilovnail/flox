@@ -10,12 +10,14 @@ import {
   createSortedRowModel,
   filterFn_includesString,
   rowPaginationFeature,
+  rowSelectionFeature,
   rowSortingFeature,
   sortFn_alphanumeric,
   sortFn_text,
   tableFeatures,
   useTable,
   type ColumnDef,
+  type RowSelectionState,
 } from "@tanstack/react-table"
 import {
   ArrowDownIcon,
@@ -27,6 +29,7 @@ import {
 } from "lucide-react"
 
 import { cn } from "@/lib/utils"
+import { Checkbox } from "@/components/ui/checkbox"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { EmptyState } from "@/components/ui/empty-state"
@@ -48,7 +51,33 @@ export const dataTableFeatures = tableFeatures({
   filteredRowModel: createFilteredRowModel(),
   filterFns: { includesString: filterFn_includesString },
   columnVisibilityFeature,
+  rowSelectionFeature,
 })
+
+const SELECT_COLUMN_ID = "__select__"
+
+function buildSelectColumn<TData extends Record<string, unknown>>(): ColumnDef<typeof dataTableFeatures, TData> {
+  return {
+    id: SELECT_COLUMN_ID,
+    header: ({ table }) => (
+      <Checkbox
+        checked={table.getIsAllPageRowsSelected() ? true : table.getIsSomePageRowsSelected() ? "indeterminate" : false}
+        onCheckedChange={(value) => table.toggleAllPageRowsSelected(!!value)}
+        aria-label="Select all rows on this page"
+      />
+    ),
+    cell: ({ row }) => (
+      <Checkbox
+        checked={row.getIsSelected()}
+        onCheckedChange={(value) => row.toggleSelected(!!value)}
+        onClick={(e) => e.stopPropagation()}
+        aria-label="Select row"
+      />
+    ),
+    enableSorting: false,
+    enableHiding: false,
+  }
+}
 
 /**
  * Client-side table: sort, paginate, search, column visibility. "Virtualize
@@ -63,6 +92,10 @@ function DataTable<TData extends Record<string, unknown>>({
   emptyDescription,
   pageSize = 20,
   className,
+  filters,
+  enableRowSelection = false,
+  getRowId,
+  bulkActions,
 }: {
   columns: ColumnDef<typeof dataTableFeatures, TData>[]
   data: TData[]
@@ -71,6 +104,14 @@ function DataTable<TData extends Record<string, unknown>>({
   emptyDescription?: string
   pageSize?: number
   className?: string
+  /** Extra toolbar controls rendered between search and the Columns menu — e.g. a tag filter. */
+  filters?: React.ReactNode
+  /** Opt-in row selection + a checkbox column. Every existing call site keeps working unchanged when omitted. */
+  enableRowSelection?: boolean
+  /** Required when enableRowSelection is true — selection state is keyed by this, not row index. */
+  getRowId?: (row: TData) => string
+  /** Rendered in a toolbar that appears only while rows are selected. */
+  bulkActions?: (ctx: { selectedRows: TData[]; clearSelection: () => void }) => React.ReactNode
 }) {
   const [sorting, setSorting] = React.useState<
     { id: string; desc: boolean }[]
@@ -83,32 +124,59 @@ function DataTable<TData extends Record<string, unknown>>({
     pageIndex: 0,
     pageSize,
   })
+  const [rowSelection, setRowSelection] = React.useState<RowSelectionState>({})
+
+  const tableColumns = React.useMemo(
+    () => (enableRowSelection ? [buildSelectColumn<TData>(), ...columns] : columns),
+    [enableRowSelection, columns],
+  )
 
   const table = useTable({
     features: dataTableFeatures,
-    columns,
+    columns: tableColumns,
     data,
-    state: { sorting, globalFilter, columnVisibility, pagination },
+    state: { sorting, globalFilter, columnVisibility, pagination, rowSelection },
     onSortingChange: setSorting,
     onGlobalFilterChange: setGlobalFilter,
     onColumnVisibilityChange: setColumnVisibility,
     onPaginationChange: setPagination,
+    onRowSelectionChange: setRowSelection,
+    getRowId: getRowId as ((row: TData) => string) | undefined,
     globalFilterFn: "includesString",
   })
 
   const rows = table.getRowModel().rows
+  const selectedRows = enableRowSelection ? table.getSelectedRowModel().rows.map((r) => r.original) : []
 
   return (
     <div data-slot="data-table" className={cn("flex flex-col gap-3", className)}>
-      <div className="flex items-center justify-between gap-2">
-        <div className="relative w-64">
-          <SearchIcon className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            value={globalFilter}
-            onChange={(e) => setGlobalFilter(e.target.value)}
-            placeholder={searchPlaceholder}
-            className="h-8 pl-8"
-          />
+      {enableRowSelection && selectedRows.length > 0 && (
+        <div className="flex items-center gap-2 rounded-md border border-border bg-muted/40 px-3 py-2 text-sm">
+          <span className="font-medium">{selectedRows.length} selected</span>
+          {bulkActions?.({ selectedRows, clearSelection: () => table.setRowSelection({}) })}
+          <Button
+            variant="ghost"
+            size="sm"
+            className="ml-auto"
+            onClick={() => table.setRowSelection({})}
+          >
+            Clear
+          </Button>
+        </div>
+      )}
+
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="relative w-64">
+            <SearchIcon className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              value={globalFilter}
+              onChange={(e) => setGlobalFilter(e.target.value)}
+              placeholder={searchPlaceholder}
+              className="h-8 pl-8"
+            />
+          </div>
+          {filters}
         </div>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>

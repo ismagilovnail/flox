@@ -2,21 +2,28 @@
 
 import * as React from "react";
 import { toast } from "sonner";
-import { PlusIcon } from "lucide-react";
+import { PlusIcon, TagIcon } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
 import { usePwasStore } from "@/stores/pwas";
+import { useTagsStore } from "@/stores/tags";
 import { pwaColumns } from "@/features/pwa/pwa-columns";
 import { PwaFormSheet, type PwaFormValues } from "@/features/pwa/pwa-form-sheet";
+import { TagFilterControl } from "@/features/tags/tag-filter-control";
+import { BulkTagDialog } from "@/features/tags/bulk-tag-dialog";
+import { filterByTags } from "@/features/tags/filter-by-tags";
 import type { Pwa } from "@/lib/mock/pwas";
 
 export function PwaList() {
   const pwas = usePwasStore((s) => s.pwas);
   const addPwa = usePwasStore((s) => s.addPwa);
   const updatePwa = usePwasStore((s) => s.updatePwa);
+  const assignments = useTagsStore((s) => s.assignments);
 
   const [target, setTarget] = React.useState<Pwa | null | undefined>(undefined);
+  const [tagFilter, setTagFilter] = React.useState<string[]>([]);
+  const [bulkTarget, setBulkTarget] = React.useState<{ ids: string[]; clear: () => void } | null>(null);
 
   function handleSubmit(values: PwaFormValues) {
     if (target) {
@@ -30,6 +37,10 @@ export function PwaList() {
   }
 
   const columns = React.useMemo(() => pwaColumns((pwa) => setTarget(pwa)), []);
+  const filtered = React.useMemo(
+    () => filterByTags("pwa", pwas, tagFilter, assignments),
+    [pwas, tagFilter, assignments],
+  );
 
   return (
     <div className="flex flex-col gap-4">
@@ -43,11 +54,23 @@ export function PwaList() {
 
       <DataTable
         columns={columns}
-        data={pwas}
+        data={filtered}
         searchPlaceholder="Search PWAs..."
         emptyTitle="No PWAs yet"
         emptyDescription="Add a PWA manifest to use as the installable step of a flow."
         pageSize={10}
+        filters={<TagFilterControl selected={tagFilter} onChange={setTagFilter} />}
+        enableRowSelection
+        getRowId={(row) => row.id}
+        bulkActions={({ selectedRows, clearSelection }) => (
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => setBulkTarget({ ids: selectedRows.map((r) => r.id), clear: clearSelection })}
+          >
+            <TagIcon className="size-3.5" /> Edit Tags
+          </Button>
+        )}
       />
 
       {target !== undefined && (
@@ -59,6 +82,19 @@ export function PwaList() {
           submitLabel={target ? "Save changes" : "Create PWA"}
           defaultValues={target ?? {}}
           onSubmit={handleSubmit}
+        />
+      )}
+
+      {bulkTarget && (
+        <BulkTagDialog
+          entityType="pwa"
+          entityIds={bulkTarget.ids}
+          open
+          onOpenChange={(open) => !open && setBulkTarget(null)}
+          onApplied={() => {
+            bulkTarget.clear();
+            setBulkTarget(null);
+          }}
         />
       )}
     </div>

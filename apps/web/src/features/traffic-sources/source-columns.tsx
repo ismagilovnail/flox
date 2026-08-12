@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Caption, Mono } from "@/components/ui/typography";
 import { COST_INTEGRATION_LABELS, type SourceStatus, type TrafficSource } from "@/lib/mock/traffic-sources";
 import { SourceRowActions } from "@/features/traffic-sources/source-row-actions";
+import { TagBadgeList } from "@/features/tags/tag-badge-list";
 
 const STATUS_VARIANT: Record<SourceStatus, "success" | "warning" | "secondary"> = {
   active: "success",
@@ -53,6 +54,12 @@ export function sourceColumns(onEdit: (source: TrafficSource) => void): ColumnDe
         const status = getValue() as SourceStatus;
         return <Badge variant={STATUS_VARIANT[status]}>{status}</Badge>;
       },
+    },
+    {
+      id: "tags",
+      header: "Tags",
+      enableSorting: false,
+      cell: ({ row }) => <TagBadgeList entityType="traffic_source" entityId={row.original.id} />,
     },
     {
       accessorKey: "updatedAt",

@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Caption, Mono } from "@/components/ui/typography";
 import type { Offer, OfferStatus } from "@/lib/mock/offers";
 import { OfferRowActions } from "@/features/offers/offer-row-actions";
+import { TagBadgeList } from "@/features/tags/tag-badge-list";
 
 const STATUS_VARIANT: Record<OfferStatus, "success" | "warning" | "secondary"> = {
   active: "success",
@@ -74,6 +75,12 @@ export function offerColumns(
         const status = getValue() as OfferStatus;
         return <Badge variant={STATUS_VARIANT[status]}>{status}</Badge>;
       },
+    },
+    {
+      id: "tags",
+      header: "Tags",
+      enableSorting: false,
+      cell: ({ row }) => <TagBadgeList entityType="offer" entityId={row.original.id} />,
     },
     {
       accessorKey: "updatedAt",

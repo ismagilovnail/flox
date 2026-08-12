@@ -3,6 +3,76 @@
 Format follows [Keep a Changelog](https://keepachangelog.com/). Entries are
 per-phase, matching `CLAUDE.md`'s phase protocol.
 
+## [Phase 14.5] — Tags (cross-entity)
+
+### Added
+
+- Tags (§30.6): a color-label system spanning exactly the seven entities
+  the spec names — Campaigns, Networks, Offers, Flows, Traffic Sources,
+  PWA, Landings — and nothing else (Postlanding/Pixels/Conversions/
+  Domains/Team stay untagged, matching the spec's list precisely).
+- Data model mirrors §30.6's generic `tags` table + polymorphic
+  `taggables` join exactly: `lib/mock/tags.ts` (Tag, decorative
+  `TAG_COLORS` palette deliberately kept separate from the design
+  system's semantic success/warning/danger/info tokens) and
+  `lib/mock/tag-assignments.ts` (the join side). One `stores/tags.ts`
+  owns both, with `setEntityTags` (single-item replace-all) and
+  `bulkEditTags(entityType, entityIds, toAdd, toRemove)` implementing
+  §30.6's bulk rule precisely: pre-check is the intersection of tags
+  across the whole selection; confirming adds newly-checked tags to
+  every selected item and removes previously-common tags that got
+  unchecked; tags only some items had, left untouched by the user, are
+  never touched.
+- **ONE tag component, ONE filter, reused across all seven entities per
+  the spec's explicit "do not reimplement per entity"** — everything
+  lives in `features/tags/`: `use-entity-tags.ts` (safe hook — selects
+  raw stable arrays and filters in a `useMemo`, learned from the Phase 13
+  crash), `tag-badge-list.tsx` (the shared "Tags column" cell: ≤3 shown,
+  >3 "+N", "Add tags" affordance when empty), `tag-picker-popover.tsx`
+  (search, checkboxes, inline quick-create when the typed name has no
+  match, inline rename/recolor, delete), `tag-filter-control.tsx` (OR
+  filter with colored dots), `bulk-tag-dialog.tsx`, `filter-by-tags.ts`.
+  Six list pages (Campaigns/Networks/Offers/Traffic Sources/PWA/Landings)
+  wire the exact same five pieces; Flows (no list page — nested inside
+  Stream Set cards) get `TagBadgeList` inline in `flow-editor.tsx` only,
+  since bulk-select and filtering are list-view concepts Flows don't
+  have.
+- Extended `components/ui/data-table.tsx` with opt-in row selection
+  (`enableRowSelection`, `getRowId`, a `bulkActions` render-prop, and a
+  `filters` toolbar slot) using TanStack v9's `rowSelectionFeature` —
+  strictly additive, so every pre-existing `<DataTable>` call site
+  (Postback Logs, Conversions, Pixels, Postlanding, …) keeps working
+  with zero changes since the new props all default to off.
+- Deliberate scope decision: skipped a second "Manage Tags" entry point
+  in each row's `⋮` menu. The spec offers it as an alternative ("via the
+  Tags column **or** the row's ⋮ Manage Tags"), and the Tags column
+  click already fully covers single-item tag management; a redundant
+  second popover-from-a-closed-dropdown entry point would have meant
+  six more rounds of anchor-positioning boilerplate for identical
+  functionality.
+
+### Fixed
+
+- N/A this phase.
+
+### Known issues
+
+- Full browser smoke test passed (extension connected): tag column +
+  picker + quick-create + propagation into the filter list on Campaigns,
+  OR-semantics filtering, bulk-select → Edit Tags with the intersection/
+  add/remove algorithm verified end-to-end, flow-level tagging inside
+  the Flow Builder, and a second entity (PWA) spot-checked for the same
+  behavior. No console errors. Re-ran the Phase 13 selector-antipattern
+  grep sweep before testing — clean.
+- No dedicated tag-management page — tags are created/renamed/recolored/
+  deleted entirely inline from any picker they appear in (by design, per
+  spec; there's no separate admin UI called for). Deleting a tag from
+  one picker removes it (and all its assignments) everywhere at once,
+  which is correct per "edit tag name/color propagates everywhere" but
+  is a real destructive action with no confirmation step beyond the
+  picker's own delete icon — worth a confirm dialog if this becomes a
+  frequent misclick in practice.
+
 ## [Phase 14] — Domains / Team / Settings
 
 ### Added

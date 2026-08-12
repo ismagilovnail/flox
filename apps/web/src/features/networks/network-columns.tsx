@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Caption, Mono } from "@/components/ui/typography";
 import type { Network, NetworkStatus } from "@/lib/mock/networks";
 import { NetworkRowActions } from "@/features/networks/network-row-actions";
+import { TagBadgeList } from "@/features/tags/tag-badge-list";
 
 const STATUS_VARIANT: Record<NetworkStatus, "success" | "warning" | "secondary"> = {
   active: "success",
@@ -35,6 +36,12 @@ export function networkColumns(onEdit: (network: Network) => void): ColumnDef<ty
         const status = getValue() as NetworkStatus;
         return <Badge variant={STATUS_VARIANT[status]}>{status}</Badge>;
       },
+    },
+    {
+      id: "tags",
+      header: "Tags",
+      enableSorting: false,
+      cell: ({ row }) => <TagBadgeList entityType="network" entityId={row.original.id} />,
     },
     {
       accessorKey: "postbackUrl",
