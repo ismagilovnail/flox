@@ -19,11 +19,11 @@ referenced below as §N).
 ## CURRENT STATE — UPDATE THIS EVERY PHASE
 
 ```
-CURRENT PHASE : PHASE 19 — Routing Engine
+CURRENT PHASE : PHASE 20 — Traffic Classifier
 STATUS        : done — Phase 10 crash-loop report still unresolved (unrelated);
                 apps/tracker/apps/worker module topology is an open decision, see apps/api/README.md
-LAST COMMIT   : feat(api): routing engine
-NEXT          : PHASE 20 — Traffic Classifier — confirm before starting
+LAST COMMIT   : feat(api): traffic classifier
+NEXT          : PHASE 21 — Tracking Engine — confirm before starting
 ```
 
 > At the end of every phase: update the four lines above, add a CHANGELOG entry,

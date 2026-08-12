@@ -3,6 +3,75 @@
 Format follows [Keep a Changelog](https://keepachangelog.com/). Entries are
 per-phase, matching `CLAUDE.md`'s phase protocol.
 
+## [Phase 20] — Traffic Classifier
+
+### Added
+
+- **`internal/classifier`** (§40): turns raw request signal (IP,
+  User-Agent, `Accept-Language`) into `routing.Attributes`, keyed by the
+  exact `routing.FilterField` constants stream-set filters already
+  evaluate against — imported from Phase 19's package, not redeclared, so
+  the two can never drift apart on a field's name. Feeds directly into
+  `Router.Resolve` with no adapter layer, verified end-to-end in
+  `integration_test.go`.
+- **`GeoProvider`/`ASNProvider`/`BotDetector`** interfaces (§74/§75,
+  non-negotiable #11 — no vendor lock-in), matching the spec's placeholder
+  signatures with real method shapes. Defaults are honest about not being
+  wired to a vendor: `NoopGeoProvider`/`NoopASNProvider` return empty
+  results rather than fabricated geo/ASN data; `HeuristicBotDetector`
+  flags well-known crawlers by a generic User-Agent substring list
+  (Googlebot, curl, python-requests, …) — explicitly the provider-neutral
+  technique §73 allows, not the ad-network moderator/reviewer detection it
+  forbids — and always reports `IsProxy: false` rather than guess without
+  a real IP-reputation vendor.
+- **Local User-Agent parsing** (`useragent.go`, stdlib `regexp` only — RE2,
+  non-negotiable #8): device/platform/os/os_version/browser/browser_version
+  bucketed into the same small fixed vocabulary the frontend's
+  `FIELD_VOCAB` already defines. No external UA-parsing dependency — the
+  target vocabulary is already small and fixed, so hand-written
+  substring/regex matching (with browser-detection order handled
+  carefully: Edge and Samsung Internet checked before Chrome, Chrome
+  before Safari, since all three embed each other's tokens) covers it
+  completely.
+- **`os_version`/`browser_version` populated even though §40's field list
+  doesn't name them** — they're already real, filterable
+  `routing.FilterField`s exposed since Phase 8's filter builder; leaving
+  them dead would be a gap, not fidelity to the spec's (representative,
+  not exhaustive) list.
+- **`connection_type` always `"unknown"`** — no reliable
+  wifi/cellular/ethernet signal exists server-side without a paid
+  network-intelligence vendor or a client-side JS beacon, neither of which
+  exist yet. Honest default, not a guess; matches the frontend's own
+  vocabulary option of the same name.
+- Device classification's one intentional non-"leave it empty" default:
+  absent any mobile/tablet marker, `Device` defaults to `"desktop"` — "not
+  mobile, not tablet" is itself a meaningful, safe-to-assume signal
+  (the convention every real UA parser uses), unlike platform/os/browser
+  where no such safe default exists.
+
+### Fixed
+
+- **A test expectation, not the implementation**: while writing
+  `useragent_test.go`, an "unrecognized UA" case initially expected
+  `Device: ""`, which failed against the (correct, intentional)
+  `desktop`-default behavior described above. Fixed the test's
+  expectation and tightened `UAResult`'s doc comment to state the
+  device-defaulting rule explicitly, rather than changing working code to
+  match a wrong assumption.
+
+### Known issues
+
+- None new. Phase 10's unresolved crash-loop report carries over
+  (unrelated to this phase). `apps/tracker`/`apps/worker` module topology
+  remains an open decision (documented Phase 16, still unresolved, not
+  blocking) — `internal/classifier`'s eventual caller, alongside
+  `internal/routing`.
+
+### Files changed
+
+- `apps/api/internal/classifier/*` (new)
+- `docs/architecture.md` (modified — Phase 20 section)
+
 ## [Phase 19] — Routing Engine
 
 ### Added

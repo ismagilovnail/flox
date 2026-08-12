@@ -156,3 +156,48 @@ frontend mock never implemented. §58 explicitly requires an "inactive
 offers" test case, and Strategy A means the Go engine — not the mock — is
 what's actually correct here; the frontend catches up when Phase 27 swaps
 it onto the real endpoint.
+
+## Phase 20 — Traffic Classifier
+
+`internal/classifier` (§40) turns raw request signal (IP, User-Agent,
+`Accept-Language`) into `routing.Attributes` — the "classify request" step
+of §39's ROUTING ENGINE ORDER, feeding directly into the routing engine
+Phase 19 built with no adapter layer: `Classify` returns `routing.Attributes`
+keyed by the exact `routing.FilterField` constants stream-set filters
+already evaluate against (imported, not redeclared — the two packages can
+never disagree about a field's name).
+
+External signal (§74/§75, CLAUDE.md non-negotiable #11 — no vendor lock-in)
+sits behind three interfaces the spec asked for verbatim (`GeoProvider`,
+`ASNProvider`, `BotDetector`), each with a default implementation that's
+honest about not being wired to a real vendor yet rather than fabricating
+data:
+
+- `NoopGeoProvider`/`NoopASNProvider` return empty results, no error — no
+  geo/ASN vendor is integrated until a later phase.
+- `HeuristicBotDetector` flags well-known crawlers/automation tools by a
+  User-Agent substring list (Googlebot, curl, python-requests, …) — a
+  generic, provider-neutral technique, explicitly not the ad-network
+  moderator/reviewer detection §73 forbids. `IsProxy` is always `false`:
+  reliable proxy detection needs an IP-reputation vendor that doesn't
+  exist yet, and guessing would be exactly the "fake API that looks real"
+  CLAUDE.md forbids.
+
+Device/platform/os/browser classification is local (`useragent.go`,
+`regexp` — RE2 only, non-negotiable #8), not an external dependency: the
+target vocabulary is already small and fixed (frontend `FIELD_VOCAB`), so
+hand-written substring/regex matching covers it without pulling in a
+UA-parsing library. `os_version`/`browser_version` are populated even
+though §40's field list doesn't name them — they're already real,
+filterable `routing.FilterField`s the frontend's filter builder has
+exposed since Phase 8, and a classifier that produced "os" without
+"os_version" would leave two long-standing filter fields permanently dead.
+`connection_type` always returns `"unknown"`: no reliable
+wifi/cellular/ethernet signal exists server-side without either a paid
+network-intelligence vendor or a client-side JS beacon, and neither exists
+yet — honest, not guessed, and matches the frontend's own vocabulary.
+
+Verified end-to-end, not just unit-by-unit: `integration_test.go` feeds
+`Classify`'s real output into a real `routing.Engine.Resolve` call against
+a stream-set filter on `country`/`device`/`bot`, proving the two packages'
+contract actually lines up in practice, not just by inspection.
