@@ -1,5 +1,5 @@
-import { PageStub } from "@/components/shell/page-stub";
+import { SourceList } from "@/features/traffic-sources/source-list";
 
 export default function Page() {
-  return <PageStub title="Traffic Sources" />;
+  return <SourceList />;
 }

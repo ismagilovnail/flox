@@ -6,8 +6,10 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { formatInt } from "@/lib/format";
 import { cn } from "@/lib/utils";
-import { LANDINGS, NETWORKS, OFFERS, POSTLANDINGS, PWAS, PWA_TYPES } from "@/lib/mock/flow-entities";
+import { LANDINGS, POSTLANDINGS, PWAS, PWA_TYPES } from "@/lib/mock/flow-entities";
 import type { Flow } from "@/lib/mock/stream-sets";
+import { useNetworksStore } from "@/stores/networks";
+import { useOffersStore } from "@/stores/offers";
 import { FlowNode } from "@/features/stream-sets/flow-node";
 
 function Connector() {
@@ -37,10 +39,12 @@ export function FlowFunnel({
   fallbackUrl: string;
   onChange: (patch: Partial<Flow>) => void;
 }) {
+  const networks = useNetworksStore((s) => s.networks);
+  const offers = useOffersStore((s) => s.offers);
   const landingOption = LANDINGS.find((l) => l.id === flow.landing.landingId);
   const postlandingOption = POSTLANDINGS.find((p) => p.id === flow.postlanding.postlandingId);
   const destination = flow.destination;
-  const networkOffers = destination.kind === "offer" ? OFFERS.filter((o) => o.networkId === destination.networkId) : [];
+  const networkOffers = destination.kind === "offer" ? offers.filter((o) => o.networkId === destination.networkId) : [];
 
   return (
     <div className="flex flex-col">
@@ -168,7 +172,7 @@ export function FlowFunnel({
                   onChange({
                     destination:
                       kind === "offer"
-                        ? { kind: "offer", networkId: NETWORKS[0].id, offerId: "", offerUrl: "" }
+                        ? { kind: "offer", networkId: networks[0]?.id ?? "", offerId: "", offerUrl: "" }
                         : { kind: "redirect", url: "" },
                   })
                 }
@@ -189,9 +193,14 @@ export function FlowFunnel({
               <Select
                 value={flow.destination.networkId}
                 onValueChange={(networkId) => {
-                  const firstOffer = OFFERS.find((o) => o.networkId === networkId);
+                  const firstOffer = offers.find((o) => o.networkId === networkId);
                   onChange({
-                    destination: { kind: "offer", networkId, offerId: firstOffer?.id ?? "", offerUrl: firstOffer?.url ?? "" },
+                    destination: {
+                      kind: "offer",
+                      networkId,
+                      offerId: firstOffer?.id ?? "",
+                      offerUrl: firstOffer?.links[0]?.url ?? "",
+                    },
                   });
                 }}
               >
@@ -199,7 +208,7 @@ export function FlowFunnel({
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {NETWORKS.map((n) => (
+                  {networks.map((n) => (
                     <SelectItem key={n.id} value={n.id}>
                       {n.name}
                     </SelectItem>
@@ -209,11 +218,11 @@ export function FlowFunnel({
               <Select
                 value={flow.destination.offerId || undefined}
                 onValueChange={(offerId) => {
-                  const offer = OFFERS.find((o) => o.id === offerId);
+                  const offer = offers.find((o) => o.id === offerId);
                   onChange({
                     destination:
                       flow.destination.kind === "offer"
-                        ? { ...flow.destination, offerId, offerUrl: offer?.url ?? flow.destination.offerUrl }
+                        ? { ...flow.destination, offerId, offerUrl: offer?.links[0]?.url ?? flow.destination.offerUrl }
                         : flow.destination,
                   });
                 }}

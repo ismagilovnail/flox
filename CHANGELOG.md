@@ -3,6 +3,72 @@
 Format follows [Keep a Changelog](https://keepachangelog.com/). Entries are
 per-phase, matching `CLAUDE.md`'s phase protocol.
 
+## [Phase 11] — Offers / Networks / Sources UI
+
+### Added
+
+- Traffic Sources, Networks, and Offers are now real, team-managed entities
+  (§27) with their own top-level pages (`/traffic-sources`, `/networks`,
+  `/offers`) — list (`DataTable`, search/sort/paginate), create/edit (a
+  `Sheet` form, following the Stream Set Builder's pattern rather than a
+  full detail route since none of these three need per-entity analytics
+  tabs), row actions (edit/pause/resume/duplicate/archive with an archive
+  confirm dialog), Zustand store per entity (`stores/{networks,offers,
+  traffic-sources}.ts`) mirroring the Campaigns store's CRUD shape.
+- Modeled the real hierarchy from §27: Network → Offer → Offer Link. An
+  Offer carries a `links: OfferLink[]` field array (primary + backups) in
+  its form, editable independently with add/remove.
+- `src/lib/macros.ts` — the ONE shared macro/placeholder resolver (§27):
+  `{click_id}`, `{status}`, `{revenue}`, `{currency}`, `{payout}`, `sub1..10`,
+  etc., plus `resolveMacros()`. `src/components/shared/macro-picker.tsx` is
+  the reusable insert-a-token popover, wired into the Offer link URL,
+  Network postback URL, and Source tracking template fields. Both are built
+  to be reused as-is by Postback templates and Pixel payloads in Phase 13 —
+  no second token list.
+- `src/lib/countries.ts` — static ISO country/currency reference for the
+  Offer GEO multi-select (`components/ui/multi-select.tsx`, previously only
+  used by the filter builder and analytics).
+- **Closed a Phase 9 known issue**: the Flow Builder's Network/Offer
+  pickers (`flow-funnel.tsx`, `stream-set-list.tsx`, `stream-set-row.tsx`,
+  `stream-set-form-sheet.tsx`) now read live from `useNetworksStore` /
+  `useOffersStore` instead of the static `flow-entities.ts` mock list —
+  creating/editing/pausing an offer in the new Phase 11 UI is immediately
+  reflected in the Flow Builder. `flow-entities.ts` keeps only
+  Landing/PWA/Postlanding placeholders (real in Phase 12). The stream-set
+  mock generator (`mock/stream-sets.ts`, a module-level pure function, not
+  a component) still seeds from the static `OFFERS`/`NETWORKS` arrays
+  exported by the new mock files — same non-reactive-seed behavior it had
+  before, just sourced from the new location.
+- Mock data IDs (`net_afftrust`, `off_sweeps_us`, etc.) were kept identical
+  to the old `flow-entities.ts` placeholders so every existing seeded
+  stream-set flow keeps resolving to the same offer/network without a data
+  migration.
+
+### Fixed
+
+- N/A this phase.
+
+### Known issues
+
+- No visual browser smoke test was possible this phase — the Claude-in-Chrome
+  extension reported "not connected" in this environment. Validated instead
+  via `tsc --noEmit` (clean), `eslint` (clean), `next build` (clean, all 3
+  new routes prerender), and `curl` against a running dev server confirming
+  200s and correct SSR content on `/traffic-sources`, `/networks`, `/offers`,
+  and a campaign detail page (including that a stream-set flow still
+  resolves "US Sweeps — CPA $12" through the new offers store). This does
+  not re-exercise the Phase 10 client-side navigation crash-loop report —
+  that one needs a real browser tab and DevTools console to chase down;
+  still unresolved.
+- Offer/Network/Source archive is a status flag, not a hard delete (matches
+  the Campaigns pattern) — nothing currently blocks deleting the last
+  network, which would leave the Offer form's network picker empty and the
+  "New Offer" button disabled; acceptable for mock data, revisit once
+  Offers/Networks have real referential integrity in Phase 17+.
+- Payout is shown/entered in the offer's own currency with no FX
+  conversion to USD anywhere in this UI (§50-FX is backend/event-time work,
+  out of scope for an entity-management screen with no events yet).
+
 ## [Phase 10] — Routing Simulator
 
 ### Added

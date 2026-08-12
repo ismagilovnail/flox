@@ -22,15 +22,15 @@ import { Button } from "@/components/ui/button";
 import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { useStreamSetsStore } from "@/stores/stream-sets";
+import { useNetworksStore } from "@/stores/networks";
 import { genId } from "@/lib/id";
 import { emptyGroup } from "@/lib/filters";
-import { NETWORKS } from "@/lib/mock/flow-entities";
 import { type StreamSet } from "@/lib/mock/stream-sets";
 import { StreamSetRow } from "@/features/stream-sets/stream-set-row";
 import { StreamSetFormSheet } from "@/features/stream-sets/stream-set-form-sheet";
 import type { StreamSetFormValues } from "@/features/stream-sets/stream-set-schema";
 
-function emptyStreamSetForm(): StreamSetFormValues {
+function emptyStreamSetForm(firstNetworkId: string): StreamSetFormValues {
   return {
     name: "",
     status: "active",
@@ -44,7 +44,7 @@ function emptyStreamSetForm(): StreamSetFormValues {
         landing: { enabled: false, landingId: "", asPwa: false },
         pwa: { enabled: false, pwaId: "", pwaType: "internal" },
         postlanding: { enabled: false, postlandingId: "" },
-        destination: { kind: "offer", networkId: NETWORKS[0].id, offerId: "", offerUrl: "" },
+        destination: { kind: "offer", networkId: firstNetworkId, offerId: "", offerUrl: "" },
       },
     ],
     pixels: [],
@@ -70,6 +70,7 @@ export function StreamSetList({ campaignId }: { campaignId: string }) {
   const setStatus = useStreamSetsStore((s) => s.setStatus);
   const duplicateStreamSet = useStreamSetsStore((s) => s.duplicateStreamSet);
   const reorder = useStreamSetsStore((s) => s.reorder);
+  const networks = useNetworksStore((s) => s.networks);
 
   const [target, setTarget] = React.useState<{ id: string | null } | null>(null);
 
@@ -155,7 +156,7 @@ export function StreamSetList({ campaignId }: { campaignId: string }) {
           onOpenChange={(open) => !open && setTarget(null)}
           title={editingStreamSet ? `Edit ${editingStreamSet.name}` : "New Stream Set"}
           submitLabel={editingStreamSet ? "Save changes" : "Create stream set"}
-          defaultValues={editingStreamSet ? toFormValues(editingStreamSet) : emptyStreamSetForm()}
+          defaultValues={editingStreamSet ? toFormValues(editingStreamSet) : emptyStreamSetForm(networks[0]?.id ?? "")}
           onSubmit={handleSubmit}
         />
       )}

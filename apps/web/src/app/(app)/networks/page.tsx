@@ -1,5 +1,5 @@
-import { PageStub } from "@/components/shell/page-stub";
+import { NetworkList } from "@/features/networks/network-list";
 
 export default function Page() {
-  return <PageStub title="Networks" />;
+  return <NetworkList />;
 }

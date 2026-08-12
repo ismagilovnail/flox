@@ -1,5 +1,5 @@
-import { PageStub } from "@/components/shell/page-stub";
+import { OfferList } from "@/features/offers/offer-list";
 
 export default function Page() {
-  return <PageStub title="Offers" />;
+  return <OfferList />;
 }

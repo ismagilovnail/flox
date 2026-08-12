@@ -19,10 +19,11 @@ referenced below as §N).
 ## CURRENT STATE — UPDATE THIS EVERY PHASE
 
 ```
-CURRENT PHASE : PHASE 10 — Routing Simulator
-STATUS        : done (see CHANGELOG "Known issues" — one unresolved crash-loop report)
-LAST COMMIT   : feat(routing): routing simulator
-NEXT          : PHASE 11 — Sources / Networks / Offers (§27) — confirm before starting
+CURRENT PHASE : PHASE 11 — Offers / Networks / Sources UI
+STATUS        : done (see CHANGELOG "Known issues" — Phase 10 crash-loop report still
+                unresolved; no browser available this phase to re-chase it)
+LAST COMMIT   : feat(entities): sources, networks, offers
+NEXT          : PHASE 12 — Landing / PWA / Postlanding — confirm before starting
 ```
 
 > At the end of every phase: update the four lines above, add a CHANGELOG entry,

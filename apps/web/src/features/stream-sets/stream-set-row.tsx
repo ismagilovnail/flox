@@ -19,7 +19,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { countConditions, describeFilterTree } from "@/lib/filters";
-import { OFFERS } from "@/lib/mock/flow-entities";
+import { useOffersStore } from "@/stores/offers";
 import type { StreamSet } from "@/lib/mock/stream-sets";
 
 export function StreamSetRow({
@@ -36,13 +36,14 @@ export function StreamSetRow({
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: streamSet.id,
   });
+  const offers = useOffersStore((s) => s.offers);
 
   const weightSum = streamSet.flows.reduce((sum, f) => sum + f.weight, 0);
 
   function destinationLabel(flow: StreamSet["flows"][number]) {
     const destination = flow.destination;
     if (destination.kind === "redirect") return "Redirect";
-    return OFFERS.find((o) => o.id === destination.offerId)?.name ?? "No offer";
+    return offers.find((o) => o.id === destination.offerId)?.name ?? "No offer";
   }
 
   return (

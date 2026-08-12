@@ -20,7 +20,7 @@ import {
 } from "@/components/ui/sheet";
 import { genId } from "@/lib/id";
 import type { FilterGroupNode } from "@/lib/filters";
-import { NETWORKS } from "@/lib/mock/flow-entities";
+import { useNetworksStore } from "@/stores/networks";
 import { FilterGroupBuilder } from "@/features/stream-sets/filter-group-builder";
 import { FlowEditor } from "@/features/stream-sets/flow-editor";
 import { streamSetFormSchema, type StreamSetFormValues } from "@/features/stream-sets/stream-set-schema";
@@ -58,6 +58,7 @@ export function StreamSetFormSheet({
     formState: { errors, isSubmitting },
   } = form;
 
+  const networks = useNetworksStore((s) => s.networks);
   const flowArray = useFieldArray({ control, name: "flows" });
   const pixelArray = useFieldArray({ control, name: "pixels" });
 
@@ -177,7 +178,7 @@ export function StreamSetFormSheet({
                     landing: { enabled: false, landingId: "", asPwa: false },
                     pwa: { enabled: false, pwaId: "", pwaType: "internal" },
                     postlanding: { enabled: false, postlandingId: "" },
-                    destination: { kind: "offer", networkId: NETWORKS[0].id, offerId: "", offerUrl: "" },
+                    destination: { kind: "offer", networkId: networks[0]?.id ?? "", offerId: "", offerUrl: "" },
                   })
                 }
               >

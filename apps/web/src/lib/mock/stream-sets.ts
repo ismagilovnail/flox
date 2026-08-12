@@ -1,6 +1,7 @@
 import { genId } from "@/lib/id";
 import { emptyGroup, type FilterGroupNode } from "@/lib/filters";
-import { LANDINGS, OFFERS, PWAS, type PwaType } from "@/lib/mock/flow-entities";
+import { LANDINGS, PWAS, type PwaType } from "@/lib/mock/flow-entities";
+import { OFFERS } from "@/lib/mock/offers";
 
 function mulberry32(seed: number) {
   return function rand() {
@@ -55,7 +56,7 @@ const SET_NAMES = ["Mobile — Tier 1 GEOs", "Desktop — Retarget", "Bot & Prox
 
 function offerDestination(networkId: string, offerId: string): Destination {
   const offer = OFFERS.find((o) => o.id === offerId);
-  return { kind: "offer", networkId, offerId, offerUrl: offer?.url ?? "" };
+  return { kind: "offer", networkId, offerId, offerUrl: offer?.links[0]?.url ?? "" };
 }
 
 const DISABLED_LANDING: LandingStage = { enabled: false, landingId: "", asPwa: false };
