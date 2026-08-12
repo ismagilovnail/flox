@@ -17,7 +17,6 @@ export type OfferInput = {
 type OffersState = {
   offers: Offer[];
   getById: (id: string) => Offer | undefined;
-  listByNetwork: (networkId: string) => Offer[];
   addOffer: (input: OfferInput) => string;
   updateOffer: (id: string, input: OfferInput) => void;
   setStatus: (id: string, status: OfferStatus) => void;
@@ -28,8 +27,6 @@ export const useOffersStore = create<OffersState>()((set, get) => ({
   offers: [...OFFERS],
 
   getById: (id) => get().offers.find((o) => o.id === id),
-
-  listByNetwork: (networkId) => get().offers.filter((o) => o.networkId === networkId),
 
   addOffer: (input) => {
     const id = genId();

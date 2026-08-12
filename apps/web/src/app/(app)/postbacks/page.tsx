@@ -1,5 +1,5 @@
-import { PageStub } from "@/components/shell/page-stub";
+import { PostbacksView } from "@/features/postbacks/postbacks-view";
 
 export default function Page() {
-  return <PageStub title="Postbacks" />;
+  return <PostbacksView />;
 }

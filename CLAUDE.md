@@ -19,11 +19,11 @@ referenced below as §N).
 ## CURRENT STATE — UPDATE THIS EVERY PHASE
 
 ```
-CURRENT PHASE : PHASE 12 — Landing / PWA / Postlanding UI
-STATUS        : done (see CHANGELOG "Known issues" — Phase 10 crash-loop report still
-                unresolved; browser-verified this phase but didn't hit that repro path)
-LAST COMMIT   : feat(entities): landings, pwa, postlanding
-NEXT          : PHASE 13 — Conversions / Postbacks / Pixels — confirm before starting
+CURRENT PHASE : PHASE 13 — Conversions / Postbacks / Pixels UI
+STATUS        : done — found and fixed a real infinite-render crash this phase (see
+                CHANGELOG "Fixed"); Phase 10 crash-loop report still separately unresolved
+LAST COMMIT   : feat(entities): conversions, postbacks, pixels
+NEXT          : PHASE 14 — Domains / Team / Settings — confirm before starting
 ```
 
 > At the end of every phase: update the four lines above, add a CHANGELOG entry,

@@ -1,5 +1,5 @@
-import { PageStub } from "@/components/shell/page-stub";
+import { ConversionList } from "@/features/conversions/conversion-list";
 
 export default function Page() {
-  return <PageStub title="Conversions" />;
+  return <ConversionList />;
 }

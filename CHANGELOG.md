@@ -3,6 +3,73 @@
 Format follows [Keep a Changelog](https://keepachangelog.com/). Entries are
 per-phase, matching `CLAUDE.md`'s phase protocol.
 
+## [Phase 13] — Conversions / Postbacks / Pixels UI
+
+### Added
+
+- Conversions (§29, §43): `/conversions` list (click ID, campaign, offer,
+  CPA status badge, revenue+currency, postback status, event time — all
+  cross-referenced live from the Campaigns/Offers stores) linking to
+  `/conversions/[id]`, a detail page with the exact §29 timeline (Click →
+  Landing → PWA → Offer → Conversion → Postback) as a vertical stepper, plus
+  a "Resend postback" action. `status` is a proper `CpaStatus` enum with
+  the CLAUDE.md-authoritative token values (`CPA_HOLD`/`CPA_ACCEPT`/
+  `CPA_REDEP`/`CPA_DECLINE`/`CPA_TRASH`) — never collapsed into one
+  "conversion" type (invariant #2).
+- Postbacks (§29, §45): `/postbacks` with four tabs.
+  - **Outgoing** reuses `NetworkList`/`NetworkFormSheet` as-is (outgoing
+    postback config IS the Network entity's `postbackUrl` — no second CRUD
+    for the same data).
+  - **Incoming** is new: a per-network reference card showing the URL to
+    hand that network so they can report conversions into FLOX
+    (`api.floxlink.io/postback/{networkId}?...`), with copy-to-clipboard
+    and a mapped-status-count badge.
+  - **Event Mapping** is a new, editable per-network table translating a
+    network's own raw status string to the canonical `CpaStatus` — what
+    the real Conversion Engine (Phase 23) will run at ingest time.
+  - **Logs** is a new `DataTable` of every incoming/outgoing postback
+    attempt (success/duplicate/error) with a Replay row action, per §45's
+    "log every postback... with replay ability."
+- Extended the Network entity (Phase 11) with `acceptDuplicates: boolean`
+  — the §45 per-network dedup override — as a toggle in the existing
+  `NetworkFormSheet`, plus a "Dedup" column on both the Networks page and
+  the reused Outgoing Postbacks panel.
+- Pixels (§29): `/pixels` — the same list/create-edit-Sheet/row-actions
+  shape as Landings/PWA/Postlanding. Client-side ad-platform pixels
+  (Facebook/TikTok/Snap/X/generic S2S) fired on a curated event subset.
+  Explicitly documented as distinct from a Stream Set's raw `pixels:
+  string[]` S2S URLs (§23/§24) — different concepts, not touched here.
+
+### Fixed
+
+- **Infinite-render crash on `/postbacks` → Event Mapping tab**: found via
+  the in-browser smoke test (Claude-in-Chrome connected this session).
+  `NetworkMappingCard` selected `useEventMappingsStore((s) =>
+  s.listByNetwork(networkId))` — `listByNetwork` returns a fresh
+  `.filter()`'d array on every call, which breaks `useSyncExternalStore`'s
+  snapshot-stability check (new reference each read, even with no `set()`
+  call) and threw `Uncaught Error: Maximum update depth exceeded`,
+  crashing the tab outright — the same failure class already documented
+  and correctly avoided in `stores/stream-sets.ts`'s `listByCampaign`
+  (which sidesteps it with a cache), just not learned from here. Fixed by
+  selecting the raw `mappings` array and filtering locally in a
+  `useMemo`. Also deleted the equivalent unused `listByNetwork` off
+  `stores/offers.ts` and `stores/event-mappings.ts` — both were dead code
+  and the exact loaded gun for the next person to pick up the same way;
+  confirmed via a full-codebase grep that no other `useXStore((s) =>
+  s.method(...))` or inline `.filter()`/`.map()` selector exists anywhere,
+  including in Phase 9/10's code. This does **not** explain the Phase 10
+  crash-loop report — that one has no reproduction and no `.filter()`-as-
+  selector pattern anywhere near it — so that stays logged as unresolved,
+  not retroactively closed by this fix.
+
+### Known issues
+
+- None new this phase — full browser smoke test passed after the fix
+  above (Conversions list + detail, all four Postbacks tabs including
+  adding an Event Mapping row and replaying a log entry, Pixels list), no
+  console errors.
+
 ## [Phase 12] — Landing / PWA / Postlanding UI
 
 ### Added

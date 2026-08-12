@@ -42,6 +42,13 @@ export function networkColumns(onEdit: (network: Network) => void): ColumnDef<ty
       cell: ({ getValue }) => <Mono className="block max-w-md truncate text-xs">{getValue() as string}</Mono>,
     },
     {
+      accessorKey: "acceptDuplicates",
+      header: "Dedup",
+      cell: ({ getValue }) => (
+        <Badge variant={getValue() ? "warning" : "outline"}>{getValue() ? "accepts dupes" : "dedup on"}</Badge>
+      ),
+    },
+    {
       accessorKey: "updatedAt",
       header: "Updated",
       cell: ({ getValue }) => (

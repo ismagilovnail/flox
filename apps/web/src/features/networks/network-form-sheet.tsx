@@ -16,12 +16,14 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet";
+import { Switch } from "@/components/ui/switch";
 import { MacroPicker } from "@/components/shared/macro-picker";
 import type { NetworkStatus } from "@/lib/mock/networks";
 
 export const networkFormSchema = z.object({
   name: z.string().min(2, "Name must be at least 2 characters").max(80),
   postbackUrl: z.url("Enter a valid URL"),
+  acceptDuplicates: z.boolean(),
   status: z.enum(["active", "paused", "archived"] as [NetworkStatus, ...NetworkStatus[]]),
 });
 
@@ -46,7 +48,7 @@ export function NetworkFormSheet({
 }) {
   const form = useForm<NetworkFormValues>({
     resolver: zodResolver(networkFormSchema),
-    defaultValues: { name: "", postbackUrl: "", status: "active", ...defaultValues },
+    defaultValues: { name: "", postbackUrl: "", acceptDuplicates: false, status: "active", ...defaultValues },
   });
 
   const {
@@ -87,8 +89,25 @@ export function NetworkFormSheet({
             />
             {errors.postbackUrl && <p className="text-xs text-danger">{errors.postbackUrl.message}</p>}
             <p className="text-xs text-muted-foreground">
-              Fired when a conversion status changes for this network (Phase 13 wires the real delivery).
+              Fired when a conversion status changes for this network (Phase 24 wires the real delivery).
             </p>
+          </div>
+
+          <div className="flex items-center justify-between rounded-md border border-border p-2.5">
+            <div>
+              <p className="text-sm font-medium">Accept duplicate postbacks</p>
+              <p className="text-xs text-muted-foreground">
+                FLOX dedups postbacks on (click_id, status) by default — some partners re-send identical
+                deposits/statuses on purpose. Turn this on only if this network&apos;s semantics require it (§45).
+              </p>
+            </div>
+            <Controller
+              control={control}
+              name="acceptDuplicates"
+              render={({ field }) => (
+                <Switch checked={field.value} onCheckedChange={field.onChange} aria-label="Accept duplicate postbacks" />
+              )}
+            />
           </div>
 
           <div className="grid gap-1.5">

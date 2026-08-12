@@ -1,5 +1,5 @@
-import { PageStub } from "@/components/shell/page-stub";
+import { PixelList } from "@/features/pixels/pixel-list";
 
 export default function Page() {
-  return <PageStub title="Pixels" />;
+  return <PixelList />;
 }

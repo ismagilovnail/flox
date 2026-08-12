@@ -6,6 +6,7 @@ import { NETWORKS, type Network, type NetworkStatus } from "@/lib/mock/networks"
 export type NetworkInput = {
   name: string;
   postbackUrl: string;
+  acceptDuplicates: boolean;
   status: NetworkStatus;
 };
 
