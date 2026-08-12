@@ -3,6 +3,69 @@
 Format follows [Keep a Changelog](https://keepachangelog.com/). Entries are
 per-phase, matching `CLAUDE.md`'s phase protocol.
 
+## [Phase 14.7] — Report Presets + Directory Stats
+
+### Added
+
+- **Report Presets** (§27.5), built on top of the Phase 5 Analytics
+  Explorer rather than a parallel report system: save the current
+  {dimensions ("columns"), metrics, groupBy ("grouping"), period,
+  timezone} as a named preset, apply it back, edit (rename + resave
+  current config), delete. One system default preset (starred, can't be
+  renamed or deleted) is seeded and visible to everyone.
+- `period` is stored **relative** ("last 7/30/90 days") wherever the
+  current date range matches a known relative window, not as a frozen
+  from/to pair — reapplying a preset next month still means "the last 30
+  days," not a stale historical window. Falls back to a fixed custom
+  range only when the current selection doesn't match a relative window.
+  Because the mock "now" is a fixed constant already used throughout
+  `analytics-view.tsx`, reapplying a preset is fully deterministic —
+  directly satisfying "applying a preset reproduces an identical report."
+- **View Statistics directory drill-in** (§27.5): a row action on
+  Networks, Offers, and Traffic Sources (the three of the spec's four
+  named surfaces — Campaigns, CPA Networks, Offers, Flows, Traffic
+  Sources — that have both a real list view and a stable entity name;
+  Flows skipped for the same reason Phase 14.5 skipped them: no Flows
+  list view exists to put a row action on) that hands off a fully-formed
+  report query via URL search params (`/analytics?dim=&val=&tab=line`) —
+  a navigation + pre-filter, per spec, not a client-side recompute.
+  `AnalyticsView` reads `dim`/`val`/`tab` on mount (validated against a
+  small allowlist) to seed its initial filter and default to the Line
+  tab, which already aggregates by day — satisfying "grouping by day"
+  with the chart that already exists rather than inventing a new
+  dimension. `analytics/page.tsx` wraps the view in `<Suspense>`, which
+  `useSearchParams()` requires.
+- **Fixed a pre-existing, silent mock-data disconnect while wiring this
+  up**: `mock/analytics.ts`'s `network`/`offer` dimension pools (Phase 5)
+  were self-contained fake names ("MaxBounty", "Sweeps Gold US", …) that
+  never matched the real Network/Offer entities Phase 11 introduced
+  later — so a "View Statistics" link built against real entity names
+  would have landed on a correctly filtered but permanently *empty*
+  report. Realigned both pools to the real seeded names (same array
+  length, pure string swap, no change to the generator logic); `source`
+  already coincidentally matched Traffic Source names, left as-is; `flow`
+  left untouched since Flows aren't wired to this feature.
+
+### Fixed
+
+- N/A this phase (see "Added" above for the mock-data alignment, which
+  is a data-content fix rather than a code-logic fix).
+
+### Known issues
+
+- Full browser smoke test passed (extension connected): applied both
+  seeded presets and confirmed dimensions/metrics/groupBy/date-range all
+  updated correctly; saved a new preset from the current view and
+  confirmed it appeared with edit/delete controls (the default preset
+  correctly has neither); "View Statistics" from both a Network and an
+  Offer row landed on `/analytics` with the right filter chip, the Line
+  tab active, and non-empty real trend data. No console errors.
+- Report Presets don't capture `filters` or `sort`/`compare` — only the
+  five fields §27.5 explicitly lists ({columns, metrics, grouping,
+  period, timezone}). This is a deliberate scope match to the spec's
+  literal field list, not an oversight, but worth knowing if a preset
+  seems to "forget" an ad hoc filter you had applied when you saved it.
+
 ## [Phase 14.6] — Custom Metrics builder
 
 ### Added

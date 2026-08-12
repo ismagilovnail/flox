@@ -1,5 +1,11 @@
+import { Suspense } from "react";
+
 import { AnalyticsView } from "@/features/analytics/analytics-view";
 
 export default function Page() {
-  return <AnalyticsView />;
+  return (
+    <Suspense>
+      <AnalyticsView />
+    </Suspense>
+  );
 }

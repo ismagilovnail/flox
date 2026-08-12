@@ -31,8 +31,10 @@ const POOLS: Record<DimensionKey, string[]> = {
   landing: ["LP Sweeps A", "LP Sweeps B", "LP Nutra A", "LP Dating A"],
   pwa: ["PWA Sweeps", "PWA Nutra", "None"],
   postlanding: ["PL Upsell A", "PL Survey B", "None"],
-  offer: ["Sweeps Gold US", "Nutra Slim UK", "Dating Prime DE", "Crypto Wallet AU"],
-  network: ["MaxBounty", "PropellerAds", "ClickDealer", "AdCombo"],
+  // Matches the real Offer/Network entities (mock/offers.ts, mock/networks.ts) so
+  // "View statistics" (§27.5) drill-in from those list pages lands on non-empty data.
+  offer: ["US Sweeps — CPA $12", "UK Nutra Trial", "DE Dating — CPL", "CA Crypto — RevShare"],
+  network: ["AffTrust CPA", "AdCombo", "MyLead", "Direct advertiser"],
 };
 
 export function dimensionValues(key: DimensionKey): string[] {

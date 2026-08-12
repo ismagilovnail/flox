@@ -1,19 +1,25 @@
 "use client";
 
 import * as React from "react";
+import { useSearchParams } from "next/navigation";
 
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { StatCard } from "@/components/ui/stat-card";
 import { ReportControls, type ReportControlsState } from "@/features/analytics/report-controls";
+import { ReportPresetBar } from "@/features/analytics/report-preset-bar";
 import { ReportTable } from "@/features/analytics/report-table";
 import { ReportLineChart, ReportBarChart } from "@/features/analytics/report-chart";
 import { FunnelChart } from "@/features/analytics/funnel-chart";
-import { aggregateReport } from "@/features/analytics/aggregate";
-import { METRICS, formatMetric } from "@/features/analytics/registry";
+import { aggregateReport, type FilterCondition } from "@/features/analytics/aggregate";
+import { METRICS, formatMetric, type DimensionKey } from "@/features/analytics/registry";
 import { generateAnalyticsSlices } from "@/lib/mock/analytics";
 import { useCustomMetricsStore } from "@/stores/custom-metrics";
 
 const SLICES = generateAnalyticsSlices();
+
+/** Dimensions "View statistics" (§27.5) is allowed to deep-link a filter for —
+ * an allowlist so an arbitrary/malformed URL query can't inject a bogus filter. */
+const VIEW_STATS_DIMENSIONS: DimensionKey[] = ["network", "offer", "source"];
 
 function previousRange(range: ReportControlsState["dateRange"]) {
   if (!range?.from) return undefined;
@@ -25,6 +31,7 @@ function previousRange(range: ReportControlsState["dateRange"]) {
 }
 
 export function AnalyticsView() {
+  const searchParams = useSearchParams();
   const allCustomMetrics = useCustomMetricsStore((s) => s.metrics);
   const reportBuilderMetrics = React.useMemo(
     () => allCustomMetrics.filter((m) => m.status === "published" && m.active && m.targets.includes("report_builder")),
@@ -35,16 +42,26 @@ export function AnalyticsView() {
   const defaultFrom = new Date(lastDate);
   defaultFrom.setUTCDate(defaultFrom.getUTCDate() - 29);
 
-  const [state, setState] = React.useState<ReportControlsState>({
-    dateRange: { from: defaultFrom, to: lastDate },
-    timezone: "UTC",
-    dimensions: ["campaign"],
-    metrics: ["clicks", "conversions", "revenue", "cvr"],
-    filters: [],
-    groupBy: "campaign",
-    sort: { key: "revenue", dir: "desc" },
-    compare: false,
+  const [state, setState] = React.useState<ReportControlsState>(() => {
+    const dim = searchParams.get("dim");
+    const val = searchParams.get("val");
+    const filters: FilterCondition[] =
+      dim && val && VIEW_STATS_DIMENSIONS.includes(dim as DimensionKey)
+        ? [{ dimension: dim as DimensionKey, value: val }]
+        : [];
+    return {
+      dateRange: { from: defaultFrom, to: lastDate },
+      timezone: "UTC",
+      dimensions: ["campaign"],
+      metrics: ["clicks", "conversions", "revenue", "cvr"],
+      filters,
+      groupBy: "campaign",
+      sort: { key: "revenue", dir: "desc" },
+      compare: false,
+    };
   });
+
+  const initialTab = searchParams.get("tab") === "line" ? "line" : "table";
 
   function onChange(patch: Partial<ReportControlsState>) {
     setState((s) => ({ ...s, ...patch }));
@@ -85,6 +102,7 @@ export function AnalyticsView() {
     <div className="flex flex-col gap-6">
       <h1 className="text-2xl font-semibold tracking-tight">Analytics</h1>
 
+      <ReportPresetBar state={state} onApply={onChange} />
       <ReportControls state={state} onChange={onChange} />
 
       {compareRows && (
@@ -114,7 +132,7 @@ export function AnalyticsView() {
         </div>
       )}
 
-      <Tabs defaultValue="table">
+      <Tabs defaultValue={initialTab}>
         <TabsList>
           <TabsTrigger value="table">Table</TabsTrigger>
           <TabsTrigger value="line">Line</TabsTrigger>

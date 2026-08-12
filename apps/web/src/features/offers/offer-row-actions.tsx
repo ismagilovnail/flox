@@ -1,8 +1,9 @@
 "use client";
 
 import * as React from "react";
+import Link from "next/link";
 import { toast } from "sonner";
-import { CopyIcon, MoreHorizontalIcon, PauseIcon, PencilIcon, PlayIcon, Trash2Icon } from "lucide-react";
+import { BarChart3Icon, CopyIcon, MoreHorizontalIcon, PauseIcon, PencilIcon, PlayIcon, Trash2Icon } from "lucide-react";
 
 import { IconButton } from "@/components/ui/icon-button";
 import { Button } from "@/components/ui/button";
@@ -22,6 +23,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { useOffersStore } from "@/stores/offers";
+import { viewStatisticsHref } from "@/features/analytics/view-statistics-link";
 import type { Offer } from "@/lib/mock/offers";
 
 export function OfferRowActions({ offer, onEdit }: { offer: Offer; onEdit: () => void }) {
@@ -57,6 +59,11 @@ export function OfferRowActions({ offer, onEdit }: { offer: Offer; onEdit: () =>
         <DropdownMenuContent align="end">
           <DropdownMenuItem onSelect={onEdit}>
             <PencilIcon className="size-4" /> Edit
+          </DropdownMenuItem>
+          <DropdownMenuItem asChild>
+            <Link href={viewStatisticsHref("offer", offer.name)}>
+              <BarChart3Icon className="size-4" /> View statistics
+            </Link>
           </DropdownMenuItem>
           {offer.status !== "archived" && (
             <DropdownMenuItem onSelect={togglePause}>

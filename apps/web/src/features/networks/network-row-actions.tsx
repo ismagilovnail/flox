@@ -1,8 +1,9 @@
 "use client";
 
 import * as React from "react";
+import Link from "next/link";
 import { toast } from "sonner";
-import { CopyIcon, MoreHorizontalIcon, PauseIcon, PencilIcon, PlayIcon, Trash2Icon } from "lucide-react";
+import { BarChart3Icon, CopyIcon, MoreHorizontalIcon, PauseIcon, PencilIcon, PlayIcon, Trash2Icon } from "lucide-react";
 
 import { IconButton } from "@/components/ui/icon-button";
 import { Button } from "@/components/ui/button";
@@ -22,6 +23,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { useNetworksStore } from "@/stores/networks";
+import { viewStatisticsHref } from "@/features/analytics/view-statistics-link";
 import type { Network } from "@/lib/mock/networks";
 
 export function NetworkRowActions({ network, onEdit }: { network: Network; onEdit: () => void }) {
@@ -57,6 +59,11 @@ export function NetworkRowActions({ network, onEdit }: { network: Network; onEdi
         <DropdownMenuContent align="end">
           <DropdownMenuItem onSelect={onEdit}>
             <PencilIcon className="size-4" /> Edit
+          </DropdownMenuItem>
+          <DropdownMenuItem asChild>
+            <Link href={viewStatisticsHref("network", network.name)}>
+              <BarChart3Icon className="size-4" /> View statistics
+            </Link>
           </DropdownMenuItem>
           {network.status !== "archived" && (
             <DropdownMenuItem onSelect={togglePause}>
