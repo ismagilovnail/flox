@@ -1,5 +1,5 @@
-import { PageStub } from "@/components/shell/page-stub";
+import { ReferralDashboard } from "@/features/referral/referral-dashboard";
 
 export default function Page() {
-  return <PageStub title="Referral" />;
+  return <ReferralDashboard />;
 }

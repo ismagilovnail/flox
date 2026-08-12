@@ -3,6 +3,59 @@
 Format follows [Keep a Changelog](https://keepachangelog.com/). Entries are
 per-phase, matching `CLAUDE.md`'s phase protocol.
 
+## [Phase 14.8] — Referral Program
+
+### Added
+
+- **Referral dashboard** (§27.6/§30.7) at `/referral`: one referral
+  account per team (tenant-scoped, matching every other §36-TENANCY
+  surface), not per-user — FLOX pays a commission to the workspace for
+  referring other advertisers to the platform, so it's scoped like the
+  workspace itself. `referralCode`/`referralLink` derived from the org
+  name via the existing `slugify()` helper; copy-to-clipboard with a
+  toast confirmation.
+- **Referred Signups** table: name, email, status badge
+  (invited/signed_up/converted), relative signup date.
+- **Earnings History**: an immutable, append-only transaction ledger
+  (§54-style audit trail) — `accrual` | `adjustment` | `payout_paid`
+  entries, each attributed to a team member and timestamped. Balances
+  are never stored or edited directly; `computeBalances()` derives
+  Total earned / Total paid / Pending payout / Available balance from
+  the transaction + payout logs via a pure function, so the numbers can
+  never drift out of sync with the log that produced them.
+- **Payouts** state machine: `pending → approved → paid`, plus a
+  `rejected` branch (a reasonable low-cost extension of the spec's
+  linear 3-state description — every approval flow needs a "no").
+  Owner/Admin (reusing Team's canonical roles, not a new per-feature
+  role vocabulary) can approve, reject (with a required reason), or
+  mark paid; marking paid appends a matching negative `payout_paid`
+  ledger entry. Terminal states (`paid`/`rejected`) render no actions.
+- **Request payout** dialog, pre-filled to the full available balance,
+  validated `0 < amount <= availableBalance`. **Add adjustment** dialog
+  (Owner/Admin only): signed amount + required reason, for manual
+  corrections.
+- All amounts are flat USD — deliberately *not* run through §50-FX
+  original-currency/event-date normalization, since referral payouts
+  are FLOX's own commission structure, not tenant traffic revenue.
+
+### Fixed
+
+- N/A this phase — full request → approve → mark-paid flow, balance
+  math, and ledger immutability all verified correct in the browser on
+  the first pass; no console errors.
+
+### Known issues
+
+- None new. Phase 10's unresolved crash-loop report carries over
+  (unrelated to this phase).
+
+### Files changed
+
+- `apps/web/src/lib/mock/referral.ts` (new) — data model + `computeBalances()`
+- `apps/web/src/stores/referral.ts` (new) — Zustand ledger store
+- `apps/web/src/features/referral/*` (new) — dashboard, tables, dialogs, row actions
+- `apps/web/src/app/(app)/referral/page.tsx` (modified) — wired to `ReferralDashboard`
+
 ## [Phase 14.7] — Report Presets + Directory Stats
 
 ### Added

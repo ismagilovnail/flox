@@ -19,11 +19,10 @@ referenced below as §N).
 ## CURRENT STATE — UPDATE THIS EVERY PHASE
 
 ```
-CURRENT PHASE : PHASE 14.7 — Report Presets + Directory Stats
-STATUS        : done — also realigned mock/analytics.ts's network/offer dimension pools
-                with real entities (Phase 5/11 disconnect); Phase 10 crash-loop still unresolved
-LAST COMMIT   : feat(analytics): report presets, view statistics drill-in
-NEXT          : PHASE 14.8 — Referral Program — confirm before starting
+CURRENT PHASE : PHASE 14.8 — Referral Program
+STATUS        : done — Phase 10 crash-loop report still unresolved (unrelated)
+LAST COMMIT   : feat(referral): referral program
+NEXT          : PHASE 14.9 — Content Gallery — confirm before starting
 ```
 
 > At the end of every phase: update the four lines above, add a CHANGELOG entry,
