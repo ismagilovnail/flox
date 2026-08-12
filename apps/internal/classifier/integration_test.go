@@ -5,8 +5,8 @@ import (
 	"net"
 	"testing"
 
-	"github.com/ismagilovnail/flox/apps/api/internal/classifier"
-	"github.com/ismagilovnail/flox/apps/api/internal/routing"
+	"github.com/ismagilovnail/flox/apps/internal/classifier"
+	"github.com/ismagilovnail/flox/apps/internal/routing"
 )
 
 // TestClassifyIntoRouting proves the "classify request" step of §39's

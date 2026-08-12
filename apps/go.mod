@@ -1,4 +1,4 @@
-module github.com/ismagilovnail/flox/apps/api
+module github.com/ismagilovnail/flox/apps
 
 go 1.26.5
 

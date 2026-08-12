@@ -34,8 +34,10 @@ logic is duplicated between binaries.
 
 ```
 apps/
+  go.mod     ONE Go module for api + tracker + worker (root moved here in Phase 21)
+  internal/  shared Go packages — routing, classifier, event, config, …
   web/       Next.js frontend — the only non-Go app
-  api/       Go control-plane API
+  api/       Go control-plane API (+ migrations/)
   tracker/   Go hot-path click/redirect service
   worker/    Go async event/postback processor
 packages/
@@ -43,6 +45,12 @@ packages/
 docs/        architecture, event-model, routing, ltv, metrics, etc.
 infra/       docker-compose, deployment
 ```
+
+The Go module root sits at `apps/` rather than `apps/api/` precisely so the
+three binaries can share `apps/internal/...`: Go's internal-import rule
+only permits importing `.../internal/x` from code rooted at that
+directory's parent, so a module rooted at `apps/api` could never have let
+`apps/tracker` import the routing engine.
 
 Frontend internal structure: `app/ components/ features/ hooks/ lib/ stores/
 types/ schemas/`. Domain code lives in `features/`. All server calls go

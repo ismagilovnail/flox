@@ -7,8 +7,8 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/ismagilovnail/flox/apps/api/internal/campaign"
-	"github.com/ismagilovnail/flox/apps/api/internal/idgen"
+	"github.com/ismagilovnail/flox/apps/internal/campaign"
+	"github.com/ismagilovnail/flox/apps/internal/idgen"
 )
 
 // TestCrossTenantIsolation is the DoD requirement CLAUDE.md calls out

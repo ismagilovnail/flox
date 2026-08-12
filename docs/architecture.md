@@ -36,16 +36,12 @@ matching `.env.example` exactly. `apps/api` doesn't connect to any of them
 yet; the compose file exists now because every later phase needs it and
 there's no reason to keep re-deriving it.
 
-**Open decision, not yet made:** `apps/tracker` and `apps/worker` are
-separate top-level directories from `apps/api`, but Go's internal-import
-visibility rule means a sibling directory cannot import
-`apps/api/internal/routing` regardless of module setup. Phase 21 (when
-`apps/tracker` is first scaffolded) needs to either move this module's root
-up to `apps/` (one `go.mod` for all three binaries, matching
-`ARCHITECTURE.md`'s "same Go module" description literally) or keep three
-modules and put routing/classifier under `pkg/` instead of `internal/`
-(no cross-module visibility restriction there). See `apps/api/README.md`
-for the fuller writeup.
+> **Superseded by Phase 21.** The paths above describe the layout as it was
+> when Phase 16 landed. The module root has since moved from `apps/api` to
+> `apps/` (module `github.com/ismagilovnail/flox/apps`), so `cmd/api/` is
+> now `api/main.go` and `internal/…` is now `apps/internal/…`, shared with
+> `apps/tracker`. See the Phase 21 section below. The Phase 16 open
+> question about module topology is resolved there.
 
 ## Phase 17 — Database
 
@@ -201,3 +197,85 @@ Verified end-to-end, not just unit-by-unit: `integration_test.go` feeds
 `Classify`'s real output into a real `routing.Engine.Resolve` call against
 a stream-set filter on `country`/`device`/`bot`, proving the two packages'
 contract actually lines up in practice, not just by inspection.
+
+## Phase 21 — Tracking Engine
+
+`apps/tracker` — the hot-path click/redirect service (§41). Critical path:
+
+```
+HTTP request → parse → classify → route → record async → 302 redirect
+```
+
+Measured on the dev stack over 200 requests: **p50 1.1ms, p95 1.4ms**
+against §56's p50 < 20ms / p95 < 50ms budget.
+
+### Module topology — the Phase 16 open question, resolved
+
+The Go module root moved from `apps/api` up to `apps/`, so `apps/api`,
+`apps/tracker` and `apps/worker` are separate binaries in one module
+importing the same `apps/internal/...` — exactly what ARCHITECTURE.md
+already specified and what §41's "shares internal packages" requires. Go's
+internal-import rule made this the only workable option short of demoting
+routing/classifier out of `internal/`. The directory layout CLAUDE.md
+specifies is unchanged; only `go.mod` moved.
+
+One side effect worth recording: the module now contains `apps/web`, so
+`go build ./...` would have compiled and vetted any stray `.go` file
+shipped inside `web/node_modules` by an npm package — letting a JS
+dependency break the Go build. `apps/web/go.mod` is a stub that exists
+solely to make the toolchain skip that subtree.
+
+### Event pipeline (§41, §43)
+
+`internal/event` holds the full ~20-type model from day one (CLAUDE.md
+non-negotiable #2), with the five CPA statuses as distinct members — a
+test asserts the model against §43's list so a future edit can't quietly
+truncate it, and asserts that a generic `CONVERSION` type does *not*
+exist.
+
+`internal/eventbuf` is the buffered batch writer. Its one hard guarantee:
+`Enqueue` never blocks. It is a single non-blocking channel send, so a
+stalled sink drops events (counted, and logged — never silent) rather than
+making a user wait on a redirect. A test proves this by wiring a
+permanently-stalled sink to a 4-deep buffer and asserting 1000 `Enqueue`
+calls still return promptly. §43's durable queue and its ClickHouse
+consumer arrive with `apps/worker` (Phase 24); until then the sink is an
+honest structured-log writer behind the same `Sink` interface.
+
+### Tracking links resolve by host + slug
+
+`tracking_links` is unique on `(domain_id, slug)`, so a slug is
+deliberately *not* globally unique — two organizations may each own
+`summer` on their own domain. `routingstore.ResolveTrackingLink` therefore
+matches on host *and* slug; resolving by slug alone would be a
+cross-tenant data leak.
+
+### Where the "caller-level" routing concerns landed
+
+Phase 19 documented three §58 cases as out of `internal/routing`'s scope
+because they happen before `Resolve` is called. Two of them are now
+implemented here, in the tracker, where the data actually lives: an
+unresolvable tracking link and a non-`active` campaign both 404 without
+ever reaching the routing engine. The third (in-app WebView bounce) is
+still outstanding and belongs with the PWA install funnel.
+
+### Sticky (§39-STICKY)
+
+The cookie is the source of truth, and nothing in this phase consults a
+cache — there is no Redis dependency in the tracker at all, so there is
+nothing that eviction could corrupt. `stickyFlowKeepClickId` is handled
+here rather than in `internal/routing`: it decides whether a returning
+visitor's original `click_id` is reused for attribution, which has no
+effect on which flow is selected, so the routing engine still never sees
+it (`routingstore.CampaignRouting` returns it alongside the config rather
+than smuggling it into `routing.RoutingConfig`). Verified end to end: a
+replayed cookie produced `sticky_applied=true` and reused the original
+`click_id` across a return visit.
+
+### Unfilled Facebook subs (§42)
+
+Implemented by having no special case at all: whatever `sub1..sub10`
+arrive are persisted, whatever don't stay empty strings — no placeholder,
+no "unknown campaign", no inference. `event.Subs.SubCount()` makes the
+share of subs-less traffic measurable downstream, which is what §42 asks
+for.

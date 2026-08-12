@@ -45,10 +45,24 @@ type S3Config struct {
 	SecretAccessKey string
 }
 
+// Load builds the control-plane API's configuration (apps/api).
 func Load() (Config, error) {
-	port, err := parsePort(getEnv("API_URL", "http://localhost:8080"))
+	return load("API_URL", "http://localhost:8080", "flox-api")
+}
+
+// LoadTracker builds the hot-path tracker's configuration (apps/tracker).
+// Same shape and same environment variables as the API's — the two
+// services differ only in which URL variable supplies their listen port
+// and in their default OTel service name, so they share one loader rather
+// than each growing a near-identical copy that can drift.
+func LoadTracker() (Config, error) {
+	return load("TRACKER_URL", "http://localhost:8081", "flox-tracker")
+}
+
+func load(portVar, portDefault, defaultServiceName string) (Config, error) {
+	port, err := parsePort(getEnv(portVar, portDefault))
 	if err != nil {
-		return Config{}, fmt.Errorf("parsing API_URL: %w", err)
+		return Config{}, fmt.Errorf("parsing %s: %w", portVar, err)
 	}
 
 	return Config{
@@ -57,7 +71,7 @@ func Load() (Config, error) {
 		LogLevel: getEnv("LOG_LEVEL", "info"),
 
 		OTelExporterOTLPEndpoint: getEnv("OTEL_EXPORTER_OTLP_ENDPOINT", ""),
-		OTelServiceName:          getEnv("OTEL_SERVICE_NAME", "flox-api"),
+		OTelServiceName:          getEnv("OTEL_SERVICE_NAME", defaultServiceName),
 
 		DatabaseURL: getEnv("DATABASE_URL", ""),
 		ClickHouse: ClickHouseConfig{

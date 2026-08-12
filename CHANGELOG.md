@@ -3,6 +3,149 @@
 Format follows [Keep a Changelog](https://keepachangelog.com/). Entries are
 per-phase, matching `CLAUDE.md`'s phase protocol.
 
+## [Phase 21] — Tracking Engine
+
+### Changed — module topology (the Phase 16 open question, resolved)
+
+- **The Go module root moved from `apps/api` to `apps/`** (module
+  `github.com/ismagilovnail/flox/apps`). Phase 16 flagged this as a
+  decision for whoever started Phase 21: Go's internal-import rule means
+  `.../internal/x` is only importable by code rooted at that directory's
+  parent, so `apps/tracker` could never have imported
+  `apps/api/internal/routing`. Both `ARCHITECTURE.md` ("separate binaries
+  inside the same Go module") and §41 ("shares internal packages") state
+  the answer outright, so there was nothing left to weigh — taken rather
+  than re-litigated. `git mv` throughout, so history is preserved.
+  - `apps/api/cmd/api/main.go` → `apps/api/main.go`; run with `go run ./api`.
+  - `apps/api/internal/…` → `apps/internal/…`.
+  - Migrations stay with the control plane: `go tool goose -dir api/migrations`.
+  - The directory layout CLAUDE.md specifies is unchanged; only `go.mod` moved.
+- **`apps/web/go.mod`** (new, 4 lines): the module root now sits above
+  `apps/web`, so `go build ./...` was compiling and vetting a stray `.go`
+  file shipped inside `web/node_modules` by an npm package — letting a JS
+  dependency break the Go build. A nested module stub makes the toolchain
+  skip that subtree. Found empirically right after the move, not
+  theorised.
+
+### Added
+
+- **`apps/tracker`** (§41): the hot-path click/redirect binary.
+  `GET /t/{trackingID}` runs parse → classify → route → record async →
+  302 redirect, with no analytics query and no wait on persistence
+  anywhere on the path. Measured on the dev stack over 200 requests:
+  **p50 1.1ms, p95 1.4ms** against §56's p50 < 20ms / p95 < 50ms budget.
+- **`internal/event`** (§43): the full ~20-type event model, present from
+  day one and never truncated (CLAUDE.md non-negotiable #2), with the five
+  CPA statuses as distinct enum members. A test asserts the model against
+  §43's list so a later edit can't quietly drop a type, and asserts a
+  generic `CONVERSION` type does *not* exist.
+- **`internal/eventbuf`** (§41): buffered batch writer whose one hard
+  guarantee is that `Enqueue` never blocks — a single non-blocking channel
+  send, so a stalled sink drops events (counted, and logged, never
+  silently) rather than making a user wait on a redirect. Proven by a test
+  that wires a permanently-stalled sink to a 4-deep buffer and asserts
+  1000 `Enqueue` calls still return promptly. Batches flush on size or
+  interval, and `Close` drains rather than discarding accepted events.
+  §43's durable queue + ClickHouse consumer arrive with `apps/worker`
+  (Phase 24); until then the sink is an honest structured-log writer
+  behind the same `Sink` interface.
+- **`internal/routingstore`**: loads a campaign's routing configuration
+  out of Postgres into `internal/routing`'s pure types — a separate
+  package specifically so the routing engine keeps its no-database
+  property. Rebuilds the recursive AND/OR filter tree from the flat
+  `filter_groups`/`filter_conditions` rows in two queries rather than one
+  per node, and resolves whether an offer destination's offer is still
+  active (the check §58's "inactive offers" case needs).
+- **`ConfigVersion`** is derived from the newest `updated_at` across the
+  campaign and its routing objects. §39 asks for versioned configuration
+  and no version column exists; this is a real monotonic version that
+  changes exactly when the configuration changes, which is what
+  cache-invalidation and "which config produced this decision" actually
+  need.
+- **Migration `00011`**: §39-STICKY's three flags (`sticky_flow`,
+  `sticky_flow_keep_click_id`, `sticky_flow_skip_inactive`) on
+  `campaigns`. Not in §35's table list, so Phase 17 correctly didn't
+  invent them; the tracker is the first code that reads them, so they land
+  now — schema following the code that needs it.
+- **`config.LoadTracker`**: same shape and env vars as the API's loader,
+  differing only in which URL variable supplies the port and the default
+  OTel service name, so the two share one loader instead of growing
+  near-identical copies that drift.
+
+### Notable implementation decisions
+
+- **Tracking links resolve by host + slug, never slug alone.**
+  `tracking_links` is unique on `(domain_id, slug)`, so two organizations
+  may each own the slug `summer` on their own domain — resolving by slug
+  alone would be a cross-tenant data leak.
+- **Two of Phase 19's three "caller-level" §58 cases are now implemented
+  here**, where the data actually lives: an unresolvable tracking link and
+  a non-`active` campaign both 404 without ever reaching the routing
+  engine. The third (in-app WebView bounce) remains outstanding and
+  belongs with the PWA install funnel.
+- **`stickyFlowKeepClickId` still doesn't reach `internal/routing`.**
+  Phase 19 documented that it affects attribution only, never flow
+  selection. The tracker needs it, so `routingstore.CampaignRouting`
+  returns it *alongside* the routing config rather than smuggling it in —
+  and the tracker parses the full `setId:flowId[:clickId]` cookie itself,
+  handing the engine only the two fields a routing decision depends on.
+- **§42's unfilled-FB-subs rule is implemented by having no special case
+  at all**: whatever subs arrive are persisted, whatever don't stay empty
+  strings — no placeholder, no "unknown campaign", no inference.
+  `event.Subs.SubCount()` makes subs-less traffic measurable, which is the
+  point.
+- **302, not 301.** A permanently-cached redirect would bypass the tracker
+  on the next click, losing both the event and any routing change.
+- **No per-request logging middleware on the tracker's router** — the path
+  is latency-budgeted and every click already produces a structured event
+  asynchronously; a second synchronous log line per click would be
+  duplicate work on the hot path.
+
+### Verified
+
+- Live end-to-end against real Postgres with a seeded
+  campaign → tracking link → 3 stream sets (bot block / nested
+  `AND(device, OR(country US, CA))` / catch-all) → flows graph:
+  - desktop → catch-all set → 302 to its flow destination;
+  - unknown slug → 404;
+  - Googlebot → classified `bot=1`, matched the block set, and routed to
+    the campaign's **safe fallback** (§73's fallback model) rather than
+    the real destination;
+  - mobile with unknown geo → nested `OR(country…)` correctly failed, so
+    the `AND` failed and it fell through to the catch-all — proving the
+    filter tree really was rebuilt from Postgres and evaluated;
+  - replayed sticky cookie → `sticky_applied=true` and the **original
+    `click_id` reused**, a real attribution chain across a return visit.
+- 205 events emitted, zero dropped, zero errors or warnings in the log.
+- `go build`/`vet`/`gofmt`/`test -race` clean across the whole module.
+
+### Fixed
+
+- N/A this phase — no defects found in the implementation. Two mistakes
+  were caught and corrected in the *test scaffolding* while validating:
+  ULID literals in a seed script used the Crockford-excluded letters
+  `O`/`L` (the `ulid` domain's CHECK constraint caught them, which is
+  exactly what it is for), and a seed comment mispredicted that a blocked
+  bot would end with no destination — it correctly received the campaign
+  fallback instead.
+
+### Known issues
+
+- None new. Phase 10's unresolved crash-loop report carries over
+  (unrelated). The in-app WebView bounce (§73) is still unimplemented, now
+  tracked in `apps/tracker/README.md` rather than as an open architectural
+  question.
+
+### Files changed
+
+- `apps/go.mod`, `apps/go.sum`, `apps/internal/**`, `apps/api/main.go` (moved)
+- `apps/tracker/{main,handler,params,sticky}.go` + tests (new)
+- `apps/internal/{event,eventbuf,routingstore}/**` (new)
+- `apps/api/migrations/00011_campaign_sticky_flags.sql` (new)
+- `apps/web/go.mod` (new — node_modules exclusion)
+- `ARCHITECTURE.md`, `docs/architecture.md`, `apps/api/README.md`,
+  `apps/api/migrations/README.md`, `apps/tracker/README.md` (modified)
+
 ## [Phase 20] — Traffic Classifier
 
 ### Added

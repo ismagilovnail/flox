@@ -6,7 +6,7 @@ import (
 	"net"
 	"strings"
 
-	"github.com/ismagilovnail/flox/apps/api/internal/routing"
+	"github.com/ismagilovnail/flox/apps/internal/routing"
 )
 
 // Input is the raw signal a request carries — everything classification

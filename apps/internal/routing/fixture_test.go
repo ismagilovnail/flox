@@ -5,7 +5,7 @@ import (
 	"math"
 	"testing"
 
-	"github.com/ismagilovnail/flox/apps/api/internal/routing"
+	"github.com/ismagilovnail/flox/apps/internal/routing"
 )
 
 // fixture_test.go is the shared conformance fixture §6-SHARED requires:

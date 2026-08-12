@@ -6,8 +6,8 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/ismagilovnail/flox/apps/api/internal/apierror"
-	"github.com/ismagilovnail/flox/apps/api/internal/idgen"
+	"github.com/ismagilovnail/flox/apps/internal/apierror"
+	"github.com/ismagilovnail/flox/apps/internal/idgen"
 )
 
 const (

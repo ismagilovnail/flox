@@ -8,8 +8,8 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	"github.com/ismagilovnail/flox/apps/api/internal/apierror"
-	"github.com/ismagilovnail/flox/apps/api/internal/tenant"
+	"github.com/ismagilovnail/flox/apps/internal/apierror"
+	"github.com/ismagilovnail/flox/apps/internal/tenant"
 )
 
 type Handler struct {

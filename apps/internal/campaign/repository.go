@@ -9,7 +9,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/ismagilovnail/flox/apps/api/internal/apierror"
+	"github.com/ismagilovnail/flox/apps/internal/apierror"
 )
 
 type Repository struct {

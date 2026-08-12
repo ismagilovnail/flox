@@ -3,7 +3,7 @@ package classifier_test
 import (
 	"testing"
 
-	"github.com/ismagilovnail/flox/apps/api/internal/classifier"
+	"github.com/ismagilovnail/flox/apps/internal/classifier"
 )
 
 func TestParseUserAgent(t *testing.T) {

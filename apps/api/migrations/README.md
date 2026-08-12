@@ -7,10 +7,10 @@ install needed).
 Run against local dev Postgres (`docker compose -f infra/docker-compose.dev.yml up -d postgres`):
 
 ```
-cd apps/api
-go tool goose -dir migrations postgres "$DATABASE_URL" up
-go tool goose -dir migrations postgres "$DATABASE_URL" status
-go tool goose -dir migrations postgres "$DATABASE_URL" down   # one step back
+cd apps
+go tool goose -dir api/migrations postgres "$DATABASE_URL" up
+go tool goose -dir api/migrations postgres "$DATABASE_URL" status
+go tool goose -dir api/migrations postgres "$DATABASE_URL" down   # one step back
 ```
 
 `$DATABASE_URL` defaults to `postgres://flox:flox@localhost:5432/flox?sslmode=disable`
@@ -44,3 +44,9 @@ Tags/Custom Metrics/Report Presets/Referral/Content Gallery yet — those are
 the v3 "secondary" frontend phases (14.5–14.9), not in §35's core list;
 their backend tables land whenever the spec actually schedules them, not
 guessed at here.
+
+`00011` adds §39-STICKY's three flags (`sticky_flow`,
+`sticky_flow_keep_click_id`, `sticky_flow_skip_inactive`) to `campaigns`.
+They aren't in §35's table list, so Phase 17 didn't invent them; Phase 21's
+tracker is the first code that actually reads them, so they landed there —
+schema follows the code that needs it, rather than being guessed ahead.

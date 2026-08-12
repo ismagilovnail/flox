@@ -20,8 +20,8 @@ import (
 	"encoding/json"
 	"net/http"
 
-	"github.com/ismagilovnail/flox/apps/api/internal/apierror"
-	"github.com/ismagilovnail/flox/apps/api/internal/idgen"
+	"github.com/ismagilovnail/flox/apps/internal/apierror"
+	"github.com/ismagilovnail/flox/apps/internal/idgen"
 )
 
 const headerName = "X-Organization-Id"

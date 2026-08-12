@@ -12,13 +12,13 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	"github.com/ismagilovnail/flox/apps/api/internal/campaign"
-	"github.com/ismagilovnail/flox/apps/api/internal/config"
-	"github.com/ismagilovnail/flox/apps/api/internal/httpserver"
-	"github.com/ismagilovnail/flox/apps/api/internal/logging"
-	"github.com/ismagilovnail/flox/apps/api/internal/postgres"
-	"github.com/ismagilovnail/flox/apps/api/internal/telemetry"
-	"github.com/ismagilovnail/flox/apps/api/internal/tenant"
+	"github.com/ismagilovnail/flox/apps/internal/campaign"
+	"github.com/ismagilovnail/flox/apps/internal/config"
+	"github.com/ismagilovnail/flox/apps/internal/httpserver"
+	"github.com/ismagilovnail/flox/apps/internal/logging"
+	"github.com/ismagilovnail/flox/apps/internal/postgres"
+	"github.com/ismagilovnail/flox/apps/internal/telemetry"
+	"github.com/ismagilovnail/flox/apps/internal/tenant"
 )
 
 func main() {
