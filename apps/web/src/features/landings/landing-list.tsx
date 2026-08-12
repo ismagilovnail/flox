@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { useSearchParams } from "next/navigation";
 import { toast } from "sonner";
 import { PlusIcon, TagIcon } from "lucide-react";
 
@@ -8,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
 import { useLandingsStore } from "@/stores/landings";
 import { useTagsStore } from "@/stores/tags";
+import { useContentGalleryStore } from "@/stores/content-gallery";
 import { slugify } from "@/lib/utils";
 import { landingColumns } from "@/features/landings/landing-columns";
 import { LandingFormSheet, type LandingFormValues } from "@/features/landings/landing-form-sheet";
@@ -21,8 +23,10 @@ export function LandingList() {
   const addLanding = useLandingsStore((s) => s.addLanding);
   const updateLanding = useLandingsStore((s) => s.updateLanding);
   const assignments = useTagsStore((s) => s.assignments);
+  const searchParams = useSearchParams();
+  const galleryItem = useContentGalleryStore((s) => s.items.find((i) => i.id === searchParams.get("gallery")));
 
-  const [target, setTarget] = React.useState<Landing | null | undefined>(undefined);
+  const [target, setTarget] = React.useState<Landing | null | undefined>(() => (galleryItem?.landingPayload ? null : undefined));
   const [tagFilter, setTagFilter] = React.useState<string[]>([]);
   const [bulkTarget, setBulkTarget] = React.useState<{ ids: string[]; clear: () => void } | null>(null);
 
@@ -86,9 +90,9 @@ export function LandingList() {
           key={target?.id ?? "new"}
           open
           onOpenChange={(open) => !open && setTarget(undefined)}
-          title={target ? `Edit ${target.name}` : "New Landing"}
+          title={target ? `Edit ${target.name}` : galleryItem ? `New Landing — from ${galleryItem.title}` : "New Landing"}
           submitLabel={target ? "Save changes" : "Create landing"}
-          defaultValues={target ?? {}}
+          defaultValues={target ?? (galleryItem?.landingPayload ? { name: galleryItem.title, ...galleryItem.landingPayload } : {})}
           onSubmit={handleSubmit}
         />
       )}

@@ -19,10 +19,10 @@ referenced below as §N).
 ## CURRENT STATE — UPDATE THIS EVERY PHASE
 
 ```
-CURRENT PHASE : PHASE 14.8 — Referral Program
+CURRENT PHASE : PHASE 14.9 — Content Gallery
 STATUS        : done — Phase 10 crash-loop report still unresolved (unrelated)
-LAST COMMIT   : feat(referral): referral program
-NEXT          : PHASE 14.9 — Content Gallery — confirm before starting
+LAST COMMIT   : feat(content-gallery): content gallery
+NEXT          : PHASE 15 — Frontend Architecture — confirm before starting
 ```
 
 > At the end of every phase: update the four lines above, add a CHANGELOG entry,

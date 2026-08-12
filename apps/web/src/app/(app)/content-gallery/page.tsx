@@ -1,5 +1,5 @@
-import { PageStub } from "@/components/shell/page-stub";
+import { ContentGalleryView } from "@/features/content-gallery/content-gallery-view";
 
 export default function Page() {
-  return <PageStub title="Content Gallery" />;
+  return <ContentGalleryView />;
 }

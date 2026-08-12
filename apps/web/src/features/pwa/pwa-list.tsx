@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { useSearchParams } from "next/navigation";
 import { toast } from "sonner";
 import { PlusIcon, TagIcon } from "lucide-react";
 
@@ -8,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
 import { usePwasStore } from "@/stores/pwas";
 import { useTagsStore } from "@/stores/tags";
+import { useContentGalleryStore } from "@/stores/content-gallery";
 import { pwaColumns } from "@/features/pwa/pwa-columns";
 import { PwaFormSheet, type PwaFormValues } from "@/features/pwa/pwa-form-sheet";
 import { TagFilterControl } from "@/features/tags/tag-filter-control";
@@ -20,8 +22,10 @@ export function PwaList() {
   const addPwa = usePwasStore((s) => s.addPwa);
   const updatePwa = usePwasStore((s) => s.updatePwa);
   const assignments = useTagsStore((s) => s.assignments);
+  const searchParams = useSearchParams();
+  const galleryItem = useContentGalleryStore((s) => s.items.find((i) => i.id === searchParams.get("gallery")));
 
-  const [target, setTarget] = React.useState<Pwa | null | undefined>(undefined);
+  const [target, setTarget] = React.useState<Pwa | null | undefined>(() => (galleryItem?.pwaPayload ? null : undefined));
   const [tagFilter, setTagFilter] = React.useState<string[]>([]);
   const [bulkTarget, setBulkTarget] = React.useState<{ ids: string[]; clear: () => void } | null>(null);
 
@@ -78,9 +82,9 @@ export function PwaList() {
           key={target?.id ?? "new"}
           open
           onOpenChange={(open) => !open && setTarget(undefined)}
-          title={target ? `Edit ${target.name}` : "New PWA"}
+          title={target ? `Edit ${target.name}` : galleryItem ? `New PWA — from ${galleryItem.title}` : "New PWA"}
           submitLabel={target ? "Save changes" : "Create PWA"}
-          defaultValues={target ?? {}}
+          defaultValues={target ?? (galleryItem?.pwaPayload ? { name: galleryItem.title, ...galleryItem.pwaPayload } : {})}
           onSubmit={handleSubmit}
         />
       )}

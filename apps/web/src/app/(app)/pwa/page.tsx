@@ -1,5 +1,11 @@
+import { Suspense } from "react";
+
 import { PwaList } from "@/features/pwa/pwa-list";
 
 export default function Page() {
-  return <PwaList />;
+  return (
+    <Suspense>
+      <PwaList />
+    </Suspense>
+  );
 }

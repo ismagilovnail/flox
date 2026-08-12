@@ -3,6 +3,67 @@
 Format follows [Keep a Changelog](https://keepachangelog.com/). Entries are
 per-phase, matching `CLAUDE.md`'s phase protocol.
 
+## [Phase 14.9] — Content Gallery
+
+### Added
+
+- **Content Gallery** (§30.8) at `/content-gallery`: a browsable, searchable,
+  categorized library of system-provided templates and creative assets, plus
+  team uploads. Four categories: landing/PWA/postlanding templates, and
+  creative assets. Category and source (All/System/Team) filters, plus a
+  free-text search over title/description/tags.
+- **Real hand-off, not a simulated one**: each template's `GalleryItem`
+  carries a payload shaped exactly like the target builder's form
+  `defaultValues` (from the Phase 12 Landing/PWA/Postlanding form sheets).
+  "Use this" navigates to `/landings|pwa|postlanding?gallery=<id>` — reusing
+  the same "URL hands off a fully-formed query" pattern Phase 14.7's View
+  Statistics established — and the target list page opens its existing
+  create sheet pre-filled from the template, sheet title annotated "— from
+  {template}". No parallel template-authoring UI was built; the existing
+  builders do the work.
+- **No real asset library exists yet** (Phase 12 never built one), so a
+  creative asset's "Use this" copies its hosted URL to the clipboard instead
+  of a builder hand-off — an honest minimal action rather than inventing a
+  second, unbuilt system.
+- **Team uploads** (§36-TENANCY: private to the workspace) are scoped to
+  creative assets only — there's no template-authoring flow to upload a
+  landing/PWA/postlanding template into, so upload is restricted to the one
+  category that makes sense today. No real object storage in this
+  frontend-first phase: an upload records an already-hosted URL, the same
+  "URL stands in for upload" convention already used for PWA icons — real S3
+  integration is Phase 27's job, not this one's. The uploader can remove
+  their own upload; Owner/Admin can remove any team upload. System items are
+  read-only.
+- Preview tiles are generated CSS gradients + a category icon, not fake
+  hosted images — the gallery has no real image pipeline, and CLAUDE.md
+  forbids mock APIs that look real.
+- Seeded 10 system items (3 landing, 2 PWA, 2 postlanding templates, 3
+  creative assets) and 2 team items, across all four categories.
+
+### Fixed
+
+- N/A this phase — full flow verified in the browser: search, category/source
+  filters, preview, "Use this" into all three builders (landing tested
+  end-to-end through actual creation), asset URL copy, team upload, and
+  team-item removal. No console errors.
+
+### Known issues
+
+- None new. Phase 10's unresolved crash-loop report carries over
+  (unrelated to this phase).
+
+### Files changed
+
+- `apps/web/src/lib/mock/content-gallery.ts` (new) — data model + seed data
+- `apps/web/src/stores/content-gallery.ts` (new) — Zustand store
+- `apps/web/src/features/content-gallery/*` (new) — view, card, preview tile,
+  preview dialog, upload dialog
+- `apps/web/src/app/(app)/content-gallery/page.tsx` (modified) — wired to `ContentGalleryView`
+- `apps/web/src/features/{landings,pwa,postlanding}/*-list.tsx` (modified) —
+  read `?gallery=<id>` to pre-fill the create sheet from a template
+- `apps/web/src/app/(app)/{landings,pwa,postlanding}/page.tsx` (modified) —
+  wrapped in `<Suspense>` for `useSearchParams()`
+
 ## [Phase 14.8] — Referral Program
 
 ### Added
