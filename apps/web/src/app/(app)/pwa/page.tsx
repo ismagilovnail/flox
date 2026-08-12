@@ -1,5 +1,5 @@
-import { PageStub } from "@/components/shell/page-stub";
+import { PwaList } from "@/features/pwa/pwa-list";
 
 export default function Page() {
-  return <PageStub title="PWA" />;
+  return <PwaList />;
 }

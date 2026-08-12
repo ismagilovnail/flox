@@ -1,7 +1,9 @@
 import { genId } from "@/lib/id";
 import { emptyGroup, type FilterGroupNode } from "@/lib/filters";
-import { LANDINGS, PWAS, type PwaType } from "@/lib/mock/flow-entities";
+import { type PwaType } from "@/lib/mock/flow-entities";
 import { OFFERS } from "@/lib/mock/offers";
+import { LANDINGS } from "@/lib/mock/landings";
+import { PWAS } from "@/lib/mock/pwas";
 
 function mulberry32(seed: number) {
   return function rand() {

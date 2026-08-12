@@ -1,5 +1,5 @@
-import { PageStub } from "@/components/shell/page-stub";
+import { LandingList } from "@/features/landings/landing-list";
 
 export default function Page() {
-  return <PageStub title="Landings" />;
+  return <LandingList />;
 }

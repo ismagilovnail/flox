@@ -6,10 +6,13 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { formatInt } from "@/lib/format";
 import { cn } from "@/lib/utils";
-import { LANDINGS, POSTLANDINGS, PWAS, PWA_TYPES } from "@/lib/mock/flow-entities";
+import { PWA_TYPES } from "@/lib/mock/flow-entities";
 import type { Flow } from "@/lib/mock/stream-sets";
 import { useNetworksStore } from "@/stores/networks";
 import { useOffersStore } from "@/stores/offers";
+import { useLandingsStore } from "@/stores/landings";
+import { usePwasStore } from "@/stores/pwas";
+import { usePostlandingsStore } from "@/stores/postlandings";
 import { FlowNode } from "@/features/stream-sets/flow-node";
 
 function Connector() {
@@ -41,8 +44,12 @@ export function FlowFunnel({
 }) {
   const networks = useNetworksStore((s) => s.networks);
   const offers = useOffersStore((s) => s.offers);
-  const landingOption = LANDINGS.find((l) => l.id === flow.landing.landingId);
-  const postlandingOption = POSTLANDINGS.find((p) => p.id === flow.postlanding.postlandingId);
+  const landings = useLandingsStore((s) => s.landings);
+  const pwas = usePwasStore((s) => s.pwas);
+  const postlandings = usePostlandingsStore((s) => s.postlandings);
+  const landingOption = landings.find((l) => l.id === flow.landing.landingId);
+  const pwaOption = pwas.find((p) => p.id === flow.pwa.pwaId);
+  const postlandingOption = postlandings.find((p) => p.id === flow.postlanding.postlandingId);
   const destination = flow.destination;
   const networkOffers = destination.kind === "offer" ? offers.filter((o) => o.networkId === destination.networkId) : [];
 
@@ -65,7 +72,7 @@ export function FlowFunnel({
             <SelectValue placeholder="Choose landing" />
           </SelectTrigger>
           <SelectContent>
-            {LANDINGS.map((l) => (
+            {landings.map((l) => (
               <SelectItem key={l.id} value={l.id}>
                 {l.name}
               </SelectItem>
@@ -91,7 +98,7 @@ export function FlowFunnel({
         enabled={flow.pwa.enabled}
         onToggleEnabled={(enabled) => onChange({ pwa: { ...flow.pwa, enabled } })}
         configured={!!flow.pwa.pwaId}
-        previewUrl={flow.pwa.pwaId ? `https://pwa.floxlink.io/install/${flow.pwa.pwaId}` : undefined}
+        previewUrl={pwaOption ? `https://pwa.floxlink.io${pwaOption.startUrl}` : undefined}
         analytics={flow.pwa.enabled ? nodeAnalytics(flow.id, "pwa") : undefined}
       >
         <Select value={flow.pwa.pwaId || undefined} onValueChange={(pwaId) => onChange({ pwa: { ...flow.pwa, pwaId } })}>
@@ -99,7 +106,7 @@ export function FlowFunnel({
             <SelectValue placeholder="Choose PWA" />
           </SelectTrigger>
           <SelectContent>
-            {PWAS.map((p) => (
+            {pwas.map((p) => (
               <SelectItem key={p.id} value={p.id}>
                 {p.name}
               </SelectItem>
@@ -142,7 +149,7 @@ export function FlowFunnel({
             <SelectValue placeholder="Choose postlanding" />
           </SelectTrigger>
           <SelectContent>
-            {POSTLANDINGS.map((p) => (
+            {postlandings.map((p) => (
               <SelectItem key={p.id} value={p.id}>
                 {p.name}
               </SelectItem>

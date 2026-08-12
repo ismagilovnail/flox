@@ -3,6 +3,76 @@
 Format follows [Keep a Changelog](https://keepachangelog.com/). Entries are
 per-phase, matching `CLAUDE.md`'s phase protocol.
 
+## [Phase 12] — Landing / PWA / Postlanding UI
+
+### Added
+
+- Landings, PWAs, and Postlandings are now real, team-managed entities
+  (§28) with their own pages (`/landings`, `/pwa`, `/postlanding`) — same
+  list/create-edit-Sheet/row-actions/Zustand-store shape established in
+  Phase 11 for Offers/Networks/Sources.
+- Landing editor models the §28 `internal`/`external` split for real: an
+  `external` landing takes a URL you already control; an `internal` one
+  takes a content textarea and the Sheet derives + live-previews a
+  `cdn.floxlink.io/lnd/{slug}` hosted URL from the name via the new
+  `slugify()` (`lib/utils.ts`) as you type. Verified in-browser that the
+  slug preview updates live and that submitting an internal landing with
+  no content is correctly rejected before persisting a broken entity, per
+  the `.superRefine` in `landing-form-sheet.tsx`.
+- PWA editor fields are the real Web App Manifest (name, short_name,
+  theme_color, background_color, icon, start_url) rather than a
+  fictionalized subset — the Sheet renders a live, read-only
+  `manifest.json` preview generated from those exact fields, plus a
+  color-swatch input alongside each hex field. Includes the §73-required,
+  provider-neutral `bounceInAppWebview` toggle: bounce in-app WebView
+  traffic (FB/IG/TikTok/Telegram) to the external browser so the install
+  prompt can fire. This is explicitly NOT vendor-specific moderator
+  detection, which §73 forbids — the toggle only ever describes bouncing
+  a generic in-app WebView, never detecting a specific ad network's
+  reviewer.
+- Postlanding editor's `events` field is a multi-select over a curated,
+  postlanding-relevant subset of the §43 event model (`PWA_INSTALL`,
+  `NOTIFICATION_REQUEST/SUBSCRIBE/DECLINE`, `TG_JOIN`, `TG_START`) —
+  string values chosen to match the canonical list in CLAUDE.md exactly,
+  so nothing needs renaming when Phase 13 (Conversions/Postbacks/Pixels)
+  introduces the full enum.
+- **Closed the equivalent of the Phase 9 known issue for the last three
+  Flow Builder pickers**: `flow-funnel.tsx` now reads Landings/PWAs/
+  Postlandings live from `useLandingsStore`/`usePwasStore`/
+  `usePostlandingsStore` instead of the static `flow-entities.ts` mock
+  list (which now holds only the flow-level `PwaType`/`PWA_TYPES` display
+  mode — internal/external/ios_app, NOT one of the real entities). Also
+  fixed the PWA node's preview URL, which was a hardcoded
+  `pwa.floxlink.io/install/{id}` string — it now resolves the selected
+  PWA's real `startUrl`. `stream-sets.ts` (the module-level stream-set
+  mock generator, not a component) keeps seeding from the static
+  `LANDINGS`/`PWAS` arrays exported by the new mock files.
+- IDs were kept identical to the old `flow-entities.ts` placeholders
+  (`lnd_prelander_a`, `pwa_sweeps`, `psl_thankyou`, etc.) so every existing
+  seeded stream-set flow keeps resolving without a data migration.
+
+### Fixed
+
+- N/A this phase.
+
+### Known issues
+
+- Verified in a real browser this time (the Claude-in-Chrome extension
+  connected, unlike Phase 11's session) — clicked through creating a
+  Landing, confirmed its live slug preview and validation, confirmed the
+  PWA manifest preview renders correctly, and confirmed a landing created
+  in the Landings UI shows up immediately in a campaign's Flow Builder
+  picker within the same session (state resets on a hard navigation/
+  reload, same known limitation the Campaigns store already has — not a
+  regression). No console errors during any of it. This still isn't the
+  exact repro path from the Phase 10 crash-loop report, so that one stays
+  logged as unresolved rather than closed.
+- Internal-landing content is a raw HTML textarea, not a real page
+  builder/WYSIWYG editor — matches the spec's field list (§28 lists
+  "internal/external" as the Landing distinction, not a builder
+  requirement) but is worth flagging if a future phase expects richer
+  authoring.
+
 ## [Phase 11] — Offers / Networks / Sources UI
 
 ### Added
