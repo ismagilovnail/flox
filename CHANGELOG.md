@@ -3,6 +3,84 @@
 Format follows [Keep a Changelog](https://keepachangelog.com/). Entries are
 per-phase, matching `CLAUDE.md`'s phase protocol.
 
+## [Phase 18] — Campaign API
+
+### Added
+
+- **Campaign API** (§37): `internal/campaign/` — `handler.go` → `service.go`
+  → `repository.go` → `model.go`, per CLAUDE.md's Go architecture (thin
+  handlers, business logic in the service, repository is just SQL).
+  `GET/POST /campaigns`, `GET/PATCH/DELETE /campaigns/:id`, `POST
+  /campaigns/:id/{duplicate,pause,activate}`. Every query org-scoped
+  (§36-TENANCY).
+- **`internal/tenant`**: `X-Organization-Id`-header middleware — the
+  session-derived org-scoping stand-in until Phase 28 auth lands (fully
+  documented as a deliberate, temporary substitute in `apps/api/README.md`,
+  not a shortcut: handlers physically cannot read org scope from anywhere
+  else, which is the property §36-TENANCY actually protects).
+- **Cross-tenant FK check**: a campaign's `traffic_source_id` foreign key
+  only proves that row exists *somewhere* — nothing stops it belonging to a
+  different org unless checked explicitly. `Repository.TrafficSourceBelongsToOrg`
+  verifies it against the caller's org before every create/update; this is
+  the pattern every future domain package with a cross-table reference
+  needs to repeat.
+- **`internal/apierror`**: one JSON error envelope (`{code, message,
+  fields?}`) shared by every handler, so `/campaigns` and every future
+  `/offers`, `/networks`, etc. render errors the same shape.
+- **`internal/idgen`**: ULID generation (`oklog/ulid/v2`) + the same
+  format validation `apps/api/migrations`'s `ulid` domain enforces, so an
+  application-generated id and a database CHECK constraint can never
+  disagree about what's valid.
+- **`internal/postgres`**: pgx pool constructor, pinged once at startup so
+  a misconfigured `DATABASE_URL` fails fast instead of surfacing on the
+  first request.
+- **`GET /ready` now genuinely pings Postgres** — the check Phase 16
+  promised ("starts checking real dependencies once Phase 17+ wires them
+  in") and deliberately hadn't faked yet. Returns `503` with the failing
+  check named if the ping fails.
+- **Pause/activate domain rules** (§37: "validate using domain rules," not
+  bare setters): idempotent from the target state, rejected with `409` from
+  `archived` — an archived campaign has to be explicitly edited back to
+  another status via `PATCH`, not casually reactivated by a toggle.
+  `Duplicate` mirrors the frontend's `stores/campaigns.ts`: `"{name}
+  (Copy)"`, forced back to `draft`, stats/tracking reset.
+- **Cross-tenant isolation test** (CLAUDE.md DoD requirement for API
+  phases): `internal/campaign/repository_test.go`, gated on `DATABASE_URL`
+  (skips cleanly without it — `go test ./...` never needs a live DB).
+  Creates a campaign for org A, proves org B's list/get/update/delete all
+  see nothing of it, and that org A can't attach a campaign to org B's
+  traffic source.
+
+### Fixed
+
+- **Test-cleanup bug in the isolation test itself**, caught before this
+  phase closed: `defer pool.Close()` in the test body runs at function
+  return, which is *before* `t.Cleanup`-registered callbacks run — so the
+  pool was already closed by the time each seeded test org's delete-cleanup
+  query fired, silently leaking `organizations`/`campaigns` rows into the
+  dev database on every test run (confirmed leaked rows via `psql`, fixed
+  by registering the pool's close via `t.Cleanup` instead, ordered by LIFO
+  to run after the org-delete cleanups, re-verified via row counts before
+  and after a run).
+- **`internal/tenant`'s missing-header error** originally used a hand-rolled
+  JSON string that didn't match `apierror`'s envelope shape — caught via
+  manual curl testing, fixed to construct a real `apierror.Error`.
+
+### Known issues
+
+- None new. Phase 10's unresolved crash-loop report carries over
+  (unrelated to this phase). `apps/tracker`/`apps/worker` module topology
+  remains an open decision (documented Phase 16, still unresolved, not
+  blocking).
+
+### Files changed
+
+- `apps/api/internal/campaign/*` (new)
+- `apps/api/internal/{tenant,apierror,idgen,postgres}/*` (new)
+- `apps/api/internal/httpserver/{server.go,health.go}` (modified — DB ping, route mounting)
+- `apps/api/cmd/api/main.go` (modified — wires DB pool + campaign routes)
+- `apps/api/README.md`, `docs/architecture.md` (modified — Phase 18 sections)
+
 ## [Phase 17] — Database
 
 ### Added

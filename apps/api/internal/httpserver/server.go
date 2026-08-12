@@ -1,12 +1,14 @@
 // Package httpserver builds apps/api's chi router: request ID, structured
 // request logging, panic recovery, OTel instrumentation, and the health/
 // readiness endpoints (§33). Route registration for real resources
-// (campaigns, offers, ...) starts Phase 18 and lives in its own package per
-// module — this file only owns cross-cutting middleware and the two
-// endpoints this phase actually delivers.
+// (campaigns, offers, ...) lives in each domain package (internal/campaign/
+// handler.go, ...) and is mounted onto Server.Mux() from cmd/api/main.go —
+// this file only owns cross-cutting middleware and the two endpoints every
+// phase needs.
 package httpserver
 
 import (
+	"context"
 	"log/slog"
 	"net/http"
 	"time"
@@ -16,11 +18,18 @@ import (
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 )
 
+// Pinger is satisfied by *pgxpool.Pool — kept as a narrow interface here so
+// this package doesn't need to import pgx just to define /ready.
+type Pinger interface {
+	Ping(ctx context.Context) error
+}
+
 type Server struct {
+	mux    *chi.Mux
 	router http.Handler
 }
 
-func New(logger *slog.Logger, serviceName string) *Server {
+func New(logger *slog.Logger, serviceName string, db Pinger) *Server {
 	r := chi.NewRouter()
 
 	r.Use(middleware.RequestID)
@@ -31,9 +40,19 @@ func New(logger *slog.Logger, serviceName string) *Server {
 	r.Use(middleware.Timeout(30 * time.Second))
 
 	r.Get("/health", healthHandler)
-	r.Get("/ready", readyHandler)
+	r.Get("/ready", readyHandler(db))
 
-	return &Server{router: otelhttp.NewHandler(r, serviceName)}
+	return &Server{mux: r, router: otelhttp.NewHandler(r, serviceName)}
+}
+
+// Mux is where domain packages mount their own route groups, e.g.:
+//
+//	srv.Mux().Route("/campaigns", func(r chi.Router) {
+//	    r.Use(tenant.Middleware)
+//	    campaignHandler.Register(r)
+//	})
+func (s *Server) Mux() chi.Router {
+	return s.mux
 }
 
 func (s *Server) Handler() http.Handler {

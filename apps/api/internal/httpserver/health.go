@@ -12,12 +12,28 @@ func healthHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 // readyHandler is readiness: "can this instance actually serve traffic."
-// No dependency checks yet because there are no dependencies to check —
-// Postgres/ClickHouse/Redis connections don't exist until Phase 17+ wires
-// them up, at which point this handler starts pinging each one and can
-// return 503 on a failed check instead of always 200.
-func readyHandler(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, map[string]any{"status": "ok", "checks": map[string]string{}})
+// Checks Postgres, the one dependency that exists as of Phase 18 —
+// ClickHouse/Redis join this check whenever a later phase actually wires
+// them in, not before (a check that doesn't check anything is exactly the
+// "fake API that looks real" CLAUDE.md forbids).
+func readyHandler(db Pinger) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		checks := map[string]string{"postgres": "ok"}
+		status := http.StatusOK
+
+		if err := db.Ping(r.Context()); err != nil {
+			checks["postgres"] = err.Error()
+			status = http.StatusServiceUnavailable
+		}
+
+		body := map[string]any{"checks": checks}
+		if status == http.StatusOK {
+			body["status"] = "ok"
+		} else {
+			body["status"] = "unavailable"
+		}
+		writeJSON(w, status, body)
+	}
 }
 
 func writeJSON(w http.ResponseWriter, status int, body any) {

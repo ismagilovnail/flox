@@ -19,11 +19,11 @@ referenced below as §N).
 ## CURRENT STATE — UPDATE THIS EVERY PHASE
 
 ```
-CURRENT PHASE : PHASE 17 — Database
+CURRENT PHASE : PHASE 18 — Campaign API
 STATUS        : done — Phase 10 crash-loop report still unresolved (unrelated);
                 apps/tracker/apps/worker module topology is an open decision, see apps/api/README.md
-LAST COMMIT   : feat(api): database schema
-NEXT          : PHASE 18 — Campaign API — confirm before starting
+LAST COMMIT   : feat(api): campaign api
+NEXT          : PHASE 19 — Routing Engine — confirm before starting
 ```
 
 > At the end of every phase: update the four lines above, add a CHANGELOG entry,

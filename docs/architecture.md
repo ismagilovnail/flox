@@ -89,3 +89,48 @@ for one org, confirmed a second org's queries return zero rows against it,
 and confirmed every hand-written constraint (postback dedup +
 `accept_duplicates` override, `flows` destination shape CHECK, cost_entries
 per-day dedup) fires exactly as intended.
+
+## Phase 18 — Campaign API
+
+`internal/campaign/` (`handler.go` → `service.go` → `repository.go` →
+`model.go`, per CLAUDE.md's Go architecture): `GET/POST /campaigns`,
+`GET/PATCH/DELETE /campaigns/:id`, `POST /campaigns/:id/{duplicate,pause,activate}`.
+
+Two cross-cutting pieces landed alongside it, both reused by every domain
+package from here on rather than being campaign-specific:
+
+- **`internal/tenant`** — the `X-Organization-Id`-header stand-in for
+  session-derived org scoping described in `apps/api/README.md`. §36-
+  TENANCY's cross-tenant FK gap also got a real fix here: a campaign's
+  `traffic_source_id` FK only proves that row *exists somewhere* — nothing
+  stops it belonging to a different org unless the service layer checks
+  `traffic_sources.organization_id` matches the caller's org before
+  writing. `Repository.TrafficSourceBelongsToOrg` does that check; it's the
+  pattern every future domain package with a cross-table reference needs
+  to repeat, not just campaigns' problem.
+- **`internal/apierror`** — one JSON error envelope (`{code, message,
+  fields?}`) every handler renders, so a client gets the same shape from
+  every endpoint instead of each domain package inventing its own.
+
+`GET /ready` now genuinely pings Postgres (promised, not yet delivered, in
+the Phase 16 section above) and returns `503` with the failing check named
+if the ping fails.
+
+Pause/activate aren't bare status setters — "validate using domain rules"
+(§37) meant giving them real transition rules: idempotent from the target
+state, rejected outright from `archived` (an archived campaign has to be
+explicitly edited back via `PATCH`, not casually reactivated by a
+pause/activate toggle).
+
+**Cross-tenant isolation test** (CLAUDE.md DoD requirement for API phases):
+`internal/campaign/repository_test.go`, gated on `DATABASE_URL` being set
+(skips cleanly otherwise). Creates a campaign for org A, then proves org B's
+`list`/`get`/`update`/`delete` all see nothing, and that org A can't attach
+a campaign to org B's traffic source. Caught one real bug while writing
+it: `defer pool.Close()` in the test body ran *before* `t.Cleanup`-registered
+delete callbacks (Go runs deferred statements at function return, then
+`t.Cleanup` callbacks after) — the pool was already closed by the time the
+cleanup queries ran, so every seeded test org silently leaked. Fixed by
+registering the pool's close via `t.Cleanup` too, ordered (via LIFO) after
+the org-delete cleanups; confirmed fixed by checking `organizations`/
+`campaigns` row counts before and after a test run.

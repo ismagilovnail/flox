@@ -10,10 +10,15 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/go-chi/chi/v5"
+
+	"github.com/ismagilovnail/flox/apps/api/internal/campaign"
 	"github.com/ismagilovnail/flox/apps/api/internal/config"
 	"github.com/ismagilovnail/flox/apps/api/internal/httpserver"
 	"github.com/ismagilovnail/flox/apps/api/internal/logging"
+	"github.com/ismagilovnail/flox/apps/api/internal/postgres"
 	"github.com/ismagilovnail/flox/apps/api/internal/telemetry"
+	"github.com/ismagilovnail/flox/apps/api/internal/tenant"
 )
 
 func main() {
@@ -46,7 +51,23 @@ func run() error {
 		}
 	}()
 
-	srv := httpserver.New(logger, cfg.OTelServiceName)
+	db, err := postgres.NewPool(ctx, cfg.DatabaseURL)
+	if err != nil {
+		logger.Error("database connection failed", "error", err)
+		return err
+	}
+	defer db.Close()
+
+	srv := httpserver.New(logger, cfg.OTelServiceName, db)
+
+	campaignRepo := campaign.NewRepository(db)
+	campaignSvc := campaign.NewService(campaignRepo)
+	campaignHandler := campaign.NewHandler(campaignSvc, logger)
+	srv.Mux().Route("/campaigns", func(r chi.Router) {
+		r.Use(tenant.Middleware)
+		campaignHandler.Register(r)
+	})
+
 	httpSrv := &http.Server{
 		Addr:              cfg.HTTPAddr,
 		Handler:           srv.Handler(),

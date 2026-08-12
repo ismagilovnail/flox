@@ -4,22 +4,39 @@ Go control-plane API (chi, pgx). Scaffolded in Phase 16 (Go Backend
 Foundation).
 
 ```
-cmd/api/          entrypoint — wires config, logging, telemetry, HTTP server
+cmd/api/          entrypoint — wires config, logging, telemetry, DB pool, HTTP server
 internal/config/   env-based configuration (Config.Load)
 internal/logging/  slog.Logger setup (JSON)
 internal/telemetry/ OpenTelemetry TracerProvider setup
-internal/httpserver/ chi router: middleware, GET /health, GET /ready
+internal/postgres/ pgx pool constructor
+internal/idgen/     ULID generation/validation, matching the `ulid` Postgres domain
+internal/tenant/    organization_id request-context middleware (§36-TENANCY) — see below
+internal/apierror/  shared error envelope every domain package's handler renders
+internal/httpserver/ chi router: middleware, GET /health, GET /ready (now pings Postgres)
+internal/campaign/  Campaign API (§37, Phase 18) — handler → service → repository
 migrations/        goose migrations — §35's core schema, landed Phase 17
 pkg/                code meant for import by other services — empty until something needs it
 ```
 
-Run locally:
+Run locally (needs Postgres — see below):
 
 ```
 cd apps/api && go run ./cmd/api
 curl localhost:8080/health
 curl localhost:8080/ready
+curl -H "X-Organization-Id: <ulid>" localhost:8080/campaigns/
 ```
+
+## Tenant context: no auth yet
+
+There's no session/API-key auth until Phase 28. Every tenant-scoped route
+requires an `X-Organization-Id` header set to a real, already-existing
+organization id — `internal/tenant`'s middleware validates it's present and
+ULID-shaped, then every handler reads `organization_id` from request
+context, never from the body or a query param. This satisfies §36-TENANCY's
+letter (a handler *cannot* pull org scope from anywhere else) while being
+honest that it isn't real auth. Phase 28 replaces the middleware's header
+lookup with a session/API-key lookup; nothing downstream of it changes.
 
 Database migrations — see `migrations/README.md` for the full command
 reference and schema conventions:
