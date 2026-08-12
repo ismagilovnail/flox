@@ -19,11 +19,11 @@ referenced below as §N).
 ## CURRENT STATE — UPDATE THIS EVERY PHASE
 
 ```
-CURRENT PHASE : PHASE 16 — Go Backend Foundation
+CURRENT PHASE : PHASE 17 — Database
 STATUS        : done — Phase 10 crash-loop report still unresolved (unrelated);
                 apps/tracker/apps/worker module topology is an open decision, see apps/api/README.md
-LAST COMMIT   : feat(api): go backend foundation
-NEXT          : PHASE 17 — Database — confirm before starting
+LAST COMMIT   : feat(api): database schema
+NEXT          : PHASE 18 — Campaign API — confirm before starting
 ```
 
 > At the end of every phase: update the four lines above, add a CHANGELOG entry,

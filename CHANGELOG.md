@@ -3,6 +3,106 @@
 Format follows [Keep a Changelog](https://keepachangelog.com/). Entries are
 per-phase, matching `CLAUDE.md`'s phase protocol.
 
+## [Phase 17] — Database
+
+### Added
+
+- **10 goose migrations** in `apps/api/migrations/` implementing §35's full
+  core table list: `organizations`, `users`, `memberships`, `roles`,
+  `permissions`, `traffic_sources`, `campaigns`, `stream_sets`,
+  `filter_groups`, `filter_conditions`, `flows`, `landings`, `pwas`,
+  `postlandings`, `networks`, `offers`, `offer_links`, `domains`,
+  `tracking_links`, `pixels`, `postbacks`, `cost_entries`, `fx_rates`,
+  `api_keys`, `audit_logs` — plus `stream_set_pixels`, a join table for
+  `StreamSet.pixels: string[]` that the explicit table list didn't spell
+  out but a many-to-many relationship needs. `go tool goose` (vendored as a
+  Go tool dependency, no separate install).
+- **ULID everywhere**: a `ulid` Postgres domain (text + Crockford-base32
+  format CHECK) defined once in `00001`, used as every table's primary key
+  — "one standard, consistently, everywhere" per §35, not a mix.
+- **`organization_id` denormalized onto every tenant-scoped table,
+  including child tables** (`offer_links`, `filter_conditions`, `flows`,
+  `stream_set_pixels`, …) rather than left implicit via a join to the
+  parent — §36-TENANCY calls cross-tenant isolation "a hard security
+  invariant, not a convention," and a repository query that filters a
+  child table directly by `organization_id` can't leak data even if a
+  future join condition is written wrong.
+- **`updated_at` maintained by a trigger** (`set_updated_at()`), not
+  application code, on every mutable table — can't go stale from a
+  forgotten `SET updated_at = now()`.
+- **Filter tree**: `filter_groups` (self-referencing via `parent_group_id`,
+  `stream_set_id` denormalized onto every node) + `filter_conditions`,
+  matching the frontend's recursive `FilterGroupNode`/`FilterCondition`
+  shape (`lib/filters.ts`) exactly enough that Phase 27 integration should
+  be a straight read/write mapping, not a redesign.
+- **`flows`**: the frontend's `LandingStage`/`PwaStage`/`PostlandingStage`/
+  `Destination` structs flattened into nullable columns gated by their own
+  `*_enabled`/`destination_kind` flag, with a CHECK constraint enforcing
+  the destination discriminated-union shape (`offer` requires network+offer
+  IDs and no URL; `redirect` requires a URL and no network/offer IDs).
+- **`postbacks`**: the durable dedup ledger for §45/non-negotiable
+  invariant #3 — `UNIQUE (organization_id, click_id, status)`, with a
+  partial-index exemption (`WHERE NOT network_accepts_duplicates`) for
+  networks with the `acceptDuplicates` override. Deliberately does *not*
+  duplicate the rich per-attempt log (message, payload) — that belongs in
+  ClickHouse's `postback_events`, outside this Postgres-only phase.
+- **`cost_entries`**: one row per (campaign, traffic_source-or-none, day),
+  enforced with two partial unique indexes rather than a
+  `COALESCE`-sentinel expression index (avoids needing a fake placeholder
+  ULID to satisfy the `ulid` domain's format CHECK).
+- **`fx_rates`**: the one non-`organization_id`-scoped, non-ULID table —
+  natural composite key `(currency, rate_date)`, since an exchange rate is
+  an objective market fact, not something each tenant has its own copy of.
+- **`campaigns` has no `tracking_domain`/`tracking_id` columns** even
+  though the frontend mock has them — that's a `(campaign, domain, slug)`
+  row in `tracking_links` instead, so one campaign with links on multiple
+  domains never desyncs a domain string stored in two places.
+- No tables for Tags/Custom Metrics/Report Presets/Referral/Content
+  Gallery — those v3 "secondary" frontend phases (14.5–14.9) aren't in
+  §35's core table list; not guessed at here.
+
+### Validated
+
+- Brought up a real Postgres via `infra/docker-compose.dev.yml`, ran
+  `goose up` (all 10 migrations, clean), `goose down-to 0` (full rollback,
+  clean — zero orphaned objects, confirming every `-- +goose Down` block is
+  correct), then `goose up` again.
+- Ran a full smoke-test transaction: inserted a complete two-org dataset —
+  campaign → stream_set → nested AND/OR filter tree → two flows (one
+  `offer` destination, one `redirect`) → domain/tracking_link → pixel →
+  cost_entry → api_key → audit_log → postback — for Org A, then verified
+  Org B's queries return zero rows against every one of those tables
+  (cross-tenant isolation, DoD requirement for data-model phases). Also
+  verified, as expected failures: the postback dedup constraint rejects a
+  true duplicate but the `accept_duplicates` override allows one; the
+  `flows` destination CHECK rejects a malformed `offer` row with a URL set;
+  the `cost_entries` dedup constraint rejects a same-day double-entry. A
+  recursive CTE read-back of the filter tree round-trips correctly.
+- `go build`/`vet`/`gofmt` clean.
+
+### Fixed
+
+- N/A this phase — all defects (invalid Crockford-charset ULIDs in seed
+  data during authoring, a fragile `COALESCE`-sentinel unique index, a
+  psql `\gset`-inside-`DO`-block scripting mistake in the smoke test) were
+  caught and fixed before anything ran against real Postgres, not found
+  as bugs afterward.
+
+### Known issues
+
+- None new. Phase 10's unresolved crash-loop report carries over
+  (unrelated to this phase). `apps/tracker`/`apps/worker` module topology
+  remains an open decision (documented Phase 16, still unresolved, not
+  blocking).
+
+### Files changed
+
+- `apps/api/migrations/00001..00010_*.sql` (new)
+- `apps/api/migrations/README.md` (rewritten — command reference + conventions)
+- `apps/api/go.mod`/`go.sum` (modified — goose tool dependency)
+- `apps/api/README.md` (modified — migration commands)
+- `docs/architecture.md`, `docs/domain-model.md` (modified — Phase 17 section)
+
 ## [Phase 16] — Go Backend Foundation
 
 ### Added

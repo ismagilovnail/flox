@@ -1,8 +1,8 @@
 # Domain Model
 
-Entities as defined by the master spec §7, §17, §35. Full column-level detail
-lands with the PostgreSQL migrations (Phase 17); this document is the
-conceptual map.
+Entities as defined by the master spec §7, §17, §35. Full column-level
+detail is in `apps/api/migrations/` (Phase 17, landed); this document stays
+the conceptual map — read the migrations for exact columns/constraints.
 
 ## Identity & tenancy
 

@@ -9,7 +9,7 @@ internal/config/   env-based configuration (Config.Load)
 internal/logging/  slog.Logger setup (JSON)
 internal/telemetry/ OpenTelemetry TracerProvider setup
 internal/httpserver/ chi router: middleware, GET /health, GET /ready
-migrations/        goose migrations — empty until Phase 17
+migrations/        goose migrations — §35's core schema, landed Phase 17
 pkg/                code meant for import by other services — empty until something needs it
 ```
 
@@ -19,6 +19,14 @@ Run locally:
 cd apps/api && go run ./cmd/api
 curl localhost:8080/health
 curl localhost:8080/ready
+```
+
+Database migrations — see `migrations/README.md` for the full command
+reference and schema conventions:
+
+```
+docker compose -f ../../infra/docker-compose.dev.yml up -d postgres
+go tool goose -dir migrations postgres "$DATABASE_URL" up
 ```
 
 ## Open question: module topology once tracker/worker exist
