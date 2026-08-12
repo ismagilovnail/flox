@@ -1,5 +1,5 @@
-import { PageStub } from "@/components/shell/page-stub";
+import { TeamView } from "@/features/team/team-view";
 
 export default function Page() {
-  return <PageStub title="Team" />;
+  return <TeamView />;
 }

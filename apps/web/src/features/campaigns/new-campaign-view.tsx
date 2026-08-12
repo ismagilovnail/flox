@@ -3,7 +3,6 @@
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 
-import { SOURCES, TRACKING_DOMAINS } from "@/lib/mock/campaigns";
 import { useCampaignsStore } from "@/stores/campaigns";
 import { CampaignForm, type CampaignFormValues } from "@/features/campaigns/campaign-form";
 
@@ -26,11 +25,7 @@ export function NewCampaignView() {
   return (
     <div className="flex flex-col gap-4">
       <h1 className="text-2xl font-semibold tracking-tight">New Campaign</h1>
-      <CampaignForm
-        defaultValues={{ source: SOURCES[0], trackingDomain: TRACKING_DOMAINS[0] }}
-        submitLabel="Create campaign"
-        onSubmit={handleSubmit}
-      />
+      <CampaignForm defaultValues={{}} submitLabel="Create campaign" onSubmit={handleSubmit} />
     </div>
   );
 }

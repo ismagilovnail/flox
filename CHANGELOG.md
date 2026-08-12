@@ -3,6 +3,68 @@
 Format follows [Keep a Changelog](https://keepachangelog.com/). Entries are
 per-phase, matching `CLAUDE.md`'s phase protocol.
 
+## [Phase 14] — Domains / Team / Settings
+
+### Added
+
+- Domains (§30): `/domains` — the §30 note that this is "a real module, not
+  a text field" is modeled directly: `purpose` (tracking/pwa/fallback),
+  `registrar`/`dnsProvider` enums, `expiresAt`/`verifiedAt` tracking, and
+  separate mock "Verify ownership" / "Issue SSL" actions rather than raw
+  editable status fields (you don't hand-set SSL status, you issue a
+  cert). Seeded with the exact 3 domain strings `mock/campaigns.ts` already
+  used as `TRACKING_DOMAINS`, plus a PWA domain and a fallback domain.
+  Domain removal is a real hard delete (with confirm) — unlike every other
+  entity phase so far, there's no "archived" status in the spec for
+  domains, and hard delete is the honest action here.
+- **Closed the last remaining "known mock placeholder" loop from Phase 6**:
+  `campaign-form.tsx`'s Source and Tracking domain selects now read live
+  from `useTrafficSourcesStore` (Phase 11) and `useDomainsStore` (filtered
+  to `purpose: "tracking"`) instead of the static `SOURCES`/
+  `TRACKING_DOMAINS` arrays in `mock/campaigns.ts`. That module keeps
+  those two arrays only for its own non-reactive seed generator, same
+  pattern as every prior phase's mock-list closure.
+- Team (§30, roles from §52): `/team` with Members / Roles & Permissions /
+  Activity tabs. Roles (`Owner/Admin/Manager/Buyer/Analyst/Viewer`) and
+  permission keys (`campaign.read`, `offer.write`, `settings.write`, etc.)
+  match §52 (Phase 28 Auth/RBAC) exactly, so the Roles & Permissions
+  reference table is the real vocabulary, not a placeholder — Phase 28
+  just adds server-side enforcement on top. The seeded Owner is the actual
+  mock signed-in user (`Nail Ismagilov`, `nailismagilovnick@gmail.com`)
+  already used in `components/shell/user-menu.tsx` — same person, not a
+  stand-in. Owner's role can't be changed and has no remove/suspend
+  actions, matching real SaaS conventions for a workspace's sole owner.
+- Settings (§30): `/settings` with Organization / API Keys / Integrations
+  / Security tabs. API key creation shows the full key exactly once
+  (only the prefix persists afterward) via a two-step create → reveal
+  dialog flow. Integrations panel doubles as the visible home for the
+  Facebook/TikTok/Google Ads connections `TrafficSource.costIntegration`
+  (Phase 11) and Domains' registrar/DNS providers (this phase) point at —
+  connect/disconnect is mocked, matching the "OAuth wiring lands in Phase
+  27-COST" note already established. **Custom Metrics is intentionally
+  NOT here** despite §30 listing it under Settings — CLAUDE.md's build
+  order makes it its own later phase (14.6); adding it now would be
+  building ahead.
+
+### Fixed
+
+- N/A this phase.
+
+### Known issues
+
+- Full browser smoke test passed (extension connected): Domains list +
+  Issue SSL action, Team's all 3 tabs including role-change and the
+  Owner-has-no-actions guard, Settings' all 4 tabs including the API-key
+  reveal-once flow, and the campaign creation form's now-live Source/
+  Tracking-domain pickers. No console errors. Re-ran the Phase 13
+  selector-antipattern grep sweep before testing — clean, nothing new to
+  fix this time.
+- Team/Settings/Domains are pure frontend state (Zustand, in-memory) with
+  no backend behind "Verify ownership," "Issue SSL," "Connect"
+  integration, or API key creation — all are explicitly mock actions
+  pending their real phases (27, 27-COST, 28). Documented in-code at each
+  call site so this isn't discovered by surprise later.
+
 ## [Phase 13] — Conversions / Postbacks / Pixels UI
 
 ### Added

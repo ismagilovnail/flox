@@ -16,12 +16,14 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { SOURCES, TRACKING_DOMAINS, type CampaignStatus } from "@/lib/mock/campaigns";
+import { type CampaignStatus } from "@/lib/mock/campaigns";
+import { useTrafficSourcesStore } from "@/stores/traffic-sources";
+import { useDomainsStore } from "@/stores/domains";
 
 export const campaignFormSchema = z.object({
   name: z.string().min(2, "Name must be at least 2 characters").max(80),
-  source: z.enum(SOURCES as [string, ...string[]], { error: "Select a source" }),
-  trackingDomain: z.enum(TRACKING_DOMAINS as [string, ...string[]], { error: "Select a domain" }),
+  source: z.string().min(1, "Select a source"),
+  trackingDomain: z.string().min(1, "Select a tracking domain"),
   fallbackUrl: z.url("Enter a valid URL"),
   notes: z.string().max(500).optional(),
   status: z.enum(["active", "paused", "draft", "archived"] as [CampaignStatus, ...CampaignStatus[]]).optional(),
@@ -42,12 +44,16 @@ export function CampaignForm({
   submitLabel?: string;
   onSubmit: (values: CampaignFormValues) => void;
 }) {
+  const sources = useTrafficSourcesStore((s) => s.sources);
+  const domains = useDomainsStore((s) => s.domains);
+  const trackingDomains = domains.filter((d) => d.purpose.includes("tracking"));
+
   const form = useForm<CampaignFormValues>({
     resolver: zodResolver(campaignFormSchema),
     defaultValues: {
       name: "",
-      source: SOURCES[0],
-      trackingDomain: TRACKING_DOMAINS[0],
+      source: sources[0]?.name ?? "",
+      trackingDomain: trackingDomains[0]?.domain ?? "",
       fallbackUrl: "",
       notes: "",
       status: "draft",
@@ -87,9 +93,9 @@ export function CampaignForm({
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    {SOURCES.map((s) => (
-                      <SelectItem key={s} value={s}>
-                        {s}
+                    {sources.map((s) => (
+                      <SelectItem key={s.id} value={s.name}>
+                        {s.name}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -109,9 +115,9 @@ export function CampaignForm({
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    {TRACKING_DOMAINS.map((d) => (
-                      <SelectItem key={d} value={d}>
-                        {d}
+                    {trackingDomains.map((d) => (
+                      <SelectItem key={d.id} value={d.domain}>
+                        {d.domain}
                       </SelectItem>
                     ))}
                   </SelectContent>

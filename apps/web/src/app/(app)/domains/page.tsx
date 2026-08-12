@@ -1,5 +1,5 @@
-import { PageStub } from "@/components/shell/page-stub";
+import { DomainList } from "@/features/domains/domain-list";
 
 export default function Page() {
-  return <PageStub title="Domains" />;
+  return <DomainList />;
 }

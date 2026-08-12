@@ -1,5 +1,5 @@
-import { PageStub } from "@/components/shell/page-stub";
+import { SettingsView } from "@/features/settings/settings-view";
 
 export default function Page() {
-  return <PageStub title="Settings" />;
+  return <SettingsView />;
 }

@@ -19,11 +19,11 @@ referenced below as §N).
 ## CURRENT STATE — UPDATE THIS EVERY PHASE
 
 ```
-CURRENT PHASE : PHASE 13 — Conversions / Postbacks / Pixels UI
-STATUS        : done — found and fixed a real infinite-render crash this phase (see
-                CHANGELOG "Fixed"); Phase 10 crash-loop report still separately unresolved
-LAST COMMIT   : feat(entities): conversions, postbacks, pixels
-NEXT          : PHASE 14 — Domains / Team / Settings — confirm before starting
+CURRENT PHASE : PHASE 14 — Domains / Team / Settings
+STATUS        : done — Custom Metrics intentionally deferred to Phase 14.6 per build
+                order; Phase 10 crash-loop report still separately unresolved
+LAST COMMIT   : feat(workspace): domains, team, settings
+NEXT          : PHASE 14.5 — Tags (cross-entity) — confirm before starting
 ```
 
 > At the end of every phase: update the four lines above, add a CHANGELOG entry,
