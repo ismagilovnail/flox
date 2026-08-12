@@ -19,10 +19,10 @@ referenced below as §N).
 ## CURRENT STATE — UPDATE THIS EVERY PHASE
 
 ```
-CURRENT PHASE : PHASE 14.9 — Content Gallery
+CURRENT PHASE : PHASE 15 — Frontend Architecture
 STATUS        : done — Phase 10 crash-loop report still unresolved (unrelated)
-LAST COMMIT   : feat(content-gallery): content gallery
-NEXT          : PHASE 15 — Frontend Architecture — confirm before starting
+LAST COMMIT   : feat(frontend): frontend architecture pass
+NEXT          : PHASE 16 — Go Backend Foundation — confirm before starting
 ```
 
 > At the end of every phase: update the four lines above, add a CHANGELOG entry,

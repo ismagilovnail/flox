@@ -4,7 +4,8 @@ import * as React from "react";
 
 import { EmptyState } from "@/components/ui/empty-state";
 import { useStreamSetsStore } from "@/stores/stream-sets";
-import { emptySimulateRequest, simulateRoute, type SimulateResult } from "@/lib/routing-simulate";
+import { emptySimulateRequest, type SimulateResult } from "@/lib/routing-simulate";
+import { simulateRoute } from "@/lib/api/routing";
 import type { FilterField } from "@/lib/filters";
 import { SimulatorForm } from "@/features/routing-simulator/simulator-form";
 import { SimulatorResult } from "@/features/routing-simulator/simulator-result";
@@ -21,13 +22,19 @@ export function RoutingSimulatorView({
   const streamSets = useStreamSetsStore((s) => s.listByCampaign(campaignId));
   const [request, setRequest] = React.useState(emptySimulateRequest);
   const [result, setResult] = React.useState<SimulateResult | null>(null);
+  const [isSimulating, setIsSimulating] = React.useState(false);
 
   function handleFieldChange(field: FilterField, value: string) {
     setRequest((prev) => ({ ...prev, [field]: value }));
   }
 
-  function handleSimulate() {
-    setResult(simulateRoute(streamSets, fallbackUrl, request));
+  async function handleSimulate() {
+    setIsSimulating(true);
+    try {
+      setResult(await simulateRoute(streamSets, fallbackUrl, request));
+    } finally {
+      setIsSimulating(false);
+    }
   }
 
   return (
@@ -41,7 +48,7 @@ export function RoutingSimulatorView({
         </p>
       </div>
 
-      <SimulatorForm request={request} onChange={handleFieldChange} onSimulate={handleSimulate} />
+      <SimulatorForm request={request} onChange={handleFieldChange} onSimulate={handleSimulate} isSimulating={isSimulating} />
 
       {result ? (
         <SimulatorResult result={result} campaignName={campaignName} />

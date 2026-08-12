@@ -3,6 +3,86 @@
 Format follows [Keep a Changelog](https://keepachangelog.com/). Entries are
 per-phase, matching `CLAUDE.md`'s phase protocol.
 
+## [Phase 15] — Frontend Architecture
+
+### Added
+
+- `apps/web/src/hooks/` — the first genuinely cross-feature hook,
+  `useCurrentMember()`, replacing an identical `CURRENT_USER_MEMBER_ID` +
+  `useTeamStore((s) => s.members.find(...))` + Owner/Admin check that had
+  been copy-pasted into Referral (14.8), Content Gallery (14.9), and Custom
+  Metrics (14.6) independently. Single source of truth for "who am I, what
+  can I manage" until real auth/sessions land in Phase 28.
+- `apps/web/src/lib/api/routing.ts` — the frontend API boundary (§32)
+  starts here, not as 20 speculative per-domain clients. `docs/architecture.md`
+  already promised the Routing Simulator "runs against a local mock that
+  implements the exact same request/response contract... in Phase 27 it is
+  switched to the real endpoint with no UI changes" — but the Phase 10 call
+  site was a plain synchronous function, which would have broken that
+  promise (swapping sync for `fetch` always forces UI changes). It's now a
+  promise-returning wrapper around the same pure mock (`lib/routing-simulate.ts`),
+  with a real loading state (`SimulatorForm`'s button now disables and reads
+  "Simulating..." mid-flight) — so Phase 27 only ever touches this one
+  file's body.
+
+### Scope decision — no `src/lib/api/<domain>.ts` per store, no empty `types/`/`schemas/` folders
+
+Audited the full `apps/web/src` tree against CLAUDE.md's recommended
+`app/ components/ features/ hooks/ lib/ stores/ types/ schemas/` layout.
+Findings:
+
+- **No `fetch()` exists anywhere in the codebase** (grepped) — so "don't
+  scatter fetch() in components" is vacuously satisfied today. Every
+  component already reads/writes data exclusively through a Zustand store's
+  typed action surface, never directly — that store action surface **is**
+  each domain's mock API contract, per CLAUDE.md's own REPO LAYOUT section
+  listing `stores/` as a sanctioned top-level layer. Wrapping every existing
+  store (campaigns, offers, networks, landings, pwa, postlanding,
+  conversions, postbacks, pixels, domains, team, settings, tags,
+  custom-metrics, referral, content-gallery, …) in an additional
+  `lib/api/<domain>.ts` pass-through now would be a same-shaped duplicate
+  with no consumer and nothing to swap it against — real per-domain API
+  integration is explicitly Phase 27's job (CLAUDE.md BUILD ORDER: "Design &
+  UI on mock contracts first (phases 2–15)... then integration (27)"), and
+  building 20 client stubs 12 phases early is exactly the "never build
+  ahead" / "no unnecessary frameworks" this file warns against. Routing
+  (above) is the one exception because a concrete promise about it already
+  existed in `docs/architecture.md` from Phase 0.
+- **Zod schemas and mock types stay co-located per-feature**
+  (`features/*/x-form-sheet.tsx`, `lib/mock/*.ts`) rather than moved into
+  new top-level `types/`/`schemas/` folders. This already satisfies "domain-
+  specific code belongs inside features" — a Landing form's schema is
+  exactly as domain-specific as the Landing form itself. Top-level
+  `types/`/`schemas/` directories would only be justified by types genuinely
+  shared *across* features (e.g. a future OpenAPI-generated contract), which
+  don't exist yet; creating them empty now would be pure scaffolding.
+- Audited every `useXStore((s) => s.method(...))` selector call site for the
+  Phase 13 stale-snapshot crash pattern (a selector that itself does
+  `.filter()`/`.map()` breaks `useSyncExternalStore`). All are either
+  `.find()` (safe) or already explicitly guarded with a stable-reference
+  cache (`stream-sets.ts`'s `listByCampaign`, commented from when that was
+  fixed pre-dating this conversation). No latent bugs found.
+
+### Fixed
+
+- N/A this phase — no defects found; the two mock-list-view regressions
+  after the `useCurrentMember()` refactor (Referral, Content Gallery, Custom
+  Metrics) and the routing simulator's new async path were all verified
+  clean in the browser, no console errors.
+
+### Known issues
+
+- None new. Phase 10's unresolved crash-loop report carries over
+  (unrelated to this phase).
+
+### Files changed
+
+- `apps/web/src/hooks/use-current-member.ts` (new)
+- `apps/web/src/lib/api/routing.ts` (new)
+- `apps/web/src/features/{referral,content-gallery,custom-metrics}/*` (modified) — use `useCurrentMember()`
+- `apps/web/src/features/routing-simulator/*` (modified) — async simulate call + loading state
+- `apps/web/src/lib/routing-simulate.ts` (unchanged — now called from `lib/api/routing.ts` instead of directly)
+
 ## [Phase 14.9] — Content Gallery
 
 ### Added

@@ -8,18 +8,15 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
 import { useCustomMetricsStore } from "@/stores/custom-metrics";
-import { useTeamStore } from "@/stores/team";
 import { METRIC_CATALOG, surfaceCanCompute } from "@/lib/mock/custom-metrics-registry";
 import { validateFormula } from "@/lib/formula-engine";
+import { useCurrentMember } from "@/hooks/use-current-member";
 import { customMetricColumns } from "@/features/custom-metrics/custom-metric-columns";
 import {
   CustomMetricFormSheet,
   type CustomMetricFormValues,
 } from "@/features/custom-metrics/custom-metric-form-sheet";
 import type { CustomMetric } from "@/lib/mock/custom-metrics";
-
-/** Matches the mock signed-in user (Owner) already seeded in stores/team.ts. */
-const CURRENT_USER_MEMBER_ID = "mem_owner";
 
 function toFormValues(metric: CustomMetric): CustomMetricFormValues {
   return {
@@ -36,16 +33,15 @@ export function CustomMetricsList() {
   const metrics = useCustomMetricsStore((s) => s.metrics);
   const addMetric = useCustomMetricsStore((s) => s.addMetric);
   const updateMetric = useCustomMetricsStore((s) => s.updateMetric);
-  const currentMember = useTeamStore((s) => s.members.find((m) => m.id === CURRENT_USER_MEMBER_ID));
+  const { member: currentMember, memberId: CURRENT_USER_MEMBER_ID, isOwnerOrAdmin: canManageAny } = useCurrentMember();
 
   const [target, setTarget] = React.useState<CustomMetric | null | undefined>(undefined);
 
   const role = currentMember?.role;
-  const canCreate = role === "Owner" || role === "Admin" || role === "Manager";
-  const canManageAny = role === "Owner" || role === "Admin";
+  const canCreate = canManageAny || role === "Manager";
   const canManage = React.useCallback(
     (metric: CustomMetric) => canManageAny || (role === "Manager" && metric.createdByMemberId === CURRENT_USER_MEMBER_ID),
-    [canManageAny, role],
+    [canManageAny, role, CURRENT_USER_MEMBER_ID],
   );
 
   const visibleMetrics = canCreate ? metrics : metrics.filter((m) => m.status === "published" && m.active);

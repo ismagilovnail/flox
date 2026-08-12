@@ -65,10 +65,12 @@ export function SimulatorForm({
   request,
   onChange,
   onSimulate,
+  isSimulating,
 }: {
   request: SimulateRequest;
   onChange: (field: FilterField, value: string) => void;
   onSimulate: () => void;
+  isSimulating: boolean;
 }) {
   return (
     <div className="flex flex-col gap-4">
@@ -89,8 +91,8 @@ export function SimulatorForm({
           </div>
         ))}
       </div>
-      <Button onClick={onSimulate} className="self-start">
-        Simulate
+      <Button onClick={onSimulate} disabled={isSimulating} className="self-start">
+        {isSimulating ? "Simulating..." : "Simulate"}
       </Button>
     </div>
   );

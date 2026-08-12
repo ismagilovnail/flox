@@ -10,25 +10,21 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { formatUsd } from "@/lib/format";
 import { computeBalances, referralLink } from "@/lib/mock/referral";
 import { useReferralStore } from "@/stores/referral";
-import { useTeamStore } from "@/stores/team";
 import { useSettingsStore } from "@/stores/settings";
+import { useCurrentMember } from "@/hooks/use-current-member";
 import { ReferredSignupsTable } from "@/features/referral/referred-signups-table";
 import { EarningsHistoryTable } from "@/features/referral/earnings-history-table";
 import { PayoutsTable } from "@/features/referral/payouts-table";
 import { RequestPayoutDialog } from "@/features/referral/request-payout-dialog";
 import { AddAdjustmentDialog } from "@/features/referral/add-adjustment-dialog";
 
-/** Matches the mock signed-in user (Owner) already seeded in stores/team.ts. */
-const CURRENT_USER_MEMBER_ID = "mem_owner";
-
 export function ReferralDashboard() {
   const signups = useReferralStore((s) => s.signups);
   const transactions = useReferralStore((s) => s.transactions);
   const payouts = useReferralStore((s) => s.payouts);
   const orgName = useSettingsStore((s) => s.org.name);
-  const currentMember = useTeamStore((s) => s.members.find((m) => m.id === CURRENT_USER_MEMBER_ID));
+  const { memberId: CURRENT_USER_MEMBER_ID, isOwnerOrAdmin: canManage } = useCurrentMember();
 
-  const canManage = currentMember?.role === "Owner" || currentMember?.role === "Admin";
   const balances = React.useMemo(() => computeBalances(transactions, payouts), [transactions, payouts]);
   const link = referralLink(orgName);
 

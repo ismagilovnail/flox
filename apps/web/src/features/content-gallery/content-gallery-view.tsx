@@ -13,10 +13,7 @@ import { GalleryPreviewDialog } from "@/features/content-gallery/gallery-preview
 import { UploadAssetDialog } from "@/features/content-gallery/upload-asset-dialog";
 import { GALLERY_CATEGORY_LABELS, type GalleryCategory, type GalleryItem, type GallerySource } from "@/lib/mock/content-gallery";
 import { useContentGalleryStore } from "@/stores/content-gallery";
-import { useTeamStore } from "@/stores/team";
-
-/** Matches the mock signed-in user (Owner) already seeded in stores/team.ts. */
-const CURRENT_USER_MEMBER_ID = "mem_owner";
+import { useCurrentMember } from "@/hooks/use-current-member";
 
 const CATEGORY_OPTIONS: Array<{ value: GalleryCategory | "all"; label: string }> = [
   { value: "all", label: "All categories" },
@@ -25,8 +22,7 @@ const CATEGORY_OPTIONS: Array<{ value: GalleryCategory | "all"; label: string }>
 
 export function ContentGalleryView() {
   const items = useContentGalleryStore((s) => s.items);
-  const currentMember = useTeamStore((s) => s.members.find((m) => m.id === CURRENT_USER_MEMBER_ID));
-  const canManage = currentMember?.role === "Owner" || currentMember?.role === "Admin";
+  const { memberId: CURRENT_USER_MEMBER_ID, isOwnerOrAdmin: canManage } = useCurrentMember();
 
   const [search, setSearch] = React.useState("");
   const [category, setCategory] = React.useState<GalleryCategory | "all">("all");
