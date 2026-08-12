@@ -3,6 +3,80 @@
 Format follows [Keep a Changelog](https://keepachangelog.com/). Entries are
 per-phase, matching `CLAUDE.md`'s phase protocol.
 
+## [Phase 19] — Routing Engine
+
+### Added
+
+- **`internal/routing`** (§38, §6-SHARED Strategy A): the single source of
+  truth for routing decisions — stream-set priority, AND/OR nested filter
+  evaluation, weighted flow selection, sticky assignment. Deliberately
+  independent of `net/http` and any database driver (§38: "keep routing
+  independent from HTTP handlers") — `Resolve` is a pure function of
+  already-loaded config + already-classified request attributes →
+  decision.
+- **`Router.Resolve`** matches §38's exact spec'd interface and
+  `RouteResult` shape byte for byte. **`Engine.Explain`** (a second method
+  on the concrete engine, not part of the `Router` interface) runs the
+  identical evaluation and additionally returns the full per-stream-set/
+  per-flow `Explanation` §72 requires ("why did this match, why not that
+  one, why this flow, why fallback, sticky from where") — the shape the
+  frontend Routing Simulator already renders — without growing
+  `RouteResult` beyond what §38 specifies. `Resolve`/`Explain` share one
+  internal evaluation function, so they can't disagree.
+- **Filter evaluation, weighted pick, and destination resolution ported
+  faithfully from the existing frontend mock** (`lib/filters.ts`,
+  `lib/routing-simulate.ts`) — same 31 `FilterField`s, same 16
+  `FilterOperator`s (including the exact `norm()`/`compareValues()`
+  semantics), same weighted-pick and fallback-cascade logic. Strategy A
+  means the frontend's TypeScript version is a mock to be *replaced*
+  (Phase 27), not a second implementation to keep in sync — porting the
+  behavior faithfully now is what makes that swap invisible to users.
+- **One deliberate correctness improvement over the frontend mock**: the
+  Go engine checks `Destination.OfferActive` before using an offer
+  destination, falling through to fallback if the offer is inactive — §58
+  explicitly requires an "inactive offers" test case, and the current
+  frontend mock never implemented this check at all.
+- **`stickyFlowKeepClickId` doesn't reach this package at all** — it only
+  affects whether the caller reuses an old `click_id` for attribution,
+  which has zero effect on which flow gets selected. `RoutingConfig`
+  doesn't carry it; documented in both the code and `docs/routing.md` so
+  its absence reads as a decision, not an oversight.
+- **Sticky is verifiably Redis-independent by construction**: this package
+  has no cache dependency at all, so a sticky decision is a pure function
+  of `(req.Sticky, req.Config)` on every call — there's nothing an "eviction"
+  could invalidate on this side. Test proves identical results across
+  repeated calls with the same sticky state.
+- **Conformance fixture** (§6-SHARED, §58): `internal/routing/fixture_test.go`
+  covers all 17 required cases — AND/OR/nested groups, priority
+  (first-match wins), fallback (stream-set level before campaign level),
+  weighted distribution (±2% over 10k picks, real seeded PRNG via an
+  injectable `Engine.Rand01`, not a fixed value), sticky (+ skipInactive
+  both branches), inactive flows/offers, missing-destination fallback
+  cascade, and ISO-code-mismatch (proving no fuzzy UK/GB coercion — a
+  literal, case-insensitive-only match). Three cases (`inactive campaigns`,
+  `invalid tracking links`, `in-app WebView bounce`) are explicitly
+  documented as out of this package's scope via `t.Skip` with reasoning
+  inline, not silently absent — all three happen in the caller
+  (`apps/tracker`, Phase 21) before `Resolve` is ever invoked.
+
+### Fixed
+
+- N/A this phase — no defects found. `go build`/`vet`/`gofmt`/`test`
+  clean, full suite stable across 5 repeated runs and under `go test -race`.
+
+### Known issues
+
+- None new. Phase 10's unresolved crash-loop report carries over
+  (unrelated to this phase). `apps/tracker`/`apps/worker` module topology
+  remains an open decision (documented Phase 16, still unresolved, not
+  blocking) — `internal/routing`'s eventual consumers.
+
+### Files changed
+
+- `apps/api/internal/routing/*` (new)
+- `docs/routing.md` (rewritten — real conformance fixture table)
+- `docs/architecture.md` (modified — Phase 19 section)
+
 ## [Phase 18] — Campaign API
 
 ### Added

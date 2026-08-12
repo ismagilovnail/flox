@@ -134,3 +134,25 @@ cleanup queries ran, so every seeded test org silently leaked. Fixed by
 registering the pool's close via `t.Cleanup` too, ordered (via LIFO) after
 the org-delete cleanups; confirmed fixed by checking `organizations`/
 `campaigns` row counts before and after a test run.
+
+## Phase 19 — Routing Engine
+
+`internal/routing` — the §6-SHARED Strategy A single source of truth for
+routing decisions. Full detail, including the conformance fixture table,
+is in [`docs/routing.md`](routing.md); the short version: `Resolve` is a
+pure function with no `net/http` or database dependency (§38), matches the
+spec's exact `RouteResult` shape, and a second method on the concrete
+engine (`Explain`) shares the same evaluation to additionally return the
+full per-stream-set/per-flow trace §72 requires, without growing
+`RouteResult` beyond what §38 specifies. All 17 of §58's required test
+cases pass or are explicitly documented as out of this package's scope
+(tracking-link resolution, campaign-active checks, and the WebView bounce
+all happen in the caller, before `Resolve` is ever invoked).
+
+One deliberate divergence from the current frontend mock
+(`lib/routing-simulate.ts`): the Go engine checks a destination's offer is
+still active before using it (`Destination.OfferActive`), which the
+frontend mock never implemented. §58 explicitly requires an "inactive
+offers" test case, and Strategy A means the Go engine — not the mock — is
+what's actually correct here; the frontend catches up when Phase 27 swaps
+it onto the real endpoint.
