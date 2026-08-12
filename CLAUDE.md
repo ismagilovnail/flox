@@ -19,11 +19,11 @@ referenced below as §N).
 ## CURRENT STATE — UPDATE THIS EVERY PHASE
 
 ```
-CURRENT PHASE : PHASE 14.5 — Tags (cross-entity)
-STATUS        : done — DataTable gained opt-in row-selection support (additive, all
-                existing call sites unaffected); Phase 10 crash-loop report still unresolved
-LAST COMMIT   : feat(tags): cross-entity tagging
-NEXT          : PHASE 14.6 — Custom Metrics builder — confirm before starting
+CURRENT PHASE : PHASE 14.6 — Custom Metrics builder
+STATUS        : done — found and fixed a real crash this phase (lifted-validation-state
+                race, see CHANGELOG "Fixed"); Phase 10 crash-loop report still unresolved
+LAST COMMIT   : feat(metrics): custom metrics builder
+NEXT          : PHASE 14.7 — Report Presets + Directory Stats — confirm before starting
 ```
 
 > At the end of every phase: update the four lines above, add a CHANGELOG entry,

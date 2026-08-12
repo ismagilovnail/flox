@@ -11,6 +11,7 @@ import { FunnelChart } from "@/features/analytics/funnel-chart";
 import { aggregateReport } from "@/features/analytics/aggregate";
 import { METRICS, formatMetric } from "@/features/analytics/registry";
 import { generateAnalyticsSlices } from "@/lib/mock/analytics";
+import { useCustomMetricsStore } from "@/stores/custom-metrics";
 
 const SLICES = generateAnalyticsSlices();
 
@@ -24,6 +25,12 @@ function previousRange(range: ReportControlsState["dateRange"]) {
 }
 
 export function AnalyticsView() {
+  const allCustomMetrics = useCustomMetricsStore((s) => s.metrics);
+  const reportBuilderMetrics = React.useMemo(
+    () => allCustomMetrics.filter((m) => m.status === "published" && m.active && m.targets.includes("report_builder")),
+    [allCustomMetrics],
+  );
+
   const lastDate = new Date("2026-08-11T00:00:00Z");
   const defaultFrom = new Date(lastDate);
   defaultFrom.setUTCDate(defaultFrom.getUTCDate() - 29);
@@ -115,7 +122,12 @@ export function AnalyticsView() {
           <TabsTrigger value="funnel">Funnel</TabsTrigger>
         </TabsList>
         <TabsContent value="table">
-          <ReportTable rows={rows} dimensions={state.dimensions} metrics={state.metrics} />
+          <ReportTable
+            rows={rows}
+            dimensions={state.dimensions}
+            metrics={state.metrics}
+            customMetrics={reportBuilderMetrics}
+          />
         </TabsContent>
         <TabsContent value="line">
           <ReportLineChart

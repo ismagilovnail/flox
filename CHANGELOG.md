@@ -3,6 +3,101 @@
 Format follows [Keep a Changelog](https://keepachangelog.com/). Entries are
 per-phase, matching `CLAUDE.md`'s phase protocol.
 
+## [Phase 14.6] — Custom Metrics builder
+
+### Added
+
+- **`src/lib/formula-engine.ts`** — a real tokenizer/parser/evaluator/
+  validator (§30.5), not an `eval()`/`Function()` shortcut. Operators
+  `+ − × ÷ ( )` plus comparisons; functions `DIV, EMPTYIF, IF, ROUND, ABS,
+  MIN, MAX` with contextual hints; `{metric_id}` tokens. Division is safe
+  everywhere — bare `/` and `DIV()` alike — division by zero or a null
+  input yields empty, never throws, exactly as mandated. `validateFormula`
+  enforces the single-data-source constraint and rejects LTV metrics
+  outright, both explicitly required by §30.5.
+- **Critical finding, not duplicated**: `features/analytics/registry.ts`
+  (Phase 5) already *is* the §50 Metrics Registry — its own comment says
+  so ("matches §50 — never recompute ad hoc elsewhere"). The Custom
+  Metrics catalog (`lib/mock/custom-metrics-registry.ts`) re-exports its
+  13 `METRICS` verbatim as the live "Traffic / Performance" category and
+  only *adds* what Phase 5 didn't need: CPA Funnel, Fraud (`bots`,
+  `click_all` — §30.5's own Bot Share example uses these ids), and Push,
+  all catalog-only (`live: false`, no tracker/Push module exists yet to
+  compute them) — plus LTV, catalog-only **and** `insertable: false`,
+  the one category §30.5 forbids in formulas outright, not just
+  "unimplemented."
+- Formula Builder Sheet: searchable/grouped metric catalog with
+  click-to-insert-at-cursor (LTV entries shown disabled with a tooltip,
+  not hidden — the constraint stays discoverable), an operator/function
+  toolbar, a contextual hint when the cursor is inside a function call,
+  live green-check/red-X validation, and a live preview computed against
+  representative sample values. Name/group (existing-or-new)/format,
+  Show-in targets, Draft/Published.
+- "Show in" targets scoped to 4 concrete, real surfaces (Report Builder,
+  Campaigns Table, Offers Table, Traffic Sources Table) — each checkbox is
+  disabled unless every metric the formula references is actually
+  available as data on that surface. Offers/Sources currently have no
+  analytics numbers at all (no tracker), so those two are honestly almost
+  always disabled rather than faked — a real demonstration of §30.5's
+  "never render empty zeros where it cannot be computed" rule, not a cop-out.
+- Seeded two metrics illustrating both lifecycle states genuinely: "Margin
+  per Click" (§30.5's own example, Published + Active, live on Report
+  Builder and Campaigns Table) and "Bot Share" (§30.5's other example,
+  kept as **Draft** because `{bots}`/`{click_all}` aren't tracked by
+  anything yet — an honest use of "drafts are invisible until published,"
+  not a placeholder that pretends to work).
+- Lifecycle/governance: Draft/Published, an independent Active toggle
+  ("hide from pickers without deleting"), duplicate, and deletion blocked
+  while published or exposed on any surface (archive/deactivate instead)
+  — enforced in `stores/custom-metrics.ts`.
+- Role access reuses Team's existing canonical roles
+  (Owner/Admin/Manager/Buyer/Analyst/Viewer, §52) rather than inventing
+  §30.5's separate Owner/Tech/Lead/Buyer vocabulary: Owner/Admin manage
+  any metric, Manager creates and manages only their own, Buyer/Analyst/
+  Viewer see only published+active metrics read-only. Gating logic is
+  real (checks the current mock user's role from `useTeamStore`) even
+  though the single seeded identity is always Owner — noted below.
+- Live computation wired into two real surfaces, proving "computes
+  correctly" isn't just a UI toggle: `ReportTable` (Analytics) appends a
+  column per report_builder-targeted metric evaluated against each row's
+  own `ReportRow.metrics`; the Campaigns `DataTable` does the same against
+  each campaign's clicks/conversions/revenue/spend/profit/roi. Same
+  formula engine, same evaluator, both places.
+
+### Fixed
+
+- **Crash found during the in-browser smoke test**: typing an
+  in-progress/invalid formula (e.g. mid-keystroke) threw an uncaught
+  `FormulaError` and crashed the Sheet's render. Root cause:
+  `FormulaInput` computed its own validation and reported it to the
+  parent through a `useEffect` callback, so the parent's lifted
+  `validation` state was always one render behind the live `formula`
+  value — on the render where `formula` had just become invalid, the
+  parent still evaluated it against its stale "valid" state, and
+  `evaluateFormula`/`parseFormula` (unlike `validateFormula`) don't catch
+  parse errors. Fixed by making the parent compute validation once,
+  synchronously, from `formula` itself (`useMemo`) and pass the result
+  down as a prop — one source of truth, no lifted-state race. Documented
+  the failure mode in both files as a comment so the pattern isn't
+  reintroduced.
+
+### Known issues
+
+- Role-restricted paths (Manager/Buyer/Analyst/Viewer) are implemented
+  and exercised by code path but not interactively verified in the
+  browser — the only seeded mock identity is the Team Owner, so testing
+  the restricted views would require a role-switcher UI this phase didn't
+  build. The permission checks themselves read the real (mock) team
+  member/role data, not a hardcoded flag.
+- Full browser smoke test otherwise passed (extension connected):
+  click-to-insert from the catalog, live validation and live preview,
+  safe division against zero confirmed via direct DOM/JS inspection
+  (screenshots were unreliable this session due to viewport-size
+  cutoff — verified state via `get_page_text`/`javascript_tool` instead),
+  the single-data-source rejection (`{clicks} + {push_sent}`), and LTV
+  metrics rendering as non-interactive (not `<button>`) catalog rows. No
+  console errors after the fix above.
+
 ## [Phase 14.5] — Tags (cross-entity)
 
 ### Added

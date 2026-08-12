@@ -4,15 +4,21 @@ import { DataTable, dataTableFeatures } from "@/components/ui/data-table";
 import { Mono } from "@/components/ui/typography";
 import { DIMENSIONS, METRICS, formatMetric, type DimensionKey, type MetricKey } from "@/features/analytics/registry";
 import type { ReportRow } from "@/features/analytics/aggregate";
+import { evaluateFormula } from "@/lib/formula-engine";
+import type { CustomMetric } from "@/lib/mock/custom-metrics";
 
 export function ReportTable({
   rows,
   dimensions,
   metrics,
+  customMetrics = [],
 }: {
   rows: ReportRow[];
   dimensions: DimensionKey[];
   metrics: MetricKey[];
+  /** Published + active custom metrics targeting the report_builder surface (§30.5) —
+   * evaluated live against each row's own metrics, same formula engine everywhere. */
+  customMetrics?: CustomMetric[];
 }) {
   const columns: ColumnDef<typeof dataTableFeatures, ReportRow>[] = [
     ...(dimensions.length === 0
@@ -39,6 +45,12 @@ export function ReportTable({
         cell: ({ getValue }) => <Mono>{formatMetric(getValue() as number | null, meta.format)}</Mono>,
       };
     }),
+    ...customMetrics.map((cm): ColumnDef<typeof dataTableFeatures, ReportRow> => ({
+      id: `cm_${cm.id}`,
+      header: cm.name,
+      accessorFn: (row) => evaluateFormula(cm.formula, row.metrics),
+      cell: ({ getValue }) => <Mono>{formatMetric(getValue() as number | null, cm.format)}</Mono>,
+    })),
   ];
 
   return (

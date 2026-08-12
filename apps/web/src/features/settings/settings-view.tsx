@@ -5,6 +5,7 @@ import { OrganizationPanel } from "@/features/settings/organization-panel";
 import { ApiKeysPanel } from "@/features/settings/api-keys-panel";
 import { IntegrationsPanel } from "@/features/settings/integrations-panel";
 import { SecurityPanel } from "@/features/settings/security-panel";
+import { CustomMetricsList } from "@/features/custom-metrics/custom-metrics-list";
 
 export function SettingsView() {
   return (
@@ -17,6 +18,7 @@ export function SettingsView() {
           <TabsTrigger value="api-keys">API Keys</TabsTrigger>
           <TabsTrigger value="integrations">Integrations</TabsTrigger>
           <TabsTrigger value="security">Security</TabsTrigger>
+          <TabsTrigger value="custom-metrics">Custom Metrics</TabsTrigger>
         </TabsList>
 
         <TabsContent value="organization">
@@ -30,6 +32,9 @@ export function SettingsView() {
         </TabsContent>
         <TabsContent value="security">
           <SecurityPanel />
+        </TabsContent>
+        <TabsContent value="custom-metrics">
+          <CustomMetricsList />
         </TabsContent>
       </Tabs>
     </div>
