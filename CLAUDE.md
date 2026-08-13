@@ -25,10 +25,11 @@ STATUS        : done — module topology resolved (one go.mod at apps/, shared i
                 in-app WebView bounce (§73) still unimplemented, see apps/tracker/README.md
 LAST COMMIT   : feat(tracker): tracking engine
 NEXT          : PHASE 22 — Attribution — confirm before starting
-                A1/A2 of docs/spec-amendments-phase22.md are APPLIED to §45/§59
-                (dedup key is now 3-part; status never returns to CPA_HOLD).
-                Still open: A3 (deterministic weighted pick) — decide before the
-                §6-SHARED fixture is frozen.
+                All of docs/spec-amendments-phase22.md (A1/A2/A3) is APPLIED to
+                the spec. Carry-over into the routing code, NOT yet done:
+                internal/routing/weighted.go still takes rand01 and must move to
+                a visit-key hash per the amended §38 — do it when Phase 22 opens
+                that package, before the §6-SHARED fixture is frozen.
 ```
 
 > At the end of every phase: update the four lines above, add a CHANGELOG entry,
@@ -204,6 +205,13 @@ Campaign → Stream Set (priority, first match wins, AND/OR filters, pixels)
         → Flow (weighted, pickWeighted) → destination
 No set matches → campaign fallback / safe destination.
 ```
+
+`pickWeighted` is **deterministic by visit key** (§38): an unseeded FNV-1a hash
+of a stable property of the visit, never an RNG. Same visit → same flow on every
+replica and after every restart. Independent of sticky — the cookie is still the
+truth for a returning visitor (#4); the hash covers what happens before a cookie
+exists. Candidates are filtered *before* the draw, so weights mean what the
+operator typed.
 
 Decisions must be explainable: why matched / why not / why this flow / why
 fallback / sticky applied from where (§72).

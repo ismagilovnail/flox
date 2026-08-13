@@ -2059,7 +2059,34 @@ type RouteResult struct {
 }
 ```
 
-Routing must be deterministic where configuration requires deterministic behavior.
+Routing must be deterministic ALWAYS, not only when sticky is enabled.
+
+The same request must resolve to the same flow on every replica and after every
+restart. Weighted selection therefore draws from a hash of a stable property of
+the visit, never from a random number generator:
+
+```text
+pickWeighted(flows, key) where key is derived from the visit
+  (click_id when already minted, otherwise a stable fingerprint of the request)
+
+  * uniform hash → observed shares converge to configured weights (§58: within
+    2% over 10k picks)
+  * pure function → a replayed request lands exactly where the original did
+
+Use a fixed, unseeded hash (FNV-1a 64). NOT hash/maphash: it is seeded randomly
+per process, so two tracker replicas behind one load balancer would disagree
+about the same visit and a restart would re-bucket every visitor.
+
+Flows with weight <= 0 are SKIPPED, not clamped: pausing one flow must not
+require re-balancing the others before traffic stops reaching it.
+
+Shares are relative to the sum of the weights actually in play after filtering,
+not to 100 — see §58 "eligibility before the draw".
+```
+
+This is independent of sticky (§39-STICKY). The cookie remains the source of
+truth for a returning visitor; the hash decides what happens BEFORE a cookie
+exists and if it is lost.
 
 > This package is the single source of truth for routing decisions and is
 > consumed by the tracker, the worker, and the /routing/simulate endpoint.
@@ -2094,7 +2121,7 @@ evaluate filters (AND/OR, nested)
 ↓
 select eligible flow
 ↓
-apply weighted selection (pickWeighted)
+apply weighted selection (pickWeighted — deterministic by visit key, §38)
 ↓
 persist sticky assignment (if enabled)
 ↓
@@ -2922,7 +2949,15 @@ OR
 nested groups
 priority (first-match wins)
 fallback
-weighted routing (distribution within 2% of configured weights over 10k picks)
+weighted routing, distribution (within 2% of configured weights over 10k
+  distinct visit keys)
+weighted routing, determinism (the same visit key resolves to the same flow
+  across repeated calls, across engine instances, and across process restarts)
+weighted routing, eligibility before the draw (of two flows at 50/50 where one
+  is US-only, ALL non-US traffic goes to the other one — it does not half
+  disappear into the fallback)
+weighted routing, zero and negative weights (skipped, not clamped; remaining
+  flows split the traffic between themselves)
 sticky routing (cookie survives Redis flush)
 sticky keepClickId
 sticky skipInactive true/false
