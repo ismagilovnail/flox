@@ -5,6 +5,75 @@ per-phase, matching `CLAUDE.md`'s phase protocol. The one exception is
 [Between phases], below: spec amendments and the code changes that follow from
 them land between phases and would otherwise be invisible here.
 
+## [Phase 22] — Attribution
+
+### Added
+
+- **`internal/attribution`** (§44): decides which click a conversion belongs
+  to, implementing §44's `AttributionService` interface exactly. Pure — no
+  HTTP, no database driver, no clock of its own — reading clicks through a
+  `ClickResolver`, the same shape `internal/routing` has with `routingstore`.
+- **Evidence is tried strongest-first**: `click_id` (which FLOX minted and
+  handed to the network) before `external_click_id` (which the network
+  supplied and which is not reliably unique). Two refusals carry the weight of
+  §44's "do not invent attribution when there is insufficient evidence":
+  - a `external_click_id` matching **several** clicks is `ambiguous`, not a
+    tiebreak. The same `fbclid` recurs across a redirect chain, a prefetch and
+    a genuine second visit; preferring "the most recent" would look sensible
+    and credit the wrong click a fraction of the time, invisibly.
+  - a present-but-unmatched `click_id` does **not** fall back to the external
+    id. If the network echoed back an identifier we minted and it resolves to
+    nothing, that claim is suspect, and re-matching it on a weaker field would
+    hide exactly the case worth investigating.
+- **Unattributed is a first-class answer, not an error.** Four closed outcomes
+  (`attributed`, `no_identifier`, `unknown_click`,
+  `ambiguous_external_click_id`), each carrying a human-readable reason for the
+  postback log — a disputed payout gets re-argued from that record (§72's
+  spirit). `no_identifier` is deliberately distinct from `unknown_click`: the
+  first is a misconfigured postback template, the second is a real lookup miss,
+  and the fixes differ.
+- **`TimeToConversion`**, including negative values. A conversion timestamped
+  before its click means clock skew or a replayed postback; clamping it to zero
+  would erase the one signal that says so. It is a diagnostic, never grounds
+  for refusing a click that matched.
+- **`MemoryResolver`** — the honest stand-in, per-process and gone on restart,
+  labelled as such. The tracker still writes to `eventbuf.LogSink`, which is
+  explicitly not durable storage, so there is nothing to query yet; the real
+  ClickHouse-backed resolver arrives with the worker (Phase 24) and the
+  analytical schema (Phase 26). Adding a clicks table to Postgres instead would
+  have contradicted §7 and §47.
+- **`docs/attribution.md`** (§76).
+
+### Security
+
+- **Tenant isolation is enforced in the repository layer** (CLAUDE.md #5):
+  every `ClickResolver` method takes `organizationID` and filters on it, rather
+  than the service comparing ids after the fact — a filter that is part of the
+  query cannot be forgotten at one call site. `Conversion.OrganizationID` comes
+  from the authenticated credential, never the request body, and a missing one
+  returns `ErrNoOrganization` rather than searching globally.
+- A click belonging to a **different** organization is reported as
+  `unknown_click`, indistinguishable from a nonexistent one, so the outcome
+  cannot be used to confirm another tenant's click id exists.
+- Four isolation tests, including one asserting that the same
+  `external_click_id` present in two organizations resolves cleanly for each
+  rather than turning ambiguous — the failure mode a dropped org filter would
+  produce, and one that would otherwise read as a data-quality problem rather
+  than a breach.
+
+### Notes
+
+- A resolver failure surfaces as an error, never as `unattributed`: recording a
+  database blip as "no click found" would permanently write off real revenue.
+- **No attribution window** is implemented. §44 specifies none, and a policy
+  that silently discards late revenue is not this phase's decision to make
+  alone; §45 already notes partners re-send deposits with hours-to-days delay.
+  Recorded as an open question for Phase 23, where the postback timing rules
+  live.
+- Nothing is wired into a binary yet — Phase 23's postback handler is the
+  consumer, exactly as `internal/routing` (Phase 19) waited for the tracker
+  (Phase 21).
+
 ## [Between phases] — spec amendments (§38, §45, §58, §59)
 
 Three amendments drafted in `docs/spec-amendments-phase22.md` after reviewing

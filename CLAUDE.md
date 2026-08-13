@@ -19,17 +19,22 @@ referenced below as §N).
 ## CURRENT STATE — UPDATE THIS EVERY PHASE
 
 ```
-CURRENT PHASE : PHASE 21 — Tracking Engine
-STATUS        : done — module topology resolved (one go.mod at apps/, shared internal/);
-                Phase 10 crash-loop report still unresolved (unrelated);
-                in-app WebView bounce (§73) still unimplemented, see apps/tracker/README.md
-LAST COMMIT   : feat(tracker): tracking engine
-NEXT          : PHASE 22 — Attribution — confirm before starting
-                docs/spec-amendments-phase22.md (A1/A2/A3) is fully APPLIED —
-                spec AND code: pickWeighted is now a visit-key hash, Engine has
-                no RNG, RequestContext.VisitKey is required for a real split.
-                A1/A2 (dedup key, status progression) are spec-only so far and
-                land as code in PHASE 23 — Conversion Engine.
+CURRENT PHASE : PHASE 22 — Attribution
+STATUS        : done — internal/attribution implements §44's AttributionService;
+                evidence order click_id → unique external_click_id → refuse;
+                tenant isolation enforced in the resolver, 14 tests pass.
+                Click storage is still a MemoryResolver stand-in — the real
+                ClickHouse-backed one lands with the worker (Phase 24 / 26).
+                No attribution window: open question for Phase 23 (see
+                docs/attribution.md).
+                Carried over, unrelated: Phase 10 crash-loop report; in-app
+                WebView bounce (§73) — see apps/tracker/README.md.
+LAST COMMIT   : feat(attribution): attribution engine
+NEXT          : PHASE 23 — Conversion Engine — confirm before starting
+                A1/A2 of docs/spec-amendments-phase22.md are already in the
+                spec (§45) and land as CODE in this phase: dedup key
+                (click_id, status, event_ref) and "status never returns to
+                CPA_HOLD". A3 is fully done, spec and code.
 ```
 
 > At the end of every phase: update the four lines above, add a CHANGELOG entry,
