@@ -1,7 +1,80 @@
 # CHANGELOG
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). Entries are
-per-phase, matching `CLAUDE.md`'s phase protocol.
+per-phase, matching `CLAUDE.md`'s phase protocol. The one exception is
+[Between phases], below: spec amendments and the code changes that follow from
+them land between phases and would otherwise be invisible here.
+
+## [Between phases] — spec amendments (§38, §45, §58, §59)
+
+Three amendments drafted in `docs/spec-amendments-phase22.md` after reviewing
+a third-party tracker, then applied. A1 and A2 are spec-only until Phase 23
+implements the conversion engine; A3 is spec **and** code.
+
+### Changed — weighted flow selection is deterministic (A3, §38)
+
+- **`internal/routing.pickWeighted` now hashes a visit key instead of rolling
+  a die.** §38 previously said routing must be deterministic "where
+  configuration requires deterministic behavior", which reads as "when sticky
+  is on" and permitted the injected RNG the engine actually used. The
+  consequences were real: a replayed request landed in a different flow than
+  the original before a sticky cookie existed, two replicas behind one load
+  balancer disagreed about the same visit, and a restart re-bucketed everyone.
+  The draw is now an unseeded FNV-1a/64 of `RequestContext.VisitKey` —
+  uniform, so shares still converge to the configured weights, and pure, so a
+  replay resolves identically. Explicitly **not** `hash/maphash`, whose
+  per-process random seed would reintroduce exactly the cross-replica
+  disagreement being fixed. Sticky is untouched: the cookie is still the
+  source of truth and short-circuits before the draw.
+- **`routing.Engine` lost its `Rand01` field and now has no fields at all** —
+  no state, no entropy. A fresh `Engine{}` per call is indistinguishable from
+  another replica or a restart, which is what makes the new determinism test
+  expressible.
+- **`RequestContext.VisitKey` (new, required for a real split).** The caller
+  derives it, because "the same visit" is an HTTP-layer question the routing
+  package is deliberately blind to: `apps/tracker` fingerprints
+  `campaignID|clientIP|userAgent`, and the simulator mock derives it from its
+  form. The campaign id is in the tracker's key so one visitor is bucketed
+  independently per campaign rather than landing in the same relative
+  position in every split on the platform.
+- **A missing key is refused, not guessed** (`ErrNoVisitKey`). Hashing the
+  empty string would route 100% of traffic to one arm of a split while every
+  dashboard still reported the configured percentages — silent, and only
+  discoverable after the experiment is over. A single eligible flow is not a
+  draw and still needs no key, so the most common configuration is unaffected.
+- **Eligibility is now decided before the draw, and zero/negative weights are
+  skipped rather than clamped.** The previous implementation could select a
+  zero-weight flow through its "float rounding fallback" branch, which meant a
+  paused arm could still take traffic.
+- **`lib/routing-simulate.ts` mirrors all of the above**, including FNV-1a in
+  `BigInt` (hashing UTF-8 bytes, matching Go's byte-indexed strings — UTF-16
+  code units would have diverged the two on exactly the non-ASCII user agents
+  that are hardest to debug). Verified: Go and TS agree on `""`, `"a"`,
+  `"hello"`, an ASCII key and a non-ASCII key, with the values checked against
+  an independent third implementation rather than captured from either side.
+
+### Changed — postback correctness (A1/A2, §45, §59 — spec only)
+
+- **Dedup key is `(click_id, status, event_ref)`.** The old normative line said
+  `(click_id, status)` while the rationale beneath it already described a txn
+  id; the two-part form is what would have been coded, dropping every redeposit
+  after the first. `event_ref` is scoped to `CPA_REDEP` and empty for every
+  other status even when a network sends a txn id, since networks retry with a
+  fresh one per attempt. Also drops "else a monotonic sequence", which would
+  have disabled deduplication outright.
+- **Status never moves back to `CPA_HOLD`.** No ordering rule existed anywhere
+  in the spec, so a nightly partner replay re-sending the original hold after
+  approval would have been recorded — it is not a duplicate under any dedup key
+  — and would have taken revenue out of an already-published report. Only that
+  one transition is refused; chargebacks and their reversals stay allowed.
+- **§59** gained the cases that make both testable, and the `NEVER` lists in
+  §80 and `CLAUDE.md` were widened: they banned only dedup on `click_id` alone,
+  which after A1 left the newly-wrong two-part key permitted.
+
+### Fixed
+
+- `docs/routing.md` pointed at `apps/api/internal/routing`, a path that stopped
+  existing when the module root moved in Phase 21.
 
 ## [Phase 21] — Tracking Engine
 

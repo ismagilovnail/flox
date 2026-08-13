@@ -194,6 +194,23 @@ type RequestContext struct {
 	Attributes Attributes
 	Config     RoutingConfig
 	Sticky     *StickyState
+
+	// VisitKey is the stable identifier of this visit that the weighted flow
+	// draw hashes (§38). Same key + same weights → same flow, on every replica
+	// and after every restart.
+	//
+	// The caller derives it, because what counts as "the same visit" is an
+	// HTTP-layer question this package is deliberately blind to: the tracker
+	// fingerprints the request (campaign + client IP + user agent), and the
+	// routing simulator derives it from its form. Scoping the key to one
+	// campaign matters — a key shared across campaigns would land a given
+	// visitor in the same relative position in every split they ever see,
+	// which is a correlation no experiment asked for.
+	//
+	// Required whenever more than one flow is eligible; pickWeighted returns
+	// ErrNoVisitKey rather than guessing. Not consulted at all when a sticky
+	// assignment is honored, since no draw takes place.
+	VisitKey string
 }
 
 // RouteResult is §38's exact spec'd shape — the production hot-path return

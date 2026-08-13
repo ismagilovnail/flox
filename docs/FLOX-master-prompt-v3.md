@@ -2953,11 +2953,18 @@ weighted routing, distribution (within 2% of configured weights over 10k
   distinct visit keys)
 weighted routing, determinism (the same visit key resolves to the same flow
   across repeated calls, across engine instances, and across process restarts)
-weighted routing, eligibility before the draw (of two flows at 50/50 where one
-  is US-only, ALL non-US traffic goes to the other one — it does not half
-  disappear into the fallback)
+weighted routing, eligibility before the draw (only flows that are active AND
+  carry a positive weight enter the draw; an ineligible flow never wins and
+  never absorbs share, so with one paused flow, one zero-weight flow and one
+  live flow at equal weights, the live one takes 100% — not a third, with the
+  rest falling into the fallback)
 weighted routing, zero and negative weights (skipped, not clamped; remaining
-  flows split the traffic between themselves)
+  flows split the traffic between themselves without the operator having to
+  re-balance the weights first)
+weighted routing, no eligible flow at all (falls back; not an error)
+weighted routing, missing visit key with several eligible flows (refused
+  loudly — hashing an empty key would send 100% of traffic to one arm while
+  the dashboard still reported the configured split)
 sticky routing (cookie survives Redis flush)
 sticky keepClickId
 sticky skipInactive true/false

@@ -25,11 +25,11 @@ STATUS        : done — module topology resolved (one go.mod at apps/, shared i
                 in-app WebView bounce (§73) still unimplemented, see apps/tracker/README.md
 LAST COMMIT   : feat(tracker): tracking engine
 NEXT          : PHASE 22 — Attribution — confirm before starting
-                All of docs/spec-amendments-phase22.md (A1/A2/A3) is APPLIED to
-                the spec. Carry-over into the routing code, NOT yet done:
-                internal/routing/weighted.go still takes rand01 and must move to
-                a visit-key hash per the amended §38 — do it when Phase 22 opens
-                that package, before the §6-SHARED fixture is frozen.
+                docs/spec-amendments-phase22.md (A1/A2/A3) is fully APPLIED —
+                spec AND code: pickWeighted is now a visit-key hash, Engine has
+                no RNG, RequestContext.VisitKey is required for a real split.
+                A1/A2 (dedup key, status progression) are spec-only so far and
+                land as code in PHASE 23 — Conversion Engine.
 ```
 
 > At the end of every phase: update the four lines above, add a CHANGELOG entry,

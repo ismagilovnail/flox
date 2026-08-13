@@ -3,32 +3,27 @@ package routing
 import (
 	"context"
 	"fmt"
-	"math/rand/v2"
 	"sort"
 )
 
-// Engine is the concrete Router. Rand01, if nil, defaults to a real
-// math/rand/v2 source — tests inject a fixed or seeded one so weighted
-// picks are reproducible (exact-value assertions) or statistically
-// checkable (distribution-over-N-trials assertions, §58).
-type Engine struct {
-	Rand01 func() float64
-}
+// Engine is the concrete Router.
+//
+// It has no fields, and that is the point: the engine holds no state and no
+// entropy. Every decision is a pure function of (configuration, attributes,
+// sticky cookie, visit key), so two replicas resolve the same request the same
+// way and a restart changes nothing (§38). It used to carry an injectable
+// Rand01 for the weighted pick; the draw is now a hash of RequestContext's
+// VisitKey, which is both reproducible and uniform, so there is nothing left
+// to inject.
+type Engine struct{}
 
 var _ Router = (*Engine)(nil)
-
-func (e *Engine) rand01() float64 {
-	if e.Rand01 != nil {
-		return e.Rand01()
-	}
-	return rand.Float64()
-}
 
 // Resolve is §38's exact interface method — the production hot-path
 // decision, returning only what apps/tracker/apps/worker need to act.
 func (e *Engine) Resolve(ctx context.Context, req RequestContext) (RouteResult, error) {
-	result, _ := e.resolve(req)
-	return result, nil
+	result, _, err := e.resolve(req)
+	return result, err
 }
 
 // Explain runs the identical evaluation as Resolve — same function, same
@@ -37,14 +32,17 @@ func (e *Engine) Resolve(ctx context.Context, req RequestContext) (RouteResult, 
 // to produce. This is what the future /routing/simulate endpoint (Phase
 // 27) and this package's own conformance tests use; Resolve alone is what
 // ships in the hot path.
-func (e *Engine) Explain(ctx context.Context, req RequestContext) (RouteResult, Explanation) {
+func (e *Engine) Explain(ctx context.Context, req RequestContext) (RouteResult, Explanation, error) {
 	return e.resolve(req)
 }
 
-func (e *Engine) resolve(req RequestContext) (RouteResult, Explanation) {
+func (e *Engine) resolve(req RequestContext) (RouteResult, Explanation, error) {
+	// Sticky short-circuits before any draw happens, so an honored assignment
+	// needs no VisitKey — the cookie already carries the answer the draw would
+	// have produced (§39-STICKY).
 	sticky, note := e.trySticky(req)
 	if sticky != nil {
-		return *sticky, Explanation{StickyNote: sticky.Reason}
+		return *sticky, Explanation{StickyNote: sticky.Reason}, nil
 	}
 	return e.freshEvaluate(req, note)
 }
@@ -107,7 +105,7 @@ func (e *Engine) trySticky(req RequestContext) (*RouteResult, string) {
 	}, ""
 }
 
-func (e *Engine) freshEvaluate(req RequestContext, stickyNote string) (RouteResult, Explanation) {
+func (e *Engine) freshEvaluate(req RequestContext, stickyNote string) (RouteResult, Explanation, error) {
 	cfg := req.Config
 
 	sorted := make([]StreamSet, len(cfg.StreamSets))
@@ -151,7 +149,11 @@ func (e *Engine) freshEvaluate(req RequestContext, stickyNote string) (RouteResu
 	matchedStreamSetID := ""
 	if matched != nil {
 		matchedStreamSetID = matched.ID
-		flowCandidates, selectedFlow = pickWeighted(matched.Flows, e.rand01)
+		var err error
+		flowCandidates, selectedFlow, err = pickWeighted(matched.Flows, req.VisitKey)
+		if err != nil {
+			return RouteResult{}, Explanation{}, err
+		}
 	}
 
 	streamSetFallback := ""
@@ -185,7 +187,7 @@ func (e *Engine) freshEvaluate(req RequestContext, stickyNote string) (RouteResu
 		FlowCandidates:       flowCandidates,
 		StickyNote:           stickyNote,
 	}
-	return result, explanation
+	return result, explanation, nil
 }
 
 func buildReason(matched *StreamSet, flow *Flow, destLabel string) string {

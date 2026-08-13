@@ -161,35 +161,91 @@ function evaluateGroup(group: FilterGroupNode, request: SimulateRequest): GroupT
   return { kind: "group", joiner: group.joiner, passed, children };
 }
 
-function pickWeightedFlow(flows: Flow[]): { candidates: FlowCandidate[]; selected: Flow | null } {
-  const active = flows.filter((f) => f.active);
-  const weightSum = active.reduce((sum, f) => sum + f.weight, 0);
+// Written as BigInt() calls rather than `123n` literals so the file compiles
+// under the project's ES2017 target (TS2737) without dragging the whole
+// frontend's tsconfig to ES2020 for one function.
+const FNV_OFFSET_64 = BigInt("14695981039346656037");
+const FNV_PRIME_64 = BigInt("1099511628211");
+const U64_MASK = BigInt("18446744073709551615"); // 2^64 - 1
+const ZERO = BigInt(0);
 
-  if (active.length === 0 || weightSum <= 0) {
+/**
+ * FNV-1a/64 — the byte-for-byte mirror of internal/routing's VisitHash.
+ * BigInt because the multiply overflows a JS number long before 64 bits.
+ *
+ * Hashing UTF-8 bytes (not UTF-16 code units) is what keeps it identical to
+ * the Go side, where a string index yields a byte: a non-ASCII character in a
+ * user agent would otherwise diverge the two implementations on exactly the
+ * traffic that is hardest to debug.
+ */
+export function visitHash(key: string): bigint {
+  let h = FNV_OFFSET_64;
+  for (const byte of new TextEncoder().encode(key)) {
+    h = (h ^ BigInt(byte)) & U64_MASK;
+    h = (h * FNV_PRIME_64) & U64_MASK;
+  }
+  return h;
+}
+
+/**
+ * Mirrors internal/routing's pickWeighted (§38): same key + same weights →
+ * same flow. Deterministic, never Math.random() — a simulator that rolled the
+ * dice would show a different answer on every click for an unchanged
+ * configuration, which is the opposite of what a simulator is for.
+ *
+ * Eligibility is decided before the draw: only active, positive-weight flows
+ * take part, and shares are relative to their sum rather than to 100.
+ */
+function pickWeightedFlow(flows: Flow[], visitKey: string): { candidates: FlowCandidate[]; selected: Flow | null } {
+  const eligible = flows.filter((f) => f.active && f.weight > 0);
+  const weightSum = eligible.reduce((sum, f) => sum + f.weight, 0);
+
+  if (weightSum <= 0) {
     return {
       candidates: flows.map((f) => ({ flowId: f.id, name: f.name, weight: f.weight, normalizedPercent: 0, selected: false })),
       selected: null,
     };
   }
 
-  let roll = Math.random() * weightSum;
-  let selectedId = active[active.length - 1].id;
-  for (const f of active) {
-    if (roll < f.weight) {
+  const point = visitHash(visitKey) % BigInt(weightSum);
+  let selectedId = "";
+  let running = ZERO;
+  for (const f of flows) {
+    if (!f.active || f.weight <= 0) continue;
+    running += BigInt(f.weight);
+    if (point < running) {
       selectedId = f.id;
       break;
     }
-    roll -= f.weight;
   }
 
   const candidates = flows.map((f) => ({
     flowId: f.id,
     name: f.name,
     weight: f.weight,
-    normalizedPercent: f.active ? (f.weight / weightSum) * 100 : 0,
+    normalizedPercent: f.active && f.weight > 0 ? (f.weight / weightSum) * 100 : 0,
     selected: f.id === selectedId,
   }));
   return { candidates, selected: flows.find((f) => f.id === selectedId) ?? null };
+}
+
+/**
+ * Derives the visit key from the simulated request.
+ *
+ * The tracker fingerprints the real visit (campaign + client IP + user agent);
+ * the simulator has neither an IP nor a campaign id to hand, so it hashes the
+ * filled-in request fields instead. That difference is fine and deliberate:
+ * the shared contract is "same key + same weights → same flow", and deriving
+ * the key is the caller's job on both sides. What it buys the operator is that
+ * changing a request field re-rolls the pick, while re-running an unchanged
+ * request does not.
+ */
+function deriveVisitKey(request: SimulateRequest): string {
+  return Object.entries(request)
+    .filter(([, value]) => value !== "")
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([field, value]) => `${field}=${value}`)
+    .join("|");
 }
 
 function resolveDestination(flow: Flow | null, streamSetFallback: string, campaignFallback: string): Destination {
@@ -230,7 +286,7 @@ export function simulateRoute(streamSets: StreamSet[], campaignFallbackUrl: stri
   let flowCandidates: FlowCandidate[] = [];
   let selectedFlow: Flow | null = null;
   if (matchedSet) {
-    const pick = pickWeightedFlow(matchedSet.flows);
+    const pick = pickWeightedFlow(matchedSet.flows, deriveVisitKey(request));
     flowCandidates = pick.candidates;
     selectedFlow = pick.selected;
   }

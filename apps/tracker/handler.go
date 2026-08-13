@@ -94,6 +94,7 @@ func (h *Handler) track(w http.ResponseWriter, r *http.Request) {
 		Attributes: attrs,
 		Config:     cfg,
 		Sticky:     sticky.routingState(),
+		VisitKey:   visitKey(link.CampaignID, clientIP(r), r.UserAgent()),
 	})
 	if err != nil {
 		h.logger.Error("resolving route", "error", err, "campaign_id", link.CampaignID)
@@ -127,6 +128,27 @@ func (h *Handler) track(w http.ResponseWriter, r *http.Request) {
 	// entirely on the next click, losing both the event and any future
 	// routing change.
 	http.Redirect(w, r, result.Destination, http.StatusFound)
+}
+
+// visitKey builds the value internal/routing hashes to pick a flow (§38).
+//
+// It cannot be the click_id: that is minted *after* Resolve returns, because
+// whether to reuse the sticky one depends on the routing result. So the visit
+// is fingerprinted from what is already known at request time. Client IP and
+// user agent are the pair that stays constant across a retry, a prefetch or a
+// duplicate delivery of the same visit — which is exactly the sameness the
+// draw has to reproduce.
+//
+// The campaign id is in the key so that one visitor is bucketed independently
+// per campaign; without it, someone whose hash sits low would land in the
+// first arm of every split on the platform.
+//
+// This is not a fraud control and does not need to be: two genuinely different
+// visitors sharing an IP and a user agent land on the same flow, which costs
+// nothing but a slightly lumpier split, and the ±2% the fixture allows absorbs
+// it at any real traffic volume.
+func visitKey(campaignID string, ip net.IP, userAgent string) string {
+	return campaignID + "|" + ip.String() + "|" + userAgent
 }
 
 // clickIDFor mints a new click_id, or reuses the one carried in the sticky

@@ -2,6 +2,8 @@ package routing_test
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"math"
 	"testing"
 
@@ -192,16 +194,23 @@ func TestWeightedRouting_DistributionWithin2PercentOver10kPicks(t *testing.T) {
 		},
 	}
 	cfg := routing.RoutingConfig{CampaignID: "c1", StreamSets: []routing.StreamSet{set}}
+	e := &routing.Engine{}
 
-	// A real PRNG, not a fixed value — this test needs actual statistical
-	// spread across trials, which is why Engine.Rand01 is injectable.
-	var seed uint64 = 42
-	e := &routing.Engine{Rand01: pseudoRandSource(&seed)}
-
+	// 10k DISTINCT visit keys, not 10k repeats of one. The pick is
+	// deterministic now (§38), so repeating a single key would measure
+	// nothing but "the same key keeps winning" — the distribution property
+	// only exists across the key space.
 	const trials = 10_000
 	counts := map[string]int{}
 	for i := 0; i < trials; i++ {
-		res, _ := e.Resolve(ctx(), routing.RequestContext{Attributes: routing.Attributes{}, Config: cfg})
+		res, err := e.Resolve(ctx(), routing.RequestContext{
+			Attributes: routing.Attributes{},
+			Config:     cfg,
+			VisitKey:   fmt.Sprintf("visitor-%d", i),
+		})
+		if err != nil {
+			t.Fatalf("trial %d: %v", i, err)
+		}
 		counts[res.FlowID]++
 	}
 
@@ -212,6 +221,200 @@ func TestWeightedRouting_DistributionWithin2PercentOver10kPicks(t *testing.T) {
 	}
 	if math.Abs(pctB-30) > 2 {
 		t.Fatalf("f30 got %.2f%%, want 30%% ± 2%%", pctB)
+	}
+}
+
+func TestWeightedRouting_DeterministicAcrossCallsInstancesAndRestarts(t *testing.T) {
+	set := routing.StreamSet{
+		ID: "set1", Priority: 1, Status: routing.StreamSetActive,
+		RootFilter: routing.FilterGroup{Joiner: routing.JoinAND},
+		Flows: []routing.Flow{
+			flow("f50a", true, 50, redirectTo("https://a.example")),
+			flow("f50b", true, 50, redirectTo("https://b.example")),
+		},
+	}
+	cfg := routing.RoutingConfig{CampaignID: "c1", StreamSets: []routing.StreamSet{set}}
+
+	// A fresh Engine per call stands in for both "another replica behind the
+	// load balancer" and "the same process after a restart": the engine holds
+	// no state and no seed, so a new value of it is indistinguishable from
+	// either. Under the old RNG this test could not have been written.
+	req := routing.RequestContext{
+		Attributes: routing.Attributes{},
+		Config:     cfg,
+		VisitKey:   "1.2.3.4|Mozilla/5.0",
+	}
+
+	first, err := (&routing.Engine{}).Resolve(ctx(), req)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if first.FlowID == "" {
+		t.Fatal("expected a flow to be selected")
+	}
+	for i := 0; i < 50; i++ {
+		got, err := (&routing.Engine{}).Resolve(ctx(), req)
+		if err != nil {
+			t.Fatalf("call %d: %v", i, err)
+		}
+		if got.FlowID != first.FlowID {
+			t.Fatalf("call %d picked %q, first call picked %q — the pick is not deterministic",
+				i, got.FlowID, first.FlowID)
+		}
+	}
+}
+
+func TestVisitHash_StableAcrossBuilds(t *testing.T) {
+	// Pinned FNV-1a/64 values, computed with an independent implementation,
+	// not captured from this one. "" is the offset basis and "hello" is the
+	// algorithm's canonical published vector, so these two also assert that
+	// VisitHash really is standard FNV-1a rather than merely self-consistent.
+	//
+	// If this fails, the hash changed, and with it every returning visitor's
+	// flow — the split of every live A/B test would be silently reshuffled.
+	// Changing these numbers is never the fix.
+	for key, want := range map[string]uint64{
+		"":                   14695981039346656037,
+		"a":                  12638187200555641996,
+		"hello":              11831194018420276491,
+		"c1|1.2.3.4|Mozilla": 4746821185785492819,
+	} {
+		if got := routing.VisitHash(key); got != want {
+			t.Errorf("VisitHash(%q) = %d, want %d", key, got, want)
+		}
+	}
+}
+
+func TestWeightedRouting_EligibilityDecidedBeforeTheDraw(t *testing.T) {
+	// A paused flow and a zero-weight flow are both ineligible. The rule that
+	// matters is that neither absorbs share: the one eligible flow must take
+	// 100% of the traffic, not 25%, with the rest falling through to the
+	// fallback. Weights are NOT re-balanced by the operator here — that is the
+	// point, pausing an arm has to work on its own.
+	set := routing.StreamSet{
+		ID: "set1", Priority: 1, Status: routing.StreamSetActive,
+		RootFilter: routing.FilterGroup{Joiner: routing.JoinAND},
+		Flows: []routing.Flow{
+			flow("paused", false, 25, redirectTo("https://paused.example")),
+			flow("zero", true, 0, redirectTo("https://zero.example")),
+			flow("live", true, 25, redirectTo("https://live.example")),
+		},
+		FallbackURL: "https://streamset-fallback.example",
+	}
+	cfg := routing.RoutingConfig{CampaignID: "c1", StreamSets: []routing.StreamSet{set}}
+	e := &routing.Engine{}
+
+	for i := 0; i < 500; i++ {
+		res, err := e.Resolve(ctx(), routing.RequestContext{
+			Attributes: routing.Attributes{},
+			Config:     cfg,
+			VisitKey:   fmt.Sprintf("visitor-%d", i),
+		})
+		if err != nil {
+			t.Fatalf("visitor %d: %v", i, err)
+		}
+		if res.FlowID != "live" {
+			t.Fatalf("visitor %d landed on %q (destination %q); the only eligible flow must take everything",
+				i, res.FlowID, res.Destination)
+		}
+	}
+}
+
+func TestWeightedRouting_AllFlowsIneligibleFallsBack(t *testing.T) {
+	set := routing.StreamSet{
+		ID: "set1", Priority: 1, Status: routing.StreamSetActive,
+		RootFilter: routing.FilterGroup{Joiner: routing.JoinAND},
+		Flows: []routing.Flow{
+			flow("paused", false, 50, redirectTo("https://paused.example")),
+			flow("zero", true, 0, redirectTo("https://zero.example")),
+		},
+		FallbackURL: "https://streamset-fallback.example",
+	}
+	cfg := routing.RoutingConfig{CampaignID: "c1", StreamSets: []routing.StreamSet{set}}
+
+	res, err := (&routing.Engine{}).Resolve(ctx(), routing.RequestContext{
+		Attributes: routing.Attributes{}, Config: cfg, VisitKey: "k",
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if res.FlowID != "" {
+		t.Fatalf("no flow is eligible, but %q was selected", res.FlowID)
+	}
+	if res.Destination != "https://streamset-fallback.example" {
+		t.Fatalf("want stream-set fallback, got %q", res.Destination)
+	}
+}
+
+func TestWeightedRouting_MissingVisitKeyIsRefusedNotGuessed(t *testing.T) {
+	// Hashing the empty string would be silently catastrophic: every visit
+	// would land in whichever bucket that single value falls in, so one arm of
+	// the split would take 100% of the traffic while the dashboard kept
+	// reporting 50/50. Refusing loudly is the whole design (§38).
+	set := routing.StreamSet{
+		ID: "set1", Priority: 1, Status: routing.StreamSetActive,
+		RootFilter: routing.FilterGroup{Joiner: routing.JoinAND},
+		Flows: []routing.Flow{
+			flow("f50a", true, 50, redirectTo("https://a.example")),
+			flow("f50b", true, 50, redirectTo("https://b.example")),
+		},
+	}
+	cfg := routing.RoutingConfig{CampaignID: "c1", StreamSets: []routing.StreamSet{set}}
+
+	_, err := (&routing.Engine{}).Resolve(ctx(), routing.RequestContext{
+		Attributes: routing.Attributes{}, Config: cfg, // VisitKey deliberately unset
+	})
+	if !errors.Is(err, routing.ErrNoVisitKey) {
+		t.Fatalf("want ErrNoVisitKey, got %v", err)
+	}
+}
+
+func TestWeightedRouting_SingleEligibleFlowNeedsNoVisitKey(t *testing.T) {
+	// One candidate is not a draw. Requiring a key here would turn the most
+	// common configuration of all into an error for any caller that hasn't
+	// been updated yet.
+	set := routing.StreamSet{
+		ID: "set1", Priority: 1, Status: routing.StreamSetActive,
+		RootFilter: routing.FilterGroup{Joiner: routing.JoinAND},
+		Flows:      []routing.Flow{flow("only", true, 100, redirectTo("https://only.example"))},
+	}
+	cfg := routing.RoutingConfig{CampaignID: "c1", StreamSets: []routing.StreamSet{set}}
+
+	res, err := (&routing.Engine{}).Resolve(ctx(), routing.RequestContext{
+		Attributes: routing.Attributes{}, Config: cfg, // no VisitKey
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if res.FlowID != "only" {
+		t.Fatalf("want the single flow, got %q", res.FlowID)
+	}
+}
+
+func TestSticky_HonoredWithoutAVisitKey(t *testing.T) {
+	// Sticky short-circuits before the draw, so a returning visitor is routed
+	// even if the caller supplies no key at all — the cookie already holds the
+	// answer the draw would have produced.
+	set := routing.StreamSet{
+		ID: "set1", Priority: 1, Status: routing.StreamSetActive,
+		RootFilter: routing.FilterGroup{Joiner: routing.JoinAND},
+		Flows: []routing.Flow{
+			flow("sticky-flow", true, 50, redirectTo("https://sticky.example")),
+			flow("other-flow", true, 50, redirectTo("https://other.example")),
+		},
+	}
+	cfg := routing.RoutingConfig{CampaignID: "c1", StickyFlow: true, StreamSets: []routing.StreamSet{set}}
+
+	res, err := (&routing.Engine{}).Resolve(ctx(), routing.RequestContext{
+		Attributes: routing.Attributes{},
+		Config:     cfg,
+		Sticky:     &routing.StickyState{StreamSetID: "set1", FlowID: "sticky-flow"},
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !res.StickyApplied || res.FlowID != "sticky-flow" {
+		t.Fatalf("want sticky flow honored, got %+v", res)
 	}
 }
 
@@ -381,17 +584,4 @@ func TestInactiveCampaigns_CallerLevelConcern(t *testing.T) {
 
 func TestInAppWebViewBounce_CallerLevelConcern(t *testing.T) {
 	t.Skip("the WebView bounce (§73) is a pre-routing HTTP redirect based on User-Agent, handled entirely by apps/tracker before any stream-set/flow decision is made. It never reaches this package.")
-}
-
-// pseudoRandSource returns a fast, deterministic (seeded) [0,1) generator
-// — good enough for a statistical-distribution test, not cryptographic,
-// and doesn't require importing math/rand/v2's *Rand type into the test's
-// public surface.
-func pseudoRandSource(state *uint64) func() float64 {
-	return func() float64 {
-		*state ^= *state << 13
-		*state ^= *state >> 7
-		*state ^= *state << 17
-		return float64(*state%1_000_000) / 1_000_000
-	}
 }
