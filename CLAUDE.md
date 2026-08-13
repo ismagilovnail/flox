@@ -25,6 +25,11 @@ STATUS        : done — module topology resolved (one go.mod at apps/, shared i
                 in-app WebView bounce (§73) still unimplemented, see apps/tracker/README.md
 LAST COMMIT   : feat(tracker): tracking engine
 NEXT          : PHASE 22 — Attribution — confirm before starting
+                BLOCKER FIRST: decide A1/A2 in docs/spec-amendments-phase22.md
+                (postback dedup key + status-progression rule). Both change key
+                shapes and unique constraints — after live conversions land in
+                ClickHouse they become a money-data migration. A3 (deterministic
+                weighted pick) before the §6-SHARED fixture is frozen.
 ```
 
 > At the end of every phase: update the four lines above, add a CHANGELOG entry,

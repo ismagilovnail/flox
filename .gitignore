@@ -48,6 +48,12 @@ uploads/
 tmp/
 *.log
 
+# --- Local reference material (not part of the project) ---
+# Read-only source code from another tracker, kept locally for comparison.
+# ~600MB including node_modules, .next and compiled binaries — never commit it.
+# Findings from it live in docs/spec-amendments-phase22.md instead.
+reference/
+
 # --- Editors / OS ---
 .vscode/
 .idea/
