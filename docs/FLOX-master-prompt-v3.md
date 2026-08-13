@@ -2353,12 +2353,33 @@ Create conversion event.
 ## DEDUPLICATION (specify explicitly — money correctness)
 
 ```text
-DEDUP KEY: (click_id, status)  — NOT click_id alone.
+DEDUP KEY: (click_id, status, event_ref)
+  — NOT click_id alone, and NOT (click_id, status) alone.
+
   Rationale: the same click legitimately produces CPA_HOLD, then CPA_ACCEPT,
   then multiple CPA_REDEP. Dedup on click_id alone would drop the deposit after
-  the registration. Redeposits are distinguished by an additional event
-  identifier (network txn id if provided, else a monotonic sequence), so N
-  distinct redeposits are N events, but a re-sent identical one is dropped.
+  the registration; dedup on (click_id, status) would drop every redeposit
+  after the first.
+
+  event_ref is defined by the status, not by what the network happened to send:
+
+    REPEATABLE STATUS (CPA_REDEP only)
+      event_ref = the network's transaction id.
+      A second deposit by the same user is a second conversion, and the txn id
+      is the only thing that tells it apart from a re-send of the first.
+
+      Network sends no txn id → event_ref = "" → exactly ONE redeposit is
+      recorded per click. This is deliberate: a missed redeposit is a support
+      ticket, a double-counted one is an incorrect invoice, so the failure is
+      aimed at the recoverable side. Do NOT substitute a locally generated
+      sequence number — a fresh number per delivery makes every re-send look
+      distinct and disables deduplication entirely.
+
+    NON-REPEATABLE STATUSES (CPA_HOLD / CPA_ACCEPT / CPA_DECLINE / CPA_TRASH)
+      event_ref = "" ALWAYS, even when the network sends a transaction id.
+      Networks commonly retry with a fresh txn id per attempt; including it
+      here would turn every retry into a new conversion.
+      The txn id is still STORED on the event — it is just not part of the key.
 
 WINDOW: dedup key held in Redis with a LONG TTL (partners re-send deposits with
   hours-to-days delay). Persist a durable unique constraint in ClickHouse/PG as
@@ -2370,6 +2391,44 @@ acceptDuplicates FLAG: per-network override to intentionally accept duplicates
 CURRENCY: store original currency + revenue AND a USD-normalized value using the
   fx rate at event time (§50-FX). Never normalize with the current rate.
 ```
+
+## STATUS PROGRESSION (order-independence — money correctness)
+
+Postbacks arrive out of order. Networks replay a whole day on a nightly job and
+re-send the original CPA_HOLD hours after the conversion was approved. That
+re-send is not a duplicate under the dedup key above — the status differs, so
+the key is free — and recording it would move an approved conversion back to
+pending, removing revenue from a report the client has already seen. Nothing
+would be logged, because formally every step succeeded.
+
+```text
+RULE: the only refused transition is BACK TO CPA_HOLD.
+
+  last = "" (no prior status)            → accept
+  last = next (same status again)        → handled by the dedup key, not here
+  next = CPA_HOLD and last != CPA_HOLD   → REFUSE, record as outcome=ignored
+  everything else                        → accept
+
+Everything else is allowed on purpose: approvals really are reversed
+(chargebacks → CPA_DECLINE after CPA_ACCEPT) and reversals really are undone
+(CPA_ACCEPT after CPA_DECLINE). Only the return to "not decided yet" is
+meaningless.
+
+STORAGE: the last seen status per click_id lives next to the dedup keys
+  (Redis, same long TTL) so the check costs one lookup on a path that is
+  already doing one.
+
+REDIS UNAVAILABLE: fall through and record the event. A missing progression
+  check is a wrong report; a refused postback is a lost conversion. Never lose
+  the conversion.
+
+acceptDuplicates DOES NOT bypass this rule. That flag is about duplicate
+  deliveries, not about time travel.
+```
+
+A refused postback is still logged in full (see the postback log below) with
+outcome=ignored, so "the network says it re-sent, where did it go" stays
+answerable.
 
 Deduplicate. Log every postback (success / error / pending) with replay ability.
 
@@ -2886,9 +2945,20 @@ Test:
 
 ```text
 valid conversion
-duplicate conversion (same click_id + status → dropped)
+duplicate conversion, non-repeatable status (same click_id + status → dropped,
+  including when the network sends a different txn id on the retry)
+duplicate conversion, repeatable status (same click_id + REDEP + same txn id
+  → dropped)
+distinct redeposits (same click_id + REDEP + different txn ids → all recorded)
+redeposits with no txn id (same click_id + REDEP, network sends none
+  → exactly one recorded, not N)
 legitimate sequence (HOLD, then ACCEPT, then multiple REDEP → all recorded)
 delayed re-send after hours (still deduped)
+late HOLD after ACCEPT (nightly replay → ignored, conversion stays ACCEPT)
+late HOLD after ACCEPT with Redis down (→ recorded, never lost)
+chargeback (ACCEPT then DECLINE → recorded, revenue reversed)
+chargeback undone (DECLINE then ACCEPT → recorded)
+refused postback is still visible in the postback log with outcome=ignored
 unknown click
 unknown campaign
 invalid status
@@ -3384,7 +3454,8 @@ ignore TypeScript errors
 ignore Go errors
 create fake APIs that look production-ready
 hide errors
-dedup conversions on click_id alone
+dedup conversions on click_id alone, or on (click_id, status) alone
+record a postback that moves a conversion back to CPA_HOLD
 treat missing cost as zero
 store sticky assignment only in Redis
 truncate the event model

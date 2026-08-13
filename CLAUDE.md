@@ -25,11 +25,10 @@ STATUS        : done — module topology resolved (one go.mod at apps/, shared i
                 in-app WebView bounce (§73) still unimplemented, see apps/tracker/README.md
 LAST COMMIT   : feat(tracker): tracking engine
 NEXT          : PHASE 22 — Attribution — confirm before starting
-                BLOCKER FIRST: decide A1/A2 in docs/spec-amendments-phase22.md
-                (postback dedup key + status-progression rule). Both change key
-                shapes and unique constraints — after live conversions land in
-                ClickHouse they become a money-data migration. A3 (deterministic
-                weighted pick) before the §6-SHARED fixture is frozen.
+                A1/A2 of docs/spec-amendments-phase22.md are APPLIED to §45/§59
+                (dedup key is now 3-part; status never returns to CPA_HOLD).
+                Still open: A3 (deterministic weighted pick) — decide before the
+                §6-SHARED fixture is frozen.
 ```
 
 > At the end of every phase: update the four lines above, add a CHANGELOG entry,
@@ -133,9 +132,15 @@ Read the referenced section before touching related code.
    all of them from day one — adding types later is a live-data migration. Never
    collapse conversions into one "conversion" type.
 
-3. **Postback dedup key = (click_id, status)** (§45), NOT click_id alone. Long
-   Redis TTL + durable DB unique constraint. Store original currency + USD value
-   at event time. `acceptDuplicates` override per network.
+3. **Postback dedup key = (click_id, status, event_ref)** (§45) — NOT click_id
+   alone, and NOT (click_id, status). `event_ref` = network txn id for CPA_REDEP
+   (the only repeatable status), empty string for every other status even if a
+   txn id was sent. **Status never goes back to CPA_HOLD** — nightly partner
+   replays re-send it after approval and would take revenue out of a closed
+   report (§45 STATUS PROGRESSION). Long Redis TTL + durable DB unique
+   constraint. Store original currency + USD value at event time.
+   `acceptDuplicates` override per network — it does not bypass the
+   progression rule.
 
 4. **Sticky = cookie is truth, Redis is cache only (§39-STICKY).** Cookie
    `sf_{campaignId}` = `setId:flowId[:clickId]`. Redis-only sticky is forbidden
@@ -250,7 +255,8 @@ WCAG 2.2 AA. Animation sparing (150–250ms ease-out).
 Build all phases at once · replace repo without inspection · duplicate business
 logic (esp. a 2nd routing impl in TS) · hardcode secrets · commit `.env` · skip
 tests/validation · ignore TS/Go errors · fake APIs that look real · hide errors ·
-dedup on click_id alone · treat missing cost as zero · Redis-only sticky ·
+dedup on click_id alone or on (click_id, status) alone · record a postback that
+moves a conversion back to CPA_HOLD · treat missing cost as zero · Redis-only sticky ·
 truncate the event model · leak data across orgs · embed vendor moderator
 detection · divide-by-zero into an error in custom metrics · mix push+regular
 metrics in one formula · reimplement tags per entity · treat empty FB subs as
