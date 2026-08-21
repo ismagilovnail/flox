@@ -19,11 +19,14 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 
+	"github.com/ismagilovnail/flox/apps/internal/attribution"
 	"github.com/ismagilovnail/flox/apps/internal/classifier"
 	"github.com/ismagilovnail/flox/apps/internal/config"
+	"github.com/ismagilovnail/flox/apps/internal/conversion"
 	"github.com/ismagilovnail/flox/apps/internal/eventbuf"
 	"github.com/ismagilovnail/flox/apps/internal/logging"
 	"github.com/ismagilovnail/flox/apps/internal/postgres"
+	"github.com/ismagilovnail/flox/apps/internal/rediscache"
 	"github.com/ismagilovnail/flox/apps/internal/routing"
 	"github.com/ismagilovnail/flox/apps/internal/routingstore"
 	"github.com/ismagilovnail/flox/apps/internal/telemetry"
@@ -81,6 +84,48 @@ func run() error {
 		logger:     logger,
 	}
 
+	// The click-resolver behind attribution is still MemoryResolver — the
+	// tracker hands click events to eventbuf.LogSink, not durable storage,
+	// so there is nothing to query yet (docs/attribution.md). It becomes a
+	// ClickHouse-backed resolver with the worker (Phase 24) and the
+	// analytical schema (Phase 26); nothing in internal/conversion or this
+	// wiring changes when it does.
+	clicks := attribution.NewMemoryResolver()
+	attributionSvc := attribution.NewService(clicks)
+
+	// Redis is best-effort at startup, matching §45's "REDIS UNAVAILABLE:
+	// fall through and record the event" at runtime: a postback correctness
+	// rule must not become a tracker-availability dependency, especially
+	// since the redirect path (this binary's actual latency budget) never
+	// touches Redis at all. conversion.PostgresStore alone is already
+	// correct — the cache only saves a round trip.
+	var convStore conversion.Store = conversion.NewPostgresStore(db)
+	if cfg.RedisURL != "" {
+		redisCtx, cancelRedis := context.WithTimeout(ctx, 5*time.Second)
+		rdb, err := rediscache.NewClient(redisCtx, cfg.RedisURL)
+		cancelRedis()
+		if err != nil {
+			logger.Warn("redis unavailable at startup, conversion progression checks will read Postgres directly", "error", err)
+		} else {
+			defer rdb.Close()
+			convStore = conversion.NewRedisStore(convStore, rdb, logger)
+		}
+	} else {
+		logger.Warn("REDIS_URL not set, conversion progression checks will read Postgres directly")
+	}
+
+	postback := &PostbackHandler{
+		networks: conversion.NewPostgresNetworkLookup(db),
+		service: conversion.NewService(
+			conversion.NewPostgresMapper(db),
+			convStore,
+			conversion.NewPostgresFX(db),
+			attributionSvc,
+			events,
+		),
+		logger: logger,
+	}
+
 	r := chi.NewRouter()
 	r.Use(middleware.RealIP)
 	r.Use(middleware.Recoverer)
@@ -94,6 +139,7 @@ func run() error {
 		_, _ = w.Write([]byte(`{"status":"ok"}`))
 	})
 	handler.Register(r)
+	postback.Register(r)
 
 	httpSrv := &http.Server{
 		Addr:              cfg.HTTPAddr,

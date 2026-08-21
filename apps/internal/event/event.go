@@ -162,4 +162,39 @@ type Event struct {
 	// FilterReason is set on SOURCE_FILTER only — why the click was
 	// blocked, so a buyer can tell bot-filtering from geo-filtering.
 	FilterReason string `json:"filterReason,omitempty"`
+
+	// CPA conversion fields (§45, Phase 23), set on CPA_* events only.
+	// event.Event grows per phase rather than being redefined — see the
+	// package doc.
+	NetworkID string `json:"networkId,omitempty"`
+
+	// Revenue/Currency are exactly as the network reported them; USDValue
+	// is normalized using the FX rate on EventAt's date, never the current
+	// rate (§50-FX, CLAUDE.md #7). HasUSDValue distinguishes "converts to
+	// 0 USD" from "no FX rate was on file for that currency/date" — a
+	// missing rate is never silently treated as zero.
+	Revenue     float64 `json:"revenue,omitempty"`
+	Currency    string  `json:"currency,omitempty"`
+	USDValue    float64 `json:"usdValue,omitempty"`
+	HasUSDValue bool    `json:"hasUsdValue,omitempty"`
+
+	// EventRef is the dedup key's third component (§45): the network's
+	// transaction id for CPA_REDEP, empty for every other status even when
+	// the network sent one. NetworkTxnID is stored regardless — the raw
+	// value is kept even on statuses where it doesn't participate in the
+	// dedup key.
+	EventRef     string `json:"eventRef,omitempty"`
+	NetworkTxnID string `json:"networkTxnId,omitempty"`
+
+	// AttributionOutcome/AttributionMethod carry §44's attribution
+	// decision (e.g. "attributed"/"click_id", or "unknown_click"/"") onto
+	// the event so an unattributed conversion is stored, not discarded
+	// (docs/attribution.md).
+	AttributionOutcome string `json:"attributionOutcome,omitempty"`
+	AttributionMethod  string `json:"attributionMethod,omitempty"`
+
+	// TimeToConversion is the conversion timestamp minus the click's own,
+	// in milliseconds. Can be negative (clock skew / replay) — reported,
+	// never clamped.
+	TimeToConversionMS int64 `json:"timeToConversionMs,omitempty"`
 }

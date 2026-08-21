@@ -40,6 +40,13 @@ func (s LogSink) Write(ctx context.Context, batch []event.Event) error {
 			// so subs-less traffic is measurable rather than invisible.
 			"sub_count", e.Subs.SubCount(),
 			"filter_reason", e.FilterReason,
+			"network_id", e.NetworkID,
+			"revenue", e.Revenue,
+			"currency", e.Currency,
+			"usd_value", e.USDValue,
+			"has_usd_value", e.HasUSDValue,
+			"event_ref", e.EventRef,
+			"attribution_outcome", e.AttributionOutcome,
 		)
 	}
 	return nil

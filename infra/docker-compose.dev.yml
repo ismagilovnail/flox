@@ -4,9 +4,11 @@
 #
 # apps/api doesn't connect to any of these yet (Phase 16 has no DB/cache
 # calls) — this file exists now because Postgres (Phase 17), ClickHouse
-# (Phase 22-ish), and Redis (sticky cache, Phase 39-ish) all need somewhere
-# to run locally, and standing the containers up once is easier than
-# re-deriving the compose file service-by-service later.
+# (Phase 22-ish), and Redis (Phase 39-ish for sticky cache; wired for real
+# starting Phase 23, as the conversion engine's progression-check fast path
+# — see apps/internal/conversion/redis.go) all need somewhere to run
+# locally, and standing the containers up once is easier than re-deriving
+# the compose file service-by-service later.
 services:
   postgres:
     image: postgres:16-alpine

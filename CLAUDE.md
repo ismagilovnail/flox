@@ -19,22 +19,43 @@ referenced below as §N).
 ## CURRENT STATE — UPDATE THIS EVERY PHASE
 
 ```
-CURRENT PHASE : PHASE 22 — Attribution
-STATUS        : done — internal/attribution implements §44's AttributionService;
-                evidence order click_id → unique external_click_id → refuse;
-                tenant isolation enforced in the resolver, 14 tests pass.
-                Click storage is still a MemoryResolver stand-in — the real
-                ClickHouse-backed one lands with the worker (Phase 24 / 26).
-                No attribution window: open question for Phase 23 (see
-                docs/attribution.md).
+CURRENT PHASE : PHASE 23 — Conversion Engine
+STATUS        : done — internal/conversion implements §45's postback flow:
+                Mapper (per-network event_mappings table) → STATUS
+                PROGRESSION check → attribution.AttributeConversion →
+                FXConverter → Store.Record (atomic Postgres dedup insert) →
+                CPA event emitted on success. Dedup key is (click_id, status,
+                event_ref) per A1/A2, enforced by a partial unique index
+                (migration 00013) scoped to result='success' so
+                duplicate/ignored/error attempts still get their own log row
+                — "log every postback" and "have we seen this" share one
+                table. Status progression (refuse next=CPA_HOLD unless
+                last=CPA_HOLD or absent) enforced independently of
+                acceptDuplicates. Served at GET/POST /postback/{networkId} on
+                apps/tracker (not worker — see ARCHITECTURE.md); {networkId}
+                is where OrganizationID comes from, never the request body.
+                Redis wired for real (go-redis, apps/internal/rediscache):
+                RedisStore caches ONLY the progression-check fast path, never
+                the dedup insert itself — see docs/conversion.md for why.
+                Best-effort at startup; PostgresStore alone is already
+                correct. No attribution window (decided this phase, see
+                docs/attribution.md). 23 tests pass (13 pure + 10 Postgres/
+                Redis-gated on DATABASE_URL/REDIS_URL).
+                Known spec gap (not a bug): a repeated non-REDEP status
+                (e.g. CPA_ACCEPT reinstated after CPA_DECLINE) shares its
+                predecessor's dedup key and is recorded as a duplicate —
+                §45 forbids inventing a synthetic event_ref to fix this; see
+                docs/conversion.md.
                 Carried over, unrelated: Phase 10 crash-loop report; in-app
-                WebView bounce (§73) — see apps/tracker/README.md.
-LAST COMMIT   : feat(attribution): attribution engine
-NEXT          : PHASE 23 — Conversion Engine — confirm before starting
-                A1/A2 of docs/spec-amendments-phase22.md are already in the
-                spec (§45) and land as CODE in this phase: dedup key
-                (click_id, status, event_ref) and "status never returns to
-                CPA_HOLD". A3 is fully done, spec and code.
+                WebView bounce (§73) — see apps/tracker/README.md. Click
+                storage is still attribution's MemoryResolver stand-in — the
+                real ClickHouse-backed one lands with the worker (Phase 24 /
+                26); nothing in internal/conversion changes when it does.
+LAST COMMIT   : feat(conversion): conversion engine
+NEXT          : PHASE 24 — Postback Engine (outgoing) — confirm before
+                starting. Queue/worker/retry/dead-letter for apps/worker
+                notifying networks of status changes; also where the
+                ClickHouse-backed ClickResolver lands.
 ```
 
 > At the end of every phase: update the four lines above, add a CHANGELOG entry,

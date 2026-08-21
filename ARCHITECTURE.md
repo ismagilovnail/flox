@@ -30,6 +30,12 @@ independently — but they import the same `internal/routing` and
 `internal/classifier` packages as `apps/api`. No routing or classification
 logic is duplicated between binaries.
 
+Incoming postbacks (`GET/POST /postback/{networkId}`, §45) are served by
+`apps/tracker` too, via `internal/conversion` — a network calling FLOX is
+external traffic like a click, just not on the same p50 < 20ms budget.
+Outgoing postbacks (FLOX notifying a network, Phase 24) are `apps/worker`'s
+job.
+
 ## Repository layout
 
 ```
@@ -99,7 +105,10 @@ Summarized here; full detail and rationale in `CLAUDE.md`:
 1. Single source of truth for routing (this document, above).
 2. Full event model — ~20 event types, CPA statuses as an enum, never
    collapsed (see [`docs/event-model.md`](docs/event-model.md)).
-3. Postback dedup key = `(click_id, status)`, not `click_id` alone.
+3. Postback dedup key = `(click_id, status, event_ref)`, not `click_id`
+   alone and not `(click_id, status)` alone — `event_ref` is the network's
+   transaction id, used only for `CPA_REDEP` (see
+   [`internal/conversion`](apps/internal/conversion), Phase 23/§45).
 4. Sticky = cookie is truth, Redis is cache only.
 5. Tenant isolation — every tenant-scoped table has `organization_id`,
    enforced in the repository layer.

@@ -137,11 +137,16 @@ A resolver **failure** (database unavailable) surfaces as an error, never as
 `unattributed`. Recording a blip as "no click found" would permanently write
 off a real conversion; the caller has to be able to retry.
 
-## Open question for Phase 23
+## Attribution window: decided in Phase 23 — there isn't one
 
-There is no attribution **window** — no "conversions more than N days after the
-click are refused". §44 does not specify one, and inventing a policy that
-silently discards revenue is not a decision this phase should make alone. §45
-notes that partners re-send deposits with hours-to-days delay, so any window
-would have to be generous and per-network. Decide it with the conversion
-engine, where the postback timing rules already live.
+There is no attribution **window** — no "conversions more than N days after
+the click are refused." §44 doesn't specify one, and §45's own explicit
+"never lose the conversion" stance (its Redis-unavailable fallback would
+rather accept a wrong report than drop revenue) points the same direction: a
+window that silently discards a late conversion is the kind of policy this
+package refuses to invent on its own. `Attribution.TimeToConversion` is
+already the observable an operator needs to build alerts on outliers without
+FLOX unilaterally writing off revenue on their behalf. If a real window is
+ever wanted, it belongs as an explicit, per-network, operator-configured
+setting — not a default baked into `internal/attribution` or
+`internal/conversion`.

@@ -5,6 +5,114 @@ per-phase, matching `CLAUDE.md`'s phase protocol. The one exception is
 [Between phases], below: spec amendments and the code changes that follow from
 them land between phases and would otherwise be invisible here.
 
+## [Phase 23] — Conversion Engine
+
+### Added
+
+- **`internal/conversion`** (§45): turns an inbound postback into a recorded,
+  deduplicated, correctly-attributed CPA event, or an honestly-logged reason
+  it wasn't. Pure orchestration — no HTTP, no database driver — over `Store`,
+  `Mapper`, `NetworkLookup`, `FXConverter`, and `internal/attribution`'s
+  `AttributionService`, the same shape `internal/attribution` itself has over
+  `ClickResolver`.
+- **Dedup key is `(click_id, status, event_ref)`** (A1, §45), computed by
+  `eventRefFor`: the network's transaction id for `CPA_REDEP` only, empty
+  string for every other status even when one was sent. A network sending no
+  txn id on a redeposit records exactly one — a missed redeposit (support
+  ticket) is preferred over a double-counted one (bad invoice).
+- **Status progression** (A2, §45): the only refused transition is back to
+  `CPA_HOLD`. Independent of dedup — it exists specifically because
+  `acceptDuplicates` networks bypass the dedup constraint but must not bypass
+  this rule (nightly partner replays re-sending an already-approved `HOLD`
+  would otherwise pull revenue out of a closed report).
+- **`GET/POST /postback/{networkId}`** on `apps/tracker` (§45's endpoint,
+  ARCHITECTURE.md explains why tracker and not worker). `{networkId}` — not a
+  header, not the body — is where `OrganizationID` comes from
+  (`PostgresNetworkLookup`), matching how attribution derives tenant scope.
+- **Event Mapping is now real**: `event_mappings` table (migration 00012) plus
+  `PostgresMapper`, replacing the Phase 13 frontend mock's documented "what
+  the real Conversion Engine runs at ingest time." Matched case-insensitively
+  — networks are inconsistent about casing across retries.
+- **FX normalization at event time** (§50-FX, CLAUDE.md #7): `PostgresFX`
+  reads `fx_rates` by `(currency, event date)`, never the current rate. No
+  rate on file is `ok=false`, not an error — the conversion is stored with its
+  original currency/amount and a nil USD value rather than inventing a rate or
+  dropping the conversion.
+- **Redis wired for real** (`github.com/redis/go-redis/v9`,
+  `internal/rediscache`): `RedisStore` caches only the progression check
+  (`LastStatus`), never the dedup insert itself. The cache is written only
+  *after* Postgres confirms a success, so staleness can only cause an extra
+  Postgres read, never a false "already seen" — see docs/conversion.md for why
+  a Redis-first dedup pre-check was deliberately rejected. Best-effort at
+  tracker startup: `PostgresStore` alone is already correct, so a
+  down/unconfigured Redis logs a warning and falls back rather than failing
+  the process.
+- **`event.Event` grows its §45 fields** (`NetworkID`, `Revenue`, `Currency`,
+  `USDValue`/`HasUSDValue`, `EventRef`, `NetworkTxnID`,
+  `AttributionOutcome`/`AttributionMethod`, `TimeToConversionMS`) — extended,
+  not redefined, per the package doc's own stated pattern.
+- **`docs/conversion.md`** (§76); resolves docs/attribution.md's open
+  question (no attribution window, decided this phase — see Notes).
+
+### Fixed
+
+- **`postbacks` migration 00008 predated the A1/A2 amendment**: its unique
+  index was `(organization_id, click_id, status)`, which would have dropped
+  every redeposit after the first. Migration 00013 replaces it with
+  `(organization_id, click_id, status, event_ref) WHERE NOT
+  network_accepts_duplicates AND result = 'success'` — the added `result =
+  'success'` clause is what lets a duplicate/ignored/error attempt log its own
+  row without colliding with an already-accepted one, making "log every
+  postback... with replay ability" and "have we already processed this"
+  answerable from one table.
+- **`postbacks_status_check` rejected `status = ''`**: found via a full
+  end-to-end smoke test against a running tracker binary — a postback missing
+  `click_id`/`status` entirely, or with no Event Mapping configured for its
+  raw status, has no canonical `CpaStatus` to record, and the original CHECK
+  (inherited unmodified from 00008) required one on every row including
+  `result = 'error'` ones. Migration 00013 exempts `status = ''` rows scoped
+  to `result = 'error'` only — every other result still requires a real
+  `CpaStatus`.
+- **`ARCHITECTURE.md`'s non-negotiable #3** still stated the pre-amendment
+  `(click_id, status)` key; corrected alongside the code per CLAUDE.md's own
+  rule that a doc and its code must not read differently.
+
+### Security
+
+- `OrganizationID` never comes from the postback body — see "Added" above.
+  `PostgresStore`'s dedup/progression queries filter on it directly (mirrors
+  `internal/attribution`'s repository-layer enforcement), and
+  `TestPostgresStoreTenantIsolation` confirms org B's `LastStatus` lookup
+  cannot see org A's click, matching CLAUDE.md #5's DoD requirement for
+  data-model phases.
+
+### Notes
+
+- **No attribution window**, decided in this phase rather than left as Phase
+  22's open question: §45's own "never lose the conversion" stance (its
+  Redis-unavailable fallback would rather accept a wrong report than drop
+  revenue) argues against a policy that silently discards a late conversion.
+  `Attribution.TimeToConversion` remains the observable an operator can alert
+  on instead.
+- **Known spec gap, not a bug**: a non-REDEP status recurring for the same
+  click (e.g. `CPA_ACCEPT` reinstated after a `CPA_DECLINE` reversal) computes
+  the same dedup key as its first occurrence and is recorded as a duplicate —
+  §45 designates only `CPA_REDEP` as repeatable and explicitly forbids
+  inventing a synthetic `event_ref` to work around this. Documented in
+  docs/conversion.md and exercised (not "fixed") by
+  `TestProgressionAllowsEverythingElse`. Left for a future spec amendment if a
+  real network's reinstatement flow needs it.
+- 23 tests: 13 pure-logic (fakes for `Store`/`Mapper`/`FXConverter`/
+  `AttributionService`, mirroring `internal/attribution`'s test style) plus 10
+  gated on `DATABASE_URL`/`REDIS_URL` proving the actual schema/cache
+  implement the contract the fakes assert. Full migration round-trip (`goose
+  up` → `down` → `up`) verified against a real Postgres, plus an end-to-end
+  smoke test of the compiled tracker binary exercising every `ResultKind`
+  through the real HTTP endpoint (this is what caught both Fixed items above).
+- Click storage behind attribution is still `MemoryResolver` — unchanged by
+  this phase, still arriving with the worker (Phase 24) and ClickHouse (Phase
+  26).
+
 ## [Phase 22] — Attribution
 
 ### Added
@@ -77,8 +185,9 @@ them land between phases and would otherwise be invisible here.
 ## [Between phases] — spec amendments (§38, §45, §58, §59)
 
 Three amendments drafted in `docs/spec-amendments-phase22.md` after reviewing
-a third-party tracker, then applied. A1 and A2 are spec-only until Phase 23
-implements the conversion engine; A3 is spec **and** code.
+a third-party tracker, then applied. All three are now spec **and** code: A3
+landed with routing (Phase 22); A1 and A2 landed with the conversion engine
+([Phase 23], above).
 
 ### Changed — weighted flow selection is deterministic (A3, §38)
 
