@@ -67,19 +67,24 @@ single concrete, honestly-deliverable slice:
   integrating it.
 - `/ltv-cohorts` — literally a `<PageStub>`; no UI was ever built against
   the Phase 26.5 LTV endpoints to integrate in the first place.
-- Postback Logs (incoming/outgoing delivery log) — no backend wiring yet,
-  though ClickHouse's `postback_events` table already exists. Its own
-  Postbacks page tabs (Incoming, Logs) still read the mock
-  `stores/event-mappings.ts`/`stores/networks.ts` even after Event
-  Mappings CRUD landed real, a documented inconsistency — see
-  `docs/event-mappings.md`. **Traffic Sources, Networks, Offers, Stream
-  Sets/Filters/Flows, the Routing Simulator, Conversions (list +
-  detail/timeline), and Event Mappings CRUD are no longer on this list**
-  — full CRUD (or, for the Simulator/Conversions, a real read/compute
-  endpoint) landed for all of them; see `docs/traffic-sources.md`,
-  `docs/networks-offers.md`, `docs/stream-sets.md`,
-  `docs/routing-simulate.md`, `docs/conversions.md`, and
-  `docs/event-mappings.md`.
+- Postback Logs' **Replay** action — the read-only log itself is real
+  now (see below), but replaying an attempt (re-invoking
+  `apps/internal/conversion` for an incoming row, or re-enqueuing a
+  `apps/internal/postback` delivery for an outgoing one) was deliberately
+  scoped out of that phase as a real, separate write capability. See
+  `docs/postback-logs.md`.
+
+  **Traffic Sources, Networks, Offers, Stream Sets/Filters/Flows, the
+  Routing Simulator, Conversions (list + detail/timeline), Event
+  Mappings CRUD, and Postback Logs (read-only) are no longer on this
+  list** — full CRUD (or, for the Simulator/Conversions/Postback Logs, a
+  real read/compute endpoint) landed for all of them; see
+  `docs/traffic-sources.md`, `docs/networks-offers.md`,
+  `docs/stream-sets.md`, `docs/routing-simulate.md`,
+  `docs/conversions.md`, `docs/event-mappings.md`, and
+  `docs/postback-logs.md`. The "Conversions/Postbacks" domain identified
+  at the start of this three-phase arc is now fully wired except for the
+  deliberately-deferred Replay action.
 
 ## Verified
 

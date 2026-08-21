@@ -19,71 +19,72 @@ referenced below as §N).
 ## CURRENT STATE — UPDATE THIS EVERY PHASE
 
 ```
-CURRENT PHASE : PHASE (unnumbered) — Event Mappings CRUD
-STATUS        : done — confirmed via AskUserQuestion (recommended
-                option) as the smallest remaining piece of the
-                Conversions/Postbacks domain, over Postback Logs/FB-
-                TikTok ad-spend import/Landing-PWA-Postlanding-Pixels
-                CRUD. New apps/internal/eventmapping package writes rows
-                for event_mappings (migration 00012) — the table
-                apps/internal/conversion.PostgresMapper.MapStatus already
-                read at postback-ingest time (Phase 23); never duplicates
-                that lookup, same relationship streamset has to
-                routingstore. FloxStatus reuses event.Type directly
-                (validated via the already-existing event.Type.IsCPA()),
-                not a redeclared enum. GET/POST /event-mappings (org-
-                wide, not per-network — the panel groups by networkId
-                client-side, matching the old mock's org-wide array) and
-                DELETE /event-mappings/{id}; no PATCH, since the UI only
-                ever adds or removes a mapping, never edits one in place.
-                Duplicate detection relies on the database's existing
-                unique index (network_id, lower(network_status)) rather
-                than a race-prone check-then-insert — Create just catches
-                Postgres 23505 into a real apierror.Conflict, this
-                codebase's first 23505 catch (every prior one was 23503
-                FK violations).
-                EventMappingPanel was still reading the mock
-                useNetworksStore (stale fabricated network ids) even
-                though it already imported the real CPA_STATUSES from an
-                earlier phase — switched to the real useNetworks() hook,
-                since managing mappings for networks that can't match any
-                real network_id would have been pointless. stores/event-
-                mappings.ts and lib/mock/event-mappings.ts were NOT
-                deleted (unlike the Routing Simulator phase's stream-sets
-                mock/store pair) — both are still read by
-                IncomingPostbacksPanel and the deferred Postback Logs
-                mock, both out of scope. Net result, documented rather
-                than hidden: the Postbacks page's "Event Mapping" tab now
-                manages real data while its "Incoming" tab still shows
-                stale mock networks with a mapped-count badge sourced
-                from the mock store — confirmed live, not just inferred.
-                See docs/event-mappings.md.
-                Verified: go build/vet/gofmt/test ./... all green (5 new
-                eventmapping tests: CRUD round-trip, invalid FloxStatus
-                rejected, case-insensitive duplicate rejected with a real
-                conflict apierror, unknown network id rejected, full
-                cross-tenant isolation); tsc --noEmit/eslint clean; full
-                manual browser pass — created two real networks, added a
-                mapping through the real form (confirmed landed in
-                Postgres via direct API call), attempted a case-
-                insensitive duplicate and confirmed the real 409 by
-                inspecting the network request directly (not just the
-                UI), removed the mapping and confirmed it was gone both
-                in the UI and via the API, confirmed the Incoming tab's
-                stale-but-non-crashing inconsistency live. Test networks
-                removed via real DELETE afterward.
-LAST COMMIT   : feat(event-mappings): wire Event Mappings CRUD to real
-                Postgres-backed API
-NEXT          : confirm scope before starting. Candidates: Postback Logs
-                (ClickHouse postback_events, replay-capable) — the last
-                remaining piece of the Conversions/Postbacks domain, and
-                would also let IncomingPostbacksPanel switch off its
-                stale mock networks/mappings, closing the inconsistency
-                this phase documented; FB/TikTok ad-spend import (§74's
-                CostProvider interface, the "later" half of §27-COST); or
+CURRENT PHASE : PHASE (unnumbered) — Postback Logs (read-only)
+STATUS        : done — confirmed via AskUserQuestion (recommended) as
+                the last remaining piece of the Conversions/Postbacks
+                domain. A second AskUserQuestion split scope further once
+                inspection found the old mock's "Replay" button was a
+                genuine write action (re-invoking apps/internal
+                /conversion.Service.Record for an incoming row, or
+                re-enqueuing a apps/internal/postback delivery for an
+                outgoing one — both real and buildable with no schema
+                changes, but a second capability beyond a pure read view)
+                — user chose logs-list-only this phase, replay deferred
+                as its own follow-on.
+                Inspection also found the "Outgoing" tab was already
+                real (reuses NetworkList — a network's postbackUrl IS
+                the outgoing config, no second table). New
+                apps/internal/postbacklogs package (plural — distinct
+                from the existing singular apps/internal/postbacklog,
+                Phase 24's write-side queue/producer that feeds
+                postback_events, untouched this phase): GET
+                /postback-logs (org-wide, both directions mixed in one
+                list, date-ranged, paginated) — the first read methods
+                against postback_events (chstore.ListPostbackAttempts/
+                CountPostbackAttempts), previously write-only. Reused the
+                Conversions phase's date-only-`to`-parses-to-midnight fix
+                directly this time (already known, not rediscovered).
+                IncomingPostbacksPanel — flagged as a documented
+                inconsistency in the Event Mappings phase (still reading
+                mock useNetworksStore/useEventMappingsStore after Event
+                Mappings CRUD landed real) — switched to the real
+                useNetworks()/useEventMappings() hooks, closing that gap.
+                Once PostbackLogsPanel/postback-log-columns.tsx and
+                IncomingPostbacksPanel all moved to real hooks, a repo-
+                wide grep found stores/postback-logs.ts, lib/mock
+                /postback-logs.ts, stores/networks.ts, and lib/mock
+                /networks.ts had zero remaining importers — all four
+                deleted outright, same "drop it, don't fake it"
+                precedent as the Routing Simulator phase's stream-sets
+                mock/store pair. postback-log-columns.tsx's Replay
+                action column dropped entirely (not disabled/faked),
+                matching the scope decision above. See
+                docs/postback-logs.md.
+                Verified: go build/vet/gofmt/test ./... all green (2 new
+                chstore integration tests against real ClickHouse, 2 new
+                postbacklogs.Service unit tests against a fake repo);
+                tsc --noEmit/eslint clean; full manual browser pass —
+                created a real network and event mapping, seeded 4 real
+                postback_events rows (incoming success + outgoing
+                success pair, incoming error, outgoing retrying) via a
+                throwaway, never-committed InsertPostbackAttempts call;
+                confirmed the Logs tab renders all four correctly (raw
+                to mapped status for incoming, mapped-only for outgoing,
+                correct result badges across the wider real vocabulary,
+                no Replay column) and the Incoming tab now shows the
+                real network id and a correct real mapped-count badge.
+                Test network and its postback_events rows removed
+                afterward.
+LAST COMMIT   : feat(postback-logs): wire Postback Logs to real
+                ClickHouse-backed API (read-only, replay deferred)
+NEXT          : confirm scope before starting. The Conversions/Postbacks
+                domain is now fully wired except for the deliberately-
+                deferred Replay action (its own follow-on candidate).
+                Other candidates: FB/TikTok ad-spend import (§74's
+                CostProvider interface, the "later" half of §27-COST);
                 Landing/PWA/Postlanding/Pixels CRUD (would unblock the
                 stages the Stream Sets phase had to drop from the Flow
-                editor).
+                editor); or Postback Replay itself.
 ```
 
 > At the end of every phase: update the four lines above, add a CHANGELOG entry,

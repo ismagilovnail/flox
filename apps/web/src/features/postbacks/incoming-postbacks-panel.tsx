@@ -6,23 +6,51 @@ import { CopyIcon } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { ErrorState } from "@/components/ui/error-state";
 import { IconButton } from "@/components/ui/icon-button";
+import { LoadingState } from "@/components/ui/loading-state";
 import { Mono } from "@/components/ui/typography";
-import { useNetworksStore } from "@/stores/networks";
-import { useEventMappingsStore } from "@/stores/event-mappings";
+import { useNetworks } from "@/hooks/use-networks";
+import { useEventMappings } from "@/hooks/use-event-mappings";
 
 function incomingUrl(networkId: string) {
   return `https://api.floxlink.io/postback/${networkId}?click_id={click_id}&status={status}&revenue={revenue}&currency={currency}`;
 }
 
 export function IncomingPostbacksPanel() {
-  const networks = useNetworksStore((s) => s.networks);
-  const mappings = useEventMappingsStore((s) => s.mappings);
+  const networksQuery = useNetworks();
+  const mappingsQuery = useEventMappings();
 
   function copy(url: string) {
     navigator.clipboard.writeText(url);
     toast("Incoming postback URL copied", { description: url });
   }
+
+  if (networksQuery.isPending || mappingsQuery.isPending) {
+    return <LoadingState label="Loading networks…" />;
+  }
+
+  if (networksQuery.isError) {
+    return (
+      <ErrorState
+        title="Couldn't load networks"
+        description={networksQuery.error.message}
+        onRetry={() => networksQuery.refetch()}
+      />
+    );
+  }
+  if (mappingsQuery.isError) {
+    return (
+      <ErrorState
+        title="Couldn't load event mappings"
+        description={mappingsQuery.error.message}
+        onRetry={() => mappingsQuery.refetch()}
+      />
+    );
+  }
+
+  const networks = networksQuery.data.networks;
+  const mappings = mappingsQuery.data.eventMappings;
 
   return (
     <div className="flex flex-col gap-4">
@@ -58,6 +86,7 @@ export function IncomingPostbacksPanel() {
           );
         })}
       </div>
+      {networks.length === 0 && <p className="text-sm text-muted-foreground">No networks yet — add one on the Networks page first.</p>}
     </div>
   );
 }

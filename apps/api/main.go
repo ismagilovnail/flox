@@ -27,6 +27,7 @@ import (
 	"github.com/ismagilovnail/flox/apps/internal/ltv"
 	"github.com/ismagilovnail/flox/apps/internal/network"
 	"github.com/ismagilovnail/flox/apps/internal/offer"
+	"github.com/ismagilovnail/flox/apps/internal/postbacklogs"
 	"github.com/ismagilovnail/flox/apps/internal/postgres"
 	"github.com/ismagilovnail/flox/apps/internal/routing"
 	"github.com/ismagilovnail/flox/apps/internal/routingsimulate"
@@ -170,6 +171,12 @@ func run() error {
 		srv.Mux().Route("/conversions", func(r chi.Router) {
 			r.Use(tenant.Middleware)
 			conversionsHandler.Register(r)
+		})
+
+		postbackLogsHandler := postbacklogs.NewHandler(postbacklogs.NewService(events), logger)
+		srv.Mux().Route("/postback-logs", func(r chi.Router) {
+			r.Use(tenant.Middleware)
+			postbackLogsHandler.Register(r)
 		})
 	}
 

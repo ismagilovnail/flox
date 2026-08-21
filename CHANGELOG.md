@@ -5,6 +5,83 @@ per-phase, matching `CLAUDE.md`'s phase protocol. The one exception is
 [Between phases], below: spec amendments and the code changes that follow from
 them land between phases and would otherwise be invisible here.
 
+## [Postback Logs] — Wired to real ClickHouse-backed API (read-only, replay deferred)
+
+### Scope
+
+Two rounds of `AskUserQuestion`. First confirmed Postback Logs as the
+last remaining piece of the Conversions/Postbacks domain. Second split
+scope further once inspection found the old mock's "Replay" button was a
+genuine write action — re-invoking `apps/internal/conversion.Service
+.Record` for an incoming row, or re-enqueuing a `apps/internal/postback`
+delivery for an outgoing one. Both are real and buildable with no schema
+changes, but are a second capability beyond a pure read view; user chose
+logs-list-only this phase, replay deferred as its own follow-on. See
+`docs/postback-logs.md`.
+
+### Added
+
+- **`apps/internal/postbacklogs`** (new, plural — distinct from the
+  existing singular `apps/internal/postbacklog`, Phase 24's write-side
+  queue/producer that feeds `postback_events`, untouched this phase): a
+  thin read layer over ClickHouse's `postback_events`, mirroring
+  `apps/internal/analytics`/`apps/internal/conversions`'s own shape. `GET
+  /postback-logs` (org-wide, both directions mixed in one list,
+  date-ranged, paginated).
+- **`chstore` additions**: `ListPostbackAttempts`/`CountPostbackAttempts`
+  — the first read methods against `postback_events` (previously
+  write-only, fed by `InsertPostbackAttempts`).
+- Frontend: `lib/api/postback-logs.ts` + `hooks/use-postback-logs.ts`
+  (new, TanStack Query). `PostbackLogsPanel`/`postback-log-columns.tsx`
+  rewritten against the real hook, with a wider, real `PostbackResult`
+  vocabulary (incoming: success/duplicate/ignored/error; outgoing:
+  queued/processing/success/failed/retrying/dead) replacing the old
+  mock's three-value fiction.
+
+### Fixed (closing a gap the Event Mappings phase documented)
+
+`IncomingPostbacksPanel` was still reading the mock `useNetworksStore`/
+`useEventMappingsStore` even after Event Mappings CRUD landed real —
+flagged as a documented inconsistency in that phase's own changelog
+entry. Switched to the real `useNetworks()`/`useEventMappings()` hooks
+(both already existed), closing the gap.
+
+### Removed
+
+- `postback-log-columns.tsx`'s Replay action column and its
+  `RotateCcwIcon` button — dropped entirely, not disabled or faked,
+  matching this phase's scope decision above.
+- **`stores/postback-logs.ts`**, **`lib/mock/postback-logs.ts`**,
+  **`stores/networks.ts`**, **`lib/mock/networks.ts`** — once
+  `PostbackLogsPanel` and `IncomingPostbacksPanel` both moved to real
+  hooks, a repo-wide grep found all four had zero remaining importers
+  (each only imported the next one in the chain). Deleted outright, the
+  same "drop it, don't fake it" precedent as the Routing Simulator
+  phase's `stream-sets` mock/store pair.
+
+### Verified
+
+- Backend: `go build/vet/gofmt/test ./...` all green — 2 new `chstore`
+  integration tests against real ClickHouse, 2 new
+  `postbacklogs.Service` unit tests against a fake repository.
+- Frontend: `tsc --noEmit`/`eslint` clean.
+- Full manual browser pass against the real running `api` + `web` dev
+  servers: created a real network and a real event mapping, seeded 4
+  real `postback_events` rows (an incoming/outgoing success pair, an
+  incoming error, an outgoing retrying) via a throwaway, never-committed
+  `chstore.EventStore.InsertPostbackAttempts` call. Confirmed the Logs
+  tab renders all four correctly — raw-to-mapped status display for
+  incoming, mapped-only for outgoing, correct result badges across the
+  wider real vocabulary, no Replay column — and the Incoming tab now
+  shows the real network id and a correct real mapped-count badge. Test
+  network and its `postback_events` rows removed afterward.
+
+### Domain complete
+
+Conversions, Event Mappings, and Postback Logs (read-only) are all real
+now — the "Conversions/Postbacks" domain is fully wired except for the
+deliberately-deferred Replay action.
+
 ## [Event Mappings] — CRUD wired to real Postgres-backed API
 
 ### Scope

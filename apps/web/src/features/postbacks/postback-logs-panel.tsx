@@ -1,36 +1,44 @@
 "use client";
 
 import * as React from "react";
-import { toast } from "sonner";
 
 import { DataTable } from "@/components/ui/data-table";
-import { usePostbackLogsStore } from "@/stores/postback-logs";
-import { useNetworksStore } from "@/stores/networks";
+import { ErrorState } from "@/components/ui/error-state";
+import { LoadingState } from "@/components/ui/loading-state";
+import { useNetworks } from "@/hooks/use-networks";
+import { usePostbackLogs } from "@/hooks/use-postback-logs";
 import { postbackLogColumns } from "@/features/postbacks/postback-log-columns";
 
 export function PostbackLogsPanel() {
-  const logs = usePostbackLogsStore((s) => s.logs);
-  const replay = usePostbackLogsStore((s) => s.replay);
-  const networks = useNetworksStore((s) => s.networks);
+  const logsQuery = usePostbackLogs();
+  const networksQuery = useNetworks();
 
   const networkNameById = React.useMemo(
-    () => Object.fromEntries(networks.map((n) => [n.id, n.name])),
-    [networks],
+    () => Object.fromEntries((networksQuery.data?.networks ?? []).map((n) => [n.id, n.name])),
+    [networksQuery.data],
   );
 
-  const columns = React.useMemo(
-    () =>
-      postbackLogColumns(networkNameById, (log) => {
-        replay(log.id);
-        toast("Postback replayed", { description: log.clickId });
-      }),
-    [networkNameById, replay],
-  );
+  const columns = React.useMemo(() => postbackLogColumns(networkNameById), [networkNameById]);
+
+  if (logsQuery.isPending) {
+    return <LoadingState label="Loading postback logs…" />;
+  }
+
+  if (logsQuery.isError) {
+    return (
+      <ErrorState
+        title="Couldn't load postback logs"
+        description={logsQuery.error.message}
+        onRetry={() => logsQuery.refetch()}
+      />
+    );
+  }
 
   return (
     <DataTable
       columns={columns}
-      data={logs}
+      data={logsQuery.data.logs}
+      getRowId={(row) => `${row.direction}:${row.networkId}:${row.clickId}:${row.eventAt}`}
       searchPlaceholder="Search by click ID..."
       emptyTitle="No postback activity yet"
       emptyDescription="Every incoming and outgoing postback attempt is logged here, success or not."
