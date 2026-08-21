@@ -5,6 +5,98 @@ per-phase, matching `CLAUDE.md`'s phase protocol. The one exception is
 [Between phases], below: spec amendments and the code changes that follow from
 them land between phases and would otherwise be invisible here.
 
+## [Phase 27] — Frontend/Backend Integration
+
+### Scope
+
+§51's literal phase order ("auth, campaigns, sources, offers, networks,
+flows, stream sets, filters, tracking, conversions, analytics, ltv/cohorts,
+postbacks") assumes backend APIs that were never built — `ROADMAP.md` has
+exactly one dedicated backend-API phase before this one (18, "Campaign
+API"), and auth doesn't exist until Phase 28. Negotiated down to a single
+concrete slice with the user via two `AskUserQuestion` rounds rather than
+silently absorbing eleven phases' worth of missing backend work or silently
+picking a scope: **Campaigns CRUD + real analytics on the campaign detail
+page**. See `docs/frontend-integration.md`.
+
+### Added
+
+- **`apps/web/src/lib/api`** (`client.ts`, `campaigns.ts`,
+  `traffic-sources.ts`, `analytics.ts`) — the first real fetch layer
+  against the Go API, replacing `apps/web/src/lib/mock/*` for campaigns.
+  `apiFetch<T>()` sends `X-Organization-Id` from
+  `NEXT_PUBLIC_DEV_ORG_ID`, the frontend's temporary stand-in for auth
+  (mirrors `internal/tenant`'s header — both go away in Phase 28), and
+  throws a distinct `MissingDevOrgError` when unset so the failure is a
+  clear message, not a silent 400.
+- **`hooks/use-{campaigns,traffic-sources,campaign-analytics}.ts`** —
+  TanStack Query hooks (first real use of the library since it was
+  installed); `campaign-list.tsx`, `campaign-form.tsx`,
+  `campaign-row-actions.tsx`, `new-campaign-view.tsx`,
+  `campaign-detail-view.tsx` rewritten against them, each with real
+  loading/error states.
+- **`apps/internal/trafficsource`** (new) — `GET /traffic-sources`,
+  tenant-scoped, backed by the `traffic_sources` table that already
+  existed but had no read endpoint. The one backend addition this slice
+  needed; campaign CRUD and analytics endpoints already existed from
+  earlier phases.
+- **CORS** (`github.com/go-chi/cors`) on `httpserver.New`, origin locked to
+  the new `config.AppURL` (`APP_URL` env var, default
+  `http://localhost:3000`) — required now that the browser calls the API
+  cross-origin.
+- **`apps/web/.env.example`** (+ `.env.local`, not committed) —
+  `NEXT_PUBLIC_API_URL`, `NEXT_PUBLIC_DEV_ORG_ID`. Next.js loads env files
+  from `apps/web/` itself, a separate surface from the root
+  `.env.example` (Go services).
+- **`CampaignDetailView`'s Overview tab** — real Revenue/Clicks/
+  Conversions/CVR stat cards and a real daily revenue chart, computed from
+  the Phase 25/26 analytics endpoints. `Spend`/`Profit`/`ROI`/`CPA` removed
+  entirely rather than shown as `"—"`: invariant #6's `"—"` means "no cost
+  entered yet," not "no cost pipeline exists yet" (that's Phase 27-COST).
+- **`docs/frontend-integration.md`**; `ARCHITECTURE.md` §6-SHARED note
+  corrected — the Routing Simulator was not switched to a real endpoint
+  this phase (no stream-set/flow backend exists yet) and still runs on its
+  mock, unchanged.
+
+### Removed
+
+- Mock-only `Campaign` fields with no backend equivalent:
+  `trackingDomain`, `trackingId`, `clicks`, `conversions`, `revenue`,
+  `spend`. The campaign list's Clicks/Revenue columns and the "Copy
+  tracking URL" row action are gone, not faked with placeholder data.
+
+### Fixed
+
+- `apps/web/.gitignore`'s blanket `.env*` pattern was silently swallowing
+  `.env.example` too (no `!.env.example` exception, unlike the root
+  `.gitignore`) — added.
+
+### Notes
+
+- **Deliberately still mocked, not silently absorbed**: the standalone
+  `/analytics` report builder (a full ad-hoc report UI with no matching
+  backend contract at any granularity close to what it renders);
+  `/ltv-cohorts` (a bare `<PageStub>` — no UI was ever built against the
+  Phase 26.5 endpoints); `StreamSetList`/`RoutingSimulatorView` on the
+  campaign detail page; every sources/offers/networks/flows/stream-sets/
+  filters/routing-simulate/conversions/postbacks list-management page.
+  Each needs its own dedicated backend phase before its existing mock can
+  be wired up the same way campaigns were here.
+- Verified end-to-end against the real running `api` + `web` dev servers,
+  not just automated checks: created a campaign through the UI with the
+  Source dropdown populated from real seeded `GET /traffic-sources` data,
+  confirmed it lands via `POST /campaigns` and navigates to a real detail
+  page whose Overview tab renders a correct zero-value empty state (not an
+  error) for a campaign with no conversion events, confirmed the Settings
+  tab pre-fills from the real record with its Archive control present, and
+  confirmed the campaign list resolves and displays the real source name
+  after creation. Backend also verified independently: `go build/vet/
+  gofmt/test ./...` all green (incl. 2 new `trafficsource` tests), plus
+  `curl` confirming traffic-sources list, campaigns list, and a CORS
+  preflight all work against real seeded data. Frontend: `tsc --noEmit`
+  and `eslint` both clean. Test campaign and its two seed traffic sources
+  removed via the real `DELETE` endpoint after verification.
+
 ## [Phase 26.5] — LTV & Cohort Engine
 
 ### Added

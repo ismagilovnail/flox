@@ -3,69 +3,77 @@
 import * as React from "react";
 import Link from "next/link";
 import { PlusIcon, TagIcon } from "lucide-react";
-import type { ColumnDef } from "@tanstack/react-table";
 
 import { Button } from "@/components/ui/button";
-import { DataTable, dataTableFeatures } from "@/components/ui/data-table";
-import { Mono } from "@/components/ui/typography";
-import { useCampaignsStore } from "@/stores/campaigns";
+import { DataTable } from "@/components/ui/data-table";
+import { LoadingState } from "@/components/ui/loading-state";
+import { ErrorState } from "@/components/ui/error-state";
+import { useCampaigns } from "@/hooks/use-campaigns";
+import { useTrafficSources } from "@/hooks/use-traffic-sources";
 import { useTagsStore } from "@/stores/tags";
-import { useCustomMetricsStore } from "@/stores/custom-metrics";
 import { campaignColumns } from "@/features/campaigns/campaign-columns";
 import { TagFilterControl } from "@/features/tags/tag-filter-control";
 import { BulkTagDialog } from "@/features/tags/bulk-tag-dialog";
 import { filterByTags } from "@/features/tags/filter-by-tags";
-import { evaluateFormula } from "@/lib/formula-engine";
-import { formatMetric } from "@/features/analytics/registry";
-import type { Campaign } from "@/lib/mock/campaigns";
-
-/** Maps a Campaign row onto the same registry metric ids the formula engine
- * uses everywhere else — only the fields a campaign row actually carries. */
-function campaignMetricValues(c: Campaign): Record<string, number | null> {
-  const profit = c.spend === null ? null : c.revenue - c.spend;
-  const roi = c.spend && c.spend > 0 ? ((profit as number) / c.spend) * 100 : null;
-  return { clicks: c.clicks, conversions: c.conversions, revenue: c.revenue, cost: c.spend, profit, roi };
-}
 
 export function CampaignList() {
-  const campaigns = useCampaignsStore((s) => s.campaigns);
+  const campaignsQuery = useCampaigns();
+  const sourcesQuery = useTrafficSources();
   const assignments = useTagsStore((s) => s.assignments);
-  const allCustomMetrics = useCustomMetricsStore((s) => s.metrics);
 
   const [tagFilter, setTagFilter] = React.useState<string[]>([]);
   const [bulkTarget, setBulkTarget] = React.useState<{ ids: string[]; clear: () => void } | null>(null);
 
+  const sourceNameById = React.useMemo(() => {
+    const map: Record<string, string> = {};
+    for (const s of sourcesQuery.data?.trafficSources ?? []) map[s.id] = s.name;
+    return map;
+  }, [sourcesQuery.data]);
+
   const filtered = React.useMemo(
-    () => filterByTags("campaign", campaigns, tagFilter, assignments),
-    [campaigns, tagFilter, assignments],
+    () => filterByTags("campaign", campaignsQuery.data?.campaigns ?? [], tagFilter, assignments),
+    [campaignsQuery.data, tagFilter, assignments],
   );
 
-  const columns = React.useMemo(() => {
-    const customColumns: ColumnDef<typeof dataTableFeatures, Campaign>[] = allCustomMetrics
-      .filter((m) => m.status === "published" && m.active && m.targets.includes("campaigns_table"))
-      .map((cm) => ({
-        id: `cm_${cm.id}`,
-        header: cm.name,
-        accessorFn: (row: Campaign) => evaluateFormula(cm.formula, campaignMetricValues(row)),
-        cell: ({ getValue }: { getValue: () => unknown }) => (
-          <Mono>{formatMetric(getValue() as number | null, cm.format)}</Mono>
-        ),
-      }));
-    // Insert before the trailing "actions" column so it stays rightmost.
-    return [...campaignColumns.slice(0, -1), ...customColumns, campaignColumns[campaignColumns.length - 1]];
-  }, [allCustomMetrics]);
+  const columns = React.useMemo(() => campaignColumns(sourceNameById), [sourceNameById]);
+
+  const header = (
+    <div className="flex items-center justify-between">
+      <h1 className="text-2xl font-semibold tracking-tight">Campaigns</h1>
+      <Button asChild>
+        <Link href="/campaigns/new">
+          <PlusIcon className="size-4" />
+          New Campaign
+        </Link>
+      </Button>
+    </div>
+  );
+
+  if (campaignsQuery.isPending) {
+    return (
+      <div className="flex flex-col gap-4">
+        {header}
+        <LoadingState label="Loading campaigns…" />
+      </div>
+    );
+  }
+
+  if (campaignsQuery.isError) {
+    return (
+      <div className="flex flex-col gap-4">
+        {header}
+        <ErrorState
+          title="Couldn't load campaigns"
+          description={campaignsQuery.error.message}
+          onRetry={() => campaignsQuery.refetch()}
+        />
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-semibold tracking-tight">Campaigns</h1>
-        <Button asChild>
-          <Link href="/campaigns/new">
-            <PlusIcon className="size-4" />
-            New Campaign
-          </Link>
-        </Button>
-      </div>
+      {header}
 
       <DataTable
         columns={columns}

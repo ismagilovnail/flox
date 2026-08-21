@@ -18,6 +18,12 @@ type Config struct {
 	Env      string // development | staging | production
 	HTTPAddr string // host:port the HTTP server listens on
 	LogLevel string // debug | info | warn | error
+	// AppURL is apps/web's own origin (APP_URL in .env.example) — apps/api
+	// uses it as the one allowed CORS origin (Phase 27): the browser calls
+	// the control-plane API directly from apps/web, a different origin in
+	// dev (localhost:3000 vs :8080), so without this every fetch() would
+	// be blocked before ever reaching a handler.
+	AppURL string
 
 	// --- OpenTelemetry ---
 	OTelExporterOTLPEndpoint string
@@ -77,6 +83,7 @@ func load(portVar, portDefault, defaultServiceName string) (Config, error) {
 		Env:      getEnv("NODE_ENV", "development"),
 		HTTPAddr: fmt.Sprintf(":%d", port),
 		LogLevel: getEnv("LOG_LEVEL", "info"),
+		AppURL:   getEnv("APP_URL", "http://localhost:3000"),
 
 		OTelExporterOTLPEndpoint: getEnv("OTEL_EXPORTER_OTLP_ENDPOINT", ""),
 		OTelServiceName:          getEnv("OTEL_SERVICE_NAME", defaultServiceName),

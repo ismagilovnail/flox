@@ -19,57 +19,56 @@ referenced below as §N).
 ## CURRENT STATE — UPDATE THIS EVERY PHASE
 
 ```
-CURRENT PHASE : PHASE 26.5 — LTV & Cohort Engine
-STATUS        : done — "a primary reason teams pay for a tracker in this
-                vertical. Do not skip," and not skipped. internal/ltv is
-                pure Go (no DB, no clock of its own) over a narrow
-                ClickHouse fetch, same architecture as internal/routing —
-                deliberately, so §26.5's own acceptance criterion ("numbers
-                reconcile against fixtures") is provable directly: 11
-                fixture tests nail down exact window bucketing, the
-                incomplete-window-shows-partial-not-zero rule, conservative
-                cross-member completeness, both rate formulas, and the
-                FX-missing-contributes-zero invariant carrying through from
-                Phase 23. ltv_events (schema/007) is a materialized view
-                over conversion_events, narrowed to CPA_HOLD/ACCEPT/REDEP.
-                ClicksByFTDAnchor/ClicksByRegAnchor don't need MIN()/
-                GROUP BY to find each click's "first" anchor status — the
-                dedup key (CLAUDE.md #3) already guarantees at most one row
-                per click per status, a consequence of Phase 23's own
-                invariant, not a new rule.
-                FTDCohort and RegCohort are distinct types (not one shared
-                struct with optional fields): each spec rate formula
-                (ftd_to_redep_rate/dep_to_redep vs reg_to_ftd_rate) has a
-                different natural denominator (cpa_accept vs cpa_hold),
-                and attaching both to one generic type risked a silently
-                wrong denominator on one of them.
-                Confirmed out of scope, consistent with precedent
-                (no AskUserQuestion needed — same conclusion reached 4
-                phases running): "source"/"offer" filter dimensions (event
-                pipeline doesn't carry traffic_source_id/offer_id yet) and
-                any frontend work (no LTV UI mock exists to integrate with;
-                Phase 27's job per every prior Go-backend phase).
-                REST: GET /analytics/ltv/{ftd,reg}-cohorts?period=&from=&to=&campaignId=&networkId=&country=,
-                mounted on apps/api behind the existing tenant.Middleware.
-                20 new tests (ltv: 16, chstore: +4 for the anchor-query
-                layer) — all green. End-to-end smoke test through the real
-                compiled api binary and real seeded conversion_events: an
-                old 2-click FTD cohort's windows summed exactly right with
-                every window correctly Complete, a 5-day-old cohort showed
-                d0 complete/populated and the later windows correctly
-                incomplete-with-zero, Reg cohort regToFtdRate came out
-                exactly 2/3, and a second org got an empty result for the
-                same query — tenant isolation held through the full stack.
-LAST COMMIT   : feat(ltv): LTV and cohort engine
-NEXT          : PHASE 27 — Frontend/Backend Integration — confirm before
-                starting. First phase to touch apps/web against real APIs
-                instead of apps/web/src/lib/mock/*. Six Go-backend phases
-                (23-26.5) now have real endpoints waiting: conversion,
-                postback delivery, analytics (2 endpoints), LTV/cohorts (2
-                endpoints), plus whatever campaign/routing endpoints exist
-                from earlier phases. Scope this one carefully — it's likely
-                the largest phase yet by surface area even if none of the
-                individual wiring is hard.
+CURRENT PHASE : PHASE 27 — Frontend/Backend Integration
+STATUS        : done — narrowed scope, confirmed with the user via two
+                AskUserQuestion rounds: §51's literal phase order assumes
+                backend APIs that don't exist (ROADMAP.md has exactly one
+                dedicated backend-API phase before this one; auth doesn't
+                exist until Phase 28). Delivered slice: Campaigns CRUD +
+                real campaign-detail analytics.
+                apps/web/src/lib/api (apiFetch, X-Organization-Id from
+                NEXT_PUBLIC_DEV_ORG_ID) + hooks/use-* (TanStack Query) now
+                back campaigns list/detail/create/edit/archive for real.
+                Campaign TS type matches the Go JSON exactly; mock-only
+                trackingDomain/trackingId/clicks/conversions/revenue/spend
+                fields are gone from the UI, not faked.
+                Campaign detail Overview tab: real Revenue/Clicks/
+                Conversions/CVR stat cards + a real daily revenue chart
+                from the Phase 25/26 analytics endpoints. Spend/Profit/
+                ROI/CPA dropped entirely (not shown as "—") — no cost
+                pipeline is wired to the frontend yet (Phase 27-COST).
+                New apps/internal/trafficsource (GET /traffic-sources,
+                tenant-scoped) — the one backend addition this slice
+                needed; everything else (campaign CRUD, analytics) already
+                existed. CORS added to httpserver (go-chi/cors, origin =
+                config.AppURL) for the now-cross-origin browser→API calls.
+                apps/web/.env.example + .env.local (not committed) for
+                NEXT_PUBLIC_API_URL/NEXT_PUBLIC_DEV_ORG_ID; fixed
+                apps/web/.gitignore silently swallowing .env.example (no
+                !.env.example exception, unlike the root .gitignore).
+                Verified: go build/vet/gofmt/test ./... all green (incl.
+                new trafficsource tests); tsc --noEmit and eslint clean;
+                full manual browser pass against the real running api+web
+                dev servers — create → detail → list → settings edit →
+                archive control, all correct, incl. a correct zero-value
+                empty state (not an error) for a brand-new campaign's
+                analytics. Test campaign + seed traffic sources removed
+                via the real DELETE endpoint after verification.
+                StreamSetList/RoutingSimulatorView on the campaign detail
+                page, the standalone /analytics report builder, and
+                /ltv-cohorts (a bare PageStub) remain fully mocked — see
+                docs/frontend-integration.md for the complete remaining
+                gap (sources/offers/networks/flows/stream-sets/filters/
+                routing-simulate/conversions/postbacks all still need
+                dedicated backend work before their existing mocks can be
+                wired up the same way).
+LAST COMMIT   : feat(frontend): wire campaigns to real API
+NEXT          : confirm scope before starting. Candidates: Phase 27-COST
+                (cost ingestion — unblocks Spend/Profit/ROI/CPA on the
+                campaign detail page), or picking the next domain
+                (sources/offers/networks/stream-sets/...) to give it a real
+                backend and wire its existing frontend mock, same pattern
+                this phase established.
 ```
 
 > At the end of every phase: update the four lines above, add a CHANGELOG entry,

@@ -16,14 +16,12 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { type CampaignStatus } from "@/lib/mock/campaigns";
-import { useTrafficSourcesStore } from "@/stores/traffic-sources";
-import { useDomainsStore } from "@/stores/domains";
+import { type CampaignStatus } from "@/lib/api/campaigns";
+import { useTrafficSources } from "@/hooks/use-traffic-sources";
 
 export const campaignFormSchema = z.object({
   name: z.string().min(2, "Name must be at least 2 characters").max(80),
-  source: z.string().min(1, "Select a source"),
-  trackingDomain: z.string().min(1, "Select a tracking domain"),
+  trafficSourceId: z.string().min(1, "Select a source"),
   fallbackUrl: z.url("Enter a valid URL"),
   notes: z.string().max(500).optional(),
   status: z.enum(["active", "paused", "draft", "archived"] as [CampaignStatus, ...CampaignStatus[]]).optional(),
@@ -44,16 +42,14 @@ export function CampaignForm({
   submitLabel?: string;
   onSubmit: (values: CampaignFormValues) => void;
 }) {
-  const sources = useTrafficSourcesStore((s) => s.sources);
-  const domains = useDomainsStore((s) => s.domains);
-  const trackingDomains = domains.filter((d) => d.purpose.includes("tracking"));
+  const sourcesQuery = useTrafficSources();
+  const sources = sourcesQuery.data?.trafficSources ?? [];
 
   const form = useForm<CampaignFormValues>({
     resolver: zodResolver(campaignFormSchema),
-    defaultValues: {
+    values: {
       name: "",
-      source: sources[0]?.name ?? "",
-      trackingDomain: trackingDomains[0]?.domain ?? "",
+      trafficSourceId: sources[0]?.id ?? "",
       fallbackUrl: "",
       notes: "",
       status: "draft",
@@ -83,47 +79,36 @@ export function CampaignForm({
           </div>
 
           <div className="grid gap-1.5">
-            <Label htmlFor="source">Source</Label>
-            <Controller
-              control={control}
-              name="source"
-              render={({ field }) => (
-                <Select value={field.value} onValueChange={field.onChange}>
-                  <SelectTrigger id="source" className="w-full">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {sources.map((s) => (
-                      <SelectItem key={s.id} value={s.name}>
-                        {s.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              )}
-            />
-          </div>
-
-          <div className="grid gap-1.5">
-            <Label htmlFor="trackingDomain">Tracking domain</Label>
-            <Controller
-              control={control}
-              name="trackingDomain"
-              render={({ field }) => (
-                <Select value={field.value} onValueChange={field.onChange}>
-                  <SelectTrigger id="trackingDomain" className="w-full">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {trackingDomains.map((d) => (
-                      <SelectItem key={d.id} value={d.domain}>
-                        {d.domain}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              )}
-            />
+            <Label htmlFor="trafficSourceId">Source</Label>
+            {sourcesQuery.isPending ? (
+              <p className="text-xs text-muted-foreground">Loading sources…</p>
+            ) : sourcesQuery.isError ? (
+              <p className="text-xs text-danger">Couldn&apos;t load sources: {sourcesQuery.error.message}</p>
+            ) : sources.length === 0 ? (
+              <p className="text-xs text-muted-foreground">
+                No traffic sources yet — creating one isn&apos;t built yet, so a campaign needs at least one to exist already.
+              </p>
+            ) : (
+              <Controller
+                control={control}
+                name="trafficSourceId"
+                render={({ field }) => (
+                  <Select value={field.value} onValueChange={field.onChange}>
+                    <SelectTrigger id="trafficSourceId" className="w-full">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {sources.map((s) => (
+                        <SelectItem key={s.id} value={s.id}>
+                          {s.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
+              />
+            )}
+            {errors.trafficSourceId && <p className="text-xs text-danger">{errors.trafficSourceId.message}</p>}
           </div>
 
           <div className="grid gap-1.5">
@@ -172,7 +157,7 @@ export function CampaignForm({
       </Card>
 
       <div className="flex justify-end">
-        <Button type="submit" disabled={isSubmitting}>
+        <Button type="submit" disabled={isSubmitting || sources.length === 0}>
           {submitLabel}
         </Button>
       </div>

@@ -4,14 +4,7 @@ import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import {
-  CopyIcon,
-  ExternalLinkIcon,
-  MoreHorizontalIcon,
-  PauseIcon,
-  PlayIcon,
-  Trash2Icon,
-} from "lucide-react";
+import { CopyIcon, ExternalLinkIcon, MoreHorizontalIcon, PauseIcon, PlayIcon, Trash2Icon } from "lucide-react";
 
 import { IconButton } from "@/components/ui/icon-button";
 import { Button } from "@/components/ui/button";
@@ -30,40 +23,47 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { useCampaignsStore } from "@/stores/campaigns";
-import type { Campaign } from "@/lib/mock/campaigns";
+import { useActivateCampaign, useArchiveCampaign, useDuplicateCampaign, usePauseCampaign } from "@/hooks/use-campaigns";
+import type { Campaign } from "@/lib/api/campaigns";
 
 export function CampaignRowActions({ campaign }: { campaign: Campaign }) {
   const router = useRouter();
-  const setStatus = useCampaignsStore((s) => s.setStatus);
-  const duplicateCampaign = useCampaignsStore((s) => s.duplicateCampaign);
+  const pause = usePauseCampaign();
+  const activate = useActivateCampaign();
+  const duplicate = useDuplicateCampaign();
+  const archive = useArchiveCampaign();
   const [confirmArchive, setConfirmArchive] = React.useState(false);
 
-  const trackingUrl = `https://${campaign.trackingDomain}/t/${campaign.trackingId}`;
-
-  function copyTrackingUrl() {
-    navigator.clipboard.writeText(trackingUrl);
-    toast("Tracking URL copied", { description: trackingUrl });
-  }
-
   function togglePause() {
-    const next = campaign.status === "active" ? "paused" : "active";
-    setStatus(campaign.id, next);
-    toast(next === "paused" ? "Campaign paused" : "Campaign resumed", {
-      description: campaign.name,
+    const action = campaign.status === "active" ? pause : activate;
+    action.mutate(campaign.id, {
+      onSuccess: () =>
+        toast(campaign.status === "active" ? "Campaign paused" : "Campaign resumed", { description: campaign.name }),
+      onError: (err) => toast.error("Couldn't update campaign", { description: err.message }),
     });
   }
 
-  function duplicate() {
-    const id = duplicateCampaign(campaign.id);
-    toast("Campaign duplicated", { description: `${campaign.name} (Copy)` });
-    if (id) router.push(`/campaigns/${id}`);
+  function handleDuplicate() {
+    duplicate.mutate(campaign.id, {
+      onSuccess: (created) => {
+        toast("Campaign duplicated", { description: `${campaign.name} (Copy)` });
+        router.push(`/campaigns/${created.id}`);
+      },
+      onError: (err) => toast.error("Couldn't duplicate campaign", { description: err.message }),
+    });
   }
 
-  function archive() {
-    setStatus(campaign.id, "archived");
-    setConfirmArchive(false);
-    toast("Campaign archived", { description: campaign.name });
+  function handleArchive() {
+    archive.mutate(campaign.id, {
+      onSuccess: () => {
+        setConfirmArchive(false);
+        toast("Campaign archived", { description: campaign.name });
+      },
+      onError: (err) => {
+        setConfirmArchive(false);
+        toast.error("Couldn't archive campaign", { description: err.message });
+      },
+    });
   }
 
   return (
@@ -93,11 +93,8 @@ export function CampaignRowActions({ campaign }: { campaign: Campaign }) {
               )}
             </DropdownMenuItem>
           )}
-          <DropdownMenuItem onSelect={duplicate}>
+          <DropdownMenuItem onSelect={handleDuplicate}>
             <CopyIcon className="size-4" /> Duplicate
-          </DropdownMenuItem>
-          <DropdownMenuItem onSelect={copyTrackingUrl}>
-            <CopyIcon className="size-4" /> Copy tracking URL
           </DropdownMenuItem>
           {campaign.status !== "archived" && (
             <>
@@ -123,7 +120,7 @@ export function CampaignRowActions({ campaign }: { campaign: Campaign }) {
             <Button variant="outline" onClick={() => setConfirmArchive(false)}>
               Cancel
             </Button>
-            <Button variant="destructive" onClick={archive}>
+            <Button variant="destructive" onClick={handleArchive} disabled={archive.isPending}>
               Archive
             </Button>
           </DialogFooter>

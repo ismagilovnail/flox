@@ -15,6 +15,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
+	"github.com/go-chi/cors"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 )
 
@@ -31,7 +32,9 @@ type Server struct {
 
 // ch may be nil when the caller has no ClickHouse connection to offer —
 // /ready simply skips that check rather than reporting it unavailable.
-func New(logger *slog.Logger, serviceName string, db Pinger, ch Pinger) *Server {
+// appURL is apps/web's own origin, the one CORS-allowed origin (Phase 27:
+// the browser calls this API directly from a different origin in dev).
+func New(logger *slog.Logger, serviceName string, db Pinger, ch Pinger, appURL string) *Server {
 	r := chi.NewRouter()
 
 	r.Use(middleware.RequestID)
@@ -40,6 +43,13 @@ func New(logger *slog.Logger, serviceName string, db Pinger, ch Pinger) *Server 
 	r.Use(requestLogger(logger))
 	r.Use(middleware.Recoverer)
 	r.Use(middleware.Timeout(30 * time.Second))
+	r.Use(cors.Handler(cors.Options{
+		AllowedOrigins:   []string{appURL},
+		AllowedMethods:   []string{http.MethodGet, http.MethodPost, http.MethodPatch, http.MethodDelete},
+		AllowedHeaders:   []string{"Content-Type", "X-Organization-Id"},
+		AllowCredentials: false,
+		MaxAge:           300,
+	}))
 
 	r.Get("/health", healthHandler)
 	r.Get("/ready", readyHandler(db, ch))

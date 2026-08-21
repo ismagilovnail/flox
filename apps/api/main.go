@@ -24,6 +24,7 @@ import (
 	"github.com/ismagilovnail/flox/apps/internal/postgres"
 	"github.com/ismagilovnail/flox/apps/internal/telemetry"
 	"github.com/ismagilovnail/flox/apps/internal/tenant"
+	"github.com/ismagilovnail/flox/apps/internal/trafficsource"
 )
 
 func main() {
@@ -84,7 +85,7 @@ func run() error {
 		ch = chConn
 	}
 
-	srv := httpserver.New(logger, cfg.OTelServiceName, db, ch)
+	srv := httpserver.New(logger, cfg.OTelServiceName, db, ch, cfg.AppURL)
 
 	campaignRepo := campaign.NewRepository(db)
 	campaignSvc := campaign.NewService(campaignRepo)
@@ -92,6 +93,12 @@ func run() error {
 	srv.Mux().Route("/campaigns", func(r chi.Router) {
 		r.Use(tenant.Middleware)
 		campaignHandler.Register(r)
+	})
+
+	trafficSourceHandler := trafficsource.NewHandler(trafficsource.NewRepository(db), logger)
+	srv.Mux().Route("/traffic-sources", func(r chi.Router) {
+		r.Use(tenant.Middleware)
+		trafficSourceHandler.Register(r)
 	})
 
 	if ch != nil {

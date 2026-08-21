@@ -1,14 +1,13 @@
 "use client";
 
 import * as React from "react";
-import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { CopyIcon, LinkIcon } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { StatCard } from "@/components/ui/stat-card";
+import { LoadingState } from "@/components/ui/loading-state";
 import { ErrorState } from "@/components/ui/error-state";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
@@ -22,8 +21,9 @@ import {
 import { LineMetricChart } from "@/components/charts/line-metric-chart";
 import { CHART_COLORS } from "@/lib/chart-theme";
 import { formatUsd } from "@/lib/format";
-import { generateCampaignDaily, type CampaignStatus } from "@/lib/mock/campaigns";
-import { useCampaignsStore } from "@/stores/campaigns";
+import type { CampaignStatus } from "@/lib/api/campaigns";
+import { useArchiveCampaign, useCampaign, useUpdateCampaign } from "@/hooks/use-campaigns";
+import { useCampaignDailyClicks, useCampaignDailyRevenue } from "@/hooks/use-campaign-analytics";
 import { CampaignRowActions } from "@/features/campaigns/campaign-row-actions";
 import { CampaignForm, type CampaignFormValues } from "@/features/campaigns/campaign-form";
 import { StreamSetList } from "@/features/stream-sets/stream-set-list";
@@ -37,39 +37,54 @@ const STATUS_VARIANT: Record<CampaignStatus, "success" | "warning" | "outline" |
 };
 
 export function CampaignDetailView({ id }: { id: string }) {
-  const campaign = useCampaignsStore((s) => s.getById(id));
-  const updateCampaign = useCampaignsStore((s) => s.updateCampaign);
-  const setStatus = useCampaignsStore((s) => s.setStatus);
-  const router = useRouter();
+  const campaignQuery = useCampaign(id);
+  const updateCampaign = useUpdateCampaign(id);
+  const archiveCampaign = useArchiveCampaign();
   const [confirmArchive, setConfirmArchive] = React.useState(false);
 
-  const daily = React.useMemo(() => (campaign ? generateCampaignDaily(campaign.id) : []), [campaign]);
+  if (campaignQuery.isPending) {
+    return <LoadingState label="Loading campaign…" />;
+  }
 
-  if (!campaign) {
+  if (campaignQuery.isError) {
     return (
       <ErrorState
-        title="Campaign not found"
-        description="It may have been created in a previous session — mock data resets when the app reloads."
-        onRetry={() => router.push("/campaigns")}
+        title="Couldn't load campaign"
+        description={campaignQuery.error.message}
+        onRetry={() => campaignQuery.refetch()}
       />
     );
   }
 
-  const trackingUrl = `https://${campaign.trackingDomain}/t/${campaign.trackingId}`;
-  const profit = campaign.spend === null ? null : campaign.revenue - campaign.spend;
-  const roi = campaign.spend && campaign.spend > 0 ? ((profit as number) / campaign.spend) * 100 : null;
-  const cvr = campaign.clicks > 0 ? (campaign.conversions / campaign.clicks) * 100 : 0;
-  const cpa = campaign.spend !== null && campaign.conversions > 0 ? campaign.spend / campaign.conversions : null;
-
-  function copyTrackingUrl() {
-    navigator.clipboard.writeText(trackingUrl);
-    toast("Tracking URL copied", { description: trackingUrl });
-  }
+  const campaign = campaignQuery.data;
 
   function handleSettingsSubmit(values: CampaignFormValues) {
-    updateCampaign(campaign!.id, values);
-    if (values.status) setStatus(campaign!.id, values.status);
-    toast("Campaign updated", { description: values.name });
+    updateCampaign.mutate(
+      {
+        name: values.name,
+        trafficSourceId: values.trafficSourceId,
+        fallbackUrl: values.fallbackUrl,
+        notes: values.notes ?? "",
+        status: values.status,
+      },
+      {
+        onSuccess: () => toast("Campaign updated", { description: values.name }),
+        onError: (err) => toast.error("Couldn't update campaign", { description: err.message }),
+      },
+    );
+  }
+
+  function handleArchive() {
+    archiveCampaign.mutate(campaign.id, {
+      onSuccess: () => {
+        setConfirmArchive(false);
+        toast("Campaign archived", { description: campaign.name });
+      },
+      onError: (err) => {
+        setConfirmArchive(false);
+        toast.error("Couldn't archive campaign", { description: err.message });
+      },
+    });
   }
 
   return (
@@ -80,15 +95,6 @@ export function CampaignDetailView({ id }: { id: string }) {
             <h1 className="text-2xl font-semibold tracking-tight">{campaign.name}</h1>
             <Badge variant={STATUS_VARIANT[campaign.status]}>{campaign.status}</Badge>
           </div>
-          <button
-            type="button"
-            onClick={copyTrackingUrl}
-            className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground"
-          >
-            <LinkIcon className="size-3" />
-            <span className="font-mono">{trackingUrl}</span>
-            <CopyIcon className="size-3" />
-          </button>
         </div>
         <CampaignRowActions campaign={campaign} />
       </div>
@@ -101,24 +107,7 @@ export function CampaignDetailView({ id }: { id: string }) {
         </TabsList>
 
         <TabsContent value="overview" className="flex flex-col gap-6">
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-            <StatCard label="Revenue" value={formatUsd(campaign.revenue, 2)} />
-            <StatCard label="Spend" value={campaign.spend === null ? "—" : formatUsd(campaign.spend, 2)} />
-            <StatCard label="Profit" value={profit === null ? "—" : formatUsd(profit, 2)} />
-            <StatCard label="ROI" value={roi === null ? "—" : `${roi > 0 ? "+" : ""}${roi.toFixed(1)}%`} />
-            <StatCard label="Clicks" value={campaign.clicks.toLocaleString("en-US")} />
-            <StatCard label="Conversions" value={campaign.conversions.toLocaleString("en-US")} />
-            <StatCard label="CVR" value={`${cvr.toFixed(2)}%`} />
-            <StatCard label="CPA" value={cpa === null ? "—" : formatUsd(cpa, 2)} />
-          </div>
-
-          <LineMetricChart
-            title="Revenue (last 30 days)"
-            points={daily.map((p) => ({ date: p.date, value: p.revenue }))}
-            color={CHART_COLORS.success}
-            valueFormatter={(v) => formatUsd(v, 0)}
-          />
-
+          <CampaignOverview campaignId={campaign.id} />
           <StreamSetList campaignId={campaign.id} />
         </TabsContent>
 
@@ -130,8 +119,7 @@ export function CampaignDetailView({ id }: { id: string }) {
           <CampaignForm
             defaultValues={{
               name: campaign.name,
-              source: campaign.source,
-              trackingDomain: campaign.trackingDomain,
+              trafficSourceId: campaign.trafficSourceId,
               fallbackUrl: campaign.fallbackUrl,
               notes: campaign.notes,
               status: campaign.status,
@@ -171,19 +159,76 @@ export function CampaignDetailView({ id }: { id: string }) {
             <Button variant="outline" onClick={() => setConfirmArchive(false)}>
               Cancel
             </Button>
-            <Button
-              variant="destructive"
-              onClick={() => {
-                setStatus(campaign.id, "archived");
-                setConfirmArchive(false);
-                toast("Campaign archived", { description: campaign.name });
-              }}
-            >
+            <Button variant="destructive" onClick={handleArchive} disabled={archiveCampaign.isPending}>
               Archive
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>
+  );
+}
+
+/** Real stats from apps/internal/analytics — replaces the mock's Revenue/
+ * Spend/Profit/ROI/Clicks/Conversions/CVR/CPA block. Spend/Profit/ROI/CPA
+ * are gone entirely rather than shown as "—": there is no cost data
+ * pipeline wired to the frontend yet (Phase 27-COST), and "—" implied a
+ * value that just hadn't been entered, not a feature that doesn't exist
+ * yet. See docs/frontend-integration.md. */
+function CampaignOverview({ campaignId }: { campaignId: string }) {
+  const clicksQuery = useCampaignDailyClicks(campaignId);
+  const revenueQuery = useCampaignDailyRevenue(campaignId);
+
+  if (clicksQuery.isPending || revenueQuery.isPending) {
+    return <LoadingState label="Loading analytics…" />;
+  }
+  if (clicksQuery.isError) {
+    return <ErrorState title="Couldn't load click analytics" description={clicksQuery.error.message} onRetry={() => clicksQuery.refetch()} />;
+  }
+  if (revenueQuery.isError) {
+    return (
+      <ErrorState
+        title="Couldn't load revenue analytics"
+        description={revenueQuery.error.message}
+        onRetry={() => revenueQuery.refetch()}
+      />
+    );
+  }
+
+  const totalClicks = clicksQuery.data.counts
+    .filter((c) => c.type === "SOURCE_CLICK")
+    .reduce((sum, c) => sum + c.eventCount, 0);
+  // "Conversions" here is total deposit events (CPA_ACCEPT + CPA_REDEP) —
+  // matches §26.5's own total_deposits definition, not just first deposits.
+  const totalConversions = revenueQuery.data.revenue
+    .filter((r) => r.type === "CPA_ACCEPT" || r.type === "CPA_REDEP")
+    .reduce((sum, r) => sum + r.eventCount, 0);
+  const totalRevenue = revenueQuery.data.revenue.reduce((sum, r) => sum + r.revenueUsd, 0);
+  const cvr = totalClicks > 0 ? (totalConversions / totalClicks) * 100 : 0;
+
+  const revenueByDay = new Map<string, number>();
+  for (const r of revenueQuery.data.revenue) {
+    revenueByDay.set(r.day, (revenueByDay.get(r.day) ?? 0) + r.revenueUsd);
+  }
+  const dailyPoints = Array.from(revenueByDay.entries())
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([date, value]) => ({ date, value }));
+
+  return (
+    <>
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <StatCard label="Revenue" value={formatUsd(totalRevenue, 2)} />
+        <StatCard label="Clicks" value={totalClicks.toLocaleString("en-US")} />
+        <StatCard label="Conversions" value={totalConversions.toLocaleString("en-US")} />
+        <StatCard label="CVR" value={`${cvr.toFixed(2)}%`} />
+      </div>
+
+      <LineMetricChart
+        title="Revenue (last 30 days)"
+        points={dailyPoints}
+        color={CHART_COLORS.success}
+        valueFormatter={(v) => formatUsd(v, 0)}
+      />
+    </>
   );
 }

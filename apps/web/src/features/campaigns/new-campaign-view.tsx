@@ -3,23 +3,29 @@
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 
-import { useCampaignsStore } from "@/stores/campaigns";
+import { useCreateCampaign } from "@/hooks/use-campaigns";
 import { CampaignForm, type CampaignFormValues } from "@/features/campaigns/campaign-form";
 
 export function NewCampaignView() {
   const router = useRouter();
-  const addCampaign = useCampaignsStore((s) => s.addCampaign);
+  const createCampaign = useCreateCampaign();
 
   function handleSubmit(values: CampaignFormValues) {
-    const id = addCampaign({
-      name: values.name,
-      source: values.source,
-      trackingDomain: values.trackingDomain,
-      fallbackUrl: values.fallbackUrl,
-      notes: values.notes ?? "",
-    });
-    toast("Campaign created", { description: values.name });
-    router.push(`/campaigns/${id}`);
+    createCampaign.mutate(
+      {
+        name: values.name,
+        trafficSourceId: values.trafficSourceId,
+        fallbackUrl: values.fallbackUrl,
+        notes: values.notes ?? "",
+      },
+      {
+        onSuccess: (created) => {
+          toast("Campaign created", { description: created.name });
+          router.push(`/campaigns/${created.id}`);
+        },
+        onError: (err) => toast.error("Couldn't create campaign", { description: err.message }),
+      },
+    );
   }
 
   return (
