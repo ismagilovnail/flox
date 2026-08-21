@@ -19,6 +19,7 @@ import (
 	"github.com/ismagilovnail/flox/apps/internal/chstore"
 	"github.com/ismagilovnail/flox/apps/internal/config"
 	"github.com/ismagilovnail/flox/apps/internal/conversion"
+	"github.com/ismagilovnail/flox/apps/internal/conversions"
 	"github.com/ismagilovnail/flox/apps/internal/cost"
 	"github.com/ismagilovnail/flox/apps/internal/httpserver"
 	"github.com/ismagilovnail/flox/apps/internal/logging"
@@ -156,6 +157,12 @@ func run() error {
 		srv.Mux().Route("/analytics/ltv", func(r chi.Router) {
 			r.Use(tenant.Middleware)
 			ltvHandler.Register(r)
+		})
+
+		conversionsHandler := conversions.NewHandler(conversions.NewService(events), logger)
+		srv.Mux().Route("/conversions", func(r chi.Router) {
+			r.Use(tenant.Middleware)
+			conversionsHandler.Register(r)
 		})
 	}
 

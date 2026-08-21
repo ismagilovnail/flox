@@ -7,7 +7,8 @@
  */
 
 import { genId } from "@/lib/id";
-import { generateConversions, type CpaStatus } from "@/lib/mock/conversions";
+import { generateConversions } from "@/lib/mock/conversions";
+import type { CpaStatus } from "@/lib/api/conversions";
 import { NETWORKS } from "@/lib/mock/networks";
 import { EVENT_MAPPINGS } from "@/lib/mock/event-mappings";
 

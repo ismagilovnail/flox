@@ -67,13 +67,16 @@ single concrete, honestly-deliverable slice:
   integrating it.
 - `/ltv-cohorts` — literally a `<PageStub>`; no UI was ever built against
   the Phase 26.5 LTV endpoints to integrate in the first place.
-- Conversions/postbacks list-management pages — no backend exists yet for
-  these. **Traffic Sources, Networks, Offers, Stream Sets/Filters/Flows,
-  and the Routing Simulator are no longer on this list** — full CRUD (or,
-  for the Simulator, a real `POST /campaigns/{campaignId}/routing/
-  simulate` endpoint) landed for all of them; see
-  `docs/traffic-sources.md`, `docs/networks-offers.md`,
-  `docs/stream-sets.md`, and `docs/routing-simulate.md`.
+- Postback Logs (incoming/outgoing delivery log) and Event Mappings CRUD
+  (per-network raw-status → CPA-status config) — no backend wiring yet for
+  either, though both tables (`event_mappings`, and ClickHouse's
+  `postback_events`) already exist. **Traffic Sources, Networks, Offers,
+  Stream Sets/Filters/Flows, the Routing Simulator, and Conversions
+  (list + detail/timeline) are no longer on this list** — full CRUD (or,
+  for the Simulator/Conversions, a real read/compute endpoint) landed for
+  all of them; see `docs/traffic-sources.md`, `docs/networks-offers.md`,
+  `docs/stream-sets.md`, `docs/routing-simulate.md`, and
+  `docs/conversions.md`.
 
 ## Verified
 

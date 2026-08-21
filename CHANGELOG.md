@@ -5,6 +5,93 @@ per-phase, matching `CLAUDE.md`'s phase protocol. The one exception is
 [Between phases], below: spec amendments and the code changes that follow from
 them land between phases and would otherwise be invisible here.
 
+## [Conversions] — List + detail/timeline wired to real ClickHouse-backed API
+
+### Scope
+
+Two rounds of `AskUserQuestion`. First picked "Conversions/Postbacks" as
+the domain from three candidates. Inspection then found the hard backend
+(dedup, delivery, ClickHouse logging) already fully built and wired into
+`apps/tracker`/`apps/worker` — only a browser-facing read API was
+missing, and the domain was really three separable pieces. Second
+question narrowed to this slice: Conversions list + detail/timeline,
+deferring Postback Logs and Event Mappings CRUD. See `docs/conversions.md`.
+
+### Added
+
+- **`apps/internal/conversions`** (new, plural — distinct from the
+  existing singular `apps/internal/conversion`, Phase 23's write-side
+  dedup/status-progression engine, untouched this phase): a thin read
+  layer over ClickHouse's `conversion_events`/`click_events`/
+  `tracking_events`, mirroring `apps/internal/analytics`'s own shape. `GET
+  /conversions` (org-wide, date-ranged, paginated) lists CPA_* rows; `GET
+  /conversions/{clickId}` returns a merged, chronological timeline of
+  every funnel + conversion event for that click_id.
+- **`chstore` additions**: `ListConversions`/`CountConversions`/
+  `ConversionsByClickID`/`FunnelByClickID` — the first read methods on
+  `EventStore` for `click_events`/`tracking_events`/`conversion_events`
+  (previously write-only, fed by `InsertBatch`).
+- A click_id can carry more than one `conversion_events` row (HOLD, then
+  ACCEPT, then REDEP, ...) — real status history, not duplicate rows to
+  dedupe. The old mock's fixed six-stage funnel (Click/Landing/PWA/Offer/
+  Conversion/Postback, four stages fabricated with synthetic sentences)
+  is replaced by a real, variable-length chronological list of whatever
+  §43 events actually happened for that click_id.
+- Frontend: `lib/api/conversions.ts` + `hooks/use-conversions.ts` (new,
+  TanStack Query). `conversion-list.tsx`/`conversion-detail-view.tsx`/
+  `conversion-timeline.tsx`/`conversion-columns.tsx` all rewritten
+  against the real hooks. `CpaStatus`/`CPA_STATUSES` moved from
+  `lib/mock/conversions.ts` to `lib/api/conversions.ts` (a real domain
+  enum, not mock-specific) — every consumer, including the still-mocked
+  Postback Logs/Event Mappings features, now imports it from there.
+
+### Removed
+
+- **Offer column**: `conversion_events` carries no `offer_id` (only
+  `flow_id`, which would need a separate Postgres join to resolve — out
+  of scope). Campaign and Network (both directly on the ClickHouse row)
+  took its place.
+- **Postback delivery status / "Resend postback"**: the deferred
+  Postback Logs domain — the old mock's `postbackStatus` column, its
+  StatCard, and the resend button are gone entirely, not shown as "—" or
+  left disabled.
+- **`stores/conversions.ts`** — no remaining importers once
+  `ConversionList`/`ConversionDetailView` switched to the real hooks;
+  deleted outright. `lib/mock/conversions.ts` stays, trimmed to just
+  what the still-mocked Postback Logs feature cross-references.
+
+### Fixed
+
+`GET /conversions?to=YYYY-MM-DD` parsed `to` as midnight UTC of that
+date. `internal/analytics`'s daily endpoints do the same thing safely,
+because they query pre-aggregated day-granularity materialized views
+where a date-only comparison is exactly right. This package queries raw
+`event_at` timestamps — every event later that same day was silently
+excluded (`event_at <= to` false for anything after 00:00:00). Caught
+live seeding test data "today" and passing an explicit `?to=<today>`.
+Fixed by pushing an explicit date-only `to` to end-of-day (`+24h-1ns`) in
+the handler.
+
+### Verified
+
+- Backend: `go build/vet/gofmt/test ./...` all green — `chstore`
+  integration tests against real ClickHouse for all four new query
+  methods, `conversions.Service` unit tests against a fake repository
+  (range/limit validation, chronological funnel+conversion merge, the
+  no-events-found 404).
+- Frontend: `tsc --noEmit`/`eslint` clean.
+- Full manual browser pass against the real running `api` + `web` dev
+  servers: seeded two real click_ids' worth of ClickHouse events (one
+  full funnel, one bare click-then-decline) via a throwaway, never-
+  committed `chstore.EventStore.InsertBatch` call against a real test
+  campaign/network created through the real API. Confirmed the list's
+  multi-row status history with resolved campaign/network names, both
+  detail pages' real and genuinely different-length timelines, a clean
+  404 error state for an unknown click_id, and that the still-mocked
+  Postback Logs/Event Mapping panels (both touched by the `CpaStatus`
+  move) kept rendering correctly. Test campaign, network, and their
+  ClickHouse rows removed afterward.
+
 ## [Routing Simulator] — Wired to a real /routing/simulate endpoint
 
 ### Scope

@@ -1,47 +1,72 @@
 import type { LucideIcon } from "lucide-react";
-import { CheckCircle2Icon, MousePointerClickIcon, LayoutTemplateIcon, SendIcon, SmartphoneIcon, TargetIcon } from "lucide-react";
+import { BellIcon, CheckCircle2Icon, LayoutTemplateIcon, MousePointerClickIcon, SendIcon, SmartphoneIcon } from "lucide-react";
 import { format } from "date-fns";
 
 import { Card } from "@/components/ui/card";
 import { Caption, Mono } from "@/components/ui/typography";
-import type { TimelineStage, TimelineStep } from "@/lib/mock/conversions";
+import type { CpaStatus, EventType, TimelineEvent } from "@/lib/api/conversions";
 
-const STAGE_ICON: Record<TimelineStage, LucideIcon> = {
-  Click: MousePointerClickIcon,
-  Landing: LayoutTemplateIcon,
-  PWA: SmartphoneIcon,
-  Offer: TargetIcon,
-  Conversion: CheckCircle2Icon,
-  Postback: SendIcon,
+/** Real event types (§43, ~20 of them) grouped into the same six icon
+ * buckets the old fixed-stage mock used, but the label under each icon is
+ * the real event type, not a synthesized sentence — this timeline shows
+ * whatever actually happened for a click_id, in whatever order, not a
+ * fixed six-item funnel every conversion gets forced into. */
+function iconFor(type: EventType): LucideIcon {
+  if (type === "SOURCE_CLICK" || type === "SOURCE_FILTER") return MousePointerClickIcon;
+  if (type.startsWith("LAND_") || type.startsWith("POSTLANDING_")) return LayoutTemplateIcon;
+  if (type.startsWith("PWA_") || type === "IOS_INSTALL") return SmartphoneIcon;
+  if (type.startsWith("NOTIFICATION_")) return BellIcon;
+  if (type.startsWith("TG_")) return SendIcon;
+  return CheckCircle2Icon; // CPA_*
+}
+
+const CPA_LABEL: Record<CpaStatus, string> = {
+  CPA_HOLD: "Registration held",
+  CPA_ACCEPT: "First deposit accepted",
+  CPA_REDEP: "Re-deposit accepted",
+  CPA_DECLINE: "Conversion declined",
+  CPA_TRASH: "Marked junk/duplicate",
 };
+
+function labelFor(type: EventType): string {
+  if (type in CPA_LABEL) return CPA_LABEL[type as CpaStatus];
+  return type
+    .toLowerCase()
+    .split("_")
+    .map((w) => w[0].toUpperCase() + w.slice(1))
+    .join(" ");
+}
 
 function Connector() {
   return <div className="ml-[15px] h-4 w-px bg-border" />;
 }
 
-export function ConversionTimeline({ steps }: { steps: TimelineStep[] }) {
+export function ConversionTimeline({ events }: { events: TimelineEvent[] }) {
   return (
     <div className="flex flex-col">
-      {steps.map((step, i) => {
-        const Icon = STAGE_ICON[step.stage];
+      {events.map((event, i) => {
+        const Icon = iconFor(event.type);
         return (
-          <div key={step.stage}>
+          <div key={`${event.type}-${event.eventAt}`}>
             <Card size="sm" className="flex-row items-center gap-3 px-3 py-2.5">
               <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-muted">
                 <Icon className="size-4 text-muted-foreground" />
               </span>
               <div className="flex min-w-0 flex-1 flex-col">
                 <div className="flex items-center justify-between gap-2">
-                  <span className="text-sm font-medium">{step.stage}</span>
+                  <span className="text-sm font-medium">{labelFor(event.type)}</span>
                   <Mono className="shrink-0 text-xs text-muted-foreground">
-                    {format(new Date(step.timestamp), "MMM d, HH:mm:ss")}
+                    {format(new Date(event.eventAt), "MMM d, HH:mm:ss")}
                   </Mono>
                 </div>
-                <Caption>{step.label}</Caption>
-                {step.description && <Caption className="text-muted-foreground/80">{step.description}</Caption>}
+                {event.isConversion && (
+                  <Caption className="text-muted-foreground/80">
+                    {event.hasUsdValue ? `${(event.revenue ?? 0).toFixed(2)} ${event.currency}` : "No revenue on this event"}
+                  </Caption>
+                )}
               </div>
             </Card>
-            {i < steps.length - 1 && <Connector />}
+            {i < events.length - 1 && <Connector />}
           </div>
         );
       })}

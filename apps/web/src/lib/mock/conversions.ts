@@ -1,14 +1,17 @@
 /**
- * Conversions (§29, §43) — CPA events. `status` is a proper enum, never
- * collapsed into one "conversion" type (CLAUDE.md invariant #2). Token
- * values match the authoritative event model in CLAUDE.md exactly
- * (CPA_HOLD/CPA_ACCEPT/CPA_REDEP/CPA_DECLINE/CPA_TRASH) so nothing needs
- * renaming once Phase 23 (Conversion Engine) produces the real thing.
+ * Conversions mock — kept alive only for `generateConversions`, which the
+ * still-mocked Postback Logs feature (lib/mock/postback-logs.ts)
+ * cross-references to synthesize fake postback attempts. The real
+ * Conversions list/detail/timeline (§29, §43) is wired to the real
+ * backend now — see lib/api/conversions.ts, which is also the real home
+ * for CpaStatus/CPA_STATUSES (a real domain enum, not mock-specific,
+ * imported from there directly by every consumer, this file included).
  */
 
 import { genId } from "@/lib/id";
 import { generateCampaigns } from "@/lib/mock/campaigns";
 import { OFFERS } from "@/lib/mock/offers";
+import type { CpaStatus } from "@/lib/api/conversions";
 
 function mulberry32(seed: number) {
   return function rand() {
@@ -23,9 +26,6 @@ function mulberry32(seed: number) {
 function round2(n: number) {
   return Math.round(n * 100) / 100;
 }
-
-export type CpaStatus = "CPA_HOLD" | "CPA_ACCEPT" | "CPA_REDEP" | "CPA_DECLINE" | "CPA_TRASH";
-export const CPA_STATUSES: CpaStatus[] = ["CPA_HOLD", "CPA_ACCEPT", "CPA_REDEP", "CPA_DECLINE", "CPA_TRASH"];
 
 export type PostbackDeliveryStatus = "sent" | "pending" | "failed" | "not_configured";
 

@@ -14,7 +14,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Mono } from "@/components/ui/typography";
 import { useNetworksStore } from "@/stores/networks";
 import { useEventMappingsStore } from "@/stores/event-mappings";
-import { CPA_STATUSES, type CpaStatus } from "@/lib/mock/conversions";
+import { CPA_STATUSES, type CpaStatus } from "@/lib/api/conversions";
 
 const STATUS_VARIANT: Record<CpaStatus, "warning" | "success" | "danger" | "secondary"> = {
   CPA_HOLD: "warning",

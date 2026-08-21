@@ -1,21 +1,15 @@
 "use client";
 
-import * as React from "react";
-import { useRouter } from "next/navigation";
-import { toast } from "sonner";
-import { SendIcon } from "lucide-react";
-
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
 import { ErrorState } from "@/components/ui/error-state";
+import { LoadingState } from "@/components/ui/loading-state";
 import { StatCard } from "@/components/ui/stat-card";
 import { Mono } from "@/components/ui/typography";
-import { useConversionsStore } from "@/stores/conversions";
-import { useCampaignsStore } from "@/stores/campaigns";
-import { useOffersStore } from "@/stores/offers";
-import { useNetworksStore } from "@/stores/networks";
-import { generateConversionTimeline, type CpaStatus, type PostbackDeliveryStatus } from "@/lib/mock/conversions";
+import { useConversionTimeline } from "@/hooks/use-conversions";
+import { useCampaign } from "@/hooks/use-campaigns";
+import { useNetwork } from "@/hooks/use-networks";
+import type { CpaStatus } from "@/lib/api/conversions";
 import { ConversionTimeline } from "@/features/conversions/conversion-timeline";
 
 const STATUS_VARIANT: Record<CpaStatus, "warning" | "success" | "danger" | "secondary"> = {
@@ -26,37 +20,28 @@ const STATUS_VARIANT: Record<CpaStatus, "warning" | "success" | "danger" | "seco
   CPA_TRASH: "secondary",
 };
 
-const POSTBACK_VARIANT: Record<PostbackDeliveryStatus, "success" | "warning" | "danger" | "outline"> = {
-  sent: "success",
-  pending: "warning",
-  failed: "danger",
-  not_configured: "outline",
-};
-
 export function ConversionDetailView({ id }: { id: string }) {
-  const conversion = useConversionsStore((s) => s.getById(id));
-  const resendPostback = useConversionsStore((s) => s.resendPostback);
-  const campaign = useCampaignsStore((s) => (conversion ? s.getById(conversion.campaignId) : undefined));
-  const offer = useOffersStore((s) => (conversion ? s.getById(conversion.offerId) : undefined));
-  const network = useNetworksStore((s) => (conversion ? s.getById(conversion.networkId) : undefined));
-  const router = useRouter();
+  const timelineQuery = useConversionTimeline(id);
+  const campaignQuery = useCampaign(timelineQuery.data?.campaignId ?? "");
+  const networkQuery = useNetwork(timelineQuery.data?.networkId ?? "");
 
-  const timeline = React.useMemo(() => (conversion ? generateConversionTimeline(conversion) : []), [conversion]);
+  if (timelineQuery.isPending) {
+    return <LoadingState label="Loading conversion…" />;
+  }
 
-  if (!conversion) {
+  if (timelineQuery.isError) {
     return (
       <ErrorState
         title="Conversion not found"
-        description="It may have been created in a previous session — mock data resets when the app reloads."
-        onRetry={() => router.push("/conversions")}
+        description={timelineQuery.error.message}
+        onRetry={() => timelineQuery.refetch()}
       />
     );
   }
 
-  function handleResend() {
-    resendPostback(conversion!.id);
-    toast("Postback resent", { description: conversion!.clickId });
-  }
+  const timeline = timelineQuery.data;
+  const conversionEvents = timeline.events.filter((e) => e.isConversion);
+  const latest = conversionEvents.at(-1);
 
   return (
     <div className="flex flex-col gap-6">
@@ -64,45 +49,35 @@ export function ConversionDetailView({ id }: { id: string }) {
         <div className="flex flex-col gap-1.5">
           <div className="flex items-center gap-2">
             <h1 className="text-2xl font-semibold tracking-tight">
-              <Mono>{conversion.clickId}</Mono>
+              <Mono>{timeline.clickId}</Mono>
             </h1>
-            <Badge variant={STATUS_VARIANT[conversion.status]}>{conversion.status.replace("CPA_", "")}</Badge>
+            {latest && (
+              <Badge variant={STATUS_VARIANT[latest.type as CpaStatus]}>{latest.type.replace("CPA_", "")}</Badge>
+            )}
           </div>
           <p className="text-xs text-muted-foreground">
-            {campaign?.name ?? conversion.campaignId} · {offer?.name ?? conversion.offerId} ·{" "}
-            {network?.name ?? conversion.networkId}
+            {campaignQuery.data?.name ?? timeline.campaignId}
+            {timeline.networkId ? ` · ${networkQuery.data?.name ?? timeline.networkId}` : ""}
           </p>
         </div>
-        <Button variant="outline" onClick={handleResend} disabled={conversion.postbackStatus === "not_configured"}>
-          <SendIcon className="size-4" />
-          Resend postback
-        </Button>
       </div>
 
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
         <StatCard
           label="Revenue"
-          value={conversion.revenue === 0 ? "—" : `${conversion.revenue.toFixed(2)} ${conversion.currency}`}
+          value={latest?.hasUsdValue ? `${(latest.revenue ?? 0).toFixed(2)} ${latest.currency}` : "—"}
         />
-        <StatCard
-          label="Postback"
-          value={
-            <Badge variant={POSTBACK_VARIANT[conversion.postbackStatus]} className="text-base">
-              {conversion.postbackStatus.replace("_", " ")}
-            </Badge>
-          }
-        />
-        <StatCard label="Event time" value={new Date(conversion.eventAt).toLocaleString("en-US")} />
-        <StatCard label="Network" value={network?.name ?? conversion.networkId} />
+        <StatCard label="Status" value={latest ? latest.type.replace("CPA_", "") : "No conversion yet"} />
+        <StatCard label="Events recorded" value={timeline.events.length} />
       </div>
 
       <Card>
         <CardHeader>
           <CardTitle>Timeline</CardTitle>
-          <CardDescription>Click → Landing → PWA → Offer → Conversion → Postback (§29).</CardDescription>
+          <CardDescription>Every recorded event for this click, in order.</CardDescription>
         </CardHeader>
         <CardContent>
-          <ConversionTimeline steps={timeline} />
+          <ConversionTimeline events={timeline.events} />
         </CardContent>
       </Card>
     </div>

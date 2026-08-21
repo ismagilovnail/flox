@@ -19,94 +19,79 @@ referenced below as §N).
 ## CURRENT STATE — UPDATE THIS EVERY PHASE
 
 ```
-CURRENT PHASE : PHASE (unnumbered) — Wire Routing Simulator to
-                /routing/simulate
-STATUS        : done — direct instruction, no scope negotiation needed
-                (user picked this exact candidate from the prior phase's
-                own NEXT list). New apps/internal/routingsimulate package:
-                Service.Simulate loads a campaign's real config via
-                routingstore.LoadRoutingConfig and calls
-                routing.Engine.Explain (never Resolve — the simulator's
-                whole point is the trace Resolve doesn't return), mounted
-                as POST /campaigns/{campaignId}/routing/simulate. No new
-                routing decision logic anywhere (CLAUDE.md #1) — this
-                phase is a thin reshape of an already-existing pure
-                evaluation into JSON. routing.Explanation gained one field
-                (DestinationLabel, the human label resolveDestination
-                already computed internally but discarded) and
-                Trace/StreamSetEvaluation/FlowCandidate gained JSON tags
-                matching the frontend's field names exactly, reused
-                directly with no separate DTO layer. Sticky is never
-                simulated (always Sticky: nil — a fabricated cookie would
-                be indistinguishable from a real returning visitor's,
-                which is misleading for a debugging tool); the response's
-                stickyNote is generated from the campaign's real
-                sticky_flow flag instead of the old mock's static,
-                increasingly-stale string. deriveVisitKey is reimplemented
-                byte-for-byte in Go; an all-empty request against a
-                multi-flow tie now surfaces as a real 422
-                (routing.ErrNoVisitKey), not silently guessed.
-                Frontend: lib/routing-simulate.ts (the mock) deleted
-                outright — its types moved into lib/api/routing.ts, the
-                seam file built in an earlier phase specifically for this
-                swap ("Phase 27 only ever changes this file's body," now
-                true). routing-simulator-view.tsx dropped its
-                useStreamSetsStore read; simulator-form.tsx/stream-set-
-                trace.tsx needed only an import-path change (both already
-                pure/prop-driven); simulator-result.tsx dropped the
-                selectedFlow boolean check (now flowCandidates.some(c =>
-                c.selected)) and the kind-keyed DESTINATION_LABEL lookup
-                (now renders destination.label directly — the backend
-                already sends the exact display string). Once the
-                Simulator stopped reading stores/stream-sets.ts and
-                lib/mock/stream-sets.ts, a repo-wide grep found zero
-                remaining importers of either — both deleted outright
-                (this session's "drop it, don't fake it" precedent),
-                not left as an orphaned pair.
-                Two real bugs caught during manual browser verification,
-                both the same root mistake hit twice: Go's encoding/json
-                omitempty omits ANY zero-length slice, nil or not, not
-                just nil ones. (1) routingsimulate.Response.FlowCandidates
-                was nil (no draw ran) when no stream set matched, encoding
-                as JSON null and crashing SimulatorResult's unconditional
-                .some() call — fixed by normalizing to []
-                in Service.Simulate. (2) routing.Trace.Children and
-                streamset.FilterNode.Children both had omitempty; an empty
-                top-level filter group ("no filters — matches all
-                traffic," a normal UI-documented config) produces a real
-                non-nil empty Children that omitempty hid anyway —
-                crashing not just the Simulator but the Stream Sets card
-                on ANY campaign with an empty-filter stream set, since
-                hydrateFilterNode/FilterTraceView call .map()/.length on
-                children unconditionally. Fixed by dropping omitempty from
-                both types' Children tags. Neither bug was reachable in
-                any prior phase's verification pass because no earlier
-                test fixture had exercised an empty root filter group
-                through a real HTTP round-trip. See
-                docs/routing-simulate.md for full detail on both.
-                Verified: go build/vet/gofmt/test ./... all green (5 new
-                routingsimulate tests, 2 new regression tests for the
-                omitempty bug in streamset/routing, the pre-existing
-                18-case routing conformance fixture unchanged); tsc
-                --noEmit and eslint clean; full manual browser pass —
-                matched and non-matched filter simulation, weighted
-                50/50 tie-break with a deterministic pick, sticky-enabled
-                note toggling live against a real Postgres update, both
-                bugs caught and fixed in the same pass. Test campaign
-                (cascading to its stream set), offer, and network removed
-                via real DELETE afterward.
-                Phase 27's remaining gap (conversions/postbacks, the
-                /analytics report builder, /ltv-cohorts) is unchanged —
-                Traffic Sources, Networks, Offers, Stream Sets/Filters/
-                Flows, and the Routing Simulator are all off that list
-                now, see docs/frontend-integration.md.
-LAST COMMIT   : feat(routing): wire Routing Simulator to /routing/simulate
-NEXT          : confirm scope before starting. Candidates: FB/TikTok
+CURRENT PHASE : PHASE (unnumbered) — Conversions list + detail/timeline
+STATUS        : done — two rounds of AskUserQuestion. First: user picked
+                "Conversions/Postbacks" as the domain from three candidates.
+                Inspection then found the hard backend (dedup, delivery,
+                ClickHouse logging) already fully built and wired into
+                apps/tracker/apps/worker — only a browser-facing read API
+                was missing, and the domain was really three separable
+                pieces. Second question narrowed to this slice, deferring
+                Postback Logs and Event Mappings CRUD.
+                New apps/internal/conversions package (plural — distinct
+                from the existing singular apps/internal/conversion, Phase
+                23's write-side dedup/status-progression engine, untouched
+                this phase): a thin read layer over ClickHouse's
+                conversion_events/click_events/tracking_events, mirroring
+                apps/internal/analytics's own shape. GET /conversions
+                (org-wide, date-ranged, paginated) lists CPA_* rows; GET
+                /conversions/{clickId} returns a merged, chronological
+                timeline of every funnel + conversion event for that
+                click_id. New chstore.go additions: ListConversions/
+                CountConversions/ConversionsByClickID/FunnelByClickID.
+                A click_id can carry more than one conversion_events row
+                (HOLD, then ACCEPT, then REDEP, ...) — real status history,
+                not duplicate rows; the old mock's fixed six-stage funnel
+                (Click/Landing/PWA/Offer/Conversion/Postback, four stages
+                fabricated) is replaced by a real, variable-length
+                chronological list of whatever §43 events actually
+                happened for that click_id, however many there are.
+                Dropped, not faked: Offer (conversion_events carries no
+                offer_id, only flow_id — resolving it needs a Postgres
+                join out of scope) and postback delivery status/"Resend
+                postback" (the deferred Postback Logs domain). Campaign/
+                network names resolved client-side via the already-real
+                useCampaigns()/useNetworks() hooks, same pattern the old
+                mock UI used against its own mock stores.
+                CpaStatus/CPA_STATUSES moved from lib/mock/conversions.ts
+                to lib/api/conversions.ts (a real domain enum, not mock-
+                specific); every consumer, including the still-mocked
+                Postback Logs/Event Mappings features, now imports from
+                there. stores/conversions.ts deleted outright (no
+                remaining importers once the real hooks landed);
+                lib/mock/conversions.ts kept, trimmed to just what
+                Postback Logs' mock still cross-references.
+                A real bug caught during manual verification:
+                GET /conversions?to=YYYY-MM-DD parsed to midnight UTC,
+                silently excluding every same-day event — correct for
+                internal/analytics's day-granularity materialized views,
+                wrong for this package's raw event_at timestamps. Fixed
+                by pushing an explicit date-only `to` to end-of-day
+                (+24h-1ns) in the handler. See docs/conversions.md.
+                Verified: go build/vet/gofmt/test ./... all green (chstore
+                integration tests against real ClickHouse for all four new
+                query methods, conversions.Service unit tests against a
+                fake repo for range/limit validation + chronological
+                merge + the no-events 404); tsc --noEmit/eslint clean;
+                full manual browser pass — seeded two real click_ids'
+                worth of ClickHouse events via a throwaway, never-committed
+                InsertBatch call against a real test campaign/network;
+                confirmed the list's multi-row status history, both
+                detail pages' real (different-length) timelines, a clean
+                404 for an unknown click_id, and that the still-mocked
+                Postback Logs/Event Mapping panels (both touched by the
+                CpaStatus move) kept rendering correctly. Test campaign,
+                network, and ClickHouse rows removed afterward.
+LAST COMMIT   : feat(conversions): wire Conversions list + detail/timeline
+                to real ClickHouse-backed API
+NEXT          : confirm scope before starting. Candidates: Postback Logs
+                (ClickHouse postback_events, replay-capable) or Event
+                Mappings CRUD (Postgres event_mappings, already migrated)
+                — the two remaining pieces of this domain; FB/TikTok
                 ad-spend import (§74's CostProvider interface, the "later"
-                half of §27-COST), Landing/PWA/Postlanding/Pixels CRUD
+                half of §27-COST); or Landing/PWA/Postlanding/Pixels CRUD
                 (would unblock the stages the Stream Sets phase had to
-                drop from the Flow editor), or the next domain slice
-                (Conversions/Postbacks — both still fully mocked).
+                drop from the Flow editor).
 ```
 
 > At the end of every phase: update the four lines above, add a CHANGELOG entry,

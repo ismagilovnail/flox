@@ -2,7 +2,7 @@ import { create } from "zustand";
 
 import { genId } from "@/lib/id";
 import { EVENT_MAPPINGS, type EventMapping } from "@/lib/mock/event-mappings";
-import type { CpaStatus } from "@/lib/mock/conversions";
+import type { CpaStatus } from "@/lib/api/conversions";
 
 export type EventMappingInput = {
   networkId: string;

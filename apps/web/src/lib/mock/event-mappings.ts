@@ -5,7 +5,7 @@
  * (Phase 23) runs at ingest time; here it's the team-editable config surface.
  */
 
-import type { CpaStatus } from "@/lib/mock/conversions";
+import type { CpaStatus } from "@/lib/api/conversions";
 
 export type EventMapping = {
   id: string;

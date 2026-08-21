@@ -3,26 +3,53 @@
 import * as React from "react";
 
 import { DataTable } from "@/components/ui/data-table";
-import { useConversionsStore } from "@/stores/conversions";
-import { useCampaignsStore } from "@/stores/campaigns";
-import { useOffersStore } from "@/stores/offers";
+import { LoadingState } from "@/components/ui/loading-state";
+import { ErrorState } from "@/components/ui/error-state";
+import { useConversions } from "@/hooks/use-conversions";
+import { useCampaigns } from "@/hooks/use-campaigns";
+import { useNetworks } from "@/hooks/use-networks";
 import { conversionColumns } from "@/features/conversions/conversion-columns";
 
 export function ConversionList() {
-  const conversions = useConversionsStore((s) => s.conversions);
-  const campaigns = useCampaignsStore((s) => s.campaigns);
-  const offers = useOffersStore((s) => s.offers);
+  const conversionsQuery = useConversions();
+  const campaignsQuery = useCampaigns();
+  const networksQuery = useNetworks();
 
   const campaignNameById = React.useMemo(
-    () => Object.fromEntries(campaigns.map((c) => [c.id, c.name])),
-    [campaigns],
+    () => Object.fromEntries((campaignsQuery.data?.campaigns ?? []).map((c) => [c.id, c.name])),
+    [campaignsQuery.data],
   );
-  const offerNameById = React.useMemo(() => Object.fromEntries(offers.map((o) => [o.id, o.name])), [offers]);
+  const networkNameById = React.useMemo(
+    () => Object.fromEntries((networksQuery.data?.networks ?? []).map((n) => [n.id, n.name])),
+    [networksQuery.data],
+  );
 
   const columns = React.useMemo(
-    () => conversionColumns(campaignNameById, offerNameById),
-    [campaignNameById, offerNameById],
+    () => conversionColumns(campaignNameById, networkNameById),
+    [campaignNameById, networkNameById],
   );
+
+  if (conversionsQuery.isPending) {
+    return (
+      <div className="flex flex-col gap-4">
+        <h1 className="text-2xl font-semibold tracking-tight">Conversions</h1>
+        <LoadingState label="Loading conversions…" />
+      </div>
+    );
+  }
+
+  if (conversionsQuery.isError) {
+    return (
+      <div className="flex flex-col gap-4">
+        <h1 className="text-2xl font-semibold tracking-tight">Conversions</h1>
+        <ErrorState
+          title="Couldn't load conversions"
+          description={conversionsQuery.error.message}
+          onRetry={() => conversionsQuery.refetch()}
+        />
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col gap-4">
@@ -30,7 +57,8 @@ export function ConversionList() {
 
       <DataTable
         columns={columns}
-        data={conversions}
+        data={conversionsQuery.data.conversions}
+        getRowId={(row) => `${row.clickId}:${row.type}:${row.eventAt}`}
         searchPlaceholder="Search by click ID..."
         emptyTitle="No conversions yet"
         emptyDescription="CPA events will show up here once the tracker starts recording postbacks."
