@@ -21,11 +21,27 @@ import {
 import { Button } from "@/components/ui/button";
 import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
-import { useStreamSetsStore } from "@/stores/stream-sets";
-import { useNetworksStore } from "@/stores/networks";
+import { LoadingState } from "@/components/ui/loading-state";
+import { ErrorState } from "@/components/ui/error-state";
 import { genId } from "@/lib/id";
 import { emptyGroup } from "@/lib/filters";
-import { type StreamSet } from "@/lib/mock/stream-sets";
+import {
+  dehydrateFilterNode,
+  hydrateRootFilter,
+  type CreateStreamSetInput,
+  type StreamSet,
+} from "@/lib/api/stream-sets";
+import {
+  useCreateStreamSet,
+  useDuplicateStreamSet,
+  useReorderStreamSets,
+  useStreamSets,
+  useUpdateStreamSet,
+} from "@/hooks/use-stream-sets";
+import { useNetworks } from "@/hooks/use-networks";
+import { useOffers } from "@/hooks/use-offers";
+import type { Network } from "@/lib/api/networks";
+import type { Offer } from "@/lib/api/offers";
 import { StreamSetRow } from "@/features/stream-sets/stream-set-row";
 import { StreamSetFormSheet } from "@/features/stream-sets/stream-set-form-sheet";
 import type { StreamSetFormValues } from "@/features/stream-sets/stream-set-schema";
@@ -41,13 +57,9 @@ function emptyStreamSetForm(firstNetworkId: string): StreamSetFormValues {
         name: "Primary offer",
         active: true,
         weight: 100,
-        landing: { enabled: false, landingId: "", asPwa: false },
-        pwa: { enabled: false, pwaId: "", pwaType: "internal" },
-        postlanding: { enabled: false, postlandingId: "" },
-        destination: { kind: "offer", networkId: firstNetworkId, offerId: "", offerUrl: "" },
+        destination: { kind: "offer", networkId: firstNetworkId, offerId: "" },
       },
     ],
-    pixels: [],
     fallbackUrl: "",
   };
 }
@@ -56,21 +68,26 @@ function toFormValues(streamSet: StreamSet): StreamSetFormValues {
   return {
     name: streamSet.name,
     status: streamSet.status,
-    rootFilter: streamSet.rootFilter,
+    rootFilter: hydrateRootFilter(streamSet.rootFilter),
     flows: streamSet.flows,
-    pixels: streamSet.pixels.map((url) => ({ id: genId(), url })),
     fallbackUrl: streamSet.fallbackUrl,
   };
 }
 
+function toCreateInput(values: StreamSetFormValues): CreateStreamSetInput {
+  return {
+    name: values.name,
+    fallbackUrl: values.fallbackUrl,
+    rootFilter: dehydrateFilterNode(values.rootFilter),
+    flows: values.flows.map(({ name, active, weight, destination }) => ({ name, active, weight, destination })),
+  };
+}
+
 export function StreamSetList({ campaignId }: { campaignId: string }) {
-  const streamSets = useStreamSetsStore((s) => s.listByCampaign(campaignId));
-  const addStreamSet = useStreamSetsStore((s) => s.addStreamSet);
-  const updateStreamSet = useStreamSetsStore((s) => s.updateStreamSet);
-  const setStatus = useStreamSetsStore((s) => s.setStatus);
-  const duplicateStreamSet = useStreamSetsStore((s) => s.duplicateStreamSet);
-  const reorder = useStreamSetsStore((s) => s.reorder);
-  const networks = useNetworksStore((s) => s.networks);
+  const streamSetsQuery = useStreamSets(campaignId);
+  const networksQuery = useNetworks();
+  const offersQuery = useOffers();
+  const reorder = useReorderStreamSets(campaignId);
 
   const [target, setTarget] = React.useState<{ id: string | null } | null>(null);
 
@@ -78,6 +95,10 @@ export function StreamSetList({ campaignId }: { campaignId: string }) {
     useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
   );
+
+  const streamSets = streamSetsQuery.data?.streamSets ?? [];
+  const networks = networksQuery.data?.networks ?? [];
+  const offers = offersQuery.data?.offers ?? [];
 
   function handleDragEnd(event: DragEndEvent) {
     const { active, over } = event;
@@ -88,37 +109,64 @@ export function StreamSetList({ campaignId }: { campaignId: string }) {
     const reordered = [...ids];
     reordered.splice(oldIndex, 1);
     reordered.splice(newIndex, 0, String(active.id));
-    reorder(campaignId, reordered);
-  }
-
-  function handleSubmit(values: StreamSetFormValues) {
-    const input = { ...values, pixels: values.pixels.map((p) => p.url) };
-    if (target?.id) {
-      updateStreamSet(campaignId, target.id, input);
-      toast("Stream set updated", { description: values.name });
-    } else {
-      addStreamSet(campaignId, input);
-      toast("Stream set created", { description: values.name });
-    }
-    setTarget(null);
+    reorder.mutate(reordered, {
+      onError: (err) => toast.error("Couldn't reorder stream sets", { description: err.message }),
+    });
   }
 
   const editingStreamSet = target?.id ? streamSets.find((s) => s.id === target.id) : undefined;
 
+  const header = (
+    <CardHeader>
+      <CardTitle>Stream Sets</CardTitle>
+      <CardDescription>
+        Evaluated top-to-bottom by priority — the first set whose filters match wins. No match falls back to the
+        campaign fallback in Settings.
+      </CardDescription>
+      <CardAction>
+        <Button size="sm" onClick={() => setTarget({ id: null })} disabled={networks.length === 0}>
+          <PlusIcon className="size-4" /> New Stream Set
+        </Button>
+      </CardAction>
+    </CardHeader>
+  );
+
+  if (streamSetsQuery.isPending || networksQuery.isPending || offersQuery.isPending) {
+    return (
+      <Card>
+        {header}
+        <CardContent>
+          <LoadingState label="Loading stream sets…" />
+        </CardContent>
+      </Card>
+    );
+  }
+
+  if (streamSetsQuery.isError) {
+    return (
+      <Card>
+        {header}
+        <CardContent>
+          <ErrorState title="Couldn't load stream sets" description={streamSetsQuery.error.message} onRetry={() => streamSetsQuery.refetch()} />
+        </CardContent>
+      </Card>
+    );
+  }
+  if (networksQuery.isError || offersQuery.isError) {
+    const err = networksQuery.error ?? offersQuery.error;
+    return (
+      <Card>
+        {header}
+        <CardContent>
+          <ErrorState title="Couldn't load networks/offers" description={err?.message} onRetry={() => { networksQuery.refetch(); offersQuery.refetch(); }} />
+        </CardContent>
+      </Card>
+    );
+  }
+
   return (
     <Card>
-      <CardHeader>
-        <CardTitle>Stream Sets</CardTitle>
-        <CardDescription>
-          Evaluated top-to-bottom by priority — the first set whose filters match wins. No match falls back to the
-          campaign fallback in Settings.
-        </CardDescription>
-        <CardAction>
-          <Button size="sm" onClick={() => setTarget({ id: null })}>
-            <PlusIcon className="size-4" /> New Stream Set
-          </Button>
-        </CardAction>
-      </CardHeader>
+      {header}
       <CardContent>
         {streamSets.length === 0 ? (
           <EmptyState
@@ -130,17 +178,12 @@ export function StreamSetList({ campaignId }: { campaignId: string }) {
             <SortableContext items={streamSets.map((s) => s.id)} strategy={verticalListSortingStrategy}>
               <div className="flex flex-col gap-2">
                 {streamSets.map((streamSet) => (
-                  <StreamSetRow
+                  <StreamSetRowContainer
                     key={streamSet.id}
                     streamSet={streamSet}
+                    offers={offers}
                     onEdit={() => setTarget({ id: streamSet.id })}
-                    onDuplicate={() => {
-                      duplicateStreamSet(campaignId, streamSet.id);
-                      toast("Stream set duplicated", { description: `${streamSet.name} (Copy)` });
-                    }}
-                    onToggleStatus={() =>
-                      setStatus(campaignId, streamSet.id, streamSet.status === "active" ? "paused" : "active")
-                    }
+                    campaignId={campaignId}
                   />
                 ))}
               </div>
@@ -150,16 +193,111 @@ export function StreamSetList({ campaignId }: { campaignId: string }) {
       </CardContent>
 
       {target && (
-        <StreamSetFormSheet
+        <StreamSetFormDialog
           key={target.id ?? "new"}
-          open
-          onOpenChange={(open) => !open && setTarget(null)}
-          title={editingStreamSet ? `Edit ${editingStreamSet.name}` : "New Stream Set"}
-          submitLabel={editingStreamSet ? "Save changes" : "Create stream set"}
-          defaultValues={editingStreamSet ? toFormValues(editingStreamSet) : emptyStreamSetForm(networks[0]?.id ?? "")}
-          onSubmit={handleSubmit}
+          target={editingStreamSet ?? null}
+          networks={networks}
+          offers={offers}
+          campaignId={campaignId}
+          firstNetworkId={networks[0]?.id ?? ""}
+          onClose={() => setTarget(null)}
         />
       )}
     </Card>
+  );
+}
+
+/** Each row owns its own duplicate mutation so a toast/error from one
+ * row's action can't be misattributed to another mid-list. Status
+ * toggling PATCHes {status} only — the same partial-update convention
+ * every other domain's archive/pause action uses this session. */
+function StreamSetRowContainer({
+  streamSet,
+  offers,
+  campaignId,
+  onEdit,
+}: {
+  streamSet: StreamSet;
+  offers: Offer[];
+  campaignId: string;
+  onEdit: () => void;
+}) {
+  const updateStatus = useUpdateStreamSet(campaignId, streamSet.id);
+  const duplicate = useDuplicateStreamSet(campaignId);
+
+  return (
+    <StreamSetRow
+      streamSet={streamSet}
+      offers={offers}
+      onEdit={onEdit}
+      onDuplicate={() =>
+        duplicate.mutate(streamSet.id, {
+          onSuccess: () => toast("Stream set duplicated", { description: `${streamSet.name} (Copy)` }),
+          onError: (err) => toast.error("Couldn't duplicate stream set", { description: err.message }),
+        })
+      }
+      onToggleStatus={() =>
+        updateStatus.mutate(
+          { status: streamSet.status === "active" ? "paused" : "active" },
+          { onError: (err) => toast.error("Couldn't update stream set", { description: err.message }) },
+        )
+      }
+    />
+  );
+}
+
+function StreamSetFormDialog({
+  target,
+  networks,
+  offers,
+  campaignId,
+  firstNetworkId,
+  onClose,
+}: {
+  target: StreamSet | null;
+  networks: Network[];
+  offers: Offer[];
+  campaignId: string;
+  firstNetworkId: string;
+  onClose: () => void;
+}) {
+  const createStreamSet = useCreateStreamSet(campaignId);
+  const updateStreamSet = useUpdateStreamSet(campaignId, target?.id ?? "");
+
+  function handleSubmit(values: StreamSetFormValues) {
+    const input = toCreateInput(values);
+    if (target) {
+      updateStreamSet.mutate(
+        { ...input, status: values.status },
+        {
+          onSuccess: () => {
+            toast("Stream set updated", { description: values.name });
+            onClose();
+          },
+          onError: (err) => toast.error("Couldn't update stream set", { description: err.message }),
+        },
+      );
+    } else {
+      createStreamSet.mutate(input, {
+        onSuccess: () => {
+          toast("Stream set created", { description: values.name });
+          onClose();
+        },
+        onError: (err) => toast.error("Couldn't create stream set", { description: err.message }),
+      });
+    }
+  }
+
+  return (
+    <StreamSetFormSheet
+      open
+      onOpenChange={(open) => !open && onClose()}
+      title={target ? `Edit ${target.name}` : "New Stream Set"}
+      submitLabel={target ? "Save changes" : "Create stream set"}
+      defaultValues={target ? toFormValues(target) : emptyStreamSetForm(firstNetworkId)}
+      networks={networks}
+      offers={offers}
+      onSubmit={handleSubmit}
+    />
   );
 }

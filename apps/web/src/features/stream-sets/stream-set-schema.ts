@@ -9,7 +9,6 @@ import {
   type FilterField,
   type FilterOperator,
 } from "@/lib/filters";
-import { PWA_TYPES, type PwaType } from "@/lib/mock/flow-entities";
 
 const filterConditionSchema = z
   .object({
@@ -55,55 +54,24 @@ const filterGroupSchema: z.ZodType<FilterNodeFormValue & { type: "group" }> = z.
   }),
 );
 
-const landingStageSchema = z.object({ enabled: z.boolean(), landingId: z.string(), asPwa: z.boolean() });
-const pwaStageSchema = z.object({
-  enabled: z.boolean(),
-  pwaId: z.string(),
-  pwaType: z.enum(PWA_TYPES as [PwaType, ...PwaType[]]),
-});
-const postlandingStageSchema = z.object({ enabled: z.boolean(), postlandingId: z.string() });
-
+/** Landing/PWA/Postlanding stages and per-flow Pixels are gone here —
+ * neither has a real backend yet (no internal/landing, internal/pwa,
+ * internal/postlanding, or internal/pixel package exists), and their DB
+ * columns/tables are nullable/optional specifically so a Flow can exist
+ * without them. Dropped from the writable form rather than faked, same
+ * precedent as every other domain this session. See
+ * docs/stream-sets.md. */
 const destinationSchema = z.union([
-  z.object({ kind: z.literal("offer"), networkId: z.string(), offerId: z.string(), offerUrl: z.string() }),
-  z.object({ kind: z.literal("redirect"), url: z.string() }),
+  z.object({ kind: z.literal("offer"), networkId: z.string(), offerId: z.string().min(1, "Choose an offer") }),
+  z.object({ kind: z.literal("redirect"), url: z.url("Enter a valid URL") }),
 ]);
 
-const flowSchema = z
-  .object({
-    id: z.string(),
-    name: z.string().min(1, "Name is required"),
-    active: z.boolean(),
-    weight: z.number().min(0, "Weight can't be negative"),
-    landing: landingStageSchema,
-    pwa: pwaStageSchema,
-    postlanding: postlandingStageSchema,
-    destination: destinationSchema,
-  })
-  .superRefine((flow, ctx) => {
-    if (flow.landing.enabled && !flow.landing.landingId) {
-      ctx.addIssue({ code: "custom", message: "Choose a landing", path: ["landing", "landingId"] });
-    }
-    if (flow.pwa.enabled && !flow.pwa.pwaId) {
-      ctx.addIssue({ code: "custom", message: "Choose a PWA", path: ["pwa", "pwaId"] });
-    }
-    if (flow.postlanding.enabled && !flow.postlanding.postlandingId) {
-      ctx.addIssue({ code: "custom", message: "Choose a postlanding", path: ["postlanding", "postlandingId"] });
-    }
-    if (flow.destination.kind === "offer") {
-      if (!flow.destination.offerId) {
-        ctx.addIssue({ code: "custom", message: "Choose an offer", path: ["destination", "offerId"] });
-      }
-      if (!flow.destination.offerUrl || !/^https?:\/\//.test(flow.destination.offerUrl)) {
-        ctx.addIssue({ code: "custom", message: "Enter a valid offer URL", path: ["destination", "offerUrl"] });
-      }
-    } else if (!flow.destination.url || !/^https?:\/\//.test(flow.destination.url)) {
-      ctx.addIssue({ code: "custom", message: "Enter a valid redirect URL", path: ["destination", "url"] });
-    }
-  });
-
-const pixelSchema = z.object({
+const flowSchema = z.object({
   id: z.string(),
-  url: z.url("Enter a valid URL"),
+  name: z.string().min(1, "Name is required"),
+  active: z.boolean(),
+  weight: z.number().min(0, "Weight can't be negative"),
+  destination: destinationSchema,
 });
 
 export const streamSetFormSchema = z.object({
@@ -111,7 +79,6 @@ export const streamSetFormSchema = z.object({
   status: z.enum(["active", "paused"]),
   rootFilter: filterGroupSchema,
   flows: z.array(flowSchema).min(1, "At least one flow is required"),
-  pixels: z.array(pixelSchema),
   fallbackUrl: z.union([z.literal(""), z.url("Enter a valid URL")]),
 });
 

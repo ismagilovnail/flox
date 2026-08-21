@@ -2,10 +2,9 @@
 
 import { Controller, useFieldArray, useForm, useWatch, type Resolver } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { PlusIcon, XIcon } from "lucide-react";
+import { PlusIcon } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import { IconButton } from "@/components/ui/icon-button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -20,7 +19,8 @@ import {
 } from "@/components/ui/sheet";
 import { genId } from "@/lib/id";
 import type { FilterGroupNode } from "@/lib/filters";
-import { useNetworksStore } from "@/stores/networks";
+import type { Network } from "@/lib/api/networks";
+import type { Offer } from "@/lib/api/offers";
 import { FilterGroupBuilder } from "@/features/stream-sets/filter-group-builder";
 import { FlowEditor } from "@/features/stream-sets/flow-editor";
 import { streamSetFormSchema, type StreamSetFormValues } from "@/features/stream-sets/stream-set-schema";
@@ -31,6 +31,8 @@ export function StreamSetFormSheet({
   open,
   onOpenChange,
   defaultValues,
+  networks,
+  offers,
   title,
   submitLabel,
   onSubmit,
@@ -38,6 +40,8 @@ export function StreamSetFormSheet({
   open: boolean;
   onOpenChange: (open: boolean) => void;
   defaultValues: StreamSetFormValues;
+  networks: Network[];
+  offers: Offer[];
   title: string;
   submitLabel: string;
   onSubmit: (values: StreamSetFormValues) => void;
@@ -55,12 +59,11 @@ export function StreamSetFormSheet({
     register,
     handleSubmit,
     control,
+    setValue,
     formState: { errors, isSubmitting },
   } = form;
 
-  const networks = useNetworksStore((s) => s.networks);
   const flowArray = useFieldArray({ control, name: "flows" });
-  const pixelArray = useFieldArray({ control, name: "pixels" });
 
   const flows = useWatch({ control, name: "flows" });
   const fallbackUrl = useWatch({ control, name: "fallbackUrl" });
@@ -139,11 +142,20 @@ export function StreamSetFormSheet({
             <div>
               <h3 className="text-sm font-medium">Flows</h3>
               <p className="text-xs text-muted-foreground">
-                Each flow is a funnel: optional Landing → PWA → Postlanding, then a required Offer or Redirect.
-                Weight is a raw number — the engine normalizes it to a percentage across active flows.
+                Each flow routes to an Offer or a Redirect URL. Weight is a raw number — the engine normalizes it to
+                a percentage across active flows.
               </p>
             </div>
 
+            {/* Per-flow edits go through setValue(`flows.${index}`, ...), not
+                flowArray.update(index, ...): RHF's own docs say update()
+                unregisters and re-registers the row, which remounts its
+                subtree on every keystroke/selection. Reproduced live —
+                the offer picker inside FlowDestinationEditor would select
+                correctly, then get silently reset to empty a moment
+                later, because the Select itself was being torn down and
+                rebuilt mid-interaction. setValue patches the field in
+                place with no remount. */}
             <div className="flex flex-col gap-2">
               {flowArray.fields.map((field, index) => {
                 const flow = flows[index];
@@ -154,7 +166,9 @@ export function StreamSetFormSheet({
                     flow={flow}
                     normalizedPercent={weightSum > 0 ? (flow.weight / weightSum) * 100 : 0}
                     fallbackUrl={fallbackUrl}
-                    onChange={(patch) => flowArray.update(index, { ...flow, ...patch })}
+                    networks={networks}
+                    offers={offers}
+                    onChange={(patch) => setValue(`flows.${index}`, { ...flow, ...patch }, { shouldDirty: true, shouldValidate: true })}
                     onRemove={() => flowArray.remove(index)}
                     onDuplicate={() => flowArray.insert(index + 1, { ...flow, id: genId(), name: `${flow.name} (Copy)` })}
                     canRemove={flowArray.fields.length > 1}
@@ -175,10 +189,7 @@ export function StreamSetFormSheet({
                     name: `Flow ${flowArray.fields.length + 1}`,
                     active: true,
                     weight: 0,
-                    landing: { enabled: false, landingId: "", asPwa: false },
-                    pwa: { enabled: false, pwaId: "", pwaType: "internal" },
-                    postlanding: { enabled: false, postlandingId: "" },
-                    destination: { kind: "offer", networkId: networks[0]?.id ?? "", offerId: "", offerUrl: "" },
+                    destination: { kind: "offer", networkId: networks[0]?.id ?? "", offerId: "" },
                   })
                 }
               >
@@ -186,43 +197,6 @@ export function StreamSetFormSheet({
               </Button>
               <span className="text-xs font-mono text-muted-foreground">Total weight: {weightSum}</span>
             </div>
-          </div>
-
-          <Separator />
-
-          <div className="flex flex-col gap-3">
-            <div>
-              <h3 className="text-sm font-medium">Pixels</h3>
-              <p className="text-xs text-muted-foreground">S2S pixel URLs fired when this set is matched.</p>
-            </div>
-            <div className="flex flex-col gap-2">
-              {pixelArray.fields.map((field, index) => (
-                <div key={field.id} className="flex items-center gap-2">
-                  <Controller
-                    control={control}
-                    name={`pixels.${index}.url`}
-                    render={({ field: urlField, fieldState }) => (
-                      <div className="flex flex-1 flex-col gap-1">
-                        <Input {...urlField} placeholder="https://px.example.com/s2s" className="h-7" />
-                        {fieldState.error && <p className="text-xs text-danger">{fieldState.error.message}</p>}
-                      </div>
-                    )}
-                  />
-                  <IconButton aria-label="Remove pixel" size="icon-sm" onClick={() => pixelArray.remove(index)}>
-                    <XIcon className="size-3.5" />
-                  </IconButton>
-                </div>
-              ))}
-            </div>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="self-start"
-              onClick={() => pixelArray.append({ id: genId(), url: "" })}
-            >
-              <PlusIcon className="size-3.5" /> Add pixel
-            </Button>
           </div>
 
           <Separator />

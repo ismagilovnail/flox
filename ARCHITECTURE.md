@@ -99,11 +99,16 @@ stay thin; business logic never lives in handlers or in React components.
 > Phase 10) is a thin UI over `POST /routing/simulate`. During frontend-first
 > phases (2–15) it runs against a local mock that implements the exact same
 > request/response contract; it is switched to the real endpoint once a
-> source/offer/stream-set/flow backend exists to simulate against — Phase 27
-> wired Campaigns instead (see [`docs/frontend-integration.md`](docs/frontend-integration.md)),
-> so the simulator still runs on its mock, unchanged. There is no second
-> (TypeScript) implementation of routing/filter/sticky logic — mocks only
-> mirror the response shape, never the decision logic itself.
+> source/offer/stream-set/flow backend exists to simulate against —
+> Networks, Offers, and Stream Sets/Filters/Flows CRUD all landed since
+> (see [`docs/networks-offers.md`](docs/networks-offers.md),
+> [`docs/stream-sets.md`](docs/stream-sets.md)), and the engine
+> `/routing/simulate` would call (`routingstore.LoadRoutingConfig` +
+> `routing.Router.Explain`) already exists — but the endpoint itself and
+> the UI's switch to it are still their own, not-yet-started phase, so the
+> simulator still runs on its mock today. There is no second (TypeScript)
+> implementation of routing/filter/sticky logic — mocks only mirror the
+> response shape, never the decision logic itself.
 
 Both sides are validated against one shared conformance fixture (a table of
 inputs → expected route decisions), documented in

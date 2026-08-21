@@ -19,68 +19,79 @@ referenced below as §N).
 ## CURRENT STATE — UPDATE THIS EVERY PHASE
 
 ```
-CURRENT PHASE : PHASE (unnumbered) — Networks & Offers CRUD
-STATUS        : done — chosen via AskUserQuestion as "Offers," the
-                simplest-looking next slice — but offers.network_id is a
-                real NOT NULL FK to networks (00003), contradicting my own
-                preview text ("network can stay free-text"). Surfaced the
-                discovery rather than silently expanding scope or
-                weakening the schema; user chose to build Networks +
-                Offers + nested offer_links together in one phase,
-                completing §27's own Network → Offer → Offer Link
-                hierarchy. See docs/networks-offers.md.
-                apps/internal/network: flat entity, mirrors trafficsource
-                closely. Delete is the opposite of trafficsource's own
-                story — offers.network_id CASCADEs (deleting a network
-                deletes its offers), while flows.destination_network_id
-                (no Flow CRUD yet) would RESTRICT, caught defensively.
-                apps/internal/offer: NetworkBelongsToOrg validates the FK
-                cross-tenant (§36-TENANCY, same pattern as campaign→
-                traffic_source). offer_links use whole-array replace on
-                every write (delete-all/insert-all in one tx), matching
-                the frontend form's useFieldArray submitting every link
-                every save — no standalone link endpoint. Cap needed a
-                custom OptionalCap JSON type (Set bool, Value *int) to
-                distinguish PATCH's three real states — not sent / sent as
-                null (uncapped) / sent as a number — since a plain *int
-                can't tell "absent" from "explicit null" apart.
-                Frontend: lib/api/networks.ts + lib/api/offers.ts (new,
-                parallel files) wire the existing mock CRUD UIs to the
-                real API; lib/mock/{networks,offers}.ts and
-                stores/{networks,offers}.ts stay untouched (stream-sets/
-                postbacks/conversions still import them transitively, same
-                situation campaigns' mock/store was left in after Phase
-                27). A real bug hit and fixed during manual verification:
-                the offer form crashed with "Maximum update depth
-                exceeded" — RHF's `values` option (used everywhere else
-                this session) plus useFieldArray plus a MultiSelect looped
-                forever. Fixed by reverting offer-form-sheet.tsx to
-                defaultValues and restoring key={target?.id ?? "new"} on
-                all three list components' form-dialog wrappers, a pattern
-                the original mock components had and this session's
-                earlier rewrites had quietly dropped.
+CURRENT PHASE : PHASE (unnumbered) — Stream Sets, Filters & Flows CRUD
+STATUS        : done — confirmed scope via AskUserQuestion (recommended
+                option): Stream Sets + Filters (AND/OR tree) + Flows CRUD,
+                dropping landing/pwa/postlanding stages and per-flow
+                pixels from the writable form (no backend exists for any
+                of the four yet — same "drop it, don't fake it" precedent
+                as every other domain). Wiring the Routing Simulator to a
+                real /routing/simulate endpoint deliberately deferred as
+                its own smaller phase. See docs/stream-sets.md.
+                apps/internal/streamset writes rows for the READ path that
+                already existed (apps/internal/routingstore +
+                apps/internal/routing, used by the tracker's hot path) —
+                never duplicates matching/weighted-selection logic
+                (CLAUDE.md #1), and reuses routing.FilterField/Operator/
+                Joiner/DestinationKind/StreamSetStatus directly rather
+                than redefining them. FilterNode is a flattened
+                discriminated-union struct with no id (routing.FilterNode
+                doesn't need one either) — the frontend hydrates fresh
+                client-side ids on load for filter-group-builder.tsx's
+                id-addressed tree edits, strips them back out on save.
+                Server-side validates MATCHES conditions with Go's real
+                regexp.Compile (RE2, CLAUDE.md #8 — no heuristic needed,
+                unlike the frontend's own client-side-only check) and
+                country codes (rejects "UK", requires ISO-3166 alpha-2).
+                Offer-destination flows derive their network from the
+                offer's own network_id server-side, never trusting a
+                client-supplied pair — proven by a test that sends a
+                deliberately wrong network id alongside a real offer id.
+                Priority is never client-supplied (no field in the form
+                at all) — Create always appends, Reorder takes the full
+                dragged-list order and rewrites every priority in one
+                transaction.
+                A real render-loop bug hit and fixed during manual
+                verification: the offer picker selected correctly for an
+                instant then silently reset to empty. Root cause: RHF's
+                useFieldArray().update() is documented to unregister/
+                re-register the field row on every call, remounting its
+                whole subtree (including its Selects) on every keystroke;
+                the remounting Select fired a stray onValueChange("") that
+                raced and won. Confirmed via a mount/unmount effect log
+                (fired on every field edit) and a temporary handler log
+                (3 calls per click: real id, then "", then "" again).
+                Fixed by switching every per-flow edit from
+                flowArray.update() to setValue(`flows.${index}`, ...),
+                which patches in place with no remount; also hardened the
+                offer Select against Radix's own documented "empty
+                controlled value" fragility with a NO_OFFER sentinel.
                 Verified: go build/vet/gofmt/test ./... all green (6 new
-                network tests incl. a cascade-delete proof, 6 new offer
-                tests incl. the three-state Cap PATCH and whole-array link
-                replace); tsc --noEmit and eslint clean; full manual
-                browser pass — created a network then an offer against it
-                through the complete form (GEOs, payout, currency, cap,
-                one link), edited it (pre-fill correct incl. the link
-                URL), paused it, duplicated it (copy kept paused, not
-                reset). Test rows removed via real DELETE afterward — both
-                net-new for this phase, no pre-existing seed data at risk.
-                Phase 27's remaining gap (flows/stream-sets/filters/
-                routing-simulate/conversions/postbacks, the /analytics
-                report builder, /ltv-cohorts) is unchanged — Traffic
-                Sources, Networks, and Offers are all off that list now,
-                see docs/frontend-integration.md.
-LAST COMMIT   : feat(networks,offers): full CRUD incl. offer_links
-NEXT          : confirm scope before starting. Candidates: FB/TikTok
+                streamset tests incl. RE2/country validation and the
+                network-derivation proof); tsc --noEmit and eslint clean;
+                full manual browser pass — created a stream set with a
+                real filter condition and a real offer-destination flow,
+                confirmed the API response had the exact tree and
+                resolved network id, edited it (tree + offer selection
+                both pre-filled correctly), duplicated it (kept status +
+                tree + flow), toggled status live, reordered two sets via
+                the real endpoint and confirmed the new order survived a
+                reload. Test campaign (cascading to its stream sets),
+                offer, and network removed via real DELETE afterward.
+                Phase 27's remaining gap (routing-simulate/conversions/
+                postbacks, the /analytics report builder, /ltv-cohorts) is
+                unchanged — Traffic Sources, Networks, Offers, and Stream
+                Sets/Filters/Flows are all off that list now, see
+                docs/frontend-integration.md.
+LAST COMMIT   : feat(stream-sets): full CRUD incl. filters and flows
+NEXT          : confirm scope before starting. Candidates: wiring the
+                Routing Simulator to a real POST /routing/simulate
+                endpoint (thin — reuses routingstore.LoadRoutingConfig +
+                routing.Router.Explain, both already built), FB/TikTok
                 ad-spend import (§74's CostProvider interface, the "later"
-                half of §27-COST), or the next domain slice (Stream Sets/
-                Filters/Flows — Stream Sets now has both dependencies,
-                Offers and Networks, so it's unblocked) to give it a real
-                backend and wire its existing frontend mock.
+                half of §27-COST), or Landing/PWA/Postlanding/Pixels CRUD
+                (would unblock the stages this phase had to drop from the
+                Flow editor).
 ```
 
 > At the end of every phase: update the four lines above, add a CHANGELOG entry,

@@ -1,8 +1,9 @@
 "use client";
 
+import * as React from "react";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { CopyIcon, GripVerticalIcon, MoreHorizontalIcon, PencilIcon, RadioTowerIcon } from "lucide-react";
+import { CopyIcon, GripVerticalIcon, MoreHorizontalIcon, PencilIcon } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
@@ -19,16 +20,18 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { countConditions, describeFilterTree } from "@/lib/filters";
-import { useOffersStore } from "@/stores/offers";
-import type { StreamSet } from "@/lib/mock/stream-sets";
+import { hydrateRootFilter, type ApiFlow, type StreamSet } from "@/lib/api/stream-sets";
+import type { Offer } from "@/lib/api/offers";
 
 export function StreamSetRow({
   streamSet,
+  offers,
   onEdit,
   onDuplicate,
   onToggleStatus,
 }: {
   streamSet: StreamSet;
+  offers: Offer[];
   onEdit: () => void;
   onDuplicate: () => void;
   onToggleStatus: () => void;
@@ -36,11 +39,15 @@ export function StreamSetRow({
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: streamSet.id,
   });
-  const offers = useOffersStore((s) => s.offers);
+
+  // Hydrated only for display (React keys + filter-chip rendering) — this
+  // row never edits the tree, so ids are throwaway, not addressed by any
+  // mutation helper the way filter-group-builder.tsx's are.
+  const hydratedRoot = React.useMemo(() => hydrateRootFilter(streamSet.rootFilter), [streamSet.rootFilter]);
 
   const weightSum = streamSet.flows.reduce((sum, f) => sum + f.weight, 0);
 
-  function destinationLabel(flow: StreamSet["flows"][number]) {
+  function destinationLabel(flow: ApiFlow) {
     const destination = flow.destination;
     if (destination.kind === "redirect") return "Redirect";
     return offers.find((o) => o.id === destination.offerId)?.name ?? "No offer";
@@ -96,12 +103,12 @@ export function StreamSetRow({
             </div>
           </div>
 
-          {streamSet.rootFilter.children.length > 0 ? (
+          {hydratedRoot.children.length > 0 ? (
             <Tooltip>
               <TooltipTrigger asChild>
                 <div className="w-fit">
-                  <FilterGroup joiner={streamSet.rootFilter.joiner}>
-                    {streamSet.rootFilter.children.map((child) =>
+                  <FilterGroup joiner={hydratedRoot.joiner}>
+                    {hydratedRoot.children.map((child) =>
                       child.type === "condition" ? (
                         <FilterChip
                           key={child.id}
@@ -118,7 +125,7 @@ export function StreamSetRow({
                   </FilterGroup>
                 </div>
               </TooltipTrigger>
-              <TooltipContent>{describeFilterTree(streamSet.rootFilter)}</TooltipContent>
+              <TooltipContent>{describeFilterTree(hydratedRoot)}</TooltipContent>
             </Tooltip>
           ) : (
             <p className="text-xs text-muted-foreground">No filters — matches all traffic</p>
@@ -130,12 +137,6 @@ export function StreamSetRow({
                 {f.name} · {weightSum > 0 ? ((f.weight / weightSum) * 100).toFixed(0) : 0}%
               </Tag>
             ))}
-            {streamSet.pixels.length > 0 && (
-              <Badge variant="outline">
-                <RadioTowerIcon className="size-3" /> {streamSet.pixels.length} pixel
-                {streamSet.pixels.length > 1 ? "s" : ""}
-              </Badge>
-            )}
             <Badge variant={streamSet.status === "active" ? "success" : "secondary"}>{streamSet.status}</Badge>
           </div>
         </div>

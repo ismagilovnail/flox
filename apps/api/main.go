@@ -26,6 +26,7 @@ import (
 	"github.com/ismagilovnail/flox/apps/internal/network"
 	"github.com/ismagilovnail/flox/apps/internal/offer"
 	"github.com/ismagilovnail/flox/apps/internal/postgres"
+	"github.com/ismagilovnail/flox/apps/internal/streamset"
 	"github.com/ismagilovnail/flox/apps/internal/telemetry"
 	"github.com/ismagilovnail/flox/apps/internal/tenant"
 	"github.com/ismagilovnail/flox/apps/internal/trafficsource"
@@ -121,6 +122,12 @@ func run() error {
 	srv.Mux().Route("/campaigns/{campaignId}/cost-entries", func(r chi.Router) {
 		r.Use(tenant.Middleware)
 		costHandler.Register(r)
+	})
+
+	streamSetHandler := streamset.NewHandler(streamset.NewService(streamset.NewRepository(db)), logger)
+	srv.Mux().Route("/campaigns/{campaignId}/stream-sets", func(r chi.Router) {
+		r.Use(tenant.Middleware)
+		streamSetHandler.Register(r)
 	})
 
 	if ch != nil {

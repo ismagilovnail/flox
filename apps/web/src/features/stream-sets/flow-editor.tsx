@@ -8,23 +8,31 @@ import { IconButton } from "@/components/ui/icon-button";
 import { Input } from "@/components/ui/input";
 import { Mono } from "@/components/ui/typography";
 import { Switch } from "@/components/ui/switch";
-import type { Flow } from "@/lib/mock/stream-sets";
-import { FlowFunnel } from "@/features/stream-sets/flow-funnel";
+import type { Network } from "@/lib/api/networks";
+import type { Offer } from "@/lib/api/offers";
+import type { StreamSetFormValues } from "@/features/stream-sets/stream-set-schema";
+import { FlowDestinationEditor } from "@/features/stream-sets/flow-destination-editor";
 import { TagBadgeList } from "@/features/tags/tag-badge-list";
+
+type FlowFormValue = StreamSetFormValues["flows"][number];
 
 export function FlowEditor({
   flow,
   normalizedPercent,
   fallbackUrl,
+  networks,
+  offers,
   onChange,
   onRemove,
   onDuplicate,
   canRemove,
 }: {
-  flow: Flow;
+  flow: FlowFormValue;
   normalizedPercent: number;
   fallbackUrl: string;
-  onChange: (patch: Partial<Flow>) => void;
+  networks: Network[];
+  offers: Offer[];
+  onChange: (patch: Partial<FlowFormValue>) => void;
   onRemove: () => void;
   onDuplicate: () => void;
   canRemove: boolean;
@@ -76,7 +84,7 @@ export function FlowEditor({
 
       {expanded && (
         <div className="px-3 pt-1">
-          <FlowFunnel flow={flow} fallbackUrl={fallbackUrl} onChange={onChange} />
+          <FlowDestinationEditor flow={flow} fallbackUrl={fallbackUrl} networks={networks} offers={offers} onChange={onChange} />
         </div>
       )}
     </Card>

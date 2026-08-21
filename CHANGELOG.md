@@ -5,6 +5,123 @@ per-phase, matching `CLAUDE.md`'s phase protocol. The one exception is
 [Between phases], below: spec amendments and the code changes that follow from
 them land between phases and would otherwise be invisible here.
 
+## [Stream Sets, Filters & Flows CRUD] — Frontend/Backend Integration, next domain slice
+
+### Scope
+
+Confirmed via `AskUserQuestion` (the recommended option): Stream Sets +
+Filters (recursive AND/OR tree) + Flows CRUD, dropping the Landing/PWA/
+Postlanding stage pickers and per-flow Pixels from the writable form —
+none of those four have a real backend yet, and their DB columns/tables
+are nullable/optional specifically so a Flow can exist without them.
+Wiring the Routing Simulator to a real `/routing/simulate` endpoint was
+scoped out as its own smaller follow-on phase. See `docs/stream-sets.md`.
+
+### Added
+
+- **`apps/internal/streamset`** writes rows for the read path that
+  already existed (`apps/internal/routingstore` + `apps/internal/routing`,
+  used by the tracker's hot-path redirect) — never duplicates matching or
+  weighted-selection logic (CLAUDE.md #1), and reuses
+  `routing.FilterField`/`Operator`/`Joiner`/`DestinationKind`/
+  `StreamSetStatus` directly rather than redefining the same enums twice.
+- **`FilterNode`**: a flattened discriminated-union struct (mirrors how
+  `routing/trace.go`'s own `Trace` type already solves the same
+  frontend-union-on-the-wire problem), with no `id` — `routing.FilterNode`
+  doesn't need one either. The frontend hydrates fresh client-side ids on
+  load (`hydrateFilterNode`/`hydrateRootFilter`) for
+  `filter-group-builder.tsx`'s id-addressed tree-mutation helpers, and
+  strips them back out before saving (`dehydrateFilterNode`).
+- **Server-side filter validation**: `MATCHES` conditions compiled with
+  Go's real `regexp.Compile` (which *is* RE2, CLAUDE.md #8 — no separate
+  heuristic needed, unlike the frontend's own client-side-only
+  `checkRE2Compatible`); country codes checked against ISO-3166 alpha-2
+  (rejects `"UK"`, same as the frontend's `validateCountryValue`, now
+  enforced server-side too — "never trust the client as the source of
+  truth" per `lib/filters.ts`'s own comment about its own heuristic).
+- **Offer-destination network derivation**: a flow's `networkId` is
+  looked up from the offer's own `network_id`, never trusted from the
+  client — the flows table denormalizes both ids (its own CHECK
+  constraint requires it), but there's exactly one correct network for a
+  given offer. `TestOfferDestinationDerivesNetworkFromOffer` sends a
+  deliberately wrong network id alongside a real offer id and asserts the
+  real one wins.
+- **Priority**: never client-supplied (no field in the form at all) —
+  `Create` always appends after the campaign's existing stream sets,
+  `POST .../stream-sets/reorder` takes a full dragged-list order and
+  rewrites every priority in one transaction, matching
+  `stores/stream-sets.ts`'s own `addStreamSet`/`reorder` exactly.
+- **Frontend**: `lib/api/stream-sets.ts` + `hooks/use-stream-sets.ts` (new,
+  parallel to the untouched mock) wire the existing Stream Sets card to
+  the real API. `FlowFunnel` (which rendered the now-dropped Landing/PWA/
+  Postlanding/Offer/Redirect/Fallback chain) is deleted outright, replaced
+  by a new, leaner `FlowDestinationEditor` (Offer-or-Redirect + a
+  read-only Fallback preview) reusing the generic `FlowNode` component
+  unchanged. `filter-group-builder.tsx`/`filter-condition-editor.tsx`
+  needed zero changes — both were already pure, store-free components
+  operating only on the tree shape passed through props.
+- **`docs/stream-sets.md`**; `docs/frontend-integration.md` and
+  `ARCHITECTURE.md`'s §6-SHARED note updated — Stream Sets/Filters/Flows
+  are off the "still mocked" list, and the Routing Simulator's own note
+  now names what's actually left (a thin `/routing/simulate` handler over
+  already-built primitives, not a new engine).
+
+### Fixed
+
+- **A real render-loop bug, caught during manual verification, not
+  shipped**: the new offer picker would select correctly for an instant,
+  then silently reset to empty. Root cause: React Hook Form's
+  `useFieldArray().update()` is documented (by RHF itself) to unregister
+  and re-register the field row on every call, remounting that row's
+  whole subtree — including its Radix `<Select>`s — on every keystroke or
+  selection; the remounting Select fired a stray `onValueChange("")` that
+  raced the real selection and won. Confirmed live: a temporary
+  mount/unmount effect log fired on every field edit, and a temporary
+  handler log showed three `onValueChange` calls per click (the real
+  offer id, then `""` twice more). Fixed by switching every per-flow edit
+  from `flowArray.update(index, {...flow, ...patch})` to
+  `setValue(`flows.${index}`, {...flow, ...patch})`, which patches the
+  field in place with no remount. Hardened defensively alongside: the
+  offer `<Select>`'s controlled value is never handed a raw empty string
+  (Radix's own docs warn against an empty `SelectItem` value for the same
+  underlying fragility) — a `NO_OFFER` sentinel stands in for "nothing
+  chosen yet" on the wire instead.
+
+### Notes
+
+- **A pre-existing schema quirk inherited, not introduced**: `filter_
+  conditions.position`/`filter_groups.position` are two independent
+  ordering sequences (conditions among themselves, sub-groups among
+  themselves), not one interleaved order — the read path
+  (`routingstore.loadFilterTrees`) has always reconstructed a group's
+  children as "conditions first, then nested groups" regardless of
+  original interleaving, since AND/OR evaluation is commutative and never
+  cared. This phase's `insertFilterGroup` matches that exact reconstruction
+  rather than inventing a different write-side order the reader would
+  just re-order anyway.
+- 6 new integration tests in `apps/internal/streamset` (CRUD round-trip
+  with a nested two-level filter tree, rejecting empty flows / a
+  condition-as-root / an invalid country code / an invalid RE2 pattern /
+  an incomplete BETWEEN, the offer-network derivation proof, reorder
+  rewriting priority correctly, duplicate keeping status and copying the
+  tree+flows with fresh ids, full cross-tenant isolation including
+  create-against-another-org's-campaign) — all pass against real
+  Postgres.
+- Verified end-to-end against the real running `api` + `web` dev servers:
+  created a network, offer, and campaign; built a stream set through the
+  complete form (name, one filter condition, one offer-destination flow);
+  confirmed via the real API response that the filter tree and resolved
+  network id were exactly right; edited it and confirmed the hydrated
+  filter tree and offer selection both pre-filled correctly; duplicated
+  it (kept the tree, flow, and `active` status); toggled status to
+  `paused` live; reordered two stream sets via the real endpoint and
+  confirmed the new priorities survived a page reload. Test campaign
+  (cascading to its stream sets), offer, and network removed via the real
+  `DELETE` endpoints afterward — all net-new for this phase, no
+  pre-existing seed data at risk.
+- Backend: `go build/vet/gofmt/test ./...` all green. Frontend:
+  `tsc --noEmit` and `eslint` both clean.
+
 ## [Networks & Offers CRUD] — Frontend/Backend Integration, next domain slice
 
 ### Scope
