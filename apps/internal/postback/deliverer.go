@@ -21,13 +21,14 @@ type HTTPClient interface {
 
 // Deliverer claims due deliveries and attempts them.
 type Deliverer struct {
-	store  Store
-	client HTTPClient
-	logger *slog.Logger
+	store    Store
+	client   HTTPClient
+	attempts AttemptLogger
+	logger   *slog.Logger
 }
 
-func NewDeliverer(store Store, client HTTPClient, logger *slog.Logger) *Deliverer {
-	return &Deliverer{store: store, client: client, logger: logger}
+func NewDeliverer(store Store, client HTTPClient, attempts AttemptLogger, logger *slog.Logger) *Deliverer {
+	return &Deliverer{store: store, client: client, attempts: attempts, logger: logger}
 }
 
 // RunOnce claims up to limit due deliveries and attempts each one,
@@ -97,6 +98,7 @@ func (d *Deliverer) attempt(ctx context.Context, del Delivery) {
 		if err := d.store.MarkSuccess(ctx, del.ID, resp.StatusCode); err != nil {
 			d.logger.Error("marking delivery success", "error", err, "delivery_id", del.ID)
 		}
+		d.logAttempt(ctx, del, StatusSuccess, resp.StatusCode, "")
 		return
 	}
 	d.fail(ctx, del, resp.StatusCode, fmt.Sprintf("network responded %d", resp.StatusCode))
@@ -107,10 +109,27 @@ func (d *Deliverer) fail(ctx context.Context, del Delivery, statusCode int, mess
 		if err := d.store.MarkDead(ctx, del.ID, statusCode, message); err != nil {
 			d.logger.Error("marking delivery dead", "error", err, "delivery_id", del.ID)
 		}
+		d.logAttempt(ctx, del, StatusDead, statusCode, message)
 		return
 	}
 	next := time.Now().UTC().Add(NextAttemptDelay(del.AttemptCount))
 	if err := d.store.MarkRetrying(ctx, del.ID, statusCode, message, next); err != nil {
 		d.logger.Error("marking delivery retrying", "error", err, "delivery_id", del.ID)
 	}
+	d.logAttempt(ctx, del, StatusRetrying, statusCode, message)
+}
+
+func (d *Deliverer) logAttempt(ctx context.Context, del Delivery, result DeliveryStatus, responseStatusCode int, message string) {
+	d.attempts.LogAttempt(ctx, AttemptRecord{
+		OrganizationID:     del.OrganizationID,
+		NetworkID:          del.NetworkID,
+		ClickID:            del.ClickID,
+		Status:             del.Status,
+		Result:             result,
+		Message:            message,
+		AttemptCount:       del.AttemptCount,
+		ResponseStatusCode: responseStatusCode,
+		URL:                del.URL,
+		OccurredAt:         time.Now().UTC(),
+	})
 }

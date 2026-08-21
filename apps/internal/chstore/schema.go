@@ -1,8 +1,10 @@
-// Package chstore is Phase 25's ClickHouse-facing half of the analytics
-// pipeline (§47): applying the minimal schema (schema/*.sql), batch-writing
-// events into it, and reading back the one aggregate table it maintains.
-// See schema/001_events.sql's comment for why this schema is deliberately
-// disposable — Phase 26 (§48) replaces it with the real five-table design.
+// Package chstore is the ClickHouse-facing half of the analytics pipeline
+// (§47/§48): applying the real five-table schema (schema/*.sql) —
+// click_events, tracking_events, conversion_events, cost_events,
+// postback_events — batch-writing into it, and reading back the
+// materialized aggregates it maintains. Replaces Phase 25's single
+// disposable `events` table (see schema/000_drop_phase25_schema.sql and
+// docs/analytics-pipeline.md for that history).
 package chstore
 
 import (

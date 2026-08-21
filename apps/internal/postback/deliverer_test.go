@@ -105,6 +105,17 @@ type fakeHTTPClient struct {
 
 func (c *fakeHTTPClient) Do(req *http.Request) (*http.Response, error) { return c.respond(req) }
 
+type fakeAttemptLogger struct {
+	mu   sync.Mutex
+	recs []postback.AttemptRecord
+}
+
+func (l *fakeAttemptLogger) LogAttempt(_ context.Context, rec postback.AttemptRecord) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.recs = append(l.recs, rec)
+}
+
 func statusResponse(code int) (*http.Response, error) {
 	return &http.Response{StatusCode: code, Body: io.NopCloser(strings.NewReader(""))}, nil
 }
@@ -112,7 +123,7 @@ func statusResponse(code int) (*http.Response, error) {
 func TestDeliverer2xxMarksSuccess(t *testing.T) {
 	store := newFakeStore(postback.Delivery{ID: "d1", URL: "https://net.example/pb", AttemptCount: 0})
 	client := &fakeHTTPClient{respond: func(*http.Request) (*http.Response, error) { return statusResponse(200) }}
-	d := postback.NewDeliverer(store, client, quietLogger())
+	d := postback.NewDeliverer(store, client, &fakeAttemptLogger{}, quietLogger())
 
 	n, err := d.RunOnce(context.Background(), 10)
 	if err != nil {
@@ -129,7 +140,7 @@ func TestDeliverer2xxMarksSuccess(t *testing.T) {
 func TestDelivererNon2xxRetriesUnderMaxAttempts(t *testing.T) {
 	store := newFakeStore(postback.Delivery{ID: "d1", URL: "https://net.example/pb", AttemptCount: 0}) // ClaimDue bumps to 1
 	client := &fakeHTTPClient{respond: func(*http.Request) (*http.Response, error) { return statusResponse(500) }}
-	d := postback.NewDeliverer(store, client, quietLogger())
+	d := postback.NewDeliverer(store, client, &fakeAttemptLogger{}, quietLogger())
 
 	if _, err := d.RunOnce(context.Background(), 10); err != nil {
 		t.Fatalf("RunOnce: %v", err)
@@ -145,7 +156,7 @@ func TestDelivererNon2xxRetriesUnderMaxAttempts(t *testing.T) {
 func TestDelivererDeadLettersAtMaxAttempts(t *testing.T) {
 	store := newFakeStore(postback.Delivery{ID: "d1", URL: "https://net.example/pb", AttemptCount: postback.MaxAttempts - 1})
 	client := &fakeHTTPClient{respond: func(*http.Request) (*http.Response, error) { return statusResponse(500) }}
-	d := postback.NewDeliverer(store, client, quietLogger())
+	d := postback.NewDeliverer(store, client, &fakeAttemptLogger{}, quietLogger())
 
 	if _, err := d.RunOnce(context.Background(), 10); err != nil {
 		t.Fatalf("RunOnce: %v", err)
@@ -160,7 +171,7 @@ func TestDelivererNetworkErrorRetriesLikeNon2xx(t *testing.T) {
 	client := &fakeHTTPClient{respond: func(*http.Request) (*http.Response, error) {
 		return nil, errors.New("connection refused")
 	}}
-	d := postback.NewDeliverer(store, client, quietLogger())
+	d := postback.NewDeliverer(store, client, &fakeAttemptLogger{}, quietLogger())
 
 	if _, err := d.RunOnce(context.Background(), 10); err != nil {
 		t.Fatalf("RunOnce: %v", err)
@@ -176,7 +187,7 @@ func TestDelivererMalformedURLRetries(t *testing.T) {
 		t.Fatal("client.Do must not be called for an unparseable URL")
 		return nil, nil
 	}}
-	d := postback.NewDeliverer(store, client, quietLogger())
+	d := postback.NewDeliverer(store, client, &fakeAttemptLogger{}, quietLogger())
 
 	if _, err := d.RunOnce(context.Background(), 10); err != nil {
 		t.Fatalf("RunOnce: %v", err)
@@ -201,6 +212,54 @@ func TestNextAttemptDelayIsMonotonicAndCapped(t *testing.T) {
 	if tail != beyond {
 		t.Fatalf("delay past the backoff table's end should stay capped: got %v vs %v", tail, beyond)
 	}
+}
+
+// TestAttemptLoggedForEveryOutcome is §48's postback_events requirement at
+// the Deliverer level: success, retrying, and dead must all report to the
+// attempt audit log. One independent Deliverer per outcome, so each
+// assertion is unambiguous about which attempt produced which log entry.
+func TestAttemptLoggedForEveryOutcome(t *testing.T) {
+	t.Run("success", func(t *testing.T) {
+		store := newFakeStore(postback.Delivery{ID: "s1", URL: "https://net.example/pb"})
+		client := &fakeHTTPClient{respond: func(*http.Request) (*http.Response, error) { return statusResponse(200) }}
+		logger := &fakeAttemptLogger{}
+		d := postback.NewDeliverer(store, client, logger, quietLogger())
+
+		if _, err := d.RunOnce(context.Background(), 10); err != nil {
+			t.Fatalf("RunOnce: %v", err)
+		}
+		if len(logger.recs) != 1 || logger.recs[0].Result != postback.StatusSuccess {
+			t.Fatalf("logged recs = %+v, want one StatusSuccess", logger.recs)
+		}
+	})
+
+	t.Run("retrying", func(t *testing.T) {
+		store := newFakeStore(postback.Delivery{ID: "r1", URL: "https://net.example/pb"})
+		client := &fakeHTTPClient{respond: func(*http.Request) (*http.Response, error) { return statusResponse(500) }}
+		logger := &fakeAttemptLogger{}
+		d := postback.NewDeliverer(store, client, logger, quietLogger())
+
+		if _, err := d.RunOnce(context.Background(), 10); err != nil {
+			t.Fatalf("RunOnce: %v", err)
+		}
+		if len(logger.recs) != 1 || logger.recs[0].Result != postback.StatusRetrying {
+			t.Fatalf("logged recs = %+v, want one StatusRetrying", logger.recs)
+		}
+	})
+
+	t.Run("dead", func(t *testing.T) {
+		store := newFakeStore(postback.Delivery{ID: "d1", URL: "https://net.example/pb", AttemptCount: postback.MaxAttempts - 1})
+		client := &fakeHTTPClient{respond: func(*http.Request) (*http.Response, error) { return statusResponse(500) }}
+		logger := &fakeAttemptLogger{}
+		d := postback.NewDeliverer(store, client, logger, quietLogger())
+
+		if _, err := d.RunOnce(context.Background(), 10); err != nil {
+			t.Fatalf("RunOnce: %v", err)
+		}
+		if len(logger.recs) != 1 || logger.recs[0].Result != postback.StatusDead {
+			t.Fatalf("logged recs = %+v, want one StatusDead", logger.recs)
+		}
+	})
 }
 
 func TestClaimedDeliveryCarriesStatus(t *testing.T) {

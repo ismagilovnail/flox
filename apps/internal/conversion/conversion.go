@@ -222,6 +222,33 @@ type DeliveryEnqueuer interface {
 	Enqueue(ctx context.Context, req DeliveryRequest)
 }
 
+// AttemptRecord is what Service reports to the postback attempt audit log
+// (internal/postbacklog, §48's postback_events) after EVERY incoming
+// postback — success, duplicate, ignored, and error alike, mirroring §45's
+// "log every postback... with replay ability".
+type AttemptRecord struct {
+	OrganizationID string
+	NetworkID      string
+	ClickID        string
+	Status         event.Type
+	EventRef       string
+	RawStatus      string
+	Result         ResultKind
+	Message        string
+	Revenue        *float64
+	Currency       string
+	OccurredAt     time.Time
+}
+
+// AttemptLogger is the narrow slice of internal/postbacklog this package
+// needs — same decoupled-interface, no-error-return pattern as
+// DeliveryEnqueuer: an already-processed postback (whatever its outcome)
+// must never be reported differently to the network just because this
+// secondary audit log's queue insert stumbled.
+type AttemptLogger interface {
+	LogAttempt(ctx context.Context, rec AttemptRecord)
+}
+
 // Service is the conversion engine.
 //
 // It deliberately has no NetworkLookup: resolving {networkId} to an
@@ -235,10 +262,33 @@ type Service struct {
 	attribution attribution.AttributionService
 	events      EventSink
 	deliveries  DeliveryEnqueuer
+	attempts    AttemptLogger
 }
 
-func NewService(mapper Mapper, store Store, fx FXConverter, attr attribution.AttributionService, events EventSink, deliveries DeliveryEnqueuer) *Service {
-	return &Service{mapper: mapper, store: store, fx: fx, attribution: attr, events: events, deliveries: deliveries}
+func NewService(mapper Mapper, store Store, fx FXConverter, attr attribution.AttributionService, events EventSink, deliveries DeliveryEnqueuer, attempts AttemptLogger) *Service {
+	return &Service{mapper: mapper, store: store, fx: fx, attribution: attr, events: events, deliveries: deliveries, attempts: attempts}
+}
+
+// logAttempt reports one outcome to the postback attempt audit log. Called
+// from every exit point of Record (the main path, logError, logIgnored)
+// with whatever fields are known at that point — an error path before
+// mapping has no Status yet, and that's fine, an empty Status is itself
+// informative (§48's postback_events schema allows it, same as the
+// underlying Postgres ledger does for 'error' rows).
+func (s *Service) logAttempt(ctx context.Context, p Postback, clickID string, status event.Type, eventRef string, result ResultKind, message string) {
+	s.attempts.LogAttempt(ctx, AttemptRecord{
+		OrganizationID: p.OrganizationID,
+		NetworkID:      p.NetworkID,
+		ClickID:        clickID,
+		Status:         status,
+		EventRef:       eventRef,
+		RawStatus:      strings.TrimSpace(p.RawStatus),
+		Result:         result,
+		Message:        message,
+		Revenue:        p.Revenue,
+		Currency:       strings.TrimSpace(p.Currency),
+		OccurredAt:     p.OccurredAt,
+	})
 }
 
 // Record runs one postback through mapping, the progression check,
@@ -322,6 +372,8 @@ func (s *Service) Record(ctx context.Context, p Postback) (Result, error) {
 		return Result{}, fmt.Errorf("conversion: recording: %w", err)
 	}
 
+	s.logAttempt(ctx, p, clickID, status, eventRef, actual, entry.Message)
+
 	result := Result{ID: id, Kind: actual, Status: status, Attribution: attr, Message: entry.Message}
 	if actual == ResultSuccess {
 		s.events.Enqueue(buildEvent(p, attr, status, eventRef, revenue, usdValue))
@@ -398,6 +450,7 @@ func (s *Service) logError(ctx context.Context, p Postback, clickID string, stat
 	if err != nil {
 		return Result{}, fmt.Errorf("conversion: logging error: %w", err)
 	}
+	s.logAttempt(ctx, p, clickID, status, "", ResultError, message)
 	return Result{ID: id, Kind: ResultError, Status: status, Message: message}, nil
 }
 
@@ -420,6 +473,7 @@ func (s *Service) logIgnored(ctx context.Context, p Postback, clickID string, st
 	if err != nil {
 		return Result{}, fmt.Errorf("conversion: logging ignored: %w", err)
 	}
+	s.logAttempt(ctx, p, clickID, status, eventRef, ResultIgnored, message)
 	return Result{ID: id, Kind: ResultIgnored, Status: status, Message: message}, nil
 }
 

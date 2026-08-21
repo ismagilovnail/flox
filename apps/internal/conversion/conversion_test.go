@@ -144,6 +144,24 @@ func (d *fakeDeliveries) last() conversion.DeliveryRequest {
 	return d.reqs[len(d.reqs)-1]
 }
 
+// fakeAttempts collects whatever AttemptRecords Service logged.
+type fakeAttempts struct {
+	mu   sync.Mutex
+	recs []conversion.AttemptRecord
+}
+
+func (a *fakeAttempts) LogAttempt(_ context.Context, rec conversion.AttemptRecord) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.recs = append(a.recs, rec)
+}
+
+func (a *fakeAttempts) count() int {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return len(a.recs)
+}
+
 // attributionOf builds a AttributionService that always attributes to one
 // fixed click, or always reports OutcomeUnknownClick, for tests that don't
 // care about attribution's own logic (that's attribution package's job).
@@ -177,7 +195,7 @@ func newHarness() (*conversion.Service, *fakeMapper, *fakeStore, *fakeEvents, *f
 		outcome: attribution.OutcomeAttributed,
 		click:   attribution.Click{ClickID: "click-1", OrganizationID: orgA, OccurredAt: time.Date(2026, 8, 20, 10, 0, 0, 0, time.UTC)},
 	}
-	svc := conversion.NewService(mapper, store, &fakeFX{rates: map[string]float64{"EUR": 1.1}}, attr, events, deliveries)
+	svc := conversion.NewService(mapper, store, &fakeFX{rates: map[string]float64{"EUR": 1.1}}, attr, events, deliveries, &fakeAttempts{})
 	return svc, mapper, store, events, deliveries
 }
 
@@ -400,7 +418,7 @@ func TestUnattributedConversionIsStillRecorded(t *testing.T) {
 	store := newFakeStore()
 	events := &fakeEvents{}
 	attr := &fakeAttribution{outcome: attribution.OutcomeUnknownClick}
-	svc := conversion.NewService(mapper, store, &fakeFX{}, attr, events, &fakeDeliveries{})
+	svc := conversion.NewService(mapper, store, &fakeFX{}, attr, events, &fakeDeliveries{}, &fakeAttempts{})
 
 	result, err := svc.Record(ctx(), postback("net-1", "click-missing", "sale"))
 	if err != nil {
@@ -424,7 +442,7 @@ func TestAttributionFailureSurfacesAsError(t *testing.T) {
 	events := &fakeEvents{}
 	boom := errors.New("resolver unavailable")
 	attr := &fakeAttribution{err: boom}
-	svc := conversion.NewService(mapper, store, &fakeFX{}, attr, events, &fakeDeliveries{})
+	svc := conversion.NewService(mapper, store, &fakeFX{}, attr, events, &fakeDeliveries{}, &fakeAttempts{})
 
 	_, err := svc.Record(ctx(), postback("net-1", "click-1", "sale"))
 	if err == nil {
@@ -441,7 +459,7 @@ func TestFXMissingRateStoresConversionWithoutUSDValue(t *testing.T) {
 	store := newFakeStore()
 	events := &fakeEvents{}
 	attr := &fakeAttribution{outcome: attribution.OutcomeUnknownClick}
-	svc := conversion.NewService(mapper, store, &fakeFX{}, attr, events, &fakeDeliveries{}) // no rates configured
+	svc := conversion.NewService(mapper, store, &fakeFX{}, attr, events, &fakeDeliveries{}, &fakeAttempts{}) // no rates configured
 
 	p := postback("net-1", "click-1", "sale")
 	revenue := 100.0
@@ -580,5 +598,52 @@ func TestNoDeliveryOnDuplicateIgnoredOrError(t *testing.T) {
 	}
 	if deliveries.count() != 2 {
 		t.Fatalf("deliveries after unmapped-status error = %d, want still 2", deliveries.count())
+	}
+}
+
+// TestAttemptLoggedForEveryOutcome is §48's postback_events requirement at
+// the Service level: every exit point of Record — success, duplicate,
+// ignored, error — must report to the attempt audit log, not just the
+// ones that also succeed durably.
+func TestAttemptLoggedForEveryOutcome(t *testing.T) {
+	mapper := newFakeMapper()
+	mapper.set("net-1", "reg", event.CpaHold)
+	mapper.set("net-1", "sale", event.CpaAccept)
+	store := newFakeStore()
+	events := &fakeEvents{}
+	attempts := &fakeAttempts{}
+	attr := &fakeAttribution{outcome: attribution.OutcomeUnknownClick}
+	svc := conversion.NewService(mapper, store, &fakeFX{}, attr, events, &fakeDeliveries{}, attempts)
+
+	// success
+	if _, err := svc.Record(ctx(), postback("net-1", "click-1", "reg")); err != nil {
+		t.Fatalf("recording HOLD: %v", err)
+	}
+	// duplicate
+	if _, err := svc.Record(ctx(), postback("net-1", "click-1", "reg")); err != nil {
+		t.Fatalf("recording duplicate HOLD: %v", err)
+	}
+	// success (a second, different key) then ignored (replayed HOLD)
+	if _, err := svc.Record(ctx(), postback("net-1", "click-1", "sale")); err != nil {
+		t.Fatalf("recording ACCEPT: %v", err)
+	}
+	if _, err := svc.Record(ctx(), postback("net-1", "click-1", "reg")); err != nil {
+		t.Fatalf("recording replayed HOLD: %v", err)
+	}
+	// error (unmapped)
+	if _, err := svc.Record(ctx(), postback("net-1", "click-1", "bogus")); err != nil {
+		t.Fatalf("recording unmapped status: %v", err)
+	}
+
+	if attempts.count() != 5 {
+		t.Fatalf("attempts logged = %d, want 5 (one per Record call, regardless of outcome)", attempts.count())
+	}
+	kinds := map[conversion.ResultKind]int{}
+	for _, r := range attempts.recs {
+		kinds[r.Result]++
+	}
+	if kinds[conversion.ResultSuccess] != 2 || kinds[conversion.ResultDuplicate] != 1 ||
+		kinds[conversion.ResultIgnored] != 1 || kinds[conversion.ResultError] != 1 {
+		t.Fatalf("attempt outcomes = %+v, want 2 success, 1 duplicate, 1 ignored, 1 error", kinds)
 	}
 }

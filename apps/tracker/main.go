@@ -20,6 +20,8 @@ import (
 	"github.com/go-chi/chi/v5/middleware"
 
 	"github.com/ismagilovnail/flox/apps/internal/attribution"
+	"github.com/ismagilovnail/flox/apps/internal/chconn"
+	"github.com/ismagilovnail/flox/apps/internal/chstore"
 	"github.com/ismagilovnail/flox/apps/internal/classifier"
 	"github.com/ismagilovnail/flox/apps/internal/config"
 	"github.com/ismagilovnail/flox/apps/internal/conversion"
@@ -27,6 +29,7 @@ import (
 	"github.com/ismagilovnail/flox/apps/internal/eventqueue"
 	"github.com/ismagilovnail/flox/apps/internal/logging"
 	"github.com/ismagilovnail/flox/apps/internal/postback"
+	"github.com/ismagilovnail/flox/apps/internal/postbacklog"
 	"github.com/ismagilovnail/flox/apps/internal/postgres"
 	"github.com/ismagilovnail/flox/apps/internal/rediscache"
 	"github.com/ismagilovnail/flox/apps/internal/routing"
@@ -86,14 +89,23 @@ func run() error {
 		logger:     logger,
 	}
 
-	// The click-resolver behind attribution is still MemoryResolver — the
-	// tracker hands click events to eventbuf.LogSink, not durable storage,
-	// so there is nothing to query yet (docs/attribution.md). It becomes a
-	// ClickHouse-backed resolver with the worker (Phase 24) and the
-	// analytical schema (Phase 26); nothing in internal/conversion or this
-	// wiring changes when it does.
-	clicks := attribution.NewMemoryResolver()
-	attributionSvc := attribution.NewService(clicks)
+	// ClickHouse is best-effort at startup, same stance as Redis below: a
+	// down analytics store must not block the redirect path (CLAUDE.md #9)
+	// or prevent the tracker from starting at all. Falling back to
+	// MemoryResolver degrades attribution to "always unattributed" — worse
+	// than real matching, but no worse than every phase before this one.
+	var clickResolver attribution.ClickResolver = attribution.NewMemoryResolver()
+	chConn, chErr := chconn.NewConn(ctx, cfg.ClickHouse)
+	if chErr != nil {
+		logger.Warn("clickhouse unavailable at startup, attribution will not match real clicks", "error", chErr)
+	} else if migrateErr := chstore.Migrate(ctx, chConn); migrateErr != nil {
+		logger.Warn("clickhouse schema migration failed, attribution will not match real clicks", "error", migrateErr)
+		_ = chConn.Close()
+	} else {
+		defer chConn.Close()
+		clickResolver = chstore.NewClickResolver(chConn)
+	}
+	attributionSvc := attribution.NewService(clickResolver)
 
 	// Redis is best-effort at startup, matching §45's "REDIS UNAVAILABLE:
 	// fall through and record the event" at runtime: a postback correctness
@@ -117,6 +129,7 @@ func run() error {
 	}
 
 	deliveries := postback.NewEnqueuer(postback.NewPostgresStore(db), logger)
+	attemptLog := postbacklog.NewConversionAttemptLogger(postbacklog.NewPostgresQueue(db, logger))
 
 	postbackHandler := &PostbackHandler{
 		networks: conversion.NewPostgresNetworkLookup(db),
@@ -127,6 +140,7 @@ func run() error {
 			attributionSvc,
 			events,
 			deliveries,
+			attemptLog,
 		),
 		logger: logger,
 	}

@@ -71,12 +71,13 @@ stay thin; business logic never lives in handlers or in React components.
   sets, filters, flows, sources, networks, offers, landings, pwas,
   postlandings, domains, tracking links, pixels, postbacks, cost_entries,
   fx_rates, integrations, api_keys, audit_logs.
-- **ClickHouse** — high-volume events: clicks, tracking_events,
-  conversion_events, cost_events, postback_events, ltv_events, and
-  analytical aggregates. Sort keys lead with `organization_id`, partitioned
-  by date. As of Phase 25 this is a single minimal `events` table covering
-  the full event model, not yet the five-table design above — that split,
-  with per-table sort keys and TTLs, is Phase 26 (§48). See
+- **ClickHouse** — high-volume events: click_events, tracking_events,
+  conversion_events, cost_events, postback_events (the real §48 five-table
+  design, landed Phase 26), plus `ltv_events`/analytical aggregates
+  (§26.5, later). Sort keys lead with `organization_id`, partitioned by
+  date. `cost_events` is schema-only — its sync pipeline from Postgres
+  `cost_entries` is Phase 27-COST's job. No TTL yet on any table (no
+  retention policy exists in this project's docs). See
   `docs/analytics-pipeline.md`.
 - **Redis** — cache, rate limits, short-lived sessions, job coordination,
   postback dedup keys, and sticky-assignment **cache only** (never source of

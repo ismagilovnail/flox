@@ -5,6 +5,129 @@ per-phase, matching `CLAUDE.md`'s phase protocol. The one exception is
 [Between phases], below: spec amendments and the code changes that follow from
 them land between phases and would otherwise be invisible here.
 
+## [Phase 26] — ClickHouse
+
+### Added
+
+- **The real §48 five-table schema** — `click_events`, `tracking_events`,
+  `conversion_events`, `cost_events`, `postback_events` — replaces Phase
+  25's deliberately disposable single `events` table.
+  `schema/000_drop_phase25_schema.sql` drops it and its aggregate first;
+  every table gets its own sort key reasoning documented in its own
+  `schema/*.sql` file rather than one generic comment repeated five times.
+  No TTL on any table — confirmed via user question before starting: no
+  data retention policy exists anywhere in this project's docs
+  (PRODUCT.md, ARCHITECTURE.md), and defaulting one in silently would be a
+  real, possibly GDPR-relevant product decision made by omission.
+- **`event.Type.IsClick()`** (new, alongside the existing `IsCPA()`):
+  decides `click_events` vs `conversion_events` vs `tracking_events`
+  routing. `TestEventClassificationIsExhaustiveAndDisjoint` guards that
+  every type in the model lands in exactly one bucket — a future event
+  type added to `event.go` without updating this classification fails a
+  test instead of silently landing nowhere or in two tables at once.
+  `chstore.EventStore.InsertBatch` now buckets one mixed batch into up to
+  three ClickHouse batch inserts, never one insert per row.
+- **`cost_events`**: schema only, confirmed out of scope for this phase.
+  Mirrors Postgres `cost_entries` for cross-database-free JOINs against
+  click/conversion volume, but the sync pipeline that populates it is
+  Phase 27-COST's job ("Cost ingestion," ROADMAP.md) — the same pattern
+  `cost_entries` itself followed, starting manual-entry-only in Phase 17
+  before any FB/TikTok import existed. `ReplacingMergeTree(updated_at)`,
+  not a plain `MergeTree` — the only append-only-by-default table here that
+  anticipates needing to overwrite an edited entry once that sync exists.
+- **`postback_events`: real ingestion, both directions** — confirmed via
+  user question before starting, closing a gap migration 00008 (Phase 17)
+  explicitly earmarked for once ClickHouse existed. Every exit point of
+  `internal/conversion.Service.Record` (success, duplicate, ignored, error)
+  and every dispatch outcome in `internal/postback.Deliverer` (success,
+  retrying, dead) now reports through a new `AttemptLogger` interface —
+  same decoupled, no-error-return contract as `EventSink`/
+  `DeliveryEnqueuer` — to **`internal/postbacklog`**, a near-duplicate of
+  `internal/eventqueue` (own Postgres `FOR UPDATE SKIP LOCKED` queue,
+  `postback_attempt_queue`/migration 00016, own `Flusher`) rather than a
+  shared/generic implementation: the two payload shapes
+  (`chstore.PostbackAttempt` vs `event.Event`) have nothing else in common,
+  and duplicating ~150 lines of already-proven code was judged lower risk
+  than a generics refactor touching Phase 25's shipped `eventqueue`
+  mid-project. `postback_events` is explicitly **not** the dedup/delivery
+  source of truth — Postgres's `postbacks`/`postback_deliveries` still are
+  — it's the read-side replay/audit log §45 requires, fed asynchronously,
+  never on either direction's critical path.
+- **Three materialized views**: `click_events_daily_campaign` and
+  `click_events_daily_geo` (§48's two named patterns), plus
+  `conversion_events_daily_campaign` (counts **and USD revenue** per
+  campaign/day/status) — not named by §48 directly, but the same pattern
+  applied to money instead of volume, added because CLAUDE.md #6 ("cost or
+  it doesn't exist") and §27-COST's eventual ROI queries will need a
+  revenue aggregate and the marginal cost of a third view was near zero.
+  All three `SummingMergeTree`, verified firing *synchronously* on
+  `INSERT` (no polling needed in tests). Revenue sums
+  `usd_value * has_usd_value` — a conversion with no FX rate on file
+  contributes exactly zero, not an approximation.
+- **`internal/analytics` gains `GET /analytics/campaigns/{id}/daily-revenue`**,
+  reading the new revenue aggregate — the query method existed since this
+  phase's schema work but the REST endpoint was initially missed and added
+  once the smoke test went looking for it.
+- **Attribution's `MemoryResolver` replaced by `chstore.ClickResolver`** —
+  not originally scoped for this phase's user-confirmed plan, but closes a
+  promise `docs/attribution.md` made across Phases 22/23/25 ("arriving with
+  the worker (Phase 24) and the analytical schema (Phase 26)") using
+  infrastructure this phase already built. Found while verifying the
+  schema end-to-end: `apps/tracker` never actually called
+  `MemoryResolver.Record` anywhere — every conversion has been permanently
+  `unknown_click` since Phase 23 shipped, silently. `ByClickID` resolves to
+  the **earliest** occurrence of a click_id (handles `stickyFlowKeepClickId`
+  reusing one click_id across a returning visitor's journey, §39-STICKY)
+  and excludes `SOURCE_FILTER` rows (a filtered click never reached a
+  destination, so a network could never legitimately reference one) — a
+  lookup-eligibility decision, not new attribution policy; the matching
+  logic itself is entirely `internal/attribution`'s own, unchanged.
+  Best-effort at tracker startup (falls back to `MemoryResolver` — same
+  degraded-but-honest stance as Redis elsewhere) since the redirect path
+  must never depend on ClickHouse being up.
+- **`internal/chstore/schema/*.sql`**, **`docs/analytics-pipeline.md`**
+  (rewritten for the real schema), **`docs/attribution.md`** (the "Later"
+  promise marked landed), **`ARCHITECTURE.md`** updated (§76).
+
+### Fixed
+
+- Nothing broken, but one real functional gap closed in passing: see
+  "Attribution's `MemoryResolver` replaced" above — every conversion was
+  silently unattributed in any environment that actually ran the compiled
+  tracker, not just in tests.
+
+### Security
+
+- Tenant isolation re-verified for the new `ClickResolver`
+  (`TestClickResolverTenantIsolation`): org B resolving org A's click_id
+  gets `ErrClickNotFound`, the same outcome as a genuinely nonexistent
+  click — indistinguishable from outside, so the failure mode can't be used
+  to confirm another tenant's click_id exists (mirrors
+  `internal/attribution`'s own stated reasoning for `OutcomeUnknownClick`).
+
+### Notes
+
+- End-to-end smoke test against compiled `tracker`/`worker`/`api` binaries
+  and real Postgres/ClickHouse: a real click through `/t/{trackingID}` →
+  flushed to `click_events` → a real incoming postback for that exact
+  click_id → `attribution_outcome = "attributed"`, `method = "click_id"` in
+  the resulting `conversion_events` row — the first smoke test all session
+  to NOT read "matched no click of this organization." Also verified: the
+  postback's own audit trail in `postback_events` (both `incoming` and the
+  `outgoing` delivery it triggered, including a real HTTP hit against a
+  local receiver), and a from-scratch ClickHouse schema application
+  (`DROP`s issued manually, `Migrate` re-run, all 5 tables + 3 views
+  recreated cleanly).
+- 69 tests total across the touched/new packages (up from 39 last phase):
+  `chconn` 1, `chstore` 12 (incl. 7 new `ClickResolver` tests), `eventqueue`
+  5 (unchanged), `postbacklog` 5 (new), `conversion` 24 (+1: every `Record`
+  outcome logs an attempt), `postback` 12 (+1: every dispatch outcome logs
+  an attempt), `event` 4 (+1: classification exhaustiveness), `analytics` 6
+  (+2: the revenue endpoint).
+- Full Postgres migration round-trip (`up`/`down`/`up`) verified through
+  00016; a from-scratch ClickHouse schema application verified separately
+  from the idempotency check `chstore_test.go` already had.
+
 ## [Phase 25] — Analytics Pipeline
 
 ### Added

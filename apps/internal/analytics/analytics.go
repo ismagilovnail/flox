@@ -1,10 +1,10 @@
-// Package analytics is Phase 25's "analytics service" pipeline stage
-// (§47): a thin read layer over chstore's minimal aggregate table, exposed
-// as a REST endpoint by apps/api. Deliberately narrow — one query, one
-// endpoint — proving the pipeline's last two stages work end to end;
-// the real analytics surface (per-GEO/per-source/per-offer breakdowns,
-// the metrics registry, custom metrics) is later work once Phase 26's
-// real ClickHouse schema exists to query.
+// Package analytics is the "analytics service" pipeline stage (§47/§48): a
+// thin read layer over chstore's materialized aggregates, exposed as REST
+// endpoints by apps/api. Deliberately narrow — two queries, two endpoints
+// (click/filter volume, conversion revenue) — proving the pipeline's last
+// two stages work end to end; the real analytics surface (per-GEO/per-
+// source/per-offer breakdowns, the metrics registry, custom metrics) is
+// later work once Phase 27's frontend integration needs it.
 package analytics
 
 import (
@@ -20,6 +20,7 @@ import (
 // pattern used throughout (EventSink, DeliveryEnqueuer, ClickHouseSink).
 type Repository interface {
 	DailyCampaignCounts(ctx context.Context, organizationID, campaignID string, from, to time.Time) ([]chstore.DailyCount, error)
+	DailyCampaignRevenue(ctx context.Context, organizationID, campaignID string, from, to time.Time) ([]chstore.DailyRevenue, error)
 }
 
 // maxRangeDays bounds how wide a query can ask for. Not in §47 — a
@@ -34,19 +35,36 @@ type Service struct {
 
 func NewService(repo Repository) *Service { return &Service{repo: repo} }
 
-// CampaignDaily returns daily (day, event type) counts for one campaign.
-func (s *Service) CampaignDaily(ctx context.Context, organizationID, campaignID string, from, to time.Time) ([]chstore.DailyCount, error) {
+func (s *Service) validateRange(organizationID, campaignID string, from, to time.Time) error {
 	if organizationID == "" {
-		return nil, apierror.Validation("missing organization", nil)
+		return apierror.Validation("missing organization", nil)
 	}
 	if campaignID == "" {
-		return nil, apierror.Validation("missing campaign id", nil)
+		return apierror.Validation("missing campaign id", nil)
 	}
 	if to.Before(from) {
-		return nil, apierror.Validation("to must not be before from", map[string]string{"to": "before from"})
+		return apierror.Validation("to must not be before from", map[string]string{"to": "before from"})
 	}
 	if to.Sub(from) > maxRangeDays*24*time.Hour {
-		return nil, apierror.Validation("date range too wide", map[string]string{"to": "more than 366 days after from"})
+		return apierror.Validation("date range too wide", map[string]string{"to": "more than 366 days after from"})
+	}
+	return nil
+}
+
+// CampaignDaily returns daily (day, event type) click/filter counts for one
+// campaign, from click_events_daily_campaign.
+func (s *Service) CampaignDaily(ctx context.Context, organizationID, campaignID string, from, to time.Time) ([]chstore.DailyCount, error) {
+	if err := s.validateRange(organizationID, campaignID, from, to); err != nil {
+		return nil, err
 	}
 	return s.repo.DailyCampaignCounts(ctx, organizationID, campaignID, from, to)
+}
+
+// CampaignDailyRevenue returns daily (day, CPA status) conversion counts
+// and USD revenue for one campaign, from conversion_events_daily_campaign.
+func (s *Service) CampaignDailyRevenue(ctx context.Context, organizationID, campaignID string, from, to time.Time) ([]chstore.DailyRevenue, error) {
+	if err := s.validateRange(organizationID, campaignID, from, to); err != nil {
+		return nil, err
+	}
+	return s.repo.DailyCampaignRevenue(ctx, organizationID, campaignID, from, to)
 }

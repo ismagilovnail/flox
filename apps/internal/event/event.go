@@ -86,6 +86,18 @@ func (t Type) IsCPA() bool {
 	}
 }
 
+// IsClick reports whether t is the tracker's own redirect-time decision
+// (SOURCE_CLICK/SOURCE_FILTER) — §48's click_events table, as opposed to
+// every other non-CPA event (tracking_events).
+func (t Type) IsClick() bool {
+	switch t {
+	case SourceClick, SourceFilter:
+		return true
+	default:
+		return false
+	}
+}
+
 // Subs are the sub1..sub10 pass-through parameters (§42). A fixed-size
 // array rather than a map: the set is fixed at exactly ten, and this keeps
 // "present but empty" (the common Facebook case) distinct from "not a

@@ -58,6 +58,27 @@ func TestCPAStatusesAreDistinct(t *testing.T) {
 	}
 }
 
+// TestEventClassificationIsExhaustiveAndDisjoint guards §48's three-way
+// split (click_events/tracking_events/conversion_events): every type in
+// the model must land in exactly one of IsClick()/IsCPA()/neither, so the
+// ClickHouse ingestion router (internal/chstore) never silently drops a
+// type or double-counts it into two tables.
+func TestEventClassificationIsExhaustiveAndDisjoint(t *testing.T) {
+	for _, ty := range event.All {
+		isClick := ty.IsClick()
+		isCPA := ty.IsCPA()
+		if isClick && isCPA {
+			t.Fatalf("%q is both IsClick() and IsCPA() — must be at most one", ty)
+		}
+	}
+	if !event.SourceClick.IsClick() || !event.SourceFilter.IsClick() {
+		t.Error("SOURCE_CLICK and SOURCE_FILTER must both be IsClick()")
+	}
+	if event.LandView.IsClick() || event.LandView.IsCPA() {
+		t.Error("LAND_VIEW must be neither IsClick() nor IsCPA() (it's a tracking_events row)")
+	}
+}
+
 func TestSubCount(t *testing.T) {
 	cases := []struct {
 		name string

@@ -128,14 +128,36 @@ Rather than pretend otherwise — by quietly adding a clicks table to Postgres
 that §7 says does not belong there — the stand-in is honest and explicitly
 replaceable.
 
-**Later:** a ClickHouse-backed resolver, arriving with the worker (Phase 24)
-and the analytical schema (Phase 26). §7 puts raw high-volume traffic events
-there and §47 forbids serving them from Postgres. Nothing in this package
-changes when it lands.
+**Landed in Phase 26:** `chstore.ClickResolver`, querying `click_events`
+(§48's real analytical schema). `apps/tracker/main.go` wires it in place of
+`MemoryResolver` — nothing in `internal/attribution` itself changed, exactly
+as this package always promised. Two decisions specific to querying an
+event-sourced table rather than a live index:
 
-A resolver **failure** (database unavailable) surfaces as an error, never as
-`unattributed`. Recording a blip as "no click found" would permanently write
-off a real conversion; the caller has to be able to retry.
+- **Eventual consistency**: a click reaches `click_events` only after
+  `apps/tracker` enqueues it and `apps/worker` flushes it
+  (`internal/eventqueue`, up to ~2s behind in the worst case). A conversion
+  arriving within that window for a brand-new click can see
+  `unknown_click` even though the click genuinely happened. Real postback
+  delay dwarfs this window in practice; nothing compensates for it (no
+  retry-after-delay), and none was added — see `chstore`'s own doc comment.
+- **`stickyFlowKeepClickId` reuse** (§39-STICKY) means one `click_id` can
+  legitimately appear on more than one `click_events` row across a
+  returning visitor's journey. `ByClickID` resolves to the **earliest**
+  occurrence — the original click that started the journey — not the most
+  recent.
+
+A resolver **failure** (a query against a live ClickHouse erroring) surfaces
+as an error, never as `unattributed` — recording a blip as "no click found"
+would permanently write off a real conversion, so the caller has to be able
+to retry. This is distinct from `apps/tracker`'s own startup choice of
+*which* resolver to wire up at all: ClickHouse being unreachable when the
+tracker boots falls back to an empty `MemoryResolver` (logged clearly, not
+silently) rather than refusing to start — the redirect path must never
+depend on ClickHouse being up (CLAUDE.md #9's spirit), even though the
+practical effect is every conversion reading `unknown_click` until the next
+successful restart. Recorded here as a deliberate, known degradation, not
+an oversight.
 
 ## Attribution window: decided in Phase 23 — there isn't one
 

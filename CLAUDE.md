@@ -19,58 +19,74 @@ referenced below as §N).
 ## CURRENT STATE — UPDATE THIS EVERY PHASE
 
 ```
-CURRENT PHASE : PHASE 25 — Analytics Pipeline
-STATUS        : done — full pipeline wired and verified end-to-end against
-                real Postgres/ClickHouse/compiled binaries: tracker's
-                eventbuf.Writer now uses eventqueue.Sink (Postgres-backed
-                event_queue, migration 00015, same FOR UPDATE SKIP LOCKED
-                job-queue pattern as postback_deliveries) instead of the
-                LogSink stand-in it ran with through Phase 24. apps/worker
-                gained a second poll loop (internal/eventqueue.Flusher):
-                claims batches (up to 500), one ClickHouse batch insert per
-                batch, deletes on success or requeues the WHOLE batch on
-                failure (fixed 10s retry, no dead-letter — unlike postbacks,
-                analytics has no per-item deadline). internal/chconn dials
-                ClickHouse over HTTP (the only interface docker-compose.dev
-                exposes to the host — NOT the native protocol some
-                reference code defaults to). internal/chstore is a
-                DELIBERATELY MINIMAL, single `events` table (embedded
-                schema/*.sql, idempotent CREATE-IF-NOT-EXISTS, no migration
-                framework) plus one aggregate (events_daily_campaign, a
-                SummingMergeTree fed by a materialized view that fires
-                synchronously on INSERT — verified, no polling needed).
-                Confirmed via AskUserQuestion before starting: this minimal
-                schema is a deliberate, KNOWN rework — the real five-table
-                design with per-table sort keys/TTLs is explicitly Phase
-                26's job (§48), not built ahead of here. internal/analytics
-                is one query/one endpoint (GET /analytics/campaigns/
-                {id}/daily) on apps/api, tenant-scoped via the existing
-                tenant.Middleware; apps/api's ClickHouse connection and
-                httpserver's /ready check are both best-effort/optional,
-                same stance as Redis elsewhere — a down ClickHouse degrades
-                /analytics, not the whole control-plane API.
-                Frontend (apps/web) untouched — wiring it to real APIs is
-                explicitly Phase 27 ("Frontend/backend integration" per
-                ROADMAP.md), not this phase.
-                13 new tests across 4 new packages (chconn: 1, chstore: 3,
-                eventqueue: 5 incl. pure-logic Flusher tests with fakes,
-                analytics: 4) — all Postgres/ClickHouse-gated ones run
-                against real instances. End-to-end smoke test: real events
-                through Postgres queue -> worker flush -> ClickHouse ->
-                materialized aggregate -> real analytics REST API response,
-                plus a cross-tenant check (org B queries org A's campaign,
-                gets zero rows).
+CURRENT PHASE : PHASE 26 — ClickHouse
+STATUS        : done — the real §48 five-table schema replaces Phase 25's
+                disposable single `events` table (schema/000_drop_phase25_
+                schema.sql drops it, 001-005 create click_events/
+                tracking_events/conversion_events/cost_events/
+                postback_events). event.Type.IsClick()/IsCPA() (new,
+                exhaustive-and-disjoint, test-guarded) route each
+                event_queue batch into up to 3 ClickHouse inserts via
+                internal/chstore.EventStore.InsertBatch — never one insert
+                per row. cost_events is schema-only (its Postgres sync is
+                Phase 27-COST's job, confirmed out of scope, same pattern
+                as cost_entries starting manual-only in Phase 17).
+                postback_events gets REAL ingestion, both directions
+                (confirmed via AskUserQuestion): internal/conversion.Service
+                and internal/postback.Deliverer each report every outcome
+                (not just successes) through a new AttemptLogger interface
+                to internal/postbacklog — a near-duplicate of
+                internal/eventqueue (own Postgres queue + Flusher) rather
+                than a shared/generic implementation, deliberately, since
+                the two payload shapes have nothing else in common.
+                Verified end-to-end: one incoming postback produces both a
+                Postgres `postbacks` row and a ClickHouse postback_events
+                row, and the outgoing delivery it triggers produces its own
+                postback_events row after actually hitting the network.
+                Materialized views: click_events_daily_campaign,
+                click_events_daily_geo (§48's two named patterns) plus
+                conversion_events_daily_campaign (revenue — not named by
+                §48 but the same pattern, added since CLAUDE.md #6/
+                §27-COST will need it and the cost was near-zero).
+                internal/analytics gained a second endpoint
+                (GET .../daily-revenue) reading the new revenue aggregate.
+                No TTL on any table (confirmed via AskUserQuestion — no
+                retention policy exists anywhere in this project's docs;
+                a silent default would be a real, possibly GDPR-relevant
+                decision made by omission).
+                BONUS, not originally scoped but closes a promise made in
+                Phase 22/23/25 docs: attribution's MemoryResolver — which
+                was NEVER actually populated by the real tracker, so EVERY
+                conversion has been permanently unattributed since Phase 23
+                shipped — is replaced by chstore.ClickResolver, querying
+                click_events for real. Handles stickyFlowKeepClickId's
+                click_id reuse (resolves to the EARLIEST occurrence) and
+                excludes SOURCE_FILTER rows (never reached a destination,
+                so a network could never legitimately reference one).
+                Eventual-consistency caveat documented (click_events lags
+                the real click by up to ~2s, the worker's flush interval).
+                Best-effort at tracker startup, matching Redis's existing
+                stance — falls back to MemoryResolver (attribution always
+                unattributed until restart) rather than refusing to start,
+                since the redirect path must never depend on ClickHouse
+                being up. Verified with a REAL click through the tracker's
+                /t/ endpoint, flushed to ClickHouse, then a real incoming
+                postback for that exact click_id — attribution_outcome
+                came back "attributed" / method "click_id", the first time
+                any smoke test this session has NOT read "matched no click
+                of this organization."
+                69 tests pass across 8 packages (up from 39 last phase);
+                full Postgres migration round-trip (00001-00016) and a
+                from-scratch ClickHouse schema application both verified.
+                Frontend (apps/web) untouched — Phase 27's job.
                 Carried over, unrelated: Phase 10 crash-loop report; in-app
-                WebView bounce (§73). Click storage (attribution) still
-                MemoryResolver.
-LAST COMMIT   : feat(analytics): analytics pipeline
-NEXT          : PHASE 26 — ClickHouse — confirm before starting. The real
-                five-table schema (click_events/tracking_events/
-                conversion_events/cost_events/postback_events), sort keys
-                optimized for org/date/campaign/source/country/flow/offer,
-                per-campaign+day and per-GEO+day materialized views —
-                replacing Phase 25's single disposable `events` table.
-                Known rework, not a surprise; see docs/analytics-pipeline.md.
+                WebView bounce (§73).
+LAST COMMIT   : feat(clickhouse): five-table analytical schema
+NEXT          : PHASE 26.5 — LTV & Cohort Engine — confirm before starting.
+                FTD/reg cohorts, lifetime_days, LTV windows — "core value
+                for iGaming, do not skip" per the spec. Likely needs its
+                own ltv_events table or a materialized view over
+                conversion_events; decide which before writing schema.
 ```
 
 > At the end of every phase: update the four lines above, add a CHANGELOG entry,

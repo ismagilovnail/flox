@@ -113,3 +113,28 @@ type Store interface {
 	// MarkDead records a failed attempt that exhausted MaxAttempts.
 	MarkDead(ctx context.Context, id string, responseStatusCode int, message string) error
 }
+
+// AttemptRecord is what Deliverer reports to the postback attempt audit
+// log (internal/postbacklog, §48's postback_events) after every dispatch
+// attempt — success, retrying, and dead alike.
+type AttemptRecord struct {
+	OrganizationID     string
+	NetworkID          string
+	ClickID            string
+	Status             event.Type
+	Result             DeliveryStatus
+	Message            string
+	AttemptCount       int
+	ResponseStatusCode int
+	URL                string
+	OccurredAt         time.Time
+}
+
+// AttemptLogger is the narrow slice of internal/postbacklog this package
+// needs — same decoupled, no-error-return pattern as everywhere else in
+// this codebase (EventSink, DeliveryEnqueuer, conversion.AttemptLogger): a
+// delivery attempt's own outcome (already durably recorded via Store) must
+// never be affected by this secondary audit log's queue insert stumbling.
+type AttemptLogger interface {
+	LogAttempt(ctx context.Context, rec AttemptRecord)
+}
