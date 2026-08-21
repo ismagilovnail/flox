@@ -23,7 +23,7 @@ import {
   type CostIntegration,
   type SourceStatus,
   type SourceType,
-} from "@/lib/mock/traffic-sources";
+} from "@/lib/api/traffic-sources";
 
 const COST_INTEGRATIONS: CostIntegration[] = ["none", "manual", "facebook_ads", "tiktok_ads"];
 
@@ -32,7 +32,7 @@ export const sourceFormSchema = z.object({
   type: z.enum(SOURCE_TYPES as [SourceType, ...SourceType[]]),
   trackingTemplate: z.url("Enter a valid URL"),
   costIntegration: z.enum(COST_INTEGRATIONS as [CostIntegration, ...CostIntegration[]]),
-  status: z.enum(["active", "paused", "archived"] as [SourceStatus, ...SourceStatus[]]),
+  status: z.enum(["active", "paused", "archived"] as [SourceStatus, ...SourceStatus[]]).optional(),
 });
 
 export type SourceFormValues = z.infer<typeof sourceFormSchema>;
@@ -45,6 +45,7 @@ export function SourceFormSheet({
   defaultValues,
   title,
   submitLabel,
+  showStatus = false,
   onSubmit,
 }: {
   open: boolean;
@@ -52,11 +53,12 @@ export function SourceFormSheet({
   defaultValues: Partial<SourceFormValues>;
   title: string;
   submitLabel: string;
+  showStatus?: boolean;
   onSubmit: (values: SourceFormValues) => void;
 }) {
   const form = useForm<SourceFormValues>({
     resolver: zodResolver(sourceFormSchema),
-    defaultValues: {
+    values: {
       name: "",
       type: SOURCE_TYPES[0],
       trackingTemplate: "",
@@ -153,31 +155,33 @@ export function SourceFormSheet({
                 )}
               />
               <p className="text-xs text-muted-foreground">
-                Manual entry and ad-network OAuth pulls both land in Phase 27-COST — this only records intent for now.
+                Manual entries are logged per campaign on its Cost tab. Ad-network OAuth pulls (Facebook/TikTok) aren&apos;t built yet — this only records intent.
               </p>
             </div>
 
-            <div className="grid gap-1.5">
-              <Label htmlFor="src-status">Status</Label>
-              <Controller
-                control={control}
-                name="status"
-                render={({ field }) => (
-                  <Select value={field.value} onValueChange={field.onChange}>
-                    <SelectTrigger id="src-status" className="w-full">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {STATUS_OPTIONS.map((s) => (
-                        <SelectItem key={s} value={s}>
-                          {s}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                )}
-              />
-            </div>
+            {showStatus && (
+              <div className="grid gap-1.5">
+                <Label htmlFor="src-status">Status</Label>
+                <Controller
+                  control={control}
+                  name="status"
+                  render={({ field }) => (
+                    <Select value={field.value} onValueChange={field.onChange}>
+                      <SelectTrigger id="src-status" className="w-full">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {STATUS_OPTIONS.map((s) => (
+                          <SelectItem key={s} value={s}>
+                            {s}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  )}
+                />
+              </div>
+            )}
           </div>
 
           <SheetFooter className="mt-0 flex-row justify-end gap-2 p-0">

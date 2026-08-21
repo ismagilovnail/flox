@@ -97,7 +97,7 @@ func run() error {
 		campaignHandler.Register(r)
 	})
 
-	trafficSourceHandler := trafficsource.NewHandler(trafficsource.NewRepository(db), logger)
+	trafficSourceHandler := trafficsource.NewHandler(trafficsource.NewService(trafficsource.NewRepository(db)), logger)
 	srv.Mux().Route("/traffic-sources", func(r chi.Router) {
 		r.Use(tenant.Middleware)
 		trafficSourceHandler.Register(r)

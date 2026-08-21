@@ -22,30 +22,48 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { useTrafficSourcesStore } from "@/stores/traffic-sources";
+import {
+  useActivateTrafficSource,
+  useArchiveTrafficSource,
+  useDuplicateTrafficSource,
+  usePauseTrafficSource,
+} from "@/hooks/use-traffic-sources";
 import { viewStatisticsHref } from "@/features/analytics/view-statistics-link";
-import type { TrafficSource } from "@/lib/mock/traffic-sources";
+import type { TrafficSource } from "@/lib/api/traffic-sources";
 
 export function SourceRowActions({ source, onEdit }: { source: TrafficSource; onEdit: () => void }) {
-  const setStatus = useTrafficSourcesStore((s) => s.setStatus);
-  const duplicateSource = useTrafficSourcesStore((s) => s.duplicateSource);
+  const pause = usePauseTrafficSource();
+  const activate = useActivateTrafficSource();
+  const duplicate = useDuplicateTrafficSource();
+  const archive = useArchiveTrafficSource();
   const [confirmArchive, setConfirmArchive] = React.useState(false);
 
   function togglePause() {
-    const next = source.status === "active" ? "paused" : "active";
-    setStatus(source.id, next);
-    toast(next === "paused" ? "Source paused" : "Source resumed", { description: source.name });
+    const action = source.status === "active" ? pause : activate;
+    action.mutate(source.id, {
+      onSuccess: () => toast(source.status === "active" ? "Source paused" : "Source resumed", { description: source.name }),
+      onError: (err) => toast.error("Couldn't update source", { description: err.message }),
+    });
   }
 
-  function duplicate() {
-    duplicateSource(source.id);
-    toast("Source duplicated", { description: `${source.name} (Copy)` });
+  function handleDuplicate() {
+    duplicate.mutate(source.id, {
+      onSuccess: () => toast("Source duplicated", { description: `${source.name} (Copy)` }),
+      onError: (err) => toast.error("Couldn't duplicate source", { description: err.message }),
+    });
   }
 
-  function archive() {
-    setStatus(source.id, "archived");
-    setConfirmArchive(false);
-    toast("Source archived", { description: source.name });
+  function handleArchive() {
+    archive.mutate(source.id, {
+      onSuccess: () => {
+        setConfirmArchive(false);
+        toast("Source archived", { description: source.name });
+      },
+      onError: (err) => {
+        setConfirmArchive(false);
+        toast.error("Couldn't archive source", { description: err.message });
+      },
+    });
   }
 
   return (
@@ -78,7 +96,7 @@ export function SourceRowActions({ source, onEdit }: { source: TrafficSource; on
               )}
             </DropdownMenuItem>
           )}
-          <DropdownMenuItem onSelect={duplicate}>
+          <DropdownMenuItem onSelect={handleDuplicate}>
             <CopyIcon className="size-4" /> Duplicate
           </DropdownMenuItem>
           {source.status !== "archived" && (
@@ -104,7 +122,7 @@ export function SourceRowActions({ source, onEdit }: { source: TrafficSource; on
             <Button variant="outline" onClick={() => setConfirmArchive(false)}>
               Cancel
             </Button>
-            <Button variant="destructive" onClick={archive}>
+            <Button variant="destructive" onClick={handleArchive} disabled={archive.isPending}>
               Archive
             </Button>
           </DialogFooter>

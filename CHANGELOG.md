@@ -5,6 +5,69 @@ per-phase, matching `CLAUDE.md`'s phase protocol. The one exception is
 [Between phases], below: spec amendments and the code changes that follow from
 them land between phases and would otherwise be invisible here.
 
+## [Traffic Sources CRUD] — Frontend/Backend Integration, next domain slice
+
+### Added
+
+- **`apps/internal/trafficsource`** grew from Phase 27's deliberately
+  read-only `List` into full CRUD (`Create`/`Get`/`Update`/`Delete`/
+  `Duplicate`/`Pause`/`Activate`), mirroring `internal/campaign`'s
+  handler→service→repository split exactly. Chosen over Offers/Networks/
+  Stream Sets (confirmed via `AskUserQuestion`) as the smallest next
+  slice: the read endpoint and a complete mock CRUD UI already existed,
+  and the entity has no nested children.
+- **`Service.Duplicate` keeps the source's status as-is** — unlike
+  `campaign.Service.Duplicate`, which resets a copy to `"draft"`.
+  `TrafficSource` has no draft-equivalent status, and the mock store this
+  replaced never reset it either.
+- **`Repository.Delete` turns a Postgres FK violation into a clean 409**:
+  `campaigns.traffic_source_id` has no `ON DELETE` clause (defaults to
+  `RESTRICT`, deliberately — a source with campaigns still pointing at it
+  shouldn't silently vanish). Catches error code `23503` and returns
+  `apierror.Conflict` instead of letting a raw 500 through.
+- **Frontend**: `lib/api/traffic-sources.ts` + `hooks/use-traffic-sources.ts`
+  fully rewritten off the mock store onto the real API; `source-list.tsx`/
+  `source-form-sheet.tsx`/`source-row-actions.tsx`/`source-columns.tsx`
+  wired to real queries/mutations with their existing UI shape unchanged
+  (create/edit sheet, pause/resume/duplicate/archive row actions, tags
+  column still local-mock same as campaigns).
+- **`docs/traffic-sources.md`**; `docs/frontend-integration.md` updated —
+  Traffic Sources is off the "still mocked" list now.
+
+### Removed
+
+- **`lib/mock/traffic-sources.ts` and `stores/traffic-sources.ts` deleted
+  outright** — unlike campaigns' equivalents (Phase 27 kept
+  `lib/mock/campaigns.ts`/`stores/campaigns.ts` because other still-mocked
+  features — conversions, tag assignments — import them transitively),
+  nothing outside the traffic-sources feature ever referenced these, so
+  there was nothing to preserve.
+
+### Notes
+
+- 7 new integration tests in `apps/internal/trafficsource` (real Postgres,
+  `DATABASE_URL`-gated): create/get/update/delete round-trip, invalid
+  tracking-template URL rejected, pause/activate transitions (incl.
+  idempotency from the target state and rejection from archived),
+  duplicate keeps status, delete conflicts when a campaign references the
+  source, and full cross-tenant isolation across get/update/delete/list.
+- Verified end-to-end against the real running `api` + `web` dev servers:
+  created a source through the UI, paused it (status flipped live),
+  duplicated it (copy correctly kept `paused`, not reset), opened Edit
+  and confirmed real pre-filled data with the Status field present
+  (edit-only). The FK-conflict path was verified directly via `curl`
+  against a real referencing campaign — a clean `409`, not a raw
+  Postgres error.
+- **A real mistake made and corrected during verification, not shipped
+  silently**: one of the dev org's two seeded traffic sources ("Facebook
+  Ads") was deleted while testing the delete flow, before the
+  FK-referencing test case that would have caught it (no campaign existed
+  at that moment to trigger the conflict path). Noticed immediately,
+  recreated with the same name/type to restore dev state — see
+  `docs/traffic-sources.md` for the full account.
+- Backend: `go build/vet/gofmt/test ./...` all green. Frontend:
+  `tsc --noEmit` and `eslint` both clean.
+
 ## [Phase 27-COST] — Cost Ingestion
 
 ### Added
