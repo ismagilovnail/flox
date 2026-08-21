@@ -49,10 +49,14 @@ single concrete, honestly-deliverable slice:
 - **`CampaignDetailView`'s Overview tab** — real `StatCard`s (Revenue,
   Clicks, Conversions, CVR) computed from the same two analytics endpoints
   Phase 25/26 built, plus a real daily revenue line chart. `Spend`,
-  `Profit`, `ROI`, `CPA` are gone entirely, not shown as `"—"`: CLAUDE.md
-  invariant #6 reads `"—"` as "a value that hasn't been entered yet," and
-  that's not what's true here — there is no cost pipeline wired to the
-  frontend at all yet (that's Phase 27-COST, separately roadmapped).
+  `Profit`, `ROI`, `CPA` were gone entirely at the time this phase closed
+  (not shown as `"—"`: CLAUDE.md invariant #6 reads `"—"` as "a value that
+  hasn't been entered yet," and that wasn't true — there was no cost
+  pipeline wired to the frontend at all). **Phase 27-COST closed this
+  gap** — see `docs/cost-ingestion.md`; all four are real now, with
+  Profit/ROI/CPA correctly falling back to `"—"` only when cost genuinely
+  isn't entered (or, for CPA, when conversions are zero — a division by
+  zero, not a $0.00 acquisition cost).
 
 ## What's still mocked, unchanged
 

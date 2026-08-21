@@ -18,6 +18,8 @@ import (
 	"github.com/ismagilovnail/flox/apps/internal/chconn"
 	"github.com/ismagilovnail/flox/apps/internal/chstore"
 	"github.com/ismagilovnail/flox/apps/internal/config"
+	"github.com/ismagilovnail/flox/apps/internal/conversion"
+	"github.com/ismagilovnail/flox/apps/internal/cost"
 	"github.com/ismagilovnail/flox/apps/internal/httpserver"
 	"github.com/ismagilovnail/flox/apps/internal/logging"
 	"github.com/ismagilovnail/flox/apps/internal/ltv"
@@ -99,6 +101,12 @@ func run() error {
 	srv.Mux().Route("/traffic-sources", func(r chi.Router) {
 		r.Use(tenant.Middleware)
 		trafficSourceHandler.Register(r)
+	})
+
+	costHandler := cost.NewHandler(cost.NewService(cost.NewRepository(db), conversion.NewPostgresFX(db)), logger)
+	srv.Mux().Route("/campaigns/{campaignId}/cost-entries", func(r chi.Router) {
+		r.Use(tenant.Middleware)
+		costHandler.Register(r)
 	})
 
 	if ch != nil {

@@ -24,8 +24,10 @@ import { formatUsd } from "@/lib/format";
 import type { CampaignStatus } from "@/lib/api/campaigns";
 import { useArchiveCampaign, useCampaign, useUpdateCampaign } from "@/hooks/use-campaigns";
 import { useCampaignDailyClicks, useCampaignDailyRevenue } from "@/hooks/use-campaign-analytics";
+import { useCampaignDailySpend } from "@/hooks/use-cost-entries";
 import { CampaignRowActions } from "@/features/campaigns/campaign-row-actions";
 import { CampaignForm, type CampaignFormValues } from "@/features/campaigns/campaign-form";
+import { CampaignCostEntries } from "@/features/campaigns/campaign-cost-entries";
 import { StreamSetList } from "@/features/stream-sets/stream-set-list";
 import { RoutingSimulatorView } from "@/features/routing-simulator/routing-simulator-view";
 
@@ -102,6 +104,7 @@ export function CampaignDetailView({ id }: { id: string }) {
       <Tabs defaultValue="overview">
         <TabsList>
           <TabsTrigger value="overview">Overview</TabsTrigger>
+          <TabsTrigger value="cost">Cost</TabsTrigger>
           <TabsTrigger value="simulator">Simulator</TabsTrigger>
           <TabsTrigger value="settings">Settings</TabsTrigger>
         </TabsList>
@@ -109,6 +112,10 @@ export function CampaignDetailView({ id }: { id: string }) {
         <TabsContent value="overview" className="flex flex-col gap-6">
           <CampaignOverview campaignId={campaign.id} />
           <StreamSetList campaignId={campaign.id} />
+        </TabsContent>
+
+        <TabsContent value="cost" className="flex flex-col gap-6">
+          <CampaignCostEntries campaignId={campaign.id} />
         </TabsContent>
 
         <TabsContent value="simulator" className="flex flex-col gap-6">
@@ -169,17 +176,19 @@ export function CampaignDetailView({ id }: { id: string }) {
   );
 }
 
-/** Real stats from apps/internal/analytics — replaces the mock's Revenue/
- * Spend/Profit/ROI/Clicks/Conversions/CVR/CPA block. Spend/Profit/ROI/CPA
- * are gone entirely rather than shown as "—": there is no cost data
- * pipeline wired to the frontend yet (Phase 27-COST), and "—" implied a
- * value that just hadn't been entered, not a feature that doesn't exist
- * yet. See docs/frontend-integration.md. */
+/** Real stats from apps/internal/analytics + apps/internal/cost. Spend/
+ * Profit/ROI/CPA (dropped entirely in Phase 27 pending a cost pipeline)
+ * are real as of Phase 27-COST. Per CLAUDE.md #6: Spend itself is a
+ * direct sum, shown as $0.00 when genuinely no entries exist for the
+ * range — but Profit/ROI/CPA are ratios/derivations against spend, so
+ * they render "—" (never a false-positive computed against an implicit
+ * zero) whenever hasCost is false. See docs/frontend-integration.md. */
 function CampaignOverview({ campaignId }: { campaignId: string }) {
   const clicksQuery = useCampaignDailyClicks(campaignId);
   const revenueQuery = useCampaignDailyRevenue(campaignId);
+  const spendQuery = useCampaignDailySpend(campaignId);
 
-  if (clicksQuery.isPending || revenueQuery.isPending) {
+  if (clicksQuery.isPending || revenueQuery.isPending || spendQuery.isPending) {
     return <LoadingState label="Loading analytics…" />;
   }
   if (clicksQuery.isError) {
@@ -194,6 +203,9 @@ function CampaignOverview({ campaignId }: { campaignId: string }) {
       />
     );
   }
+  if (spendQuery.isError) {
+    return <ErrorState title="Couldn't load spend" description={spendQuery.error.message} onRetry={() => spendQuery.refetch()} />;
+  }
 
   const totalClicks = clicksQuery.data.counts
     .filter((c) => c.type === "SOURCE_CLICK")
@@ -205,6 +217,15 @@ function CampaignOverview({ campaignId }: { campaignId: string }) {
     .reduce((sum, r) => sum + r.eventCount, 0);
   const totalRevenue = revenueQuery.data.revenue.reduce((sum, r) => sum + r.revenueUsd, 0);
   const cvr = totalClicks > 0 ? (totalConversions / totalClicks) * 100 : 0;
+
+  const hasCost = spendQuery.data.spend.length > 0;
+  const totalSpend = spendQuery.data.spend.reduce((sum, s) => sum + s.amountUsd, 0);
+  const profit = totalRevenue - totalSpend;
+  const roi = totalSpend > 0 ? (profit / totalSpend) * 100 : 0;
+  // CPA is undefined (never $0.00) with zero conversions — that's a
+  // division-by-zero, not "free," same principle as CLAUDE.md #12 for
+  // custom metrics.
+  const cpa = totalConversions > 0 ? totalSpend / totalConversions : null;
 
   const revenueByDay = new Map<string, number>();
   for (const r of revenueQuery.data.revenue) {
@@ -221,6 +242,12 @@ function CampaignOverview({ campaignId }: { campaignId: string }) {
         <StatCard label="Clicks" value={totalClicks.toLocaleString("en-US")} />
         <StatCard label="Conversions" value={totalConversions.toLocaleString("en-US")} />
         <StatCard label="CVR" value={`${cvr.toFixed(2)}%`} />
+      </div>
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <StatCard label="Spend" value={formatUsd(totalSpend, 2)} />
+        <StatCard label="Profit" value={hasCost ? formatUsd(profit, 2) : "—"} />
+        <StatCard label="ROI" value={hasCost ? `${roi.toFixed(2)}%` : "—"} />
+        <StatCard label="CPA" value={hasCost && cpa !== null ? formatUsd(cpa, 2) : "—"} />
       </div>
 
       <LineMetricChart

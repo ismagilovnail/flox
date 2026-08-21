@@ -76,10 +76,15 @@ stay thin; business logic never lives in handlers or in React components.
   design, landed Phase 26), plus `ltv_events` (a materialized view over
   conversion_events driving the FTD/Reg cohort engine, §26.5, landed Phase
   26.5) and further analytical aggregates. Sort keys lead with
-  `organization_id`, partitioned by date. `cost_events` is schema-only —
-  its sync pipeline from Postgres `cost_entries` is Phase 27-COST's job. No
+  `organization_id`, partitioned by date. `cost_events` stays schema-only
+  even after Phase 27-COST: at manual-entry volume, campaign-detail spend
+  is answered directly from Postgres `cost_entries` (a `GROUP BY
+  entry_date`, no cross-database join needed) — the ClickHouse sync this
+  table was reserved for becomes worth building once FB/TikTok ad-spend
+  import (§74) actually produces ClickHouse-scale volume, not before. No
   TTL yet on any table (no retention policy exists in this project's
-  docs). See `docs/analytics-pipeline.md`, `docs/ltv-cohorts.md`.
+  docs). See `docs/analytics-pipeline.md`, `docs/ltv-cohorts.md`,
+  `docs/cost-ingestion.md`.
 - **Redis** — cache, rate limits, short-lived sessions, job coordination,
   postback dedup keys, and sticky-assignment **cache only** (never source of
   truth — see below).

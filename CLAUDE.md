@@ -19,56 +19,66 @@ referenced below as §N).
 ## CURRENT STATE — UPDATE THIS EVERY PHASE
 
 ```
-CURRENT PHASE : PHASE 27 — Frontend/Backend Integration
-STATUS        : done — narrowed scope, confirmed with the user via two
-                AskUserQuestion rounds: §51's literal phase order assumes
-                backend APIs that don't exist (ROADMAP.md has exactly one
-                dedicated backend-API phase before this one; auth doesn't
-                exist until Phase 28). Delivered slice: Campaigns CRUD +
-                real campaign-detail analytics.
-                apps/web/src/lib/api (apiFetch, X-Organization-Id from
-                NEXT_PUBLIC_DEV_ORG_ID) + hooks/use-* (TanStack Query) now
-                back campaigns list/detail/create/edit/archive for real.
-                Campaign TS type matches the Go JSON exactly; mock-only
-                trackingDomain/trackingId/clicks/conversions/revenue/spend
-                fields are gone from the UI, not faked.
-                Campaign detail Overview tab: real Revenue/Clicks/
-                Conversions/CVR stat cards + a real daily revenue chart
-                from the Phase 25/26 analytics endpoints. Spend/Profit/
-                ROI/CPA dropped entirely (not shown as "—") — no cost
-                pipeline is wired to the frontend yet (Phase 27-COST).
-                New apps/internal/trafficsource (GET /traffic-sources,
-                tenant-scoped) — the one backend addition this slice
-                needed; everything else (campaign CRUD, analytics) already
-                existed. CORS added to httpserver (go-chi/cors, origin =
-                config.AppURL) for the now-cross-origin browser→API calls.
-                apps/web/.env.example + .env.local (not committed) for
-                NEXT_PUBLIC_API_URL/NEXT_PUBLIC_DEV_ORG_ID; fixed
-                apps/web/.gitignore silently swallowing .env.example (no
-                !.env.example exception, unlike the root .gitignore).
+CURRENT PHASE : PHASE 27-COST — Cost Ingestion
+STATUS        : done — confirmed with user via AskUserQuestion as the pick
+                between Phase 27-COST and the next domain slice. Manual
+                cost entry MVP, closing the Spend/Profit/ROI/CPA gap
+                Phase 27 documented and deliberately left open.
+                New apps/internal/cost (repository/service/handler,
+                mirrors campaign's split): upsert-by-(campaign, source,
+                day) — re-submitting the same day updates it, never
+                stacks, matching cost_entries' own two partial unique
+                indexes (00009). FX-converts via the existing
+                conversion.FXConverter interface, reused structurally
+                (conversion.PostgresFX, no duplicate FX logic) — USD is
+                1:1 special-cased there already, so the common case never
+                needs an fx_rates seed. Migration 00017: added nullable
+                cost_entries.amount_usd (§50-FX/CLAUDE.md #7 — never 0 for
+                "no rate yet"); dropped NOT NULL on created_by_user_id (no
+                auth yet, Phase 28's gap, documented not worked around).
+                Deliberate architecture call, documented in
+                docs/cost-ingestion.md: cost_events (ClickHouse,
+                schema-only since Phase 26) stays schema-only — daily
+                spend is answered directly from Postgres cost_entries
+                (GROUP BY entry_date), since manual-entry volume doesn't
+                justify a ClickHouse sync with zero other readers yet.
+                Revisit once FB/TikTok ad-spend import (§74, still
+                unbuilt) produces real volume.
+                GET .../cost-entries/daily lives on cost.Handler itself
+                (not under /analytics) so Spend's availability never
+                depends on ClickHouse being up, unlike click/revenue
+                analytics.
+                Frontend: new "Cost" tab on the campaign detail page (add/
+                edit/delete spend by day+source, upsert semantics mirrored
+                exactly). Overview's Spend/Profit/ROI/CPA stat cards are
+                real: Spend is a direct sum (shows $0.00 when genuinely
+                empty); Profit/ROI/CPA show "—" whenever hasCost is false,
+                and CPA additionally shows "—" whenever conversions are
+                zero regardless of hasCost — caught during browser
+                verification (a nonzero-spend/zero-conversion campaign was
+                showing CPA as $0.00, a division-by-zero, not a real
+                acquisition cost) and fixed before closing the phase.
                 Verified: go build/vet/gofmt/test ./... all green (incl.
-                new trafficsource tests); tsc --noEmit and eslint clean;
-                full manual browser pass against the real running api+web
-                dev servers — create → detail → list → settings edit →
-                archive control, all correct, incl. a correct zero-value
-                empty state (not an error) for a brand-new campaign's
-                analytics. Test campaign + seed traffic sources removed
-                via the real DELETE endpoint after verification.
-                StreamSetList/RoutingSimulatorView on the campaign detail
-                page, the standalone /analytics report builder, and
-                /ltv-cohorts (a bare PageStub) remain fully mocked — see
-                docs/frontend-integration.md for the complete remaining
-                gap (sources/offers/networks/flows/stream-sets/filters/
-                routing-simulate/conversions/postbacks all still need
-                dedicated backend work before their existing mocks can be
-                wired up the same way).
-LAST COMMIT   : feat(frontend): wire campaigns to real API
-NEXT          : confirm scope before starting. Candidates: Phase 27-COST
-                (cost ingestion — unblocks Spend/Profit/ROI/CPA on the
-                campaign detail page), or picking the next domain
-                (sources/offers/networks/stream-sets/...) to give it a real
-                backend and wire its existing frontend mock, same pattern
-                this phase established.
+                4 new cost tests: upsert-updates-in-place, no-FX-rate-
+                stores-nil, incomplete-FX-day flagging, cross-tenant
+                isolation); tsc --noEmit and eslint clean; full manual
+                browser pass against the real running api+web dev
+                servers — added a $150 entry with zero conversions,
+                confirmed Spend/Profit/ROI populated and CPA correctly
+                "—", deleted the entry, confirmed the empty state and all
+                four cards reverting correctly. Test campaign removed via
+                the real DELETE endpoint after.
+                Phase 27's remaining gap (sources/offers/networks/flows/
+                stream-sets/filters/routing-simulate/conversions/
+                postbacks, the /analytics report builder, /ltv-cohorts)
+                is unchanged by this phase — see docs/frontend-integration.md.
+LAST COMMIT   : feat(cost): manual cost entry MVP
+NEXT          : confirm scope before starting. Candidates: FB/TikTok
+                ad-spend import (§74's CostProvider interface — the
+                "later" half of §27-COST), or picking the next domain
+                (sources/offers/networks/stream-sets/...) to give it a
+                real backend and wire its existing frontend mock, same
+                pattern Phase 27/27-COST established.
 ```
 
 > At the end of every phase: update the four lines above, add a CHANGELOG entry,

@@ -5,6 +5,85 @@ per-phase, matching `CLAUDE.md`'s phase protocol. The one exception is
 [Between phases], below: spec amendments and the code changes that follow from
 them land between phases and would otherwise be invisible here.
 
+## [Phase 27-COST] — Cost Ingestion
+
+### Added
+
+- **`apps/internal/cost`** (repository/service/handler, mirrors
+  `campaign`'s split) — manual cost entry MVP, closing the Spend/Profit/
+  ROI/CPA gap Phase 27 documented and deliberately left open.
+  `Repository.Upsert` overwrites-in-place on re-submitting the same
+  (campaign, source, day), matching `cost_entries`' own two partial
+  unique indexes (00009) exactly — two `ON CONFLICT` statements chosen by
+  whether a traffic source is set, since Postgres can't target both
+  partial indexes from one clause.
+- **FX conversion reused, not reimplemented**: `cost.FXConverter` is the
+  same shape as `internal/conversion.FXConverter`, satisfied structurally
+  by the existing `conversion.PostgresFX` — one `fx_rates` lookup
+  implementation for both packages. USD is already 1:1 special-cased
+  there, so the common case (manual entries default to USD) always
+  converts cleanly with no rate seeding needed.
+- **Migration 00017**: `cost_entries.amount_usd` (nullable, §50-FX/
+  CLAUDE.md #7 — a missing FX rate is NULL, never a silent 0, same
+  pattern as `conversion_events.usd_value`). `created_by_user_id` DROP
+  NOT NULL — there's no auth yet (Phase 28), so there's no real user id
+  to attribute a dev-created entry to; a fabricated placeholder user
+  would be a fake fact recorded as real data, which is worse than an
+  honest NULL.
+- **`DailyCampaignSpend`** sums `amount_usd` per day and flags days where
+  `bool_and(amount_usd IS NOT NULL)` is false — a day with an unconverted
+  entry is visibly incomplete, not silently understated by `SUM()`
+  skipping the NULL.
+- **`GET /campaigns/{id}/cost-entries/daily`** lives on `cost.Handler`
+  itself, not under `/analytics`: unlike click/revenue analytics, spend
+  never depends on ClickHouse, so its availability shouldn't share
+  `apps/api`'s `if ch != nil` mount guard for the rest of `/analytics`.
+- **Frontend**: a new "Cost" tab on the campaign detail page (add/edit/
+  delete spend by day + optional source — the form doubles as the edit
+  flow via the same upsert semantics as the backend). Overview's Spend/
+  Profit/ROI/CPA stat cards are real: Spend is a direct sum (`$0.00` when
+  genuinely empty, an honest number); Profit/ROI/CPA render `"—"`
+  whenever no cost is entered for the range (CLAUDE.md #6 — never a
+  false-positive ratio against an implicit zero); CPA additionally
+  renders `"—"` whenever conversions are zero regardless of cost, since
+  cost-per-acquisition with zero acquisitions is a division by zero, not
+  a $0.00 acquisition cost.
+- **`docs/cost-ingestion.md`**; `ARCHITECTURE.md` and
+  `docs/frontend-integration.md` updated to reflect the closed gap.
+
+### Notes
+
+- **Deliberate architecture call, not a shortcut**: `cost_events`
+  (ClickHouse, schema-only since Phase 26, with a comment promising this
+  phase would build its sync pipeline) stays schema-only. Daily spend is
+  answered directly from Postgres `cost_entries` — at manual-entry
+  volume a `GROUP BY entry_date` is simpler and correct, and a
+  write-through sync into a table with zero readers would be exactly the
+  kind of abstraction CLAUDE.md's "don't add features beyond what the
+  task requires" rules out. Revisit once FB/TikTok ad-spend import (§74,
+  still unbuilt, explicitly "later" in §27-COST's own text) produces
+  ClickHouse-scale volume.
+- **A real bug caught during manual verification, not shipped**: the
+  first CPA implementation returned `0` (not `null`) when conversions
+  were zero, which rendered as `$0.00` — a plausible-looking but false
+  acquisition cost. Caught live in the browser (a campaign with $150
+  logged spend and zero conversions showed CPA `$0.00` instead of `"—"`),
+  fixed before closing the phase, re-verified.
+- 4 new integration tests in `apps/internal/cost` (real Postgres,
+  `DATABASE_URL`-gated same as `campaign`/`trafficsource`): upsert
+  updates in place rather than stacking, a missing FX rate stores `nil`
+  not `0`, a mixed converted/unconverted day is correctly flagged
+  incomplete, and full cross-tenant isolation (create/list/delete/daily
+  spend all refuse another org's campaign).
+- Verified end-to-end against the real running `api` + `web` dev
+  servers: logged a $150 entry with zero conversions through the Cost
+  tab UI, confirmed Spend/Profit/ROI populated correctly and CPA showed
+  `"—"`, deleted the entry through the UI, confirmed the empty state and
+  all four cards reverted. Backend also verified independently: `go
+  build/vet/gofmt/test ./...` all green. Frontend: `tsc --noEmit` and
+  `eslint` both clean. Test campaign removed via the real `DELETE`
+  endpoint after.
+
 ## [Phase 27] — Frontend/Backend Integration
 
 ### Scope
