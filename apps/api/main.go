@@ -10,9 +10,13 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/ClickHouse/clickhouse-go/v2/lib/driver"
 	"github.com/go-chi/chi/v5"
 
+	"github.com/ismagilovnail/flox/apps/internal/analytics"
 	"github.com/ismagilovnail/flox/apps/internal/campaign"
+	"github.com/ismagilovnail/flox/apps/internal/chconn"
+	"github.com/ismagilovnail/flox/apps/internal/chstore"
 	"github.com/ismagilovnail/flox/apps/internal/config"
 	"github.com/ismagilovnail/flox/apps/internal/httpserver"
 	"github.com/ismagilovnail/flox/apps/internal/logging"
@@ -58,7 +62,28 @@ func run() error {
 	}
 	defer db.Close()
 
-	srv := httpserver.New(logger, cfg.OTelServiceName, db)
+	// ClickHouse is best-effort at startup, matching the tracker/worker's
+	// own "a dependency the redirect/queue path never touches must not
+	// become a startup-availability requirement" stance: apps/api's
+	// campaign endpoints don't need it, only /analytics does, so a down
+	// ClickHouse degrades one route group and shows up on /ready — it
+	// doesn't take the whole control-plane API down.
+	var ch driver.Conn
+	chConn, chErr := chconn.NewConn(ctx, cfg.ClickHouse)
+	if chErr != nil {
+		logger.Warn("clickhouse unavailable at startup, /analytics will fail until it recovers", "error", chErr)
+	} else if migrateErr := chstore.Migrate(ctx, chConn); migrateErr != nil {
+		// Idempotent (every statement is CREATE ... IF NOT EXISTS), so this
+		// is safe to run from both apps/api and apps/worker regardless of
+		// which one starts first — see chstore.Migrate's doc.
+		logger.Warn("clickhouse schema migration failed, /analytics will fail until it recovers", "error", migrateErr)
+		_ = chConn.Close()
+	} else {
+		defer chConn.Close()
+		ch = chConn
+	}
+
+	srv := httpserver.New(logger, cfg.OTelServiceName, db, ch)
 
 	campaignRepo := campaign.NewRepository(db)
 	campaignSvc := campaign.NewService(campaignRepo)
@@ -67,6 +92,15 @@ func run() error {
 		r.Use(tenant.Middleware)
 		campaignHandler.Register(r)
 	})
+
+	if ch != nil {
+		analyticsSvc := analytics.NewService(chstore.NewEventStore(ch))
+		analyticsHandler := analytics.NewHandler(analyticsSvc, logger)
+		srv.Mux().Route("/analytics", func(r chi.Router) {
+			r.Use(tenant.Middleware)
+			analyticsHandler.Register(r)
+		})
+	}
 
 	httpSrv := &http.Server{
 		Addr:              cfg.HTTPAddr,

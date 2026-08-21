@@ -29,7 +29,9 @@ type Server struct {
 	router http.Handler
 }
 
-func New(logger *slog.Logger, serviceName string, db Pinger) *Server {
+// ch may be nil when the caller has no ClickHouse connection to offer —
+// /ready simply skips that check rather than reporting it unavailable.
+func New(logger *slog.Logger, serviceName string, db Pinger, ch Pinger) *Server {
 	r := chi.NewRouter()
 
 	r.Use(middleware.RequestID)
@@ -40,7 +42,7 @@ func New(logger *slog.Logger, serviceName string, db Pinger) *Server {
 	r.Use(middleware.Timeout(30 * time.Second))
 
 	r.Get("/health", healthHandler)
-	r.Get("/ready", readyHandler(db))
+	r.Get("/ready", readyHandler(db, ch))
 
 	return &Server{mux: r, router: otelhttp.NewHandler(r, serviceName)}
 }

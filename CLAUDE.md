@@ -19,51 +19,58 @@ referenced below as §N).
 ## CURRENT STATE — UPDATE THIS EVERY PHASE
 
 ```
-CURRENT PHASE : PHASE 24 — Postback Engine (outgoing)
-STATUS        : done — apps/worker is a real binary now (health endpoint +
-                internal/postback.Deliverer.PollLoop); apps/internal/postback
-                is the outgoing delivery engine: Postgres-backed
-                postback_deliveries queue (migration 00014, its own table —
-                see docs/postback-delivery.md for why not more
-                direction='outgoing' rows in postbacks), FOR UPDATE SKIP
-                LOCKED claim, exponential backoff (8 attempts, ~21h span),
-                dead-letter state. internal/conversion.Service gets a
-                DeliveryEnqueuer hook (same decoupled-interface pattern as
-                EventSink): every ResultSuccess with a configured
-                networks.postback_url queues a delivery, macro-resolved via
-                the new apps/internal/macro (ports apps/web/src/lib/
-                macros.ts's token contract — click_id/status/revenue/
-                currency/campaign_id/country/device/sub1-10 resolved today;
-                payout/offer_id/source recognized but left literal, no
-                Flow->Offer/TrafficSource lookup wired anywhere yet).
-                Confirmed via AskUserQuestion: all 5 CPA statuses trigger
-                delivery, not just payable ones. Enqueue failures are
-                best-effort (no error return) — an already-recorded
-                conversion must never be reported failed over a delivery-
-                queue blip. 39 tests pass across the two new packages
-                (macro: 5, postback: 11 incl. Postgres-gated ClaimDue/
-                backoff-timing checks) plus conversion's now-23 (3 new
-                delivery-enqueue tests added to Phase 23's 20) — all green
-                together with Phase 21-23's suites. Full end-to-end smoke test:
-                tracker -> Postgres queue -> worker -> real HTTP receiver,
-                covering both the success path and the retry-then-succeed
-                path with real backoff timing.
-                Also fixed doc/code drift found while touching this area:
-                docs/event-model.md, docs/domain-model.md, and
-                migrations/README.md still stated the pre-A1/A2 two-part
-                dedup key from Phase 22 or earlier — corrected.
+CURRENT PHASE : PHASE 25 — Analytics Pipeline
+STATUS        : done — full pipeline wired and verified end-to-end against
+                real Postgres/ClickHouse/compiled binaries: tracker's
+                eventbuf.Writer now uses eventqueue.Sink (Postgres-backed
+                event_queue, migration 00015, same FOR UPDATE SKIP LOCKED
+                job-queue pattern as postback_deliveries) instead of the
+                LogSink stand-in it ran with through Phase 24. apps/worker
+                gained a second poll loop (internal/eventqueue.Flusher):
+                claims batches (up to 500), one ClickHouse batch insert per
+                batch, deletes on success or requeues the WHOLE batch on
+                failure (fixed 10s retry, no dead-letter — unlike postbacks,
+                analytics has no per-item deadline). internal/chconn dials
+                ClickHouse over HTTP (the only interface docker-compose.dev
+                exposes to the host — NOT the native protocol some
+                reference code defaults to). internal/chstore is a
+                DELIBERATELY MINIMAL, single `events` table (embedded
+                schema/*.sql, idempotent CREATE-IF-NOT-EXISTS, no migration
+                framework) plus one aggregate (events_daily_campaign, a
+                SummingMergeTree fed by a materialized view that fires
+                synchronously on INSERT — verified, no polling needed).
+                Confirmed via AskUserQuestion before starting: this minimal
+                schema is a deliberate, KNOWN rework — the real five-table
+                design with per-table sort keys/TTLs is explicitly Phase
+                26's job (§48), not built ahead of here. internal/analytics
+                is one query/one endpoint (GET /analytics/campaigns/
+                {id}/daily) on apps/api, tenant-scoped via the existing
+                tenant.Middleware; apps/api's ClickHouse connection and
+                httpserver's /ready check are both best-effort/optional,
+                same stance as Redis elsewhere — a down ClickHouse degrades
+                /analytics, not the whole control-plane API.
+                Frontend (apps/web) untouched — wiring it to real APIs is
+                explicitly Phase 27 ("Frontend/backend integration" per
+                ROADMAP.md), not this phase.
+                13 new tests across 4 new packages (chconn: 1, chstore: 3,
+                eventqueue: 5 incl. pure-logic Flusher tests with fakes,
+                analytics: 4) — all Postgres/ClickHouse-gated ones run
+                against real instances. End-to-end smoke test: real events
+                through Postgres queue -> worker flush -> ClickHouse ->
+                materialized aggregate -> real analytics REST API response,
+                plus a cross-tenant check (org B queries org A's campaign,
+                gets zero rows).
                 Carried over, unrelated: Phase 10 crash-loop report; in-app
-                WebView bounce (§73) — see apps/tracker/README.md. Click
-                storage is still attribution's MemoryResolver stand-in.
-                apps/worker's OTHER eventual job — consuming the tracker's
-                event queue into ClickHouse — is explicitly NOT this phase
-                (§47/§48, Phases 25-26); apps/worker/README.md says so.
-LAST COMMIT   : feat(postback): outgoing postback engine
-NEXT          : PHASE 25 — Analytics Pipeline — confirm before starting.
-                events -> ClickHouse -> materialized/aggregate tables ->
-                analytics service -> REST API -> frontend. First real
-                ClickHouse ingestion; also likely where apps/tracker's
-                eventbuf.LogSink gets replaced with a durable queue producer.
+                WebView bounce (§73). Click storage (attribution) still
+                MemoryResolver.
+LAST COMMIT   : feat(analytics): analytics pipeline
+NEXT          : PHASE 26 — ClickHouse — confirm before starting. The real
+                five-table schema (click_events/tracking_events/
+                conversion_events/cost_events/postback_events), sort keys
+                optimized for org/date/campaign/source/country/flow/offer,
+                per-campaign+day and per-GEO+day materialized views —
+                replacing Phase 25's single disposable `events` table.
+                Known rework, not a surprise; see docs/analytics-pipeline.md.
 ```
 
 > At the end of every phase: update the four lines above, add a CHANGELOG entry,

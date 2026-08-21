@@ -1,15 +1,17 @@
-// Command worker is FLOX's async background processor (§46, Phase 24). It
-// is a separate binary from apps/api and apps/tracker, same Go module, so
-// it can be deployed and scaled independently of the redirect hot path —
-// exactly the same reasoning apps/tracker's own doc comment gives.
+// Command worker is FLOX's async background processor. It is a separate
+// binary from apps/api and apps/tracker, same Go module, so it can be
+// deployed and scaled independently of the redirect hot path — exactly the
+// same reasoning apps/tracker's own doc comment gives.
 //
-// Phase 24's job is outgoing postback delivery only (internal/postback):
-// claim due rows from postback_deliveries and dispatch them, with
-// exponential backoff and a dead-letter state after repeated failure.
-// Consuming the tracker's event queue into ClickHouse is a LATER role for
-// this binary (§47/§48, Phases 25-26) — apps/worker/README.md describes
-// that eventual full scope; this file only stands up what Phase 24 itself
-// specifies, per CLAUDE.md's "work strictly one phase at a time."
+// Two poll loops run here:
+//   - internal/postback (§46, Phase 24): outgoing postback delivery —
+//     claim due rows from postback_deliveries and dispatch them, with
+//     exponential backoff and a dead-letter state after repeated failure.
+//   - internal/eventqueue (§43/§47, Phase 25): the tracker's event queue,
+//     claimed in batches and written to ClickHouse's minimal `events` table
+//     (internal/chstore) — a deliberately disposable single-table schema;
+//     the real five-table design lands in Phase 26 (§48), which this file
+//     does not build ahead of. See docs/analytics-pipeline.md.
 package main
 
 import (
@@ -21,20 +23,31 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/ismagilovnail/flox/apps/internal/chconn"
+	"github.com/ismagilovnail/flox/apps/internal/chstore"
 	"github.com/ismagilovnail/flox/apps/internal/config"
+	"github.com/ismagilovnail/flox/apps/internal/eventqueue"
 	"github.com/ismagilovnail/flox/apps/internal/logging"
 	"github.com/ismagilovnail/flox/apps/internal/postback"
 	"github.com/ismagilovnail/flox/apps/internal/postgres"
 	"github.com/ismagilovnail/flox/apps/internal/telemetry"
 )
 
-// pollBatchSize is how many due deliveries one poll claims at a time.
-const pollBatchSize = 20
+// postbackPollBatchSize/postbackPollIdle: how many due postback deliveries
+// one poll claims, and how long to wait after a partial batch.
+const (
+	postbackPollBatchSize = 20
+	postbackPollIdle      = 5 * time.Second
+)
 
-// pollIdle is how long the poll loop waits after a batch smaller than
-// pollBatchSize before polling again — no point hammering Postgres when the
-// queue is empty or nearly so.
-const pollIdle = 5 * time.Second
+// eventPollBatchSize/eventPollIdle: same shape, sized for click/tracking
+// event volume, which runs far higher than outgoing postback deliveries —
+// a bigger batch and a shorter idle wait keeps the queue from backing up
+// under normal traffic.
+const (
+	eventPollBatchSize = 500
+	eventPollIdle      = 2 * time.Second
+)
 
 func main() {
 	if err := run(); err != nil {
@@ -73,11 +86,23 @@ func run() error {
 	}
 	defer db.Close()
 
+	ch, err := chconn.NewConn(ctx, cfg.ClickHouse)
+	if err != nil {
+		logger.Error("clickhouse connection failed", "error", err)
+		return err
+	}
+	defer ch.Close()
+	if err := chstore.Migrate(ctx, ch); err != nil {
+		logger.Error("clickhouse schema migration failed", "error", err)
+		return err
+	}
+
 	deliverer := postback.NewDeliverer(postback.NewPostgresStore(db), http.DefaultClient, logger)
+	flusher := eventqueue.NewFlusher(eventqueue.NewPostgresQueue(db), chstore.NewEventStore(ch), logger)
 
 	// A bare health endpoint for orchestration liveness probes — this
-	// binary has no inbound routing otherwise, its work is the poll loop
-	// below.
+	// binary has no inbound routing otherwise, its work is the two poll
+	// loops below.
 	healthSrv := &http.Server{
 		Addr: cfg.HTTPAddr,
 		Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -93,8 +118,11 @@ func run() error {
 		}
 	}()
 
-	logger.Info("postback delivery poll loop starting", "batch_size", pollBatchSize, "idle", pollIdle)
-	go deliverer.PollLoop(ctx, pollBatchSize, pollIdle)
+	logger.Info("postback delivery poll loop starting", "batch_size", postbackPollBatchSize, "idle", postbackPollIdle)
+	go deliverer.PollLoop(ctx, postbackPollBatchSize, postbackPollIdle)
+
+	logger.Info("event flush poll loop starting", "batch_size", eventPollBatchSize, "idle", eventPollIdle)
+	go flusher.PollLoop(ctx, eventPollBatchSize, eventPollIdle)
 
 	<-ctx.Done()
 	logger.Info("shutting down")

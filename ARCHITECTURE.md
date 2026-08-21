@@ -74,7 +74,10 @@ stay thin; business logic never lives in handlers or in React components.
 - **ClickHouse** — high-volume events: clicks, tracking_events,
   conversion_events, cost_events, postback_events, ltv_events, and
   analytical aggregates. Sort keys lead with `organization_id`, partitioned
-  by date.
+  by date. As of Phase 25 this is a single minimal `events` table covering
+  the full event model, not yet the five-table design above — that split,
+  with per-table sort keys and TTLs, is Phase 26 (§48). See
+  `docs/analytics-pipeline.md`.
 - **Redis** — cache, rate limits, short-lived sessions, job coordination,
   postback dedup keys, and sticky-assignment **cache only** (never source of
   truth — see below).

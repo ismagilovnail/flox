@@ -24,6 +24,7 @@ import (
 	"github.com/ismagilovnail/flox/apps/internal/config"
 	"github.com/ismagilovnail/flox/apps/internal/conversion"
 	"github.com/ismagilovnail/flox/apps/internal/eventbuf"
+	"github.com/ismagilovnail/flox/apps/internal/eventqueue"
 	"github.com/ismagilovnail/flox/apps/internal/logging"
 	"github.com/ismagilovnail/flox/apps/internal/postback"
 	"github.com/ismagilovnail/flox/apps/internal/postgres"
@@ -70,11 +71,11 @@ func run() error {
 	}
 	defer db.Close()
 
-	// §43's durable queue and its ClickHouse consumer arrive with the
-	// worker (Phase 24). Until then the sink is an honest structured-log
-	// writer — swapping it is a one-line change here, because everything
+	// §43's durable queue (apps/worker's ClickHouse consumer, Phase 25)
+	// replaces the structured-log stand-in this used through Phase 24 —
+	// exactly the one-line swap that design promised, because everything
 	// upstream only ever sees the eventbuf.Sink interface.
-	events := eventbuf.New(eventbuf.LogSink{Logger: logger}, logger, eventbuf.Config{})
+	events := eventbuf.New(eventqueue.NewSink(eventqueue.NewPostgresQueue(db)), logger, eventbuf.Config{})
 	defer events.Close()
 
 	handler := &Handler{

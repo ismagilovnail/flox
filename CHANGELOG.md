@@ -5,6 +5,109 @@ per-phase, matching `CLAUDE.md`'s phase protocol. The one exception is
 [Between phases], below: spec amendments and the code changes that follow from
 them land between phases and would otherwise be invisible here.
 
+## [Phase 25] — Analytics Pipeline
+
+### Added
+
+- **Scope boundary with Phase 26 confirmed via user question before
+  starting**: §47's own pipeline diagram names ClickHouse as one of its
+  stages, but the actual table design (five tables, dimension-specific sort
+  keys, per-campaign+day/per-GEO+day materialized views) is explicitly §48's
+  content, in a phase titled "ClickHouse" on its own. Building both at once
+  would blur a boundary the spec draws deliberately. Chosen: a minimal,
+  disposable single-table schema now, proving the pipeline end to end;
+  Phase 26 replaces it wholesale. Recorded in full in
+  `docs/analytics-pipeline.md` so the coming rework reads as planned, not
+  as backtracking.
+- **`internal/eventqueue`**: the durable link in §43's "Tracker -> Event
+  Queue -> Worker -> ClickHouse" pipeline. `event_queue` (migration 00015)
+  is Postgres, the same `FOR UPDATE SKIP LOCKED` job-queue pattern
+  `postback_deliveries` (Phase 24) already established — STACK has no
+  message broker. One difference: a row here is **deleted**, not kept
+  terminal, once its batch lands in ClickHouse — this queue is disposable
+  transit, not an audit ledger. `payload` is the whole `event.Event`
+  JSON-encoded (it already carries `json` tags for exactly this) rather than
+  a wide explicit-column table that would just be Phase 26's real schema
+  designed a second time.
+- **`apps/tracker` drops `eventbuf.LogSink`** for `eventqueue.Sink` — the
+  one-line swap Phase 21's design always promised, since everything
+  upstream only ever saw the `eventbuf.Sink` interface.
+- **`apps/worker` gains a second poll loop**, `internal/eventqueue.Flusher`:
+  claims up to 500 due events, ONE ClickHouse batch insert per batch,
+  deletes on success or requeues the whole batch on failure (fixed 10s
+  delay). No dead-letter state, unlike outgoing postbacks — a delayed
+  analytics batch has no per-item deadline the way a lost conversion does,
+  so it retries indefinitely rather than giving up. A deliberately different
+  tradeoff from `internal/postback`'s `MaxAttempts`, not an inconsistency.
+- **`internal/chconn`**: the ClickHouse connection, always over HTTP —
+  `infra/docker-compose.dev.yml` exposes only ClickHouse's HTTP interface
+  (port 8123) to the host, unlike some reference implementations that
+  default to the native protocol (port 9000, container-internal here to
+  avoid colliding with MinIO).
+- **`internal/chstore`**: the minimal schema (`schema/*.sql`, embedded,
+  applied idempotently via `CREATE ... IF NOT EXISTS` — no migration
+  framework, no version table, a deliberate simplification matched to one
+  disposable table) plus `EventStore.InsertBatch` and the one aggregate
+  query. `events`' `type` column covers the full ~20-value event model even
+  in this disposable table (CLAUDE.md #2 isn't phase-scoped), and
+  `organization_id` leads the sort key (CLAUDE.md #5), same as it will in
+  Phase 26's real schema.
+- **`events_daily_campaign`**: one `SummingMergeTree` aggregate fed by a
+  `MATERIALIZED VIEW`, proving the "materialized/aggregate tables" pipeline
+  stage with a single rollup rather than §48's full per-campaign+day/
+  per-GEO+day set. Verified firing *synchronously* on `INSERT INTO events`
+  — no polling needed in the test that checks it — though reading it still
+  requires `SUM(event_count)`, not a plain read: `SummingMergeTree` merges
+  same-key rows only in the background.
+- **`internal/analytics`**: one query, one endpoint —
+  `GET /analytics/campaigns/{campaignId}/daily?from=&to=` on `apps/api`,
+  mounted behind the existing `tenant.Middleware`. Deliberately narrow:
+  proves the pipeline's last two stages (analytics service -> REST API)
+  without delivering the eventual rich analytics surface (per-GEO/source/
+  offer breakdowns, the metrics registry) that later phases own. Date range
+  capped at 366 days as a guard against an unbounded ClickHouse scan, not a
+  spec requirement.
+- **`httpserver.readyHandler` now checks ClickHouse too** (`ch Pinger`,
+  nil-able) — the doc comment left in Phase 18 said this would happen
+  "whenever a later phase actually wires it in, not before." `apps/api`'s
+  ClickHouse connection is best-effort at startup: `/campaigns` doesn't need
+  it, only `/analytics` does, so a down ClickHouse degrades one route group
+  (and shows up on `/ready`) rather than the whole control-plane API.
+- **`apps/worker/README.md`**, **`apps/tracker/README.md`**,
+  **`docs/analytics-pipeline.md`** updated/added (§76).
+
+### Fixed
+
+- **`ARCHITECTURE.md`'s ClickHouse bullet** read as if the five-table design
+  already existed; corrected to note the Phase 25 minimal table and point at
+  `docs/analytics-pipeline.md`.
+
+### Security
+
+- Tenant isolation verified end-to-end through the real `/analytics` REST
+  endpoint (not just at the repository layer): org B querying org A's
+  campaign id via `X-Organization-Id` gets `{"counts":[]}`, not an error and
+  not another tenant's data — `organization_id` scopes the ClickHouse query
+  the same way it scopes every Postgres one.
+
+### Notes
+
+- 13 new tests across four new packages: `chconn` (1), `chstore` (3),
+  `eventqueue` (5, including pure-logic `Flusher` tests against fakes —
+  success deletes, failure requeues the whole batch, an empty claim never
+  calls ClickHouse), `analytics` (4). Every Postgres/ClickHouse-gated test
+  ran against real local instances, not just the fakes.
+- Full end-to-end smoke test against compiled `tracker`/`worker`/`api`
+  binaries and real Postgres/ClickHouse: events enqueued, drained by the
+  worker within its poll interval, visible in ClickHouse's `events` table
+  and the `events_daily_campaign` aggregate, and returned correctly by the
+  real (not mocked) `/analytics` HTTP response — plus the cross-tenant check
+  above.
+- `apps/web` untouched. Wiring the frontend to real backend APIs is Phase
+  27's explicit job ("Frontend/backend integration," ROADMAP.md), consistent
+  with this project's frontend-first-on-mocks build order — `apps/web`
+  keeps reading `apps/web/src/lib/mock/*` until then.
+
 ## [Phase 24] — Postback Engine (outgoing)
 
 ### Added

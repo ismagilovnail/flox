@@ -43,13 +43,18 @@ each own the slug `summer` on their own domain. Looking up by slug alone
 would be a cross-tenant data leak. For local testing, seed a `domains` row
 with `domain = 'localhost'`.
 
+## Events
+
+§43's pipeline — Tracker → Event Queue → Worker → ClickHouse — is real as
+of Phase 25: `eventbuf.Writer`'s sink is `eventqueue.Sink`, which durably
+enqueues each flushed batch into Postgres's `event_queue` table.
+`apps/worker` claims due rows and batch-inserts them into ClickHouse's
+`events` table (`internal/chstore`) — a minimal, single-table schema on
+purpose; the real five-table design lands in Phase 26 (§48). See
+`docs/analytics-pipeline.md`.
+
 ## What this service deliberately does not do
 
-- **Persist durably.** §43's pipeline is Tracker → Event Queue → Worker →
-  ClickHouse. The queue and its consumer arrive with `apps/worker`
-  (Phase 24). Until then the event sink is an honest structured-log writer
-  — swapping it is a one-line change in `main.go`, because everything
-  upstream only sees the `eventbuf.Sink` interface.
 - **In-app WebView bounce (§73).** A pre-routing redirect based on
   User-Agent, and a required, provider-neutral capability — but it belongs
   with the PWA install funnel, not the first cut of the redirect path.
