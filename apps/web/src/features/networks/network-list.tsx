@@ -6,51 +6,66 @@ import { PlusIcon, TagIcon } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
-import { useNetworksStore } from "@/stores/networks";
+import { LoadingState } from "@/components/ui/loading-state";
+import { ErrorState } from "@/components/ui/error-state";
+import { useCreateNetwork, useNetworks, useUpdateNetwork } from "@/hooks/use-networks";
 import { useTagsStore } from "@/stores/tags";
 import { networkColumns } from "@/features/networks/network-columns";
 import { NetworkFormSheet, type NetworkFormValues } from "@/features/networks/network-form-sheet";
 import { TagFilterControl } from "@/features/tags/tag-filter-control";
 import { BulkTagDialog } from "@/features/tags/bulk-tag-dialog";
 import { filterByTags } from "@/features/tags/filter-by-tags";
-import type { Network } from "@/lib/mock/networks";
+import type { Network } from "@/lib/api/networks";
 
 export function NetworkList() {
-  const networks = useNetworksStore((s) => s.networks);
-  const addNetwork = useNetworksStore((s) => s.addNetwork);
-  const updateNetwork = useNetworksStore((s) => s.updateNetwork);
+  const networksQuery = useNetworks();
   const assignments = useTagsStore((s) => s.assignments);
 
   const [target, setTarget] = React.useState<Network | null | undefined>(undefined);
   const [tagFilter, setTagFilter] = React.useState<string[]>([]);
   const [bulkTarget, setBulkTarget] = React.useState<{ ids: string[]; clear: () => void } | null>(null);
 
-  function handleSubmit(values: NetworkFormValues) {
-    if (target) {
-      updateNetwork(target.id, values);
-      toast("Network updated", { description: values.name });
-    } else {
-      addNetwork(values);
-      toast("Network created", { description: values.name });
-    }
-    setTarget(undefined);
-  }
-
   const columns = React.useMemo(() => networkColumns((network) => setTarget(network)), []);
   const filtered = React.useMemo(
-    () => filterByTags("network", networks, tagFilter, assignments),
-    [networks, tagFilter, assignments],
+    () => filterByTags("network", networksQuery.data?.networks ?? [], tagFilter, assignments),
+    [networksQuery.data, tagFilter, assignments],
   );
+
+  const header = (
+    <div className="flex items-center justify-between">
+      <h1 className="text-2xl font-semibold tracking-tight">Networks</h1>
+      <Button onClick={() => setTarget(null)}>
+        <PlusIcon className="size-4" />
+        New Network
+      </Button>
+    </div>
+  );
+
+  if (networksQuery.isPending) {
+    return (
+      <div className="flex flex-col gap-4">
+        {header}
+        <LoadingState label="Loading networks…" />
+      </div>
+    );
+  }
+
+  if (networksQuery.isError) {
+    return (
+      <div className="flex flex-col gap-4">
+        {header}
+        <ErrorState
+          title="Couldn't load networks"
+          description={networksQuery.error.message}
+          onRetry={() => networksQuery.refetch()}
+        />
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-semibold tracking-tight">Networks</h1>
-        <Button onClick={() => setTarget(null)}>
-          <PlusIcon className="size-4" />
-          New Network
-        </Button>
-      </div>
+      {header}
 
       <DataTable
         columns={columns}
@@ -74,15 +89,7 @@ export function NetworkList() {
       />
 
       {target !== undefined && (
-        <NetworkFormSheet
-          key={target?.id ?? "new"}
-          open
-          onOpenChange={(open) => !open && setTarget(undefined)}
-          title={target ? `Edit ${target.name}` : "New Network"}
-          submitLabel={target ? "Save changes" : "Create network"}
-          defaultValues={target ?? {}}
-          onSubmit={handleSubmit}
-        />
+        <NetworkFormDialog key={target?.id ?? "new"} target={target} onClose={() => setTarget(undefined)} />
       )}
 
       {bulkTarget && (
@@ -98,5 +105,52 @@ export function NetworkList() {
         />
       )}
     </div>
+  );
+}
+
+function NetworkFormDialog({ target, onClose }: { target: Network | null; onClose: () => void }) {
+  const createNetwork = useCreateNetwork();
+  const updateNetwork = useUpdateNetwork(target?.id ?? "");
+
+  function handleSubmit(values: NetworkFormValues) {
+    if (target) {
+      updateNetwork.mutate(
+        { name: values.name, postbackUrl: values.postbackUrl, acceptDuplicates: values.acceptDuplicates, status: values.status },
+        {
+          onSuccess: () => {
+            toast("Network updated", { description: values.name });
+            onClose();
+          },
+          onError: (err) => toast.error("Couldn't update network", { description: err.message }),
+        },
+      );
+    } else {
+      createNetwork.mutate(
+        { name: values.name, postbackUrl: values.postbackUrl, acceptDuplicates: values.acceptDuplicates },
+        {
+          onSuccess: () => {
+            toast("Network created", { description: values.name });
+            onClose();
+          },
+          onError: (err) => toast.error("Couldn't create network", { description: err.message }),
+        },
+      );
+    }
+  }
+
+  return (
+    <NetworkFormSheet
+      open
+      onOpenChange={(open) => !open && onClose()}
+      title={target ? `Edit ${target.name}` : "New Network"}
+      submitLabel={target ? "Save changes" : "Create network"}
+      showStatus={!!target}
+      defaultValues={
+        target
+          ? { name: target.name, postbackUrl: target.postbackUrl, acceptDuplicates: target.acceptDuplicates, status: target.status }
+          : {}
+      }
+      onSubmit={handleSubmit}
+    />
   );
 }

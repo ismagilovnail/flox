@@ -18,13 +18,13 @@ import {
 } from "@/components/ui/sheet";
 import { Switch } from "@/components/ui/switch";
 import { MacroPicker } from "@/components/shared/macro-picker";
-import type { NetworkStatus } from "@/lib/mock/networks";
+import type { NetworkStatus } from "@/lib/api/networks";
 
 export const networkFormSchema = z.object({
   name: z.string().min(2, "Name must be at least 2 characters").max(80),
   postbackUrl: z.url("Enter a valid URL"),
   acceptDuplicates: z.boolean(),
-  status: z.enum(["active", "paused", "archived"] as [NetworkStatus, ...NetworkStatus[]]),
+  status: z.enum(["active", "paused", "archived"] as [NetworkStatus, ...NetworkStatus[]]).optional(),
 });
 
 export type NetworkFormValues = z.infer<typeof networkFormSchema>;
@@ -37,6 +37,7 @@ export function NetworkFormSheet({
   defaultValues,
   title,
   submitLabel,
+  showStatus = false,
   onSubmit,
 }: {
   open: boolean;
@@ -44,11 +45,12 @@ export function NetworkFormSheet({
   defaultValues: Partial<NetworkFormValues>;
   title: string;
   submitLabel: string;
+  showStatus?: boolean;
   onSubmit: (values: NetworkFormValues) => void;
 }) {
   const form = useForm<NetworkFormValues>({
     resolver: zodResolver(networkFormSchema),
-    defaultValues: { name: "", postbackUrl: "", acceptDuplicates: false, status: "active", ...defaultValues },
+    values: { name: "", postbackUrl: "", acceptDuplicates: false, status: "active", ...defaultValues },
   });
 
   const {
@@ -110,27 +112,29 @@ export function NetworkFormSheet({
             />
           </div>
 
-          <div className="grid gap-1.5">
-            <Label htmlFor="net-status">Status</Label>
-            <Controller
-              control={control}
-              name="status"
-              render={({ field }) => (
-                <Select value={field.value} onValueChange={field.onChange}>
-                  <SelectTrigger id="net-status" className="w-full">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {STATUS_OPTIONS.map((s) => (
-                      <SelectItem key={s} value={s}>
-                        {s}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              )}
-            />
-          </div>
+          {showStatus && (
+            <div className="grid gap-1.5">
+              <Label htmlFor="net-status">Status</Label>
+              <Controller
+                control={control}
+                name="status"
+                render={({ field }) => (
+                  <Select value={field.value} onValueChange={field.onChange}>
+                    <SelectTrigger id="net-status" className="w-full">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {STATUS_OPTIONS.map((s) => (
+                        <SelectItem key={s} value={s}>
+                          {s}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
+              />
+            </div>
+          )}
 
           <SheetFooter className="mt-0 flex-row justify-end gap-2 p-0">
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>

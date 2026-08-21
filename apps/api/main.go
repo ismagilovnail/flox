@@ -23,6 +23,8 @@ import (
 	"github.com/ismagilovnail/flox/apps/internal/httpserver"
 	"github.com/ismagilovnail/flox/apps/internal/logging"
 	"github.com/ismagilovnail/flox/apps/internal/ltv"
+	"github.com/ismagilovnail/flox/apps/internal/network"
+	"github.com/ismagilovnail/flox/apps/internal/offer"
 	"github.com/ismagilovnail/flox/apps/internal/postgres"
 	"github.com/ismagilovnail/flox/apps/internal/telemetry"
 	"github.com/ismagilovnail/flox/apps/internal/tenant"
@@ -101,6 +103,18 @@ func run() error {
 	srv.Mux().Route("/traffic-sources", func(r chi.Router) {
 		r.Use(tenant.Middleware)
 		trafficSourceHandler.Register(r)
+	})
+
+	networkHandler := network.NewHandler(network.NewService(network.NewRepository(db)), logger)
+	srv.Mux().Route("/networks", func(r chi.Router) {
+		r.Use(tenant.Middleware)
+		networkHandler.Register(r)
+	})
+
+	offerHandler := offer.NewHandler(offer.NewService(offer.NewRepository(db)), logger)
+	srv.Mux().Route("/offers", func(r chi.Router) {
+		r.Use(tenant.Middleware)
+		offerHandler.Register(r)
 	})
 
 	costHandler := cost.NewHandler(cost.NewService(cost.NewRepository(db), conversion.NewPostgresFX(db)), logger)

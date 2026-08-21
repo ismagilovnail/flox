@@ -70,10 +70,10 @@ single concrete, honestly-deliverable slice:
 - `StreamSetList`/`RoutingSimulatorView` on the campaign detail page — no
   stream-set/flow/filter backend exists yet (§51's own list names all of
   these as separate, later phases).
-- Offers/networks/flows/stream-sets/filters/routing-simulate/conversions/
-  postbacks list-management pages — same reason. **Traffic Sources is no
-  longer on this list** — full CRUD landed as its own phase; see
-  `docs/traffic-sources.md`.
+- Flows/stream-sets/filters/routing-simulate/conversions/postbacks
+  list-management pages — same reason. **Traffic Sources, Networks, and
+  Offers are no longer on this list** — full CRUD landed for all three;
+  see `docs/traffic-sources.md` and `docs/networks-offers.md`.
 
 ## Verified
 

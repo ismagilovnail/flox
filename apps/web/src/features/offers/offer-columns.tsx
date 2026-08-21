@@ -4,7 +4,7 @@ import { formatDistanceToNow } from "date-fns";
 import { dataTableFeatures } from "@/components/ui/data-table";
 import { Badge } from "@/components/ui/badge";
 import { Caption, Mono } from "@/components/ui/typography";
-import type { Offer, OfferStatus } from "@/lib/mock/offers";
+import type { Offer, OfferStatus } from "@/lib/api/offers";
 import { OfferRowActions } from "@/features/offers/offer-row-actions";
 import { TagBadgeList } from "@/features/tags/tag-badge-list";
 
@@ -58,7 +58,11 @@ export function offerColumns(
       id: "payout",
       header: "Payout",
       accessorFn: (row) => row.payout,
-      cell: ({ row }) => <Mono>{row.original.payout.toFixed(2)} {row.original.currency}</Mono>,
+      cell: ({ row }) => (
+        <Mono>
+          {row.original.payout.toFixed(2)} {row.original.currency}
+        </Mono>
+      ),
     },
     {
       accessorKey: "cap",

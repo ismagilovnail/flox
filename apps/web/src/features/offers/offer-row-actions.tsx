@@ -22,30 +22,43 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { useOffersStore } from "@/stores/offers";
+import { useActivateOffer, useArchiveOffer, useDuplicateOffer, usePauseOffer } from "@/hooks/use-offers";
 import { viewStatisticsHref } from "@/features/analytics/view-statistics-link";
-import type { Offer } from "@/lib/mock/offers";
+import type { Offer } from "@/lib/api/offers";
 
 export function OfferRowActions({ offer, onEdit }: { offer: Offer; onEdit: () => void }) {
-  const setStatus = useOffersStore((s) => s.setStatus);
-  const duplicateOffer = useOffersStore((s) => s.duplicateOffer);
+  const pause = usePauseOffer();
+  const activate = useActivateOffer();
+  const duplicate = useDuplicateOffer();
+  const archive = useArchiveOffer();
   const [confirmArchive, setConfirmArchive] = React.useState(false);
 
   function togglePause() {
-    const next = offer.status === "active" ? "paused" : "active";
-    setStatus(offer.id, next);
-    toast(next === "paused" ? "Offer paused" : "Offer resumed", { description: offer.name });
+    const action = offer.status === "active" ? pause : activate;
+    action.mutate(offer.id, {
+      onSuccess: () => toast(offer.status === "active" ? "Offer paused" : "Offer resumed", { description: offer.name }),
+      onError: (err) => toast.error("Couldn't update offer", { description: err.message }),
+    });
   }
 
-  function duplicate() {
-    duplicateOffer(offer.id);
-    toast("Offer duplicated", { description: `${offer.name} (Copy)` });
+  function handleDuplicate() {
+    duplicate.mutate(offer.id, {
+      onSuccess: () => toast("Offer duplicated", { description: `${offer.name} (Copy)` }),
+      onError: (err) => toast.error("Couldn't duplicate offer", { description: err.message }),
+    });
   }
 
-  function archive() {
-    setStatus(offer.id, "archived");
-    setConfirmArchive(false);
-    toast("Offer archived", { description: offer.name });
+  function handleArchive() {
+    archive.mutate(offer.id, {
+      onSuccess: () => {
+        setConfirmArchive(false);
+        toast("Offer archived", { description: offer.name });
+      },
+      onError: (err) => {
+        setConfirmArchive(false);
+        toast.error("Couldn't archive offer", { description: err.message });
+      },
+    });
   }
 
   return (
@@ -78,7 +91,7 @@ export function OfferRowActions({ offer, onEdit }: { offer: Offer; onEdit: () =>
               )}
             </DropdownMenuItem>
           )}
-          <DropdownMenuItem onSelect={duplicate}>
+          <DropdownMenuItem onSelect={handleDuplicate}>
             <CopyIcon className="size-4" /> Duplicate
           </DropdownMenuItem>
           {offer.status !== "archived" && (
@@ -105,7 +118,7 @@ export function OfferRowActions({ offer, onEdit }: { offer: Offer; onEdit: () =>
             <Button variant="outline" onClick={() => setConfirmArchive(false)}>
               Cancel
             </Button>
-            <Button variant="destructive" onClick={archive}>
+            <Button variant="destructive" onClick={handleArchive} disabled={archive.isPending}>
               Archive
             </Button>
           </DialogFooter>

@@ -19,56 +19,68 @@ referenced below as §N).
 ## CURRENT STATE — UPDATE THIS EVERY PHASE
 
 ```
-CURRENT PHASE : PHASE (unnumbered) — Traffic Sources CRUD
-STATUS        : done — confirmed with user via two AskUserQuestion rounds
-                (next-domain-slice, then which domain: Traffic Sources
-                over Offers/Networks/Stream Sets, as the smallest scope —
-                GET /traffic-sources already existed, a complete mock CRUD
-                UI already existed to wire up unchanged, no nested
-                children unlike Stream Sets).
-                apps/internal/trafficsource grew from Phase 27's
-                deliberately read-only List into full CRUD (create/edit/
-                pause/activate/archive/duplicate), mirroring campaign's
-                handler→service→repository split exactly. Duplicate keeps
-                the source's status as-is (no draft-equivalent status
-                exists to reset to, unlike campaign.Service.Duplicate).
-                Delete catches a Postgres 23503 (campaigns.traffic_source_id
-                has no ON DELETE clause, defaults to RESTRICT) and returns
-                a clean 409 instead of a raw 500 — verified live via curl
-                against a real referencing campaign.
-                Frontend: lib/api/traffic-sources.ts + hooks fully
-                rewritten off the mock store; source-list/source-form-
-                sheet/source-row-actions/source-columns wired to real
-                queries/mutations with their existing UI shape unchanged.
-                lib/mock/traffic-sources.ts and stores/traffic-sources.ts
-                deleted outright — unlike campaigns' equivalents (kept
-                because other still-mocked features import them
-                transitively), nothing outside this feature ever
-                referenced the traffic-sources mock/store.
-                Verified: go build/vet/gofmt/test ./... all green (incl. 7
-                new trafficsource tests: CRUD round-trip, invalid-URL
-                rejection, pause/activate transitions + idempotency +
-                archived-rejection, duplicate-keeps-status, delete-
-                conflicts-when-referenced, cross-tenant isolation);
-                tsc --noEmit and eslint clean; full manual browser pass —
-                created/paused/duplicated/edited a source through the real
-                UI, all correct. One dev-seed source ("Facebook Ads") was
-                deleted by mistake mid-verification (no campaign
-                referenced it at that moment) and recreated with the same
-                name/type once noticed — see docs/traffic-sources.md for
-                the full account.
-                Phase 27's remaining gap (offers/networks/flows/stream-
-                sets/filters/routing-simulate/conversions/postbacks, the
-                /analytics report builder, /ltv-cohorts) is unchanged by
-                this phase — Traffic Sources is off that list now, see
-                docs/frontend-integration.md.
-LAST COMMIT   : feat(traffic-sources): full CRUD
+CURRENT PHASE : PHASE (unnumbered) — Networks & Offers CRUD
+STATUS        : done — chosen via AskUserQuestion as "Offers," the
+                simplest-looking next slice — but offers.network_id is a
+                real NOT NULL FK to networks (00003), contradicting my own
+                preview text ("network can stay free-text"). Surfaced the
+                discovery rather than silently expanding scope or
+                weakening the schema; user chose to build Networks +
+                Offers + nested offer_links together in one phase,
+                completing §27's own Network → Offer → Offer Link
+                hierarchy. See docs/networks-offers.md.
+                apps/internal/network: flat entity, mirrors trafficsource
+                closely. Delete is the opposite of trafficsource's own
+                story — offers.network_id CASCADEs (deleting a network
+                deletes its offers), while flows.destination_network_id
+                (no Flow CRUD yet) would RESTRICT, caught defensively.
+                apps/internal/offer: NetworkBelongsToOrg validates the FK
+                cross-tenant (§36-TENANCY, same pattern as campaign→
+                traffic_source). offer_links use whole-array replace on
+                every write (delete-all/insert-all in one tx), matching
+                the frontend form's useFieldArray submitting every link
+                every save — no standalone link endpoint. Cap needed a
+                custom OptionalCap JSON type (Set bool, Value *int) to
+                distinguish PATCH's three real states — not sent / sent as
+                null (uncapped) / sent as a number — since a plain *int
+                can't tell "absent" from "explicit null" apart.
+                Frontend: lib/api/networks.ts + lib/api/offers.ts (new,
+                parallel files) wire the existing mock CRUD UIs to the
+                real API; lib/mock/{networks,offers}.ts and
+                stores/{networks,offers}.ts stay untouched (stream-sets/
+                postbacks/conversions still import them transitively, same
+                situation campaigns' mock/store was left in after Phase
+                27). A real bug hit and fixed during manual verification:
+                the offer form crashed with "Maximum update depth
+                exceeded" — RHF's `values` option (used everywhere else
+                this session) plus useFieldArray plus a MultiSelect looped
+                forever. Fixed by reverting offer-form-sheet.tsx to
+                defaultValues and restoring key={target?.id ?? "new"} on
+                all three list components' form-dialog wrappers, a pattern
+                the original mock components had and this session's
+                earlier rewrites had quietly dropped.
+                Verified: go build/vet/gofmt/test ./... all green (6 new
+                network tests incl. a cascade-delete proof, 6 new offer
+                tests incl. the three-state Cap PATCH and whole-array link
+                replace); tsc --noEmit and eslint clean; full manual
+                browser pass — created a network then an offer against it
+                through the complete form (GEOs, payout, currency, cap,
+                one link), edited it (pre-fill correct incl. the link
+                URL), paused it, duplicated it (copy kept paused, not
+                reset). Test rows removed via real DELETE afterward — both
+                net-new for this phase, no pre-existing seed data at risk.
+                Phase 27's remaining gap (flows/stream-sets/filters/
+                routing-simulate/conversions/postbacks, the /analytics
+                report builder, /ltv-cohorts) is unchanged — Traffic
+                Sources, Networks, and Offers are all off that list now,
+                see docs/frontend-integration.md.
+LAST COMMIT   : feat(networks,offers): full CRUD incl. offer_links
 NEXT          : confirm scope before starting. Candidates: FB/TikTok
                 ad-spend import (§74's CostProvider interface, the "later"
-                half of §27-COST), or the next domain slice (Offers/
-                Networks/Stream Sets/Filters/Flows) to give it a real
-                backend and wire its existing frontend mock, same pattern
-                this phase established.
+                half of §27-COST), or the next domain slice (Stream Sets/
+                Filters/Flows — Stream Sets now has both dependencies,
+                Offers and Networks, so it's unblocked) to give it a real
+                backend and wire its existing frontend mock.
 ```
 
 > At the end of every phase: update the four lines above, add a CHANGELOG entry,

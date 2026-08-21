@@ -5,6 +5,96 @@ per-phase, matching `CLAUDE.md`'s phase protocol. The one exception is
 [Between phases], below: spec amendments and the code changes that follow from
 them land between phases and would otherwise be invisible here.
 
+## [Networks & Offers CRUD] — Frontend/Backend Integration, next domain slice
+
+### Scope
+
+"Offers" was picked as the next slice on the assumption its network
+reference could stay free-text until Networks existed separately — wrong:
+`offers.network_id` is `NOT NULL REFERENCES networks (id)` (00003). This
+was discovered before any code was written and surfaced via
+`AskUserQuestion` rather than silently absorbing the extra scope or
+silently weakening the schema to route around it. The user chose to build
+Networks + Offers + nested `offer_links` together, completing §27's own
+stated hierarchy (Network → Offer → Offer Link) in one phase. See
+`docs/networks-offers.md`.
+
+### Added
+
+- **`apps/internal/network`** — flat entity CRUD, mirrors
+  `internal/trafficsource` closely (same handler/service/repository
+  split, same Duplicate-keeps-status reasoning). `Delete` is the mirror
+  image of `trafficsource`'s own delete story: `offers.network_id`
+  `CASCADE`s (deleting a network deletes its offers, by original schema
+  design, not a choice this phase makes), while
+  `flows.destination_network_id` (no Flow CRUD exists yet) would
+  `RESTRICT` — caught defensively with the same `23503`-to-409 pattern.
+- **`apps/internal/offer`** — the first non-flat domain in this session.
+  `NetworkID` is validated against the owning org via
+  `NetworkBelongsToOrg` before insert/update (§36-TENANCY, same pattern as
+  `campaign`→`traffic_source`). `offer_links` use whole-array replace
+  (delete-all/insert-all in one transaction) on every write where `Links`
+  is present — matching the frontend form's `useFieldArray`, which
+  submits every link on every save rather than a diff. No standalone link
+  endpoint; a link is never addressed independently of its offer.
+- **`OptionalCap`**: a small custom `json.Unmarshaler` distinguishing
+  PATCH's three real states for `cap` — not sent (leave unchanged), sent
+  as `null` (clear to uncapped), sent as a number (set that cap). A plain
+  `*int` can't tell "key absent" apart from "key present with `null`"; the
+  frontend side needed no equivalent trick — `UpdateOfferInput.cap` is
+  typed `number | null | undefined` and relies on `JSON.stringify` already
+  dropping `undefined` keys.
+- **Frontend**: `lib/api/networks.ts` + `lib/api/offers.ts` (new, parallel
+  to the untouched mocks) wire the existing mock CRUD UIs
+  (`network-*`/`offer-*` feature components) to the real API, unchanged in
+  shape. `lib/mock/{networks,offers}.ts` and `stores/{networks,offers}.ts`
+  are left exactly as they were — stream-sets/postbacks/conversions
+  (still fully mocked) import them transitively, same situation
+  `lib/mock/campaigns.ts` was left in after Phase 27.
+- **`docs/networks-offers.md`**; `docs/frontend-integration.md` updated —
+  Networks and Offers are off the "still mocked" list now.
+
+### Fixed
+
+- **A real render-loop bug, caught during manual verification, not
+  shipped**: `offer-form-sheet.tsx` crashed on open with React's "Maximum
+  update depth exceeded." Every other rewritten form this session uses
+  React Hook Form's `values` option so it re-syncs without a full remount;
+  combined with this form's `useFieldArray` (the links list) and a
+  `MultiSelect` (countries), a fresh `values` object literal on every
+  render caused RHF to keep re-syncing the field array, which triggered a
+  Radix Popper ref-callback state update, which caused another render,
+  forever. Fixed by reverting to plain `defaultValues` (read once per
+  mount) and restoring `key={target?.id ?? "new"}` on all three list
+  components' form-dialog wrappers — the remount-on-target-change pattern
+  the original mock-backed components already had, which this session's
+  earlier rewrites (Traffic Sources, then this phase's own first pass)
+  had quietly dropped when extracting the dialog into its own component.
+  `values` stays correct for the two simple forms with no array fields.
+
+### Notes
+
+- 6 new integration tests in `apps/internal/network` (CRUD round-trip,
+  invalid-URL rejection, pause/activate transitions, duplicate-keeps-
+  status, a direct cascade-delete-to-offers proof, cross-tenant
+  isolation) and 6 in `apps/internal/offer` (CRUD + country/currency
+  normalization, no-links/no-countries/non-positive-payout/cross-org-
+  network all rejected, whole-array link replace, the three-state Cap
+  PATCH, duplicate keeps status and copies links with fresh ids,
+  cross-tenant isolation) — all pass against real Postgres.
+- Verified end-to-end against the real running `api` + `web` dev servers:
+  created a network, then a full offer against it (network picker, GEO
+  multi-select, payout, currency, daily cap, one tracking link) through
+  the UI; edited it and confirmed every field pre-filled correctly
+  including the link URL, with the Status field present (edit-only);
+  paused it (status flipped live); duplicated it (copy kept every field
+  including GEOs/cap, and correctly stayed `paused` rather than
+  resetting). Test offers and the test network removed via the real
+  `DELETE` endpoints afterward — both net-new for this phase, so no
+  pre-existing seed data was at risk (unlike Traffic Sources' incident).
+- Backend: `go build/vet/gofmt/test ./...` all green. Frontend:
+  `tsc --noEmit` and `eslint` both clean.
+
 ## [Traffic Sources CRUD] — Frontend/Backend Integration, next domain slice
 
 ### Added

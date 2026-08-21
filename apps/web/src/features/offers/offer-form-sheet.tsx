@@ -23,8 +23,8 @@ import {
 import { MacroPicker } from "@/components/shared/macro-picker";
 import { genId } from "@/lib/id";
 import { COUNTRIES, CURRENCIES } from "@/lib/countries";
-import type { OfferStatus } from "@/lib/mock/offers";
-import type { Network } from "@/lib/mock/networks";
+import type { OfferStatus } from "@/lib/api/offers";
+import type { Network } from "@/lib/api/networks";
 
 const linkSchema = z.object({
   id: z.string(),
@@ -39,7 +39,7 @@ export const offerFormSchema = z.object({
   payout: z.number("Enter a payout amount").positive("Payout must be greater than 0"),
   currency: z.enum(CURRENCIES as [string, ...string[]]),
   cap: z.string().regex(/^\d*$/, "Cap must be a whole number"),
-  status: z.enum(["active", "paused", "archived"] as [OfferStatus, ...OfferStatus[]]),
+  status: z.enum(["active", "paused", "archived"] as [OfferStatus, ...OfferStatus[]]).optional(),
   links: z.array(linkSchema).min(1, "Add at least one offer link"),
 });
 
@@ -55,6 +55,7 @@ export function OfferFormSheet({
   networks,
   title,
   submitLabel,
+  showStatus = false,
   onSubmit,
 }: {
   open: boolean;
@@ -63,8 +64,17 @@ export function OfferFormSheet({
   networks: Network[];
   title: string;
   submitLabel: string;
+  showStatus?: boolean;
   onSubmit: (values: OfferFormValues) => void;
 }) {
+  // defaultValues, not RHF's `values` option: `values` re-syncs the whole
+  // form (including useFieldArray's internal array state) on every render
+  // where the object identity changes, which — combined with
+  // useFieldArray + MultiSelect here — produced a real "Maximum update
+  // depth exceeded" render loop during manual verification. The parent
+  // (offer-list.tsx) remounts this component via `key={target?.id ??
+  // "new"}` when switching targets, so defaultValues (read once on mount)
+  // is sufficient — same pattern the original mock-backed version used.
   const form = useForm<OfferFormValues>({
     resolver: zodResolver(offerFormSchema),
     defaultValues: {
@@ -194,27 +204,29 @@ export function OfferFormSheet({
             </div>
           </div>
 
-          <div className="grid gap-1.5">
-            <Label htmlFor="off-status">Status</Label>
-            <Controller
-              control={control}
-              name="status"
-              render={({ field }) => (
-                <Select value={field.value} onValueChange={field.onChange}>
-                  <SelectTrigger id="off-status" className="w-full">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {STATUS_OPTIONS.map((s) => (
-                      <SelectItem key={s} value={s}>
-                        {s}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              )}
-            />
-          </div>
+          {showStatus && (
+            <div className="grid gap-1.5">
+              <Label htmlFor="off-status">Status</Label>
+              <Controller
+                control={control}
+                name="status"
+                render={({ field }) => (
+                  <Select value={field.value} onValueChange={field.onChange}>
+                    <SelectTrigger id="off-status" className="w-full">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {STATUS_OPTIONS.map((s) => (
+                        <SelectItem key={s} value={s}>
+                          {s}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
+              />
+            </div>
+          )}
 
           <Separator />
 

@@ -22,30 +22,43 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { useNetworksStore } from "@/stores/networks";
+import { useActivateNetwork, useArchiveNetwork, useDuplicateNetwork, usePauseNetwork } from "@/hooks/use-networks";
 import { viewStatisticsHref } from "@/features/analytics/view-statistics-link";
-import type { Network } from "@/lib/mock/networks";
+import type { Network } from "@/lib/api/networks";
 
 export function NetworkRowActions({ network, onEdit }: { network: Network; onEdit: () => void }) {
-  const setStatus = useNetworksStore((s) => s.setStatus);
-  const duplicateNetwork = useNetworksStore((s) => s.duplicateNetwork);
+  const pause = usePauseNetwork();
+  const activate = useActivateNetwork();
+  const duplicate = useDuplicateNetwork();
+  const archive = useArchiveNetwork();
   const [confirmArchive, setConfirmArchive] = React.useState(false);
 
   function togglePause() {
-    const next = network.status === "active" ? "paused" : "active";
-    setStatus(network.id, next);
-    toast(next === "paused" ? "Network paused" : "Network resumed", { description: network.name });
+    const action = network.status === "active" ? pause : activate;
+    action.mutate(network.id, {
+      onSuccess: () => toast(network.status === "active" ? "Network paused" : "Network resumed", { description: network.name }),
+      onError: (err) => toast.error("Couldn't update network", { description: err.message }),
+    });
   }
 
-  function duplicate() {
-    duplicateNetwork(network.id);
-    toast("Network duplicated", { description: `${network.name} (Copy)` });
+  function handleDuplicate() {
+    duplicate.mutate(network.id, {
+      onSuccess: () => toast("Network duplicated", { description: `${network.name} (Copy)` }),
+      onError: (err) => toast.error("Couldn't duplicate network", { description: err.message }),
+    });
   }
 
-  function archive() {
-    setStatus(network.id, "archived");
-    setConfirmArchive(false);
-    toast("Network archived", { description: network.name });
+  function handleArchive() {
+    archive.mutate(network.id, {
+      onSuccess: () => {
+        setConfirmArchive(false);
+        toast("Network archived", { description: network.name });
+      },
+      onError: (err) => {
+        setConfirmArchive(false);
+        toast.error("Couldn't archive network", { description: err.message });
+      },
+    });
   }
 
   return (
@@ -78,7 +91,7 @@ export function NetworkRowActions({ network, onEdit }: { network: Network; onEdi
               )}
             </DropdownMenuItem>
           )}
-          <DropdownMenuItem onSelect={duplicate}>
+          <DropdownMenuItem onSelect={handleDuplicate}>
             <CopyIcon className="size-4" /> Duplicate
           </DropdownMenuItem>
           {network.status !== "archived" && (
@@ -105,7 +118,7 @@ export function NetworkRowActions({ network, onEdit }: { network: Network; onEdi
             <Button variant="outline" onClick={() => setConfirmArchive(false)}>
               Cancel
             </Button>
-            <Button variant="destructive" onClick={archive}>
+            <Button variant="destructive" onClick={handleArchive} disabled={archive.isPending}>
               Archive
             </Button>
           </DialogFooter>

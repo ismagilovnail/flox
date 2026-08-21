@@ -89,7 +89,7 @@ export function SourceList() {
       />
 
       {target !== undefined && (
-        <SourceFormDialog target={target} onClose={() => setTarget(undefined)} />
+        <SourceFormDialog key={target?.id ?? "new"} target={target} onClose={() => setTarget(undefined)} />
       )}
 
       {bulkTarget && (

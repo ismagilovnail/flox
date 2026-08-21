@@ -4,7 +4,7 @@ import { formatDistanceToNow } from "date-fns";
 import { dataTableFeatures } from "@/components/ui/data-table";
 import { Badge } from "@/components/ui/badge";
 import { Caption, Mono } from "@/components/ui/typography";
-import type { Network, NetworkStatus } from "@/lib/mock/networks";
+import type { Network, NetworkStatus } from "@/lib/api/networks";
 import { NetworkRowActions } from "@/features/networks/network-row-actions";
 import { TagBadgeList } from "@/features/tags/tag-badge-list";
 
