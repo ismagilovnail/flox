@@ -8,13 +8,17 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { ErrorState } from "@/components/ui/error-state";
 import { IconButton } from "@/components/ui/icon-button";
 import { Input } from "@/components/ui/input";
+import { LoadingState } from "@/components/ui/loading-state";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Mono } from "@/components/ui/typography";
-import { useNetworksStore } from "@/stores/networks";
-import { useEventMappingsStore } from "@/stores/event-mappings";
+import { useNetworks } from "@/hooks/use-networks";
+import { useCreateEventMapping, useDeleteEventMapping, useEventMappings } from "@/hooks/use-event-mappings";
 import { CPA_STATUSES, type CpaStatus } from "@/lib/api/conversions";
+import type { EventMapping } from "@/lib/api/event-mappings";
+import type { Network } from "@/lib/api/networks";
 
 const STATUS_VARIANT: Record<CpaStatus, "warning" | "success" | "danger" | "secondary"> = {
   CPA_HOLD: "warning",
@@ -24,17 +28,9 @@ const STATUS_VARIANT: Record<CpaStatus, "warning" | "success" | "danger" | "seco
   CPA_TRASH: "secondary",
 };
 
-function NetworkMappingCard({ networkId, networkName }: { networkId: string; networkName: string }) {
-  // Select the raw array and filter locally — calling a store method that returns a
-  // freshly-.filter()'d array AS the selector breaks useSyncExternalStore's snapshot-
-  // stability check (new reference every read) and causes an infinite render loop.
-  const allMappings = useEventMappingsStore((s) => s.mappings);
-  const mappings = React.useMemo(
-    () => allMappings.filter((m) => m.networkId === networkId),
-    [allMappings, networkId],
-  );
-  const addMapping = useEventMappingsStore((s) => s.addMapping);
-  const removeMapping = useEventMappingsStore((s) => s.removeMapping);
+function NetworkMappingCard({ network, mappings }: { network: Network; mappings: EventMapping[] }) {
+  const createMapping = useCreateEventMapping();
+  const deleteMapping = useDeleteEventMapping();
 
   const [networkStatus, setNetworkStatus] = React.useState("");
   const [floxStatus, setFloxStatus] = React.useState<CpaStatus>("CPA_HOLD");
@@ -42,15 +38,22 @@ function NetworkMappingCard({ networkId, networkName }: { networkId: string; net
   function handleAdd() {
     const trimmed = networkStatus.trim();
     if (!trimmed) return;
-    addMapping({ networkId, networkStatus: trimmed, floxStatus });
-    toast("Mapping added", { description: `${trimmed} → ${floxStatus}` });
-    setNetworkStatus("");
+    createMapping.mutate(
+      { networkId: network.id, networkStatus: trimmed, floxStatus },
+      {
+        onSuccess: () => {
+          toast("Mapping added", { description: `${trimmed} → ${floxStatus}` });
+          setNetworkStatus("");
+        },
+        onError: (err) => toast.error("Couldn't add mapping", { description: err.message }),
+      },
+    );
   }
 
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="text-sm">{networkName}</CardTitle>
+        <CardTitle className="text-sm">{network.name}</CardTitle>
         <CardDescription>Raw status string this network sends → FLOX status.</CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-2">
@@ -63,13 +66,20 @@ function NetworkMappingCard({ networkId, networkName }: { networkId: string; net
               aria-label={`Remove mapping ${mapping.networkStatus}`}
               size="icon-sm"
               className="ml-auto"
-              onClick={() => removeMapping(mapping.id)}
+              disabled={deleteMapping.isPending}
+              onClick={() =>
+                deleteMapping.mutate(mapping.id, {
+                  onError: (err) => toast.error("Couldn't remove mapping", { description: err.message }),
+                })
+              }
             >
               <XIcon className="size-3.5" />
             </IconButton>
           </div>
         ))}
-        {mappings.length === 0 && <p className="text-xs text-muted-foreground">No mappings yet — unmapped statuses fall through unrecognized.</p>}
+        {mappings.length === 0 && (
+          <p className="text-xs text-muted-foreground">No mappings yet — unmapped statuses fall through unrecognized.</p>
+        )}
 
         <div className="mt-1 flex items-center gap-2">
           <Input
@@ -91,7 +101,13 @@ function NetworkMappingCard({ networkId, networkName }: { networkId: string; net
               ))}
             </SelectContent>
           </Select>
-          <Button type="button" variant="outline" size="sm" onClick={handleAdd} disabled={!networkStatus.trim()}>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={handleAdd}
+            disabled={!networkStatus.trim() || createMapping.isPending}
+          >
             <PlusIcon className="size-3.5" /> Add
           </Button>
         </div>
@@ -101,21 +117,55 @@ function NetworkMappingCard({ networkId, networkName }: { networkId: string; net
 }
 
 export function EventMappingPanel() {
-  const networks = useNetworksStore((s) => s.networks);
+  const networksQuery = useNetworks();
+  const mappingsQuery = useEventMappings();
+
+  if (networksQuery.isPending || mappingsQuery.isPending) {
+    return <LoadingState label="Loading event mappings…" />;
+  }
+
+  if (networksQuery.isError) {
+    return (
+      <ErrorState
+        title="Couldn't load networks"
+        description={networksQuery.error.message}
+        onRetry={() => networksQuery.refetch()}
+      />
+    );
+  }
+  if (mappingsQuery.isError) {
+    return (
+      <ErrorState
+        title="Couldn't load event mappings"
+        description={mappingsQuery.error.message}
+        onRetry={() => mappingsQuery.refetch()}
+      />
+    );
+  }
+
+  const networks = networksQuery.data.networks;
+  const mappings = mappingsQuery.data.eventMappings;
 
   return (
     <div className="flex flex-col gap-4">
       <Alert>
         <AlertDescription>
-          The Conversion Engine (Phase 23) uses this table to translate a network&apos;s own status strings into the
-          canonical CPA_HOLD / CPA_ACCEPT / CPA_REDEP / CPA_DECLINE / CPA_TRASH enum (§43).
+          The Conversion Engine uses this table to translate a network&apos;s own status strings into the canonical
+          CPA_HOLD / CPA_ACCEPT / CPA_REDEP / CPA_DECLINE / CPA_TRASH enum (§43).
         </AlertDescription>
       </Alert>
       <div className="flex flex-col gap-3">
         {networks.map((network) => (
-          <NetworkMappingCard key={network.id} networkId={network.id} networkName={network.name} />
+          <NetworkMappingCard
+            key={network.id}
+            network={network}
+            mappings={mappings.filter((m) => m.networkId === network.id)}
+          />
         ))}
       </div>
+      {networks.length === 0 && (
+        <p className="text-sm text-muted-foreground">No networks yet — add one on the Networks page first.</p>
+      )}
     </div>
   );
 }

@@ -67,16 +67,19 @@ single concrete, honestly-deliverable slice:
   integrating it.
 - `/ltv-cohorts` — literally a `<PageStub>`; no UI was ever built against
   the Phase 26.5 LTV endpoints to integrate in the first place.
-- Postback Logs (incoming/outgoing delivery log) and Event Mappings CRUD
-  (per-network raw-status → CPA-status config) — no backend wiring yet for
-  either, though both tables (`event_mappings`, and ClickHouse's
-  `postback_events`) already exist. **Traffic Sources, Networks, Offers,
-  Stream Sets/Filters/Flows, the Routing Simulator, and Conversions
-  (list + detail/timeline) are no longer on this list** — full CRUD (or,
-  for the Simulator/Conversions, a real read/compute endpoint) landed for
-  all of them; see `docs/traffic-sources.md`, `docs/networks-offers.md`,
-  `docs/stream-sets.md`, `docs/routing-simulate.md`, and
-  `docs/conversions.md`.
+- Postback Logs (incoming/outgoing delivery log) — no backend wiring yet,
+  though ClickHouse's `postback_events` table already exists. Its own
+  Postbacks page tabs (Incoming, Logs) still read the mock
+  `stores/event-mappings.ts`/`stores/networks.ts` even after Event
+  Mappings CRUD landed real, a documented inconsistency — see
+  `docs/event-mappings.md`. **Traffic Sources, Networks, Offers, Stream
+  Sets/Filters/Flows, the Routing Simulator, Conversions (list +
+  detail/timeline), and Event Mappings CRUD are no longer on this list**
+  — full CRUD (or, for the Simulator/Conversions, a real read/compute
+  endpoint) landed for all of them; see `docs/traffic-sources.md`,
+  `docs/networks-offers.md`, `docs/stream-sets.md`,
+  `docs/routing-simulate.md`, `docs/conversions.md`, and
+  `docs/event-mappings.md`.
 
 ## Verified
 

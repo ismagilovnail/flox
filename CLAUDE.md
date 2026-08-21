@@ -19,79 +19,71 @@ referenced below as §N).
 ## CURRENT STATE — UPDATE THIS EVERY PHASE
 
 ```
-CURRENT PHASE : PHASE (unnumbered) — Conversions list + detail/timeline
-STATUS        : done — two rounds of AskUserQuestion. First: user picked
-                "Conversions/Postbacks" as the domain from three candidates.
-                Inspection then found the hard backend (dedup, delivery,
-                ClickHouse logging) already fully built and wired into
-                apps/tracker/apps/worker — only a browser-facing read API
-                was missing, and the domain was really three separable
-                pieces. Second question narrowed to this slice, deferring
-                Postback Logs and Event Mappings CRUD.
-                New apps/internal/conversions package (plural — distinct
-                from the existing singular apps/internal/conversion, Phase
-                23's write-side dedup/status-progression engine, untouched
-                this phase): a thin read layer over ClickHouse's
-                conversion_events/click_events/tracking_events, mirroring
-                apps/internal/analytics's own shape. GET /conversions
-                (org-wide, date-ranged, paginated) lists CPA_* rows; GET
-                /conversions/{clickId} returns a merged, chronological
-                timeline of every funnel + conversion event for that
-                click_id. New chstore.go additions: ListConversions/
-                CountConversions/ConversionsByClickID/FunnelByClickID.
-                A click_id can carry more than one conversion_events row
-                (HOLD, then ACCEPT, then REDEP, ...) — real status history,
-                not duplicate rows; the old mock's fixed six-stage funnel
-                (Click/Landing/PWA/Offer/Conversion/Postback, four stages
-                fabricated) is replaced by a real, variable-length
-                chronological list of whatever §43 events actually
-                happened for that click_id, however many there are.
-                Dropped, not faked: Offer (conversion_events carries no
-                offer_id, only flow_id — resolving it needs a Postgres
-                join out of scope) and postback delivery status/"Resend
-                postback" (the deferred Postback Logs domain). Campaign/
-                network names resolved client-side via the already-real
-                useCampaigns()/useNetworks() hooks, same pattern the old
-                mock UI used against its own mock stores.
-                CpaStatus/CPA_STATUSES moved from lib/mock/conversions.ts
-                to lib/api/conversions.ts (a real domain enum, not mock-
-                specific); every consumer, including the still-mocked
-                Postback Logs/Event Mappings features, now imports from
-                there. stores/conversions.ts deleted outright (no
-                remaining importers once the real hooks landed);
-                lib/mock/conversions.ts kept, trimmed to just what
-                Postback Logs' mock still cross-references.
-                A real bug caught during manual verification:
-                GET /conversions?to=YYYY-MM-DD parsed to midnight UTC,
-                silently excluding every same-day event — correct for
-                internal/analytics's day-granularity materialized views,
-                wrong for this package's raw event_at timestamps. Fixed
-                by pushing an explicit date-only `to` to end-of-day
-                (+24h-1ns) in the handler. See docs/conversions.md.
-                Verified: go build/vet/gofmt/test ./... all green (chstore
-                integration tests against real ClickHouse for all four new
-                query methods, conversions.Service unit tests against a
-                fake repo for range/limit validation + chronological
-                merge + the no-events 404); tsc --noEmit/eslint clean;
-                full manual browser pass — seeded two real click_ids'
-                worth of ClickHouse events via a throwaway, never-committed
-                InsertBatch call against a real test campaign/network;
-                confirmed the list's multi-row status history, both
-                detail pages' real (different-length) timelines, a clean
-                404 for an unknown click_id, and that the still-mocked
-                Postback Logs/Event Mapping panels (both touched by the
-                CpaStatus move) kept rendering correctly. Test campaign,
-                network, and ClickHouse rows removed afterward.
-LAST COMMIT   : feat(conversions): wire Conversions list + detail/timeline
-                to real ClickHouse-backed API
+CURRENT PHASE : PHASE (unnumbered) — Event Mappings CRUD
+STATUS        : done — confirmed via AskUserQuestion (recommended
+                option) as the smallest remaining piece of the
+                Conversions/Postbacks domain, over Postback Logs/FB-
+                TikTok ad-spend import/Landing-PWA-Postlanding-Pixels
+                CRUD. New apps/internal/eventmapping package writes rows
+                for event_mappings (migration 00012) — the table
+                apps/internal/conversion.PostgresMapper.MapStatus already
+                read at postback-ingest time (Phase 23); never duplicates
+                that lookup, same relationship streamset has to
+                routingstore. FloxStatus reuses event.Type directly
+                (validated via the already-existing event.Type.IsCPA()),
+                not a redeclared enum. GET/POST /event-mappings (org-
+                wide, not per-network — the panel groups by networkId
+                client-side, matching the old mock's org-wide array) and
+                DELETE /event-mappings/{id}; no PATCH, since the UI only
+                ever adds or removes a mapping, never edits one in place.
+                Duplicate detection relies on the database's existing
+                unique index (network_id, lower(network_status)) rather
+                than a race-prone check-then-insert — Create just catches
+                Postgres 23505 into a real apierror.Conflict, this
+                codebase's first 23505 catch (every prior one was 23503
+                FK violations).
+                EventMappingPanel was still reading the mock
+                useNetworksStore (stale fabricated network ids) even
+                though it already imported the real CPA_STATUSES from an
+                earlier phase — switched to the real useNetworks() hook,
+                since managing mappings for networks that can't match any
+                real network_id would have been pointless. stores/event-
+                mappings.ts and lib/mock/event-mappings.ts were NOT
+                deleted (unlike the Routing Simulator phase's stream-sets
+                mock/store pair) — both are still read by
+                IncomingPostbacksPanel and the deferred Postback Logs
+                mock, both out of scope. Net result, documented rather
+                than hidden: the Postbacks page's "Event Mapping" tab now
+                manages real data while its "Incoming" tab still shows
+                stale mock networks with a mapped-count badge sourced
+                from the mock store — confirmed live, not just inferred.
+                See docs/event-mappings.md.
+                Verified: go build/vet/gofmt/test ./... all green (5 new
+                eventmapping tests: CRUD round-trip, invalid FloxStatus
+                rejected, case-insensitive duplicate rejected with a real
+                conflict apierror, unknown network id rejected, full
+                cross-tenant isolation); tsc --noEmit/eslint clean; full
+                manual browser pass — created two real networks, added a
+                mapping through the real form (confirmed landed in
+                Postgres via direct API call), attempted a case-
+                insensitive duplicate and confirmed the real 409 by
+                inspecting the network request directly (not just the
+                UI), removed the mapping and confirmed it was gone both
+                in the UI and via the API, confirmed the Incoming tab's
+                stale-but-non-crashing inconsistency live. Test networks
+                removed via real DELETE afterward.
+LAST COMMIT   : feat(event-mappings): wire Event Mappings CRUD to real
+                Postgres-backed API
 NEXT          : confirm scope before starting. Candidates: Postback Logs
-                (ClickHouse postback_events, replay-capable) or Event
-                Mappings CRUD (Postgres event_mappings, already migrated)
-                — the two remaining pieces of this domain; FB/TikTok
-                ad-spend import (§74's CostProvider interface, the "later"
-                half of §27-COST); or Landing/PWA/Postlanding/Pixels CRUD
-                (would unblock the stages the Stream Sets phase had to
-                drop from the Flow editor).
+                (ClickHouse postback_events, replay-capable) — the last
+                remaining piece of the Conversions/Postbacks domain, and
+                would also let IncomingPostbacksPanel switch off its
+                stale mock networks/mappings, closing the inconsistency
+                this phase documented; FB/TikTok ad-spend import (§74's
+                CostProvider interface, the "later" half of §27-COST); or
+                Landing/PWA/Postlanding/Pixels CRUD (would unblock the
+                stages the Stream Sets phase had to drop from the Flow
+                editor).
 ```
 
 > At the end of every phase: update the four lines above, add a CHANGELOG entry,

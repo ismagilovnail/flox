@@ -5,6 +5,71 @@ per-phase, matching `CLAUDE.md`'s phase protocol. The one exception is
 [Between phases], below: spec amendments and the code changes that follow from
 them land between phases and would otherwise be invisible here.
 
+## [Event Mappings] — CRUD wired to real Postgres-backed API
+
+### Scope
+
+Confirmed via `AskUserQuestion` (the recommended option) as the smallest
+remaining piece of the Conversions/Postbacks domain — a small,
+self-contained CRUD slice with no ClickHouse involved, shaped like
+Networks/Offers. See `docs/event-mappings.md`.
+
+### Added
+
+- **`apps/internal/eventmapping`** — writes rows for `event_mappings`
+  (migration 00012), the table `apps/internal/conversion.PostgresMapper
+  .MapStatus` already read at postback-ingest time (Phase 23). Never
+  duplicates that lookup — the same relationship `streamset` has to
+  `routingstore`. `FloxStatus` reuses `event.Type` directly (validated
+  via the already-existing `event.Type.IsCPA()`), not a redeclared enum.
+- `GET`/`POST /event-mappings` (org-wide, not per-network — the panel
+  groups by `networkId` client-side, matching the old mock's org-wide
+  array) and `DELETE /event-mappings/{id}`. No `PATCH`: the UI only ever
+  adds or removes a mapping, never edits one in place.
+- Duplicate detection relies on the database's existing unique index
+  (`network_id, lower(network_status)`) rather than a race-prone
+  check-then-insert — `Create` catches Postgres `23505` into a real
+  `apierror.Conflict`, this codebase's first `23505` catch (every prior
+  one was `23503` FK violations).
+- Frontend: `lib/api/event-mappings.ts` + `hooks/use-event-mappings.ts`
+  (new, TanStack Query). `EventMappingPanel` rewired to the real hooks.
+
+### Fixed (a pre-existing gap, not new to this phase)
+
+`EventMappingPanel` was still reading the mock `useNetworksStore` (stale
+fabricated network ids like `net_afftrust`) even though it already
+imported the real `CPA_STATUSES` from the Conversions phase — switched
+to the real `useNetworks()` hook, since managing mappings for networks
+that couldn't match any real `network_id` would have been pointless.
+
+### Not changed, documented instead
+
+`stores/event-mappings.ts` and `lib/mock/event-mappings.ts` were **not**
+deleted, unlike the Routing Simulator phase's stream-sets mock/store
+pair — both are still read by `IncomingPostbacksPanel` (a "mapped count"
+badge) and the deferred Postback Logs mock, both out of this phase's
+scope. Net result: the Postbacks page's "Event Mapping" tab now manages
+real data while its "Incoming" tab still shows stale mock networks with
+a mapped-count badge sourced from the mock store — confirmed live, not
+just inferred, and documented in `docs/event-mappings.md` rather than
+papered over.
+
+### Verified
+
+- Backend: `go build/vet/gofmt/test ./...` all green — 5 new
+  `eventmapping` tests (CRUD round-trip, invalid `FloxStatus` rejected,
+  case-insensitive duplicate rejected with a real conflict apierror,
+  unknown network id rejected, full cross-tenant isolation).
+- Frontend: `tsc --noEmit`/`eslint` clean.
+- Full manual browser pass against the real running `api` + `web` dev
+  servers: created two real networks, added a mapping through the real
+  form (confirmed landed in Postgres via a direct API call), attempted a
+  case-insensitive duplicate and confirmed the real `409` by inspecting
+  the network request directly, removed the mapping and confirmed it was
+  gone both in the UI and via the API, confirmed the Incoming tab's
+  stale-but-non-crashing inconsistency live. Test networks removed via
+  the real `DELETE` endpoint afterward.
+
 ## [Conversions] — List + detail/timeline wired to real ClickHouse-backed API
 
 ### Scope

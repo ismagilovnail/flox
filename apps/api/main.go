@@ -21,6 +21,7 @@ import (
 	"github.com/ismagilovnail/flox/apps/internal/conversion"
 	"github.com/ismagilovnail/flox/apps/internal/conversions"
 	"github.com/ismagilovnail/flox/apps/internal/cost"
+	"github.com/ismagilovnail/flox/apps/internal/eventmapping"
 	"github.com/ismagilovnail/flox/apps/internal/httpserver"
 	"github.com/ismagilovnail/flox/apps/internal/logging"
 	"github.com/ismagilovnail/flox/apps/internal/ltv"
@@ -120,6 +121,12 @@ func run() error {
 	srv.Mux().Route("/offers", func(r chi.Router) {
 		r.Use(tenant.Middleware)
 		offerHandler.Register(r)
+	})
+
+	eventMappingHandler := eventmapping.NewHandler(eventmapping.NewService(eventmapping.NewRepository(db)), logger)
+	srv.Mux().Route("/event-mappings", func(r chi.Router) {
+		r.Use(tenant.Middleware)
+		eventMappingHandler.Register(r)
 	})
 
 	costHandler := cost.NewHandler(cost.NewService(cost.NewRepository(db), conversion.NewPostgresFX(db)), logger)
