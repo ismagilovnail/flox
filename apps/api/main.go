@@ -20,6 +20,7 @@ import (
 	"github.com/ismagilovnail/flox/apps/internal/config"
 	"github.com/ismagilovnail/flox/apps/internal/httpserver"
 	"github.com/ismagilovnail/flox/apps/internal/logging"
+	"github.com/ismagilovnail/flox/apps/internal/ltv"
 	"github.com/ismagilovnail/flox/apps/internal/postgres"
 	"github.com/ismagilovnail/flox/apps/internal/telemetry"
 	"github.com/ismagilovnail/flox/apps/internal/tenant"
@@ -94,11 +95,20 @@ func run() error {
 	})
 
 	if ch != nil {
-		analyticsSvc := analytics.NewService(chstore.NewEventStore(ch))
+		events := chstore.NewEventStore(ch)
+
+		analyticsSvc := analytics.NewService(events)
 		analyticsHandler := analytics.NewHandler(analyticsSvc, logger)
 		srv.Mux().Route("/analytics", func(r chi.Router) {
 			r.Use(tenant.Middleware)
 			analyticsHandler.Register(r)
+		})
+
+		ltvSvc := ltv.NewService(events)
+		ltvHandler := ltv.NewHandler(ltvSvc, logger)
+		srv.Mux().Route("/analytics/ltv", func(r chi.Router) {
+			r.Use(tenant.Middleware)
+			ltvHandler.Register(r)
 		})
 	}
 

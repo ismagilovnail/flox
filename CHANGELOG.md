@@ -5,6 +5,77 @@ per-phase, matching `CLAUDE.md`'s phase protocol. The one exception is
 [Between phases], below: spec amendments and the code changes that follow from
 them land between phases and would otherwise be invisible here.
 
+## [Phase 26.5] — LTV & Cohort Engine
+
+### Added
+
+- **`internal/ltv`**: FTD (first-deposit) and Reg (registration) cohort
+  tables with §26.5's LTV windows (`d0`/`d1_7`/`d8_30`/`d31_90`). Pure Go
+  over a narrow ClickHouse fetch — the same architecture `internal/routing`
+  has over its fixture — deliberately, so §26.5's "numbers reconcile
+  against fixtures" acceptance criterion is provable directly against this
+  package's own tests, not trusted to a `dateDiff` expression buried in a
+  materialized view. 11 fixture tests cover exact window bucketing
+  (including the day-90/day-91 boundary), the "incomplete windows show
+  partial revenue, never a clean zero" rule, conservative completeness
+  across a multi-day cohort's members (never complete until the *youngest*
+  member's window has elapsed), both §26.5 rate formulas exactly, and the
+  Phase 23 FX-missing-contributes-zero invariant carrying through
+  unchanged.
+- **`ltv_events`** (schema/007): a materialized view over
+  `conversion_events`, narrowed to `CPA_HOLD`/`CPA_ACCEPT`/`CPA_REDEP` —
+  the only statuses any §26.5 formula references.
+- **Anchor uniqueness needs no `MIN()`/`GROUP BY`**: `ClicksByFTDAnchor`/
+  `ClicksByRegAnchor` rely on CLAUDE.md #3's dedup key already guaranteeing
+  at most one `CPA_ACCEPT` (or `CPA_HOLD`) row per click_id — a direct,
+  previously-undocumented-in-this-context consequence of Phase 23's own
+  invariant, not a new rule invented here. One row per click IS the first
+  occurrence, always.
+- **`FTDCohort`/`RegCohort` are distinct types**, not one generic struct
+  with optional fields: `ftd_to_redep_rate`/`dep_to_redep` denominate by
+  `cpa_accept`, `reg_to_ftd_rate` by `cpa_hold` — attaching both rate
+  families to a single shared type risked a silently-wrong denominator on
+  whichever one didn't match that cohort's own anchor count. Both types
+  still share deposit/window/lifetime accumulation through an embedded
+  `base`, computed identically either way.
+- **`LifetimeDaysAvg`/`HasLifetimeData`**: averaged only over clicks that
+  actually redeposited — §26.5 defines `lifetime_days` as "days from FTD to
+  last redeposit," which is undefined, not zero, for a click that never
+  did. A cohort where nothing redeposited reports `HasLifetimeData: false`,
+  never a misleading `0`.
+- **REST**: `GET /analytics/ltv/ftd-cohorts` and `.../reg-cohorts`,
+  `?period=day|week|month&from=&to=&campaignId=&networkId=&country=`,
+  mounted on `apps/api` behind the existing `tenant.Middleware`. `from`/`to`
+  default to the last 90 days when omitted — §26.5 itself names 90 days as
+  the range a report needs for fully closed windows.
+- **`docs/ltv-cohorts.md`**, `ARCHITECTURE.md` updated (§76).
+
+### Notes
+
+- **Deliberately out of scope, no new confirmation needed**: §26.5 names
+  `source`/`offer` as filter/breakdown dimensions alongside
+  campaign/network/country, but `event.Event` carries neither
+  `traffic_source_id` nor `offer_id` — the same pre-existing gap
+  `internal/macro`'s `{source}` token (Phase 24) and `click_events`' sort
+  key (Phase 26) already documented, reached independently a fourth time.
+  No frontend work either — no LTV/Cohorts UI mock exists to integrate
+  with, consistent with every Go-backend phase since 23.
+- End-to-end smoke test against the real compiled `api` binary and real
+  seeded `conversion_events` (via `EventStore.InsertBatch`, the same path
+  production traffic uses): an old two-click FTD cohort's windows summed to
+  exactly the seeded revenue with every window `Complete: true`; a
+  five-day-old cohort showed `d0` complete-and-populated with the later
+  three windows correctly `Complete: false` and `0` revenue; the matching
+  Reg cohort's `regToFtdRate` came out exactly `2/3`; a second organization
+  querying the identical range got `{"cohorts":[]}` — tenant isolation held
+  through the full stack, not just the repository layer.
+- 20 new tests: `internal/ltv` 16 (11 pure-computation fixtures + 5
+  service-layer validation/pass-through), `internal/chstore` +4 (the
+  `ClicksByFTDAnchor`/`ClicksByRegAnchor` query layer, incl. dimension
+  filtering and a no-match case). A from-scratch ClickHouse schema
+  application (dropping `ltv_events`/`ltv_events_mv` and re-running
+  `Migrate`) verified alongside the existing idempotency check.
+
 ## [Phase 26] — ClickHouse
 
 ### Added

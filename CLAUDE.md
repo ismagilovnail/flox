@@ -19,74 +19,57 @@ referenced below as §N).
 ## CURRENT STATE — UPDATE THIS EVERY PHASE
 
 ```
-CURRENT PHASE : PHASE 26 — ClickHouse
-STATUS        : done — the real §48 five-table schema replaces Phase 25's
-                disposable single `events` table (schema/000_drop_phase25_
-                schema.sql drops it, 001-005 create click_events/
-                tracking_events/conversion_events/cost_events/
-                postback_events). event.Type.IsClick()/IsCPA() (new,
-                exhaustive-and-disjoint, test-guarded) route each
-                event_queue batch into up to 3 ClickHouse inserts via
-                internal/chstore.EventStore.InsertBatch — never one insert
-                per row. cost_events is schema-only (its Postgres sync is
-                Phase 27-COST's job, confirmed out of scope, same pattern
-                as cost_entries starting manual-only in Phase 17).
-                postback_events gets REAL ingestion, both directions
-                (confirmed via AskUserQuestion): internal/conversion.Service
-                and internal/postback.Deliverer each report every outcome
-                (not just successes) through a new AttemptLogger interface
-                to internal/postbacklog — a near-duplicate of
-                internal/eventqueue (own Postgres queue + Flusher) rather
-                than a shared/generic implementation, deliberately, since
-                the two payload shapes have nothing else in common.
-                Verified end-to-end: one incoming postback produces both a
-                Postgres `postbacks` row and a ClickHouse postback_events
-                row, and the outgoing delivery it triggers produces its own
-                postback_events row after actually hitting the network.
-                Materialized views: click_events_daily_campaign,
-                click_events_daily_geo (§48's two named patterns) plus
-                conversion_events_daily_campaign (revenue — not named by
-                §48 but the same pattern, added since CLAUDE.md #6/
-                §27-COST will need it and the cost was near-zero).
-                internal/analytics gained a second endpoint
-                (GET .../daily-revenue) reading the new revenue aggregate.
-                No TTL on any table (confirmed via AskUserQuestion — no
-                retention policy exists anywhere in this project's docs;
-                a silent default would be a real, possibly GDPR-relevant
-                decision made by omission).
-                BONUS, not originally scoped but closes a promise made in
-                Phase 22/23/25 docs: attribution's MemoryResolver — which
-                was NEVER actually populated by the real tracker, so EVERY
-                conversion has been permanently unattributed since Phase 23
-                shipped — is replaced by chstore.ClickResolver, querying
-                click_events for real. Handles stickyFlowKeepClickId's
-                click_id reuse (resolves to the EARLIEST occurrence) and
-                excludes SOURCE_FILTER rows (never reached a destination,
-                so a network could never legitimately reference one).
-                Eventual-consistency caveat documented (click_events lags
-                the real click by up to ~2s, the worker's flush interval).
-                Best-effort at tracker startup, matching Redis's existing
-                stance — falls back to MemoryResolver (attribution always
-                unattributed until restart) rather than refusing to start,
-                since the redirect path must never depend on ClickHouse
-                being up. Verified with a REAL click through the tracker's
-                /t/ endpoint, flushed to ClickHouse, then a real incoming
-                postback for that exact click_id — attribution_outcome
-                came back "attributed" / method "click_id", the first time
-                any smoke test this session has NOT read "matched no click
-                of this organization."
-                69 tests pass across 8 packages (up from 39 last phase);
-                full Postgres migration round-trip (00001-00016) and a
-                from-scratch ClickHouse schema application both verified.
-                Frontend (apps/web) untouched — Phase 27's job.
-                Carried over, unrelated: Phase 10 crash-loop report; in-app
-                WebView bounce (§73).
-LAST COMMIT   : feat(clickhouse): five-table analytical schema
-NEXT          : PHASE 26.5 — LTV & Cohort Engine — confirm before starting.
-                FTD/reg cohorts, lifetime_days, LTV windows — "core value
-                for iGaming, do not skip" per the spec. Likely needs its
-                own ltv_events table or a materialized view over
-                conversion_events; decide which before writing schema.
+CURRENT PHASE : PHASE 26.5 — LTV & Cohort Engine
+STATUS        : done — "a primary reason teams pay for a tracker in this
+                vertical. Do not skip," and not skipped. internal/ltv is
+                pure Go (no DB, no clock of its own) over a narrow
+                ClickHouse fetch, same architecture as internal/routing —
+                deliberately, so §26.5's own acceptance criterion ("numbers
+                reconcile against fixtures") is provable directly: 11
+                fixture tests nail down exact window bucketing, the
+                incomplete-window-shows-partial-not-zero rule, conservative
+                cross-member completeness, both rate formulas, and the
+                FX-missing-contributes-zero invariant carrying through from
+                Phase 23. ltv_events (schema/007) is a materialized view
+                over conversion_events, narrowed to CPA_HOLD/ACCEPT/REDEP.
+                ClicksByFTDAnchor/ClicksByRegAnchor don't need MIN()/
+                GROUP BY to find each click's "first" anchor status — the
+                dedup key (CLAUDE.md #3) already guarantees at most one row
+                per click per status, a consequence of Phase 23's own
+                invariant, not a new rule.
+                FTDCohort and RegCohort are distinct types (not one shared
+                struct with optional fields): each spec rate formula
+                (ftd_to_redep_rate/dep_to_redep vs reg_to_ftd_rate) has a
+                different natural denominator (cpa_accept vs cpa_hold),
+                and attaching both to one generic type risked a silently
+                wrong denominator on one of them.
+                Confirmed out of scope, consistent with precedent
+                (no AskUserQuestion needed — same conclusion reached 4
+                phases running): "source"/"offer" filter dimensions (event
+                pipeline doesn't carry traffic_source_id/offer_id yet) and
+                any frontend work (no LTV UI mock exists to integrate with;
+                Phase 27's job per every prior Go-backend phase).
+                REST: GET /analytics/ltv/{ftd,reg}-cohorts?period=&from=&to=&campaignId=&networkId=&country=,
+                mounted on apps/api behind the existing tenant.Middleware.
+                20 new tests (ltv: 16, chstore: +4 for the anchor-query
+                layer) — all green. End-to-end smoke test through the real
+                compiled api binary and real seeded conversion_events: an
+                old 2-click FTD cohort's windows summed exactly right with
+                every window correctly Complete, a 5-day-old cohort showed
+                d0 complete/populated and the later windows correctly
+                incomplete-with-zero, Reg cohort regToFtdRate came out
+                exactly 2/3, and a second org got an empty result for the
+                same query — tenant isolation held through the full stack.
+LAST COMMIT   : feat(ltv): LTV and cohort engine
+NEXT          : PHASE 27 — Frontend/Backend Integration — confirm before
+                starting. First phase to touch apps/web against real APIs
+                instead of apps/web/src/lib/mock/*. Six Go-backend phases
+                (23-26.5) now have real endpoints waiting: conversion,
+                postback delivery, analytics (2 endpoints), LTV/cohorts (2
+                endpoints), plus whatever campaign/routing endpoints exist
+                from earlier phases. Scope this one carefully — it's likely
+                the largest phase yet by surface area even if none of the
+                individual wiring is hard.
 ```
 
 > At the end of every phase: update the four lines above, add a CHANGELOG entry,
