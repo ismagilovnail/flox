@@ -1,11 +1,10 @@
 "use client";
 
 import * as React from "react";
+import { toast } from "sonner";
 
 import { EmptyState } from "@/components/ui/empty-state";
-import { useStreamSetsStore } from "@/stores/stream-sets";
-import { emptySimulateRequest, type SimulateResult } from "@/lib/routing-simulate";
-import { simulateRoute } from "@/lib/api/routing";
+import { emptySimulateRequest, simulateRoute, type SimulateResult } from "@/lib/api/routing";
 import type { FilterField } from "@/lib/filters";
 import { SimulatorForm } from "@/features/routing-simulator/simulator-form";
 import { SimulatorResult } from "@/features/routing-simulator/simulator-result";
@@ -13,13 +12,10 @@ import { SimulatorResult } from "@/features/routing-simulator/simulator-result";
 export function RoutingSimulatorView({
   campaignId,
   campaignName,
-  fallbackUrl,
 }: {
   campaignId: string;
   campaignName: string;
-  fallbackUrl: string;
 }) {
-  const streamSets = useStreamSetsStore((s) => s.listByCampaign(campaignId));
   const [request, setRequest] = React.useState(emptySimulateRequest);
   const [result, setResult] = React.useState<SimulateResult | null>(null);
   const [isSimulating, setIsSimulating] = React.useState(false);
@@ -31,7 +27,9 @@ export function RoutingSimulatorView({
   async function handleSimulate() {
     setIsSimulating(true);
     try {
-      setResult(await simulateRoute(streamSets, fallbackUrl, request));
+      setResult(await simulateRoute(campaignId, request));
+    } catch (err) {
+      toast.error("Couldn't simulate this request", { description: err instanceof Error ? err.message : undefined });
     } finally {
       setIsSimulating(false);
     }

@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { BOOLEAN_FLAG_FIELDS, FIELD_GROUPS, FIELD_VOCAB, type FilterField } from "@/lib/filters";
-import type { SimulateRequest } from "@/lib/routing-simulate";
+import type { SimulateRequest } from "@/lib/api/routing";
 
 const BOOLEAN_OPTIONS = [
   { value: "0", label: "No" },

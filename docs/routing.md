@@ -70,10 +70,13 @@ eviction with no visible error.
 
 Decision recorded in [`/ARCHITECTURE.md`](../ARCHITECTURE.md): **Strategy
 A** — the Go routing engine (`internal/routing`, Phase 19) is the single
-source of truth. The frontend Routing Simulator (Phase 10) and Filter
-Builder previews are thin UI over `POST /routing/simulate`; during
-frontend-first phases they run against a local mock of the identical
-contract, switched to the real endpoint in Phase 27 with no UI changes.
+source of truth. The frontend Routing Simulator (Phase 10) is a thin UI
+over `POST /campaigns/{campaignId}/routing/simulate`
+(`apps/internal/routingsimulate`, landed the same phase as this doc's
+last update — see [`docs/routing-simulate.md`](routing-simulate.md));
+during frontend-first phases it ran against a local mock of the
+identical contract, since replaced entirely, not kept running alongside
+the real endpoint.
 
 ## `internal/routing` (Phase 19 — landed)
 
@@ -161,8 +164,9 @@ is not a draw and needs no key.
 `(request context, configuration) → expected RouteResult`, run against the
 real Go engine. There is no separate TypeScript implementation running the
 same table: per Strategy A, the frontend Routing Simulator is a thin UI
-over this engine's future HTTP wrapper (`/routing/simulate`, Phase 27), not
-a second decision implementation to keep in sync.
+over this engine's HTTP wrapper (`POST
+/campaigns/{campaignId}/routing/simulate`), not a second decision
+implementation to keep in sync.
 
 | §58 case | Test | Notes |
 |---|---|---|
@@ -185,7 +189,8 @@ a second decision implementation to keep in sync.
 | invalid tracking links | `TestInvalidTrackingLinks_CallerLevelConcern` (skipped, documented) | never reaches this package — the caller doesn't invoke `Resolve` if the tracking link doesn't resolve |
 | ISO code mismatch (UK vs GB) | `TestISOCodeMismatch_NoFuzzyCoercion` | proves no semantic country-code aliasing — a `UK` value must not match a `GB` filter; this engine surfaces a classifier bug rather than papering over it |
 | in-app WebView bounce | `TestInAppWebViewBounce_CallerLevelConcern` (skipped, documented) | a pre-routing HTTP redirect based on User-Agent, entirely `apps/tracker`'s job |
+| empty-group trace JSON shape | `TestEmptyGroupTraceChildrenEncodesAsEmptyArrayNotNull` | regression: `Trace.Children` must never encode as JSON `null` for an empty group — see [`docs/routing-simulate.md`](routing-simulate.md) |
 
-All 17 cases pass or are explicitly documented as out of this package's
+All 18 cases pass or are explicitly documented as out of this package's
 scope (`t.Skip` with the reasoning inline, not silently absent). Verified
 stable across repeated runs and under `go test -race`.

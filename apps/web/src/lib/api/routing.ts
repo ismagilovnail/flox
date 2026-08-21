@@ -1,32 +1,86 @@
 /**
- * The frontend API boundary (§32, Phase 15). Every other domain's "server
- * calls" today are Zustand store actions over in-memory mock arrays — that
- * already satisfies "don't scatter fetch() in components," since components
- * never touch data directly, only through a store's typed action surface.
- * `stores/*.ts` action functions ARE that domain's mock API contract; there
- * is no separate `src/lib/api/<domain>.ts` per store, because that would be
- * an empty pass-through wrapper duplicating the store for no benefit until
- * a domain's Phase 27 integration actually needs one.
- *
- * Routing is the one exception, and the reason this directory exists now
- * instead of at Phase 27: `docs/architecture.md`'s §6-SHARED decision
- * already promises the Routing Simulator "runs against a local mock that
- * implements the exact same request/response contract... in Phase 27 it is
- * switched to the real endpoint with no UI changes." A plain synchronous
- * function call (the old `lib/routing-simulate.ts` call site) can't keep
- * that promise — swapping it for a real `fetch()` later would force the UI
- * to become async then, not now. Wrapping it as a promise-returning call
- * today, backed by the exact same pure mock function, means Phase 27 only
- * ever changes this file's body.
+ * The Routing Simulator's real API layer (Phase 27's final slice —
+ * "wire the Routing Simulator to /routing/simulate"). This file used to
+ * wrap a local pure-function mock (`lib/routing-simulate.ts`) precisely
+ * so that swapping it for a real `fetch()` later would change only this
+ * file's body — see `docs/architecture.md`'s §6-SHARED decision. That
+ * day has arrived: the mock is deleted, and these types now describe
+ * the wire contract of `POST /campaigns/{campaignId}/routing/simulate`
+ * (apps/internal/routingsimulate), not a client-side re-implementation
+ * of routing decisions (CLAUDE.md invariant #1 — there is exactly one
+ * routing engine, and it's Go).
  */
 
-import { simulateRoute as simulateRouteMock, type SimulateRequest, type SimulateResult } from "@/lib/routing-simulate";
-import type { StreamSet } from "@/lib/mock/stream-sets";
+import { apiFetch } from "@/lib/api/client";
+import { FILTER_FIELDS, type FilterField, type FilterOperator } from "@/lib/filters";
 
-export async function simulateRoute(
-  streamSets: StreamSet[],
-  campaignFallbackUrl: string,
-  request: SimulateRequest,
-): Promise<SimulateResult> {
-  return simulateRouteMock(streamSets, campaignFallbackUrl, request);
+export type SimulateRequest = Record<FilterField, string>;
+
+export function emptySimulateRequest(): SimulateRequest {
+  const request = Object.fromEntries(FILTER_FIELDS.map((f) => [f, ""])) as SimulateRequest;
+  request.bot = "0";
+  request.proxy = "0";
+  return request;
+}
+
+export type ConditionTrace = {
+  kind: "condition";
+  field: FilterField;
+  operator: FilterOperator;
+  value: string;
+  valueTo: string;
+  requestValue: string;
+  passed: boolean;
+};
+
+export type GroupTrace = {
+  kind: "group";
+  joiner: "AND" | "OR";
+  passed: boolean;
+  children: FilterTrace[];
+};
+
+export type FilterTrace = ConditionTrace | GroupTrace;
+
+export type StreamSetEvaluation = {
+  streamSetId: string;
+  name: string;
+  priority: number;
+  status: "active" | "paused";
+  matched: boolean;
+  reasonNotMatched?: string;
+  trace: FilterTrace;
+};
+
+export type FlowCandidate = {
+  flowId: string;
+  name: string;
+  weight: number;
+  normalizedPercent: number;
+  selected: boolean;
+};
+
+/** No `kind` enum: apps/internal/routingsimulate.Destination sends the
+ * already-resolved human label directly ("Offer", "Redirect", "Stream
+ * Set fallback", "Campaign fallback", "No destination configured") —
+ * the exact same string routing.Explanation.DestinationLabel computed
+ * for RouteResult.Reason, so the simulator can never show a label that
+ * disagrees with what the engine actually decided. An empty `url`
+ * always pairs with the "no destination" label. */
+export type Destination = {
+  url: string;
+  label: string;
+};
+
+export type SimulateResult = {
+  request: SimulateRequest;
+  streamSetEvaluations: StreamSetEvaluation[];
+  matchedStreamSet: StreamSetEvaluation | null;
+  flowCandidates: FlowCandidate[];
+  destination: Destination;
+  stickyNote: string;
+};
+
+export function simulateRoute(campaignId: string, request: SimulateRequest): Promise<SimulateResult> {
+  return apiFetch(`/campaigns/${campaignId}/routing/simulate`, { method: "POST", body: { request } });
 }

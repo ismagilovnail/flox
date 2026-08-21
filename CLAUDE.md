@@ -19,79 +19,94 @@ referenced below as §N).
 ## CURRENT STATE — UPDATE THIS EVERY PHASE
 
 ```
-CURRENT PHASE : PHASE (unnumbered) — Stream Sets, Filters & Flows CRUD
-STATUS        : done — confirmed scope via AskUserQuestion (recommended
-                option): Stream Sets + Filters (AND/OR tree) + Flows CRUD,
-                dropping landing/pwa/postlanding stages and per-flow
-                pixels from the writable form (no backend exists for any
-                of the four yet — same "drop it, don't fake it" precedent
-                as every other domain). Wiring the Routing Simulator to a
-                real /routing/simulate endpoint deliberately deferred as
-                its own smaller phase. See docs/stream-sets.md.
-                apps/internal/streamset writes rows for the READ path that
-                already existed (apps/internal/routingstore +
-                apps/internal/routing, used by the tracker's hot path) —
-                never duplicates matching/weighted-selection logic
-                (CLAUDE.md #1), and reuses routing.FilterField/Operator/
-                Joiner/DestinationKind/StreamSetStatus directly rather
-                than redefining them. FilterNode is a flattened
-                discriminated-union struct with no id (routing.FilterNode
-                doesn't need one either) — the frontend hydrates fresh
-                client-side ids on load for filter-group-builder.tsx's
-                id-addressed tree edits, strips them back out on save.
-                Server-side validates MATCHES conditions with Go's real
-                regexp.Compile (RE2, CLAUDE.md #8 — no heuristic needed,
-                unlike the frontend's own client-side-only check) and
-                country codes (rejects "UK", requires ISO-3166 alpha-2).
-                Offer-destination flows derive their network from the
-                offer's own network_id server-side, never trusting a
-                client-supplied pair — proven by a test that sends a
-                deliberately wrong network id alongside a real offer id.
-                Priority is never client-supplied (no field in the form
-                at all) — Create always appends, Reorder takes the full
-                dragged-list order and rewrites every priority in one
-                transaction.
-                A real render-loop bug hit and fixed during manual
-                verification: the offer picker selected correctly for an
-                instant then silently reset to empty. Root cause: RHF's
-                useFieldArray().update() is documented to unregister/
-                re-register the field row on every call, remounting its
-                whole subtree (including its Selects) on every keystroke;
-                the remounting Select fired a stray onValueChange("") that
-                raced and won. Confirmed via a mount/unmount effect log
-                (fired on every field edit) and a temporary handler log
-                (3 calls per click: real id, then "", then "" again).
-                Fixed by switching every per-flow edit from
-                flowArray.update() to setValue(`flows.${index}`, ...),
-                which patches in place with no remount; also hardened the
-                offer Select against Radix's own documented "empty
-                controlled value" fragility with a NO_OFFER sentinel.
-                Verified: go build/vet/gofmt/test ./... all green (6 new
-                streamset tests incl. RE2/country validation and the
-                network-derivation proof); tsc --noEmit and eslint clean;
-                full manual browser pass — created a stream set with a
-                real filter condition and a real offer-destination flow,
-                confirmed the API response had the exact tree and
-                resolved network id, edited it (tree + offer selection
-                both pre-filled correctly), duplicated it (kept status +
-                tree + flow), toggled status live, reordered two sets via
-                the real endpoint and confirmed the new order survived a
-                reload. Test campaign (cascading to its stream sets),
-                offer, and network removed via real DELETE afterward.
-                Phase 27's remaining gap (routing-simulate/conversions/
-                postbacks, the /analytics report builder, /ltv-cohorts) is
-                unchanged — Traffic Sources, Networks, Offers, and Stream
-                Sets/Filters/Flows are all off that list now, see
-                docs/frontend-integration.md.
-LAST COMMIT   : feat(stream-sets): full CRUD incl. filters and flows
-NEXT          : confirm scope before starting. Candidates: wiring the
-                Routing Simulator to a real POST /routing/simulate
-                endpoint (thin — reuses routingstore.LoadRoutingConfig +
-                routing.Router.Explain, both already built), FB/TikTok
+CURRENT PHASE : PHASE (unnumbered) — Wire Routing Simulator to
+                /routing/simulate
+STATUS        : done — direct instruction, no scope negotiation needed
+                (user picked this exact candidate from the prior phase's
+                own NEXT list). New apps/internal/routingsimulate package:
+                Service.Simulate loads a campaign's real config via
+                routingstore.LoadRoutingConfig and calls
+                routing.Engine.Explain (never Resolve — the simulator's
+                whole point is the trace Resolve doesn't return), mounted
+                as POST /campaigns/{campaignId}/routing/simulate. No new
+                routing decision logic anywhere (CLAUDE.md #1) — this
+                phase is a thin reshape of an already-existing pure
+                evaluation into JSON. routing.Explanation gained one field
+                (DestinationLabel, the human label resolveDestination
+                already computed internally but discarded) and
+                Trace/StreamSetEvaluation/FlowCandidate gained JSON tags
+                matching the frontend's field names exactly, reused
+                directly with no separate DTO layer. Sticky is never
+                simulated (always Sticky: nil — a fabricated cookie would
+                be indistinguishable from a real returning visitor's,
+                which is misleading for a debugging tool); the response's
+                stickyNote is generated from the campaign's real
+                sticky_flow flag instead of the old mock's static,
+                increasingly-stale string. deriveVisitKey is reimplemented
+                byte-for-byte in Go; an all-empty request against a
+                multi-flow tie now surfaces as a real 422
+                (routing.ErrNoVisitKey), not silently guessed.
+                Frontend: lib/routing-simulate.ts (the mock) deleted
+                outright — its types moved into lib/api/routing.ts, the
+                seam file built in an earlier phase specifically for this
+                swap ("Phase 27 only ever changes this file's body," now
+                true). routing-simulator-view.tsx dropped its
+                useStreamSetsStore read; simulator-form.tsx/stream-set-
+                trace.tsx needed only an import-path change (both already
+                pure/prop-driven); simulator-result.tsx dropped the
+                selectedFlow boolean check (now flowCandidates.some(c =>
+                c.selected)) and the kind-keyed DESTINATION_LABEL lookup
+                (now renders destination.label directly — the backend
+                already sends the exact display string). Once the
+                Simulator stopped reading stores/stream-sets.ts and
+                lib/mock/stream-sets.ts, a repo-wide grep found zero
+                remaining importers of either — both deleted outright
+                (this session's "drop it, don't fake it" precedent),
+                not left as an orphaned pair.
+                Two real bugs caught during manual browser verification,
+                both the same root mistake hit twice: Go's encoding/json
+                omitempty omits ANY zero-length slice, nil or not, not
+                just nil ones. (1) routingsimulate.Response.FlowCandidates
+                was nil (no draw ran) when no stream set matched, encoding
+                as JSON null and crashing SimulatorResult's unconditional
+                .some() call — fixed by normalizing to []
+                in Service.Simulate. (2) routing.Trace.Children and
+                streamset.FilterNode.Children both had omitempty; an empty
+                top-level filter group ("no filters — matches all
+                traffic," a normal UI-documented config) produces a real
+                non-nil empty Children that omitempty hid anyway —
+                crashing not just the Simulator but the Stream Sets card
+                on ANY campaign with an empty-filter stream set, since
+                hydrateFilterNode/FilterTraceView call .map()/.length on
+                children unconditionally. Fixed by dropping omitempty from
+                both types' Children tags. Neither bug was reachable in
+                any prior phase's verification pass because no earlier
+                test fixture had exercised an empty root filter group
+                through a real HTTP round-trip. See
+                docs/routing-simulate.md for full detail on both.
+                Verified: go build/vet/gofmt/test ./... all green (5 new
+                routingsimulate tests, 2 new regression tests for the
+                omitempty bug in streamset/routing, the pre-existing
+                18-case routing conformance fixture unchanged); tsc
+                --noEmit and eslint clean; full manual browser pass —
+                matched and non-matched filter simulation, weighted
+                50/50 tie-break with a deterministic pick, sticky-enabled
+                note toggling live against a real Postgres update, both
+                bugs caught and fixed in the same pass. Test campaign
+                (cascading to its stream set), offer, and network removed
+                via real DELETE afterward.
+                Phase 27's remaining gap (conversions/postbacks, the
+                /analytics report builder, /ltv-cohorts) is unchanged —
+                Traffic Sources, Networks, Offers, Stream Sets/Filters/
+                Flows, and the Routing Simulator are all off that list
+                now, see docs/frontend-integration.md.
+LAST COMMIT   : feat(routing): wire Routing Simulator to /routing/simulate
+NEXT          : confirm scope before starting. Candidates: FB/TikTok
                 ad-spend import (§74's CostProvider interface, the "later"
-                half of §27-COST), or Landing/PWA/Postlanding/Pixels CRUD
-                (would unblock the stages this phase had to drop from the
-                Flow editor).
+                half of §27-COST), Landing/PWA/Postlanding/Pixels CRUD
+                (would unblock the stages the Stream Sets phase had to
+                drop from the Flow editor), or the next domain slice
+                (Conversions/Postbacks — both still fully mocked).
 ```
 
 > At the end of every phase: update the four lines above, add a CHANGELOG entry,

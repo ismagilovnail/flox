@@ -2,9 +2,11 @@ package routing_test
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"math"
+	"strings"
 	"testing"
 
 	"github.com/ismagilovnail/flox/apps/internal/routing"
@@ -584,4 +586,43 @@ func TestInactiveCampaigns_CallerLevelConcern(t *testing.T) {
 
 func TestInAppWebViewBounce_CallerLevelConcern(t *testing.T) {
 	t.Skip("the WebView bounce (§73) is a pre-routing HTTP redirect based on User-Agent, handled entirely by apps/tracker before any stream-set/flow decision is made. It never reaches this package.")
+}
+
+// TestEmptyGroupTraceChildrenEncodesAsEmptyArrayNotNull guards a real bug
+// caught during manual browser verification of the routing simulator
+// phase (Phase 27): Trace.Children previously carried `omitempty`, and
+// Go's encoding/json omits a slice field under omitempty whenever
+// len(slice) == 0 — nil or not. An empty top-level filter group ("no
+// filters — matches all traffic", a normal, UI-supported configuration)
+// produces a real, non-nil, zero-length Children — but omitempty hid it
+// from the wire anyway, and the frontend's GroupTrace rendering
+// (stream-set-trace.tsx) calls trace.children.length/.map(...)
+// unconditionally, crashing the whole Routing Simulator result on any
+// campaign with an empty root group.
+func TestEmptyGroupTraceChildrenEncodesAsEmptyArrayNotNull(t *testing.T) {
+	set := routing.StreamSet{
+		ID: "set1", Priority: 1, Status: routing.StreamSetActive,
+		RootFilter: routing.FilterGroup{Joiner: routing.JoinAND}, // no children — matches everything
+		Flows:      []routing.Flow{{ID: "flow1", Active: true, Weight: 1, Destination: routing.Destination{Kind: routing.DestinationRedirect, URL: "https://match.example"}}},
+	}
+	cfg := routing.RoutingConfig{CampaignID: "c1", StreamSets: []routing.StreamSet{set}}
+
+	e := &routing.Engine{}
+	_, explanation, err := e.Explain(ctx(), routing.RequestContext{Config: cfg, VisitKey: "v1"})
+	if err != nil {
+		t.Fatalf("Explain: %v", err)
+	}
+
+	trace := explanation.StreamSetEvaluations[0].Trace
+	if trace.Children == nil {
+		t.Fatal("Trace.Children for an empty group is nil, want a non-nil empty slice")
+	}
+
+	encoded, err := json.Marshal(trace)
+	if err != nil {
+		t.Fatalf("marshaling trace: %v", err)
+	}
+	if !strings.Contains(string(encoded), `"children":[]`) {
+		t.Fatalf("encoded trace = %s, want it to contain \"children\":[] (not an omitted/null children key)", encoded)
+	}
 }

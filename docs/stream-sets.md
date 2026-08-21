@@ -126,18 +126,21 @@ empty string (`destination.offerId || undefined`, later just
 now stands in for "nothing chosen yet" on the wire instead of handing
 Radix `""` directly, even with the remount bug fixed.
 
-## Frontend: a fourth mock/store pair left untouched, for a documented reason
+## Frontend: a fourth mock/store pair left untouched, for a documented reason (superseded)
 
-`lib/mock/stream-sets.ts`/`stores/stream-sets.ts` stay exactly as they
-were — not just because other still-mocked features import them (they
-don't, apart from one), but because **the Routing Simulator tab on the
-campaign detail page reads the same mock store** and is explicitly out of
-scope this phase. After this phase, the Stream Sets card on a campaign's
-Overview tab shows real data while the Simulator tab still simulates
-against old mock-generated stream sets — a real, visible inconsistency
-until the Simulator is wired to `/routing/simulate` (not built yet; see
-`docs/frontend-integration.md`), documented here rather than papered
-over.
+`lib/mock/stream-sets.ts`/`stores/stream-sets.ts` stayed in place when
+this phase closed — not because other still-mocked features imported
+them (they didn't, apart from one), but because **the Routing Simulator
+tab on the campaign detail page read the same mock store** and was
+explicitly out of scope this phase. The Stream Sets card on a campaign's
+Overview tab showed real data while the Simulator tab still simulated
+against old mock-generated stream sets — a real, visible inconsistency,
+documented here rather than papered over.
+
+This is now history: once the Routing Simulator phase switched
+`routing-simulator-view.tsx` off the mock store, both files became
+genuinely unimported anywhere in the app and were deleted outright — see
+[`docs/routing-simulate.md`](routing-simulate.md).
 
 ## Verified
 
@@ -163,12 +166,10 @@ confirmed the UI reflected the new priorities on reload. Test campaign
 (cascading to its stream sets), offer, and network removed via the real
 `DELETE` endpoints afterward.
 
-## Deliberately deferred
+## Deliberately deferred (landed since)
 
-Wiring the Routing Simulator to `POST /routing/simulate` — a
-comparatively small remaining piece, since `routingstore.LoadRoutingConfig`
-and `routing.Router.Explain` (already built, already shaped to match the
-frontend's mock `SimulateRequest`/`Explanation` contract exactly) do
-essentially all the work; what's missing is a thin HTTP handler and
-switching the Simulator UI off its local mock. Scoped out of this phase
-deliberately to keep it reviewable, not because it's hard.
+Wiring the Routing Simulator to `/routing/simulate` was scoped out of
+this phase deliberately, to keep it reviewable — not because it was
+hard, since `routingstore.LoadRoutingConfig` and `routing.Router.Explain`
+already did essentially all the work. It landed in its own phase; see
+[`docs/routing-simulate.md`](routing-simulate.md).

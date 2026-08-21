@@ -103,6 +103,48 @@ func TestCreateGetUpdateDelete(t *testing.T) {
 	}
 }
 
+// TestEmptyRootGroupChildrenIsNeverNilOnTheWire guards a real bug caught
+// during manual browser verification of the routing simulator phase: an
+// empty top-level filter group ("no filters — matches all traffic", a
+// normal, UI-supported configuration per stream-set-form-sheet.tsx's own
+// help text) round-tripped through the repository's build() (the
+// List/Get read path) with a nil Children slice. Combined with the JSON
+// struct tag's now-removed `omitempty`, that encoded as `"children":
+// null` — and the frontend's hydrateFilterNode calls
+// node.children.map(...) unconditionally, so loading any campaign with
+// such a stream set crashed the whole detail page, not just the Routing
+// Simulator tab. Children is a real (JSON-decoded) non-nil empty slice
+// here, matching what dehydrateFilterNode always sends on the wire — the
+// bug was specifically in the re-read path, not the create/update
+// echo-back.
+func TestEmptyRootGroupChildrenIsNeverNilOnTheWire(t *testing.T) {
+	pool := mustPool(t)
+	ctx := context.Background()
+	orgID := seedOrg(t, ctx, pool)
+	campaignID := seedCampaign(t, ctx, pool, orgID)
+
+	svc := streamset.NewService(streamset.NewRepository(pool))
+	created, err := svc.Create(ctx, orgID, campaignID, streamset.CreateInput{
+		Name:       "Catch-all",
+		RootFilter: streamset.FilterNode{Kind: streamset.NodeGroup, Joiner: routing.JoinAND, Children: []streamset.FilterNode{}},
+		Flows:      []streamset.FlowInput{redirectFlow("Primary", 100)},
+	})
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	if created.RootFilter.Children == nil {
+		t.Fatal("Create response RootFilter.Children is nil, want a non-nil empty slice")
+	}
+
+	got, err := svc.Get(ctx, orgID, campaignID, created.ID)
+	if err != nil {
+		t.Fatalf("Get: %v", err)
+	}
+	if got.RootFilter.Children == nil {
+		t.Fatal("Get response RootFilter.Children is nil, want a non-nil empty slice (this is the read path the real bug was in)")
+	}
+}
+
 func TestCreateRejectsEmptyFlowsAndBadFilters(t *testing.T) {
 	pool := mustPool(t)
 	ctx := context.Background()

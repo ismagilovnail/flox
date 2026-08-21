@@ -40,22 +40,24 @@ func (e *Engine) resolve(req RequestContext) (RouteResult, Explanation, error) {
 	// Sticky short-circuits before any draw happens, so an honored assignment
 	// needs no VisitKey — the cookie already carries the answer the draw would
 	// have produced (§39-STICKY).
-	sticky, note := e.trySticky(req)
+	sticky, note, destLabel := e.trySticky(req)
 	if sticky != nil {
-		return *sticky, Explanation{StickyNote: sticky.Reason}, nil
+		return *sticky, Explanation{StickyNote: sticky.Reason, DestinationLabel: destLabel}, nil
 	}
 	return e.freshEvaluate(req, note)
 }
 
 // trySticky returns a non-nil RouteResult when an existing sticky
-// assignment should be honored. When it returns (nil, ""), sticky isn't in
-// play at all (disabled or no cookie). When it returns (nil, note), sticky
-// was present but had to be dropped — note explains why, and the caller
-// falls through to a fresh evaluation.
-func (e *Engine) trySticky(req RequestContext) (*RouteResult, string) {
+// assignment should be honored. When it returns (nil, "", ""), sticky
+// isn't in play at all (disabled or no cookie). When it returns (nil,
+// note, ""), sticky was present but had to be dropped — note explains
+// why, and the caller falls through to a fresh evaluation. The third
+// return is the resolved destination's human label, only meaningful
+// alongside a non-nil result.
+func (e *Engine) trySticky(req RequestContext) (*RouteResult, string, string) {
 	cfg := req.Config
 	if !cfg.StickyFlow || req.Sticky == nil {
-		return nil, ""
+		return nil, "", ""
 	}
 
 	var set *StreamSet
@@ -66,7 +68,7 @@ func (e *Engine) trySticky(req RequestContext) (*RouteResult, string) {
 		}
 	}
 	if set == nil {
-		return nil, "sticky cookie referenced a stream set that no longer exists; re-evaluated fresh"
+		return nil, "sticky cookie referenced a stream set that no longer exists; re-evaluated fresh", ""
 	}
 
 	var flow *Flow
@@ -77,12 +79,12 @@ func (e *Engine) trySticky(req RequestContext) (*RouteResult, string) {
 		}
 	}
 	if flow == nil {
-		return nil, "sticky cookie referenced a flow that no longer exists; re-evaluated fresh"
+		return nil, "sticky cookie referenced a flow that no longer exists; re-evaluated fresh", ""
 	}
 
 	eligible := set.Status == StreamSetActive && flow.Active
 	if !eligible && !cfg.StickyFlowSkipInactive {
-		return nil, "sticky flow is now inactive and stickyFlowSkipInactive is false; re-evaluated fresh"
+		return nil, "sticky flow is now inactive and stickyFlowSkipInactive is false; re-evaluated fresh", ""
 	}
 
 	destURL, destLabel := resolveDestination(flow, set.FallbackURL, cfg.FallbackURL)
@@ -102,7 +104,7 @@ func (e *Engine) trySticky(req RequestContext) (*RouteResult, string) {
 		Reason:        reason,
 		StickyApplied: true,
 		ConfigVersion: cfg.ConfigVersion,
-	}, ""
+	}, "", destLabel
 }
 
 func (e *Engine) freshEvaluate(req RequestContext, stickyNote string) (RouteResult, Explanation, error) {
@@ -186,6 +188,7 @@ func (e *Engine) freshEvaluate(req RequestContext, stickyNote string) (RouteResu
 		MatchedStreamSetID:   matchedStreamSetID,
 		FlowCandidates:       flowCandidates,
 		StickyNote:           stickyNote,
+		DestinationLabel:     destLabel,
 	}
 	return result, explanation, nil
 }

@@ -67,21 +67,13 @@ single concrete, honestly-deliverable slice:
   integrating it.
 - `/ltv-cohorts` — literally a `<PageStub>`; no UI was ever built against
   the Phase 26.5 LTV endpoints to integrate in the first place.
-- **`RoutingSimulatorView`** on the campaign detail page — `/routing/simulate`
-  doesn't exist yet, even though the engine it would call
-  (`routingstore.LoadRoutingConfig` + `routing.Router.Explain`) is already
-  built and already shaped to match the simulator's own mock contract.
-  Left for its own (smaller) phase. Note this now reads *stale* mock data
-  relative to `StreamSetList` right above it on the same page: the Stream
-  Sets card shows a campaign's real stream sets, but the Simulator tab
-  still simulates against `lib/mock/stream-sets.ts`'s generated fake ones
-  — a real, visible inconsistency, documented in `docs/stream-sets.md`
-  rather than hidden.
-- Routing-simulate/conversions/postbacks list-management pages — no
-  backend exists yet for these either. **Traffic Sources, Networks,
-  Offers, and Stream Sets/Filters/Flows are no longer on this list** —
-  full CRUD landed for all of them; see `docs/traffic-sources.md`,
-  `docs/networks-offers.md`, and `docs/stream-sets.md`.
+- Conversions/postbacks list-management pages — no backend exists yet for
+  these. **Traffic Sources, Networks, Offers, Stream Sets/Filters/Flows,
+  and the Routing Simulator are no longer on this list** — full CRUD (or,
+  for the Simulator, a real `POST /campaigns/{campaignId}/routing/
+  simulate` endpoint) landed for all of them; see
+  `docs/traffic-sources.md`, `docs/networks-offers.md`,
+  `docs/stream-sets.md`, and `docs/routing-simulate.md`.
 
 ## Verified
 

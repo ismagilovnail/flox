@@ -26,6 +26,9 @@ import (
 	"github.com/ismagilovnail/flox/apps/internal/network"
 	"github.com/ismagilovnail/flox/apps/internal/offer"
 	"github.com/ismagilovnail/flox/apps/internal/postgres"
+	"github.com/ismagilovnail/flox/apps/internal/routing"
+	"github.com/ismagilovnail/flox/apps/internal/routingsimulate"
+	"github.com/ismagilovnail/flox/apps/internal/routingstore"
 	"github.com/ismagilovnail/flox/apps/internal/streamset"
 	"github.com/ismagilovnail/flox/apps/internal/telemetry"
 	"github.com/ismagilovnail/flox/apps/internal/tenant"
@@ -128,6 +131,14 @@ func run() error {
 	srv.Mux().Route("/campaigns/{campaignId}/stream-sets", func(r chi.Router) {
 		r.Use(tenant.Middleware)
 		streamSetHandler.Register(r)
+	})
+
+	routingSimulateHandler := routingsimulate.NewHandler(
+		routingsimulate.NewService(routingstore.New(db), &routing.Engine{}), logger,
+	)
+	srv.Mux().Route("/campaigns/{campaignId}/routing/simulate", func(r chi.Router) {
+		r.Use(tenant.Middleware)
+		routingSimulateHandler.Register(r)
 	})
 
 	if ch != nil {

@@ -49,9 +49,15 @@ type FilterNode struct {
 	Value    string                 `json:"value,omitempty"`
 	ValueTo  string                 `json:"valueTo,omitempty"`
 
-	// group fields
+	// group fields. Children has no omitempty: the frontend's
+	// ApiFilterGroup always requires a children array (hydrateFilterNode
+	// calls .map() on it unconditionally) — an empty top-level group ("no
+	// filters, matches all traffic") is a real, UI-supported
+	// configuration, and omitempty would encode its Children as JSON
+	// null instead of [], crashing the frontend on load. See
+	// docs/routing-simulate.md.
 	Joiner   routing.Joiner `json:"joiner,omitempty"`
-	Children []FilterNode   `json:"children,omitempty"`
+	Children []FilterNode   `json:"children"`
 }
 
 type Destination struct {

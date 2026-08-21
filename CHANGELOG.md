@@ -5,6 +5,103 @@ per-phase, matching `CLAUDE.md`'s phase protocol. The one exception is
 [Between phases], below: spec amendments and the code changes that follow from
 them land between phases and would otherwise be invisible here.
 
+## [Routing Simulator] — Wired to a real /routing/simulate endpoint
+
+### Scope
+
+Direct instruction, no `AskUserQuestion` scope negotiation needed — the
+user named this exact candidate from the previous phase's own "NEXT"
+list. See `docs/routing-simulate.md`.
+
+### Added
+
+- **`apps/internal/routingsimulate`** (new package) — `Service.Simulate`
+  loads a campaign's real routing config via
+  `routingstore.LoadRoutingConfig` and calls `routing.Engine.Explain`
+  (never `Resolve` — the simulator's whole point is the trace `Resolve`
+  doesn't return), reshaping the result into the frontend's wire
+  contract. `Handler` mounts `POST /campaigns/{campaignId}/routing/
+  simulate`, tenant-scoped like every other handler. No new routing
+  decision logic anywhere (CLAUDE.md #1) — this is a thin reshape of an
+  already-existing pure evaluation into JSON.
+- **`routing.Explanation.DestinationLabel`**: the same human label
+  (`"Offer"`, `"Redirect"`, `"Stream Set fallback"`, `"Campaign
+  fallback"`, `"No destination configured"`) `resolveDestination`
+  already computed for `RouteResult.Reason` internally, now also stored
+  structurally instead of discarded.
+- **`routing.Trace`/`StreamSetEvaluation`/`FlowCandidate` JSON tags**
+  matching the frontend's field names exactly — reused directly in the
+  simulate response with no separate DTO layer, honoring `trace.go`'s
+  own doc comment written for exactly this moment.
+- Sticky is never simulated (`Sticky: nil` always — a fabricated cookie
+  would look identical to a real returning visitor's, which is
+  misleading for a debugging tool). The response's `stickyNote` is
+  generated from the campaign's real `sticky_flow` flag instead of the
+  old mock's static, increasingly-stale string.
+- `deriveVisitKey` reimplemented byte-for-byte in Go, matching the old
+  frontend mock's algorithm. Unlike the mock, an all-empty request
+  against a matched stream set with more than one tied weighted flow now
+  surfaces a real `422` (`routing.ErrNoVisitKey`) instead of silently
+  guessing.
+- **Frontend**: `lib/routing-simulate.ts` (the mock) deleted outright —
+  its type definitions moved into `lib/api/routing.ts`, the seam file
+  built in an earlier phase specifically for this swap. `routing-
+  simulator-view.tsx` dropped its `useStreamSetsStore` read (the server
+  now loads stream sets itself) and calls `simulateRoute(campaignId,
+  request)` instead of `(streamSets, fallbackUrl, request)`.
+  `simulator-form.tsx`/`stream-set-trace.tsx` needed only an import-path
+  change. `simulator-result.tsx` dropped the `selectedFlow` boolean
+  check (now `flowCandidates.some(c => c.selected)`) and the `kind`-keyed
+  `DESTINATION_LABEL` lookup (now renders `destination.label` directly).
+
+### Removed
+
+- `lib/mock/stream-sets.ts` / `stores/stream-sets.ts` — kept in the
+  Stream Sets phase specifically because the Routing Simulator was their
+  one remaining reader. Once the Simulator switched to the real API, a
+  repo-wide grep found zero remaining importers of either; deleted
+  outright rather than left as an orphaned pair.
+
+### Fixed
+
+Two real bugs caught during manual browser verification, both the same
+root mistake hit twice: Go's `encoding/json` `omitempty` omits *any*
+zero-length slice, nil or not — not just nil ones.
+
+- `routingsimulate.Response.FlowCandidates` was `nil` (no weighted draw
+  ever ran) when no stream set matched, encoding as JSON `null` and
+  crashing `SimulatorResult`'s unconditional `.some()` call. Fixed by
+  normalizing to `[]` in `Service.Simulate`.
+- `routing.Trace.Children` and `streamset.FilterNode.Children` both had
+  `omitempty`. An empty top-level filter group ("no filters — matches
+  all traffic," a normal, UI-documented configuration) produces a real,
+  non-nil, zero-length `Children` that `omitempty` hid anyway — crashing
+  not just the Simulator but the Stream Sets card on *any* campaign with
+  an empty-filter stream set, since `hydrateFilterNode`/`FilterTraceView`
+  call `.map()`/`.length` on `children` unconditionally. Fixed by
+  dropping `omitempty` from both types' `Children` tags. Neither bug was
+  reachable in any prior phase's verification pass, because no earlier
+  test fixture had exercised an empty root filter group through a real
+  HTTP round-trip.
+
+### Verified
+
+- Backend: `go build/vet/gofmt/test ./...` all green — 5 new
+  `routingsimulate` tests (match + weighted pick, no-match campaign
+  fallback with a non-nil-`FlowCandidates` regression assertion,
+  ambiguous-tie `422`, sticky-note reflecting the campaign's real
+  `sticky_flow` flag, cross-tenant isolation) and 2 new regression tests
+  for the `omitempty` bug (`streamset`, `routing`). The pre-existing
+  18-case `routing` conformance fixture passes unchanged.
+- Frontend: `tsc --noEmit`/`eslint` clean.
+- Full manual browser pass against the real running `api` + `web` dev
+  servers: matched and non-matched filter simulation against a real
+  stream set; a weighted 50/50 tie-break with a deterministic pick;
+  sticky-enabled note toggling live against a real Postgres update. Both
+  bugs above were caught and fixed during this same pass. Test campaign
+  (cascading to its stream set), offer, and network removed via real
+  `DELETE` afterward.
+
 ## [Stream Sets, Filters & Flows CRUD] — Frontend/Backend Integration, next domain slice
 
 ### Scope

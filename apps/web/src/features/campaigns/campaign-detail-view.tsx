@@ -119,7 +119,7 @@ export function CampaignDetailView({ id }: { id: string }) {
         </TabsContent>
 
         <TabsContent value="simulator" className="flex flex-col gap-6">
-          <RoutingSimulatorView campaignId={campaign.id} campaignName={campaign.name} fallbackUrl={campaign.fallbackUrl} />
+          <RoutingSimulatorView campaignId={campaign.id} campaignName={campaign.name} />
         </TabsContent>
 
         <TabsContent value="settings" className="flex flex-col gap-6">

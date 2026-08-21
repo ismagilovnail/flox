@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { IconButton } from "@/components/ui/icon-button";
 import { Tag } from "@/components/ui/tag";
-import type { SimulateResult } from "@/lib/routing-simulate";
+import type { SimulateResult } from "@/lib/api/routing";
 import { StreamSetTraceCard } from "@/features/routing-simulator/stream-set-trace";
 
 const PIPELINE_STAGES = ["Request", "Classification", "Campaign", "Stream Set", "Filters", "Flow", "Destination"];
@@ -30,16 +30,8 @@ function PipelineStepper({ reachedIndex }: { reachedIndex: number }) {
   );
 }
 
-const DESTINATION_LABEL: Record<SimulateResult["destination"]["kind"], string> = {
-  offer: "Offer",
-  redirect: "Redirect",
-  stream_set_fallback: "Stream Set fallback",
-  campaign_fallback: "Campaign fallback",
-  none: "No destination",
-};
-
 export function SimulatorResult({ result, campaignName }: { result: SimulateResult; campaignName: string }) {
-  const reachedIndex = result.selectedFlow
+  const reachedIndex = result.flowCandidates.some((c) => c.selected)
     ? 6
     : result.matchedStreamSet
       ? 4
@@ -90,9 +82,7 @@ export function SimulatorResult({ result, campaignName }: { result: SimulateResu
         <CardHeader>
           <CardTitle className="text-sm">Destination</CardTitle>
           <CardDescription className="flex items-center gap-2">
-            <Badge variant={result.destination.kind === "none" ? "secondary" : "success"}>
-              {DESTINATION_LABEL[result.destination.kind]}
-            </Badge>
+            <Badge variant={result.destination.url ? "success" : "secondary"}>{result.destination.label}</Badge>
           </CardDescription>
         </CardHeader>
         <CardContent className="flex items-center gap-2">

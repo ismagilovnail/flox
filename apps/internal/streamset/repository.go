@@ -196,7 +196,7 @@ func (r *Repository) loadFilterTrees(ctx context.Context, orgID string, streamSe
 
 	var build func(g groupRow) FilterNode
 	build = func(g groupRow) FilterNode {
-		node := FilterNode{Kind: NodeGroup, Joiner: g.joiner}
+		node := FilterNode{Kind: NodeGroup, Joiner: g.joiner, Children: []FilterNode{}}
 		node.Children = append(node.Children, condsByGroup[g.id]...)
 		for _, child := range childGroups[g.id] {
 			node.Children = append(node.Children, build(child))
@@ -538,7 +538,7 @@ func (r *Repository) loadFilterTreesTx(ctx context.Context, tx pgx.Tx, orgID, st
 
 	var build func(g groupRow) FilterNode
 	build = func(g groupRow) FilterNode {
-		node := FilterNode{Kind: NodeGroup, Joiner: g.joiner}
+		node := FilterNode{Kind: NodeGroup, Joiner: g.joiner, Children: []FilterNode{}}
 		node.Children = append(node.Children, condsByGroup[g.id]...)
 		for _, child := range childGroups[g.id] {
 			node.Children = append(node.Children, build(child))
