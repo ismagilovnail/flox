@@ -25,11 +25,13 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/ismagilovnail/flox/apps/internal/attribution"
 	"github.com/ismagilovnail/flox/apps/internal/event"
+	"github.com/ismagilovnail/flox/apps/internal/macro"
 )
 
 // Postback is the inbound claim, already stripped of HTTP concerns.
@@ -59,6 +61,13 @@ type Postback struct {
 	// NetworkTxnID is the network's own transaction/order id, when sent.
 	// Stored regardless of whether this status's dedup key uses it (§45).
 	NetworkTxnID string
+
+	// PostbackURL is the network's outgoing macro template (§46, Phase 24),
+	// e.g. "...?click_id={click_id}&status={status}" — empty when the
+	// network has none configured. Threaded through from the same
+	// NetworkLookup the handler already did for OrganizationID, so Service
+	// still never needs its own NetworkLookup dependency.
+	PostbackURL string
 
 	OccurredAt time.Time
 }
@@ -96,6 +105,10 @@ type Network struct {
 	OrganizationID   string
 	AcceptDuplicates bool
 	Status           string
+	// PostbackURL is the outgoing macro template (§46) — empty means the
+	// network has no outgoing integration configured, and the handler must
+	// not populate Postback.PostbackURL in that case.
+	PostbackURL string
 }
 
 var ErrNetworkNotFound = errors.New("conversion: network not found")
@@ -181,6 +194,34 @@ type EventSink interface {
 	Enqueue(e event.Event) bool
 }
 
+// DeliveryRequest is what Service asks the outgoing postback engine
+// (internal/postback, Phase 24/§46) to queue after a conversion is
+// successfully recorded.
+type DeliveryRequest struct {
+	OrganizationID string
+	NetworkID      string
+	// SourcePostbackID is the postbacks row this delivery was triggered by
+	// — the FK internal/postback's queue traces every attempt back to.
+	SourcePostbackID string
+	ClickID          string
+	Status           event.Type
+	// URL is already macro-resolved (see conversion.go's buildDeliveryURL);
+	// the delivery engine dispatches it as-is and never re-templates.
+	URL string
+}
+
+// DeliveryEnqueuer is the narrow slice of internal/postback this package
+// needs — just enough to queue a delivery without this package depending on
+// the delivery engine's own retry/backoff machinery, the same pattern as
+// EventSink. Enqueue is best-effort by contract (no error return): a
+// conversion that is already durably recorded must not be re-reported as
+// failed to the network just because queuing its outgoing notification
+// stumbled — that notification has its own "Resend postback" recovery path
+// (Phase 13 UI) independent of this request succeeding.
+type DeliveryEnqueuer interface {
+	Enqueue(ctx context.Context, req DeliveryRequest)
+}
+
 // Service is the conversion engine.
 //
 // It deliberately has no NetworkLookup: resolving {networkId} to an
@@ -193,10 +234,11 @@ type Service struct {
 	fx          FXConverter
 	attribution attribution.AttributionService
 	events      EventSink
+	deliveries  DeliveryEnqueuer
 }
 
-func NewService(mapper Mapper, store Store, fx FXConverter, attr attribution.AttributionService, events EventSink) *Service {
-	return &Service{mapper: mapper, store: store, fx: fx, attribution: attr, events: events}
+func NewService(mapper Mapper, store Store, fx FXConverter, attr attribution.AttributionService, events EventSink, deliveries DeliveryEnqueuer) *Service {
+	return &Service{mapper: mapper, store: store, fx: fx, attribution: attr, events: events, deliveries: deliveries}
 }
 
 // Record runs one postback through mapping, the progression check,
@@ -283,8 +325,40 @@ func (s *Service) Record(ctx context.Context, p Postback) (Result, error) {
 	result := Result{ID: id, Kind: actual, Status: status, Attribution: attr, Message: entry.Message}
 	if actual == ResultSuccess {
 		s.events.Enqueue(buildEvent(p, attr, status, eventRef, revenue, usdValue))
+		if url := strings.TrimSpace(p.PostbackURL); url != "" {
+			s.deliveries.Enqueue(ctx, DeliveryRequest{
+				OrganizationID:   p.OrganizationID,
+				NetworkID:        p.NetworkID,
+				SourcePostbackID: id,
+				ClickID:          clickID,
+				Status:           status,
+				URL:              macro.Resolve(url, deliveryMacroValues(p, attr, status, revenue)),
+			})
+		}
 	}
 	return result, nil
+}
+
+// deliveryMacroValues builds the macro.Values an outgoing postback URL is
+// resolved against. Campaign/country/device/subs come from the attributed
+// click when there is one — an unattributed conversion (docs/attribution.md)
+// still gets delivered, just without those dimensions filled in.
+func deliveryMacroValues(p Postback, attr attribution.Attribution, status event.Type, revenue *float64) macro.Values {
+	v := macro.Values{
+		ClickID:  strings.TrimSpace(p.ClickID),
+		Status:   string(status),
+		Currency: strings.TrimSpace(p.Currency),
+	}
+	if revenue != nil {
+		v.Revenue = strconv.FormatFloat(*revenue, 'f', -1, 64)
+	}
+	if attr.Outcome.Attributed() {
+		v.CampaignID = attr.Click.CampaignID
+		v.Country = attr.Click.Country
+		v.Device = attr.Click.Device
+		v.Subs = attr.Click.Subs
+	}
+	return v
 }
 
 func (s *Service) convertRevenue(ctx context.Context, p Postback) (usdValue, revenue *float64) {

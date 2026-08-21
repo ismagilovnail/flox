@@ -120,6 +120,30 @@ func (e *fakeEvents) last() event.Event {
 	return e.events[len(e.events)-1]
 }
 
+// fakeDeliveries collects whatever DeliveryRequests Service queued.
+type fakeDeliveries struct {
+	mu   sync.Mutex
+	reqs []conversion.DeliveryRequest
+}
+
+func (d *fakeDeliveries) Enqueue(_ context.Context, req conversion.DeliveryRequest) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	d.reqs = append(d.reqs, req)
+}
+
+func (d *fakeDeliveries) count() int {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	return len(d.reqs)
+}
+
+func (d *fakeDeliveries) last() conversion.DeliveryRequest {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	return d.reqs[len(d.reqs)-1]
+}
+
 // attributionOf builds a AttributionService that always attributes to one
 // fixed click, or always reports OutcomeUnknownClick, for tests that don't
 // care about attribution's own logic (that's attribution package's job).
@@ -144,16 +168,17 @@ func (a *fakeAttribution) AttributeConversion(_ context.Context, c attribution.C
 	}, nil
 }
 
-func newHarness() (*conversion.Service, *fakeMapper, *fakeStore, *fakeEvents) {
+func newHarness() (*conversion.Service, *fakeMapper, *fakeStore, *fakeEvents, *fakeDeliveries) {
 	mapper := newFakeMapper()
 	store := newFakeStore()
 	events := &fakeEvents{}
+	deliveries := &fakeDeliveries{}
 	attr := &fakeAttribution{
 		outcome: attribution.OutcomeAttributed,
 		click:   attribution.Click{ClickID: "click-1", OrganizationID: orgA, OccurredAt: time.Date(2026, 8, 20, 10, 0, 0, 0, time.UTC)},
 	}
-	svc := conversion.NewService(mapper, store, &fakeFX{rates: map[string]float64{"EUR": 1.1}}, attr, events)
-	return svc, mapper, store, events
+	svc := conversion.NewService(mapper, store, &fakeFX{rates: map[string]float64{"EUR": 1.1}}, attr, events, deliveries)
+	return svc, mapper, store, events, deliveries
 }
 
 func postback(networkID, clickID, rawStatus string) conversion.Postback {
@@ -167,7 +192,7 @@ func postback(networkID, clickID, rawStatus string) conversion.Postback {
 }
 
 func TestUnmappedStatusIsIgnoredAsError(t *testing.T) {
-	svc, _, store, events := newHarness()
+	svc, _, store, events, _ := newHarness()
 
 	result, err := svc.Record(ctx(), postback("net-1", "click-1", "unknown-status"))
 	if err != nil {
@@ -185,7 +210,7 @@ func TestUnmappedStatusIsIgnoredAsError(t *testing.T) {
 }
 
 func TestMissingClickIDIsError(t *testing.T) {
-	svc, mapper, _, _ := newHarness()
+	svc, mapper, _, _, _ := newHarness()
 	mapper.set("net-1", "sale", event.CpaAccept)
 
 	p := postback("net-1", "", "sale")
@@ -199,7 +224,7 @@ func TestMissingClickIDIsError(t *testing.T) {
 }
 
 func TestFirstConversionIsRecordedAndEmitted(t *testing.T) {
-	svc, mapper, _, events := newHarness()
+	svc, mapper, _, events, _ := newHarness()
 	mapper.set("net-1", "sale", event.CpaAccept)
 
 	result, err := svc.Record(ctx(), postback("net-1", "click-1", "sale"))
@@ -222,7 +247,7 @@ func TestFirstConversionIsRecordedAndEmitted(t *testing.T) {
 // the registration, and dedup on (click_id, status) drops every redeposit
 // after the first. Neither may happen.
 func TestDedupKeyIsClickStatusEventRef(t *testing.T) {
-	svc, mapper, _, events := newHarness()
+	svc, mapper, _, events, _ := newHarness()
 	mapper.set("net-1", "reg", event.CpaHold)
 	mapper.set("net-1", "sale", event.CpaAccept)
 	mapper.set("net-1", "rebill", event.CpaRedep)
@@ -263,7 +288,7 @@ func TestDedupKeyIsClickStatusEventRef(t *testing.T) {
 // failure mode — a missed redeposit (support ticket) is preferred over a
 // double-counted one (bad invoice) when the network sends no txn id at all.
 func TestRedepWithNoTxnIDRecordsExactlyOne(t *testing.T) {
-	svc, mapper, _, events := newHarness()
+	svc, mapper, _, events, _ := newHarness()
 	mapper.set("net-1", "rebill", event.CpaRedep)
 
 	first, err := svc.Record(ctx(), postback("net-1", "click-1", "rebill"))
@@ -285,7 +310,7 @@ func TestRedepWithNoTxnIDRecordsExactlyOne(t *testing.T) {
 
 // TestStatusProgressionRefusesReturnToHold is §45's STATUS PROGRESSION rule.
 func TestStatusProgressionRefusesReturnToHold(t *testing.T) {
-	svc, mapper, _, events := newHarness()
+	svc, mapper, _, events, _ := newHarness()
 	mapper.set("net-1", "reg", event.CpaHold)
 	mapper.set("net-1", "sale", event.CpaAccept)
 
@@ -312,7 +337,7 @@ func TestStatusProgressionRefusesReturnToHold(t *testing.T) {
 // TestProgressionRuleIsIndependentOfAcceptDuplicates: the per-network
 // override is about duplicate deliveries, not about time travel (§45).
 func TestProgressionRuleIsIndependentOfAcceptDuplicates(t *testing.T) {
-	svc, mapper, _, events := newHarness()
+	svc, mapper, _, events, _ := newHarness()
 	mapper.set("net-1", "reg", event.CpaHold)
 	mapper.set("net-1", "sale", event.CpaAccept)
 
@@ -351,7 +376,7 @@ func TestProgressionRuleIsIndependentOfAcceptDuplicates(t *testing.T) {
 // to resolve by inventing a key component (§45 explicitly forbids
 // substituting a locally generated sequence number for exactly this reason).
 func TestProgressionAllowsEverythingElse(t *testing.T) {
-	svc, mapper, _, events := newHarness()
+	svc, mapper, _, events, _ := newHarness()
 	mapper.set("net-1", "sale", event.CpaAccept)
 	mapper.set("net-1", "chargeback", event.CpaDecline)
 
@@ -375,7 +400,7 @@ func TestUnattributedConversionIsStillRecorded(t *testing.T) {
 	store := newFakeStore()
 	events := &fakeEvents{}
 	attr := &fakeAttribution{outcome: attribution.OutcomeUnknownClick}
-	svc := conversion.NewService(mapper, store, &fakeFX{}, attr, events)
+	svc := conversion.NewService(mapper, store, &fakeFX{}, attr, events, &fakeDeliveries{})
 
 	result, err := svc.Record(ctx(), postback("net-1", "click-missing", "sale"))
 	if err != nil {
@@ -399,7 +424,7 @@ func TestAttributionFailureSurfacesAsError(t *testing.T) {
 	events := &fakeEvents{}
 	boom := errors.New("resolver unavailable")
 	attr := &fakeAttribution{err: boom}
-	svc := conversion.NewService(mapper, store, &fakeFX{}, attr, events)
+	svc := conversion.NewService(mapper, store, &fakeFX{}, attr, events, &fakeDeliveries{})
 
 	_, err := svc.Record(ctx(), postback("net-1", "click-1", "sale"))
 	if err == nil {
@@ -416,7 +441,7 @@ func TestFXMissingRateStoresConversionWithoutUSDValue(t *testing.T) {
 	store := newFakeStore()
 	events := &fakeEvents{}
 	attr := &fakeAttribution{outcome: attribution.OutcomeUnknownClick}
-	svc := conversion.NewService(mapper, store, &fakeFX{}, attr, events) // no rates configured
+	svc := conversion.NewService(mapper, store, &fakeFX{}, attr, events, &fakeDeliveries{}) // no rates configured
 
 	p := postback("net-1", "click-1", "sale")
 	revenue := 100.0
@@ -446,7 +471,7 @@ func TestEventRefFor(t *testing.T) {
 	// non-REDEP side explicitly: a txn id sent on a non-repeatable status
 	// must never enter the dedup key, or every network retry with a fresh
 	// txn id would become a new conversion.
-	svc, mapper, _, events := newHarness()
+	svc, mapper, _, events, _ := newHarness()
 	mapper.set("net-1", "sale", event.CpaAccept)
 
 	first := postback("net-1", "click-1", "sale")
@@ -466,5 +491,94 @@ func TestEventRefFor(t *testing.T) {
 	}
 	if events.count() != 1 {
 		t.Fatalf("events emitted = %d, want 1", events.count())
+	}
+}
+
+func TestDeliveryEnqueuedOnSuccessWithMacroResolvedURL(t *testing.T) {
+	svc, mapper, _, _, deliveries := newHarness()
+	mapper.set("net-1", "sale", event.CpaAccept)
+
+	p := postback("net-1", "click-1", "sale")
+	p.PostbackURL = "https://net.example/pb?click_id={click_id}&status={status}&revenue={revenue}&currency={currency}"
+	revenue := 42.5
+	p.Revenue = &revenue
+	p.Currency = "USD"
+
+	if _, err := svc.Record(ctx(), p); err != nil {
+		t.Fatalf("Record: %v", err)
+	}
+	if deliveries.count() != 1 {
+		t.Fatalf("deliveries enqueued = %d, want 1", deliveries.count())
+	}
+	req := deliveries.last()
+	want := "https://net.example/pb?click_id=click-1&status=CPA_ACCEPT&revenue=42.5&currency=USD"
+	if req.URL != want {
+		t.Fatalf("delivery URL = %q, want %q", req.URL, want)
+	}
+	if req.NetworkID != "net-1" || req.OrganizationID != orgA || req.ClickID != "click-1" || req.Status != event.CpaAccept {
+		t.Fatalf("delivery request fields wrong: %+v", req)
+	}
+}
+
+func TestNoDeliveryWhenPostbackURLNotConfigured(t *testing.T) {
+	svc, mapper, _, _, deliveries := newHarness()
+	mapper.set("net-1", "sale", event.CpaAccept)
+
+	p := postback("net-1", "click-1", "sale") // p.PostbackURL left empty
+	if _, err := svc.Record(ctx(), p); err != nil {
+		t.Fatalf("Record: %v", err)
+	}
+	if deliveries.count() != 0 {
+		t.Fatalf("deliveries enqueued = %d, want 0 when the network has no postback_url", deliveries.count())
+	}
+}
+
+func TestNoDeliveryOnDuplicateIgnoredOrError(t *testing.T) {
+	svc, mapper, _, _, deliveries := newHarness()
+	mapper.set("net-1", "reg", event.CpaHold)
+	mapper.set("net-1", "sale", event.CpaAccept)
+
+	hold := postback("net-1", "click-1", "reg")
+	hold.PostbackURL = "https://net.example/pb?click_id={click_id}"
+	if _, err := svc.Record(ctx(), hold); err != nil {
+		t.Fatalf("recording HOLD: %v", err)
+	}
+	if deliveries.count() != 1 {
+		t.Fatalf("deliveries after HOLD = %d, want 1", deliveries.count())
+	}
+
+	// Duplicate of the same HOLD.
+	if _, err := svc.Record(ctx(), hold); err != nil {
+		t.Fatalf("recording duplicate HOLD: %v", err)
+	}
+	if deliveries.count() != 1 {
+		t.Fatalf("deliveries after duplicate HOLD = %d, want still 1", deliveries.count())
+	}
+
+	accept := postback("net-1", "click-1", "sale")
+	accept.PostbackURL = "https://net.example/pb?click_id={click_id}"
+	if _, err := svc.Record(ctx(), accept); err != nil {
+		t.Fatalf("recording ACCEPT: %v", err)
+	}
+	if deliveries.count() != 2 {
+		t.Fatalf("deliveries after ACCEPT = %d, want 2", deliveries.count())
+	}
+
+	// Progression-ignored replay of HOLD.
+	if _, err := svc.Record(ctx(), hold); err != nil {
+		t.Fatalf("recording replayed HOLD: %v", err)
+	}
+	if deliveries.count() != 2 {
+		t.Fatalf("deliveries after ignored HOLD replay = %d, want still 2", deliveries.count())
+	}
+
+	// Unmapped status -> error.
+	unmapped := postback("net-1", "click-1", "bogus")
+	unmapped.PostbackURL = "https://net.example/pb?click_id={click_id}"
+	if _, err := svc.Record(ctx(), unmapped); err != nil {
+		t.Fatalf("recording unmapped status: %v", err)
+	}
+	if deliveries.count() != 2 {
+		t.Fatalf("deliveries after unmapped-status error = %d, want still 2", deliveries.count())
 	}
 }

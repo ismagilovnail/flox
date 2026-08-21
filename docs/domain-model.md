@@ -52,8 +52,11 @@ Campaign
 - **domain**, **tracking_link** — resolve `GET /t/:tracking_id` to a
   campaign and generate a `click_id` (ULID).
 - **pixel**, **postback** (incoming + outgoing) — conversion signal
-  ingestion/egress. Dedup key `(click_id, status)`, not `click_id` alone —
-  see [`event-model.md`](event-model.md).
+  ingestion/egress. Dedup key `(click_id, status, event_ref)`, not
+  `click_id` alone and not `(click_id, status)` alone — see
+  [`event-model.md`](event-model.md). Outgoing delivery (queue/retry/
+  dead-letter, `postback_deliveries`) is a separate table from the incoming
+  dedup ledger — see [`postback-delivery.md`](postback-delivery.md).
 
 ## Cost & currency
 

@@ -25,6 +25,7 @@ import (
 	"github.com/ismagilovnail/flox/apps/internal/conversion"
 	"github.com/ismagilovnail/flox/apps/internal/eventbuf"
 	"github.com/ismagilovnail/flox/apps/internal/logging"
+	"github.com/ismagilovnail/flox/apps/internal/postback"
 	"github.com/ismagilovnail/flox/apps/internal/postgres"
 	"github.com/ismagilovnail/flox/apps/internal/rediscache"
 	"github.com/ismagilovnail/flox/apps/internal/routing"
@@ -114,7 +115,9 @@ func run() error {
 		logger.Warn("REDIS_URL not set, conversion progression checks will read Postgres directly")
 	}
 
-	postback := &PostbackHandler{
+	deliveries := postback.NewEnqueuer(postback.NewPostgresStore(db), logger)
+
+	postbackHandler := &PostbackHandler{
 		networks: conversion.NewPostgresNetworkLookup(db),
 		service: conversion.NewService(
 			conversion.NewPostgresMapper(db),
@@ -122,6 +125,7 @@ func run() error {
 			conversion.NewPostgresFX(db),
 			attributionSvc,
 			events,
+			deliveries,
 		),
 		logger: logger,
 	}
@@ -139,7 +143,7 @@ func run() error {
 		_, _ = w.Write([]byte(`{"status":"ok"}`))
 	})
 	handler.Register(r)
-	postback.Register(r)
+	postbackHandler.Register(r)
 
 	httpSrv := &http.Server{
 		Addr:              cfg.HTTPAddr,

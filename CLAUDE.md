@@ -19,43 +19,51 @@ referenced below as §N).
 ## CURRENT STATE — UPDATE THIS EVERY PHASE
 
 ```
-CURRENT PHASE : PHASE 23 — Conversion Engine
-STATUS        : done — internal/conversion implements §45's postback flow:
-                Mapper (per-network event_mappings table) → STATUS
-                PROGRESSION check → attribution.AttributeConversion →
-                FXConverter → Store.Record (atomic Postgres dedup insert) →
-                CPA event emitted on success. Dedup key is (click_id, status,
-                event_ref) per A1/A2, enforced by a partial unique index
-                (migration 00013) scoped to result='success' so
-                duplicate/ignored/error attempts still get their own log row
-                — "log every postback" and "have we seen this" share one
-                table. Status progression (refuse next=CPA_HOLD unless
-                last=CPA_HOLD or absent) enforced independently of
-                acceptDuplicates. Served at GET/POST /postback/{networkId} on
-                apps/tracker (not worker — see ARCHITECTURE.md); {networkId}
-                is where OrganizationID comes from, never the request body.
-                Redis wired for real (go-redis, apps/internal/rediscache):
-                RedisStore caches ONLY the progression-check fast path, never
-                the dedup insert itself — see docs/conversion.md for why.
-                Best-effort at startup; PostgresStore alone is already
-                correct. No attribution window (decided this phase, see
-                docs/attribution.md). 23 tests pass (13 pure + 10 Postgres/
-                Redis-gated on DATABASE_URL/REDIS_URL).
-                Known spec gap (not a bug): a repeated non-REDEP status
-                (e.g. CPA_ACCEPT reinstated after CPA_DECLINE) shares its
-                predecessor's dedup key and is recorded as a duplicate —
-                §45 forbids inventing a synthetic event_ref to fix this; see
-                docs/conversion.md.
+CURRENT PHASE : PHASE 24 — Postback Engine (outgoing)
+STATUS        : done — apps/worker is a real binary now (health endpoint +
+                internal/postback.Deliverer.PollLoop); apps/internal/postback
+                is the outgoing delivery engine: Postgres-backed
+                postback_deliveries queue (migration 00014, its own table —
+                see docs/postback-delivery.md for why not more
+                direction='outgoing' rows in postbacks), FOR UPDATE SKIP
+                LOCKED claim, exponential backoff (8 attempts, ~21h span),
+                dead-letter state. internal/conversion.Service gets a
+                DeliveryEnqueuer hook (same decoupled-interface pattern as
+                EventSink): every ResultSuccess with a configured
+                networks.postback_url queues a delivery, macro-resolved via
+                the new apps/internal/macro (ports apps/web/src/lib/
+                macros.ts's token contract — click_id/status/revenue/
+                currency/campaign_id/country/device/sub1-10 resolved today;
+                payout/offer_id/source recognized but left literal, no
+                Flow->Offer/TrafficSource lookup wired anywhere yet).
+                Confirmed via AskUserQuestion: all 5 CPA statuses trigger
+                delivery, not just payable ones. Enqueue failures are
+                best-effort (no error return) — an already-recorded
+                conversion must never be reported failed over a delivery-
+                queue blip. 39 tests pass across the two new packages
+                (macro: 5, postback: 11 incl. Postgres-gated ClaimDue/
+                backoff-timing checks) plus conversion's now-23 (3 new
+                delivery-enqueue tests added to Phase 23's 20) — all green
+                together with Phase 21-23's suites. Full end-to-end smoke test:
+                tracker -> Postgres queue -> worker -> real HTTP receiver,
+                covering both the success path and the retry-then-succeed
+                path with real backoff timing.
+                Also fixed doc/code drift found while touching this area:
+                docs/event-model.md, docs/domain-model.md, and
+                migrations/README.md still stated the pre-A1/A2 two-part
+                dedup key from Phase 22 or earlier — corrected.
                 Carried over, unrelated: Phase 10 crash-loop report; in-app
                 WebView bounce (§73) — see apps/tracker/README.md. Click
-                storage is still attribution's MemoryResolver stand-in — the
-                real ClickHouse-backed one lands with the worker (Phase 24 /
-                26); nothing in internal/conversion changes when it does.
-LAST COMMIT   : feat(conversion): conversion engine
-NEXT          : PHASE 24 — Postback Engine (outgoing) — confirm before
-                starting. Queue/worker/retry/dead-letter for apps/worker
-                notifying networks of status changes; also where the
-                ClickHouse-backed ClickResolver lands.
+                storage is still attribution's MemoryResolver stand-in.
+                apps/worker's OTHER eventual job — consuming the tracker's
+                event queue into ClickHouse — is explicitly NOT this phase
+                (§47/§48, Phases 25-26); apps/worker/README.md says so.
+LAST COMMIT   : feat(postback): outgoing postback engine
+NEXT          : PHASE 25 — Analytics Pipeline — confirm before starting.
+                events -> ClickHouse -> materialized/aggregate tables ->
+                analytics service -> REST API -> frontend. First real
+                ClickHouse ingestion; also likely where apps/tracker's
+                eventbuf.LogSink gets replaced with a durable queue producer.
 ```
 
 > At the end of every phase: update the four lines above, add a CHANGELOG entry,

@@ -54,15 +54,23 @@ across returns when `stickyFlowKeepClickId` is enabled (see
 
 ## Deduplication (postback / conversion events)
 
-`DEDUP KEY = (click_id, status)`, not `click_id` alone — the same click
-legitimately produces `CPA_HOLD`, then `CPA_ACCEPT`, then multiple
-`CPA_REDEP`. Redeposits are distinguished by an additional event identifier
-(network txn id if provided, else a monotonic sequence): N distinct
-redeposits are N events, a re-sent identical one is dropped. Dedup key held
-in Redis with a long TTL (fast path); a durable unique constraint in
-ClickHouse/PG is the backstop. Per-network `acceptDuplicates` override
-exists for partners whose semantics require accepting duplicates
-intentionally. Full detail: master spec §45.
+`DEDUP KEY = (click_id, status, event_ref)`, not `click_id` alone and not
+`(click_id, status)` alone — the same click legitimately produces
+`CPA_HOLD`, then `CPA_ACCEPT`, then multiple `CPA_REDEP`, and a two-part key
+would drop every redeposit after the first. `event_ref` is the network's
+transaction id for `CPA_REDEP` only (the one repeatable status) and empty
+string for every other status, even when the network sent one — a locally
+generated sequence number is NOT substituted when no txn id arrives, since
+that would make every re-send look distinct and disable deduplication
+entirely; instead exactly one redeposit is recorded per click in that case.
+The durable unique constraint lives in Postgres (`postbacks`, migration
+00013); a Redis-backed fast path exists only for the separate STATUS
+PROGRESSION check (the last-seen status per click_id), never for the dedup
+insert itself — see `docs/conversion.md` for why those two are kept apart.
+Per-network `acceptDuplicates` override exists for partners whose semantics
+require accepting duplicates intentionally, but does NOT bypass status
+progression. Full detail: master spec §45; implementation:
+`apps/internal/conversion` (Phase 23) and `docs/conversion.md`.
 
 ## Currency
 

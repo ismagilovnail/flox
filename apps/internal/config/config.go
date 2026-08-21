@@ -59,6 +59,14 @@ func LoadTracker() (Config, error) {
 	return load("TRACKER_URL", "http://localhost:8081", "flox-tracker")
 }
 
+// LoadWorker builds the async worker's configuration (apps/worker, Phase
+// 24). It has no inbound routing to serve — its HTTP surface is a bare
+// health check for orchestration liveness probes — but shares the same
+// config shape so it can be wired up identically.
+func LoadWorker() (Config, error) {
+	return load("WORKER_URL", "http://localhost:8082", "flox-worker")
+}
+
 func load(portVar, portDefault, defaultServiceName string) (Config, error) {
 	port, err := parsePort(getEnv(portVar, portDefault))
 	if err != nil {

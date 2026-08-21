@@ -81,6 +81,7 @@ func (h *PostbackHandler) handle(w http.ResponseWriter, r *http.Request) {
 		RawStatus:        r.FormValue("status"),
 		Currency:         r.FormValue("currency"),
 		NetworkTxnID:     firstNonEmpty(r.FormValue("txn_id"), r.FormValue("transaction_id")),
+		PostbackURL:      network.PostbackURL,
 		OccurredAt:       time.Now().UTC(),
 	}
 

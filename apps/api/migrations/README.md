@@ -47,6 +47,11 @@ guessed at here.
 
 `00011` adds §39-STICKY's three flags (`sticky_flow`,
 `sticky_flow_keep_click_id`, `sticky_flow_skip_inactive`) to `campaigns`.
+`00012` adds `event_mappings` and `00014` adds `postback_deliveries` —
+neither is in §35's original list either, same reasoning: Phase 23's
+conversion engine and Phase 24's postback engine are the code that actually
+needs them, so they land with that code rather than being guessed at during
+Phase 17.
 They aren't in §35's table list, so Phase 17 didn't invent them; Phase 21's
 tracker is the first code that actually reads them, so they landed there —
 schema follows the code that needs it, rather than being guessed ahead.

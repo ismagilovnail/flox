@@ -5,6 +5,82 @@ per-phase, matching `CLAUDE.md`'s phase protocol. The one exception is
 [Between phases], below: spec amendments and the code changes that follow from
 them land between phases and would otherwise be invisible here.
 
+## [Phase 24] — Postback Engine (outgoing)
+
+### Added
+
+- **`apps/worker`** is a real binary for the first time — a health endpoint
+  plus `internal/postback.Deliverer.PollLoop`. Its *other* eventual role,
+  consuming the tracker's event queue into ClickHouse, is explicitly not
+  this phase's job (§47/§48, Phases 25-26); `apps/worker/README.md` now says
+  so instead of describing the full future scope as if it already existed.
+- **`internal/postback`** (§46): the outgoing delivery engine.
+  `postback_deliveries` (migration 00014) is the durable queue — §46's exact
+  status vocabulary (`queued`/`processing`/`success`/`failed`/`retrying`/
+  `dead`), claimed via the standard Postgres `FOR UPDATE SKIP LOCKED` job-
+  queue pattern so concurrent worker replicas can never double-claim a row.
+  Deliberately a **separate table** from `postbacks`, not more
+  `direction='outgoing'` rows there as an earlier comment on that table once
+  planned — `result`'s one-shot dedup vocabulary and a multi-attempt
+  delivery's own state don't fit one column without forcing the dedup index
+  to grow a predicate it has no other need for. `source_postback_id` keeps
+  the two connected. Full reasoning: `docs/postback-delivery.md`.
+- **Exponential backoff, 8 attempts, ~21 hour span, dead-letter after** —
+  none of these numbers are in §46; chosen so a network's multi-hour outage
+  still gets delivered without retrying forever. A dead-lettered delivery
+  isn't lost — Phase 13's "Resend postback" UI action already exists as the
+  recovery path.
+- **`internal/conversion.Service` gets a `DeliveryEnqueuer` hook**, the same
+  decoupled-narrow-interface pattern `EventSink` already established: every
+  `ResultSuccess` with a configured `networks.postback_url` queues a
+  delivery. `Enqueue` has no error return by contract — a conversion
+  `internal/conversion` already durably recorded must never be reported back
+  to the network as failed just because queuing its outgoing notification
+  hit a database blip.
+- **Trigger scope decided via user confirmation**: all five CPA statuses
+  (not just HOLD/ACCEPT/REDEP) queue a delivery. §46 doesn't specify this;
+  the Phase 13 frontend mock hints at "payable only" but that reads as
+  mock-data flavor, and the URL template's `{status}` token exists
+  specifically so a network can branch on it — restricting by status would
+  have been inventing policy the spec never states.
+- **`apps/internal/macro`**: the Go half of §27's shared macro resolver,
+  porting `apps/web/src/lib/macros.ts`'s exact token contract rather than
+  inventing a second one. Resolves `{click_id}`/`{status}`/`{revenue}`/
+  `{currency}`/`{campaign_id}`/`{country}`/`{device}`/`{sub1..10}` — every
+  field `internal/conversion.Service.Record` actually has in hand.
+  `{payout}`/`{offer_id}`/`{source}` are part of the shared vocabulary but
+  pass through literally: no Flow→Offer or click→TrafficSource lookup exists
+  anywhere in the Go codebase yet, and wiring one in was out of scope for a
+  queue/worker/retry phase — documented in `docs/postback-delivery.md`
+  rather than silently narrowing the macro contract.
+- **`apps/worker/README.md`**, **`docs/postback-delivery.md`** (§76).
+
+### Fixed
+
+- **Three docs still stated the pre-A1/A2 two-part dedup key**
+  (`docs/event-model.md`, `docs/domain-model.md`,
+  `apps/api/migrations/README.md`'s table list was also missing
+  `event_mappings`/`postback_deliveries`) — found while touching this area
+  for Phase 24. `ARCHITECTURE.md` and `CLAUDE.md` were corrected in Phase 23;
+  these three were missed then. Corrected now, including
+  `event-model.md`'s literal repetition of the exact "else a monotonic
+  sequence" wording the A1 amendment identified as actively dangerous
+  (disables deduplication entirely when a network sends no txn id).
+
+### Notes
+
+- End-to-end smoke test against the compiled `tracker` and `worker`
+  binaries, a real Postgres/Redis, and a real local HTTP receiver: verified
+  both the immediate-success path and the fail→`retrying`→backoff→succeed
+  path with real wall-clock timing (a 500 response, `next_attempt_at` ~30s
+  out, not due until then, due and delivered on the next poll).
+- 39 new/updated tests: `internal/macro` (5), `internal/postback` (11, incl.
+  Postgres-gated `ClaimDue`/backoff-timing/tenant-data-shape checks), plus 3
+  new delivery-enqueue tests added to `internal/conversion`'s existing suite
+  (now 23 total there).
+- Migration 00014 round-tripped (`goose up` → `down` → `up`) against a real
+  Postgres alongside 00001-00013.
+
 ## [Phase 23] — Conversion Engine
 
 ### Added

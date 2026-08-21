@@ -52,7 +52,10 @@ func (s *PostgresStore) LastStatus(ctx context.Context, organizationID, clickID 
 
 // direction is hardcoded 'incoming': this package only handles postbacks a
 // network sends TO FLOX. Outgoing (FLOX notifying a network) is Phase 24's
-// postback engine, a separate write path onto this same table.
+// postback engine (internal/postback), which reads a success row here via
+// source_postback_id but writes its own delivery lifecycle to a separate
+// postback_deliveries table — see that migration's comment for why sharing
+// this one wasn't the right call after all.
 const insertColumns = `
 	id, organization_id, network_id, click_id, status, direction, result,
 	network_accepts_duplicates, event_ref, network_txn_id, raw_status,
@@ -140,11 +143,11 @@ var _ NetworkLookup = (*PostgresNetworkLookup)(nil)
 func (l *PostgresNetworkLookup) ByID(ctx context.Context, networkID string) (Network, error) {
 	var n Network
 	err := l.db.QueryRow(ctx, `
-		SELECT id, organization_id, accept_duplicates, status
+		SELECT id, organization_id, accept_duplicates, status, postback_url
 		FROM networks
 		WHERE id = $1`,
 		networkID,
-	).Scan(&n.ID, &n.OrganizationID, &n.AcceptDuplicates, &n.Status)
+	).Scan(&n.ID, &n.OrganizationID, &n.AcceptDuplicates, &n.Status, &n.PostbackURL)
 
 	if errors.Is(err, pgx.ErrNoRows) {
 		return Network{}, ErrNetworkNotFound
