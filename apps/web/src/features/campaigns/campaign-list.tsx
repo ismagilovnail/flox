@@ -3,6 +3,7 @@
 import * as React from "react";
 import Link from "next/link";
 import { PlusIcon, TagIcon } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
@@ -17,6 +18,7 @@ import { BulkTagDialog } from "@/features/tags/bulk-tag-dialog";
 import { filterByTags } from "@/features/tags/filter-by-tags";
 
 export function CampaignList() {
+  const { t } = useTranslation(["campaigns", "common"]);
   const campaignsQuery = useCampaigns();
   const sourcesQuery = useTrafficSources();
   const assignments = useTagsStore((s) => s.assignments);
@@ -35,15 +37,15 @@ export function CampaignList() {
     [campaignsQuery.data, tagFilter, assignments],
   );
 
-  const columns = React.useMemo(() => campaignColumns(sourceNameById), [sourceNameById]);
+  const columns = React.useMemo(() => campaignColumns(t, sourceNameById), [t, sourceNameById]);
 
   const header = (
     <div className="flex items-center justify-between">
-      <h1 className="text-2xl font-semibold tracking-tight">Campaigns</h1>
+      <h1 className="text-2xl font-semibold tracking-tight">{t("list.title", { ns: "campaigns" })}</h1>
       <Button asChild>
         <Link href="/campaigns/new">
           <PlusIcon className="size-4" />
-          New Campaign
+          {t("list.newButton", { ns: "campaigns" })}
         </Link>
       </Button>
     </div>
@@ -53,7 +55,7 @@ export function CampaignList() {
     return (
       <div className="flex flex-col gap-4">
         {header}
-        <LoadingState label="Loading campaigns…" />
+        <LoadingState label={t("list.loading", { ns: "campaigns" })} />
       </div>
     );
   }
@@ -63,7 +65,7 @@ export function CampaignList() {
       <div className="flex flex-col gap-4">
         {header}
         <ErrorState
-          title="Couldn't load campaigns"
+          title={t("list.loadError", { ns: "campaigns" })}
           description={campaignsQuery.error.message}
           onRetry={() => campaignsQuery.refetch()}
         />
@@ -78,9 +80,9 @@ export function CampaignList() {
       <DataTable
         columns={columns}
         data={filtered}
-        searchPlaceholder="Search campaigns..."
-        emptyTitle="No campaigns yet"
-        emptyDescription="Create your first campaign to start routing traffic."
+        searchPlaceholder={t("list.searchPlaceholder", { ns: "campaigns" })}
+        emptyTitle={t("list.emptyTitle", { ns: "campaigns" })}
+        emptyDescription={t("list.emptyDescription", { ns: "campaigns" })}
         pageSize={10}
         filters={<TagFilterControl selected={tagFilter} onChange={setTagFilter} />}
         enableRowSelection
@@ -91,7 +93,7 @@ export function CampaignList() {
             variant="outline"
             onClick={() => setBulkTarget({ ids: selectedRows.map((r) => r.id), clear: clearSelection })}
           >
-            <TagIcon className="size-3.5" /> Edit Tags
+            <TagIcon className="size-3.5" /> {t("list.editTagsButton", { ns: "campaigns" })}
           </Button>
         )}
       />

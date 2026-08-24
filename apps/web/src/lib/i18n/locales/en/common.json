@@ -1,0 +1,51 @@
+{
+  "actions": {
+    "save": "Save",
+    "cancel": "Cancel",
+    "delete": "Delete",
+    "edit": "Edit",
+    "add": "Add",
+    "create": "Create",
+    "retry": "Retry",
+    "clear": "Clear",
+    "close": "Close",
+    "confirm": "Confirm",
+    "duplicate": "Duplicate",
+    "archive": "Archive",
+    "activate": "Activate",
+    "pause": "Pause",
+    "copy": "Copy"
+  },
+  "dataTable": {
+    "searchPlaceholder": "Search...",
+    "emptyTitle": "No results",
+    "columns": "Columns",
+    "selected_one": "{{count}} selected",
+    "selected_other": "{{count}} selected",
+    "selectAllAria": "Select all rows on this page",
+    "selectRowAria": "Select row",
+    "previousPageAria": "Previous page",
+    "nextPageAria": "Next page",
+    "pagination_one": "Page {{page}} of {{total}} · {{count}} row",
+    "pagination_other": "Page {{page}} of {{total}} · {{count}} rows"
+  },
+  "states": {
+    "loading": "Loading",
+    "errorTitle": "Something went wrong"
+  },
+  "status": {
+    "active": "Active",
+    "paused": "Paused",
+    "archived": "Archived",
+    "draft": "Draft"
+  },
+  "language": {
+    "switcherLabel": "Change language",
+    "en": "English",
+    "ru": "Русский"
+  },
+  "multiSelect": {
+    "none": "None",
+    "searchPlaceholder": "Search {{label}}..."
+  }
+}

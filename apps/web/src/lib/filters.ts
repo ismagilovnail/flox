@@ -1,3 +1,5 @@
+import type { TFunction } from "i18next";
+
 import { genId } from "@/lib/id";
 
 export type FilterField =
@@ -53,6 +55,21 @@ export const FIELD_GROUPS: { label: string; fields: FilterField[] }[] = [
   },
 ];
 
+/** i18n keys (streamSets.json namespace) for FIELD_GROUPS' English group
+ * labels above — the stored label ("Geo", "Device", ...) is only ever
+ * used as this map's key, never sent anywhere, so translating its
+ * *display* has no effect on any stored/API value. Field names themselves
+ * (country, os_version, sub1, ...) stay untranslated — they read as
+ * attribute keys, not prose, the same call this codebase already made for
+ * enum codes elsewhere. */
+export const FIELD_GROUP_I18N_KEY: Record<string, string> = {
+  Geo: "filters.groups.geo",
+  Device: "filters.groups.device",
+  Fraud: "filters.groups.fraud",
+  Traffic: "filters.groups.traffic",
+  Custom: "filters.groups.custom",
+};
+
 export const FILTER_FIELDS: FilterField[] = FIELD_GROUPS.flatMap((g) => g.fields);
 
 export type FilterOperator =
@@ -79,6 +96,28 @@ export const FILTER_OPERATORS: FilterOperator[] = [
   "EXISTS", "NOT_EXISTS",
   "GT", "GTE", "LT", "LTE", "BETWEEN",
 ];
+
+/** i18n keys (streamSets.json namespace) for each operator's display word —
+ * the operator code itself (IS, IS_NOT, ...) is the wire value and stays
+ * untranslated everywhere else (form state, API payloads). */
+export const FILTER_OPERATOR_I18N_KEY: Record<FilterOperator, string> = {
+  IS: "filters.operators.is",
+  IS_NOT: "filters.operators.isNot",
+  IN: "filters.operators.in",
+  NOT_IN: "filters.operators.notIn",
+  CONTAINS: "filters.operators.contains",
+  NOT_CONTAINS: "filters.operators.notContains",
+  STARTS_WITH: "filters.operators.startsWith",
+  ENDS_WITH: "filters.operators.endsWith",
+  MATCHES: "filters.operators.matches",
+  EXISTS: "filters.operators.exists",
+  NOT_EXISTS: "filters.operators.notExists",
+  GT: "filters.operators.gt",
+  GTE: "filters.operators.gte",
+  LT: "filters.operators.lt",
+  LTE: "filters.operators.lte",
+  BETWEEN: "filters.operators.between",
+};
 
 /** No value input for existence checks — the field alone is the condition. */
 export const OPERATORS_WITHOUT_VALUE: FilterOperator[] = ["EXISTS", "NOT_EXISTS"];
@@ -243,14 +282,14 @@ export function describeFilterTree(node: FilterNode): string {
 const ISO_ALPHA2 = /^[A-Z]{2}$/;
 
 /** UK is the classic "filter never matches" mistake — the ISO-3166 code is GB. */
-export function validateCountryValue(value: string): string | null {
+export function validateCountryValue(value: string, t: TFunction): string | null {
   const tokens = value
     .split(",")
     .map((v) => v.trim().toUpperCase())
     .filter(Boolean);
-  if (tokens.includes("UK")) return `"UK" is not an ISO-3166 code — use "GB" for United Kingdom`;
-  const invalid = tokens.find((t) => !ISO_ALPHA2.test(t));
-  if (invalid) return `"${invalid}" is not a 2-letter ISO-3166 country code (e.g. US, GB, DE)`;
+  if (tokens.includes("UK")) return t("form.validation.ukNotIso", { ns: "streamSets" });
+  const invalid = tokens.find((tok) => !ISO_ALPHA2.test(tok));
+  if (invalid) return t("form.validation.notIso2", { ns: "streamSets", value: invalid });
   return null;
 }
 
@@ -262,18 +301,18 @@ export function validateCountryValue(value: string): string | null {
  * the backend (§5 regex safety) — never trust the client as the source of
  * truth here.
  */
-export function checkRE2Compatible(pattern: string): string | null {
-  if (!pattern) return "Pattern is required";
-  if (pattern.length > 200) return "Pattern too long (200 char max)";
-  if (/\(\?[=!]/.test(pattern)) return "Lookahead assertions aren't supported by RE2";
-  if (/\(\?<[=!]/.test(pattern)) return "Lookbehind assertions aren't supported by RE2";
-  if (/\\[1-9]/.test(pattern)) return "Backreferences aren't supported by RE2";
-  if (/\(\?>/.test(pattern)) return "Atomic groups aren't supported by RE2";
-  if (/[*+?}]\+/.test(pattern)) return "Possessive quantifiers aren't supported by RE2";
+export function checkRE2Compatible(pattern: string, t: TFunction): string | null {
+  if (!pattern) return t("form.validation.patternRequired", { ns: "streamSets" });
+  if (pattern.length > 200) return t("form.validation.patternTooLong", { ns: "streamSets" });
+  if (/\(\?[=!]/.test(pattern)) return t("form.validation.noLookahead", { ns: "streamSets" });
+  if (/\(\?<[=!]/.test(pattern)) return t("form.validation.noLookbehind", { ns: "streamSets" });
+  if (/\\[1-9]/.test(pattern)) return t("form.validation.noBackreferences", { ns: "streamSets" });
+  if (/\(\?>/.test(pattern)) return t("form.validation.noAtomicGroups", { ns: "streamSets" });
+  if (/[*+?}]\+/.test(pattern)) return t("form.validation.noPossessiveQuantifiers", { ns: "streamSets" });
   try {
     new RegExp(pattern);
   } catch {
-    return "Invalid regular expression syntax";
+    return t("form.validation.invalidRegex", { ns: "streamSets" });
   }
   return null;
 }

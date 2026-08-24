@@ -1,6 +1,8 @@
 "use client";
 
 import { XIcon } from "lucide-react";
+import { useTranslation } from "react-i18next";
+import type { TFunction } from "i18next";
 
 import { IconButton } from "@/components/ui/icon-button";
 import { Input } from "@/components/ui/input";
@@ -8,8 +10,10 @@ import { MultiSelect } from "@/components/ui/multi-select";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   BOOLEAN_FLAG_FIELDS,
+  FIELD_GROUP_I18N_KEY,
   FIELD_GROUPS,
   FIELD_VOCAB,
+  FILTER_OPERATOR_I18N_KEY,
   FILTER_OPERATORS,
   MULTI_VALUE_OPERATORS,
   OPERATORS_WITHOUT_VALUE,
@@ -19,22 +23,30 @@ import {
   type FilterCondition,
 } from "@/lib/filters";
 
-const BOOLEAN_FLAG_OPTIONS = [
-  { value: "0", label: "No" },
-  { value: "1", label: "Yes" },
-];
+function booleanFlagOptions(t: TFunction) {
+  return [
+    { value: "0", label: t("filters.booleanNo", { ns: "streamSets" }) },
+    { value: "1", label: t("filters.booleanYes", { ns: "streamSets" }) },
+  ];
+}
 
 function ValueInput({
   condition,
   onChange,
+  t,
 }: {
   condition: FilterCondition;
   onChange: (patch: Partial<FilterCondition>) => void;
+  t: TFunction;
 }) {
   const { field, operator, value, valueTo } = condition;
 
   if (OPERATORS_WITHOUT_VALUE.includes(operator)) {
-    return <span className="flex h-7 items-center text-xs text-muted-foreground">No value needed</span>;
+    return (
+      <span className="flex h-7 items-center text-xs text-muted-foreground">
+        {t("filters.noValueNeeded", { ns: "streamSets" })}
+      </span>
+    );
   }
 
   if (RANGE_OPERATORS.includes(operator)) {
@@ -43,14 +55,14 @@ function ValueInput({
         <Input
           value={value}
           onChange={(e) => onChange({ value: e.target.value })}
-          placeholder="from"
+          placeholder={t("filters.rangeFromPlaceholder", { ns: "streamSets" })}
           className="h-7 w-20"
         />
-        <span className="text-xs text-muted-foreground">and</span>
+        <span className="text-xs text-muted-foreground">{t("filters.rangeAnd", { ns: "streamSets" })}</span>
         <Input
           value={valueTo}
           onChange={(e) => onChange({ valueTo: e.target.value })}
-          placeholder="to"
+          placeholder={t("filters.rangeToPlaceholder", { ns: "streamSets" })}
           className="h-7 w-20"
         />
       </div>
@@ -58,9 +70,13 @@ function ValueInput({
   }
 
   const vocab = FIELD_VOCAB[field];
+  const translatedVocab = vocab?.map((o) => ({
+    value: o.value,
+    label: t(`filters.vocab.${field}.${o.value}`, { ns: "streamSets", defaultValue: o.label }),
+  }));
 
   if (MULTI_VALUE_OPERATORS.includes(operator) && (vocab || BOOLEAN_FLAG_FIELDS.includes(field))) {
-    const options = vocab ?? BOOLEAN_FLAG_OPTIONS;
+    const options = translatedVocab ?? booleanFlagOptions(t);
     const selected = value.split(",").map((v) => v.trim()).filter(Boolean);
     return (
       <MultiSelect
@@ -78,7 +94,7 @@ function ValueInput({
       <Input
         value={value}
         onChange={(e) => onChange({ value: e.target.value })}
-        placeholder="US, CA, GB"
+        placeholder={t("filters.multiValuePlaceholder", { ns: "streamSets" })}
         className="h-7 w-48"
       />
     );
@@ -88,10 +104,10 @@ function ValueInput({
     return (
       <Select value={value || undefined} onValueChange={(v) => onChange({ value: v })}>
         <SelectTrigger size="sm" className="w-24">
-          <SelectValue placeholder="Select" />
+          <SelectValue placeholder={t("filters.selectPlaceholder", { ns: "streamSets" })} />
         </SelectTrigger>
         <SelectContent>
-          {BOOLEAN_FLAG_OPTIONS.map((o) => (
+          {booleanFlagOptions(t).map((o) => (
             <SelectItem key={o.value} value={o.value}>
               {o.label}
             </SelectItem>
@@ -101,14 +117,14 @@ function ValueInput({
     );
   }
 
-  if (vocab) {
+  if (translatedVocab) {
     return (
       <Select value={value || undefined} onValueChange={(v) => onChange({ value: v })}>
         <SelectTrigger size="sm" className="w-36">
-          <SelectValue placeholder="Select" />
+          <SelectValue placeholder={t("filters.selectPlaceholder", { ns: "streamSets" })} />
         </SelectTrigger>
         <SelectContent>
-          {vocab.map((o) => (
+          {translatedVocab.map((o) => (
             <SelectItem key={o.value} value={o.value}>
               {o.label}
             </SelectItem>
@@ -123,7 +139,13 @@ function ValueInput({
     <Input
       value={value}
       onChange={(e) => onChange({ value: field === "country" ? e.target.value.toUpperCase() : e.target.value })}
-      placeholder={isRegex ? "^utm_.*_2026$" : field === "country" ? "US, GB" : "value"}
+      placeholder={
+        isRegex
+          ? t("filters.regexPlaceholder", { ns: "streamSets" })
+          : field === "country"
+            ? t("filters.countryPlaceholder", { ns: "streamSets" })
+            : t("filters.valuePlaceholder", { ns: "streamSets" })
+      }
       className="h-7 w-44 font-mono"
     />
   );
@@ -138,11 +160,12 @@ export function FilterConditionEditor({
   onChange: (patch: Partial<FilterCondition>) => void;
   onRemove: () => void;
 }) {
+  const { t } = useTranslation(["streamSets", "common"]);
   const validationError =
     condition.operator === "MATCHES" && condition.value
-      ? checkRE2Compatible(condition.value)
+      ? checkRE2Compatible(condition.value, t)
       : condition.field === "country" && condition.value
-        ? validateCountryValue(condition.value)
+        ? validateCountryValue(condition.value, t)
         : null;
 
   return (
@@ -155,7 +178,7 @@ export function FilterConditionEditor({
           <SelectContent>
             {FIELD_GROUPS.map((group) => (
               <SelectGroup key={group.label}>
-                <SelectLabel>{group.label}</SelectLabel>
+                <SelectLabel>{t(FIELD_GROUP_I18N_KEY[group.label], { ns: "streamSets" })}</SelectLabel>
                 {group.fields.map((f) => (
                   <SelectItem key={f} value={f}>
                     {f}
@@ -176,15 +199,15 @@ export function FilterConditionEditor({
           <SelectContent>
             {FILTER_OPERATORS.map((op) => (
               <SelectItem key={op} value={op}>
-                {op.replace(/_/g, " ")}
+                {t(FILTER_OPERATOR_I18N_KEY[op], { ns: "streamSets" })}
               </SelectItem>
             ))}
           </SelectContent>
         </Select>
 
-        <ValueInput condition={condition} onChange={onChange} />
+        <ValueInput condition={condition} onChange={onChange} t={t} />
 
-        <IconButton aria-label="Remove condition" size="icon-sm" onClick={onRemove}>
+        <IconButton aria-label={t("filters.removeConditionAria", { ns: "streamSets" })} size="icon-sm" onClick={onRemove}>
           <XIcon className="size-3.5" />
         </IconButton>
       </div>

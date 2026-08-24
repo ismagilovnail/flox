@@ -1,6 +1,8 @@
 import type { LucideIcon } from "lucide-react";
 import { BellIcon, CheckCircle2Icon, LayoutTemplateIcon, MousePointerClickIcon, SendIcon, SmartphoneIcon } from "lucide-react";
 import { format } from "date-fns";
+import { useTranslation } from "react-i18next";
+import type { TFunction } from "i18next";
 
 import { Card } from "@/components/ui/card";
 import { Caption, Mono } from "@/components/ui/typography";
@@ -20,16 +22,16 @@ function iconFor(type: EventType): LucideIcon {
   return CheckCircle2Icon; // CPA_*
 }
 
-const CPA_LABEL: Record<CpaStatus, string> = {
-  CPA_HOLD: "Registration held",
-  CPA_ACCEPT: "First deposit accepted",
-  CPA_REDEP: "Re-deposit accepted",
-  CPA_DECLINE: "Conversion declined",
-  CPA_TRASH: "Marked junk/duplicate",
+const CPA_LABEL_I18N_KEY: Record<CpaStatus, string> = {
+  CPA_HOLD: "timeline.cpaLabel.hold",
+  CPA_ACCEPT: "timeline.cpaLabel.accept",
+  CPA_REDEP: "timeline.cpaLabel.redep",
+  CPA_DECLINE: "timeline.cpaLabel.decline",
+  CPA_TRASH: "timeline.cpaLabel.trash",
 };
 
-function labelFor(type: EventType): string {
-  if (type in CPA_LABEL) return CPA_LABEL[type as CpaStatus];
+function labelFor(type: EventType, t: TFunction): string {
+  if (type in CPA_LABEL_I18N_KEY) return t(CPA_LABEL_I18N_KEY[type as CpaStatus], { ns: "conversions" });
   return type
     .toLowerCase()
     .split("_")
@@ -42,6 +44,7 @@ function Connector() {
 }
 
 export function ConversionTimeline({ events }: { events: TimelineEvent[] }) {
+  const { t } = useTranslation("conversions");
   return (
     <div className="flex flex-col">
       {events.map((event, i) => {
@@ -54,14 +57,14 @@ export function ConversionTimeline({ events }: { events: TimelineEvent[] }) {
               </span>
               <div className="flex min-w-0 flex-1 flex-col">
                 <div className="flex items-center justify-between gap-2">
-                  <span className="text-sm font-medium">{labelFor(event.type)}</span>
+                  <span className="text-sm font-medium">{labelFor(event.type, t)}</span>
                   <Mono className="shrink-0 text-xs text-muted-foreground">
                     {format(new Date(event.eventAt), "MMM d, HH:mm:ss")}
                   </Mono>
                 </div>
                 {event.isConversion && (
                   <Caption className="text-muted-foreground/80">
-                    {event.hasUsdValue ? `${(event.revenue ?? 0).toFixed(2)} ${event.currency}` : "No revenue on this event"}
+                    {event.hasUsdValue ? `${(event.revenue ?? 0).toFixed(2)} ${event.currency}` : t("timeline.noRevenue")}
                   </Caption>
                 )}
               </div>

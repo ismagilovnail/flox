@@ -19,72 +19,75 @@ referenced below as §N).
 ## CURRENT STATE — UPDATE THIS EVERY PHASE
 
 ```
-CURRENT PHASE : PHASE (unnumbered) — Postback Logs (read-only)
-STATUS        : done — confirmed via AskUserQuestion (recommended) as
-                the last remaining piece of the Conversions/Postbacks
-                domain. A second AskUserQuestion split scope further once
-                inspection found the old mock's "Replay" button was a
-                genuine write action (re-invoking apps/internal
-                /conversion.Service.Record for an incoming row, or
-                re-enqueuing a apps/internal/postback delivery for an
-                outgoing one — both real and buildable with no schema
-                changes, but a second capability beyond a pure read view)
-                — user chose logs-list-only this phase, replay deferred
-                as its own follow-on.
-                Inspection also found the "Outgoing" tab was already
-                real (reuses NetworkList — a network's postbackUrl IS
-                the outgoing config, no second table). New
-                apps/internal/postbacklogs package (plural — distinct
-                from the existing singular apps/internal/postbacklog,
-                Phase 24's write-side queue/producer that feeds
-                postback_events, untouched this phase): GET
-                /postback-logs (org-wide, both directions mixed in one
-                list, date-ranged, paginated) — the first read methods
-                against postback_events (chstore.ListPostbackAttempts/
-                CountPostbackAttempts), previously write-only. Reused the
-                Conversions phase's date-only-`to`-parses-to-midnight fix
-                directly this time (already known, not rediscovered).
-                IncomingPostbacksPanel — flagged as a documented
-                inconsistency in the Event Mappings phase (still reading
-                mock useNetworksStore/useEventMappingsStore after Event
-                Mappings CRUD landed real) — switched to the real
-                useNetworks()/useEventMappings() hooks, closing that gap.
-                Once PostbackLogsPanel/postback-log-columns.tsx and
-                IncomingPostbacksPanel all moved to real hooks, a repo-
-                wide grep found stores/postback-logs.ts, lib/mock
-                /postback-logs.ts, stores/networks.ts, and lib/mock
-                /networks.ts had zero remaining importers — all four
-                deleted outright, same "drop it, don't fake it"
-                precedent as the Routing Simulator phase's stream-sets
-                mock/store pair. postback-log-columns.tsx's Replay
-                action column dropped entirely (not disabled/faked),
-                matching the scope decision above. See
-                docs/postback-logs.md.
-                Verified: go build/vet/gofmt/test ./... all green (2 new
-                chstore integration tests against real ClickHouse, 2 new
-                postbacklogs.Service unit tests against a fake repo);
-                tsc --noEmit/eslint clean; full manual browser pass —
-                created a real network and event mapping, seeded 4 real
-                postback_events rows (incoming success + outgoing
-                success pair, incoming error, outgoing retrying) via a
-                throwaway, never-committed InsertPostbackAttempts call;
-                confirmed the Logs tab renders all four correctly (raw
-                to mapped status for incoming, mapped-only for outgoing,
-                correct result badges across the wider real vocabulary,
-                no Replay column) and the Incoming tab now shows the
-                real network id and a correct real mapped-count badge.
-                Test network and its postback_events rows removed
-                afterward.
-LAST COMMIT   : feat(postback-logs): wire Postback Logs to real
-                ClickHouse-backed API (read-only, replay deferred)
+CURRENT PHASE : PHASE (unnumbered) — Frontend i18n (EN/RU foundation)
+STATUS        : done. Cross-cutting frontend infra phase added ahead of
+                the next domain per direct instruction — not part of the
+                numbered §9 build order. Picked up mid-phase: the
+                react-i18next foundation (lib/i18n/config.ts,
+                I18nProvider, LanguageSwitcher, useLocale()), all 11
+                namespaces' en+ru JSON (fully translated), and the
+                shell/common/Campaigns/Traffic Sources/Networks
+                component migrations already existed from earlier in
+                the session. This pass wired the six remaining
+                real-backed domains to the pre-written keys: Offers,
+                Stream Sets/Filters/Flows, Routing Simulator, Cost (the
+                Campaign detail Cost tab), Conversions, and Postbacks
+                (Event Mapping/Incoming/Outgoing/Logs panels).
+                Zod schemas converted to buildXFormSchema(t) factories
+                (validation messages need the live translator, matching
+                the existing buildSourceFormSchema/buildNetworkFormSchema
+                pattern); column-def factories take t as their first
+                arg (matching networkColumns). Added lib/filters.ts's
+                FILTER_OPERATOR_I18N_KEY (mirrors FIELD_GROUP_I18N_KEY)
+                and made checkRE2Compatible/validateCountryValue take a
+                TFunction; added lib/api/conversions.ts's
+                CPA_STATUS_I18N_KEY (same pattern as
+                SOURCE_TYPE_I18N_KEY), reused by Conversions, Event
+                Mapping, and Postback Logs for CPA status badges.
+                Manual browser verification found two real gaps beyond
+                the six domains' own files: campaign-detail-view.tsx
+                (the Campaign detail page's Overview/Cost/Simulator/
+                Settings tab chrome, stat cards, danger zone) was
+                entirely untranslated despite wrapping the newly-
+                migrated Cost/Simulator/Stream Sets content — wired it
+                to campaigns.json's already-complete but unused detail/
+                overview namespace. components/ui/multi-select.tsx (used
+                by Offers' Countries picker and Stream Sets' Values
+                picker) had a hardcoded "Search {label}..." template
+                that produced a mixed-language string once a translated
+                label was passed in — added common.multiSelect.* keys,
+                switched the component to useTranslation("common")
+                internally (same self-contained pattern data-table.tsx
+                uses). See docs/frontend-i18n.md for the full namespace
+                map and conventions.
+                Verified: tsc --noEmit/eslint/next build (production,
+                all 26 routes) all clean; vitest 15/15 passing; full
+                manual browser pass in both locales against the real
+                running api+web dev servers — created a real network,
+                offer, campaign, stream set (filter condition + device-
+                vocab value), and event mapping; confirmed correct ru
+                rendering across all six domains including a genuine
+                count=0 Russian plural form and the routing simulator's
+                full pipeline trace; confirmed backend-generated strings
+                (SimulateResult.destination.label/.stickyNote) correctly
+                stay in English per the documented backend boundary;
+                switched to en and confirmed the fallback locale still
+                renders correctly. Test network/offer/campaign archived
+                afterward (no hard-delete exists for these entities in
+                the UI).
+LAST COMMIT   : feat(i18n): wire remaining real-backed domains
+                (Offers, Stream Sets, Routing Simulator, Cost,
+                Conversions, Postbacks) to the EN/RU foundation
 NEXT          : confirm scope before starting. The Conversions/Postbacks
-                domain is now fully wired except for the deliberately-
+                domain is fully wired except for the deliberately-
                 deferred Replay action (its own follow-on candidate).
                 Other candidates: FB/TikTok ad-spend import (§74's
                 CostProvider interface, the "later" half of §27-COST);
                 Landing/PWA/Postlanding/Pixels CRUD (would unblock the
                 stages the Stream Sets phase had to drop from the Flow
-                editor); or Postback Replay itself.
+                editor); Postback Replay itself; or a third i18n locale
+                (the foundation supports adding one cheaply per
+                docs/frontend-i18n.md, but none has been requested).
 ```
 
 > At the end of every phase: update the four lines above, add a CHANGELOG entry,

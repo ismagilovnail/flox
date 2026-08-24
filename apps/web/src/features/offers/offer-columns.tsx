@@ -1,5 +1,6 @@
 import type { ColumnDef } from "@tanstack/react-table";
 import { formatDistanceToNow } from "date-fns";
+import type { TFunction } from "i18next";
 
 import { dataTableFeatures } from "@/components/ui/data-table";
 import { Badge } from "@/components/ui/badge";
@@ -15,13 +16,14 @@ const STATUS_VARIANT: Record<OfferStatus, "success" | "warning" | "secondary"> =
 };
 
 export function offerColumns(
+  t: TFunction,
   onEdit: (offer: Offer) => void,
   networkNameById: Record<string, string>,
 ): ColumnDef<typeof dataTableFeatures, Offer>[] {
   return [
     {
       accessorKey: "name",
-      header: "Name",
+      header: t("columns.name", { ns: "offers" }),
       cell: ({ row }) => (
         <button
           type="button"
@@ -34,12 +36,12 @@ export function offerColumns(
     },
     {
       id: "network",
-      header: "Network",
+      header: t("columns.network", { ns: "offers" }),
       accessorFn: (row) => networkNameById[row.networkId] ?? row.networkId,
     },
     {
       accessorKey: "countries",
-      header: "GEOs",
+      header: t("columns.geos", { ns: "offers" }),
       cell: ({ getValue }) => {
         const countries = getValue() as string[];
         return (
@@ -56,7 +58,7 @@ export function offerColumns(
     },
     {
       id: "payout",
-      header: "Payout",
+      header: t("columns.payout", { ns: "offers" }),
       accessorFn: (row) => row.payout,
       cell: ({ row }) => (
         <Mono>
@@ -66,29 +68,29 @@ export function offerColumns(
     },
     {
       accessorKey: "cap",
-      header: "Daily Cap",
+      header: t("columns.dailyCap", { ns: "offers" }),
       cell: ({ getValue }) => {
         const cap = getValue() as number | null;
-        return <Mono>{cap === null ? "Uncapped" : cap.toLocaleString("en-US")}</Mono>;
+        return <Mono>{cap === null ? t("columns.uncapped", { ns: "offers" }) : cap.toLocaleString("en-US")}</Mono>;
       },
     },
     {
       accessorKey: "status",
-      header: "Status",
+      header: t("columns.status", { ns: "offers" }),
       cell: ({ getValue }) => {
         const status = getValue() as OfferStatus;
-        return <Badge variant={STATUS_VARIANT[status]}>{status}</Badge>;
+        return <Badge variant={STATUS_VARIANT[status]}>{t(`status.${status}`, { ns: "common" })}</Badge>;
       },
     },
     {
       id: "tags",
-      header: "Tags",
+      header: t("columns.tags", { ns: "offers" }),
       enableSorting: false,
       cell: ({ row }) => <TagBadgeList entityType="offer" entityId={row.original.id} />,
     },
     {
       accessorKey: "updatedAt",
-      header: "Updated",
+      header: t("columns.updated", { ns: "offers" }),
       cell: ({ getValue }) => (
         <Caption>{formatDistanceToNow(new Date(getValue() as string), { addSuffix: true })}</Caption>
       ),

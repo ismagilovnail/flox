@@ -1,0 +1,39 @@
+{
+  "form": {
+    "title": "Add or update spend",
+    "description": "One entry per day (optionally per source) — entering a day that already has spend updates it, it never stacks.",
+    "dateLabel": "Date",
+    "sourceLabel": "Source",
+    "allSources": "All sources",
+    "amountLabel": "Amount",
+    "currencyLabel": "Currency",
+    "currencyPlaceholder": "USD",
+    "submitButton": "Save spend",
+    "validation": {
+      "required": "Required",
+      "amountInvalid": "Must be a non-negative number",
+      "currencyInvalid": "3-letter code, e.g. USD"
+    }
+  },
+  "columns": {
+    "date": "Date",
+    "source": "Source",
+    "amount": "Amount",
+    "amountUsd": "USD",
+    "pendingFxRate": "pending FX rate"
+  },
+  "list": {
+    "deleteAria": "Delete entry",
+    "loading": "Loading spend entries…",
+    "loadError": "Couldn't load spend entries",
+    "emptyTitle": "No spend logged yet",
+    "emptyDescription": "Add a day's spend above to start tracking Profit/ROI/CPA on the Overview tab."
+  },
+  "toast": {
+    "saved": "Spend saved",
+    "savedDescription": "{{date}} — {{amount}} {{currency}}",
+    "saveError": "Couldn't save spend",
+    "removed": "Entry removed",
+    "removeError": "Couldn't remove entry"
+  }
+}

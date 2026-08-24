@@ -2,11 +2,13 @@
 
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
+import { useTranslation } from "react-i18next";
 
 import { useCreateCampaign } from "@/hooks/use-campaigns";
 import { CampaignForm, type CampaignFormValues } from "@/features/campaigns/campaign-form";
 
 export function NewCampaignView() {
+  const { t } = useTranslation("campaigns");
   const router = useRouter();
   const createCampaign = useCreateCampaign();
 
@@ -20,18 +22,18 @@ export function NewCampaignView() {
       },
       {
         onSuccess: (created) => {
-          toast("Campaign created", { description: created.name });
+          toast(t("toast.created"), { description: created.name });
           router.push(`/campaigns/${created.id}`);
         },
-        onError: (err) => toast.error("Couldn't create campaign", { description: err.message }),
+        onError: (err) => toast.error(t("toast.createError"), { description: err.message }),
       },
     );
   }
 
   return (
     <div className="flex flex-col gap-4">
-      <h1 className="text-2xl font-semibold tracking-tight">New Campaign</h1>
-      <CampaignForm defaultValues={{}} submitLabel="Create campaign" onSubmit={handleSubmit} />
+      <h1 className="text-2xl font-semibold tracking-tight">{t("newCampaign.title")}</h1>
+      <CampaignForm defaultValues={{}} submitLabel={t("newCampaign.submitButton")} onSubmit={handleSubmit} />
     </div>
   );
 }

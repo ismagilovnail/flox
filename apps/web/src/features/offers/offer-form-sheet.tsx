@@ -4,6 +4,8 @@ import { Controller, useFieldArray, useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { PlusIcon, XIcon } from "lucide-react";
 import { z } from "zod";
+import { useTranslation } from "react-i18next";
+import type { TFunction } from "i18next";
 
 import { Button } from "@/components/ui/button";
 import { IconButton } from "@/components/ui/icon-button";
@@ -26,24 +28,31 @@ import { COUNTRIES, CURRENCIES } from "@/lib/countries";
 import type { OfferStatus } from "@/lib/api/offers";
 import type { Network } from "@/lib/api/networks";
 
-const linkSchema = z.object({
-  id: z.string(),
-  label: z.string().min(1, "Label required").max(40),
-  url: z.url("Enter a valid URL"),
-});
+/** Factory, not a module-level const — see source-form-sheet.tsx's
+ * buildSourceFormSchema for why (Zod messages are user-facing text and
+ * need the live translator). */
+export function buildOfferFormSchema(t: TFunction) {
+  const linkSchema = z.object({
+    id: z.string(),
+    label: z.string().min(1, t("form.validation.linkLabelRequired", { ns: "offers" })).max(40),
+    url: z.url(t("form.validation.urlInvalid", { ns: "offers" })),
+  });
 
-export const offerFormSchema = z.object({
-  networkId: z.string().min(1, "Select a network"),
-  name: z.string().min(2, "Name must be at least 2 characters").max(100),
-  countries: z.array(z.string()).min(1, "Select at least one country"),
-  payout: z.number("Enter a payout amount").positive("Payout must be greater than 0"),
-  currency: z.enum(CURRENCIES as [string, ...string[]]),
-  cap: z.string().regex(/^\d*$/, "Cap must be a whole number"),
-  status: z.enum(["active", "paused", "archived"] as [OfferStatus, ...OfferStatus[]]).optional(),
-  links: z.array(linkSchema).min(1, "Add at least one offer link"),
-});
+  return z.object({
+    networkId: z.string().min(1, t("form.validation.networkRequired", { ns: "offers" })),
+    name: z.string().min(2, t("form.validation.nameMin", { ns: "offers" })).max(100),
+    countries: z.array(z.string()).min(1, t("form.validation.countriesMin", { ns: "offers" })),
+    payout: z
+      .number(t("form.validation.payoutRequired", { ns: "offers" }))
+      .positive(t("form.validation.payoutPositive", { ns: "offers" })),
+    currency: z.enum(CURRENCIES as [string, ...string[]]),
+    cap: z.string().regex(/^\d*$/, t("form.validation.capFormat", { ns: "offers" })),
+    status: z.enum(["active", "paused", "archived"] as [OfferStatus, ...OfferStatus[]]).optional(),
+    links: z.array(linkSchema).min(1, t("form.validation.linksMin", { ns: "offers" })),
+  });
+}
 
-export type OfferFormValues = z.infer<typeof offerFormSchema>;
+export type OfferFormValues = z.infer<ReturnType<typeof buildOfferFormSchema>>;
 
 const STATUS_OPTIONS: OfferStatus[] = ["active", "paused", "archived"];
 const COUNTRY_OPTIONS = COUNTRIES.map((c) => ({ value: c.code, label: `${c.code} — ${c.name}` }));
@@ -75,8 +84,9 @@ export function OfferFormSheet({
   // (offer-list.tsx) remounts this component via `key={target?.id ??
   // "new"}` when switching targets, so defaultValues (read once on mount)
   // is sufficient — same pattern the original mock-backed version used.
+  const { t } = useTranslation(["offers", "common"]);
   const form = useForm<OfferFormValues>({
-    resolver: zodResolver(offerFormSchema),
+    resolver: zodResolver(buildOfferFormSchema(t)),
     defaultValues: {
       networkId: networks[0]?.id ?? "",
       name: "",
@@ -106,28 +116,31 @@ export function OfferFormSheet({
       <SheetContent className="w-full gap-0 overflow-y-auto sm:max-w-xl" side="right">
         <SheetHeader>
           <SheetTitle>{title}</SheetTitle>
-          <SheetDescription>
-            Offers belong to a network and carry one or more tracking links (§27: Network → Offer → Offer Link).
-          </SheetDescription>
+          <SheetDescription>{t("form.description", { ns: "offers" })}</SheetDescription>
         </SheetHeader>
 
         <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-4 px-4 pb-4">
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="grid gap-1.5">
-              <Label htmlFor="off-name">Name</Label>
-              <Input id="off-name" placeholder="US Sweeps — CPA $12" {...register("name")} aria-invalid={!!errors.name} />
+              <Label htmlFor="off-name">{t("form.nameLabel", { ns: "offers" })}</Label>
+              <Input
+                id="off-name"
+                placeholder={t("form.namePlaceholder", { ns: "offers" })}
+                {...register("name")}
+                aria-invalid={!!errors.name}
+              />
               {errors.name && <p className="text-xs text-danger">{errors.name.message}</p>}
             </div>
 
             <div className="grid gap-1.5">
-              <Label htmlFor="off-network">Network</Label>
+              <Label htmlFor="off-network">{t("form.networkLabel", { ns: "offers" })}</Label>
               <Controller
                 control={control}
                 name="networkId"
                 render={({ field }) => (
                   <Select value={field.value} onValueChange={field.onChange}>
                     <SelectTrigger id="off-network" className="w-full">
-                      <SelectValue placeholder="Choose network" />
+                      <SelectValue placeholder={t("form.networkPlaceholder", { ns: "offers" })} />
                     </SelectTrigger>
                     <SelectContent>
                       {networks.map((n) => (
@@ -144,13 +157,13 @@ export function OfferFormSheet({
           </div>
 
           <div className="grid gap-1.5">
-            <Label>Countries</Label>
+            <Label>{t("form.countriesLabel", { ns: "offers" })}</Label>
             <Controller
               control={control}
               name="countries"
               render={({ field }) => (
                 <MultiSelect
-                  label="GEOs"
+                  label={t("form.countriesMultiSelectLabel", { ns: "offers" })}
                   options={COUNTRY_OPTIONS}
                   selected={field.value}
                   onChange={field.onChange}
@@ -163,7 +176,7 @@ export function OfferFormSheet({
 
           <div className="grid gap-4 sm:grid-cols-3">
             <div className="grid gap-1.5">
-              <Label htmlFor="off-payout">Payout</Label>
+              <Label htmlFor="off-payout">{t("form.payoutLabel", { ns: "offers" })}</Label>
               <Input
                 id="off-payout"
                 type="number"
@@ -176,7 +189,7 @@ export function OfferFormSheet({
             </div>
 
             <div className="grid gap-1.5">
-              <Label htmlFor="off-currency">Currency</Label>
+              <Label htmlFor="off-currency">{t("form.currencyLabel", { ns: "offers" })}</Label>
               <Controller
                 control={control}
                 name="currency"
@@ -198,15 +211,20 @@ export function OfferFormSheet({
             </div>
 
             <div className="grid gap-1.5">
-              <Label htmlFor="off-cap">Daily cap</Label>
-              <Input id="off-cap" placeholder="Uncapped" {...register("cap")} aria-invalid={!!errors.cap} />
+              <Label htmlFor="off-cap">{t("form.dailyCapLabel", { ns: "offers" })}</Label>
+              <Input
+                id="off-cap"
+                placeholder={t("form.dailyCapPlaceholder", { ns: "offers" })}
+                {...register("cap")}
+                aria-invalid={!!errors.cap}
+              />
               {errors.cap && <p className="text-xs text-danger">{errors.cap.message}</p>}
             </div>
           </div>
 
           {showStatus && (
             <div className="grid gap-1.5">
-              <Label htmlFor="off-status">Status</Label>
+              <Label htmlFor="off-status">{t("form.statusLabel", { ns: "offers" })}</Label>
               <Controller
                 control={control}
                 name="status"
@@ -218,7 +236,7 @@ export function OfferFormSheet({
                     <SelectContent>
                       {STATUS_OPTIONS.map((s) => (
                         <SelectItem key={s} value={s}>
-                          {s}
+                          {t(`status.${s}`, { ns: "common" })}
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -232,10 +250,8 @@ export function OfferFormSheet({
 
           <div className="flex flex-col gap-3">
             <div>
-              <h3 className="text-sm font-medium">Offer links</h3>
-              <p className="text-xs text-muted-foreground">
-                Primary + backup tracking links. URLs support the shared macro system.
-              </p>
+              <h3 className="text-sm font-medium">{t("form.linksTitle", { ns: "offers" })}</h3>
+              <p className="text-xs text-muted-foreground">{t("form.linksDescription", { ns: "offers" })}</p>
             </div>
 
             <div className="flex flex-col gap-3">
@@ -244,7 +260,7 @@ export function OfferFormSheet({
                   <div className="flex items-center gap-2">
                     <Input
                       {...register(`links.${index}.label`)}
-                      placeholder="Label (e.g. Primary)"
+                      placeholder={t("form.linkLabelPlaceholder", { ns: "offers" })}
                       className="h-7 w-36"
                     />
                     <MacroPicker
@@ -253,7 +269,7 @@ export function OfferFormSheet({
                       }
                     />
                     <IconButton
-                      aria-label="Remove link"
+                      aria-label={t("form.removeLinkAria", { ns: "offers" })}
                       size="icon-sm"
                       className="ml-auto"
                       onClick={() => linkArray.remove(index)}
@@ -264,7 +280,7 @@ export function OfferFormSheet({
                   </div>
                   <Input
                     {...register(`links.${index}.url`)}
-                    placeholder="https://network.example/click?click_id={click_id}"
+                    placeholder={t("form.linkUrlPlaceholder", { ns: "offers" })}
                     className="font-mono text-xs"
                   />
                   {errors.links?.[index]?.label && (
@@ -283,15 +299,21 @@ export function OfferFormSheet({
               variant="outline"
               size="sm"
               className="self-start"
-              onClick={() => linkArray.append({ id: genId(), label: `Link ${linkArray.fields.length + 1}`, url: "" })}
+              onClick={() =>
+                linkArray.append({
+                  id: genId(),
+                  label: t("form.addLinkDefaultLabel", { ns: "offers", n: linkArray.fields.length + 1 }),
+                  url: "",
+                })
+              }
             >
-              <PlusIcon className="size-3.5" /> Add link
+              <PlusIcon className="size-3.5" /> {t("form.addLinkButton", { ns: "offers" })}
             </Button>
           </div>
 
           <SheetFooter className="mt-0 flex-row justify-end gap-2 p-0">
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
-              Cancel
+              {t("actions.cancel", { ns: "common" })}
             </Button>
             <Button type="submit" disabled={isSubmitting}>
               {submitLabel}

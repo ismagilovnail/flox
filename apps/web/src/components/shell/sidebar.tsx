@@ -1,6 +1,7 @@
 "use client";
 
 import { PanelLeftIcon } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
 import { cn } from "@/lib/utils";
 import { useSidebarStore } from "@/stores/sidebar";
@@ -10,6 +11,7 @@ import { IconButton } from "@/components/ui/icon-button";
 export function Sidebar() {
   const collapsed = useSidebarStore((s) => s.collapsed);
   const toggle = useSidebarStore((s) => s.toggle);
+  const { t } = useTranslation("nav");
 
   return (
     <aside
@@ -23,7 +25,7 @@ export function Sidebar() {
       </div>
       <div className="flex items-center justify-end border-t border-border p-2">
         <IconButton
-          aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+          aria-label={t(collapsed ? "sidebar.expandAria" : "sidebar.collapseAria")}
           variant="ghost"
           size="icon-sm"
           onClick={toggle}

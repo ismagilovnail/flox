@@ -1,0 +1,47 @@
+{
+  "brand": "FLOX",
+  "groups": {
+    "traffic": "Traffic",
+    "pages": "Pages",
+    "conversions": "Conversions",
+    "insights": "Insights",
+    "growth": "Growth"
+  },
+  "items": {
+    "overview": "Overview",
+    "analytics": "Analytics",
+    "campaigns": "Campaigns",
+    "trafficSources": "Traffic Sources",
+    "offers": "Offers",
+    "networks": "Networks",
+    "landings": "Landings",
+    "pwa": "PWA",
+    "postlanding": "Postlanding",
+    "domains": "Domains",
+    "conversions": "Conversions",
+    "postbacks": "Postbacks",
+    "pixels": "Pixels",
+    "reports": "Reports",
+    "ltvCohorts": "LTV / Cohorts",
+    "push": "Push",
+    "referral": "Referral",
+    "contentGallery": "Content Gallery",
+    "team": "Team",
+    "settings": "Settings"
+  },
+  "commandPalette": {
+    "defaultGroupHeading": "Go to",
+    "searchPlaceholder": "Search campaigns, offers, flows…",
+    "noResults": "No results."
+  },
+  "sidebar": {
+    "expandAria": "Expand sidebar",
+    "collapseAria": "Collapse sidebar",
+    "openNavigationAria": "Open navigation",
+    "navigationTitle": "Navigation"
+  },
+  "topbar": {
+    "searchPlaceholder": "Search…",
+    "searchAria": "Search"
+  }
+}

@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
+import { useTranslation } from "react-i18next";
 
 import { COMMAND_GROUPS } from "@/lib/nav";
 import { useCommandMenuStore } from "@/stores/command-menu";
@@ -20,6 +21,7 @@ export function CommandMenu() {
   const setOpen = useCommandMenuStore((s) => s.setOpen);
   const toggle = useCommandMenuStore((s) => s.toggle);
   const router = useRouter();
+  const { t } = useTranslation("nav");
 
   React.useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
@@ -40,19 +42,22 @@ export function CommandMenu() {
   return (
     <CommandDialog open={open} onOpenChange={setOpen}>
       <Command>
-        <CommandInput placeholder="Search campaigns, offers, flows…" />
+        <CommandInput placeholder={t("commandPalette.searchPlaceholder")} />
         <CommandList>
-          <CommandEmpty>No results.</CommandEmpty>
+          <CommandEmpty>{t("commandPalette.noResults")}</CommandEmpty>
           {COMMAND_GROUPS.map((group, i) => (
-            <CommandGroup key={group.label ?? i} heading={group.label ?? "Go to"}>
+            <CommandGroup
+              key={group.label ?? i}
+              heading={group.label ? t(group.label) : t("commandPalette.defaultGroupHeading")}
+            >
               {group.items.map((item) => (
                 <CommandItem
                   key={item.href}
-                  value={item.label}
+                  value={t(item.label)}
                   onSelect={() => go(item.href)}
                 >
                   <item.icon className="size-4" />
-                  {item.label}
+                  {t(item.label)}
                 </CommandItem>
               ))}
             </CommandGroup>

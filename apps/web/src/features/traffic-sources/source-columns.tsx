@@ -1,10 +1,11 @@
 import type { ColumnDef } from "@tanstack/react-table";
 import { formatDistanceToNow } from "date-fns";
+import type { TFunction } from "i18next";
 
 import { dataTableFeatures } from "@/components/ui/data-table";
 import { Badge } from "@/components/ui/badge";
 import { Caption, Mono } from "@/components/ui/typography";
-import { COST_INTEGRATION_LABELS, type SourceStatus, type TrafficSource } from "@/lib/api/traffic-sources";
+import { COST_INTEGRATION_I18N_KEY, SOURCE_TYPE_I18N_KEY, type SourceStatus, type SourceType, type TrafficSource } from "@/lib/api/traffic-sources";
 import { SourceRowActions } from "@/features/traffic-sources/source-row-actions";
 import { TagBadgeList } from "@/features/tags/tag-badge-list";
 
@@ -14,11 +15,14 @@ const STATUS_VARIANT: Record<SourceStatus, "success" | "warning" | "secondary"> 
   archived: "secondary",
 };
 
-export function sourceColumns(onEdit: (source: TrafficSource) => void): ColumnDef<typeof dataTableFeatures, TrafficSource>[] {
+export function sourceColumns(
+  t: TFunction,
+  onEdit: (source: TrafficSource) => void,
+): ColumnDef<typeof dataTableFeatures, TrafficSource>[] {
   return [
     {
       accessorKey: "name",
-      header: "Name",
+      header: t("columns.name", { ns: "trafficSources" }),
       cell: ({ row }) => (
         <button
           type="button"
@@ -29,41 +33,49 @@ export function sourceColumns(onEdit: (source: TrafficSource) => void): ColumnDe
         </button>
       ),
     },
-    { accessorKey: "type", header: "Type" },
+    {
+      accessorKey: "type",
+      header: t("columns.type", { ns: "trafficSources" }),
+      cell: ({ getValue }) => {
+        const type = getValue() as string;
+        const key = SOURCE_TYPE_I18N_KEY[type as SourceType];
+        return key ? t(key, { ns: "trafficSources" }) : type;
+      },
+    },
     {
       accessorKey: "trackingTemplate",
-      header: "Tracking template",
+      header: t("columns.trackingTemplate", { ns: "trafficSources" }),
       cell: ({ getValue }) => <Mono className="block max-w-md truncate text-xs">{getValue() as string}</Mono>,
     },
     {
       accessorKey: "costIntegration",
-      header: "Cost integration",
+      header: t("columns.costIntegration", { ns: "trafficSources" }),
       cell: ({ getValue }) => {
         const integration = getValue() as TrafficSource["costIntegration"];
         return (
           <Badge variant={integration === "none" ? "outline" : "secondary"}>
-            {COST_INTEGRATION_LABELS[integration]}
+            {t(COST_INTEGRATION_I18N_KEY[integration], { ns: "trafficSources" })}
           </Badge>
         );
       },
     },
     {
       accessorKey: "status",
-      header: "Status",
+      header: t("columns.status", { ns: "trafficSources" }),
       cell: ({ getValue }) => {
         const status = getValue() as SourceStatus;
-        return <Badge variant={STATUS_VARIANT[status]}>{status}</Badge>;
+        return <Badge variant={STATUS_VARIANT[status]}>{t(`status.${status}`, { ns: "common" })}</Badge>;
       },
     },
     {
       id: "tags",
-      header: "Tags",
+      header: t("columns.tags", { ns: "trafficSources" }),
       enableSorting: false,
       cell: ({ row }) => <TagBadgeList entityType="traffic_source" entityId={row.original.id} />,
     },
     {
       accessorKey: "updatedAt",
-      header: "Updated",
+      header: t("columns.updated", { ns: "trafficSources" }),
       cell: ({ getValue }) => (
         <Caption>{formatDistanceToNow(new Date(getValue() as string), { addSuffix: true })}</Caption>
       ),

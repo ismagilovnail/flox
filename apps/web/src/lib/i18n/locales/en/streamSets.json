@@ -1,0 +1,152 @@
+{
+  "filters": {
+    "groups": {
+      "geo": "Geo",
+      "device": "Device",
+      "fraud": "Fraud",
+      "traffic": "Traffic",
+      "custom": "Custom"
+    },
+    "operators": {
+      "is": "is",
+      "isNot": "is not",
+      "in": "in",
+      "notIn": "not in",
+      "contains": "contains",
+      "notContains": "does not contain",
+      "startsWith": "starts with",
+      "endsWith": "ends with",
+      "matches": "matches",
+      "exists": "exists",
+      "notExists": "does not exist",
+      "gt": ">",
+      "gte": ">=",
+      "lt": "<",
+      "lte": "<=",
+      "between": "between"
+    },
+    "vocab": {
+      "device": { "mobile": "Mobile", "desktop": "Desktop", "tablet": "Tablet" },
+      "platform": { "ios": "iOS", "android": "Android", "windows": "Windows", "macos": "macOS", "linux": "Linux" },
+      "os": { "ios": "iOS", "android": "Android", "windows": "Windows", "macos": "macOS", "linux": "Linux" },
+      "browser": { "chrome": "Chrome", "safari": "Safari", "firefox": "Firefox", "edge": "Edge", "samsung_internet": "Samsung Internet", "other": "Other" },
+      "connection_type": { "wifi": "Wi-Fi", "cellular": "Cellular", "ethernet": "Ethernet", "unknown": "Unknown" }
+    },
+    "booleanNo": "No",
+    "booleanYes": "Yes",
+    "noValueNeeded": "No value needed",
+    "rangeFromPlaceholder": "from",
+    "rangeToPlaceholder": "to",
+    "rangeAnd": "and",
+    "multiValuePlaceholder": "US, CA, GB",
+    "selectPlaceholder": "Select",
+    "regexPlaceholder": "^utm_.*_2026$",
+    "countryPlaceholder": "US, GB",
+    "valuePlaceholder": "value",
+    "removeConditionAria": "Remove condition"
+  },
+  "filterGroupBuilder": {
+    "matchAll": "Match all",
+    "matchAny": "Match any",
+    "removeGroupAria": "Remove group",
+    "emptyGroupText": "Empty group — matches all traffic",
+    "addCondition": "Condition",
+    "addGroup": "Group"
+  },
+  "flowDestination": {
+    "offer": "Offer",
+    "redirect": "Redirect",
+    "fallback": "Fallback",
+    "fallbackUsed": "Used if this flow can't be resolved: {{url}}",
+    "fallbackNotSet": "No fallback set — the campaign fallback applies",
+    "chooseOfferPlaceholder": "Choose offer",
+    "redirectUrlPlaceholder": "https://example.com"
+  },
+  "flowEditor": {
+    "collapseAria": "Collapse flow",
+    "expandAria": "Expand flow",
+    "namePlaceholder": "Flow name",
+    "weightLabel": "weight → {{percent}}",
+    "disableAria": "Disable flow",
+    "enableAria": "Enable flow",
+    "duplicateAria": "Duplicate {{name}}",
+    "removeAria": "Remove {{name}}"
+  },
+  "flowNode": {
+    "skipped": "Skipped",
+    "configured": "Configured",
+    "needsSetup": "Needs setup",
+    "copyUrlAria": "Copy {{label}} URL",
+    "enableAria": "Enable {{label}}",
+    "urlCopiedToast": "{{label}} URL copied"
+  },
+  "form": {
+    "description": "Stream sets are evaluated top-to-bottom by priority — the first one whose filters match wins.",
+    "nameLabel": "Name",
+    "statusLabel": "Status",
+    "filtersTitle": "Filters",
+    "filtersDescription": "An empty top-level group matches all traffic. Nest groups to mix AND/OR — e.g. country IS US AND device IN [mobile, tablet] AND (OS IS Android OR OS IS iOS).",
+    "filtersError": "Fix the highlighted filter condition(s) above before saving.",
+    "flowsTitle": "Flows",
+    "flowsDescription": "Each flow routes to an Offer or a Redirect URL. Weight is a raw number — the engine normalizes it to a percentage across active flows.",
+    "addFlow": "Add flow",
+    "totalWeight": "Total weight: {{weight}}",
+    "fallbackLabel": "Fallback URL (optional)",
+    "fallbackPlaceholder": "Falls back to the campaign fallback if empty",
+    "fallbackHint": "Used if this set matches but no flow can be resolved. Otherwise the campaign fallback applies.",
+    "titleNew": "New Stream Set",
+    "titleEdit": "Edit {{name}}",
+    "submitCreate": "Create stream set",
+    "submitEdit": "Save changes",
+    "flowCopySuffix": "{{name}} (Copy)",
+    "validation": {
+      "nameMin": "Name must be at least 2 characters",
+      "urlInvalid": "Enter a valid URL",
+      "chooseOffer": "Choose an offer",
+      "flowNameRequired": "Name is required",
+      "weightNegative": "Weight can't be negative",
+      "atLeastOneFlow": "At least one flow is required",
+      "chooseValue": "Value is required",
+      "bothRangeBounds": "Enter both range bounds",
+      "notIso2": "\"{{value}}\" is not a 2-letter ISO-3166 country code (e.g. US, GB, DE)",
+      "ukNotIso": "\"UK\" is not an ISO-3166 code — use \"GB\" for United Kingdom",
+      "patternRequired": "Pattern is required",
+      "patternTooLong": "Pattern too long (200 char max)",
+      "noLookahead": "Lookahead assertions aren't supported by RE2",
+      "noLookbehind": "Lookbehind assertions aren't supported by RE2",
+      "noBackreferences": "Backreferences aren't supported by RE2",
+      "noAtomicGroups": "Atomic groups aren't supported by RE2",
+      "noPossessiveQuantifiers": "Possessive quantifiers aren't supported by RE2",
+      "invalidRegex": "Invalid regular expression syntax"
+    }
+  },
+  "list": {
+    "title": "Stream Sets",
+    "description": "Evaluated top-to-bottom by priority — the first set whose filters match wins. No match falls back to the campaign fallback in Settings.",
+    "newButton": "New Stream Set",
+    "loading": "Loading stream sets…",
+    "loadError": "Couldn't load stream sets",
+    "loadNetworksOffersError": "Couldn't load networks/offers",
+    "emptyTitle": "No stream sets yet",
+    "emptyDescription": "All traffic falls through to the campaign fallback URL until you add one.",
+    "reorderError": "Couldn't reorder stream sets"
+  },
+  "toast": {
+    "duplicated": "Stream set duplicated",
+    "duplicateError": "Couldn't duplicate stream set",
+    "updateError": "Couldn't update stream set",
+    "updated": "Stream set updated",
+    "created": "Stream set created",
+    "createError": "Couldn't create stream set"
+  },
+  "row": {
+    "reorderAria": "Reorder {{name}}",
+    "disableAria": "Disable stream set",
+    "enableAria": "Enable stream set",
+    "editAria": "Edit {{name}}",
+    "moreActionsAria": "More actions for {{name}}",
+    "duplicate": "Duplicate",
+    "noFilters": "No filters — matches all traffic",
+    "noOffer": "No offer"
+  }
+}

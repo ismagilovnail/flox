@@ -1,0 +1,39 @@
+{
+  "form": {
+    "title": "Добавить или обновить расход",
+    "description": "Одна запись на день (опционально на источник) — ввод дня, на который расход уже есть, обновляет его, а не складывает.",
+    "dateLabel": "Дата",
+    "sourceLabel": "Источник",
+    "allSources": "Все источники",
+    "amountLabel": "Сумма",
+    "currencyLabel": "Валюта",
+    "currencyPlaceholder": "USD",
+    "submitButton": "Сохранить расход",
+    "validation": {
+      "required": "Обязательное поле",
+      "amountInvalid": "Должно быть неотрицательным числом",
+      "currencyInvalid": "Код из 3 букв, например USD"
+    }
+  },
+  "columns": {
+    "date": "Дата",
+    "source": "Источник",
+    "amount": "Сумма",
+    "amountUsd": "USD",
+    "pendingFxRate": "ожидает курс валют"
+  },
+  "list": {
+    "deleteAria": "Удалить запись",
+    "loading": "Загрузка расходов…",
+    "loadError": "Не удалось загрузить расходы",
+    "emptyTitle": "Расходы ещё не внесены",
+    "emptyDescription": "Добавьте расход за день выше, чтобы отслеживать Прибыль/ROI/CPA на вкладке «Обзор»."
+  },
+  "toast": {
+    "saved": "Расход сохранён",
+    "savedDescription": "{{date}} — {{amount}} {{currency}}",
+    "saveError": "Не удалось сохранить расход",
+    "removed": "Запись удалена",
+    "removeError": "Не удалось удалить запись"
+  }
+}

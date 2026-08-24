@@ -2,6 +2,7 @@
 
 import { toast } from "sonner";
 import { CopyIcon } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -18,22 +19,23 @@ function incomingUrl(networkId: string) {
 }
 
 export function IncomingPostbacksPanel() {
+  const { t } = useTranslation("postbacks");
   const networksQuery = useNetworks();
   const mappingsQuery = useEventMappings();
 
   function copy(url: string) {
     navigator.clipboard.writeText(url);
-    toast("Incoming postback URL copied", { description: url });
+    toast(t("incoming.copyToastTitle"), { description: url });
   }
 
   if (networksQuery.isPending || mappingsQuery.isPending) {
-    return <LoadingState label="Loading networks…" />;
+    return <LoadingState label={t("incoming.loading")} />;
   }
 
   if (networksQuery.isError) {
     return (
       <ErrorState
-        title="Couldn't load networks"
+        title={t("incoming.loadNetworksError")}
         description={networksQuery.error.message}
         onRetry={() => networksQuery.refetch()}
       />
@@ -42,7 +44,7 @@ export function IncomingPostbacksPanel() {
   if (mappingsQuery.isError) {
     return (
       <ErrorState
-        title="Couldn't load event mappings"
+        title={t("incoming.loadMappingsError")}
         description={mappingsQuery.error.message}
         onRetry={() => mappingsQuery.refetch()}
       />
@@ -55,11 +57,7 @@ export function IncomingPostbacksPanel() {
   return (
     <div className="flex flex-col gap-4">
       <Alert>
-        <AlertDescription>
-          Give each network this URL so they can report conversions into FLOX. Dedup applies on (click_id, status)
-          — §45 — unless the network has &ldquo;Accept duplicate postbacks&rdquo; on. Raw status strings are
-          translated to FLOX statuses via Event Mapping.
-        </AlertDescription>
+        <AlertDescription>{t("incoming.description")}</AlertDescription>
       </Alert>
 
       <div className="flex flex-col gap-3">
@@ -72,13 +70,17 @@ export function IncomingPostbacksPanel() {
                 <CardTitle className="text-sm">{network.name}</CardTitle>
                 <CardDescription>
                   <Badge variant={mappedCount > 0 ? "outline" : "warning"}>
-                    {mappedCount} status{mappedCount === 1 ? "" : "es"} mapped
+                    {t("incoming.mappedCount", { count: mappedCount })}
                   </Badge>
                 </CardDescription>
               </CardHeader>
               <CardContent className="flex items-center gap-2">
                 <Mono className="min-w-0 flex-1 truncate text-xs">{url}</Mono>
-                <IconButton aria-label={`Copy incoming URL for ${network.name}`} size="icon-sm" onClick={() => copy(url)}>
+                <IconButton
+                  aria-label={t("incoming.copyAria", { name: network.name })}
+                  size="icon-sm"
+                  onClick={() => copy(url)}
+                >
                   <CopyIcon className="size-3.5" />
                 </IconButton>
               </CardContent>
@@ -86,7 +88,7 @@ export function IncomingPostbacksPanel() {
           );
         })}
       </div>
-      {networks.length === 0 && <p className="text-sm text-muted-foreground">No networks yet — add one on the Networks page first.</p>}
+      {networks.length === 0 && <p className="text-sm text-muted-foreground">{t("incoming.noNetworks")}</p>}
     </div>
   );
 }

@@ -3,6 +3,7 @@
 import * as React from "react";
 import { CopyIcon } from "lucide-react";
 import { toast } from "sonner";
+import { useTranslation } from "react-i18next";
 
 import { Badge } from "@/components/ui/badge";
 import { IconButton } from "@/components/ui/icon-button";
@@ -37,13 +38,18 @@ export function FlowNode({
   ghost?: boolean;
   children?: React.ReactNode;
 }) {
+  const { t } = useTranslation("streamSets");
   const statusVariant = !enabled ? "secondary" : configured ? "success" : "warning";
-  const statusLabel = !enabled ? "Skipped" : configured ? "Configured" : "Needs setup";
+  const statusLabel = !enabled
+    ? t("flowNode.skipped")
+    : configured
+      ? t("flowNode.configured")
+      : t("flowNode.needsSetup");
 
   function copyPreview() {
     if (!previewUrl) return;
     navigator.clipboard.writeText(previewUrl);
-    toast(`${label} URL copied`, { description: previewUrl });
+    toast(t("flowNode.urlCopiedToast", { label }), { description: previewUrl });
   }
 
   return (
@@ -61,12 +67,17 @@ export function FlowNode({
         </div>
         <div className="flex items-center gap-1">
           {previewUrl && (
-            <IconButton aria-label={`Copy ${label} URL`} size="icon-sm" onClick={copyPreview}>
+            <IconButton aria-label={t("flowNode.copyUrlAria", { label })} size="icon-sm" onClick={copyPreview}>
               <CopyIcon className="size-3.5" />
             </IconButton>
           )}
           {toggleable && onToggleEnabled && (
-            <Switch size="sm" checked={enabled} onCheckedChange={onToggleEnabled} aria-label={`Enable ${label}`} />
+            <Switch
+              size="sm"
+              checked={enabled}
+              onCheckedChange={onToggleEnabled}
+              aria-label={t("flowNode.enableAria", { label })}
+            />
           )}
         </div>
       </div>

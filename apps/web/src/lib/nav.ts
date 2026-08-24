@@ -23,12 +23,15 @@ import {
 } from "lucide-react";
 
 export type NavItem = {
+  /** An i18n key under the "nav" namespace (e.g. "items.campaigns") — not
+   * display text. Every consumer renders it via t(item.label, { ns: "nav" }). */
   label: string;
   href: string;
   icon: LucideIcon;
 };
 
 export type NavGroup = {
+  /** Same convention as NavItem.label (e.g. "groups.traffic"). */
   label?: string;
   items: NavItem[];
 };
@@ -39,58 +42,58 @@ export type NavGroup = {
  */
 export const NAV_GROUPS: NavGroup[] = [
   {
-    items: [{ label: "Overview", href: "/overview", icon: LayoutDashboardIcon }],
+    items: [{ label: "items.overview", href: "/overview", icon: LayoutDashboardIcon }],
   },
   {
-    items: [{ label: "Analytics", href: "/analytics", icon: BarChart3Icon }],
+    items: [{ label: "items.analytics", href: "/analytics", icon: BarChart3Icon }],
   },
   {
-    label: "Traffic",
+    label: "groups.traffic",
     items: [
-      { label: "Campaigns", href: "/campaigns", icon: MegaphoneIcon },
-      { label: "Traffic Sources", href: "/traffic-sources", icon: RadioIcon },
-      { label: "Offers", href: "/offers", icon: TagIcon },
-      { label: "Networks", href: "/networks", icon: NetworkIcon },
+      { label: "items.campaigns", href: "/campaigns", icon: MegaphoneIcon },
+      { label: "items.trafficSources", href: "/traffic-sources", icon: RadioIcon },
+      { label: "items.offers", href: "/offers", icon: TagIcon },
+      { label: "items.networks", href: "/networks", icon: NetworkIcon },
     ],
   },
   {
-    label: "Pages",
+    label: "groups.pages",
     items: [
-      { label: "Landings", href: "/landings", icon: GlobeIcon },
-      { label: "PWA", href: "/pwa", icon: SmartphoneIcon },
-      { label: "Postlanding", href: "/postlanding", icon: FileTextIcon },
+      { label: "items.landings", href: "/landings", icon: GlobeIcon },
+      { label: "items.pwa", href: "/pwa", icon: SmartphoneIcon },
+      { label: "items.postlanding", href: "/postlanding", icon: FileTextIcon },
     ],
   },
   {
-    items: [{ label: "Domains", href: "/domains", icon: LinkIcon }],
+    items: [{ label: "items.domains", href: "/domains", icon: LinkIcon }],
   },
   {
-    label: "Conversions",
+    label: "groups.conversions",
     items: [
-      { label: "Conversions", href: "/conversions", icon: CheckCircle2Icon },
-      { label: "Postbacks", href: "/postbacks", icon: SendIcon },
-      { label: "Pixels", href: "/pixels", icon: TargetIcon },
+      { label: "items.conversions", href: "/conversions", icon: CheckCircle2Icon },
+      { label: "items.postbacks", href: "/postbacks", icon: SendIcon },
+      { label: "items.pixels", href: "/pixels", icon: TargetIcon },
     ],
   },
   {
-    label: "Insights",
+    label: "groups.insights",
     items: [
-      { label: "Reports", href: "/reports", icon: FileBarChart2Icon },
-      { label: "LTV / Cohorts", href: "/ltv-cohorts", icon: TrendingUpIcon },
-      { label: "Push", href: "/push", icon: BellRingIcon },
+      { label: "items.reports", href: "/reports", icon: FileBarChart2Icon },
+      { label: "items.ltvCohorts", href: "/ltv-cohorts", icon: TrendingUpIcon },
+      { label: "items.push", href: "/push", icon: BellRingIcon },
     ],
   },
   {
-    label: "Growth",
+    label: "groups.growth",
     items: [
-      { label: "Referral", href: "/referral", icon: GiftIcon },
-      { label: "Content Gallery", href: "/content-gallery", icon: ImagesIcon },
+      { label: "items.referral", href: "/referral", icon: GiftIcon },
+      { label: "items.contentGallery", href: "/content-gallery", icon: ImagesIcon },
     ],
   },
   {
     items: [
-      { label: "Team", href: "/team", icon: UsersIcon },
-      { label: "Settings", href: "/settings", icon: SettingsIcon },
+      { label: "items.team", href: "/team", icon: UsersIcon },
+      { label: "items.settings", href: "/settings", icon: SettingsIcon },
     ],
   },
 ];

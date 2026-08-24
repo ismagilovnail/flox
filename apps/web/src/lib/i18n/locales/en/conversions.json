@@ -1,0 +1,45 @@
+{
+  "list": {
+    "title": "Conversions",
+    "searchPlaceholder": "Search by click ID...",
+    "emptyTitle": "No conversions yet",
+    "emptyDescription": "CPA events will show up here once the tracker starts recording postbacks.",
+    "loading": "Loading conversions…",
+    "loadError": "Couldn't load conversions"
+  },
+  "columns": {
+    "clickId": "Click ID",
+    "campaign": "Campaign",
+    "network": "Network",
+    "status": "Status",
+    "revenue": "Revenue",
+    "eventTime": "Event time"
+  },
+  "status": {
+    "hold": "HOLD",
+    "accept": "ACCEPT",
+    "redep": "REDEP",
+    "decline": "DECLINE",
+    "trash": "TRASH"
+  },
+  "detail": {
+    "loading": "Loading conversion…",
+    "notFoundTitle": "Conversion not found",
+    "revenueLabel": "Revenue",
+    "statusLabel": "Status",
+    "noConversionYet": "No conversion yet",
+    "eventsRecordedLabel": "Events recorded",
+    "timelineTitle": "Timeline",
+    "timelineDescription": "Every recorded event for this click, in order."
+  },
+  "timeline": {
+    "cpaLabel": {
+      "hold": "Registration held",
+      "accept": "First deposit accepted",
+      "redep": "Re-deposit accepted",
+      "decline": "Conversion declined",
+      "trash": "Marked junk/duplicate"
+    },
+    "noRevenue": "No revenue on this event"
+  }
+}

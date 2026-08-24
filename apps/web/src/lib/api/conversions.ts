@@ -16,6 +16,17 @@ import { apiFetch } from "@/lib/api/client";
 export type CpaStatus = "CPA_HOLD" | "CPA_ACCEPT" | "CPA_REDEP" | "CPA_DECLINE" | "CPA_TRASH";
 export const CPA_STATUSES: CpaStatus[] = ["CPA_HOLD", "CPA_ACCEPT", "CPA_REDEP", "CPA_DECLINE", "CPA_TRASH"];
 
+/** i18n keys (conversions.json namespace) for each CPA status's display
+ * label — the status code itself (CPA_HOLD, ...) stays untranslated
+ * everywhere else (API payloads, cache keys, the §45 dedup key). */
+export const CPA_STATUS_I18N_KEY: Record<CpaStatus, string> = {
+  CPA_HOLD: "status.hold",
+  CPA_ACCEPT: "status.accept",
+  CPA_REDEP: "status.redep",
+  CPA_DECLINE: "status.decline",
+  CPA_TRASH: "status.trash",
+};
+
 /** The full §43 event model — a timeline entry can be any of these, not
  * just a CPA status. Matches apps/internal/event.Type's All exactly. */
 export type EventType =

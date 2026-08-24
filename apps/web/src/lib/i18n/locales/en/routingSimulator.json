@@ -1,0 +1,42 @@
+{
+  "view": {
+    "title": "Simulate incoming traffic",
+    "description": "Fill in the request attributes a click could carry and see exactly which Stream Set would match, which Flow would be picked, and why — evaluated against this campaign's current configuration, top-to-bottom by priority.",
+    "simulateError": "Couldn't simulate this request",
+    "emptyTitle": "No simulation yet",
+    "emptyDescription": "Set request attributes above and click Simulate to see the routing decision."
+  },
+  "form": {
+    "simulateButton": "Simulate",
+    "simulating": "Simulating..."
+  },
+  "result": {
+    "pipeline": {
+      "request": "Request",
+      "classification": "Classification",
+      "campaign": "Campaign",
+      "streamSet": "Stream Set",
+      "filters": "Filters",
+      "flow": "Flow",
+      "destination": "Destination"
+    },
+    "campaignTitle": "Campaign",
+    "streamSetsTitle": "Stream Sets — evaluated top-to-bottom, first match wins",
+    "flowTitle": "Flow — weighted pick",
+    "flowDescription": "Normalized from each active flow's raw weight.",
+    "flowTagLabel": "{{name}} · {{percent}}",
+    "destinationTitle": "Destination",
+    "noDestination": "No destination could be resolved — check campaign fallback.",
+    "copyDestinationAria": "Copy destination URL",
+    "destinationCopiedToast": "Destination URL copied"
+  },
+  "trace": {
+    "gotValue": "(got: {{value}})",
+    "gotValueEmpty": "empty",
+    "matchAll": "match all",
+    "matchAny": "match any",
+    "emptyGroupAlwaysMatches": "empty group — always matches",
+    "matched": "Matched",
+    "notMatchedFallback": "Not matched"
+  }
+}

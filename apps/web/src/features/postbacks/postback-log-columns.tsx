@@ -1,10 +1,12 @@
 import type { ColumnDef } from "@tanstack/react-table";
 import { ArrowDownToLineIcon, ArrowUpFromLineIcon } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
+import type { TFunction } from "i18next";
 
 import { dataTableFeatures } from "@/components/ui/data-table";
 import { Badge } from "@/components/ui/badge";
 import { Caption, Mono } from "@/components/ui/typography";
+import { CPA_STATUS_I18N_KEY } from "@/lib/api/conversions";
 import type { PostbackLog, PostbackResult } from "@/lib/api/postback-logs";
 
 const RESULT_VARIANT: Record<PostbackResult, "success" | "warning" | "danger" | "secondary"> = {
@@ -22,64 +24,69 @@ const RESULT_VARIANT: Record<PostbackResult, "success" | "warning" | "danger" | 
 /** No replay action: it's a real write path (re-invoking the conversion
  * engine for an incoming row, or re-enqueuing a delivery for an outgoing
  * one) deliberately scoped out of this phase — see docs/postback-logs.md. */
-export function postbackLogColumns(networkNameById: Record<string, string>): ColumnDef<typeof dataTableFeatures, PostbackLog>[] {
+export function postbackLogColumns(
+  t: TFunction,
+  networkNameById: Record<string, string>,
+): ColumnDef<typeof dataTableFeatures, PostbackLog>[] {
   return [
     {
       accessorKey: "direction",
-      header: "Direction",
+      header: t("columns.direction", { ns: "postbacks" }),
       cell: ({ getValue }) => {
         const direction = getValue() as PostbackLog["direction"];
         const Icon = direction === "incoming" ? ArrowDownToLineIcon : ArrowUpFromLineIcon;
         return (
-          <span className="flex items-center gap-1.5 text-xs capitalize">
-            <Icon className="size-3.5 text-muted-foreground" /> {direction}
+          <span className="flex items-center gap-1.5 text-xs">
+            <Icon className="size-3.5 text-muted-foreground" /> {t(`direction.${direction}`, { ns: "postbacks" })}
           </span>
         );
       },
     },
     {
       id: "network",
-      header: "Network",
+      header: t("columns.network", { ns: "postbacks" }),
       accessorFn: (row) => networkNameById[row.networkId] ?? row.networkId,
     },
     {
       accessorKey: "clickId",
-      header: "Click ID",
+      header: t("columns.clickId", { ns: "postbacks" }),
       cell: ({ getValue }) => <Mono className="text-xs">{getValue() as string}</Mono>,
     },
     {
       id: "status",
-      header: "Status",
+      header: t("columns.status", { ns: "postbacks" }),
       cell: ({ row }) => {
         const { rawStatus, status } = row.original;
         if (rawStatus) {
           return (
             <span className="flex items-center gap-1 text-xs">
               <Mono>{rawStatus}</Mono>
-              {status && <span className="text-muted-foreground">→ {status.replace("CPA_", "")}</span>}
+              {status && (
+                <span className="text-muted-foreground">→ {t(CPA_STATUS_I18N_KEY[status], { ns: "conversions" })}</span>
+              )}
             </span>
           );
         }
-        if (status) return <Mono className="text-xs">{status.replace("CPA_", "")}</Mono>;
+        if (status) return <Mono className="text-xs">{t(CPA_STATUS_I18N_KEY[status], { ns: "conversions" })}</Mono>;
         return <span className="text-xs text-muted-foreground">—</span>;
       },
     },
     {
       accessorKey: "result",
-      header: "Result",
+      header: t("columns.result", { ns: "postbacks" }),
       cell: ({ getValue }) => {
         const result = getValue() as PostbackResult;
-        return <Badge variant={RESULT_VARIANT[result]}>{result}</Badge>;
+        return <Badge variant={RESULT_VARIANT[result]}>{t(`result.${result}`, { ns: "postbacks" })}</Badge>;
       },
     },
     {
       accessorKey: "message",
-      header: "Message",
+      header: t("columns.message", { ns: "postbacks" }),
       cell: ({ getValue }) => <Caption className="block max-w-xs truncate">{getValue() as string}</Caption>,
     },
     {
       accessorKey: "eventAt",
-      header: "Time",
+      header: t("columns.time", { ns: "postbacks" }),
       cell: ({ getValue }) => <Caption>{formatDistanceToNow(new Date(getValue() as string), { addSuffix: true })}</Caption>,
     },
   ];

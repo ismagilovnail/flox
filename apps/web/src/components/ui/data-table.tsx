@@ -27,6 +27,7 @@ import {
   ChevronRightIcon,
   SearchIcon,
 } from "lucide-react"
+import { useTranslation } from "react-i18next"
 
 import { cn } from "@/lib/utils"
 import { Checkbox } from "@/components/ui/checkbox"
@@ -56,14 +57,17 @@ export const dataTableFeatures = tableFeatures({
 
 const SELECT_COLUMN_ID = "__select__"
 
-function buildSelectColumn<TData extends Record<string, unknown>>(): ColumnDef<typeof dataTableFeatures, TData> {
+function buildSelectColumn<TData extends Record<string, unknown>>(
+  selectAllLabel: string,
+  selectRowLabel: string,
+): ColumnDef<typeof dataTableFeatures, TData> {
   return {
     id: SELECT_COLUMN_ID,
     header: ({ table }) => (
       <Checkbox
         checked={table.getIsAllPageRowsSelected() ? true : table.getIsSomePageRowsSelected() ? "indeterminate" : false}
         onCheckedChange={(value) => table.toggleAllPageRowsSelected(!!value)}
-        aria-label="Select all rows on this page"
+        aria-label={selectAllLabel}
       />
     ),
     cell: ({ row }) => (
@@ -71,7 +75,7 @@ function buildSelectColumn<TData extends Record<string, unknown>>(): ColumnDef<t
         checked={row.getIsSelected()}
         onCheckedChange={(value) => row.toggleSelected(!!value)}
         onClick={(e) => e.stopPropagation()}
-        aria-label="Select row"
+        aria-label={selectRowLabel}
       />
     ),
     enableSorting: false,
@@ -87,8 +91,8 @@ function buildSelectColumn<TData extends Record<string, unknown>>(): ColumnDef<t
 function DataTable<TData extends Record<string, unknown>>({
   columns,
   data,
-  searchPlaceholder = "Search...",
-  emptyTitle = "No results",
+  searchPlaceholder,
+  emptyTitle,
   emptyDescription,
   pageSize = 20,
   className,
@@ -113,6 +117,7 @@ function DataTable<TData extends Record<string, unknown>>({
   /** Rendered in a toolbar that appears only while rows are selected. */
   bulkActions?: (ctx: { selectedRows: TData[]; clearSelection: () => void }) => React.ReactNode
 }) {
+  const { t } = useTranslation("common")
   const [sorting, setSorting] = React.useState<
     { id: string; desc: boolean }[]
   >([])
@@ -127,8 +132,11 @@ function DataTable<TData extends Record<string, unknown>>({
   const [rowSelection, setRowSelection] = React.useState<RowSelectionState>({})
 
   const tableColumns = React.useMemo(
-    () => (enableRowSelection ? [buildSelectColumn<TData>(), ...columns] : columns),
-    [enableRowSelection, columns],
+    () =>
+      enableRowSelection
+        ? [buildSelectColumn<TData>(t("dataTable.selectAllAria"), t("dataTable.selectRowAria")), ...columns]
+        : columns,
+    [enableRowSelection, columns, t],
   )
 
   const table = useTable({
@@ -152,7 +160,7 @@ function DataTable<TData extends Record<string, unknown>>({
     <div data-slot="data-table" className={cn("flex flex-col gap-3", className)}>
       {enableRowSelection && selectedRows.length > 0 && (
         <div className="flex items-center gap-2 rounded-md border border-border bg-muted/40 px-3 py-2 text-sm">
-          <span className="font-medium">{selectedRows.length} selected</span>
+          <span className="font-medium">{t("dataTable.selected", { count: selectedRows.length })}</span>
           {bulkActions?.({ selectedRows, clearSelection: () => table.setRowSelection({}) })}
           <Button
             variant="ghost"
@@ -160,7 +168,7 @@ function DataTable<TData extends Record<string, unknown>>({
             className="ml-auto"
             onClick={() => table.setRowSelection({})}
           >
-            Clear
+            {t("actions.clear")}
           </Button>
         </div>
       )}
@@ -172,7 +180,7 @@ function DataTable<TData extends Record<string, unknown>>({
             <Input
               value={globalFilter}
               onChange={(e) => setGlobalFilter(e.target.value)}
-              placeholder={searchPlaceholder}
+              placeholder={searchPlaceholder ?? t("dataTable.searchPlaceholder")}
               className="h-8 pl-8"
             />
           </div>
@@ -181,7 +189,7 @@ function DataTable<TData extends Record<string, unknown>>({
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button variant="outline" size="sm">
-              Columns
+              {t("dataTable.columns")}
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
@@ -242,7 +250,7 @@ function DataTable<TData extends Record<string, unknown>>({
             {rows.length === 0 ? (
               <tr>
                 <td colSpan={table.getAllLeafColumns().length} className="p-0">
-                  <EmptyState title={emptyTitle} description={emptyDescription} />
+                  <EmptyState title={emptyTitle ?? t("dataTable.emptyTitle")} description={emptyDescription} />
                 </td>
               </tr>
             ) : (
@@ -266,14 +274,17 @@ function DataTable<TData extends Record<string, unknown>>({
       {rows.length > 0 && (
         <div className="flex items-center justify-between text-xs text-muted-foreground">
           <span className="font-mono font-tabular">
-            Page {table.state.pagination.pageIndex + 1} of{" "}
-            {Math.max(table.getPageCount(), 1)} · {table.getRowCount()} rows
+            {t("dataTable.pagination", {
+              page: table.state.pagination.pageIndex + 1,
+              total: Math.max(table.getPageCount(), 1),
+              count: table.getRowCount(),
+            })}
           </span>
           <div className="flex items-center gap-1">
             <Button
               variant="outline"
               size="icon-sm"
-              aria-label="Previous page"
+              aria-label={t("dataTable.previousPageAria")}
               disabled={!table.getCanPreviousPage()}
               onClick={() => table.previousPage()}
             >
@@ -282,7 +293,7 @@ function DataTable<TData extends Record<string, unknown>>({
             <Button
               variant="outline"
               size="icon-sm"
-              aria-label="Next page"
+              aria-label={t("dataTable.nextPageAria")}
               disabled={!table.getCanNextPage()}
               onClick={() => table.nextPage()}
             >

@@ -1,0 +1,152 @@
+{
+  "filters": {
+    "groups": {
+      "geo": "Гео",
+      "device": "Устройство",
+      "fraud": "Фрод",
+      "traffic": "Трафик",
+      "custom": "Другое"
+    },
+    "operators": {
+      "is": "равно",
+      "isNot": "не равно",
+      "in": "входит в",
+      "notIn": "не входит в",
+      "contains": "содержит",
+      "notContains": "не содержит",
+      "startsWith": "начинается с",
+      "endsWith": "заканчивается на",
+      "matches": "соответствует",
+      "exists": "существует",
+      "notExists": "не существует",
+      "gt": ">",
+      "gte": ">=",
+      "lt": "<",
+      "lte": "<=",
+      "between": "между"
+    },
+    "vocab": {
+      "device": { "mobile": "Мобильный", "desktop": "Десктоп", "tablet": "Планшет" },
+      "platform": { "ios": "iOS", "android": "Android", "windows": "Windows", "macos": "macOS", "linux": "Linux" },
+      "os": { "ios": "iOS", "android": "Android", "windows": "Windows", "macos": "macOS", "linux": "Linux" },
+      "browser": { "chrome": "Chrome", "safari": "Safari", "firefox": "Firefox", "edge": "Edge", "samsung_internet": "Samsung Internet", "other": "Другой" },
+      "connection_type": { "wifi": "Wi-Fi", "cellular": "Сотовая связь", "ethernet": "Ethernet", "unknown": "Неизвестно" }
+    },
+    "booleanNo": "Нет",
+    "booleanYes": "Да",
+    "noValueNeeded": "Значение не требуется",
+    "rangeFromPlaceholder": "от",
+    "rangeToPlaceholder": "до",
+    "rangeAnd": "и",
+    "multiValuePlaceholder": "US, CA, GB",
+    "selectPlaceholder": "Выбрать",
+    "regexPlaceholder": "^utm_.*_2026$",
+    "countryPlaceholder": "US, GB",
+    "valuePlaceholder": "значение",
+    "removeConditionAria": "Удалить условие"
+  },
+  "filterGroupBuilder": {
+    "matchAll": "Все условия",
+    "matchAny": "Любое условие",
+    "removeGroupAria": "Удалить группу",
+    "emptyGroupText": "Пустая группа — соответствует всему трафику",
+    "addCondition": "Условие",
+    "addGroup": "Группа"
+  },
+  "flowDestination": {
+    "offer": "Оффер",
+    "redirect": "Редирект",
+    "fallback": "Резервный переход",
+    "fallbackUsed": "Используется, если этот поток нельзя обработать: {{url}}",
+    "fallbackNotSet": "Резервный переход не задан — применяется резервный URL кампании",
+    "chooseOfferPlaceholder": "Выберите оффер",
+    "redirectUrlPlaceholder": "https://example.com"
+  },
+  "flowEditor": {
+    "collapseAria": "Свернуть поток",
+    "expandAria": "Развернуть поток",
+    "namePlaceholder": "Название потока",
+    "weightLabel": "вес → {{percent}}",
+    "disableAria": "Отключить поток",
+    "enableAria": "Включить поток",
+    "duplicateAria": "Дублировать {{name}}",
+    "removeAria": "Удалить {{name}}"
+  },
+  "flowNode": {
+    "skipped": "Пропущено",
+    "configured": "Настроено",
+    "needsSetup": "Требуется настройка",
+    "copyUrlAria": "Скопировать URL «{{label}}»",
+    "enableAria": "Включить {{label}}",
+    "urlCopiedToast": "URL «{{label}}» скопирован"
+  },
+  "form": {
+    "description": "Стрим-сеты оцениваются сверху вниз по приоритету — побеждает первый набор фильтров, который совпал.",
+    "nameLabel": "Название",
+    "statusLabel": "Статус",
+    "filtersTitle": "Фильтры",
+    "filtersDescription": "Пустая группа верхнего уровня соответствует всему трафику. Вкладывайте группы, чтобы комбинировать И/ИЛИ — например, country IS US AND device IN [mobile, tablet] AND (OS IS Android OR OS IS iOS).",
+    "filtersError": "Исправьте выделенные условия фильтра выше перед сохранением.",
+    "flowsTitle": "Потоки",
+    "flowsDescription": "Каждый поток ведёт на оффер или redirect-URL. Вес — это условное число, движок нормализует его в проценты среди активных потоков.",
+    "addFlow": "Добавить поток",
+    "totalWeight": "Суммарный вес: {{weight}}",
+    "fallbackLabel": "Резервный URL (необязательно)",
+    "fallbackPlaceholder": "Если пусто — используется резервный URL кампании",
+    "fallbackHint": "Используется, если этот набор совпал, но ни один поток не удалось обработать. Иначе применяется резервный URL кампании.",
+    "titleNew": "Новый стрим-сет",
+    "titleEdit": "Изменить {{name}}",
+    "submitCreate": "Создать стрим-сет",
+    "submitEdit": "Сохранить изменения",
+    "flowCopySuffix": "{{name}} (копия)",
+    "validation": {
+      "nameMin": "Название должно содержать не менее 2 символов",
+      "urlInvalid": "Введите корректный URL",
+      "chooseOffer": "Выберите оффер",
+      "flowNameRequired": "Название обязательно",
+      "weightNegative": "Вес не может быть отрицательным",
+      "atLeastOneFlow": "Нужен хотя бы один поток",
+      "chooseValue": "Значение обязательно",
+      "bothRangeBounds": "Введите обе границы диапазона",
+      "notIso2": "«{{value}}» не является двухбуквенным кодом страны ISO-3166 (например, US, GB, DE)",
+      "ukNotIso": "«UK» не является кодом ISO-3166 — используйте «GB» для Великобритании",
+      "patternRequired": "Шаблон обязателен",
+      "patternTooLong": "Шаблон слишком длинный (макс. 200 символов)",
+      "noLookahead": "Опережающие проверки (lookahead) не поддерживаются RE2",
+      "noLookbehind": "Ретроспективные проверки (lookbehind) не поддерживаются RE2",
+      "noBackreferences": "Обратные ссылки не поддерживаются RE2",
+      "noAtomicGroups": "Атомарные группы не поддерживаются RE2",
+      "noPossessiveQuantifiers": "Притяжательные квантификаторы не поддерживаются RE2",
+      "invalidRegex": "Некорректный синтаксис регулярного выражения"
+    }
+  },
+  "list": {
+    "title": "Стрим-сеты",
+    "description": "Оцениваются сверху вниз по приоритету — побеждает первый набор, чьи фильтры совпали. При отсутствии совпадений используется резервный URL кампании в настройках.",
+    "newButton": "Новый стрим-сет",
+    "loading": "Загрузка стрим-сетов…",
+    "loadError": "Не удалось загрузить стрим-сеты",
+    "loadNetworksOffersError": "Не удалось загрузить сети/офферы",
+    "emptyTitle": "Пока нет стрим-сетов",
+    "emptyDescription": "Весь трафик идёт на резервный URL кампании, пока вы не добавите набор.",
+    "reorderError": "Не удалось изменить порядок стрим-сетов"
+  },
+  "toast": {
+    "duplicated": "Стрим-сет продублирован",
+    "duplicateError": "Не удалось продублировать стрим-сет",
+    "updateError": "Не удалось обновить стрим-сет",
+    "updated": "Стрим-сет обновлён",
+    "created": "Стрим-сет создан",
+    "createError": "Не удалось создать стрим-сет"
+  },
+  "row": {
+    "reorderAria": "Изменить порядок «{{name}}»",
+    "disableAria": "Отключить стрим-сет",
+    "enableAria": "Включить стрим-сет",
+    "editAria": "Изменить {{name}}",
+    "moreActionsAria": "Другие действия для {{name}}",
+    "duplicate": "Дублировать",
+    "noFilters": "Нет фильтров — соответствует всему трафику",
+    "noOffer": "Нет оффера"
+  }
+}

@@ -1,0 +1,47 @@
+{
+  "brand": "FLOX",
+  "groups": {
+    "traffic": "Трафик",
+    "pages": "Страницы",
+    "conversions": "Конверсии",
+    "insights": "Аналитика",
+    "growth": "Рост"
+  },
+  "items": {
+    "overview": "Обзор",
+    "analytics": "Аналитика",
+    "campaigns": "Кампании",
+    "trafficSources": "Источники трафика",
+    "offers": "Офферы",
+    "networks": "Сети",
+    "landings": "Лендинги",
+    "pwa": "PWA",
+    "postlanding": "Постлендинг",
+    "domains": "Домены",
+    "conversions": "Конверсии",
+    "postbacks": "Постбэки",
+    "pixels": "Пиксели",
+    "reports": "Отчёты",
+    "ltvCohorts": "LTV / Когорты",
+    "push": "Push",
+    "referral": "Реферальная программа",
+    "contentGallery": "Галерея контента",
+    "team": "Команда",
+    "settings": "Настройки"
+  },
+  "commandPalette": {
+    "defaultGroupHeading": "Перейти",
+    "searchPlaceholder": "Поиск кампаний, офферов, потоков…",
+    "noResults": "Ничего не найдено."
+  },
+  "sidebar": {
+    "expandAria": "Развернуть боковую панель",
+    "collapseAria": "Свернуть боковую панель",
+    "openNavigationAria": "Открыть навигацию",
+    "navigationTitle": "Навигация"
+  },
+  "topbar": {
+    "searchPlaceholder": "Поиск…",
+    "searchAria": "Поиск"
+  }
+}

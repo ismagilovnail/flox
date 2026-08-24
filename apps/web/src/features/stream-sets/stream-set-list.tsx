@@ -3,6 +3,7 @@
 import * as React from "react";
 import { toast } from "sonner";
 import { PlusIcon } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import {
   DndContext,
   KeyboardSensor,
@@ -84,6 +85,7 @@ function toCreateInput(values: StreamSetFormValues): CreateStreamSetInput {
 }
 
 export function StreamSetList({ campaignId }: { campaignId: string }) {
+  const { t } = useTranslation("streamSets");
   const streamSetsQuery = useStreamSets(campaignId);
   const networksQuery = useNetworks();
   const offersQuery = useOffers();
@@ -110,7 +112,7 @@ export function StreamSetList({ campaignId }: { campaignId: string }) {
     reordered.splice(oldIndex, 1);
     reordered.splice(newIndex, 0, String(active.id));
     reorder.mutate(reordered, {
-      onError: (err) => toast.error("Couldn't reorder stream sets", { description: err.message }),
+      onError: (err) => toast.error(t("list.reorderError"), { description: err.message }),
     });
   }
 
@@ -118,14 +120,11 @@ export function StreamSetList({ campaignId }: { campaignId: string }) {
 
   const header = (
     <CardHeader>
-      <CardTitle>Stream Sets</CardTitle>
-      <CardDescription>
-        Evaluated top-to-bottom by priority — the first set whose filters match wins. No match falls back to the
-        campaign fallback in Settings.
-      </CardDescription>
+      <CardTitle>{t("list.title")}</CardTitle>
+      <CardDescription>{t("list.description")}</CardDescription>
       <CardAction>
         <Button size="sm" onClick={() => setTarget({ id: null })} disabled={networks.length === 0}>
-          <PlusIcon className="size-4" /> New Stream Set
+          <PlusIcon className="size-4" /> {t("list.newButton")}
         </Button>
       </CardAction>
     </CardHeader>
@@ -136,7 +135,7 @@ export function StreamSetList({ campaignId }: { campaignId: string }) {
       <Card>
         {header}
         <CardContent>
-          <LoadingState label="Loading stream sets…" />
+          <LoadingState label={t("list.loading")} />
         </CardContent>
       </Card>
     );
@@ -147,7 +146,11 @@ export function StreamSetList({ campaignId }: { campaignId: string }) {
       <Card>
         {header}
         <CardContent>
-          <ErrorState title="Couldn't load stream sets" description={streamSetsQuery.error.message} onRetry={() => streamSetsQuery.refetch()} />
+          <ErrorState
+            title={t("list.loadError")}
+            description={streamSetsQuery.error.message}
+            onRetry={() => streamSetsQuery.refetch()}
+          />
         </CardContent>
       </Card>
     );
@@ -158,7 +161,14 @@ export function StreamSetList({ campaignId }: { campaignId: string }) {
       <Card>
         {header}
         <CardContent>
-          <ErrorState title="Couldn't load networks/offers" description={err?.message} onRetry={() => { networksQuery.refetch(); offersQuery.refetch(); }} />
+          <ErrorState
+            title={t("list.loadNetworksOffersError")}
+            description={err?.message}
+            onRetry={() => {
+              networksQuery.refetch();
+              offersQuery.refetch();
+            }}
+          />
         </CardContent>
       </Card>
     );
@@ -169,10 +179,7 @@ export function StreamSetList({ campaignId }: { campaignId: string }) {
       {header}
       <CardContent>
         {streamSets.length === 0 ? (
-          <EmptyState
-            title="No stream sets yet"
-            description="All traffic falls through to the campaign fallback URL until you add one."
-          />
+          <EmptyState title={t("list.emptyTitle")} description={t("list.emptyDescription")} />
         ) : (
           <DndContext id={`stream-sets-${campaignId}`} sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
             <SortableContext items={streamSets.map((s) => s.id)} strategy={verticalListSortingStrategy}>
@@ -222,6 +229,7 @@ function StreamSetRowContainer({
   campaignId: string;
   onEdit: () => void;
 }) {
+  const { t } = useTranslation("streamSets");
   const updateStatus = useUpdateStreamSet(campaignId, streamSet.id);
   const duplicate = useDuplicateStreamSet(campaignId);
 
@@ -232,14 +240,14 @@ function StreamSetRowContainer({
       onEdit={onEdit}
       onDuplicate={() =>
         duplicate.mutate(streamSet.id, {
-          onSuccess: () => toast("Stream set duplicated", { description: `${streamSet.name} (Copy)` }),
-          onError: (err) => toast.error("Couldn't duplicate stream set", { description: err.message }),
+          onSuccess: () => toast(t("toast.duplicated"), { description: t("form.flowCopySuffix", { name: streamSet.name }) }),
+          onError: (err) => toast.error(t("toast.duplicateError"), { description: err.message }),
         })
       }
       onToggleStatus={() =>
         updateStatus.mutate(
           { status: streamSet.status === "active" ? "paused" : "active" },
-          { onError: (err) => toast.error("Couldn't update stream set", { description: err.message }) },
+          { onError: (err) => toast.error(t("toast.updateError"), { description: err.message }) },
         )
       }
     />
@@ -261,6 +269,7 @@ function StreamSetFormDialog({
   firstNetworkId: string;
   onClose: () => void;
 }) {
+  const { t } = useTranslation("streamSets");
   const createStreamSet = useCreateStreamSet(campaignId);
   const updateStreamSet = useUpdateStreamSet(campaignId, target?.id ?? "");
 
@@ -271,19 +280,19 @@ function StreamSetFormDialog({
         { ...input, status: values.status },
         {
           onSuccess: () => {
-            toast("Stream set updated", { description: values.name });
+            toast(t("toast.updated"), { description: values.name });
             onClose();
           },
-          onError: (err) => toast.error("Couldn't update stream set", { description: err.message }),
+          onError: (err) => toast.error(t("toast.updateError"), { description: err.message }),
         },
       );
     } else {
       createStreamSet.mutate(input, {
         onSuccess: () => {
-          toast("Stream set created", { description: values.name });
+          toast(t("toast.created"), { description: values.name });
           onClose();
         },
-        onError: (err) => toast.error("Couldn't create stream set", { description: err.message }),
+        onError: (err) => toast.error(t("toast.createError"), { description: err.message }),
       });
     }
   }
@@ -292,8 +301,8 @@ function StreamSetFormDialog({
     <StreamSetFormSheet
       open
       onOpenChange={(open) => !open && onClose()}
-      title={target ? `Edit ${target.name}` : "New Stream Set"}
-      submitLabel={target ? "Save changes" : "Create stream set"}
+      title={target ? t("form.titleEdit", { name: target.name }) : t("form.titleNew")}
+      submitLabel={target ? t("form.submitEdit") : t("form.submitCreate")}
       defaultValues={target ? toFormValues(target) : emptyStreamSetForm(firstNetworkId)}
       networks={networks}
       offers={offers}

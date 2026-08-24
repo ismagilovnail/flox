@@ -1,0 +1,81 @@
+{
+  "list": {
+    "title": "Источники трафика",
+    "newButton": "Новый источник",
+    "searchPlaceholder": "Поиск источников...",
+    "emptyTitle": "Пока нет источников трафика",
+    "emptyDescription": "Добавьте места, откуда приходит трафик — кампании ссылаются на них по имени.",
+    "loading": "Загрузка источников трафика…",
+    "loadError": "Не удалось загрузить источники трафика",
+    "editTagsButton": "Изменить теги"
+  },
+  "columns": {
+    "name": "Название",
+    "type": "Тип",
+    "trackingTemplate": "Шаблон трекинга",
+    "costIntegration": "Интеграция расходов",
+    "status": "Статус",
+    "tags": "Теги",
+    "updated": "Обновлено"
+  },
+  "costIntegration": {
+    "none": "Не подключено",
+    "manual": "Ручной ввод",
+    "facebookAds": "Facebook Ads (OAuth)",
+    "tiktokAds": "TikTok Ads (OAuth)"
+  },
+  "sourceType": {
+    "facebook": "Facebook",
+    "tiktok": "TikTok",
+    "google": "Google",
+    "nativeAds": "Нативная реклама",
+    "push": "Push",
+    "seo": "SEO",
+    "influencer": "Инфлюенсеры",
+    "email": "Email",
+    "other": "Другое"
+  },
+  "form": {
+    "titleNew": "Новый источник",
+    "titleEdit": "Изменить {{name}}",
+    "description": "Источники трафика — это места, откуда приходят кампании (§27).",
+    "nameLabel": "Название",
+    "namePlaceholder": "Facebook",
+    "typeLabel": "Тип",
+    "trackingTemplateLabel": "Шаблон трекинга",
+    "trackingTemplatePlaceholder": "https://track.floxlink.io/click?clickid={click_id}&sub1={sub1}",
+    "costIntegrationLabel": "Интеграция расходов",
+    "costIntegrationHint": "Записи вручную ведутся по каждой кампании на вкладке «Расходы». OAuth-интеграции с рекламными сетями (Facebook/TikTok) пока не реализованы — этот выбор только фиксирует намерение.",
+    "statusLabel": "Статус",
+    "submitCreate": "Создать источник",
+    "submitEdit": "Сохранить изменения",
+    "validation": {
+      "nameMin": "Название должно содержать не менее 2 символов",
+      "urlInvalid": "Введите корректный URL"
+    }
+  },
+  "rowActions": {
+    "actionsAria": "Действия для {{name}}",
+    "edit": "Изменить",
+    "viewStatistics": "Посмотреть статистику",
+    "pause": "Приостановить",
+    "resume": "Возобновить",
+    "duplicate": "Дублировать",
+    "archive": "В архив",
+    "archiveConfirmTitle": "Отправить «{{name}}» в архив?",
+    "archiveConfirmDescription": "Источники в архиве больше не отображаются в выборе источника для кампаний. Это можно отменить позже."
+  },
+  "toast": {
+    "updated": "Источник обновлён",
+    "created": "Источник создан",
+    "updateError": "Не удалось обновить источник",
+    "createError": "Не удалось создать источник",
+    "paused": "Источник приостановлен",
+    "resumed": "Источник возобновлён",
+    "duplicated": "Источник продублирован",
+    "duplicatedSuffix": "{{name}} (копия)",
+    "archived": "Источник отправлен в архив",
+    "archiveError": "Не удалось отправить источник в архив",
+    "duplicateError": "Не удалось продублировать источник"
+  }
+}

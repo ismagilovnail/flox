@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import { CheckIcon, ChevronDownIcon } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -30,6 +31,7 @@ function MultiSelect({
   label: string;
   className?: string;
 }) {
+  const { t } = useTranslation("common");
   const [open, setOpen] = React.useState(false);
 
   function toggle(value: string) {
@@ -42,12 +44,12 @@ function MultiSelect({
 
   const summary =
     selected.length === 0
-      ? "None"
+      ? t("multiSelect.none")
       : selected.length <= 2
         ? selected
             .map((v) => options.find((o) => o.value === v)?.label ?? v)
             .join(", ")
-        : `${selected.length} selected`;
+        : t("dataTable.selected", { count: selected.length });
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -64,9 +66,9 @@ function MultiSelect({
       </PopoverTrigger>
       <PopoverContent className="w-56 p-0" align="start">
         <Command>
-          <CommandInput placeholder={`Search ${label.toLowerCase()}...`} />
+          <CommandInput placeholder={t("multiSelect.searchPlaceholder", { label: label.toLowerCase() })} />
           <CommandList>
-            <CommandEmpty>No results.</CommandEmpty>
+            <CommandEmpty>{t("dataTable.emptyTitle")}</CommandEmpty>
             <CommandGroup>
               {options.map((option) => {
                 const checked = selected.includes(option.value);

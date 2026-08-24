@@ -1,6 +1,7 @@
 "use client";
 
 import { ArrowUpRightIcon, LifeBuoyIcon, TargetIcon } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -42,14 +43,19 @@ export function FlowDestinationEditor({
   offers: Offer[];
   onChange: (patch: Partial<FlowFormValue>) => void;
 }) {
+  const { t } = useTranslation("streamSets");
   const destination = flow.destination;
   const networkOffers = destination.kind === "offer" ? offers.filter((o) => o.networkId === destination.networkId) : [];
+  const kindLabel: Record<"offer" | "redirect", string> = {
+    offer: t("flowDestination.offer"),
+    redirect: t("flowDestination.redirect"),
+  };
 
   return (
     <div className="flex flex-col">
       <FlowNode
         icon={destination.kind === "offer" ? TargetIcon : ArrowUpRightIcon}
-        label={destination.kind === "offer" ? "Offer" : "Redirect"}
+        label={kindLabel[destination.kind]}
         toggleable={false}
         enabled
         configured={destination.kind === "offer" ? !!destination.offerId : !!destination.url}
@@ -66,13 +72,13 @@ export function FlowDestinationEditor({
                   })
                 }
                 className={cn(
-                  "px-2 py-1 text-xs font-medium capitalize",
+                  "px-2 py-1 text-xs font-medium",
                   destination.kind === kind
                     ? "bg-primary text-primary-foreground"
                     : "bg-transparent text-muted-foreground hover:bg-muted",
                 )}
               >
-                {kind}
+                {kindLabel[kind]}
               </button>
             ))}
           </div>
@@ -102,7 +108,7 @@ export function FlowDestinationEditor({
                 onValueChange={(offerId) => onChange({ destination: { kind: "offer", networkId: destination.networkId, offerId: offerId === NO_OFFER ? "" : offerId } })}
               >
                 <SelectTrigger size="sm" className="w-44">
-                  <SelectValue placeholder="Choose offer" />
+                  <SelectValue placeholder={t("flowDestination.chooseOfferPlaceholder")} />
                 </SelectTrigger>
                 <SelectContent>
                   {networkOffers.map((o) => (
@@ -117,7 +123,7 @@ export function FlowDestinationEditor({
             <Input
               value={destination.url}
               onChange={(e) => onChange({ destination: { kind: "redirect", url: e.target.value } })}
-              placeholder="https://example.com"
+              placeholder={t("flowDestination.redirectUrlPlaceholder")}
               className="h-7 min-w-56 flex-1 font-mono"
             />
           )}
@@ -128,7 +134,7 @@ export function FlowDestinationEditor({
 
       <FlowNode
         icon={LifeBuoyIcon}
-        label="Fallback"
+        label={t("flowDestination.fallback")}
         toggleable={false}
         enabled
         ghost
@@ -136,7 +142,9 @@ export function FlowDestinationEditor({
         previewUrl={fallbackUrl || undefined}
       >
         <span className="text-xs text-muted-foreground">
-          {fallbackUrl ? `Used if this flow can't be resolved: ${fallbackUrl}` : "No fallback set — the campaign fallback applies"}
+          {fallbackUrl
+            ? t("flowDestination.fallbackUsed", { url: fallbackUrl })
+            : t("flowDestination.fallbackNotSet")}
         </span>
       </FlowNode>
     </div>

@@ -3,6 +3,7 @@
 import * as React from "react";
 import { toast } from "sonner";
 import { PlusIcon, TagIcon } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
@@ -33,6 +34,7 @@ function toFormValues(offer: Offer): OfferFormValues {
 }
 
 export function OfferList() {
+  const { t } = useTranslation(["offers", "common"]);
   const offersQuery = useOffers();
   const networksQuery = useNetworks();
   const assignments = useTagsStore((s) => s.assignments);
@@ -50,14 +52,17 @@ export function OfferList() {
     () => filterByTags("offer", offersQuery.data?.offers ?? [], tagFilter, assignments),
     [offersQuery.data, tagFilter, assignments],
   );
-  const columns = React.useMemo(() => offerColumns((offer) => setTarget(offer), networkNameById), [networkNameById]);
+  const columns = React.useMemo(
+    () => offerColumns(t, (offer) => setTarget(offer), networkNameById),
+    [t, networkNameById],
+  );
 
   const header = (
     <div className="flex items-center justify-between">
-      <h1 className="text-2xl font-semibold tracking-tight">Offers</h1>
+      <h1 className="text-2xl font-semibold tracking-tight">{t("list.title", { ns: "offers" })}</h1>
       <Button onClick={() => setTarget(null)} disabled={networks.length === 0}>
         <PlusIcon className="size-4" />
-        New Offer
+        {t("list.newButton", { ns: "offers" })}
       </Button>
     </div>
   );
@@ -66,7 +71,7 @@ export function OfferList() {
     return (
       <div className="flex flex-col gap-4">
         {header}
-        <LoadingState label="Loading offers…" />
+        <LoadingState label={t("list.loading", { ns: "offers" })} />
       </div>
     );
   }
@@ -75,7 +80,11 @@ export function OfferList() {
     return (
       <div className="flex flex-col gap-4">
         {header}
-        <ErrorState title="Couldn't load offers" description={offersQuery.error.message} onRetry={() => offersQuery.refetch()} />
+        <ErrorState
+          title={t("list.loadError", { ns: "offers" })}
+          description={offersQuery.error.message}
+          onRetry={() => offersQuery.refetch()}
+        />
       </div>
     );
   }
@@ -84,7 +93,7 @@ export function OfferList() {
       <div className="flex flex-col gap-4">
         {header}
         <ErrorState
-          title="Couldn't load networks"
+          title={t("list.loadNetworksError", { ns: "offers" })}
           description={networksQuery.error.message}
           onRetry={() => networksQuery.refetch()}
         />
@@ -99,12 +108,12 @@ export function OfferList() {
       <DataTable
         columns={columns}
         data={filtered}
-        searchPlaceholder="Search offers..."
-        emptyTitle="No offers yet"
+        searchPlaceholder={t("list.searchPlaceholder", { ns: "offers" })}
+        emptyTitle={t("list.emptyTitle", { ns: "offers" })}
         emptyDescription={
           networks.length === 0
-            ? "Add a network first — an offer always belongs to one."
-            : "Add an offer under one of your networks to route traffic to it from a Flow."
+            ? t("list.emptyDescriptionNoNetworks", { ns: "offers" })
+            : t("list.emptyDescription", { ns: "offers" })
         }
         pageSize={10}
         filters={<TagFilterControl selected={tagFilter} onChange={setTagFilter} />}
@@ -116,7 +125,7 @@ export function OfferList() {
             variant="outline"
             onClick={() => setBulkTarget({ ids: selectedRows.map((r) => r.id), clear: clearSelection })}
           >
-            <TagIcon className="size-3.5" /> Edit Tags
+            <TagIcon className="size-3.5" /> {t("list.editTagsButton", { ns: "offers" })}
           </Button>
         )}
       />
@@ -150,6 +159,7 @@ function OfferFormDialog({
   networks: Network[];
   onClose: () => void;
 }) {
+  const { t } = useTranslation("offers");
   const createOffer = useCreateOffer();
   const updateOffer = useUpdateOffer(target?.id ?? "");
 
@@ -171,10 +181,10 @@ function OfferFormDialog({
         },
         {
           onSuccess: () => {
-            toast("Offer updated", { description: values.name });
+            toast(t("toast.updated"), { description: values.name });
             onClose();
           },
-          onError: (err) => toast.error("Couldn't update offer", { description: err.message }),
+          onError: (err) => toast.error(t("toast.updateError"), { description: err.message }),
         },
       );
     } else {
@@ -190,10 +200,10 @@ function OfferFormDialog({
         },
         {
           onSuccess: () => {
-            toast("Offer created", { description: values.name });
+            toast(t("toast.created"), { description: values.name });
             onClose();
           },
-          onError: (err) => toast.error("Couldn't create offer", { description: err.message }),
+          onError: (err) => toast.error(t("toast.createError"), { description: err.message }),
         },
       );
     }
@@ -203,8 +213,8 @@ function OfferFormDialog({
     <OfferFormSheet
       open
       onOpenChange={(open) => !open && onClose()}
-      title={target ? `Edit ${target.name}` : "New Offer"}
-      submitLabel={target ? "Save changes" : "Create offer"}
+      title={target ? t("form.titleEdit", { name: target.name }) : t("form.titleNew")}
+      submitLabel={target ? t("form.submitEdit") : t("form.submitCreate")}
       showStatus={!!target}
       defaultValues={target ? toFormValues(target) : {}}
       networks={networks}

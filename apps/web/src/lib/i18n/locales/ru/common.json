@@ -1,0 +1,55 @@
+{
+  "actions": {
+    "save": "Сохранить",
+    "cancel": "Отмена",
+    "delete": "Удалить",
+    "edit": "Изменить",
+    "add": "Добавить",
+    "create": "Создать",
+    "retry": "Повторить",
+    "clear": "Очистить",
+    "close": "Закрыть",
+    "confirm": "Подтвердить",
+    "duplicate": "Дублировать",
+    "archive": "В архив",
+    "activate": "Активировать",
+    "pause": "Приостановить",
+    "copy": "Копировать"
+  },
+  "dataTable": {
+    "searchPlaceholder": "Поиск...",
+    "emptyTitle": "Нет результатов",
+    "columns": "Столбцы",
+    "selected_one": "Выбрана {{count}} строка",
+    "selected_few": "Выбрано {{count}} строки",
+    "selected_many": "Выбрано {{count}} строк",
+    "selected_other": "Выбрано {{count}} строки",
+    "selectAllAria": "Выбрать все строки на странице",
+    "selectRowAria": "Выбрать строку",
+    "previousPageAria": "Предыдущая страница",
+    "nextPageAria": "Следующая страница",
+    "pagination_one": "Страница {{page}} из {{total}} · {{count}} строка",
+    "pagination_few": "Страница {{page}} из {{total}} · {{count}} строки",
+    "pagination_many": "Страница {{page}} из {{total}} · {{count}} строк",
+    "pagination_other": "Страница {{page}} из {{total}} · {{count}} строки"
+  },
+  "states": {
+    "loading": "Загрузка",
+    "errorTitle": "Что-то пошло не так"
+  },
+  "status": {
+    "active": "Активна",
+    "paused": "Приостановлена",
+    "archived": "В архиве",
+    "draft": "Черновик"
+  },
+  "language": {
+    "switcherLabel": "Сменить язык",
+    "en": "English",
+    "ru": "Русский"
+  },
+  "multiSelect": {
+    "none": "Не выбрано",
+    "searchPlaceholder": "Поиск: {{label}}..."
+  }
+}

@@ -1,6 +1,7 @@
 import type { ColumnDef } from "@tanstack/react-table";
 import Link from "next/link";
 import { formatDistanceToNow } from "date-fns";
+import type { TFunction } from "i18next";
 
 import { dataTableFeatures } from "@/components/ui/data-table";
 import { Badge } from "@/components/ui/badge";
@@ -23,11 +24,14 @@ const STATUS_VARIANT: Record<CampaignStatus, "success" | "warning" | "outline" |
  * single-campaign query, apps/internal/analytics). See
  * docs/frontend-integration.md. sourceNameById resolves each row's
  * trafficSourceId to a display name — the real API returns only the id. */
-export function campaignColumns(sourceNameById: Record<string, string>): ColumnDef<typeof dataTableFeatures, Campaign>[] {
+export function campaignColumns(
+  t: TFunction,
+  sourceNameById: Record<string, string>,
+): ColumnDef<typeof dataTableFeatures, Campaign>[] {
   return [
     {
       accessorKey: "name",
-      header: "Name",
+      header: t("columns.name", { ns: "campaigns" }),
       cell: ({ row }) => (
         <Link href={`/campaigns/${row.original.id}`} className="font-medium text-foreground hover:underline">
           {row.original.name}
@@ -36,26 +40,26 @@ export function campaignColumns(sourceNameById: Record<string, string>): ColumnD
     },
     {
       accessorKey: "status",
-      header: "Status",
+      header: t("columns.status", { ns: "campaigns" }),
       cell: ({ getValue }) => {
         const status = getValue() as CampaignStatus;
-        return <Badge variant={STATUS_VARIANT[status]}>{status}</Badge>;
+        return <Badge variant={STATUS_VARIANT[status]}>{t(`status.${status}`, { ns: "common" })}</Badge>;
       },
     },
     {
       id: "source",
-      header: "Source",
+      header: t("columns.source", { ns: "campaigns" }),
       accessorFn: (row) => sourceNameById[row.trafficSourceId] ?? row.trafficSourceId,
     },
     {
       id: "tags",
-      header: "Tags",
+      header: t("columns.tags", { ns: "campaigns" }),
       enableSorting: false,
       cell: ({ row }) => <TagBadgeList entityType="campaign" entityId={row.original.id} />,
     },
     {
       accessorKey: "updatedAt",
-      header: "Updated",
+      header: t("columns.updated", { ns: "campaigns" }),
       cell: ({ getValue }) => (
         <Caption>{formatDistanceToNow(new Date(getValue() as string), { addSuffix: true })}</Caption>
       ),

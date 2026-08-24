@@ -1,0 +1,81 @@
+{
+  "list": {
+    "title": "Traffic Sources",
+    "newButton": "New Source",
+    "searchPlaceholder": "Search sources...",
+    "emptyTitle": "No traffic sources yet",
+    "emptyDescription": "Add the places your traffic comes from — campaigns reference these by name.",
+    "loading": "Loading traffic sources…",
+    "loadError": "Couldn't load traffic sources",
+    "editTagsButton": "Edit Tags"
+  },
+  "columns": {
+    "name": "Name",
+    "type": "Type",
+    "trackingTemplate": "Tracking template",
+    "costIntegration": "Cost integration",
+    "status": "Status",
+    "tags": "Tags",
+    "updated": "Updated"
+  },
+  "costIntegration": {
+    "none": "Not connected",
+    "manual": "Manual entry",
+    "facebookAds": "Facebook Ads (OAuth)",
+    "tiktokAds": "TikTok Ads (OAuth)"
+  },
+  "sourceType": {
+    "facebook": "Facebook",
+    "tiktok": "TikTok",
+    "google": "Google",
+    "nativeAds": "Native Ads",
+    "push": "Push",
+    "seo": "SEO",
+    "influencer": "Influencer",
+    "email": "Email",
+    "other": "Other"
+  },
+  "form": {
+    "titleNew": "New Source",
+    "titleEdit": "Edit {{name}}",
+    "description": "Traffic sources are where campaigns originate from (§27).",
+    "nameLabel": "Name",
+    "namePlaceholder": "Facebook",
+    "typeLabel": "Type",
+    "trackingTemplateLabel": "Tracking template",
+    "trackingTemplatePlaceholder": "https://track.floxlink.io/click?clickid={click_id}&sub1={sub1}",
+    "costIntegrationLabel": "Cost integration",
+    "costIntegrationHint": "Manual entries are logged per campaign on its Cost tab. Ad-network OAuth pulls (Facebook/TikTok) aren't built yet — this only records intent.",
+    "statusLabel": "Status",
+    "submitCreate": "Create source",
+    "submitEdit": "Save changes",
+    "validation": {
+      "nameMin": "Name must be at least 2 characters",
+      "urlInvalid": "Enter a valid URL"
+    }
+  },
+  "rowActions": {
+    "actionsAria": "Actions for {{name}}",
+    "edit": "Edit",
+    "viewStatistics": "View statistics",
+    "pause": "Pause",
+    "resume": "Resume",
+    "duplicate": "Duplicate",
+    "archive": "Archive",
+    "archiveConfirmTitle": "Archive \"{{name}}\"?",
+    "archiveConfirmDescription": "Archived sources are hidden from campaign source pickers going forward. This can be reversed later."
+  },
+  "toast": {
+    "updated": "Source updated",
+    "created": "Source created",
+    "updateError": "Couldn't update source",
+    "createError": "Couldn't create source",
+    "paused": "Source paused",
+    "resumed": "Source resumed",
+    "duplicated": "Source duplicated",
+    "duplicatedSuffix": "{{name}} (Copy)",
+    "archived": "Source archived",
+    "archiveError": "Couldn't archive source",
+    "duplicateError": "Couldn't duplicate source"
+  }
+}

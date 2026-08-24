@@ -4,6 +4,7 @@ import * as React from "react";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { CopyIcon, GripVerticalIcon, MoreHorizontalIcon, PencilIcon } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
@@ -19,7 +20,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { countConditions, describeFilterTree } from "@/lib/filters";
+import { FILTER_OPERATOR_I18N_KEY, countConditions, describeFilterTree, type FilterOperator } from "@/lib/filters";
 import { hydrateRootFilter, type ApiFlow, type StreamSet } from "@/lib/api/stream-sets";
 import type { Offer } from "@/lib/api/offers";
 
@@ -36,6 +37,7 @@ export function StreamSetRow({
   onDuplicate: () => void;
   onToggleStatus: () => void;
 }) {
+  const { t } = useTranslation(["streamSets", "common"]);
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: streamSet.id,
   });
@@ -49,8 +51,8 @@ export function StreamSetRow({
 
   function destinationLabel(flow: ApiFlow) {
     const destination = flow.destination;
-    if (destination.kind === "redirect") return "Redirect";
-    return offers.find((o) => o.id === destination.offerId)?.name ?? "No offer";
+    if (destination.kind === "redirect") return t("flowDestination.redirect");
+    return offers.find((o) => o.id === destination.offerId)?.name ?? t("row.noOffer");
   }
 
   return (
@@ -62,7 +64,7 @@ export function StreamSetRow({
       <div className="flex items-start gap-3 px-4">
         <button
           type="button"
-          aria-label={`Reorder ${streamSet.name}`}
+          aria-label={t("row.reorderAria", { name: streamSet.name })}
           className="mt-0.5 cursor-grab touch-none text-muted-foreground hover:text-foreground active:cursor-grabbing"
           {...attributes}
           {...listeners}
@@ -83,20 +85,20 @@ export function StreamSetRow({
                 size="sm"
                 checked={streamSet.status === "active"}
                 onCheckedChange={onToggleStatus}
-                aria-label={streamSet.status === "active" ? "Disable stream set" : "Enable stream set"}
+                aria-label={streamSet.status === "active" ? t("row.disableAria") : t("row.enableAria")}
               />
-              <IconButton aria-label={`Edit ${streamSet.name}`} size="icon-sm" onClick={onEdit}>
+              <IconButton aria-label={t("row.editAria", { name: streamSet.name })} size="icon-sm" onClick={onEdit}>
                 <PencilIcon className="size-3.5" />
               </IconButton>
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <IconButton aria-label={`More actions for ${streamSet.name}`} size="icon-sm">
+                  <IconButton aria-label={t("row.moreActionsAria", { name: streamSet.name })} size="icon-sm">
                     <MoreHorizontalIcon className="size-3.5" />
                   </IconButton>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
                   <DropdownMenuItem onSelect={onDuplicate}>
-                    <CopyIcon className="size-4" /> Duplicate
+                    <CopyIcon className="size-4" /> {t("row.duplicate")}
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
@@ -113,12 +115,13 @@ export function StreamSetRow({
                         <FilterChip
                           key={child.id}
                           field={child.field}
-                          operator={child.operator.replace(/_/g, " ").toLowerCase()}
+                          operator={t(FILTER_OPERATOR_I18N_KEY[child.operator as FilterOperator])}
                           value={child.operator === "BETWEEN" ? `${child.value}–${child.valueTo}` : child.value || "—"}
                         />
                       ) : (
                         <Badge key={child.id} variant="outline">
-                          {child.joiner === "AND" ? "match all" : "match any"} ({countConditions(child)})
+                          {child.joiner === "AND" ? t("filterGroupBuilder.matchAll") : t("filterGroupBuilder.matchAny")} (
+                          {countConditions(child)})
                         </Badge>
                       ),
                     )}
@@ -128,7 +131,7 @@ export function StreamSetRow({
               <TooltipContent>{describeFilterTree(hydratedRoot)}</TooltipContent>
             </Tooltip>
           ) : (
-            <p className="text-xs text-muted-foreground">No filters — matches all traffic</p>
+            <p className="text-xs text-muted-foreground">{t("row.noFilters")}</p>
           )}
 
           <div className="flex flex-wrap items-center gap-1.5">
@@ -137,7 +140,9 @@ export function StreamSetRow({
                 {f.name} · {weightSum > 0 ? ((f.weight / weightSum) * 100).toFixed(0) : 0}%
               </Tag>
             ))}
-            <Badge variant={streamSet.status === "active" ? "success" : "secondary"}>{streamSet.status}</Badge>
+            <Badge variant={streamSet.status === "active" ? "success" : "secondary"}>
+              {t(`status.${streamSet.status}`, { ns: "common" })}
+            </Badge>
           </div>
         </div>
       </div>

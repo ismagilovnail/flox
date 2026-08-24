@@ -3,6 +3,7 @@
 import * as React from "react";
 import { toast } from "sonner";
 import { PlusIcon, TagIcon } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
@@ -18,6 +19,7 @@ import { filterByTags } from "@/features/tags/filter-by-tags";
 import type { Network } from "@/lib/api/networks";
 
 export function NetworkList() {
+  const { t } = useTranslation(["networks", "common"]);
   const networksQuery = useNetworks();
   const assignments = useTagsStore((s) => s.assignments);
 
@@ -25,7 +27,7 @@ export function NetworkList() {
   const [tagFilter, setTagFilter] = React.useState<string[]>([]);
   const [bulkTarget, setBulkTarget] = React.useState<{ ids: string[]; clear: () => void } | null>(null);
 
-  const columns = React.useMemo(() => networkColumns((network) => setTarget(network)), []);
+  const columns = React.useMemo(() => networkColumns(t, (network) => setTarget(network)), [t]);
   const filtered = React.useMemo(
     () => filterByTags("network", networksQuery.data?.networks ?? [], tagFilter, assignments),
     [networksQuery.data, tagFilter, assignments],
@@ -33,10 +35,10 @@ export function NetworkList() {
 
   const header = (
     <div className="flex items-center justify-between">
-      <h1 className="text-2xl font-semibold tracking-tight">Networks</h1>
+      <h1 className="text-2xl font-semibold tracking-tight">{t("list.title", { ns: "networks" })}</h1>
       <Button onClick={() => setTarget(null)}>
         <PlusIcon className="size-4" />
-        New Network
+        {t("list.newButton", { ns: "networks" })}
       </Button>
     </div>
   );
@@ -45,7 +47,7 @@ export function NetworkList() {
     return (
       <div className="flex flex-col gap-4">
         {header}
-        <LoadingState label="Loading networks…" />
+        <LoadingState label={t("list.loading", { ns: "networks" })} />
       </div>
     );
   }
@@ -55,7 +57,7 @@ export function NetworkList() {
       <div className="flex flex-col gap-4">
         {header}
         <ErrorState
-          title="Couldn't load networks"
+          title={t("list.loadError", { ns: "networks" })}
           description={networksQuery.error.message}
           onRetry={() => networksQuery.refetch()}
         />
@@ -70,9 +72,9 @@ export function NetworkList() {
       <DataTable
         columns={columns}
         data={filtered}
-        searchPlaceholder="Search networks..."
-        emptyTitle="No networks yet"
-        emptyDescription="Add the CPA/CPL networks your offers belong to."
+        searchPlaceholder={t("list.searchPlaceholder", { ns: "networks" })}
+        emptyTitle={t("list.emptyTitle", { ns: "networks" })}
+        emptyDescription={t("list.emptyDescription", { ns: "networks" })}
         pageSize={10}
         filters={<TagFilterControl selected={tagFilter} onChange={setTagFilter} />}
         enableRowSelection
@@ -83,7 +85,7 @@ export function NetworkList() {
             variant="outline"
             onClick={() => setBulkTarget({ ids: selectedRows.map((r) => r.id), clear: clearSelection })}
           >
-            <TagIcon className="size-3.5" /> Edit Tags
+            <TagIcon className="size-3.5" /> {t("list.editTagsButton", { ns: "networks" })}
           </Button>
         )}
       />
@@ -109,6 +111,7 @@ export function NetworkList() {
 }
 
 function NetworkFormDialog({ target, onClose }: { target: Network | null; onClose: () => void }) {
+  const { t } = useTranslation("networks");
   const createNetwork = useCreateNetwork();
   const updateNetwork = useUpdateNetwork(target?.id ?? "");
 
@@ -118,10 +121,10 @@ function NetworkFormDialog({ target, onClose }: { target: Network | null; onClos
         { name: values.name, postbackUrl: values.postbackUrl, acceptDuplicates: values.acceptDuplicates, status: values.status },
         {
           onSuccess: () => {
-            toast("Network updated", { description: values.name });
+            toast(t("toast.updated"), { description: values.name });
             onClose();
           },
-          onError: (err) => toast.error("Couldn't update network", { description: err.message }),
+          onError: (err) => toast.error(t("toast.updateError"), { description: err.message }),
         },
       );
     } else {
@@ -129,10 +132,10 @@ function NetworkFormDialog({ target, onClose }: { target: Network | null; onClos
         { name: values.name, postbackUrl: values.postbackUrl, acceptDuplicates: values.acceptDuplicates },
         {
           onSuccess: () => {
-            toast("Network created", { description: values.name });
+            toast(t("toast.created"), { description: values.name });
             onClose();
           },
-          onError: (err) => toast.error("Couldn't create network", { description: err.message }),
+          onError: (err) => toast.error(t("toast.createError"), { description: err.message }),
         },
       );
     }
@@ -142,8 +145,8 @@ function NetworkFormDialog({ target, onClose }: { target: Network | null; onClos
     <NetworkFormSheet
       open
       onOpenChange={(open) => !open && onClose()}
-      title={target ? `Edit ${target.name}` : "New Network"}
-      submitLabel={target ? "Save changes" : "Create network"}
+      title={target ? t("form.titleEdit", { name: target.name }) : t("form.titleNew")}
+      submitLabel={target ? t("form.submitEdit") : t("form.submitCreate")}
       showStatus={!!target}
       defaultValues={
         target

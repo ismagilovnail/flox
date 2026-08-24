@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { CopyIcon, ExternalLinkIcon, MoreHorizontalIcon, PauseIcon, PlayIcon, Trash2Icon } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
 import { IconButton } from "@/components/ui/icon-button";
 import { Button } from "@/components/ui/button";
@@ -27,6 +28,7 @@ import { useActivateCampaign, useArchiveCampaign, useDuplicateCampaign, usePause
 import type { Campaign } from "@/lib/api/campaigns";
 
 export function CampaignRowActions({ campaign }: { campaign: Campaign }) {
+  const { t } = useTranslation(["campaigns", "common"]);
   const router = useRouter();
   const pause = usePauseCampaign();
   const activate = useActivateCampaign();
@@ -38,18 +40,18 @@ export function CampaignRowActions({ campaign }: { campaign: Campaign }) {
     const action = campaign.status === "active" ? pause : activate;
     action.mutate(campaign.id, {
       onSuccess: () =>
-        toast(campaign.status === "active" ? "Campaign paused" : "Campaign resumed", { description: campaign.name }),
-      onError: (err) => toast.error("Couldn't update campaign", { description: err.message }),
+        toast(t(campaign.status === "active" ? "toast.paused" : "toast.resumed"), { description: campaign.name }),
+      onError: (err) => toast.error(t("toast.updateError"), { description: err.message }),
     });
   }
 
   function handleDuplicate() {
     duplicate.mutate(campaign.id, {
       onSuccess: (created) => {
-        toast("Campaign duplicated", { description: `${campaign.name} (Copy)` });
+        toast(t("toast.duplicated"), { description: t("toast.duplicatedSuffix", { name: campaign.name }) });
         router.push(`/campaigns/${created.id}`);
       },
-      onError: (err) => toast.error("Couldn't duplicate campaign", { description: err.message }),
+      onError: (err) => toast.error(t("toast.duplicateError"), { description: err.message }),
     });
   }
 
@@ -57,11 +59,11 @@ export function CampaignRowActions({ campaign }: { campaign: Campaign }) {
     archive.mutate(campaign.id, {
       onSuccess: () => {
         setConfirmArchive(false);
-        toast("Campaign archived", { description: campaign.name });
+        toast(t("toast.archived"), { description: campaign.name });
       },
       onError: (err) => {
         setConfirmArchive(false);
-        toast.error("Couldn't archive campaign", { description: err.message });
+        toast.error(t("toast.archiveError"), { description: err.message });
       },
     });
   }
@@ -70,37 +72,37 @@ export function CampaignRowActions({ campaign }: { campaign: Campaign }) {
     <>
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <IconButton aria-label={`Actions for ${campaign.name}`} variant="ghost" size="icon-sm">
+          <IconButton aria-label={t("rowActions.actionsAria", { name: campaign.name })} variant="ghost" size="icon-sm">
             <MoreHorizontalIcon className="size-4" />
           </IconButton>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
           <DropdownMenuItem asChild>
             <Link href={`/campaigns/${campaign.id}`}>
-              <ExternalLinkIcon className="size-4" /> Open
+              <ExternalLinkIcon className="size-4" /> {t("rowActions.open")}
             </Link>
           </DropdownMenuItem>
           {campaign.status !== "archived" && campaign.status !== "draft" && (
             <DropdownMenuItem onSelect={togglePause}>
               {campaign.status === "active" ? (
                 <>
-                  <PauseIcon className="size-4" /> Pause
+                  <PauseIcon className="size-4" /> {t("rowActions.pause")}
                 </>
               ) : (
                 <>
-                  <PlayIcon className="size-4" /> Resume
+                  <PlayIcon className="size-4" /> {t("rowActions.resume")}
                 </>
               )}
             </DropdownMenuItem>
           )}
           <DropdownMenuItem onSelect={handleDuplicate}>
-            <CopyIcon className="size-4" /> Duplicate
+            <CopyIcon className="size-4" /> {t("rowActions.duplicate")}
           </DropdownMenuItem>
           {campaign.status !== "archived" && (
             <>
               <DropdownMenuSeparator />
               <DropdownMenuItem variant="destructive" onSelect={() => setConfirmArchive(true)}>
-                <Trash2Icon className="size-4" /> Archive
+                <Trash2Icon className="size-4" /> {t("rowActions.archive")}
               </DropdownMenuItem>
             </>
           )}
@@ -110,18 +112,15 @@ export function CampaignRowActions({ campaign }: { campaign: Campaign }) {
       <Dialog open={confirmArchive} onOpenChange={setConfirmArchive}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Archive &ldquo;{campaign.name}&rdquo;?</DialogTitle>
-            <DialogDescription>
-              Archived campaigns stop routing traffic and are hidden from the active list. This
-              can be reversed later from campaign settings.
-            </DialogDescription>
+            <DialogTitle>{t("rowActions.archiveConfirmTitle", { name: campaign.name })}</DialogTitle>
+            <DialogDescription>{t("rowActions.archiveConfirmDescription")}</DialogDescription>
           </DialogHeader>
           <DialogFooter>
             <Button variant="outline" onClick={() => setConfirmArchive(false)}>
-              Cancel
+              {t("actions.cancel", { ns: "common" })}
             </Button>
             <Button variant="destructive" onClick={handleArchive} disabled={archive.isPending}>
-              Archive
+              {t("rowActions.archive")}
             </Button>
           </DialogFooter>
         </DialogContent>

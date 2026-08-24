@@ -1,0 +1,45 @@
+{
+  "list": {
+    "title": "Конверсии",
+    "searchPlaceholder": "Поиск по Click ID...",
+    "emptyTitle": "Пока нет конверсий",
+    "emptyDescription": "События CPA появятся здесь, как только трекер начнёт записывать постбэки.",
+    "loading": "Загрузка конверсий…",
+    "loadError": "Не удалось загрузить конверсии"
+  },
+  "columns": {
+    "clickId": "Click ID",
+    "campaign": "Кампания",
+    "network": "Сеть",
+    "status": "Статус",
+    "revenue": "Доход",
+    "eventTime": "Время события"
+  },
+  "status": {
+    "hold": "ХОЛД",
+    "accept": "ОДОБРЕНО",
+    "redep": "РЕДЕПОЗИТ",
+    "decline": "ОТКЛОНЕНО",
+    "trash": "БРАК"
+  },
+  "detail": {
+    "loading": "Загрузка конверсии…",
+    "notFoundTitle": "Конверсия не найдена",
+    "revenueLabel": "Доход",
+    "statusLabel": "Статус",
+    "noConversionYet": "Пока нет конверсии",
+    "eventsRecordedLabel": "Записано событий",
+    "timelineTitle": "Хронология",
+    "timelineDescription": "Все записанные события для этого клика, по порядку."
+  },
+  "timeline": {
+    "cpaLabel": {
+      "hold": "Регистрация в холде",
+      "accept": "Первый депозит принят",
+      "redep": "Редепозит принят",
+      "decline": "Конверсия отклонена",
+      "trash": "Помечено как брак/дубликат"
+    },
+    "noRevenue": "Нет дохода по этому событию"
+  }
+}

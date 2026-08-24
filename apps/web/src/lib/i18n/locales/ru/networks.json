@@ -1,0 +1,68 @@
+{
+  "list": {
+    "title": "Сети",
+    "newButton": "Новая сеть",
+    "searchPlaceholder": "Поиск сетей...",
+    "emptyTitle": "Пока нет сетей",
+    "emptyDescription": "Добавьте CPA/CPL сети, которым принадлежат ваши офферы.",
+    "loading": "Загрузка сетей…",
+    "loadError": "Не удалось загрузить сети",
+    "editTagsButton": "Изменить теги"
+  },
+  "columns": {
+    "name": "Название",
+    "status": "Статус",
+    "tags": "Теги",
+    "postbackUrl": "URL постбэка",
+    "dedup": "Дедуп",
+    "updated": "Обновлено"
+  },
+  "dedup": {
+    "acceptsDuplicates": "дубли разрешены",
+    "dedupOn": "дедуп включён"
+  },
+  "form": {
+    "titleNew": "Новая сеть",
+    "titleEdit": "Изменить {{name}}",
+    "description": "Сети — это CPA/CPL партнёры, которым принадлежат ваши офферы (§27).",
+    "nameLabel": "Название",
+    "namePlaceholder": "AffTrust CPA",
+    "postbackUrlLabel": "URL постбэка",
+    "postbackUrlPlaceholder": "https://network.example/postback?click_id={click_id}&status={status}",
+    "postbackUrlHint": "Отправляется при изменении статуса конверсии для этой сети (реальная доставка настраивается на Фазе 24).",
+    "acceptDuplicatesLabel": "Принимать дублирующиеся постбэки",
+    "acceptDuplicatesHint": "По умолчанию FLOX отбрасывает дубли постбэков по (click_id, status) — некоторые партнёры намеренно повторно отправляют одинаковые депозиты/статусы. Включайте это только если это необходимо для данной сети (§45).",
+    "acceptDuplicatesAria": "Принимать дублирующиеся постбэки",
+    "statusLabel": "Статус",
+    "submitCreate": "Создать сеть",
+    "submitEdit": "Сохранить изменения",
+    "validation": {
+      "nameMin": "Название должно содержать не менее 2 символов",
+      "urlInvalid": "Введите корректный URL"
+    }
+  },
+  "rowActions": {
+    "actionsAria": "Действия для {{name}}",
+    "edit": "Изменить",
+    "viewStatistics": "Посмотреть статистику",
+    "pause": "Приостановить",
+    "resume": "Возобновить",
+    "duplicate": "Дублировать",
+    "archive": "В архив",
+    "archiveConfirmTitle": "Отправить «{{name}}» в архив?",
+    "archiveConfirmDescription": "Сети в архиве больше не отображаются в выборе сети для офферов/потоков. Существующие потоки, уже ссылающиеся на эту сеть, продолжат работать. Это можно отменить позже."
+  },
+  "toast": {
+    "updated": "Сеть обновлена",
+    "created": "Сеть создана",
+    "updateError": "Не удалось обновить сеть",
+    "createError": "Не удалось создать сеть",
+    "paused": "Сеть приостановлена",
+    "resumed": "Сеть возобновлена",
+    "duplicated": "Сеть продублирована",
+    "duplicatedSuffix": "{{name}} (копия)",
+    "archived": "Сеть отправлена в архив",
+    "archiveError": "Не удалось отправить сеть в архив",
+    "duplicateError": "Не удалось продублировать сеть"
+  }
+}

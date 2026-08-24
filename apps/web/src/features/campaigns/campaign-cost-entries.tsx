@@ -7,6 +7,8 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { Trash2Icon } from "lucide-react";
 import type { ColumnDef } from "@tanstack/react-table";
+import { useTranslation } from "react-i18next";
+import type { TFunction } from "i18next";
 
 import { Button } from "@/components/ui/button";
 import { IconButton } from "@/components/ui/icon-button";
@@ -24,41 +26,53 @@ import type { CostEntry } from "@/lib/api/cost-entries";
 
 const ALL_SOURCES = "__all__";
 
-const costEntrySchema = z.object({
-  entryDate: z.string().min(1, "Required"),
-  trafficSourceId: z.string(),
-  amount: z
-    .string()
-    .min(1, "Required")
-    .refine((v) => !isNaN(Number(v)) && Number(v) >= 0, "Must be a non-negative number"),
-  currency: z.string().length(3, "3-letter code, e.g. USD"),
-});
+/** Factory, not a module-level const — see source-form-sheet.tsx's
+ * buildSourceFormSchema for why (Zod messages are user-facing text and
+ * need the live translator). */
+function buildCostEntrySchema(t: TFunction) {
+  return z.object({
+    entryDate: z.string().min(1, t("form.validation.required", { ns: "cost" })),
+    trafficSourceId: z.string(),
+    amount: z
+      .string()
+      .min(1, t("form.validation.required", { ns: "cost" }))
+      .refine((v) => !isNaN(Number(v)) && Number(v) >= 0, t("form.validation.amountInvalid", { ns: "cost" })),
+    currency: z.string().length(3, t("form.validation.currencyInvalid", { ns: "cost" })),
+  });
+}
 
-type CostEntryFormValues = z.infer<typeof costEntrySchema>;
+type CostEntryFormValues = z.infer<ReturnType<typeof buildCostEntrySchema>>;
 
 function today(): string {
   return new Date().toISOString().slice(0, 10);
 }
 
-function costEntryColumns(sourceNameById: Record<string, string>, onDelete: (id: string) => void): ColumnDef<typeof dataTableFeatures, CostEntry>[] {
+function costEntryColumns(
+  t: TFunction,
+  sourceNameById: Record<string, string>,
+  onDelete: (id: string) => void,
+): ColumnDef<typeof dataTableFeatures, CostEntry>[] {
   return [
-    { accessorKey: "entryDate", header: "Date" },
+    { accessorKey: "entryDate", header: t("columns.date", { ns: "cost" }) },
     {
       id: "source",
-      header: "Source",
-      accessorFn: (row) => (row.trafficSourceId ? (sourceNameById[row.trafficSourceId] ?? row.trafficSourceId) : "All sources"),
+      header: t("columns.source", { ns: "cost" }),
+      accessorFn: (row) =>
+        row.trafficSourceId
+          ? (sourceNameById[row.trafficSourceId] ?? row.trafficSourceId)
+          : t("form.allSources", { ns: "cost" }),
     },
     {
       id: "amount",
-      header: "Amount",
+      header: t("columns.amount", { ns: "cost" }),
       accessorFn: (row) => `${row.amount.toLocaleString("en-US", { minimumFractionDigits: 2 })} ${row.currency}`,
     },
     {
       id: "amountUsd",
-      header: "USD",
+      header: t("columns.amountUsd", { ns: "cost" }),
       cell: ({ row }) =>
         row.original.amountUsd === null ? (
-          <span className="text-xs text-muted-foreground">pending FX rate</span>
+          <span className="text-xs text-muted-foreground">{t("columns.pendingFxRate", { ns: "cost" })}</span>
         ) : (
           formatUsd(row.original.amountUsd, 2)
         ),
@@ -70,7 +84,7 @@ function costEntryColumns(sourceNameById: Record<string, string>, onDelete: (id:
       enableHiding: false,
       cell: ({ row }) => (
         <div className="flex justify-end">
-          <IconButton aria-label="Delete entry" onClick={() => onDelete(row.original.id)}>
+          <IconButton aria-label={t("list.deleteAria", { ns: "cost" })} onClick={() => onDelete(row.original.id)}>
             <Trash2Icon className="size-4" />
           </IconButton>
         </div>
@@ -83,6 +97,7 @@ function costEntryColumns(sourceNameById: Record<string, string>, onDelete: (id:
  * the same (source, date) via the form updates that day in place — the
  * backend upserts, it never stacks (apps/internal/cost). */
 export function CampaignCostEntries({ campaignId }: { campaignId: string }) {
+  const { t } = useTranslation("cost");
   const entriesQuery = useCostEntries(campaignId);
   const sourcesQuery = useTrafficSources();
   const upsert = useUpsertCostEntry(campaignId);
@@ -96,7 +111,7 @@ export function CampaignCostEntries({ campaignId }: { campaignId: string }) {
   }, [sourcesQuery.data]);
 
   const form = useForm<CostEntryFormValues>({
-    resolver: zodResolver(costEntrySchema),
+    resolver: zodResolver(buildCostEntrySchema(t)),
     defaultValues: { entryDate: today(), trafficSourceId: ALL_SOURCES, amount: "0", currency: "USD" },
   });
 
@@ -110,18 +125,24 @@ export function CampaignCostEntries({ campaignId }: { campaignId: string }) {
       },
       {
         onSuccess: () => {
-          toast("Spend saved", { description: `${values.entryDate} — ${values.amount} ${values.currency.toUpperCase()}` });
+          toast(t("toast.saved"), {
+            description: t("toast.savedDescription", {
+              date: values.entryDate,
+              amount: values.amount,
+              currency: values.currency.toUpperCase(),
+            }),
+          });
           form.reset({ entryDate: today(), trafficSourceId: ALL_SOURCES, amount: "0", currency: "USD" });
         },
-        onError: (err) => toast.error("Couldn't save spend", { description: err.message }),
+        onError: (err) => toast.error(t("toast.saveError"), { description: err.message }),
       },
     );
   }
 
   function handleDelete(id: string) {
     del.mutate(id, {
-      onSuccess: () => toast("Entry removed"),
-      onError: (err) => toast.error("Couldn't remove entry", { description: err.message }),
+      onSuccess: () => toast(t("toast.removed")),
+      onError: (err) => toast.error(t("toast.removeError"), { description: err.message }),
     });
   }
 
@@ -136,21 +157,19 @@ export function CampaignCostEntries({ campaignId }: { campaignId: string }) {
     <div className="flex flex-col gap-6">
       <Card>
         <CardHeader>
-          <CardTitle>Add or update spend</CardTitle>
-          <CardDescription>
-            One entry per day (optionally per source) — entering a day that already has spend updates it, it never stacks.
-          </CardDescription>
+          <CardTitle>{t("form.title")}</CardTitle>
+          <CardDescription>{t("form.description")}</CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit(onSubmit)} className="grid max-w-2xl grid-cols-2 gap-4 sm:grid-cols-4">
             <div className="grid gap-1.5">
-              <Label htmlFor="entryDate">Date</Label>
+              <Label htmlFor="entryDate">{t("form.dateLabel")}</Label>
               <Input id="entryDate" type="date" {...register("entryDate")} aria-invalid={!!errors.entryDate} />
               {errors.entryDate && <p className="text-xs text-danger">{errors.entryDate.message}</p>}
             </div>
 
             <div className="grid gap-1.5">
-              <Label htmlFor="trafficSourceId">Source</Label>
+              <Label htmlFor="trafficSourceId">{t("form.sourceLabel")}</Label>
               <Controller
                 control={control}
                 name="trafficSourceId"
@@ -160,7 +179,7 @@ export function CampaignCostEntries({ campaignId }: { campaignId: string }) {
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value={ALL_SOURCES}>All sources</SelectItem>
+                      <SelectItem value={ALL_SOURCES}>{t("form.allSources")}</SelectItem>
                       {sources.map((s) => (
                         <SelectItem key={s.id} value={s.id}>
                           {s.name}
@@ -173,20 +192,26 @@ export function CampaignCostEntries({ campaignId }: { campaignId: string }) {
             </div>
 
             <div className="grid gap-1.5">
-              <Label htmlFor="amount">Amount</Label>
+              <Label htmlFor="amount">{t("form.amountLabel")}</Label>
               <Input id="amount" type="number" step="0.01" min="0" {...register("amount")} aria-invalid={!!errors.amount} />
               {errors.amount && <p className="text-xs text-danger">{errors.amount.message}</p>}
             </div>
 
             <div className="grid gap-1.5">
-              <Label htmlFor="currency">Currency</Label>
-              <Input id="currency" placeholder="USD" maxLength={3} {...register("currency")} aria-invalid={!!errors.currency} />
+              <Label htmlFor="currency">{t("form.currencyLabel")}</Label>
+              <Input
+                id="currency"
+                placeholder={t("form.currencyPlaceholder")}
+                maxLength={3}
+                {...register("currency")}
+                aria-invalid={!!errors.currency}
+              />
               {errors.currency && <p className="text-xs text-danger">{errors.currency.message}</p>}
             </div>
 
             <div className="col-span-full flex justify-end">
               <Button type="submit" disabled={isSubmitting}>
-                Save spend
+                {t("form.submitButton")}
               </Button>
             </div>
           </form>
@@ -194,15 +219,15 @@ export function CampaignCostEntries({ campaignId }: { campaignId: string }) {
       </Card>
 
       {entriesQuery.isPending ? (
-        <LoadingState label="Loading spend entries…" />
+        <LoadingState label={t("list.loading")} />
       ) : entriesQuery.isError ? (
-        <ErrorState title="Couldn't load spend entries" description={entriesQuery.error.message} onRetry={() => entriesQuery.refetch()} />
+        <ErrorState title={t("list.loadError")} description={entriesQuery.error.message} onRetry={() => entriesQuery.refetch()} />
       ) : (
         <DataTable
-          columns={costEntryColumns(sourceNameById, handleDelete)}
+          columns={costEntryColumns(t, sourceNameById, handleDelete)}
           data={entriesQuery.data.entries}
-          emptyTitle="No spend logged yet"
-          emptyDescription="Add a day's spend above to start tracking Profit/ROI/CPA on the Overview tab."
+          emptyTitle={t("list.emptyTitle")}
+          emptyDescription={t("list.emptyDescription")}
           pageSize={10}
           getRowId={(row) => row.id}
         />

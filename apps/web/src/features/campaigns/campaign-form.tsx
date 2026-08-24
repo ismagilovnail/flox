@@ -3,6 +3,8 @@
 import { Controller, useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
+import { useTranslation } from "react-i18next";
+import type { TFunction } from "i18next";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -19,22 +21,26 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { type CampaignStatus } from "@/lib/api/campaigns";
 import { useTrafficSources } from "@/hooks/use-traffic-sources";
 
-export const campaignFormSchema = z.object({
-  name: z.string().min(2, "Name must be at least 2 characters").max(80),
-  trafficSourceId: z.string().min(1, "Select a source"),
-  fallbackUrl: z.url("Enter a valid URL"),
-  notes: z.string().max(500).optional(),
-  status: z.enum(["active", "paused", "draft", "archived"] as [CampaignStatus, ...CampaignStatus[]]).optional(),
-});
+/** A factory, not a module-level const — see the identical pattern (and
+ * rationale) in features/traffic-sources/source-form-sheet.tsx. */
+export function buildCampaignFormSchema(t: TFunction) {
+  return z.object({
+    name: z.string().min(2, t("form.validation.nameMin", { ns: "campaigns" })).max(80),
+    trafficSourceId: z.string().min(1, t("form.validation.sourceRequired", { ns: "campaigns" })),
+    fallbackUrl: z.url(t("form.validation.urlInvalid", { ns: "campaigns" })),
+    notes: z.string().max(500).optional(),
+    status: z.enum(["active", "paused", "draft", "archived"] as [CampaignStatus, ...CampaignStatus[]]).optional(),
+  });
+}
 
-export type CampaignFormValues = z.infer<typeof campaignFormSchema>;
+export type CampaignFormValues = z.infer<ReturnType<typeof buildCampaignFormSchema>>;
 
 const STATUS_OPTIONS: CampaignStatus[] = ["draft", "active", "paused", "archived"];
 
 export function CampaignForm({
   defaultValues,
   showStatus = false,
-  submitLabel = "Save",
+  submitLabel,
   onSubmit,
 }: {
   defaultValues: Partial<CampaignFormValues>;
@@ -42,11 +48,12 @@ export function CampaignForm({
   submitLabel?: string;
   onSubmit: (values: CampaignFormValues) => void;
 }) {
+  const { t } = useTranslation(["campaigns", "common"]);
   const sourcesQuery = useTrafficSources();
   const sources = sourcesQuery.data?.trafficSources ?? [];
 
   const form = useForm<CampaignFormValues>({
-    resolver: zodResolver(campaignFormSchema),
+    resolver: zodResolver(buildCampaignFormSchema(t)),
     values: {
       name: "",
       trafficSourceId: sources[0]?.id ?? "",
@@ -68,26 +75,31 @@ export function CampaignForm({
     <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-4">
       <Card>
         <CardHeader>
-          <CardTitle>Campaign details</CardTitle>
-          <CardDescription>Name, source, and where traffic lands if no rule matches.</CardDescription>
+          <CardTitle>{t("form.detailsTitle", { ns: "campaigns" })}</CardTitle>
+          <CardDescription>{t("form.detailsDescription", { ns: "campaigns" })}</CardDescription>
         </CardHeader>
         <CardContent className="grid max-w-lg gap-4">
           <div className="grid gap-1.5">
-            <Label htmlFor="name">Name</Label>
-            <Input id="name" placeholder="US Sweeps — FB" {...register("name")} aria-invalid={!!errors.name} />
+            <Label htmlFor="name">{t("form.nameLabel", { ns: "campaigns" })}</Label>
+            <Input
+              id="name"
+              placeholder={t("form.namePlaceholder", { ns: "campaigns" })}
+              {...register("name")}
+              aria-invalid={!!errors.name}
+            />
             {errors.name && <p className="text-xs text-danger">{errors.name.message}</p>}
           </div>
 
           <div className="grid gap-1.5">
-            <Label htmlFor="trafficSourceId">Source</Label>
+            <Label htmlFor="trafficSourceId">{t("form.sourceLabel", { ns: "campaigns" })}</Label>
             {sourcesQuery.isPending ? (
-              <p className="text-xs text-muted-foreground">Loading sources…</p>
+              <p className="text-xs text-muted-foreground">{t("form.sourceLoading", { ns: "campaigns" })}</p>
             ) : sourcesQuery.isError ? (
-              <p className="text-xs text-danger">Couldn&apos;t load sources: {sourcesQuery.error.message}</p>
-            ) : sources.length === 0 ? (
-              <p className="text-xs text-muted-foreground">
-                No traffic sources yet — creating one isn&apos;t built yet, so a campaign needs at least one to exist already.
+              <p className="text-xs text-danger">
+                {t("form.sourceLoadError", { ns: "campaigns", message: sourcesQuery.error.message })}
               </p>
+            ) : sources.length === 0 ? (
+              <p className="text-xs text-muted-foreground">{t("form.sourceEmpty", { ns: "campaigns" })}</p>
             ) : (
               <Controller
                 control={control}
@@ -112,22 +124,20 @@ export function CampaignForm({
           </div>
 
           <div className="grid gap-1.5">
-            <Label htmlFor="fallbackUrl">Fallback URL</Label>
+            <Label htmlFor="fallbackUrl">{t("form.fallbackUrlLabel", { ns: "campaigns" })}</Label>
             <Input
               id="fallbackUrl"
-              placeholder="https://example.com/offer-fallback"
+              placeholder={t("form.fallbackUrlPlaceholder", { ns: "campaigns" })}
               {...register("fallbackUrl")}
               aria-invalid={!!errors.fallbackUrl}
             />
             {errors.fallbackUrl && <p className="text-xs text-danger">{errors.fallbackUrl.message}</p>}
-            <p className="text-xs text-muted-foreground">
-              Used when no stream set matches (Phase 7 builds the rules that route around this).
-            </p>
+            <p className="text-xs text-muted-foreground">{t("form.fallbackUrlHint", { ns: "campaigns" })}</p>
           </div>
 
           {showStatus && (
             <div className="grid gap-1.5">
-              <Label htmlFor="status">Status</Label>
+              <Label htmlFor="status">{t("form.statusLabel", { ns: "campaigns" })}</Label>
               <Controller
                 control={control}
                 name="status"
@@ -139,7 +149,7 @@ export function CampaignForm({
                     <SelectContent>
                       {STATUS_OPTIONS.map((s) => (
                         <SelectItem key={s} value={s}>
-                          {s}
+                          {t(`status.${s}`, { ns: "common" })}
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -150,15 +160,15 @@ export function CampaignForm({
           )}
 
           <div className="grid gap-1.5">
-            <Label htmlFor="notes">Notes</Label>
-            <Textarea id="notes" placeholder="Internal notes..." {...register("notes")} />
+            <Label htmlFor="notes">{t("form.notesLabel", { ns: "campaigns" })}</Label>
+            <Textarea id="notes" placeholder={t("form.notesPlaceholder", { ns: "campaigns" })} {...register("notes")} />
           </div>
         </CardContent>
       </Card>
 
       <div className="flex justify-end">
         <Button type="submit" disabled={isSubmitting || sources.length === 0}>
-          {submitLabel}
+          {submitLabel ?? t("form.submitDefault", { ns: "campaigns" })}
         </Button>
       </div>
     </form>

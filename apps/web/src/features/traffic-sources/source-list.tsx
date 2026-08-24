@@ -3,6 +3,7 @@
 import * as React from "react";
 import { toast } from "sonner";
 import { PlusIcon, TagIcon } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
@@ -18,6 +19,7 @@ import { filterByTags } from "@/features/tags/filter-by-tags";
 import type { TrafficSource } from "@/lib/api/traffic-sources";
 
 export function SourceList() {
+  const { t } = useTranslation(["trafficSources", "common"]);
   const sourcesQuery = useTrafficSources();
   const assignments = useTagsStore((s) => s.assignments);
 
@@ -25,7 +27,7 @@ export function SourceList() {
   const [tagFilter, setTagFilter] = React.useState<string[]>([]);
   const [bulkTarget, setBulkTarget] = React.useState<{ ids: string[]; clear: () => void } | null>(null);
 
-  const columns = React.useMemo(() => sourceColumns((source) => setTarget(source)), []);
+  const columns = React.useMemo(() => sourceColumns(t, (source) => setTarget(source)), [t]);
   const filtered = React.useMemo(
     () => filterByTags("traffic_source", sourcesQuery.data?.trafficSources ?? [], tagFilter, assignments),
     [sourcesQuery.data, tagFilter, assignments],
@@ -33,10 +35,10 @@ export function SourceList() {
 
   const header = (
     <div className="flex items-center justify-between">
-      <h1 className="text-2xl font-semibold tracking-tight">Traffic Sources</h1>
+      <h1 className="text-2xl font-semibold tracking-tight">{t("list.title", { ns: "trafficSources" })}</h1>
       <Button onClick={() => setTarget(null)}>
         <PlusIcon className="size-4" />
-        New Source
+        {t("list.newButton", { ns: "trafficSources" })}
       </Button>
     </div>
   );
@@ -45,7 +47,7 @@ export function SourceList() {
     return (
       <div className="flex flex-col gap-4">
         {header}
-        <LoadingState label="Loading traffic sources…" />
+        <LoadingState label={t("list.loading", { ns: "trafficSources" })} />
       </div>
     );
   }
@@ -55,7 +57,7 @@ export function SourceList() {
       <div className="flex flex-col gap-4">
         {header}
         <ErrorState
-          title="Couldn't load traffic sources"
+          title={t("list.loadError", { ns: "trafficSources" })}
           description={sourcesQuery.error.message}
           onRetry={() => sourcesQuery.refetch()}
         />
@@ -70,9 +72,9 @@ export function SourceList() {
       <DataTable
         columns={columns}
         data={filtered}
-        searchPlaceholder="Search sources..."
-        emptyTitle="No traffic sources yet"
-        emptyDescription="Add the places your traffic comes from — campaigns reference these by name."
+        searchPlaceholder={t("list.searchPlaceholder", { ns: "trafficSources" })}
+        emptyTitle={t("list.emptyTitle", { ns: "trafficSources" })}
+        emptyDescription={t("list.emptyDescription", { ns: "trafficSources" })}
         pageSize={10}
         filters={<TagFilterControl selected={tagFilter} onChange={setTagFilter} />}
         enableRowSelection
@@ -83,7 +85,7 @@ export function SourceList() {
             variant="outline"
             onClick={() => setBulkTarget({ ids: selectedRows.map((r) => r.id), clear: clearSelection })}
           >
-            <TagIcon className="size-3.5" /> Edit Tags
+            <TagIcon className="size-3.5" /> {t("list.editTagsButton", { ns: "trafficSources" })}
           </Button>
         )}
       />
@@ -113,6 +115,7 @@ export function SourceList() {
  * parent) rather than one shared mutation hook, since
  * useUpdateTrafficSource(id) needs a real id and "new" has none yet. */
 function SourceFormDialog({ target, onClose }: { target: TrafficSource | null; onClose: () => void }) {
+  const { t } = useTranslation("trafficSources");
   const createSource = useCreateTrafficSource();
   const updateSource = useUpdateTrafficSource(target?.id ?? "");
 
@@ -128,10 +131,10 @@ function SourceFormDialog({ target, onClose }: { target: TrafficSource | null; o
         },
         {
           onSuccess: () => {
-            toast("Source updated", { description: values.name });
+            toast(t("toast.updated"), { description: values.name });
             onClose();
           },
-          onError: (err) => toast.error("Couldn't update source", { description: err.message }),
+          onError: (err) => toast.error(t("toast.updateError"), { description: err.message }),
         },
       );
     } else {
@@ -144,10 +147,10 @@ function SourceFormDialog({ target, onClose }: { target: TrafficSource | null; o
         },
         {
           onSuccess: () => {
-            toast("Source created", { description: values.name });
+            toast(t("toast.created"), { description: values.name });
             onClose();
           },
-          onError: (err) => toast.error("Couldn't create source", { description: err.message }),
+          onError: (err) => toast.error(t("toast.createError"), { description: err.message }),
         },
       );
     }
@@ -157,8 +160,8 @@ function SourceFormDialog({ target, onClose }: { target: TrafficSource | null; o
     <SourceFormSheet
       open
       onOpenChange={(open) => !open && onClose()}
-      title={target ? `Edit ${target.name}` : "New Source"}
-      submitLabel={target ? "Save changes" : "Create source"}
+      title={target ? t("form.titleEdit", { name: target.name }) : t("form.titleNew")}
+      submitLabel={target ? t("form.submitEdit") : t("form.submitCreate")}
       showStatus={!!target}
       defaultValues={
         target

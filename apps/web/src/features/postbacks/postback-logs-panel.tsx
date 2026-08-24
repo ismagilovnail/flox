@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { useTranslation } from "react-i18next";
 
 import { DataTable } from "@/components/ui/data-table";
 import { ErrorState } from "@/components/ui/error-state";
@@ -10,6 +11,7 @@ import { usePostbackLogs } from "@/hooks/use-postback-logs";
 import { postbackLogColumns } from "@/features/postbacks/postback-log-columns";
 
 export function PostbackLogsPanel() {
+  const { t } = useTranslation(["postbacks", "conversions"]);
   const logsQuery = usePostbackLogs();
   const networksQuery = useNetworks();
 
@@ -18,16 +20,16 @@ export function PostbackLogsPanel() {
     [networksQuery.data],
   );
 
-  const columns = React.useMemo(() => postbackLogColumns(networkNameById), [networkNameById]);
+  const columns = React.useMemo(() => postbackLogColumns(t, networkNameById), [t, networkNameById]);
 
   if (logsQuery.isPending) {
-    return <LoadingState label="Loading postback logs…" />;
+    return <LoadingState label={t("logs.loading")} />;
   }
 
   if (logsQuery.isError) {
     return (
       <ErrorState
-        title="Couldn't load postback logs"
+        title={t("logs.loadError")}
         description={logsQuery.error.message}
         onRetry={() => logsQuery.refetch()}
       />
@@ -39,9 +41,9 @@ export function PostbackLogsPanel() {
       columns={columns}
       data={logsQuery.data.logs}
       getRowId={(row) => `${row.direction}:${row.networkId}:${row.clickId}:${row.eventAt}`}
-      searchPlaceholder="Search by click ID..."
-      emptyTitle="No postback activity yet"
-      emptyDescription="Every incoming and outgoing postback attempt is logged here, success or not."
+      searchPlaceholder={t("logs.searchPlaceholder")}
+      emptyTitle={t("logs.emptyTitle")}
+      emptyDescription={t("logs.emptyDescription")}
       pageSize={15}
     />
   );

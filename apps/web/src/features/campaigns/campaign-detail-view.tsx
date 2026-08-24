@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import { toast } from "sonner";
+import { useTranslation } from "react-i18next";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -39,19 +40,20 @@ const STATUS_VARIANT: Record<CampaignStatus, "success" | "warning" | "outline" |
 };
 
 export function CampaignDetailView({ id }: { id: string }) {
+  const { t } = useTranslation(["campaigns", "common"]);
   const campaignQuery = useCampaign(id);
   const updateCampaign = useUpdateCampaign(id);
   const archiveCampaign = useArchiveCampaign();
   const [confirmArchive, setConfirmArchive] = React.useState(false);
 
   if (campaignQuery.isPending) {
-    return <LoadingState label="Loading campaign…" />;
+    return <LoadingState label={t("detail.loading")} />;
   }
 
   if (campaignQuery.isError) {
     return (
       <ErrorState
-        title="Couldn't load campaign"
+        title={t("detail.loadError")}
         description={campaignQuery.error.message}
         onRetry={() => campaignQuery.refetch()}
       />
@@ -70,8 +72,8 @@ export function CampaignDetailView({ id }: { id: string }) {
         status: values.status,
       },
       {
-        onSuccess: () => toast("Campaign updated", { description: values.name }),
-        onError: (err) => toast.error("Couldn't update campaign", { description: err.message }),
+        onSuccess: () => toast(t("toast.updated"), { description: values.name }),
+        onError: (err) => toast.error(t("toast.updateError"), { description: err.message }),
       },
     );
   }
@@ -80,11 +82,11 @@ export function CampaignDetailView({ id }: { id: string }) {
     archiveCampaign.mutate(campaign.id, {
       onSuccess: () => {
         setConfirmArchive(false);
-        toast("Campaign archived", { description: campaign.name });
+        toast(t("toast.archived"), { description: campaign.name });
       },
       onError: (err) => {
         setConfirmArchive(false);
-        toast.error("Couldn't archive campaign", { description: err.message });
+        toast.error(t("toast.archiveError"), { description: err.message });
       },
     });
   }
@@ -95,7 +97,7 @@ export function CampaignDetailView({ id }: { id: string }) {
         <div className="flex flex-col gap-1.5">
           <div className="flex items-center gap-2">
             <h1 className="text-2xl font-semibold tracking-tight">{campaign.name}</h1>
-            <Badge variant={STATUS_VARIANT[campaign.status]}>{campaign.status}</Badge>
+            <Badge variant={STATUS_VARIANT[campaign.status]}>{t(`status.${campaign.status}`, { ns: "common" })}</Badge>
           </div>
         </div>
         <CampaignRowActions campaign={campaign} />
@@ -103,10 +105,10 @@ export function CampaignDetailView({ id }: { id: string }) {
 
       <Tabs defaultValue="overview">
         <TabsList>
-          <TabsTrigger value="overview">Overview</TabsTrigger>
-          <TabsTrigger value="cost">Cost</TabsTrigger>
-          <TabsTrigger value="simulator">Simulator</TabsTrigger>
-          <TabsTrigger value="settings">Settings</TabsTrigger>
+          <TabsTrigger value="overview">{t("detail.overviewTab")}</TabsTrigger>
+          <TabsTrigger value="cost">{t("detail.costTab")}</TabsTrigger>
+          <TabsTrigger value="simulator">{t("detail.simulatorTab")}</TabsTrigger>
+          <TabsTrigger value="settings">{t("detail.settingsTab")}</TabsTrigger>
         </TabsList>
 
         <TabsContent value="overview" className="flex flex-col gap-6">
@@ -132,21 +134,21 @@ export function CampaignDetailView({ id }: { id: string }) {
               status: campaign.status,
             }}
             showStatus
-            submitLabel="Save changes"
+            submitLabel={t("detail.saveChanges")}
             onSubmit={handleSettingsSubmit}
           />
 
           <Card className="border-danger/30">
             <CardHeader>
-              <CardTitle>Danger zone</CardTitle>
-              <CardDescription>Archived campaigns stop routing traffic immediately.</CardDescription>
+              <CardTitle>{t("detail.dangerZoneTitle")}</CardTitle>
+              <CardDescription>{t("detail.dangerZoneDescription")}</CardDescription>
             </CardHeader>
             <CardContent>
               {campaign.status === "archived" ? (
-                <p className="text-sm text-muted-foreground">This campaign is archived.</p>
+                <p className="text-sm text-muted-foreground">{t("detail.alreadyArchived")}</p>
               ) : (
                 <Button variant="destructive" onClick={() => setConfirmArchive(true)}>
-                  Archive campaign
+                  {t("detail.archiveButton")}
                 </Button>
               )}
             </CardContent>
@@ -157,17 +159,15 @@ export function CampaignDetailView({ id }: { id: string }) {
       <Dialog open={confirmArchive} onOpenChange={setConfirmArchive}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Archive &ldquo;{campaign.name}&rdquo;?</DialogTitle>
-            <DialogDescription>
-              Archived campaigns stop routing traffic and are hidden from the active list.
-            </DialogDescription>
+            <DialogTitle>{t("detail.archiveConfirmTitle", { name: campaign.name })}</DialogTitle>
+            <DialogDescription>{t("detail.archiveConfirmDescription")}</DialogDescription>
           </DialogHeader>
           <DialogFooter>
             <Button variant="outline" onClick={() => setConfirmArchive(false)}>
-              Cancel
+              {t("actions.cancel", { ns: "common" })}
             </Button>
             <Button variant="destructive" onClick={handleArchive} disabled={archiveCampaign.isPending}>
-              Archive
+              {t("rowActions.archive")}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -184,27 +184,36 @@ export function CampaignDetailView({ id }: { id: string }) {
  * they render "—" (never a false-positive computed against an implicit
  * zero) whenever hasCost is false. See docs/frontend-integration.md. */
 function CampaignOverview({ campaignId }: { campaignId: string }) {
+  const { t } = useTranslation("campaigns");
   const clicksQuery = useCampaignDailyClicks(campaignId);
   const revenueQuery = useCampaignDailyRevenue(campaignId);
   const spendQuery = useCampaignDailySpend(campaignId);
 
   if (clicksQuery.isPending || revenueQuery.isPending || spendQuery.isPending) {
-    return <LoadingState label="Loading analytics…" />;
+    return <LoadingState label={t("overview.loading")} />;
   }
   if (clicksQuery.isError) {
-    return <ErrorState title="Couldn't load click analytics" description={clicksQuery.error.message} onRetry={() => clicksQuery.refetch()} />;
+    return (
+      <ErrorState
+        title={t("overview.clickLoadError")}
+        description={clicksQuery.error.message}
+        onRetry={() => clicksQuery.refetch()}
+      />
+    );
   }
   if (revenueQuery.isError) {
     return (
       <ErrorState
-        title="Couldn't load revenue analytics"
+        title={t("overview.revenueLoadError")}
         description={revenueQuery.error.message}
         onRetry={() => revenueQuery.refetch()}
       />
     );
   }
   if (spendQuery.isError) {
-    return <ErrorState title="Couldn't load spend" description={spendQuery.error.message} onRetry={() => spendQuery.refetch()} />;
+    return (
+      <ErrorState title={t("overview.spendLoadError")} description={spendQuery.error.message} onRetry={() => spendQuery.refetch()} />
+    );
   }
 
   const totalClicks = clicksQuery.data.counts
@@ -238,20 +247,20 @@ function CampaignOverview({ campaignId }: { campaignId: string }) {
   return (
     <>
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <StatCard label="Revenue" value={formatUsd(totalRevenue, 2)} />
-        <StatCard label="Clicks" value={totalClicks.toLocaleString("en-US")} />
-        <StatCard label="Conversions" value={totalConversions.toLocaleString("en-US")} />
-        <StatCard label="CVR" value={`${cvr.toFixed(2)}%`} />
+        <StatCard label={t("overview.revenue")} value={formatUsd(totalRevenue, 2)} />
+        <StatCard label={t("overview.clicks")} value={totalClicks.toLocaleString("en-US")} />
+        <StatCard label={t("overview.conversions")} value={totalConversions.toLocaleString("en-US")} />
+        <StatCard label={t("overview.cvr")} value={`${cvr.toFixed(2)}%`} />
       </div>
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <StatCard label="Spend" value={formatUsd(totalSpend, 2)} />
-        <StatCard label="Profit" value={hasCost ? formatUsd(profit, 2) : "—"} />
-        <StatCard label="ROI" value={hasCost ? `${roi.toFixed(2)}%` : "—"} />
-        <StatCard label="CPA" value={hasCost && cpa !== null ? formatUsd(cpa, 2) : "—"} />
+        <StatCard label={t("overview.spend")} value={formatUsd(totalSpend, 2)} />
+        <StatCard label={t("overview.profit")} value={hasCost ? formatUsd(profit, 2) : "—"} />
+        <StatCard label={t("overview.roi")} value={hasCost ? `${roi.toFixed(2)}%` : "—"} />
+        <StatCard label={t("overview.cpa")} value={hasCost && cpa !== null ? formatUsd(cpa, 2) : "—"} />
       </div>
 
       <LineMetricChart
-        title="Revenue (last 30 days)"
+        title={t("overview.revenueChartTitle")}
         points={dailyPoints}
         color={CHART_COLORS.success}
         valueFormatter={(v) => formatUsd(v, 0)}

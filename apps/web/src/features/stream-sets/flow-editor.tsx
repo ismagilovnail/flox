@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import { ChevronDownIcon, ChevronRightIcon, CopyIcon, XIcon } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
 import { Card } from "@/components/ui/card";
 import { IconButton } from "@/components/ui/icon-button";
@@ -37,13 +38,14 @@ export function FlowEditor({
   onDuplicate: () => void;
   canRemove: boolean;
 }) {
+  const { t } = useTranslation("streamSets");
   const [expanded, setExpanded] = React.useState(true);
 
   return (
     <Card size="sm" className="ring-1 ring-border">
       <div className="flex flex-wrap items-center gap-2 px-3">
         <IconButton
-          aria-label={expanded ? "Collapse flow" : "Expand flow"}
+          aria-label={expanded ? t("flowEditor.collapseAria") : t("flowEditor.expandAria")}
           size="icon-sm"
           onClick={() => setExpanded((v) => !v)}
         >
@@ -52,7 +54,7 @@ export function FlowEditor({
         <Input
           value={flow.name}
           onChange={(e) => onChange({ name: e.target.value })}
-          placeholder="Flow name"
+          placeholder={t("flowEditor.namePlaceholder")}
           className="h-7 w-40"
         />
         <div className="flex items-center gap-1.5">
@@ -63,7 +65,9 @@ export function FlowEditor({
             onChange={(e) => onChange({ weight: e.target.valueAsNumber || 0 })}
             className="h-7 w-16 font-mono font-tabular"
           />
-          <Mono className="text-xs text-muted-foreground">weight → {normalizedPercent.toFixed(1)}%</Mono>
+          <Mono className="text-xs text-muted-foreground">
+            {t("flowEditor.weightLabel", { percent: `${normalizedPercent.toFixed(1)}%` })}
+          </Mono>
         </div>
         <TagBadgeList entityType="flow" entityId={flow.id} />
         <div className="ml-auto flex items-center gap-1.5">
@@ -71,12 +75,17 @@ export function FlowEditor({
             size="sm"
             checked={flow.active}
             onCheckedChange={(active) => onChange({ active })}
-            aria-label={flow.active ? "Disable flow" : "Enable flow"}
+            aria-label={flow.active ? t("flowEditor.disableAria") : t("flowEditor.enableAria")}
           />
-          <IconButton aria-label={`Duplicate ${flow.name}`} size="icon-sm" onClick={onDuplicate}>
+          <IconButton aria-label={t("flowEditor.duplicateAria", { name: flow.name })} size="icon-sm" onClick={onDuplicate}>
             <CopyIcon className="size-3.5" />
           </IconButton>
-          <IconButton aria-label={`Remove ${flow.name}`} size="icon-sm" onClick={onRemove} disabled={!canRemove}>
+          <IconButton
+            aria-label={t("flowEditor.removeAria", { name: flow.name })}
+            size="icon-sm"
+            onClick={onRemove}
+            disabled={!canRemove}
+          >
             <XIcon className="size-3.5" />
           </IconButton>
         </div>

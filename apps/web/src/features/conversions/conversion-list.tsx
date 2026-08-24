@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { useTranslation } from "react-i18next";
 
 import { DataTable } from "@/components/ui/data-table";
 import { LoadingState } from "@/components/ui/loading-state";
@@ -11,6 +12,7 @@ import { useNetworks } from "@/hooks/use-networks";
 import { conversionColumns } from "@/features/conversions/conversion-columns";
 
 export function ConversionList() {
+  const { t } = useTranslation("conversions");
   const conversionsQuery = useConversions();
   const campaignsQuery = useCampaigns();
   const networksQuery = useNetworks();
@@ -25,15 +27,15 @@ export function ConversionList() {
   );
 
   const columns = React.useMemo(
-    () => conversionColumns(campaignNameById, networkNameById),
-    [campaignNameById, networkNameById],
+    () => conversionColumns(t, campaignNameById, networkNameById),
+    [t, campaignNameById, networkNameById],
   );
 
   if (conversionsQuery.isPending) {
     return (
       <div className="flex flex-col gap-4">
-        <h1 className="text-2xl font-semibold tracking-tight">Conversions</h1>
-        <LoadingState label="Loading conversions…" />
+        <h1 className="text-2xl font-semibold tracking-tight">{t("list.title")}</h1>
+        <LoadingState label={t("list.loading")} />
       </div>
     );
   }
@@ -41,9 +43,9 @@ export function ConversionList() {
   if (conversionsQuery.isError) {
     return (
       <div className="flex flex-col gap-4">
-        <h1 className="text-2xl font-semibold tracking-tight">Conversions</h1>
+        <h1 className="text-2xl font-semibold tracking-tight">{t("list.title")}</h1>
         <ErrorState
-          title="Couldn't load conversions"
+          title={t("list.loadError")}
           description={conversionsQuery.error.message}
           onRetry={() => conversionsQuery.refetch()}
         />
@@ -53,15 +55,15 @@ export function ConversionList() {
 
   return (
     <div className="flex flex-col gap-4">
-      <h1 className="text-2xl font-semibold tracking-tight">Conversions</h1>
+      <h1 className="text-2xl font-semibold tracking-tight">{t("list.title")}</h1>
 
       <DataTable
         columns={columns}
         data={conversionsQuery.data.conversions}
         getRowId={(row) => `${row.clickId}:${row.type}:${row.eventAt}`}
-        searchPlaceholder="Search by click ID..."
-        emptyTitle="No conversions yet"
-        emptyDescription="CPA events will show up here once the tracker starts recording postbacks."
+        searchPlaceholder={t("list.searchPlaceholder")}
+        emptyTitle={t("list.emptyTitle")}
+        emptyDescription={t("list.emptyDescription")}
         pageSize={15}
       />
     </div>

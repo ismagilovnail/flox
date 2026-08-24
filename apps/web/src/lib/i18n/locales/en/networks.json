@@ -1,0 +1,68 @@
+{
+  "list": {
+    "title": "Networks",
+    "newButton": "New Network",
+    "searchPlaceholder": "Search networks...",
+    "emptyTitle": "No networks yet",
+    "emptyDescription": "Add the CPA/CPL networks your offers belong to.",
+    "loading": "Loading networks…",
+    "loadError": "Couldn't load networks",
+    "editTagsButton": "Edit Tags"
+  },
+  "columns": {
+    "name": "Name",
+    "status": "Status",
+    "tags": "Tags",
+    "postbackUrl": "Postback URL",
+    "dedup": "Dedup",
+    "updated": "Updated"
+  },
+  "dedup": {
+    "acceptsDuplicates": "accepts dupes",
+    "dedupOn": "dedup on"
+  },
+  "form": {
+    "titleNew": "New Network",
+    "titleEdit": "Edit {{name}}",
+    "description": "Networks are the CPA/CPL partners your offers belong to (§27).",
+    "nameLabel": "Name",
+    "namePlaceholder": "AffTrust CPA",
+    "postbackUrlLabel": "Postback URL",
+    "postbackUrlPlaceholder": "https://network.example/postback?click_id={click_id}&status={status}",
+    "postbackUrlHint": "Fired when a conversion status changes for this network (Phase 24 wires the real delivery).",
+    "acceptDuplicatesLabel": "Accept duplicate postbacks",
+    "acceptDuplicatesHint": "FLOX dedups postbacks on (click_id, status) by default — some partners re-send identical deposits/statuses on purpose. Turn this on only if this network's semantics require it (§45).",
+    "acceptDuplicatesAria": "Accept duplicate postbacks",
+    "statusLabel": "Status",
+    "submitCreate": "Create network",
+    "submitEdit": "Save changes",
+    "validation": {
+      "nameMin": "Name must be at least 2 characters",
+      "urlInvalid": "Enter a valid URL"
+    }
+  },
+  "rowActions": {
+    "actionsAria": "Actions for {{name}}",
+    "edit": "Edit",
+    "viewStatistics": "View statistics",
+    "pause": "Pause",
+    "resume": "Resume",
+    "duplicate": "Duplicate",
+    "archive": "Archive",
+    "archiveConfirmTitle": "Archive \"{{name}}\"?",
+    "archiveConfirmDescription": "Archived networks are hidden from offer/flow pickers going forward. Existing flows that already reference this network keep working. This can be reversed later."
+  },
+  "toast": {
+    "updated": "Network updated",
+    "created": "Network created",
+    "updateError": "Couldn't update network",
+    "createError": "Couldn't create network",
+    "paused": "Network paused",
+    "resumed": "Network resumed",
+    "duplicated": "Network duplicated",
+    "duplicatedSuffix": "{{name}} (Copy)",
+    "archived": "Network archived",
+    "archiveError": "Couldn't archive network",
+    "duplicateError": "Couldn't duplicate network"
+  }
+}

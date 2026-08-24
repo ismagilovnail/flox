@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useTranslation } from "react-i18next";
 
 import { cn } from "@/lib/utils";
 import { NAV_GROUPS } from "@/lib/nav";
@@ -15,6 +16,7 @@ export function NavContent({
   onNavigate?: () => void;
 }) {
   const pathname = usePathname();
+  const { t } = useTranslation("nav");
 
   return (
     <div className="flex h-full flex-col gap-1 p-2">
@@ -26,20 +28,21 @@ export function NavContent({
           <div key={group.label ?? i} className="flex flex-col gap-0.5">
             {group.label && !collapsed && (
               <span className="px-2 py-1 text-[0.6875rem] font-medium uppercase tracking-wide text-muted-foreground">
-                {group.label}
+                {t(group.label)}
               </span>
             )}
             {group.items.map((item) => {
               const active =
                 pathname === item.href || pathname.startsWith(`${item.href}/`);
               const Icon = item.icon;
+              const label = t(item.label);
               return (
                 <Link
                   key={item.href}
                   href={item.href}
                   onClick={onNavigate}
                   aria-current={active ? "page" : undefined}
-                  title={collapsed ? item.label : undefined}
+                  title={collapsed ? label : undefined}
                   className={cn(
                     "flex h-8 items-center gap-2.5 rounded-md px-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground",
                     active && "bg-accent text-accent-foreground",
@@ -47,7 +50,7 @@ export function NavContent({
                   )}
                 >
                   <Icon className="size-4 shrink-0" />
-                  {!collapsed && <span className="truncate">{item.label}</span>}
+                  {!collapsed && <span className="truncate">{label}</span>}
                 </Link>
               );
             })}

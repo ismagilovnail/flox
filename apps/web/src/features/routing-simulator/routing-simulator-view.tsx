@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import { toast } from "sonner";
+import { useTranslation } from "react-i18next";
 
 import { EmptyState } from "@/components/ui/empty-state";
 import { emptySimulateRequest, simulateRoute, type SimulateResult } from "@/lib/api/routing";
@@ -16,6 +17,7 @@ export function RoutingSimulatorView({
   campaignId: string;
   campaignName: string;
 }) {
+  const { t } = useTranslation("routingSimulator");
   const [request, setRequest] = React.useState(emptySimulateRequest);
   const [result, setResult] = React.useState<SimulateResult | null>(null);
   const [isSimulating, setIsSimulating] = React.useState(false);
@@ -29,7 +31,7 @@ export function RoutingSimulatorView({
     try {
       setResult(await simulateRoute(campaignId, request));
     } catch (err) {
-      toast.error("Couldn't simulate this request", { description: err instanceof Error ? err.message : undefined });
+      toast.error(t("view.simulateError"), { description: err instanceof Error ? err.message : undefined });
     } finally {
       setIsSimulating(false);
     }
@@ -38,12 +40,8 @@ export function RoutingSimulatorView({
   return (
     <div className="flex flex-col gap-6">
       <div>
-        <h2 className="text-sm font-medium">Simulate incoming traffic</h2>
-        <p className="text-xs text-muted-foreground">
-          Fill in the request attributes a click could carry and see exactly which Stream Set would match, which
-          Flow would be picked, and why — evaluated against this campaign&apos;s current configuration, top-to-bottom
-          by priority.
-        </p>
+        <h2 className="text-sm font-medium">{t("view.title")}</h2>
+        <p className="text-xs text-muted-foreground">{t("view.description")}</p>
       </div>
 
       <SimulatorForm request={request} onChange={handleFieldChange} onSimulate={handleSimulate} isSimulating={isSimulating} />
@@ -51,10 +49,7 @@ export function RoutingSimulatorView({
       {result ? (
         <SimulatorResult result={result} campaignName={campaignName} />
       ) : (
-        <EmptyState
-          title="No simulation yet"
-          description="Set request attributes above and click Simulate to see the routing decision."
-        />
+        <EmptyState title={t("view.emptyTitle")} description={t("view.emptyDescription")} />
       )}
     </div>
   );

@@ -1,0 +1,98 @@
+{
+  "list": {
+    "title": "Campaigns",
+    "newButton": "New Campaign",
+    "searchPlaceholder": "Search campaigns...",
+    "emptyTitle": "No campaigns yet",
+    "emptyDescription": "Create your first campaign to start routing traffic.",
+    "loading": "Loading campaigns…",
+    "loadError": "Couldn't load campaigns",
+    "editTagsButton": "Edit Tags"
+  },
+  "columns": {
+    "name": "Name",
+    "status": "Status",
+    "source": "Source",
+    "tags": "Tags",
+    "updated": "Updated"
+  },
+  "detail": {
+    "loading": "Loading campaign…",
+    "loadError": "Couldn't load campaign",
+    "overviewTab": "Overview",
+    "costTab": "Cost",
+    "simulatorTab": "Simulator",
+    "settingsTab": "Settings",
+    "dangerZoneTitle": "Danger zone",
+    "dangerZoneDescription": "Archived campaigns stop routing traffic immediately.",
+    "alreadyArchived": "This campaign is archived.",
+    "archiveButton": "Archive campaign",
+    "archiveConfirmTitle": "Archive \"{{name}}\"?",
+    "archiveConfirmDescription": "Archived campaigns stop routing traffic and are hidden from the active list.",
+    "saveChanges": "Save changes"
+  },
+  "overview": {
+    "loading": "Loading analytics…",
+    "clickLoadError": "Couldn't load click analytics",
+    "revenueLoadError": "Couldn't load revenue analytics",
+    "spendLoadError": "Couldn't load spend",
+    "revenue": "Revenue",
+    "clicks": "Clicks",
+    "conversions": "Conversions",
+    "cvr": "CVR",
+    "spend": "Spend",
+    "profit": "Profit",
+    "roi": "ROI",
+    "cpa": "CPA",
+    "revenueChartTitle": "Revenue (last 30 days)"
+  },
+  "form": {
+    "detailsTitle": "Campaign details",
+    "detailsDescription": "Name, source, and where traffic lands if no rule matches.",
+    "nameLabel": "Name",
+    "namePlaceholder": "US Sweeps — FB",
+    "sourceLabel": "Source",
+    "sourceLoading": "Loading sources…",
+    "sourceLoadError": "Couldn't load sources: {{message}}",
+    "sourceEmpty": "No traffic sources yet — creating one isn't built yet, so a campaign needs at least one to exist already.",
+    "fallbackUrlLabel": "Fallback URL",
+    "fallbackUrlPlaceholder": "https://example.com/offer-fallback",
+    "fallbackUrlHint": "Used when no stream set matches (Phase 7 builds the rules that route around this).",
+    "statusLabel": "Status",
+    "notesLabel": "Notes",
+    "notesPlaceholder": "Internal notes...",
+    "submitDefault": "Save",
+    "validation": {
+      "nameMin": "Name must be at least 2 characters",
+      "sourceRequired": "Select a source",
+      "urlInvalid": "Enter a valid URL"
+    }
+  },
+  "newCampaign": {
+    "title": "New Campaign",
+    "submitButton": "Create campaign"
+  },
+  "rowActions": {
+    "actionsAria": "Actions for {{name}}",
+    "open": "Open",
+    "pause": "Pause",
+    "resume": "Resume",
+    "duplicate": "Duplicate",
+    "archive": "Archive",
+    "archiveConfirmTitle": "Archive \"{{name}}\"?",
+    "archiveConfirmDescription": "Archived campaigns stop routing traffic and are hidden from the active list. This can be reversed later from campaign settings."
+  },
+  "toast": {
+    "updated": "Campaign updated",
+    "updateError": "Couldn't update campaign",
+    "created": "Campaign created",
+    "createError": "Couldn't create campaign",
+    "paused": "Campaign paused",
+    "resumed": "Campaign resumed",
+    "duplicated": "Campaign duplicated",
+    "duplicatedSuffix": "{{name}} (Copy)",
+    "duplicateError": "Couldn't duplicate campaign",
+    "archived": "Campaign archived",
+    "archiveError": "Couldn't archive campaign"
+  }
+}

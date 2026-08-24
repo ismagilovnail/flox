@@ -1,12 +1,15 @@
+"use client"
+
 import * as React from "react"
 import { AlertTriangleIcon } from "lucide-react"
+import { useTranslation } from "react-i18next"
 
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 
 function ErrorState({
   className,
-  title = "Something went wrong",
+  title,
   description,
   onRetry,
   ...props
@@ -15,6 +18,7 @@ function ErrorState({
   description?: string
   onRetry?: () => void
 }) {
+  const { t } = useTranslation("common")
   return (
     <div
       data-slot="error-state"
@@ -28,7 +32,7 @@ function ErrorState({
         <AlertTriangleIcon className="size-5 text-danger" />
       </div>
       <div className="flex flex-col gap-1">
-        <p className="text-sm font-medium text-foreground">{title}</p>
+        <p className="text-sm font-medium text-foreground">{title ?? t("states.errorTitle")}</p>
         {description && (
           <p className="max-w-sm text-sm text-muted-foreground">
             {description}
@@ -37,7 +41,7 @@ function ErrorState({
       </div>
       {onRetry && (
         <Button variant="outline" size="sm" onClick={onRetry}>
-          Retry
+          {t("actions.retry")}
         </Button>
       )}
     </div>

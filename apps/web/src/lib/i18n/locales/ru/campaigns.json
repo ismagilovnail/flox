@@ -1,0 +1,98 @@
+{
+  "list": {
+    "title": "Кампании",
+    "newButton": "Новая кампания",
+    "searchPlaceholder": "Поиск кампаний...",
+    "emptyTitle": "Пока нет кампаний",
+    "emptyDescription": "Создайте первую кампанию, чтобы начать маршрутизацию трафика.",
+    "loading": "Загрузка кампаний…",
+    "loadError": "Не удалось загрузить кампании",
+    "editTagsButton": "Изменить теги"
+  },
+  "columns": {
+    "name": "Название",
+    "status": "Статус",
+    "source": "Источник",
+    "tags": "Теги",
+    "updated": "Обновлено"
+  },
+  "detail": {
+    "loading": "Загрузка кампании…",
+    "loadError": "Не удалось загрузить кампанию",
+    "overviewTab": "Обзор",
+    "costTab": "Расходы",
+    "simulatorTab": "Симулятор",
+    "settingsTab": "Настройки",
+    "dangerZoneTitle": "Опасная зона",
+    "dangerZoneDescription": "Архивные кампании немедленно прекращают маршрутизацию трафика.",
+    "alreadyArchived": "Эта кампания в архиве.",
+    "archiveButton": "Отправить кампанию в архив",
+    "archiveConfirmTitle": "Отправить «{{name}}» в архив?",
+    "archiveConfirmDescription": "Архивные кампании прекращают маршрутизацию трафика и скрываются из активного списка.",
+    "saveChanges": "Сохранить изменения"
+  },
+  "overview": {
+    "loading": "Загрузка аналитики…",
+    "clickLoadError": "Не удалось загрузить аналитику по кликам",
+    "revenueLoadError": "Не удалось загрузить аналитику по доходу",
+    "spendLoadError": "Не удалось загрузить расходы",
+    "revenue": "Доход",
+    "clicks": "Клики",
+    "conversions": "Конверсии",
+    "cvr": "CVR",
+    "spend": "Расход",
+    "profit": "Прибыль",
+    "roi": "ROI",
+    "cpa": "CPA",
+    "revenueChartTitle": "Доход (за последние 30 дней)"
+  },
+  "form": {
+    "detailsTitle": "Детали кампании",
+    "detailsDescription": "Название, источник и куда попадает трафик, если ни одно правило не сработало.",
+    "nameLabel": "Название",
+    "namePlaceholder": "US Sweeps — FB",
+    "sourceLabel": "Источник",
+    "sourceLoading": "Загрузка источников…",
+    "sourceLoadError": "Не удалось загрузить источники: {{message}}",
+    "sourceEmpty": "Пока нет источников трафика — создание пока не реализовано, поэтому у кампании должен быть хотя бы один существующий источник.",
+    "fallbackUrlLabel": "URL по умолчанию",
+    "fallbackUrlPlaceholder": "https://example.com/offer-fallback",
+    "fallbackUrlHint": "Используется, если ни один набор потоков не совпал (правила для этого добавляются на Фазе 7).",
+    "statusLabel": "Статус",
+    "notesLabel": "Заметки",
+    "notesPlaceholder": "Внутренние заметки...",
+    "submitDefault": "Сохранить",
+    "validation": {
+      "nameMin": "Название должно содержать не менее 2 символов",
+      "sourceRequired": "Выберите источник",
+      "urlInvalid": "Введите корректный URL"
+    }
+  },
+  "newCampaign": {
+    "title": "Новая кампания",
+    "submitButton": "Создать кампанию"
+  },
+  "rowActions": {
+    "actionsAria": "Действия для {{name}}",
+    "open": "Открыть",
+    "pause": "Приостановить",
+    "resume": "Возобновить",
+    "duplicate": "Дублировать",
+    "archive": "В архив",
+    "archiveConfirmTitle": "Отправить «{{name}}» в архив?",
+    "archiveConfirmDescription": "Архивные кампании прекращают маршрутизацию трафика и скрываются из активного списка. Это можно отменить позже в настройках кампании."
+  },
+  "toast": {
+    "updated": "Кампания обновлена",
+    "updateError": "Не удалось обновить кампанию",
+    "created": "Кампания создана",
+    "createError": "Не удалось создать кампанию",
+    "paused": "Кампания приостановлена",
+    "resumed": "Кампания возобновлена",
+    "duplicated": "Кампания продублирована",
+    "duplicatedSuffix": "{{name}} (копия)",
+    "duplicateError": "Не удалось продублировать кампанию",
+    "archived": "Кампания отправлена в архив",
+    "archiveError": "Не удалось отправить кампанию в архив"
+  }
+}

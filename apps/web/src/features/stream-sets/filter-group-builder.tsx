@@ -1,6 +1,7 @@
 "use client";
 
 import { PlusIcon, XIcon } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
 import { Button } from "@/components/ui/button";
 import { IconButton } from "@/components/ui/icon-button";
@@ -29,6 +30,7 @@ export function FilterGroupBuilder({
   onRootChange: (next: FilterGroupNode) => void;
   depth?: number;
 }) {
+  const { t } = useTranslation("streamSets");
   return (
     <div className={cn("flex flex-col gap-2", depth > 0 && "border-l-2 border-border pl-4")}>
       <div className="flex items-center justify-between">
@@ -42,10 +44,14 @@ export function FilterGroupBuilder({
               : "border-warning/30 bg-warning/10 text-warning hover:bg-warning/20",
           )}
         >
-          {group.joiner === "AND" ? "Match all" : "Match any"}
+          {group.joiner === "AND" ? t("filterGroupBuilder.matchAll") : t("filterGroupBuilder.matchAny")}
         </button>
         {depth > 0 && (
-          <IconButton aria-label="Remove group" size="icon-sm" onClick={() => onRootChange(removeNode(root, group.id))}>
+          <IconButton
+            aria-label={t("filterGroupBuilder.removeGroupAria")}
+            size="icon-sm"
+            onClick={() => onRootChange(removeNode(root, group.id))}
+          >
             <XIcon className="size-3.5" />
           </IconButton>
         )}
@@ -53,7 +59,7 @@ export function FilterGroupBuilder({
 
       <div className="flex flex-col gap-2">
         {group.children.length === 0 && (
-          <p className="text-xs text-muted-foreground">Empty group — matches all traffic</p>
+          <p className="text-xs text-muted-foreground">{t("filterGroupBuilder.emptyGroupText")}</p>
         )}
         {group.children.map((child) =>
           child.type === "condition" ? (
@@ -71,10 +77,10 @@ export function FilterGroupBuilder({
 
       <div className="flex gap-2">
         <Button type="button" variant="outline" size="sm" onClick={() => onRootChange(addConditionToGroup(root, group.id))}>
-          <PlusIcon className="size-3.5" /> Condition
+          <PlusIcon className="size-3.5" /> {t("filterGroupBuilder.addCondition")}
         </Button>
         <Button type="button" variant="outline" size="sm" onClick={() => onRootChange(addGroupToGroup(root, group.id))}>
-          <PlusIcon className="size-3.5" /> Group
+          <PlusIcon className="size-3.5" /> {t("filterGroupBuilder.addGroup")}
         </Button>
       </div>
     </div>

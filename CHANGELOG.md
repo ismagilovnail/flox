@@ -5,6 +5,87 @@ per-phase, matching `CLAUDE.md`'s phase protocol. The one exception is
 [Between phases], below: spec amendments and the code changes that follow from
 them land between phases and would otherwise be invisible here.
 
+## [Frontend i18n] — client-side EN/RU internationalization foundation
+
+### Scope
+
+A cross-cutting frontend infra phase, added ahead of the next domain per
+direct instruction: `react-i18next` foundation (`lib/i18n/config.ts`,
+`I18nProvider`, `LanguageSwitcher`, `useLocale()`), then migrated every
+currently-real (backend-wired) screen to it — Campaigns, Traffic
+Sources, Networks, Offers, Stream Sets/Filters/Flows, Routing Simulator,
+Cost, Conversions, Event Mappings, and Postback Logs, plus the shared
+app shell (sidebar/topbar/breadcrumbs/command menu) and `DataTable`/
+`ErrorState`/`LoadingState`. See `docs/frontend-i18n.md` for the full
+namespace map, key conventions, and formatting/pluralization rules.
+
+Session picked up mid-phase: the `en`/`ru` locale JSON (all 11
+namespaces, both languages, fully translated) and the shell/`common`/
+Campaigns/Traffic Sources/Networks component migrations already
+existed; this pass wired the remaining six domains — Offers, Stream
+Sets, Routing Simulator, Cost, Conversions, and Postbacks (Event
+Mapping/Incoming/Outgoing/Logs panels) — to the pre-written keys.
+
+### Added
+
+- `useTranslation` wired into every remaining component in the six
+  domains above: list/detail views, row actions, form sheets (Zod
+  schemas converted to `buildXFormSchema(t)` factories, matching the
+  existing `buildSourceFormSchema`/`buildNetworkFormSchema` pattern —
+  validation messages need the live translator), and column-def
+  factories (`t` threaded through as the first argument, matching
+  `networkColumns`).
+- `lib/filters.ts`: `FILTER_OPERATOR_I18N_KEY` (mirrors the existing
+  `FIELD_GROUP_I18N_KEY`); `checkRE2Compatible`/`validateCountryValue`
+  now take a `TFunction` and return translated messages.
+- `lib/api/conversions.ts`: `CPA_STATUS_I18N_KEY`, the same
+  `Record<Value, string>`-of-i18n-keys pattern as
+  `SOURCE_TYPE_I18N_KEY`/`COST_INTEGRATION_I18N_KEY`, reused by
+  Conversions, Event Mapping, and Postback Logs (all three render CPA
+  status badges).
+
+### Fixed (found during manual verification, not pre-existing scope)
+
+- **`campaign-detail-view.tsx`** (Campaign detail page: Overview/Cost/
+  Simulator/Settings tabs, stat cards, danger zone) was entirely
+  untranslated — it wraps the newly-migrated Cost/Simulator/Stream Sets
+  content in English chrome, so a Russian-locale user would see a
+  jarring English-tabs-around-Russian-content page. Pre-written
+  `campaigns.json` already had a complete `detail`/`overview` namespace
+  sitting unused; wired it in.
+- **`components/ui/multi-select.tsx`** (shared component, used by
+  Offers' Countries picker and the Stream Sets filter builder's Values
+  picker): its search placeholder was a hardcoded `Search
+  ${label.toLowerCase()}...` template — once callers started passing a
+  translated label (e.g. "ГЕО"), this produced a broken mixed-language
+  string ("Search гео..."). Added `common.multiSelect.{none,
+  searchPlaceholder}` keys and switched the component to
+  `useTranslation("common")` internally (the same self-contained
+  pattern `data-table.tsx` already uses), reusing
+  `common.dataTable.selected`/`emptyTitle` for the count summary and
+  "no results" text rather than duplicating them.
+
+### Verified
+
+- `tsc --noEmit`, `eslint`, `next build` (production build, all 26
+  routes) all clean.
+- `vitest run` — 15/15 passing (`lib/i18n/config.test.ts`, pre-existing,
+  unchanged by this pass).
+- Full manual browser pass against the real running `api` + `web` dev
+  servers, in both locales: created a real network, offer, campaign,
+  stream set (with a filter condition and a device-vocab value), and an
+  event mapping. Confirmed correct `ru` rendering for all six domains —
+  field-group labels, operator words, vocab values, pluralized counts
+  (including a genuine `count=0` → Russian "many" form via
+  `mappedCount_many`), the routing simulator's full pipeline trace, and
+  the multi-select fix — then switched to `en` and confirmed the
+  fallback locale still renders correctly. Confirmed backend-generated
+  strings (`SimulateResult.destination.label`, `.stickyNote`) correctly
+  stay in English per `docs/frontend-i18n.md`'s stated backend
+  boundary. Test network/offer/campaign archived afterward (no
+  hard-delete exists for these entities in the UI — archiving is this
+  app's own non-destructive removal path).
+
 ## [Postback Logs] — Wired to real ClickHouse-backed API (read-only, replay deferred)
 
 ### Scope

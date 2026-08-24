@@ -1,0 +1,74 @@
+{
+  "view": {
+    "title": "Postbacks",
+    "tabs": {
+      "outgoing": "Outgoing",
+      "incoming": "Incoming",
+      "mapping": "Event Mapping",
+      "logs": "Logs"
+    }
+  },
+  "eventMapping": {
+    "description": "The Conversion Engine uses this table to translate a network's own status strings into the canonical CPA_HOLD / CPA_ACCEPT / CPA_REDEP / CPA_DECLINE / CPA_TRASH enum (§43).",
+    "cardDescription": "Raw status string this network sends → FLOX status.",
+    "emptyMappings": "No mappings yet — unmapped statuses fall through unrecognized.",
+    "statusPlaceholder": "e.g. ftd",
+    "removeAria": "Remove mapping {{status}}",
+    "addButton": "Add",
+    "noNetworks": "No networks yet — add one on the Networks page first.",
+    "loading": "Loading event mappings…",
+    "loadNetworksError": "Couldn't load networks",
+    "loadMappingsError": "Couldn't load event mappings",
+    "toast": {
+      "added": "Mapping added",
+      "addedDescription": "{{status}} → {{floxStatus}}",
+      "addError": "Couldn't add mapping",
+      "removeError": "Couldn't remove mapping"
+    }
+  },
+  "incoming": {
+    "description": "Give each network this URL so they can report conversions into FLOX. Dedup applies on (click_id, status) — §45 — unless the network has \"Accept duplicate postbacks\" on. Raw status strings are translated to FLOX statuses via Event Mapping.",
+    "mappedCount_one": "{{count}} status mapped",
+    "mappedCount_other": "{{count}} statuses mapped",
+    "copyAria": "Copy incoming URL for {{name}}",
+    "copyToastTitle": "Incoming postback URL copied",
+    "noNetworks": "No networks yet — add one on the Networks page first.",
+    "loading": "Loading networks…",
+    "loadNetworksError": "Couldn't load networks",
+    "loadMappingsError": "Couldn't load event mappings"
+  },
+  "outgoing": {
+    "description": "FLOX calls a network's postback URL whenever a conversion status changes for that network. Managed here and on the Networks page — they're the same data."
+  },
+  "logs": {
+    "searchPlaceholder": "Search by click ID...",
+    "emptyTitle": "No postback activity yet",
+    "emptyDescription": "Every incoming and outgoing postback attempt is logged here, success or not.",
+    "loading": "Loading postback logs…",
+    "loadError": "Couldn't load postback logs"
+  },
+  "columns": {
+    "direction": "Direction",
+    "network": "Network",
+    "clickId": "Click ID",
+    "status": "Status",
+    "result": "Result",
+    "message": "Message",
+    "time": "Time"
+  },
+  "direction": {
+    "incoming": "incoming",
+    "outgoing": "outgoing"
+  },
+  "result": {
+    "success": "success",
+    "duplicate": "duplicate",
+    "ignored": "ignored",
+    "error": "error",
+    "queued": "queued",
+    "processing": "processing",
+    "retrying": "retrying",
+    "dead": "dead",
+    "failed": "failed"
+  }
+}
