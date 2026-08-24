@@ -1,0 +1,80 @@
+{
+  "list": {
+    "title": "PWA",
+    "newButton": "Новое PWA",
+    "searchPlaceholder": "Поиск PWA...",
+    "emptyTitle": "Пока нет PWA",
+    "emptyDescription": "Добавьте манифест PWA, чтобы использовать его как устанавливаемый шаг потока.",
+    "loading": "Загрузка PWA…",
+    "loadError": "Не удалось загрузить PWA",
+    "editTagsButton": "Изменить теги"
+  },
+  "columns": {
+    "name": "Название",
+    "shortName": "Короткое имя",
+    "theme": "Тема",
+    "webviewBounce": "Обход WebView",
+    "status": "Статус",
+    "tags": "Теги",
+    "updated": "Обновлено"
+  },
+  "webviewBounce": {
+    "on": "вкл",
+    "off": "выкл"
+  },
+  "form": {
+    "titleNew": "Новое PWA",
+    "titleEdit": "Изменить {{name}}",
+    "titleFromGallery": "Новое PWA — из «{{title}}»",
+    "description": "Эти поля — настоящий Web App Manifest (§28): превью ниже показывает, что установится на устройство.",
+    "nameLabel": "Название",
+    "namePlaceholder": "Sweeps PWA",
+    "shortNameLabel": "Короткое имя",
+    "shortNamePlaceholder": "Sweeps",
+    "themeColorLabel": "Цвет темы",
+    "themeColorPickerAria": "Выбрать цвет темы",
+    "backgroundColorLabel": "Цвет фона",
+    "backgroundColorPickerAria": "Выбрать цвет фона",
+    "iconUrlLabel": "URL иконки",
+    "iconUrlPlaceholder": "https://cdn.floxlink.io/pwa/sweeps/icon-512.png",
+    "startUrlLabel": "URL запуска",
+    "startUrlPlaceholder": "/install/sweeps",
+    "bounceLabel": "Обход трафика из in-app WebView",
+    "bounceHint": "Отправляет трафик из встроенного браузера FB/IG/TikTok/Telegram во внешний браузер устройства (Android intent / iOS Safari scheme), чтобы сработало предложение установки. Технически необходимо для всех платформ, а не определение модераторов (§73).",
+    "bounceAria": "Обход трафика из in-app WebView",
+    "statusLabel": "Статус",
+    "manifestPreviewLabel": "Превью манифеста",
+    "submitCreate": "Создать PWA",
+    "submitEdit": "Сохранить изменения",
+    "validation": {
+      "nameMin": "Название должно содержать не менее 2 символов",
+      "shortNameRequired": "Обязательно для подписи значка на главном экране",
+      "colorInvalid": "Введите цвет в формате #16a34a",
+      "iconUrlInvalid": "Введите корректный URL иконки",
+      "startUrlRequired": "Обязательно"
+    }
+  },
+  "rowActions": {
+    "actionsAria": "Действия для {{name}}",
+    "edit": "Изменить",
+    "pause": "Приостановить",
+    "resume": "Возобновить",
+    "duplicate": "Дублировать",
+    "archive": "В архив",
+    "archiveConfirmTitle": "Отправить «{{name}}» в архив?",
+    "archiveConfirmDescription": "PWA в архиве больше не отображаются в выборе для потоков. Существующие потоки, уже ссылающиеся на это PWA, продолжат работать. Это можно отменить позже."
+  },
+  "toast": {
+    "updated": "PWA обновлено",
+    "created": "PWA создано",
+    "updateError": "Не удалось обновить PWA",
+    "createError": "Не удалось создать PWA",
+    "paused": "PWA приостановлено",
+    "resumed": "PWA возобновлено",
+    "duplicated": "PWA продублировано",
+    "duplicatedSuffix": "{{name}} (копия)",
+    "archived": "PWA отправлено в архив",
+    "archiveError": "Не удалось отправить PWA в архив",
+    "duplicateError": "Не удалось продублировать PWA"
+  }
+}

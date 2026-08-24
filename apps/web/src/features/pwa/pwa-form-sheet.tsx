@@ -3,6 +3,8 @@
 import { Controller, useForm, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
+import { useTranslation } from "react-i18next";
+import type { TFunction } from "i18next";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -19,22 +21,26 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import { Mono } from "@/components/ui/typography";
-import type { PwaStatus } from "@/lib/mock/pwas";
+import type { PwaStatus } from "@/lib/api/pwa";
 
-const hexColor = z.string().regex(/^#[0-9a-fA-F]{6}$/, "Enter a hex color like #16a34a");
+/** Factory, not a module-level const — see source-form-sheet.tsx's
+ * buildSourceFormSchema for why (Zod messages are user-facing text and
+ * need the live translator). */
+export function buildPwaFormSchema(t: TFunction) {
+  const hexColor = z.string().regex(/^#[0-9a-fA-F]{6}$/, t("form.validation.colorInvalid", { ns: "pwa" }));
+  return z.object({
+    name: z.string().min(2, t("form.validation.nameMin", { ns: "pwa" })).max(80),
+    shortName: z.string().min(1, t("form.validation.shortNameRequired", { ns: "pwa" })).max(20),
+    themeColor: hexColor,
+    backgroundColor: hexColor,
+    iconUrl: z.url(t("form.validation.iconUrlInvalid", { ns: "pwa" })),
+    startUrl: z.string().min(1, t("form.validation.startUrlRequired", { ns: "pwa" })),
+    bounceInAppWebview: z.boolean(),
+    status: z.enum(["active", "paused", "archived"] as [PwaStatus, ...PwaStatus[]]),
+  });
+}
 
-export const pwaFormSchema = z.object({
-  name: z.string().min(2, "Name must be at least 2 characters").max(80),
-  shortName: z.string().min(1, "Required for the home-screen icon label").max(20),
-  themeColor: hexColor,
-  backgroundColor: hexColor,
-  iconUrl: z.url("Enter a valid icon URL"),
-  startUrl: z.string().min(1, "Required"),
-  bounceInAppWebview: z.boolean(),
-  status: z.enum(["active", "paused", "archived"] as [PwaStatus, ...PwaStatus[]]),
-});
-
-export type PwaFormValues = z.infer<typeof pwaFormSchema>;
+export type PwaFormValues = z.infer<ReturnType<typeof buildPwaFormSchema>>;
 
 const STATUS_OPTIONS: PwaStatus[] = ["active", "paused", "archived"];
 
@@ -53,8 +59,9 @@ export function PwaFormSheet({
   submitLabel: string;
   onSubmit: (values: PwaFormValues) => void;
 }) {
+  const { t } = useTranslation(["pwa", "common"]);
   const form = useForm<PwaFormValues>({
-    resolver: zodResolver(pwaFormSchema),
+    resolver: zodResolver(buildPwaFormSchema(t)),
     defaultValues: {
       name: "",
       shortName: "",
@@ -82,23 +89,26 @@ export function PwaFormSheet({
       <SheetContent className="w-full gap-0 overflow-y-auto sm:max-w-lg" side="right">
         <SheetHeader>
           <SheetTitle>{title}</SheetTitle>
-          <SheetDescription>
-            These fields are the real Web App Manifest (§28) — the preview below is what installs on the device.
-          </SheetDescription>
+          <SheetDescription>{t("form.description", { ns: "pwa" })}</SheetDescription>
         </SheetHeader>
 
         <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-4 px-4 pb-4">
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="grid gap-1.5">
-              <Label htmlFor="pwa-name">Name</Label>
-              <Input id="pwa-name" placeholder="Sweeps PWA" {...register("name")} aria-invalid={!!errors.name} />
+              <Label htmlFor="pwa-name">{t("form.nameLabel", { ns: "pwa" })}</Label>
+              <Input
+                id="pwa-name"
+                placeholder={t("form.namePlaceholder", { ns: "pwa" })}
+                {...register("name")}
+                aria-invalid={!!errors.name}
+              />
               {errors.name && <p className="text-xs text-danger">{errors.name.message}</p>}
             </div>
             <div className="grid gap-1.5">
-              <Label htmlFor="pwa-short-name">Short name</Label>
+              <Label htmlFor="pwa-short-name">{t("form.shortNameLabel", { ns: "pwa" })}</Label>
               <Input
                 id="pwa-short-name"
-                placeholder="Sweeps"
+                placeholder={t("form.shortNamePlaceholder", { ns: "pwa" })}
                 {...register("shortName")}
                 aria-invalid={!!errors.shortName}
               />
@@ -108,28 +118,28 @@ export function PwaFormSheet({
 
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="grid gap-1.5">
-              <Label htmlFor="pwa-theme">Theme color</Label>
+              <Label htmlFor="pwa-theme">{t("form.themeColorLabel", { ns: "pwa" })}</Label>
               <div className="flex items-center gap-2">
                 <input
                   type="color"
                   value={/^#[0-9a-fA-F]{6}$/.test(manifest.themeColor ?? "") ? manifest.themeColor : "#16a34a"}
                   onChange={(e) => form.setValue("themeColor", e.target.value)}
                   className="size-8 shrink-0 rounded-md border border-input bg-transparent"
-                  aria-label="Pick theme color"
+                  aria-label={t("form.themeColorPickerAria", { ns: "pwa" })}
                 />
                 <Input id="pwa-theme" {...register("themeColor")} className="font-mono text-xs" aria-invalid={!!errors.themeColor} />
               </div>
               {errors.themeColor && <p className="text-xs text-danger">{errors.themeColor.message}</p>}
             </div>
             <div className="grid gap-1.5">
-              <Label htmlFor="pwa-bg">Background color</Label>
+              <Label htmlFor="pwa-bg">{t("form.backgroundColorLabel", { ns: "pwa" })}</Label>
               <div className="flex items-center gap-2">
                 <input
                   type="color"
                   value={/^#[0-9a-fA-F]{6}$/.test(manifest.backgroundColor ?? "") ? manifest.backgroundColor : "#0a0a0a"}
                   onChange={(e) => form.setValue("backgroundColor", e.target.value)}
                   className="size-8 shrink-0 rounded-md border border-input bg-transparent"
-                  aria-label="Pick background color"
+                  aria-label={t("form.backgroundColorPickerAria", { ns: "pwa" })}
                 />
                 <Input id="pwa-bg" {...register("backgroundColor")} className="font-mono text-xs" aria-invalid={!!errors.backgroundColor} />
               </div>
@@ -138,10 +148,10 @@ export function PwaFormSheet({
           </div>
 
           <div className="grid gap-1.5">
-            <Label htmlFor="pwa-icon">Icon URL</Label>
+            <Label htmlFor="pwa-icon">{t("form.iconUrlLabel", { ns: "pwa" })}</Label>
             <Input
               id="pwa-icon"
-              placeholder="https://cdn.floxlink.io/pwa/sweeps/icon-512.png"
+              placeholder={t("form.iconUrlPlaceholder", { ns: "pwa" })}
               className="font-mono text-xs"
               {...register("iconUrl")}
               aria-invalid={!!errors.iconUrl}
@@ -150,10 +160,10 @@ export function PwaFormSheet({
           </div>
 
           <div className="grid gap-1.5">
-            <Label htmlFor="pwa-start">Start URL</Label>
+            <Label htmlFor="pwa-start">{t("form.startUrlLabel", { ns: "pwa" })}</Label>
             <Input
               id="pwa-start"
-              placeholder="/install/sweeps"
+              placeholder={t("form.startUrlPlaceholder", { ns: "pwa" })}
               className="font-mono text-xs"
               {...register("startUrl")}
               aria-invalid={!!errors.startUrl}
@@ -163,24 +173,20 @@ export function PwaFormSheet({
 
           <div className="flex items-center justify-between rounded-md border border-border p-2.5">
             <div>
-              <p className="text-sm font-medium">Bounce in-app WebView traffic</p>
-              <p className="text-xs text-muted-foreground">
-                Sends FB/IG/TikTok/Telegram in-app browser traffic to the device&apos;s external browser (Android
-                intent / iOS Safari scheme) so the install prompt can fire. Provider-neutral technical requirement,
-                not moderator detection (§73).
-              </p>
+              <p className="text-sm font-medium">{t("form.bounceLabel", { ns: "pwa" })}</p>
+              <p className="text-xs text-muted-foreground">{t("form.bounceHint", { ns: "pwa" })}</p>
             </div>
             <Controller
               control={control}
               name="bounceInAppWebview"
               render={({ field }) => (
-                <Switch checked={field.value} onCheckedChange={field.onChange} aria-label="Bounce in-app WebView traffic" />
+                <Switch checked={field.value} onCheckedChange={field.onChange} aria-label={t("form.bounceAria", { ns: "pwa" })} />
               )}
             />
           </div>
 
           <div className="grid gap-1.5">
-            <Label htmlFor="pwa-status">Status</Label>
+            <Label htmlFor="pwa-status">{t("form.statusLabel", { ns: "pwa" })}</Label>
             <Controller
               control={control}
               name="status"
@@ -192,7 +198,7 @@ export function PwaFormSheet({
                   <SelectContent>
                     {STATUS_OPTIONS.map((s) => (
                       <SelectItem key={s} value={s}>
-                        {s}
+                        {t(`status.${s}`, { ns: "common" })}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -204,7 +210,7 @@ export function PwaFormSheet({
           <Separator />
 
           <div className="grid gap-1.5">
-            <Label>Manifest preview</Label>
+            <Label>{t("form.manifestPreviewLabel", { ns: "pwa" })}</Label>
             <pre className="overflow-x-auto rounded-md bg-muted p-2.5 text-xs">
               <Mono>
                 {JSON.stringify(
@@ -226,7 +232,7 @@ export function PwaFormSheet({
 
           <SheetFooter className="mt-0 flex-row justify-end gap-2 p-0">
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
-              Cancel
+              {t("actions.cancel", { ns: "common" })}
             </Button>
             <Button type="submit" disabled={isSubmitting}>
               {submitLabel}

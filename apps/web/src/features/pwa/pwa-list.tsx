@@ -4,10 +4,13 @@ import * as React from "react";
 import { useSearchParams } from "next/navigation";
 import { toast } from "sonner";
 import { PlusIcon, TagIcon } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
-import { usePwasStore } from "@/stores/pwas";
+import { LoadingState } from "@/components/ui/loading-state";
+import { ErrorState } from "@/components/ui/error-state";
+import { useCreatePwa, usePwas, useUpdatePwa } from "@/hooks/use-pwas";
 import { useTagsStore } from "@/stores/tags";
 import { useContentGalleryStore } from "@/stores/content-gallery";
 import { pwaColumns } from "@/features/pwa/pwa-columns";
@@ -15,12 +18,24 @@ import { PwaFormSheet, type PwaFormValues } from "@/features/pwa/pwa-form-sheet"
 import { TagFilterControl } from "@/features/tags/tag-filter-control";
 import { BulkTagDialog } from "@/features/tags/bulk-tag-dialog";
 import { filterByTags } from "@/features/tags/filter-by-tags";
-import type { Pwa } from "@/lib/mock/pwas";
+import type { Pwa } from "@/lib/api/pwa";
+
+function toFormValues(pwa: Pwa): PwaFormValues {
+  return {
+    name: pwa.name,
+    shortName: pwa.shortName,
+    themeColor: pwa.themeColor,
+    backgroundColor: pwa.backgroundColor,
+    iconUrl: pwa.iconUrl,
+    startUrl: pwa.startUrl,
+    bounceInAppWebview: pwa.bounceInAppWebview,
+    status: pwa.status,
+  };
+}
 
 export function PwaList() {
-  const pwas = usePwasStore((s) => s.pwas);
-  const addPwa = usePwasStore((s) => s.addPwa);
-  const updatePwa = usePwasStore((s) => s.updatePwa);
+  const { t } = useTranslation(["pwa", "common"]);
+  const pwasQuery = usePwas();
   const assignments = useTagsStore((s) => s.assignments);
   const searchParams = useSearchParams();
   const galleryItem = useContentGalleryStore((s) => s.items.find((i) => i.id === searchParams.get("gallery")));
@@ -29,39 +44,54 @@ export function PwaList() {
   const [tagFilter, setTagFilter] = React.useState<string[]>([]);
   const [bulkTarget, setBulkTarget] = React.useState<{ ids: string[]; clear: () => void } | null>(null);
 
-  function handleSubmit(values: PwaFormValues) {
-    if (target) {
-      updatePwa(target.id, values);
-      toast("PWA updated", { description: values.name });
-    } else {
-      addPwa(values);
-      toast("PWA created", { description: values.name });
-    }
-    setTarget(undefined);
+  const columns = React.useMemo(() => pwaColumns(t, (pwa) => setTarget(pwa)), [t]);
+  const filtered = React.useMemo(
+    () => filterByTags("pwa", pwasQuery.data?.pwas ?? [], tagFilter, assignments),
+    [pwasQuery.data, tagFilter, assignments],
+  );
+
+  const header = (
+    <div className="flex items-center justify-between">
+      <h1 className="text-2xl font-semibold tracking-tight">{t("list.title", { ns: "pwa" })}</h1>
+      <Button onClick={() => setTarget(null)}>
+        <PlusIcon className="size-4" />
+        {t("list.newButton", { ns: "pwa" })}
+      </Button>
+    </div>
+  );
+
+  if (pwasQuery.isPending) {
+    return (
+      <div className="flex flex-col gap-4">
+        {header}
+        <LoadingState label={t("list.loading", { ns: "pwa" })} />
+      </div>
+    );
   }
 
-  const columns = React.useMemo(() => pwaColumns((pwa) => setTarget(pwa)), []);
-  const filtered = React.useMemo(
-    () => filterByTags("pwa", pwas, tagFilter, assignments),
-    [pwas, tagFilter, assignments],
-  );
+  if (pwasQuery.isError) {
+    return (
+      <div className="flex flex-col gap-4">
+        {header}
+        <ErrorState
+          title={t("list.loadError", { ns: "pwa" })}
+          description={pwasQuery.error.message}
+          onRetry={() => pwasQuery.refetch()}
+        />
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-semibold tracking-tight">PWA</h1>
-        <Button onClick={() => setTarget(null)}>
-          <PlusIcon className="size-4" />
-          New PWA
-        </Button>
-      </div>
+      {header}
 
       <DataTable
         columns={columns}
         data={filtered}
-        searchPlaceholder="Search PWAs..."
-        emptyTitle="No PWAs yet"
-        emptyDescription="Add a PWA manifest to use as the installable step of a flow."
+        searchPlaceholder={t("list.searchPlaceholder", { ns: "pwa" })}
+        emptyTitle={t("list.emptyTitle", { ns: "pwa" })}
+        emptyDescription={t("list.emptyDescription", { ns: "pwa" })}
         pageSize={10}
         filters={<TagFilterControl selected={tagFilter} onChange={setTagFilter} />}
         enableRowSelection
@@ -72,20 +102,18 @@ export function PwaList() {
             variant="outline"
             onClick={() => setBulkTarget({ ids: selectedRows.map((r) => r.id), clear: clearSelection })}
           >
-            <TagIcon className="size-3.5" /> Edit Tags
+            <TagIcon className="size-3.5" /> {t("list.editTagsButton", { ns: "pwa" })}
           </Button>
         )}
       />
 
       {target !== undefined && (
-        <PwaFormSheet
+        <PwaFormDialog
           key={target?.id ?? "new"}
-          open
-          onOpenChange={(open) => !open && setTarget(undefined)}
-          title={target ? `Edit ${target.name}` : galleryItem ? `New PWA — from ${galleryItem.title}` : "New PWA"}
-          submitLabel={target ? "Save changes" : "Create PWA"}
-          defaultValues={target ?? (galleryItem?.pwaPayload ? { name: galleryItem.title, ...galleryItem.pwaPayload } : {})}
-          onSubmit={handleSubmit}
+          target={target}
+          galleryTitle={galleryItem?.title}
+          galleryDefaults={target ? undefined : galleryItem?.pwaPayload}
+          onClose={() => setTarget(undefined)}
         />
       )}
 
@@ -102,5 +130,58 @@ export function PwaList() {
         />
       )}
     </div>
+  );
+}
+
+function PwaFormDialog({
+  target,
+  galleryTitle,
+  galleryDefaults,
+  onClose,
+}: {
+  target: Pwa | null;
+  galleryTitle?: string;
+  galleryDefaults?: Partial<PwaFormValues>;
+  onClose: () => void;
+}) {
+  const { t } = useTranslation("pwa");
+  const createPwa = useCreatePwa();
+  const updatePwa = useUpdatePwa(target?.id ?? "");
+
+  function handleSubmit(values: PwaFormValues) {
+    if (target) {
+      updatePwa.mutate(values, {
+        onSuccess: () => {
+          toast(t("toast.updated"), { description: values.name });
+          onClose();
+        },
+        onError: (err) => toast.error(t("toast.updateError"), { description: err.message }),
+      });
+    } else {
+      createPwa.mutate(values, {
+        onSuccess: () => {
+          toast(t("toast.created"), { description: values.name });
+          onClose();
+        },
+        onError: (err) => toast.error(t("toast.createError"), { description: err.message }),
+      });
+    }
+  }
+
+  return (
+    <PwaFormSheet
+      open
+      onOpenChange={(open) => !open && onClose()}
+      title={
+        target
+          ? t("form.titleEdit", { name: target.name })
+          : galleryTitle
+            ? t("form.titleFromGallery", { title: galleryTitle })
+            : t("form.titleNew")
+      }
+      submitLabel={target ? t("form.submitEdit") : t("form.submitCreate")}
+      defaultValues={target ? toFormValues(target) : galleryDefaults ? { name: galleryTitle, ...galleryDefaults } : {}}
+      onSubmit={handleSubmit}
+    />
   );
 }

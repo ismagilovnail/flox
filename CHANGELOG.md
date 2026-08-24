@@ -5,6 +5,69 @@ per-phase, matching `CLAUDE.md`'s phase protocol. The one exception is
 [Between phases], below: spec amendments and the code changes that follow from
 them land between phases and would otherwise be invisible here.
 
+## [PWA] — wired to a real Postgres-backed API; fixes an i18n hydration race shared with Landings
+
+### Scope
+
+`AskUserQuestion` picked this as the second slice of the Landing/PWA/
+Postlanding/Pixels CRUD candidate, right after Landings landed: `pwas`
+(migration 00004) was already flat, no children, real schema — same
+shape as Landings. Postlanding and per-flow Pixels stay mocked; this
+phase is PWA only. See `docs/pwa.md`.
+
+### Added
+
+- **`apps/internal/pwa`**: `model.go`/`handler.go`/`service.go`/
+  `repository.go`, mirroring `apps/internal/landing`'s shape almost
+  exactly, wired at `/pwas` in `apps/api/main.go`.
+- The one real validation difference from Landing: `startUrl` is a
+  relative install path (`/install/sweeps`), not an absolute URL, so
+  it's deliberately not run through `isValidURL` — covered by its own
+  test, `TestUpdateAcceptsRelativeStartURL`.
+- Frontend: `lib/api/pwa.ts` + `hooks/use-pwas.ts` (real API layer,
+  mirrors `landings`' exactly); `pwa-list`/`-form-sheet`/`-columns`/
+  `-row-actions.tsx` rewired off the Zustand mock onto the real hooks,
+  with loading/error states added.
+- A `pwa` i18n namespace (`en`+`ru`, key-set parity checked directly).
+- **Cross-cutting fix**: `components/i18n-provider.tsx` had a genuine
+  React hydration race — its post-mount `i18n.changeLanguage()` call
+  could fire before a `useSearchParams()`-driven `<Suspense>`
+  boundary's own deferred hydration commit (needed for the Content
+  Gallery `?gallery=<id>` integration on Landings/PWA/Postlanding),
+  producing a real "Hydration failed" error. This pre-dated this phase
+  (introduced with `I18nProvider` itself, already live on `/landings`,
+  just not caught during that phase's manual testing — absent on pages
+  without `useSearchParams()`, e.g. `/networks`/`/offers`).
+  `React.startTransition` and a fixed short `setTimeout` both still
+  raced; fixed with `requestIdleCallback` (`setTimeout(fn, 0)` Safari
+  fallback), which waits for the main thread to actually go idle
+  instead of guessing a constant. Retroactively fixes the same latent
+  defect on the already-shipped Landings phase with no Landings code
+  touched.
+
+### Removed
+
+- `stores/pwas.ts` and `lib/mock/pwas.ts` — deleted outright once a
+  grep confirmed zero remaining importers.
+
+### Verified
+
+- Backend: `go build/vet/gofmt/test ./...` all green — `pwa_test.go`
+  mirrors `landing_test.go`'s full test set plus
+  `TestUpdateAcceptsRelativeStartURL`.
+- Frontend: `tsc --noEmit`/`eslint`/`vitest run`/`next build`
+  (production) all clean.
+- Full manual browser pass against the real running `api`+`web` dev
+  servers, in both locales: created/edited/paused/resumed/duplicated/
+  archived a PWA (manifest preview matched form values live, copy kept
+  non-active status when applicable, archived row's action menu
+  correctly dropped to Edit/Duplicate only); confirmed full Russian
+  rendering throughout. Also confirmed the hydration fix via repeated
+  `/landings` ↔ `/pwa` navigation with the browser console read
+  directly: zero hydration errors on either page. Test PWA row deleted
+  directly from Postgres afterward (no hard-delete in the UI for this
+  entity).
+
 ## [Landings] — wired to a real Postgres-backed API
 
 ### Scope

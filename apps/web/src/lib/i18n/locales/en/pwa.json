@@ -1,0 +1,80 @@
+{
+  "list": {
+    "title": "PWA",
+    "newButton": "New PWA",
+    "searchPlaceholder": "Search PWAs...",
+    "emptyTitle": "No PWAs yet",
+    "emptyDescription": "Add a PWA manifest to use as the installable step of a flow.",
+    "loading": "Loading PWAs…",
+    "loadError": "Couldn't load PWAs",
+    "editTagsButton": "Edit Tags"
+  },
+  "columns": {
+    "name": "Name",
+    "shortName": "Short name",
+    "theme": "Theme",
+    "webviewBounce": "WebView bounce",
+    "status": "Status",
+    "tags": "Tags",
+    "updated": "Updated"
+  },
+  "webviewBounce": {
+    "on": "on",
+    "off": "off"
+  },
+  "form": {
+    "titleNew": "New PWA",
+    "titleEdit": "Edit {{name}}",
+    "titleFromGallery": "New PWA — from {{title}}",
+    "description": "These fields are the real Web App Manifest (§28) — the preview below is what installs on the device.",
+    "nameLabel": "Name",
+    "namePlaceholder": "Sweeps PWA",
+    "shortNameLabel": "Short name",
+    "shortNamePlaceholder": "Sweeps",
+    "themeColorLabel": "Theme color",
+    "themeColorPickerAria": "Pick theme color",
+    "backgroundColorLabel": "Background color",
+    "backgroundColorPickerAria": "Pick background color",
+    "iconUrlLabel": "Icon URL",
+    "iconUrlPlaceholder": "https://cdn.floxlink.io/pwa/sweeps/icon-512.png",
+    "startUrlLabel": "Start URL",
+    "startUrlPlaceholder": "/install/sweeps",
+    "bounceLabel": "Bounce in-app WebView traffic",
+    "bounceHint": "Sends FB/IG/TikTok/Telegram in-app browser traffic to the device's external browser (Android intent / iOS Safari scheme) so the install prompt can fire. Provider-neutral technical requirement, not moderator detection (§73).",
+    "bounceAria": "Bounce in-app WebView traffic",
+    "statusLabel": "Status",
+    "manifestPreviewLabel": "Manifest preview",
+    "submitCreate": "Create PWA",
+    "submitEdit": "Save changes",
+    "validation": {
+      "nameMin": "Name must be at least 2 characters",
+      "shortNameRequired": "Required for the home-screen icon label",
+      "colorInvalid": "Enter a hex color like #16a34a",
+      "iconUrlInvalid": "Enter a valid icon URL",
+      "startUrlRequired": "Required"
+    }
+  },
+  "rowActions": {
+    "actionsAria": "Actions for {{name}}",
+    "edit": "Edit",
+    "pause": "Pause",
+    "resume": "Resume",
+    "duplicate": "Duplicate",
+    "archive": "Archive",
+    "archiveConfirmTitle": "Archive \"{{name}}\"?",
+    "archiveConfirmDescription": "Archived PWAs are hidden from flow pickers going forward. Existing flows that already reference this PWA keep working. This can be reversed later."
+  },
+  "toast": {
+    "updated": "PWA updated",
+    "created": "PWA created",
+    "updateError": "Couldn't update PWA",
+    "createError": "Couldn't create PWA",
+    "paused": "PWA paused",
+    "resumed": "PWA resumed",
+    "duplicated": "PWA duplicated",
+    "duplicatedSuffix": "{{name}} (Copy)",
+    "archived": "PWA archived",
+    "archiveError": "Couldn't archive PWA",
+    "duplicateError": "Couldn't duplicate PWA"
+  }
+}

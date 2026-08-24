@@ -19,84 +19,77 @@ referenced below as §N).
 ## CURRENT STATE — UPDATE THIS EVERY PHASE
 
 ```
-CURRENT PHASE : PHASE (unnumbered) — Landings CRUD
-STATUS        : done — confirmed via AskUserQuestion as the smallest
-                slice of the Landing/PWA/Postlanding/Pixels candidate.
-                landings (migration 00004) was already flat, no children,
-                real schema — the same shape apps/internal/network
-                already establishes a real precedent for. New
-                apps/internal/landing package (model/handler/service/
-                repository) mirrors network's almost exactly; wired at
-                /landings in apps/api/main.go the same way /networks is.
-                PWA/Postlanding/per-flow Pixels stay mocked — this phase
-                is Landings only.
-                The one real business-logic addition: an internal
-                landing's url (https://cdn.floxlink.io/lnd/{slug}) moves
-                from client-computed (the old mock's submit handler) to
-                server-computed in Service.Create/Update from Name — a
-                client-supplied url for type:internal is accepted in the
-                request shape (uniform JSON contract with type:external)
-                but always ignored. Update only recomputes url when name
-                or type actually changed in that call (a status-only
-                PATCH from pause/activate/duplicate's preserve-status
-                follow-up leaves it untouched); Duplicate goes through
-                Service.Create (not Repository.Create) so a (Copy)'s url
-                is recomputed for its new name, never copied verbatim.
-                Go's slugify reimplements lib/utils.ts's exactly so the
-                form's client-side preview and the server-persisted
-                value never disagree. Delete has the same defensive,
-                not-integration-tested 23503 catch network's own
-                Delete already established for flows.landing_id (no
-                ON DELETE clause, but no Flow CRUD populates it yet).
-                Frontend: new lib/api/landings.ts + hooks/use-landings.ts
-                (mirrors networks' real API layer exactly);
-                landing-list/-form-sheet/-columns/-row-actions.tsx
-                rewired off stores/landings.ts (deleted, along with
-                lib/mock/landings.ts, zero remaining importers) onto the
-                real hooks; loading/empty/error states added (DoD
-                requires them; the old mock was synchronous and had
-                none). Content Gallery (?gallery=<id> prefill) and Tags
-                integrations untouched — both already shared, already-
-                local infra other real domains use unchanged too.
-                Added a landings i18n namespace (en+ru, registered in
-                lib/i18n/config.ts) even though this phase's own name
-                doesn't mention i18n — Landings was correctly out of the
-                dedicated i18n phase's scope (still mocked then), but
-                leaving it the one hardcoded-English holdout next to
-                every other now-real domain page the moment it goes
-                real would be a visible regression, and DoD's loading/
-                error states need real text regardless.
+CURRENT PHASE : PHASE (unnumbered) — PWA CRUD
+STATUS        : done — second slice of the Landing/PWA/Postlanding/
+                Pixels CRUD candidate, chosen via AskUserQuestion
+                immediately after Landings landed. apps/internal/pwa
+                (model/handler/service/repository) mirrors
+                apps/internal/landing almost exactly, wired at /pwas in
+                apps/api/main.go. One real validation difference from
+                Landing: startUrl is a relative install path, not run
+                through isValidURL (covered by its own test,
+                TestUpdateAcceptsRelativeStartURL). Same defensive-not-
+                integration-tested 23503-on-Delete precedent as
+                landing/network for flows.pwa_id (no Flow CRUD exists
+                yet to populate it).
+                Frontend: new lib/api/pwa.ts + hooks/use-pwas.ts (mirrors
+                landings' real API layer exactly); pwa-list/-form-sheet/
+                -columns/-row-actions.tsx rewired off stores/pwas.ts
+                (deleted, along with lib/mock/pwas.ts, zero remaining
+                importers) onto the real hooks; loading/error states
+                added. Content Gallery (?gallery=<id> prefill) and Tags
+                integrations untouched. Added a pwa i18n namespace
+                (en+ru, key-parity checked directly).
+                Cross-cutting fix found + shipped this phase: a genuine
+                React hydration race in components/i18n-provider.tsx —
+                its post-mount i18n.changeLanguage() call could fire
+                before a useSearchParams()-driven <Suspense> boundary's
+                own deferred hydration commit (needed for the Content
+                Gallery ?gallery=<id> integration on Landings/PWA/
+                Postlanding), producing a real "Hydration failed" error
+                (auto-recovered by React, not cosmetic). Pre-dated this
+                phase — introduced with I18nProvider itself, already
+                live on /landings, just not caught during that phase's
+                manual testing (absent on pages without
+                useSearchParams(), e.g. /networks, /offers).
+                React.startTransition and a fixed short setTimeout both
+                still raced; fixed with requestIdleCallback
+                (setTimeout(fn,0) Safari fallback), which waits for the
+                main thread to actually go idle instead of guessing a
+                constant. Verified via repeated fresh navigations to
+                both /landings and /pwa with the browser console read
+                directly: zero hydration errors on either. Retroactively
+                fixes the same latent defect on the already-shipped
+                Landings phase with no Landings code touched. See
+                docs/pwa.md.
                 Verified: go build/vet/gofmt/test ./... all green (new
-                landing_test.go mirrors network_test.go's full set plus
-                a dedicated server-computed-URL test — client value
-                ignored on create, URL follows a rename, a status-only
-                update leaves URL/content untouched); tsc/eslint/next
-                build clean. Full manual browser pass against real
-                running api+web dev servers, both locales: created
-                internal (server URL matched client preview exactly)
-                and external (client URL persisted untouched, empty-URL
-                rejected client-side) landings; renamed one (URL
-                followed via a real round-trip); duplicated one (copy's
-                URL recomputed for its new name); archived one (archived
-                row's menu correctly drops Pause/Archive, keeping only
-                Edit/Duplicate — matches Networks); confirmed full
-                Russian rendering throughout. Test landings deleted
-                afterward (no hard-delete in the UI for this entity,
-                same as every archive-only domain — removed directly).
-LAST COMMIT   : feat(landings): wire Landings to a real Postgres-backed
-                API
-NEXT          : confirm scope before starting. Candidates: incoming
+                pwa_test.go mirrors landing_test.go's full set plus
+                TestUpdateAcceptsRelativeStartURL); tsc --noEmit/eslint/
+                vitest run/next build (production) all clean. Full
+                manual browser pass against real running api+web dev
+                servers, both locales: created/edited/paused/resumed/
+                duplicated/archived a PWA (manifest preview matched form
+                values live, copy kept non-active status when
+                applicable, archived row's menu correctly dropped to
+                Edit/Duplicate only — matches Landings/Networks);
+                confirmed full Russian rendering throughout. Test PWA
+                row deleted directly from Postgres afterward (no hard-
+                delete in the UI for this entity).
+LAST COMMIT   : feat(pwa): wire PWA CRUD to real Postgres-backed API;
+                fix i18n hydration race shared with Landings
+NEXT          : confirm scope before starting. Landing and PWA are now
+                real; Postlanding is the last piece of that CRUD
+                candidate still mocked. Other candidates: incoming
                 Postback Replay (needs an apps/api-vs-apps/tracker
                 architecture decision — duplicate the conversion engine's
                 dependency graph into apps/api, or have it call
-                apps/tracker's /postback/{networkId} internally); FB/
-                TikTok ad-spend import (§74's CostProvider interface, the
-                "later" half of §27-COST — no backend at all yet, a
-                large phase); PWA or Postlanding CRUD (same shape as
-                Landings just was, schema already migrated — PWA has a
-                type enum wrinkle of its own: internal/external/ios_app);
-                or a third i18n locale (cheap per docs/frontend-i18n.md,
-                but none has been requested).
+                apps/tracker's /postback/{networkId} internally — note
+                outgoing Postback Replay already shipped separately, see
+                LAST COMMIT two phases back); FB/TikTok ad-spend import
+                (§74's CostProvider interface, the "later" half of
+                §27-COST — no backend at all yet, a large phase);
+                per-flow Pixels CRUD; or a third i18n locale (cheap per
+                docs/frontend-i18n.md, but none has been requested).
 ```
 
 > At the end of every phase: update the four lines above, add a CHANGELOG entry,
