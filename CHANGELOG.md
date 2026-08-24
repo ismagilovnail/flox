@@ -5,6 +5,72 @@ per-phase, matching `CLAUDE.md`'s phase protocol. The one exception is
 [Between phases], below: spec amendments and the code changes that follow from
 them land between phases and would otherwise be invisible here.
 
+## [Landings] — wired to a real Postgres-backed API
+
+### Scope
+
+`AskUserQuestion` picked this as the smallest slice of the Landing/PWA/
+Postlanding/Pixels CRUD candidate: `landings` (migration 00004) was
+already flat, no children, real schema — the exact shape
+`apps/internal/network` already establishes a real precedent for. PWA,
+Postlanding, and per-flow Pixels stay mocked; this phase is Landings
+only. See `docs/landings.md`.
+
+### Added
+
+- **`apps/internal/landing`**: `model.go`/`handler.go`/`service.go`/
+  `repository.go`, mirroring `apps/internal/network`'s shape almost
+  exactly, wired at `/landings` in `apps/api/main.go`.
+- The one real business-logic addition beyond the template: an internal
+  landing's `url` (`https://cdn.floxlink.io/lnd/{slug}`) moves from
+  client-computed (the old mock's form-submit handler) to
+  server-computed in `Service.Create`/`Update` from `Name` — a
+  client-supplied `url` for `type: internal` is accepted in the request
+  shape but always ignored. `Update` only recomputes `url` when `name`
+  or `type` actually changed in that call; `Duplicate` goes through
+  `Service.Create` (not `Repository.Create`) so a `(Copy)`'s `url` is
+  recomputed for its new name, never copied verbatim. Go's `slugify`
+  matches `lib/utils.ts`'s exactly, so the form's client-side preview
+  and the server-persisted value never disagree.
+- Frontend: `lib/api/landings.ts` + `hooks/use-landings.ts` (real API
+  layer, mirrors `networks`' exactly); `landing-list`/`-form-sheet`/
+  `-columns`/`-row-actions.tsx` rewired off the Zustand mock onto the
+  real hooks, with loading/empty/error states added (the old mock was
+  synchronous and had none — DoD requires them regardless).
+- A `landings` i18n namespace (`en`+`ru`, registered in
+  `lib/i18n/config.ts`) — Landings was correctly out of the dedicated
+  i18n phase's scope (still mocked then), but leaving it the one
+  hardcoded-English holdout next to every other now-real domain page
+  the moment it goes real would be a visible regression.
+
+### Removed
+
+- `stores/landings.ts` and `lib/mock/landings.ts` — deleted outright
+  once a grep confirmed zero remaining importers, the same "drop it,
+  don't fake it" precedent every prior real-backend phase this session
+  has followed.
+
+### Verified
+
+- Backend: `go build/vet/gofmt/test ./...` all green — `landing_test.go`
+  mirrors `network_test.go`'s full test set (create/get/update/delete,
+  invalid-shape validation, pause/activate transitions, duplicate keeps
+  status, cross-tenant isolation) plus a dedicated server-computed-URL
+  test (client value ignored on create, URL follows a rename, a
+  status-only update leaves URL/content untouched).
+- Frontend: `tsc --noEmit`/`eslint`/`next build` (production) all clean.
+- Full manual browser pass against the real running `api`+`web` dev
+  servers, in both locales: created an internal landing (server URL
+  matched the client preview exactly) and an external one (client URL
+  persisted untouched; an empty URL is rejected client-side); renamed
+  the internal one (URL followed via a real round-trip, not just client
+  state); duplicated it (copy's URL recomputed for its new name);
+  archived one (the archived row's action menu correctly drops
+  Pause/Archive, keeping only Edit/Duplicate — matches Networks'
+  identical pattern); confirmed full Russian rendering throughout (list,
+  form, row actions, archive confirmation, toasts). Test landings
+  deleted afterward (no hard-delete exists in the UI for this entity).
+
 ## [Postback Replay] — outgoing deliveries can be re-enqueued from the Logs UI
 
 ### Scope

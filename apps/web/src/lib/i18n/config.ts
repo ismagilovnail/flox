@@ -24,6 +24,7 @@ import enCampaigns from "@/lib/i18n/locales/en/campaigns.json";
 import enCost from "@/lib/i18n/locales/en/cost.json";
 import enTrafficSources from "@/lib/i18n/locales/en/trafficSources.json";
 import enNetworks from "@/lib/i18n/locales/en/networks.json";
+import enLandings from "@/lib/i18n/locales/en/landings.json";
 import enOffers from "@/lib/i18n/locales/en/offers.json";
 import enStreamSets from "@/lib/i18n/locales/en/streamSets.json";
 import enRoutingSimulator from "@/lib/i18n/locales/en/routingSimulator.json";
@@ -36,6 +37,7 @@ import ruCampaigns from "@/lib/i18n/locales/ru/campaigns.json";
 import ruCost from "@/lib/i18n/locales/ru/cost.json";
 import ruTrafficSources from "@/lib/i18n/locales/ru/trafficSources.json";
 import ruNetworks from "@/lib/i18n/locales/ru/networks.json";
+import ruLandings from "@/lib/i18n/locales/ru/landings.json";
 import ruOffers from "@/lib/i18n/locales/ru/offers.json";
 import ruStreamSets from "@/lib/i18n/locales/ru/streamSets.json";
 import ruRoutingSimulator from "@/lib/i18n/locales/ru/routingSimulator.json";
@@ -54,6 +56,7 @@ export const NAMESPACES = [
   "cost",
   "trafficSources",
   "networks",
+  "landings",
   "offers",
   "streamSets",
   "routingSimulator",
@@ -69,6 +72,7 @@ const resources = {
     cost: enCost,
     trafficSources: enTrafficSources,
     networks: enNetworks,
+    landings: enLandings,
     offers: enOffers,
     streamSets: enStreamSets,
     routingSimulator: enRoutingSimulator,
@@ -82,6 +86,7 @@ const resources = {
     cost: ruCost,
     trafficSources: ruTrafficSources,
     networks: ruNetworks,
+    landings: ruLandings,
     offers: ruOffers,
     streamSets: ruStreamSets,
     routingSimulator: ruRoutingSimulator,

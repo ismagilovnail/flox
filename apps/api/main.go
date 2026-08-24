@@ -23,6 +23,7 @@ import (
 	"github.com/ismagilovnail/flox/apps/internal/cost"
 	"github.com/ismagilovnail/flox/apps/internal/eventmapping"
 	"github.com/ismagilovnail/flox/apps/internal/httpserver"
+	"github.com/ismagilovnail/flox/apps/internal/landing"
 	"github.com/ismagilovnail/flox/apps/internal/logging"
 	"github.com/ismagilovnail/flox/apps/internal/ltv"
 	"github.com/ismagilovnail/flox/apps/internal/network"
@@ -117,6 +118,12 @@ func run() error {
 	srv.Mux().Route("/networks", func(r chi.Router) {
 		r.Use(tenant.Middleware)
 		networkHandler.Register(r)
+	})
+
+	landingHandler := landing.NewHandler(landing.NewService(landing.NewRepository(db)), logger)
+	srv.Mux().Route("/landings", func(r chi.Router) {
+		r.Use(tenant.Middleware)
+		landingHandler.Register(r)
 	})
 
 	offerHandler := offer.NewHandler(offer.NewService(offer.NewRepository(db)), logger)

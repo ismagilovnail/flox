@@ -1,0 +1,69 @@
+{
+  "list": {
+    "title": "Landings",
+    "newButton": "New Landing",
+    "searchPlaceholder": "Search landings...",
+    "emptyTitle": "No landings yet",
+    "emptyDescription": "Add a landing page to use as the first step of a flow.",
+    "loading": "Loading landings…",
+    "loadError": "Couldn't load landings",
+    "editTagsButton": "Edit Tags"
+  },
+  "columns": {
+    "name": "Name",
+    "type": "Type",
+    "url": "URL",
+    "status": "Status",
+    "tags": "Tags",
+    "updated": "Updated"
+  },
+  "type": {
+    "internal": "internal",
+    "external": "external"
+  },
+  "form": {
+    "titleNew": "New Landing",
+    "titleEdit": "Edit {{name}}",
+    "titleFromGallery": "New Landing — from {{title}}",
+    "description": "Internal landings are hosted on our CDN with content you edit here; external landings point at a URL you already control (§28).",
+    "nameLabel": "Name",
+    "namePlaceholder": "Quiz Lander",
+    "typeLabel": "Type",
+    "urlLabel": "URL",
+    "urlPlaceholder": "https://advertiser.example/landing",
+    "contentLabel": "Content",
+    "contentPlaceholder": "<h1>Headline</h1><p>Copy...</p>",
+    "hostedUrlLabel": "Hosted URL",
+    "statusLabel": "Status",
+    "submitCreate": "Create landing",
+    "submitEdit": "Save changes",
+    "validation": {
+      "nameMin": "Name must be at least 2 characters",
+      "urlInvalid": "Enter a valid URL",
+      "contentRequired": "Add page content"
+    }
+  },
+  "rowActions": {
+    "actionsAria": "Actions for {{name}}",
+    "edit": "Edit",
+    "pause": "Pause",
+    "resume": "Resume",
+    "duplicate": "Duplicate",
+    "archive": "Archive",
+    "archiveConfirmTitle": "Archive \"{{name}}\"?",
+    "archiveConfirmDescription": "Archived landings are hidden from flow pickers going forward. Existing flows that already reference this landing keep working. This can be reversed later."
+  },
+  "toast": {
+    "updated": "Landing updated",
+    "created": "Landing created",
+    "updateError": "Couldn't update landing",
+    "createError": "Couldn't create landing",
+    "paused": "Landing paused",
+    "resumed": "Landing resumed",
+    "duplicated": "Landing duplicated",
+    "duplicatedSuffix": "{{name}} (Copy)",
+    "archived": "Landing archived",
+    "archiveError": "Couldn't archive landing",
+    "duplicateError": "Couldn't duplicate landing"
+  }
+}

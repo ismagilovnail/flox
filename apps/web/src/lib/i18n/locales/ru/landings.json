@@ -1,0 +1,69 @@
+{
+  "list": {
+    "title": "Лендинги",
+    "newButton": "Новый лендинг",
+    "searchPlaceholder": "Поиск лендингов...",
+    "emptyTitle": "Пока нет лендингов",
+    "emptyDescription": "Добавьте лендинг, чтобы использовать его как первый шаг потока.",
+    "loading": "Загрузка лендингов…",
+    "loadError": "Не удалось загрузить лендинги",
+    "editTagsButton": "Изменить теги"
+  },
+  "columns": {
+    "name": "Название",
+    "type": "Тип",
+    "url": "URL",
+    "status": "Статус",
+    "tags": "Теги",
+    "updated": "Обновлено"
+  },
+  "type": {
+    "internal": "внутренний",
+    "external": "внешний"
+  },
+  "form": {
+    "titleNew": "Новый лендинг",
+    "titleEdit": "Изменить {{name}}",
+    "titleFromGallery": "Новый лендинг — из «{{title}}»",
+    "description": "Внутренние лендинги размещаются на нашем CDN с контентом, который вы редактируете здесь; внешние лендинги указывают на URL, которым вы уже управляете (§28).",
+    "nameLabel": "Название",
+    "namePlaceholder": "Квиз-лендинг",
+    "typeLabel": "Тип",
+    "urlLabel": "URL",
+    "urlPlaceholder": "https://advertiser.example/landing",
+    "contentLabel": "Контент",
+    "contentPlaceholder": "<h1>Заголовок</h1><p>Текст...</p>",
+    "hostedUrlLabel": "URL размещения",
+    "statusLabel": "Статус",
+    "submitCreate": "Создать лендинг",
+    "submitEdit": "Сохранить изменения",
+    "validation": {
+      "nameMin": "Название должно содержать не менее 2 символов",
+      "urlInvalid": "Введите корректный URL",
+      "contentRequired": "Добавьте содержимое страницы"
+    }
+  },
+  "rowActions": {
+    "actionsAria": "Действия для {{name}}",
+    "edit": "Изменить",
+    "pause": "Приостановить",
+    "resume": "Возобновить",
+    "duplicate": "Дублировать",
+    "archive": "В архив",
+    "archiveConfirmTitle": "Отправить «{{name}}» в архив?",
+    "archiveConfirmDescription": "Лендинги в архиве больше не отображаются в выборе для потоков. Существующие потоки, уже ссылающиеся на этот лендинг, продолжат работать. Это можно отменить позже."
+  },
+  "toast": {
+    "updated": "Лендинг обновлён",
+    "created": "Лендинг создан",
+    "updateError": "Не удалось обновить лендинг",
+    "createError": "Не удалось создать лендинг",
+    "paused": "Лендинг приостановлен",
+    "resumed": "Лендинг возобновлён",
+    "duplicated": "Лендинг продублирован",
+    "duplicatedSuffix": "{{name}} (копия)",
+    "archived": "Лендинг отправлен в архив",
+    "archiveError": "Не удалось отправить лендинг в архив",
+    "duplicateError": "Не удалось продублировать лендинг"
+  }
+}

@@ -19,83 +19,84 @@ referenced below as §N).
 ## CURRENT STATE — UPDATE THIS EVERY PHASE
 
 ```
-CURRENT PHASE : PHASE (unnumbered) — Postback Replay (outgoing only)
-STATUS        : done — confirmed via AskUserQuestion after inspection
-                found incoming and outgoing replay are very different
-                sizes. Outgoing re-enqueues a fresh delivery through the
-                exact apps/internal/postback.Store.Enqueue path a first
-                attempt already takes; self-contained in apps/api, which
-                already has everything it needs (db). Incoming re-
-                invokes apps/internal/conversion.Service.Record, which
-                needs mapping, the dedup/progression store, FX,
-                attribution, an async event writer, and the delivery
-                enqueuer all wired together — the exact dependency graph
-                only apps/tracker has ever needed, not apps/api. Wiring
-                it in means either duplicating that graph into apps/api
-                or apps/api calling apps/tracker's /postback/{networkId}
-                internally — a real architecture decision, deferred
-                again pending that choice.
-                New apps/internal/conversion.PostgresStore.FindSuccessID:
-                resolves a ClickHouse postback_events row back to the
-                Postgres postbacks.id apps/internal/postback's delivery
-                queue needs as its NOT NULL source_postback_id FK
-                (migration 00014), by the exact dedup key (org, network,
-                click_id, status, event_ref) — event_ref matters because
-                a CPA_REDEP click can have more than one successful row,
-                one per redeposit. postbacklogs.PostbackLog now keeps
-                EventRef in its JSON (previously dropped: "the UI never
-                renders it") specifically so the browser can round-trip
-                it back for this lookup. New apps/internal/postback
-                .ReplayEnqueuer adapts postbacklogs.ReplayInput →
-                postback.EnqueueInput, same decoupled-interface pattern
-                Enqueuer (→ conversion.DeliveryEnqueuer) already uses;
-                unlike Enqueuer's best-effort swallow-the-error contract,
-                ReplayEnqueuer's error goes straight back to the HTTP
-                caller since replaying is the entire point of that
-                request. New POST /postback-logs/replay-outgoing on
-                apps/internal/postbacklogs (Service.ReplayOutgoing).
-                Frontend: postback-log-columns.tsx's actions column and
-                RotateCcwIcon button — dropped in the read-only phase —
-                re-added, outgoing rows only; useReplayOutgoingPostback
-                mutation hook; new postbacks.json logs.replayAria/toast
-                keys, en+ru.
+CURRENT PHASE : PHASE (unnumbered) — Landings CRUD
+STATUS        : done — confirmed via AskUserQuestion as the smallest
+                slice of the Landing/PWA/Postlanding/Pixels candidate.
+                landings (migration 00004) was already flat, no children,
+                real schema — the same shape apps/internal/network
+                already establishes a real precedent for. New
+                apps/internal/landing package (model/handler/service/
+                repository) mirrors network's almost exactly; wired at
+                /landings in apps/api/main.go the same way /networks is.
+                PWA/Postlanding/per-flow Pixels stay mocked — this phase
+                is Landings only.
+                The one real business-logic addition: an internal
+                landing's url (https://cdn.floxlink.io/lnd/{slug}) moves
+                from client-computed (the old mock's submit handler) to
+                server-computed in Service.Create/Update from Name — a
+                client-supplied url for type:internal is accepted in the
+                request shape (uniform JSON contract with type:external)
+                but always ignored. Update only recomputes url when name
+                or type actually changed in that call (a status-only
+                PATCH from pause/activate/duplicate's preserve-status
+                follow-up leaves it untouched); Duplicate goes through
+                Service.Create (not Repository.Create) so a (Copy)'s url
+                is recomputed for its new name, never copied verbatim.
+                Go's slugify reimplements lib/utils.ts's exactly so the
+                form's client-side preview and the server-persisted
+                value never disagree. Delete has the same defensive,
+                not-integration-tested 23503 catch network's own
+                Delete already established for flows.landing_id (no
+                ON DELETE clause, but no Flow CRUD populates it yet).
+                Frontend: new lib/api/landings.ts + hooks/use-landings.ts
+                (mirrors networks' real API layer exactly);
+                landing-list/-form-sheet/-columns/-row-actions.tsx
+                rewired off stores/landings.ts (deleted, along with
+                lib/mock/landings.ts, zero remaining importers) onto the
+                real hooks; loading/empty/error states added (DoD
+                requires them; the old mock was synchronous and had
+                none). Content Gallery (?gallery=<id> prefill) and Tags
+                integrations untouched — both already shared, already-
+                local infra other real domains use unchanged too.
+                Added a landings i18n namespace (en+ru, registered in
+                lib/i18n/config.ts) even though this phase's own name
+                doesn't mention i18n — Landings was correctly out of the
+                dedicated i18n phase's scope (still mocked then), but
+                leaving it the one hardcoded-English holdout next to
+                every other now-real domain page the moment it goes
+                real would be a visible regression, and DoD's loading/
+                error states need real text regardless.
                 Verified: go build/vet/gofmt/test ./... all green (new
-                FindSuccessID integration test against real Postgres —
-                event_ref disambiguation between two REDEP rows, tenant
-                isolation, no-match; new ReplayEnqueuer unit test; five
-                new Service.ReplayOutgoing unit tests against fakes);
-                tsc/eslint/next build clean. Full manual browser pass
-                against real running api+tracker+worker+web dev servers
-                (first phase in this arc needing all four — a genuine
-                outgoing delivery only exists once a real incoming
-                postback creates one): real network with an unreachable
-                postback URL, real event mapping, two real incoming
-                postbacks sent through apps/tracker's actual endpoint,
-                apps/worker's Deliverer picked both up and logged
-                retrying attempts, clicked Replay, confirmed via direct
-                Postgres query that a NEW postback_deliveries row was
-                created (fresh id, attempt_count reset to 1, correct
-                source_postback_id) and that the worker picked it up on
-                its own next poll. Confirmed Replay absent on incoming
-                rows; confirmed 422/404 error paths directly. Test
-                network + its Postgres and ClickHouse rows all deleted
-                afterward (a genuine cleanup this time, not archive —
-                these were psql/curl-seeded rows with no UI path at all,
-                not entities the app itself only lets you archive).
-LAST COMMIT   : feat(postback-replay): re-enqueue outgoing deliveries
-                from the Postback Logs UI (incoming replay still
-                deferred)
+                landing_test.go mirrors network_test.go's full set plus
+                a dedicated server-computed-URL test — client value
+                ignored on create, URL follows a rename, a status-only
+                update leaves URL/content untouched); tsc/eslint/next
+                build clean. Full manual browser pass against real
+                running api+web dev servers, both locales: created
+                internal (server URL matched client preview exactly)
+                and external (client URL persisted untouched, empty-URL
+                rejected client-side) landings; renamed one (URL
+                followed via a real round-trip); duplicated one (copy's
+                URL recomputed for its new name); archived one (archived
+                row's menu correctly drops Pause/Archive, keeping only
+                Edit/Duplicate — matches Networks); confirmed full
+                Russian rendering throughout. Test landings deleted
+                afterward (no hard-delete in the UI for this entity,
+                same as every archive-only domain — removed directly).
+LAST COMMIT   : feat(landings): wire Landings to a real Postgres-backed
+                API
 NEXT          : confirm scope before starting. Candidates: incoming
-                Postback Replay (needs the apps/api-vs-apps/tracker
-                architecture decision above resolved first); FB/TikTok
-                ad-spend import (§74's CostProvider interface, the
+                Postback Replay (needs an apps/api-vs-apps/tracker
+                architecture decision — duplicate the conversion engine's
+                dependency graph into apps/api, or have it call
+                apps/tracker's /postback/{networkId} internally); FB/
+                TikTok ad-spend import (§74's CostProvider interface, the
                 "later" half of §27-COST — no backend at all yet, a
-                large phase); Landing/PWA/Postlanding/Pixels CRUD
-                (Postgres schema already migrated, zero Go service-layer
-                packages exist — would unblock stages the Stream Sets
-                phase had to drop from the Flow editor; Landings alone
-                is the smallest slice); or a third i18n locale (cheap
-                per docs/frontend-i18n.md, but none has been requested).
+                large phase); PWA or Postlanding CRUD (same shape as
+                Landings just was, schema already migrated — PWA has a
+                type enum wrinkle of its own: internal/external/ios_app);
+                or a third i18n locale (cheap per docs/frontend-i18n.md,
+                but none has been requested).
 ```
 
 > At the end of every phase: update the four lines above, add a CHANGELOG entry,

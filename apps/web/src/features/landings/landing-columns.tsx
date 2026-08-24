@@ -1,10 +1,11 @@
 import type { ColumnDef } from "@tanstack/react-table";
 import { formatDistanceToNow } from "date-fns";
+import type { TFunction } from "i18next";
 
 import { dataTableFeatures } from "@/components/ui/data-table";
 import { Badge } from "@/components/ui/badge";
 import { Caption, Mono } from "@/components/ui/typography";
-import type { Landing, LandingStatus } from "@/lib/mock/landings";
+import type { Landing, LandingStatus } from "@/lib/api/landings";
 import { LandingRowActions } from "@/features/landings/landing-row-actions";
 import { TagBadgeList } from "@/features/tags/tag-badge-list";
 
@@ -14,11 +15,11 @@ const STATUS_VARIANT: Record<LandingStatus, "success" | "warning" | "secondary">
   archived: "secondary",
 };
 
-export function landingColumns(onEdit: (landing: Landing) => void): ColumnDef<typeof dataTableFeatures, Landing>[] {
+export function landingColumns(t: TFunction, onEdit: (landing: Landing) => void): ColumnDef<typeof dataTableFeatures, Landing>[] {
   return [
     {
       accessorKey: "name",
-      header: "Name",
+      header: t("columns.name", { ns: "landings" }),
       cell: ({ row }) => (
         <button
           type="button"
@@ -31,31 +32,34 @@ export function landingColumns(onEdit: (landing: Landing) => void): ColumnDef<ty
     },
     {
       accessorKey: "type",
-      header: "Type",
-      cell: ({ getValue }) => <Badge variant="outline">{getValue() as string}</Badge>,
+      header: t("columns.type", { ns: "landings" }),
+      cell: ({ getValue }) => {
+        const type = getValue() as Landing["type"];
+        return <Badge variant="outline">{t(`type.${type}`, { ns: "landings" })}</Badge>;
+      },
     },
     {
       accessorKey: "url",
-      header: "URL",
+      header: t("columns.url", { ns: "landings" }),
       cell: ({ getValue }) => <Mono className="block max-w-md truncate text-xs">{getValue() as string}</Mono>,
     },
     {
       accessorKey: "status",
-      header: "Status",
+      header: t("columns.status", { ns: "landings" }),
       cell: ({ getValue }) => {
         const status = getValue() as LandingStatus;
-        return <Badge variant={STATUS_VARIANT[status]}>{status}</Badge>;
+        return <Badge variant={STATUS_VARIANT[status]}>{t(`status.${status}`, { ns: "common" })}</Badge>;
       },
     },
     {
       id: "tags",
-      header: "Tags",
+      header: t("columns.tags", { ns: "landings" }),
       enableSorting: false,
       cell: ({ row }) => <TagBadgeList entityType="landing" entityId={row.original.id} />,
     },
     {
       accessorKey: "updatedAt",
-      header: "Updated",
+      header: t("columns.updated", { ns: "landings" }),
       cell: ({ getValue }) => (
         <Caption>{formatDistanceToNow(new Date(getValue() as string), { addSuffix: true })}</Caption>
       ),

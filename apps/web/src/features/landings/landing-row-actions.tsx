@@ -3,6 +3,7 @@
 import * as React from "react";
 import { toast } from "sonner";
 import { CopyIcon, MoreHorizontalIcon, PauseIcon, PencilIcon, PlayIcon, Trash2Icon } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
 import { IconButton } from "@/components/ui/icon-button";
 import { Button } from "@/components/ui/button";
@@ -21,64 +22,78 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { useLandingsStore } from "@/stores/landings";
-import type { Landing } from "@/lib/mock/landings";
+import { useActivateLanding, useArchiveLanding, useDuplicateLanding, usePauseLanding } from "@/hooks/use-landings";
+import type { Landing } from "@/lib/api/landings";
 
 export function LandingRowActions({ landing, onEdit }: { landing: Landing; onEdit: () => void }) {
-  const setStatus = useLandingsStore((s) => s.setStatus);
-  const duplicateLanding = useLandingsStore((s) => s.duplicateLanding);
+  const { t } = useTranslation(["landings", "common"]);
+  const pause = usePauseLanding();
+  const activate = useActivateLanding();
+  const duplicate = useDuplicateLanding();
+  const archive = useArchiveLanding();
   const [confirmArchive, setConfirmArchive] = React.useState(false);
 
   function togglePause() {
-    const next = landing.status === "active" ? "paused" : "active";
-    setStatus(landing.id, next);
-    toast(next === "paused" ? "Landing paused" : "Landing resumed", { description: landing.name });
+    const action = landing.status === "active" ? pause : activate;
+    action.mutate(landing.id, {
+      onSuccess: () => toast(t(landing.status === "active" ? "toast.paused" : "toast.resumed"), { description: landing.name }),
+      onError: (err) => toast.error(t("toast.updateError"), { description: err.message }),
+    });
   }
 
-  function duplicate() {
-    duplicateLanding(landing.id);
-    toast("Landing duplicated", { description: `${landing.name} (Copy)` });
+  function handleDuplicate() {
+    duplicate.mutate(landing.id, {
+      onSuccess: () => toast(t("toast.duplicated"), { description: t("toast.duplicatedSuffix", { name: landing.name }) }),
+      onError: (err) => toast.error(t("toast.duplicateError"), { description: err.message }),
+    });
   }
 
-  function archive() {
-    setStatus(landing.id, "archived");
-    setConfirmArchive(false);
-    toast("Landing archived", { description: landing.name });
+  function handleArchive() {
+    archive.mutate(landing.id, {
+      onSuccess: () => {
+        setConfirmArchive(false);
+        toast(t("toast.archived"), { description: landing.name });
+      },
+      onError: (err) => {
+        setConfirmArchive(false);
+        toast.error(t("toast.archiveError"), { description: err.message });
+      },
+    });
   }
 
   return (
     <>
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <IconButton aria-label={`Actions for ${landing.name}`} variant="ghost" size="icon-sm">
+          <IconButton aria-label={t("rowActions.actionsAria", { name: landing.name })} variant="ghost" size="icon-sm">
             <MoreHorizontalIcon className="size-4" />
           </IconButton>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
           <DropdownMenuItem onSelect={onEdit}>
-            <PencilIcon className="size-4" /> Edit
+            <PencilIcon className="size-4" /> {t("rowActions.edit")}
           </DropdownMenuItem>
           {landing.status !== "archived" && (
             <DropdownMenuItem onSelect={togglePause}>
               {landing.status === "active" ? (
                 <>
-                  <PauseIcon className="size-4" /> Pause
+                  <PauseIcon className="size-4" /> {t("rowActions.pause")}
                 </>
               ) : (
                 <>
-                  <PlayIcon className="size-4" /> Resume
+                  <PlayIcon className="size-4" /> {t("rowActions.resume")}
                 </>
               )}
             </DropdownMenuItem>
           )}
-          <DropdownMenuItem onSelect={duplicate}>
-            <CopyIcon className="size-4" /> Duplicate
+          <DropdownMenuItem onSelect={handleDuplicate}>
+            <CopyIcon className="size-4" /> {t("rowActions.duplicate")}
           </DropdownMenuItem>
           {landing.status !== "archived" && (
             <>
               <DropdownMenuSeparator />
               <DropdownMenuItem variant="destructive" onSelect={() => setConfirmArchive(true)}>
-                <Trash2Icon className="size-4" /> Archive
+                <Trash2Icon className="size-4" /> {t("rowActions.archive")}
               </DropdownMenuItem>
             </>
           )}
@@ -88,18 +103,15 @@ export function LandingRowActions({ landing, onEdit }: { landing: Landing; onEdi
       <Dialog open={confirmArchive} onOpenChange={setConfirmArchive}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Archive &ldquo;{landing.name}&rdquo;?</DialogTitle>
-            <DialogDescription>
-              Archived landings are hidden from flow pickers going forward. Existing flows that already reference
-              this landing keep working. This can be reversed later.
-            </DialogDescription>
+            <DialogTitle>{t("rowActions.archiveConfirmTitle", { name: landing.name })}</DialogTitle>
+            <DialogDescription>{t("rowActions.archiveConfirmDescription")}</DialogDescription>
           </DialogHeader>
           <DialogFooter>
             <Button variant="outline" onClick={() => setConfirmArchive(false)}>
-              Cancel
+              {t("actions.cancel", { ns: "common" })}
             </Button>
-            <Button variant="destructive" onClick={archive}>
-              Archive
+            <Button variant="destructive" onClick={handleArchive} disabled={archive.isPending}>
+              {t("rowActions.archive")}
             </Button>
           </DialogFooter>
         </DialogContent>
