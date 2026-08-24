@@ -14,6 +14,7 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"github.com/ismagilovnail/flox/apps/internal/analytics"
+	"github.com/ismagilovnail/flox/apps/internal/attribution"
 	"github.com/ismagilovnail/flox/apps/internal/campaign"
 	"github.com/ismagilovnail/flox/apps/internal/chconn"
 	"github.com/ismagilovnail/flox/apps/internal/chstore"
@@ -21,7 +22,9 @@ import (
 	"github.com/ismagilovnail/flox/apps/internal/conversion"
 	"github.com/ismagilovnail/flox/apps/internal/conversions"
 	"github.com/ismagilovnail/flox/apps/internal/cost"
+	"github.com/ismagilovnail/flox/apps/internal/eventbuf"
 	"github.com/ismagilovnail/flox/apps/internal/eventmapping"
+	"github.com/ismagilovnail/flox/apps/internal/eventqueue"
 	"github.com/ismagilovnail/flox/apps/internal/httpserver"
 	"github.com/ismagilovnail/flox/apps/internal/landing"
 	"github.com/ismagilovnail/flox/apps/internal/logging"
@@ -29,10 +32,12 @@ import (
 	"github.com/ismagilovnail/flox/apps/internal/network"
 	"github.com/ismagilovnail/flox/apps/internal/offer"
 	"github.com/ismagilovnail/flox/apps/internal/postback"
+	"github.com/ismagilovnail/flox/apps/internal/postbacklog"
 	"github.com/ismagilovnail/flox/apps/internal/postbacklogs"
 	"github.com/ismagilovnail/flox/apps/internal/postgres"
 	"github.com/ismagilovnail/flox/apps/internal/postlanding"
 	"github.com/ismagilovnail/flox/apps/internal/pwa"
+	"github.com/ismagilovnail/flox/apps/internal/rediscache"
 	"github.com/ismagilovnail/flox/apps/internal/routing"
 	"github.com/ismagilovnail/flox/apps/internal/routingsimulate"
 	"github.com/ismagilovnail/flox/apps/internal/routingstore"
@@ -195,13 +200,59 @@ func run() error {
 			conversionsHandler.Register(r)
 		})
 
-		// Outgoing replay's two dependencies both reuse `db` the same way
-		// every other Postgres-backed handler on this server already does
-		// — conversion.PostgresStore only for its read-only FindSuccessID
-		// (this server never constructs a full conversion.Service; that
-		// stays apps/tracker's job, see docs/postback-logs.md).
+		// Incoming Postback Replay needs the exact dependency graph
+		// apps/tracker/main.go's PostbackHandler already builds to call
+		// apps/internal/conversion.Service.Record for a real network hit —
+		// this used to be deliberately deferred pending exactly this
+		// architecture decision (docs/postback-logs.md). Redis and
+		// ClickHouse-backed attribution get the same best-effort-at-startup
+		// fallback stance tracker uses: a postback-recording rule (§45)
+		// must never become a control-plane-availability dependency. This
+		// whole block already only runs when ch != nil, so — unlike
+		// tracker, which must start even with ClickHouse down —
+		// chConn is guaranteed live here; no attribution.NewMemoryResolver
+		// fallback is needed on this path.
+		convEvents := eventbuf.New(eventqueue.NewSink(eventqueue.NewPostgresQueue(db)), logger, eventbuf.Config{})
+		defer convEvents.Close()
+
+		var convStore conversion.Store = conversion.NewPostgresStore(db)
+		if cfg.RedisURL != "" {
+			redisCtx, cancelRedis := context.WithTimeout(ctx, 5*time.Second)
+			rdb, err := rediscache.NewClient(redisCtx, cfg.RedisURL)
+			cancelRedis()
+			if err != nil {
+				logger.Warn("redis unavailable at startup, conversion progression checks will read Postgres directly", "error", err)
+			} else {
+				defer rdb.Close()
+				convStore = conversion.NewRedisStore(convStore, rdb, logger)
+			}
+		} else {
+			logger.Warn("REDIS_URL not set, conversion progression checks will read Postgres directly")
+		}
+
+		attributionSvc := attribution.NewService(chstore.NewClickResolver(chConn))
+		postbackStore := postback.NewPostgresStore(db)
+		deliveries := postback.NewEnqueuer(postbackStore, logger)
+		attemptLog := postbacklog.NewConversionAttemptLogger(postbacklog.NewPostgresQueue(db, logger))
+
+		convSvc := conversion.NewService(
+			conversion.NewPostgresMapper(db),
+			convStore,
+			conversion.NewPostgresFX(db),
+			attributionSvc,
+			convEvents,
+			deliveries,
+			attemptLog,
+		)
+
 		postbackLogsHandler := postbacklogs.NewHandler(
-			postbacklogs.NewService(events, conversion.NewPostgresStore(db), postback.NewReplayEnqueuer(postback.NewPostgresStore(db))),
+			postbacklogs.NewService(
+				events,
+				conversion.NewPostgresStore(db),
+				postback.NewReplayEnqueuer(postbackStore),
+				conversion.NewReplayNetworkLookup(conversion.NewPostgresNetworkLookup(db)),
+				conversion.NewReplayRecorder(convSvc),
+			),
 			logger,
 		)
 		srv.Mux().Route("/postback-logs", func(r chi.Router) {

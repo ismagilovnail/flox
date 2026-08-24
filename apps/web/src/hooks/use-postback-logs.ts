@@ -2,7 +2,12 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
-import { listPostbackLogs, replayOutgoingPostback, type ListPostbackLogsParams } from "@/lib/api/postback-logs";
+import {
+  listPostbackLogs,
+  replayIncomingPostback,
+  replayOutgoingPostback,
+  type ListPostbackLogsParams,
+} from "@/lib/api/postback-logs";
 
 const postbackLogsKey = (params: ListPostbackLogsParams) => ["postback-logs", params] as const;
 
@@ -17,6 +22,17 @@ export function useReplayOutgoingPostback() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: replayOutgoingPostback,
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["postback-logs"] }),
+  });
+}
+
+/** Unlike outgoing replay, a successful incoming replay can itself insert
+ * a brand-new attempt row synchronously (no worker poll to wait for) —
+ * invalidating still just refreshes the list to whatever's current. */
+export function useReplayIncomingPostback() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: replayIncomingPostback,
     onSuccess: () => qc.invalidateQueries({ queryKey: ["postback-logs"] }),
   });
 }

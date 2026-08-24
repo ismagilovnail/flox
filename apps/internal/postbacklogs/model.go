@@ -9,12 +9,15 @@
 // takes, so the replayed attempt gets logged the normal way once
 // apps/worker's Deliverer picks it up.
 //
-// Incoming replay (re-invoking apps/internal/conversion.Service.Record for
-// an incoming row) is still deliberately deferred — see docs/postback-logs.md
-// for why the two turned out to be very different sizes. Not to be
-// confused with apps/internal/postbacklog (singular) — Phase 24's
-// write-side queue/producer that feeds postback_events in the first
-// place, untouched by this package.
+// Incoming replay (ReplayIncoming) re-invokes
+// apps/internal/conversion.Service.Record for a past incoming row, through
+// the decoupled IncomingRecorder/IncomingNetworkLookup interfaces below —
+// this package still never imports apps/internal/conversion directly (see
+// apps/internal/conversion/replay.go for the adapters that satisfy them).
+// See docs/postback-logs.md for why incoming and outgoing replay shipped
+// as separate phases. Not to be confused with apps/internal/postbacklog
+// (singular) — Phase 24's write-side queue/producer that feeds
+// postback_events in the first place, untouched by this package.
 package postbacklogs
 
 import "time"
@@ -61,4 +64,27 @@ type ReplayOutgoingInput struct {
 
 type ReplayOutgoingResult struct {
 	DeliveryID string `json:"deliveryId"`
+}
+
+// ReplayIncomingInput is what the browser posts to replay one incoming
+// postback attempt — exactly the fields a PostbackLog row already carries
+// client-side, no second fetch. EventRef doubles as the CPA_REDEP network
+// transaction id on replay: conversion.Service derives event_ref FROM the
+// txn id for that status only (conversion.eventRefFor), so passing a log
+// row's own event_ref back in reproduces the identical dedup key for
+// every status, redeposits included.
+type ReplayIncomingInput struct {
+	NetworkID string   `json:"networkId"`
+	ClickID   string   `json:"clickId"`
+	RawStatus string   `json:"rawStatus"`
+	EventRef  string   `json:"eventRef,omitempty"`
+	Revenue   *float64 `json:"revenue,omitempty"`
+	Currency  string   `json:"currency,omitempty"`
+}
+
+type ReplayIncomingResult struct {
+	ID      string `json:"id"`
+	Result  string `json:"result"`
+	Status  string `json:"status,omitempty"`
+	Message string `json:"message,omitempty"`
 }

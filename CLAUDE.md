@@ -19,80 +19,90 @@ referenced below as §N).
 ## CURRENT STATE — UPDATE THIS EVERY PHASE
 
 ```
-CURRENT PHASE : PHASE (unnumbered) — Postlanding CRUD
-STATUS        : done — third and final CRUD-shaped slice of the
-                Landing/PWA/Postlanding/Pixels candidate, right after
-                PWA. apps/internal/postlanding (model/handler/service/
-                repository) mirrors apps/internal/landing/pwa almost
-                exactly, wired at /postlandings in apps/api/main.go. No
-                internal/external split, no server-computed URL (closer
-                to PWA's shape than Landing's). events: at least one
-                required, checked against a curated 6-entry §43 subset
-                (ValidEventTypes) — not a duplicate of the canonical
-                event enum, frontend references the same values with
-                checked parity. Same defensive-not-integration-tested
-                23503-on-Delete precedent as landing/pwa/network for
-                flows.postlanding_id (no Flow CRUD exists yet).
-                Frontend: new lib/api/postlanding.ts + hooks/use-
-                postlandings.ts (mirrors pwa's real API layer exactly);
-                postlanding-list/-form-sheet/-columns/-row-actions.tsx
-                rewired off stores/postlandings.ts (deleted, along with
-                lib/mock/postlandings.ts, zero remaining importers) onto
-                the real hooks; loading/error states added. Content
-                Gallery (?gallery=<id> prefill) integration untouched,
-                only its type import moved to lib/api/postlanding.ts.
-                Added a postlanding i18n namespace (en+ru, key-parity
-                checked directly).
-                Known issue found this phase (not fixed, not a
-                regression): the PWA phase's requestIdleCallback i18n-
-                hydration fix (components/i18n-provider.tsx) mitigates
-                but doesn't fully eliminate the hydration race on
-                useSearchParams()+Suspense pages (Landings/PWA/
-                Postlanding) — reproduced intermittently (~2 of 6 fresh
-                /postlanding navigations) during this phase's manual
-                pass, and confirmed to also still reproduce on /landings
-                when specifically retested. React auto-recovers
-                (discards + re-renders the mismatched subtree); left as
-                a known, non-blocking, non-deterministic issue rather
-                than expanding this phase into a deeper architectural
-                fix (e.g. server-side locale via cookie). See
-                docs/postlanding.md.
-                Verified: go build/vet/gofmt/test ./... all green (new
-                postlanding_test.go mirrors landing_test.go's/
-                pwa_test.go's full test set incl. cross-tenant
-                isolation); tsc --noEmit/eslint/vitest run/next build
-                (production) all clean. Full manual browser pass against
-                real running api+web dev servers, Russian locale:
-                created (events multi-select + URL validation both
-                exercised)/edited (full prefill incl. events)/paused/
-                resumed/duplicated (kept paused status, URL, events
-                verbatim)/archived (confirmation dialog name
-                interpolation correct, menu correctly dropped to Edit/
-                Duplicate only — matches Landings/PWA) a postlanding.
-                Test rows deleted directly from Postgres afterward (no
-                hard-delete in the UI for this entity).
-LAST COMMIT   : feat(postlanding): wire Postlanding CRUD to real
-                Postgres-backed API
-NEXT          : confirm scope before starting. Landing, PWA, and
-                Postlanding are now all real — the Landing/PWA/
-                Postlanding/Pixels CRUD candidate is complete except for
-                per-flow Pixels (which needs Flow CRUD to exist first,
-                since pixels attach to flows — likely blocked on the
-                same Flow-CRUD gap as the flows.*_id FK precedents noted
-                above). Other candidates: incoming Postback Replay
-                (needs an apps/api-vs-apps/tracker architecture decision
-                — duplicate the conversion engine's dependency graph
-                into apps/api, or have it call apps/tracker's
-                /postback/{networkId} internally — note outgoing
-                Postback Replay already shipped separately, see
-                CHANGELOG); FB/TikTok ad-spend import (§74's
-                CostProvider interface, the "later" half of §27-COST —
-                no backend at all yet, a large phase); a deeper fix for
-                the i18n hydration race known issue above (e.g.
-                server-side locale detection via cookie, avoiding the
-                client-side changeLanguage() race entirely); or a third
-                i18n locale (cheap per docs/frontend-i18n.md, but none
-                has been requested).
+CURRENT PHASE : PHASE (unnumbered) — Incoming Postback Replay
+STATUS        : done — resolves the architecture decision the outgoing-
+                replay phase deferred (see prior LAST COMMIT). An
+                AskUserQuestion chose: apps/api now builds the exact same
+                apps/internal/conversion.Service dependency graph
+                apps/tracker/main.go already builds for a real network
+                hit (Redis-cached dedup store — best-effort-at-startup,
+                same as tracker — ClickHouse-backed attribution, async
+                event writer via eventbuf/eventqueue, outgoing-delivery
+                enqueuer, postbacklog attempt logger), rather than
+                apps/api making an internal HTTP call to apps/tracker's
+                /postback/{networkId} (rejected: that endpoint has no
+                operator/admin distinction from a real network hit, so a
+                replay through it would be indistinguishable from a
+                forged network request in the audit trail). Gated behind
+                the same ch != nil startup check the rest of Postback
+                Logs already uses.
+                apps/internal/conversion/replay.go: ReplayNetworkLookup/
+                ReplayRecorder adapt conversion's own types to
+                postbacklogs' IncomingNetworkLookup/IncomingRecorder
+                interfaces — postbacklogs still never imports conversion
+                (conversion -> postbacklogs, one-directionally, same
+                adapter-lives-with-the-engine pattern
+                apps/internal/postback's ReplayEnqueuer already
+                established for outgoing replay). New
+                postbacklogs.Service.ReplayIncoming + POST /postback-
+                logs/replay-incoming: takes the exact fields a
+                PostbackLog row already carries; explicitly checks the
+                resolved network's OrganizationID against the caller's
+                own before calling Record — a check a real network hit
+                doesn't need (its {networkId} URL param IS the tenant
+                scope) but this authenticated-session path does
+                (CLAUDE.md #5), covered by a dedicated cross-tenant test.
+                EventRef doubles as NetworkTxnID on replay (only matters
+                for CPA_REDEP's dedup key — every other status's
+                event_ref is always empty per §45).
+                Frontend: replayIncomingPostback + hooks/use-postback-
+                logs.ts's useReplayIncomingPostback; PostbackReplayButton
+                now branches on direction, surfacing the replay's actual
+                result (success/duplicate/ignored/error) in the toast
+                instead of outgoing's fixed "queued" message.
+                Verified: go build/vet/gofmt/test ./... all green — new
+                postbacklogs.Service.ReplayIncoming unit tests against
+                fakes (happy path incl. exact field mapping, not-found,
+                cross-tenant not-found, required-field validation, not-
+                configured) and new apps/internal/conversion adapter
+                tests (ReplayNetworkLookup's field/error mapping;
+                ReplayRecorder running an actual replay-then-duplicate-
+                replay sequence through a real *conversion.Service — the
+                same harness every other conversion test uses). tsc
+                --noEmit/eslint/vitest run/next build (production) all
+                clean. Full manual browser pass against real running
+                api+tracker+worker+web dev servers: sent a real incoming
+                postback through tracker's actual endpoint with no event
+                mapping configured (a genuine error row), added the
+                mapping, replayed it from the Logs tab. Confirmed
+                directly in ClickHouse: the replay recorded a new success
+                row (correctly unattributed — no real click existed for
+                this synthetic test) and triggered a real outgoing
+                delivery attempt (retrying, unreachable test domain,
+                apps/worker's Deliverer picked it up on its own poll
+                cadence); replaying the identical attempt again correctly
+                came back duplicate with no second event or delivery —
+                confirming CLAUDE.md #3's dedup/money-correctness
+                guarantee holds under a manual re-trigger, not just a
+                network's own retry. Original error row confirmed never
+                mutated. Test network and all its Postgres/ClickHouse
+                rows removed afterward. See docs/postback-logs.md.
+LAST COMMIT   : feat(postback-replay): re-run an incoming postback
+                through the real conversion engine from Postback Logs
+NEXT          : confirm scope before starting. The "Conversions/
+                Postbacks" domain (Conversions, Event Mappings, Postback
+                Logs, both replay directions) is now fully real — no
+                remaining gap in it. Candidates: per-flow Pixels CRUD
+                (blocked on Flow CRUD not existing yet — pixels attach to
+                flows); FB/TikTok ad-spend import (§74's CostProvider
+                interface, the "later" half of §27-COST — no backend at
+                all yet, a large phase); the still-open i18n hydration-
+                race known issue from the Postlanding phase (mitigated,
+                not eliminated — see docs/postlanding.md; a deeper fix
+                would mean server-side locale detection via cookie,
+                avoiding the client-side changeLanguage() race entirely);
+                or a third i18n locale (cheap per docs/frontend-i18n.md,
+                but none has been requested).
 ```
 
 > At the end of every phase: update the four lines above, add a CHANGELOG entry,

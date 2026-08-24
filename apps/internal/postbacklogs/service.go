@@ -2,6 +2,7 @@ package postbacklogs
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -57,18 +58,84 @@ type ReplayInput struct {
 	URL              string
 }
 
-type Service struct {
-	repo         Repository
-	sourceLookup SourcePostbackLookup
-	deliveries   OutgoingEnqueuer
+// ErrIncomingNetworkNotFound is IncomingNetworkLookup's not-found sentinel
+// — this package's own, so it never needs to import
+// apps/internal/conversion just to recognize
+// conversion.ErrNetworkNotFound; the adapter in
+// apps/internal/conversion/replay.go translates between the two.
+var ErrIncomingNetworkNotFound = errors.New("postbacklogs: network not found")
+
+// IncomingNetworkLookup resolves a network id to the organization that
+// owns it — the same tenant-scoping source apps/tracker's own postback
+// handler uses for a real network hit (CLAUDE.md #5). Needed here because,
+// unlike a real hit, ReplayIncoming arrives already inside an
+// authenticated tenant session: the looked-up network's OrganizationID is
+// checked against the caller's own before anything is recorded, so a
+// replay can never be pointed at another org's network merely by knowing
+// its id.
+type IncomingNetworkLookup interface {
+	ByID(ctx context.Context, networkID string) (IncomingNetwork, error)
 }
 
-// NewService's last two arguments are nil-able: a deployment that hasn't
-// wired outgoing replay yet (or a test exercising List alone) still gets a
-// working read-only Service — ReplayOutgoing on a nil-dependency Service
-// fails loudly instead of panicking (see below), not silently.
-func NewService(repo Repository, sourceLookup SourcePostbackLookup, deliveries OutgoingEnqueuer) *Service {
-	return &Service{repo: repo, sourceLookup: sourceLookup, deliveries: deliveries}
+// IncomingNetwork is just enough of a looked-up network for this package's
+// own tenant check, plus the two fields a real postback also gets from the
+// network (AcceptDuplicates, PostbackURL) — a local type, not
+// apps/internal/conversion.Network, so this package still never imports
+// conversion.
+type IncomingNetwork struct {
+	OrganizationID   string
+	AcceptDuplicates bool
+	PostbackURL      string
+}
+
+// IncomingRecord is what IncomingRecorder.Record persists — the same
+// shape apps/internal/conversion.Postback carries, expressed as this
+// package's own type so it never imports conversion directly.
+type IncomingRecord struct {
+	OrganizationID   string
+	NetworkID        string
+	AcceptDuplicates bool
+	ClickID          string
+	RawStatus        string
+	NetworkTxnID     string
+	Revenue          *float64
+	Currency         string
+	PostbackURL      string
+	OccurredAt       time.Time
+}
+
+// IncomingOutcome is IncomingRecorder.Record's result — mirrors
+// apps/internal/conversion.Result's three JSON-relevant fields.
+type IncomingOutcome struct {
+	ID      string
+	Result  string
+	Status  string
+	Message string
+}
+
+// IncomingRecorder is the narrow slice of
+// apps/internal/conversion.Service this package needs to replay an
+// incoming postback attempt — the same decoupled-interface,
+// no-conversion-import pattern as SourcePostbackLookup/OutgoingEnqueuer
+// above; satisfied by apps/internal/conversion.ReplayRecorder.
+type IncomingRecorder interface {
+	Record(ctx context.Context, in IncomingRecord) (IncomingOutcome, error)
+}
+
+type Service struct {
+	repo             Repository
+	sourceLookup     SourcePostbackLookup
+	deliveries       OutgoingEnqueuer
+	incomingNetworks IncomingNetworkLookup
+	incoming         IncomingRecorder
+}
+
+// NewService's last four arguments are nil-able: a deployment that hasn't
+// wired replay yet (or a test exercising List alone) still gets a working
+// read-only Service — ReplayOutgoing/ReplayIncoming on a nil-dependency
+// Service fail loudly instead of panicking (see below), not silently.
+func NewService(repo Repository, sourceLookup SourcePostbackLookup, deliveries OutgoingEnqueuer, incomingNetworks IncomingNetworkLookup, incoming IncomingRecorder) *Service {
+	return &Service{repo: repo, sourceLookup: sourceLookup, deliveries: deliveries, incomingNetworks: incomingNetworks, incoming: incoming}
 }
 
 // List returns one organization's postback attempts (both directions)
@@ -171,4 +238,66 @@ func (s *Service) ReplayOutgoing(ctx context.Context, organizationID string, in 
 		return ReplayOutgoingResult{}, err
 	}
 	return ReplayOutgoingResult{DeliveryID: id}, nil
+}
+
+// ReplayIncoming re-runs one incoming postback attempt through the exact
+// same conversion-recording path apps/tracker's own /postback/{networkId}
+// handler uses for a real network hit — the same Record call, just
+// triggered by an operator off a past log row's own fields instead of a
+// live HTTP request from the network. Dedup/status-progression rules
+// apply exactly as they would for a genuine retry: a re-submit of an
+// already-successful row correctly comes back "duplicate", not a special
+// case, and this can itself insert a brand-new attempt row and, on
+// success, trigger the same downstream event emission and
+// outgoing-delivery enqueue a first success would.
+func (s *Service) ReplayIncoming(ctx context.Context, organizationID string, in ReplayIncomingInput) (ReplayIncomingResult, error) {
+	if s.incomingNetworks == nil || s.incoming == nil {
+		return ReplayIncomingResult{}, fmt.Errorf("postbacklogs: incoming replay not configured")
+	}
+	if organizationID == "" {
+		return ReplayIncomingResult{}, apierror.Validation("missing organization", nil)
+	}
+	fields := map[string]string{}
+	if in.NetworkID == "" {
+		fields["networkId"] = "required"
+	}
+	if in.ClickID == "" {
+		fields["clickId"] = "required"
+	}
+	if in.RawStatus == "" {
+		fields["rawStatus"] = "required"
+	}
+	if len(fields) > 0 {
+		return ReplayIncomingResult{}, apierror.Validation("missing required field(s)", fields)
+	}
+
+	network, err := s.incomingNetworks.ByID(ctx, in.NetworkID)
+	if errors.Is(err, ErrIncomingNetworkNotFound) {
+		return ReplayIncomingResult{}, apierror.NotFound("network not found")
+	}
+	if err != nil {
+		return ReplayIncomingResult{}, err
+	}
+	// Never confirm another org's network id exists (CLAUDE.md #5) — same
+	// response as a genuine not-found.
+	if network.OrganizationID != organizationID {
+		return ReplayIncomingResult{}, apierror.NotFound("network not found")
+	}
+
+	outcome, err := s.incoming.Record(ctx, IncomingRecord{
+		OrganizationID:   organizationID,
+		NetworkID:        in.NetworkID,
+		AcceptDuplicates: network.AcceptDuplicates,
+		ClickID:          in.ClickID,
+		RawStatus:        in.RawStatus,
+		NetworkTxnID:     in.EventRef,
+		Revenue:          in.Revenue,
+		Currency:         in.Currency,
+		PostbackURL:      network.PostbackURL,
+		OccurredAt:       time.Now().UTC(),
+	})
+	if err != nil {
+		return ReplayIncomingResult{}, err
+	}
+	return ReplayIncomingResult{ID: outcome.ID, Result: outcome.Result, Status: outcome.Status, Message: outcome.Message}, nil
 }

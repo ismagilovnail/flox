@@ -29,6 +29,7 @@ func NewHandler(svc *Service, logger *slog.Logger) *Handler {
 func (h *Handler) Register(r chi.Router) {
 	r.Get("/", h.list)
 	r.Post("/replay-outgoing", h.replayOutgoing)
+	r.Post("/replay-incoming", h.replayIncoming)
 }
 
 // list answers GET /postback-logs?from=&to=&limit=&offset= — org-wide,
@@ -92,6 +93,26 @@ func (h *Handler) replayOutgoing(w http.ResponseWriter, r *http.Request) {
 	}
 
 	result, err := h.svc.ReplayOutgoing(r.Context(), orgID, in)
+	if err != nil {
+		apierror.Write(w, h.logger, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, result)
+}
+
+// replayIncoming answers POST /postback-logs/replay-incoming — re-runs a
+// past incoming attempt through the conversion engine, off the exact
+// fields a PostbackLog row the browser already has.
+func (h *Handler) replayIncoming(w http.ResponseWriter, r *http.Request) {
+	orgID, _ := tenant.OrgID(r.Context())
+
+	var in ReplayIncomingInput
+	if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
+		apierror.Write(w, h.logger, apierror.Validation("could not parse request body", nil))
+		return
+	}
+
+	result, err := h.svc.ReplayIncoming(r.Context(), orgID, in)
 	if err != nil {
 		apierror.Write(w, h.logger, err)
 		return

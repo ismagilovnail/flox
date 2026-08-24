@@ -1,4 +1,4 @@
-# Postback Logs (§29, §45/§46) — wired to a real backend; outgoing replay shipped, incoming still deferred
+# Postback Logs (§29, §45/§46) — wired to a real backend; outgoing and incoming replay both shipped
 
 The third and last of the three separable pieces "Conversions/Postbacks"
 turned out to be (see `docs/conversions.md` and `docs/event-mappings.md`
@@ -191,11 +191,133 @@ Postgres rows (`networks`/`event_mappings`/`postbacks`/
 `postback_deliveries`), and its ClickHouse `postback_events` rows all
 removed afterward.
 
-## Domain complete except incoming replay
+## Incoming Postback Replay (second follow-on phase)
+
+The architecture decision the outgoing-replay phase deferred: `apps/api`
+now builds the exact same `apps/internal/conversion.Service` dependency
+graph `apps/tracker/main.go` already builds for a real network hit
+(mapper, dedup/progression store — with the same Redis-cache-in-front,
+best-effort-at-startup stance tracker uses — FX, ClickHouse-backed
+attribution, async event writer, outgoing-delivery enqueuer, attempt
+logger), rather than making an internal HTTP call to `apps/tracker`. An
+`AskUserQuestion` decided this after inspection found the real
+alternative — `apps/api` calling `apps/tracker`'s existing
+`/postback/{networkId}` — has no operator/admin distinction from a real
+network hit (no auth model, same public unauthenticated path), so a
+replay would be indistinguishable from a forged network request in the
+audit trail. Building the dependency graph directly instead is pure Go,
+reuses the exact same `db`/`ch` connections `apps/api` already opens (no
+new external infra), and matches the existing modular-monolith pattern
+(`apps/tracker`/`apps/worker` already share `internal/routing`,
+`internal/classifier`) — the actual conversion-recording logic stays one
+shared package; only the wiring is duplicated between the two `main.go`
+files, same as `internal/routing`/`internal/classifier` already are.
+Gated behind the same `ch != nil` startup check every other
+ClickHouse-backed handler on this server already uses, since
+`postbacklogs.Repository` (the read side) needs it too — unlike
+`apps/tracker`, which must start even with ClickHouse down, this whole
+feature already only runs when ClickHouse connected successfully at
+startup, so no `attribution.NewMemoryResolver` fallback is needed here.
+
+### `postbacklogs` still never imports `conversion` — the adapter lives with the engine
+
+Same decoupled-interface-per-consumer pattern `apps/internal/postback`'s
+`ReplayEnqueuer` already established for outgoing replay:
+`postbacklogs.IncomingNetworkLookup`/`IncomingRecorder` are this
+package's own interfaces, built from primitive/local types only, never
+importing `conversion`. `apps/internal/conversion/replay.go` adds
+`ReplayNetworkLookup`/`ReplayRecorder`, two adapters satisfying those
+interfaces — `conversion` imports `postbacklogs` (one-directionally, no
+cycle, `postback` already does the same thing for outgoing), not the
+other way around.
+
+`ReplayRecorder.Record` calls the exact same `*conversion.Service.Record`
+`apps/tracker`'s `PostbackHandler` calls for a real hit — dedup and
+status-progression rules apply identically, so a re-submit of an
+already-successful attempt correctly comes back `duplicate`, and a
+successful replay triggers the same event emission and outgoing-delivery
+enqueue a first success would (confirmed manually below: replaying an
+error into success sent a real, retrying outgoing delivery attempt; a
+second replay of the identical attempt correctly returned `duplicate`
+with no second event or delivery).
+
+### The tenant check ReplayIncoming needs that a real network hit doesn't
+
+`apps/tracker`'s `/postback/{networkId}` has no separate tenant identity
+to check the resolved network against — the URL's `{networkId}` **is**
+the tenant scope for an unauthenticated public endpoint (CLAUDE.md #5).
+`ReplayIncoming` arrives already inside an authenticated tenant session
+(`tenant.Middleware`), so `postbacklogs.Service.ReplayIncoming` looks up
+the network and explicitly compares its `OrganizationID` against the
+caller's own, returning the same not-found response either way — a
+caller must never be able to confirm another org's network id exists
+merely by attempting a replay against it. Covered by a dedicated test
+(`TestReplayIncomingNotFoundWhenNetworkBelongsToAnotherOrg`), the
+explicit tenant-isolation check this phase's DoD calls for.
+
+### `EventRef` doubles as the replay's `NetworkTxnID`
+
+`conversion.eventRefFor` derives `event_ref` FROM the network's
+transaction id, but only for `CPA_REDEP` (§45 — every other status's
+`event_ref` is always empty, even when a txn id was sent). A `PostbackLog`
+row's own `eventRef` is exactly that derived value, so passing it back in
+as `NetworkTxnID` on replay reproduces the identical dedup key for every
+status, redeposits included, without this package needing to know or
+store the original raw txn id.
+
+### `POST /postback-logs/replay-incoming`
+
+Takes the exact fields a `PostbackLog` row already carries client-side
+(`networkId`, `clickId`, `rawStatus`, `eventRef`, `revenue`, `currency`)
+— no second fetch, matching `replay-outgoing`'s own shape. Returns the
+outcome (`result`/`status`/`message`) so the UI can show what actually
+happened, since — unlike outgoing replay's always-the-same "queued"
+message — an incoming replay's result genuinely varies
+(success/duplicate/ignored/error).
+
+### Verified
+
+Backend: `go build/vet/gofmt/test ./...` all green — new
+`postbacklogs.Service.ReplayIncoming` unit tests against fakes (happy
+path incl. exact field mapping, network-not-found, cross-tenant
+not-found, required-field validation, not-configured), and new
+`conversion` package tests for both adapters
+(`ReplayNetworkLookup`'s field/error mapping,
+`ReplayRecorder` running an actual replay-then-duplicate-replay sequence
+through a real `*conversion.Service` built the same way every other
+`conversion` test builds one).
+
+Frontend: `tsc --noEmit`/`eslint`/`vitest run`/`next build` (production)
+all clean. New `replayIncomingPostback` API function + `hooks/use-
+postback-logs.ts`'s `useReplayIncomingPostback`; `PostbackReplayButton`
+now branches on `direction` instead of only rendering for outgoing rows,
+surfacing the incoming replay's actual result kind in the toast
+description rather than a fixed message.
+
+Full manual browser pass against the real running `api` + `tracker` +
+`worker` + `web` dev servers: created a real network, sent a real
+incoming postback through `apps/tracker`'s actual endpoint with no event
+mapping configured (produced a genuine `error` row — "no event mapping
+configured"), added the mapping, clicked Replay on that exact row in the
+Logs tab. Confirmed directly in ClickHouse: the replay recorded a new
+`success` row (`CPA_ACCEPT`, correctly unattributed — no real click ever
+existed for this synthetic test), which correctly triggered a real
+outgoing delivery attempt (`retrying`, since the test network's postback
+URL is an unreachable domain — `apps/worker`'s `Deliverer` picked it up
+and retried on its own poll cadence). Replayed the identical attempt a
+second time and confirmed it came back `duplicate` with no second event
+emitted and no second delivery triggered — the money-correctness
+guarantee (CLAUDE.md #3) this whole feature exists to preserve under a
+manual re-trigger, not just a network's own retry. Confirmed the original
+`error` row was never mutated — replay only ever inserts new rows.
+Test network, its Postgres rows (`networks`/`event_mappings`/
+`postbacks`/`postback_deliveries`), and its ClickHouse `postback_events`
+rows all removed afterward.
+
+## Domain complete
 
 Conversions (list + detail/timeline), Event Mappings (CRUD), Postback
-Logs (read/write), and outgoing Postback Replay are all real now — the
-"Conversions/Postbacks" domain identified at the start of this
-originally-three-phase arc is fully wired except for incoming replay,
-still deferred pending an architecture decision (see above). See
+Logs (read/write), and both outgoing and incoming Postback Replay are all
+real now — the "Conversions/Postbacks" domain identified at the start of
+this originally-three-phase arc is fully wired. See
 `docs/frontend-integration.md` for the current overall status.

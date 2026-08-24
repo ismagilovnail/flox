@@ -4,13 +4,13 @@
  * postback_events. Org-wide, both directions mixed in one list, matching
  * the frontend's single Logs table.
  *
- * `replayOutgoingPostback` is the one write this file does: it re-enqueues
- * a fresh delivery for a past outgoing attempt (the exact fields a
- * PostbackLog row already carries, no second fetch), through the same
- * path a first attempt already takes. Incoming replay (re-invoking the
- * conversion engine for an incoming row) is still deliberately deferred —
- * see docs/postback-logs.md for why the two turned out to be very
- * different sizes.
+ * Two writes: `replayOutgoingPostback` re-enqueues a fresh delivery for a
+ * past outgoing attempt through the same path a first attempt already
+ * takes. `replayIncomingPostback` re-runs a past incoming attempt through
+ * the conversion engine, the same call apps/tracker's own
+ * /postback/{networkId} makes for a real network hit. Both take the exact
+ * fields a PostbackLog row already carries — no second fetch. See
+ * docs/postback-logs.md for why the two shipped as separate phases.
  */
 
 import { apiFetch } from "@/lib/api/client";
@@ -88,4 +88,28 @@ export type ReplayOutgoingPostbackResult = {
  * exact fields off the PostbackLog row being replayed, no re-derivation. */
 export function replayOutgoingPostback(input: ReplayOutgoingPostbackInput): Promise<ReplayOutgoingPostbackResult> {
   return apiFetch("/postback-logs/replay-outgoing", { method: "POST", body: input });
+}
+
+export type ReplayIncomingPostbackInput = {
+  networkId: string;
+  clickId: string;
+  rawStatus: string;
+  eventRef?: string;
+  revenue?: number;
+  currency?: string;
+};
+
+export type ReplayIncomingPostbackResult = {
+  id: string;
+  result: "success" | "duplicate" | "ignored" | "error";
+  status?: CpaStatus;
+  message?: string;
+};
+
+/** Re-runs a past incoming attempt through the conversion engine — pass
+ * the exact fields off the PostbackLog row being replayed, no
+ * re-derivation. Dedup/status-progression rules apply exactly as they
+ * would for a genuine network retry. */
+export function replayIncomingPostback(input: ReplayIncomingPostbackInput): Promise<ReplayIncomingPostbackResult> {
+  return apiFetch("/postback-logs/replay-incoming", { method: "POST", body: input });
 }

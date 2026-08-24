@@ -47,9 +47,12 @@
     "loading": "Loading postback logs…",
     "loadError": "Couldn't load postback logs",
     "replayAria": "Replay delivery for {{clickId}}",
+    "replayIncomingAria": "Replay incoming postback for {{clickId}}",
     "toast": {
       "replayed": "Delivery queued for replay",
-      "replayError": "Couldn't replay delivery"
+      "replayError": "Couldn't replay delivery",
+      "replayedIncoming": "Incoming postback replayed",
+      "replayIncomingError": "Couldn't replay incoming postback"
     }
   },
   "columns": {

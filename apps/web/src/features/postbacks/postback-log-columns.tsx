@@ -10,7 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { IconButton } from "@/components/ui/icon-button";
 import { Caption, Mono } from "@/components/ui/typography";
 import { CPA_STATUS_I18N_KEY } from "@/lib/api/conversions";
-import { useReplayOutgoingPostback } from "@/hooks/use-postback-logs";
+import { useReplayIncomingPostback, useReplayOutgoingPostback } from "@/hooks/use-postback-logs";
 import type { PostbackLog, PostbackResult } from "@/lib/api/postback-logs";
 
 const RESULT_VARIANT: Record<PostbackResult, "success" | "warning" | "danger" | "secondary"> = {
@@ -25,34 +25,70 @@ const RESULT_VARIANT: Record<PostbackResult, "success" | "warning" | "danger" | 
   dead: "danger",
 };
 
-/** Outgoing only: re-enqueues a fresh delivery through the same path a
- * first attempt already takes (§46, apps/internal/postback.Store.Enqueue).
- * Incoming replay (re-invoking the conversion engine) is still
- * deliberately deferred — see docs/postback-logs.md. */
+/** Outgoing: re-enqueues a fresh delivery through the same path a first
+ * attempt already takes (§46, apps/internal/postback.Store.Enqueue).
+ * Incoming: re-runs the attempt through the conversion engine, the same
+ * call apps/tracker's own /postback/{networkId} makes for a real network
+ * hit (§45) — dedup/status-progression rules apply exactly as they would
+ * for a genuine retry, so the toast surfaces whatever result actually
+ * came back (success/duplicate/ignored/error), not a fixed message. */
 function PostbackReplayButton({ log }: { log: PostbackLog }) {
   const { t } = useTranslation("postbacks");
-  const replay = useReplayOutgoingPostback();
+  const replayOutgoing = useReplayOutgoingPostback();
+  const replayIncoming = useReplayIncomingPostback();
 
-  if (log.direction !== "outgoing" || !log.status || !log.url) return null;
+  if (log.direction === "outgoing") {
+    if (!log.status || !log.url) return null;
+    return (
+      <IconButton
+        aria-label={t("logs.replayAria", { clickId: log.clickId })}
+        size="icon-sm"
+        disabled={replayOutgoing.isPending}
+        onClick={() =>
+          replayOutgoing.mutate(
+            { networkId: log.networkId, clickId: log.clickId, status: log.status!, eventRef: log.eventRef, url: log.url! },
+            {
+              onSuccess: () => toast(t("logs.toast.replayed")),
+              onError: (err) => toast.error(t("logs.toast.replayError"), { description: err.message }),
+            },
+          )
+        }
+      >
+        <RotateCcwIcon className="size-3.5" />
+      </IconButton>
+    );
+  }
 
-  return (
-    <IconButton
-      aria-label={t("logs.replayAria", { clickId: log.clickId })}
-      size="icon-sm"
-      disabled={replay.isPending}
-      onClick={() =>
-        replay.mutate(
-          { networkId: log.networkId, clickId: log.clickId, status: log.status!, eventRef: log.eventRef, url: log.url! },
-          {
-            onSuccess: () => toast(t("logs.toast.replayed")),
-            onError: (err) => toast.error(t("logs.toast.replayError"), { description: err.message }),
-          },
-        )
-      }
-    >
-      <RotateCcwIcon className="size-3.5" />
-    </IconButton>
-  );
+  if (log.direction === "incoming" && log.rawStatus) {
+    return (
+      <IconButton
+        aria-label={t("logs.replayIncomingAria", { clickId: log.clickId })}
+        size="icon-sm"
+        disabled={replayIncoming.isPending}
+        onClick={() =>
+          replayIncoming.mutate(
+            {
+              networkId: log.networkId,
+              clickId: log.clickId,
+              rawStatus: log.rawStatus!,
+              eventRef: log.eventRef,
+              revenue: log.revenue,
+              currency: log.currency,
+            },
+            {
+              onSuccess: (result) =>
+                toast(t("logs.toast.replayedIncoming"), { description: t(`result.${result.result}`, { ns: "postbacks" }) }),
+              onError: (err) => toast.error(t("logs.toast.replayIncomingError"), { description: err.message }),
+            },
+          )
+        }
+      >
+        <RotateCcwIcon className="size-3.5" />
+      </IconButton>
+    );
+  }
+
+  return null;
 }
 
 export function postbackLogColumns(

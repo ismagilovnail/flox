@@ -5,6 +5,67 @@ per-phase, matching `CLAUDE.md`'s phase protocol. The one exception is
 [Between phases], below: spec amendments and the code changes that follow from
 them land between phases and would otherwise be invisible here.
 
+## [Incoming Postback Replay] — apps/api now builds the full conversion engine
+
+### Scope
+
+The architecture decision `docs/postback-logs.md` deferred at the end of
+the outgoing-replay phase: how should an operator-triggered replay of a
+past **incoming** postback call `apps/internal/conversion.Service.Record`,
+the exact engine `apps/tracker`'s `/postback/{networkId}` calls for a real
+network hit. An `AskUserQuestion` decided `apps/api` should build the same
+dependency graph `apps/tracker/main.go` already builds (Redis-cached dedup
+store, ClickHouse-backed attribution, async event writer, outgoing-
+delivery enqueuer, attempt logger) rather than making an internal HTTP
+call to `apps/tracker` — that endpoint has no operator/admin distinction
+from a real network hit, so a replay through it would be indistinguishable
+from a forged network request in the audit trail. See `docs/postback-
+logs.md`.
+
+### Added
+
+- `apps/api/main.go` now constructs a full `conversion.Service`, gated
+  behind the same `ch != nil` startup check the rest of the Postback Logs
+  feature already uses.
+- **`apps/internal/conversion/replay.go`**: `ReplayNetworkLookup`/
+  `ReplayRecorder`, two adapters satisfying `postbacklogs`'
+  `IncomingNetworkLookup`/`IncomingRecorder` interfaces — `postbacklogs`
+  still never imports `conversion` (same one-directional adapter pattern
+  `apps/internal/postback`'s `ReplayEnqueuer` already established for
+  outgoing replay).
+- `postbacklogs.Service.ReplayIncoming` + `POST /postback-logs/replay-
+  incoming`: takes the exact fields a `PostbackLog` row already carries
+  (`networkId`, `clickId`, `rawStatus`, `eventRef`, `revenue`, `currency`),
+  explicitly checks the resolved network's `OrganizationID` against the
+  caller's own (a check a real network hit doesn't need, since its
+  `{networkId}` URL param **is** the tenant scope) before ever calling
+  `Record`.
+- Frontend: `replayIncomingPostback` + `useReplayIncomingPostback`;
+  `PostbackReplayButton` now branches on `direction`, surfacing the
+  replay's actual result (success/duplicate/ignored/error) in the toast
+  instead of a fixed message.
+
+### Verified
+
+- Backend: `go build/vet/gofmt/test ./...` all green — new
+  `postbacklogs.Service.ReplayIncoming` unit tests against fakes (happy
+  path, network-not-found, cross-tenant not-found, required-field
+  validation, not-configured) and new `conversion` adapter tests,
+  including one that runs an actual replay-then-duplicate-replay sequence
+  through a real `*conversion.Service`.
+- Frontend: `tsc --noEmit`/`eslint`/`vitest run`/`next build` (production)
+  all clean.
+- Full manual browser pass against the real running `api`+`tracker`+
+  `worker`+`web` dev servers: sent a real incoming postback with no event
+  mapping configured (a genuine `error` row), added the mapping, replayed
+  it from the Logs tab. Confirmed directly in ClickHouse: the replay
+  recorded a new `success` row and triggered a real outgoing delivery
+  attempt; replaying the identical attempt again correctly came back
+  `duplicate` with no second event or delivery — the CLAUDE.md #3
+  dedup/money-correctness guarantee holding under a manual re-trigger, not
+  just a network's own retry. Test network and all its rows (Postgres and
+  ClickHouse) removed afterward.
+
 ## [Postlanding] — wired to a real Postgres-backed API
 
 ### Scope

@@ -44,7 +44,7 @@ func TestListValidatesDateRangeAndClampsLimit(t *testing.T) {
 	repo := &fakeRepo{attemptsByOrg: map[string][]chstore.PostbackAttempt{
 		"org1": {{EventAt: time.Now(), Direction: "incoming", ClickID: "c1", Result: "success"}},
 	}}
-	svc := postbacklogs.NewService(repo, nil, nil)
+	svc := postbacklogs.NewService(repo, nil, nil, nil, nil)
 	ctx := context.Background()
 	now := time.Now()
 
@@ -79,7 +79,7 @@ func TestListPaginates(t *testing.T) {
 			{EventAt: base.Add(2 * time.Minute), Direction: "incoming", ClickID: "c3", Result: "error"},
 		},
 	}}
-	svc := postbacklogs.NewService(repo, nil, nil)
+	svc := postbacklogs.NewService(repo, nil, nil, nil, nil)
 
 	result, err := svc.List(context.Background(), "org1", base.Add(-time.Hour), base.Add(time.Hour), 2, 0)
 	if err != nil {
@@ -121,7 +121,7 @@ func TestReplayOutgoingEnqueuesAgainstTheResolvedSourceID(t *testing.T) {
 		{"net1", "click1", "CPA_ACCEPT", ""}: "postback-row-1",
 	}}
 	enq := &fakeEnqueuer{nextID: "delivery-1"}
-	svc := postbacklogs.NewService(nil, lookup, enq)
+	svc := postbacklogs.NewService(nil, lookup, enq, nil, nil)
 
 	result, err := svc.ReplayOutgoing(context.Background(), "org1", postbacklogs.ReplayOutgoingInput{
 		NetworkID: "net1", ClickID: "click1", Status: "CPA_ACCEPT", URL: "https://network.example/pb",
@@ -155,7 +155,7 @@ func TestReplayOutgoingUsesEventRefToDisambiguateRedeposits(t *testing.T) {
 		{"net1", "click1", "CPA_REDEP", "txn-2"}: "postback-row-2",
 	}}
 	enq := &fakeEnqueuer{nextID: "delivery-2"}
-	svc := postbacklogs.NewService(nil, lookup, enq)
+	svc := postbacklogs.NewService(nil, lookup, enq, nil, nil)
 
 	_, err := svc.ReplayOutgoing(context.Background(), "org1", postbacklogs.ReplayOutgoingInput{
 		NetworkID: "net1", ClickID: "click1", Status: "CPA_REDEP", EventRef: "txn-2", URL: "https://network.example/pb",
@@ -169,7 +169,7 @@ func TestReplayOutgoingUsesEventRefToDisambiguateRedeposits(t *testing.T) {
 }
 
 func TestReplayOutgoingNotFoundWhenNoMatchingSourceRow(t *testing.T) {
-	svc := postbacklogs.NewService(nil, &fakeSourceLookup{ids: map[[4]string]string{}}, &fakeEnqueuer{})
+	svc := postbacklogs.NewService(nil, &fakeSourceLookup{ids: map[[4]string]string{}}, &fakeEnqueuer{}, nil, nil)
 
 	_, err := svc.ReplayOutgoing(context.Background(), "org1", postbacklogs.ReplayOutgoingInput{
 		NetworkID: "net1", ClickID: "click1", Status: "CPA_ACCEPT", URL: "https://network.example/pb",
@@ -180,7 +180,7 @@ func TestReplayOutgoingNotFoundWhenNoMatchingSourceRow(t *testing.T) {
 }
 
 func TestReplayOutgoingValidatesRequiredFields(t *testing.T) {
-	svc := postbacklogs.NewService(nil, &fakeSourceLookup{}, &fakeEnqueuer{})
+	svc := postbacklogs.NewService(nil, &fakeSourceLookup{}, &fakeEnqueuer{}, nil, nil)
 
 	if _, err := svc.ReplayOutgoing(context.Background(), "", postbacklogs.ReplayOutgoingInput{
 		NetworkID: "net1", ClickID: "click1", Status: "CPA_ACCEPT", URL: "https://network.example/pb",
@@ -196,5 +196,138 @@ func TestReplayOutgoingValidatesRequiredFields(t *testing.T) {
 		NetworkID: "net1", ClickID: "click1", Status: "CPA_ACCEPT",
 	}); err == nil {
 		t.Fatal("ReplayOutgoing with no url: want an error")
+	}
+}
+
+// fakeIncomingNetworkLookup is an in-memory postbacklogs.IncomingNetworkLookup.
+type fakeIncomingNetworkLookup struct {
+	byID map[string]postbacklogs.IncomingNetwork
+}
+
+func (f *fakeIncomingNetworkLookup) ByID(_ context.Context, networkID string) (postbacklogs.IncomingNetwork, error) {
+	n, ok := f.byID[networkID]
+	if !ok {
+		return postbacklogs.IncomingNetwork{}, postbacklogs.ErrIncomingNetworkNotFound
+	}
+	return n, nil
+}
+
+// fakeIncomingRecorder is an in-memory postbacklogs.IncomingRecorder,
+// recording every call so a test can assert exactly what got recorded.
+type fakeIncomingRecorder struct {
+	calls   []postbacklogs.IncomingRecord
+	outcome postbacklogs.IncomingOutcome
+	err     error
+}
+
+func (f *fakeIncomingRecorder) Record(_ context.Context, in postbacklogs.IncomingRecord) (postbacklogs.IncomingOutcome, error) {
+	f.calls = append(f.calls, in)
+	if f.err != nil {
+		return postbacklogs.IncomingOutcome{}, f.err
+	}
+	return f.outcome, nil
+}
+
+func TestReplayIncomingRecordsAgainstTheEngine(t *testing.T) {
+	networks := &fakeIncomingNetworkLookup{byID: map[string]postbacklogs.IncomingNetwork{
+		"net1": {OrganizationID: "org1", AcceptDuplicates: true, PostbackURL: "https://network.example/out"},
+	}}
+	rec := &fakeIncomingRecorder{outcome: postbacklogs.IncomingOutcome{ID: "id-1", Result: "success", Status: "CPA_ACCEPT", Message: "ok"}}
+	svc := postbacklogs.NewService(nil, nil, nil, networks, rec)
+
+	revenue := 42.5
+	result, err := svc.ReplayIncoming(context.Background(), "org1", postbacklogs.ReplayIncomingInput{
+		NetworkID: "net1", ClickID: "click1", RawStatus: "ftd", EventRef: "txn-1", Revenue: &revenue, Currency: "USD",
+	})
+	if err != nil {
+		t.Fatalf("ReplayIncoming: %v", err)
+	}
+	if result != (postbacklogs.ReplayIncomingResult{ID: "id-1", Result: "success", Status: "CPA_ACCEPT", Message: "ok"}) {
+		t.Fatalf("result = %+v, want the recorder's outcome mapped through", result)
+	}
+	if len(rec.calls) != 1 {
+		t.Fatalf("Record calls = %d, want 1", len(rec.calls))
+	}
+	got := rec.calls[0]
+	want := postbacklogs.IncomingRecord{
+		OrganizationID: "org1", NetworkID: "net1", AcceptDuplicates: true,
+		ClickID: "click1", RawStatus: "ftd", NetworkTxnID: "txn-1",
+		Revenue: &revenue, Currency: "USD", PostbackURL: "https://network.example/out",
+		OccurredAt: got.OccurredAt, // set by the service itself; checked only for non-zero below
+	}
+	if got.OccurredAt.IsZero() {
+		t.Fatal("OccurredAt was left zero, want the service to stamp the replay's own time")
+	}
+	if got.OrganizationID != want.OrganizationID || got.NetworkID != want.NetworkID ||
+		got.AcceptDuplicates != want.AcceptDuplicates || got.ClickID != want.ClickID ||
+		got.RawStatus != want.RawStatus || got.NetworkTxnID != want.NetworkTxnID ||
+		*got.Revenue != *want.Revenue || got.Currency != want.Currency || got.PostbackURL != want.PostbackURL {
+		t.Fatalf("Record input = %+v, want %+v", got, want)
+	}
+}
+
+func TestReplayIncomingNotFoundWhenNetworkMissing(t *testing.T) {
+	svc := postbacklogs.NewService(nil, nil, nil, &fakeIncomingNetworkLookup{byID: map[string]postbacklogs.IncomingNetwork{}}, &fakeIncomingRecorder{})
+
+	if _, err := svc.ReplayIncoming(context.Background(), "org1", postbacklogs.ReplayIncomingInput{
+		NetworkID: "missing", ClickID: "click1", RawStatus: "ftd",
+	}); err == nil {
+		t.Fatal("ReplayIncoming against an unknown network: want an error")
+	}
+}
+
+// A caller must never be able to replay against another org's network
+// merely by knowing its id (CLAUDE.md #5) — the tenant check happens
+// after the lookup, not trusted from the request body.
+func TestReplayIncomingNotFoundWhenNetworkBelongsToAnotherOrg(t *testing.T) {
+	networks := &fakeIncomingNetworkLookup{byID: map[string]postbacklogs.IncomingNetwork{
+		"net1": {OrganizationID: "org-other"},
+	}}
+	rec := &fakeIncomingRecorder{}
+	svc := postbacklogs.NewService(nil, nil, nil, networks, rec)
+
+	if _, err := svc.ReplayIncoming(context.Background(), "org1", postbacklogs.ReplayIncomingInput{
+		NetworkID: "net1", ClickID: "click1", RawStatus: "ftd",
+	}); err == nil {
+		t.Fatal("ReplayIncoming against another org's network: want an error")
+	}
+	if len(rec.calls) != 0 {
+		t.Fatal("Record must never be called once the tenant check fails")
+	}
+}
+
+func TestReplayIncomingValidatesRequiredFields(t *testing.T) {
+	networks := &fakeIncomingNetworkLookup{byID: map[string]postbacklogs.IncomingNetwork{"net1": {OrganizationID: "org1"}}}
+	svc := postbacklogs.NewService(nil, nil, nil, networks, &fakeIncomingRecorder{})
+
+	if _, err := svc.ReplayIncoming(context.Background(), "", postbacklogs.ReplayIncomingInput{
+		NetworkID: "net1", ClickID: "click1", RawStatus: "ftd",
+	}); err == nil {
+		t.Fatal("ReplayIncoming with empty organization id: want an error")
+	}
+	if _, err := svc.ReplayIncoming(context.Background(), "org1", postbacklogs.ReplayIncomingInput{
+		ClickID: "click1", RawStatus: "ftd",
+	}); err == nil {
+		t.Fatal("ReplayIncoming with no networkId: want an error")
+	}
+	if _, err := svc.ReplayIncoming(context.Background(), "org1", postbacklogs.ReplayIncomingInput{
+		NetworkID: "net1", RawStatus: "ftd",
+	}); err == nil {
+		t.Fatal("ReplayIncoming with no clickId: want an error")
+	}
+	if _, err := svc.ReplayIncoming(context.Background(), "org1", postbacklogs.ReplayIncomingInput{
+		NetworkID: "net1", ClickID: "click1",
+	}); err == nil {
+		t.Fatal("ReplayIncoming with no rawStatus: want an error")
+	}
+}
+
+func TestReplayIncomingNotConfigured(t *testing.T) {
+	svc := postbacklogs.NewService(nil, nil, nil, nil, nil)
+
+	if _, err := svc.ReplayIncoming(context.Background(), "org1", postbacklogs.ReplayIncomingInput{
+		NetworkID: "net1", ClickID: "click1", RawStatus: "ftd",
+	}); err == nil {
+		t.Fatal("ReplayIncoming with no incoming-replay dependencies wired: want an error, not a panic")
 	}
 }
