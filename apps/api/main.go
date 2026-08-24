@@ -31,6 +31,7 @@ import (
 	"github.com/ismagilovnail/flox/apps/internal/postback"
 	"github.com/ismagilovnail/flox/apps/internal/postbacklogs"
 	"github.com/ismagilovnail/flox/apps/internal/postgres"
+	"github.com/ismagilovnail/flox/apps/internal/postlanding"
 	"github.com/ismagilovnail/flox/apps/internal/pwa"
 	"github.com/ismagilovnail/flox/apps/internal/routing"
 	"github.com/ismagilovnail/flox/apps/internal/routingsimulate"
@@ -131,6 +132,12 @@ func run() error {
 	srv.Mux().Route("/pwas", func(r chi.Router) {
 		r.Use(tenant.Middleware)
 		pwaHandler.Register(r)
+	})
+
+	postlandingHandler := postlanding.NewHandler(postlanding.NewService(postlanding.NewRepository(db)), logger)
+	srv.Mux().Route("/postlandings", func(r chi.Router) {
+		r.Use(tenant.Middleware)
+		postlandingHandler.Register(r)
 	})
 
 	offerHandler := offer.NewHandler(offer.NewService(offer.NewRepository(db)), logger)

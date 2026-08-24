@@ -1,10 +1,11 @@
 import type { ColumnDef } from "@tanstack/react-table";
 import { formatDistanceToNow } from "date-fns";
+import type { TFunction } from "i18next";
 
 import { dataTableFeatures } from "@/components/ui/data-table";
 import { Badge } from "@/components/ui/badge";
 import { Caption, Mono } from "@/components/ui/typography";
-import type { Postlanding, PostlandingStatus } from "@/lib/mock/postlandings";
+import type { Postlanding, PostlandingStatus } from "@/lib/api/postlanding";
 import { PostlandingRowActions } from "@/features/postlanding/postlanding-row-actions";
 
 const STATUS_VARIANT: Record<PostlandingStatus, "success" | "warning" | "secondary"> = {
@@ -14,12 +15,13 @@ const STATUS_VARIANT: Record<PostlandingStatus, "success" | "warning" | "seconda
 };
 
 export function postlandingColumns(
+  t: TFunction,
   onEdit: (postlanding: Postlanding) => void,
 ): ColumnDef<typeof dataTableFeatures, Postlanding>[] {
   return [
     {
       accessorKey: "name",
-      header: "Name",
+      header: t("columns.name", { ns: "postlanding" }),
       cell: ({ row }) => (
         <button
           type="button"
@@ -32,12 +34,12 @@ export function postlandingColumns(
     },
     {
       accessorKey: "url",
-      header: "URL",
+      header: t("columns.url", { ns: "postlanding" }),
       cell: ({ getValue }) => <Mono className="block max-w-md truncate text-xs">{getValue() as string}</Mono>,
     },
     {
       accessorKey: "events",
-      header: "Events",
+      header: t("columns.events", { ns: "postlanding" }),
       cell: ({ getValue }) => {
         const events = getValue() as string[];
         return (
@@ -54,15 +56,15 @@ export function postlandingColumns(
     },
     {
       accessorKey: "status",
-      header: "Status",
+      header: t("columns.status", { ns: "postlanding" }),
       cell: ({ getValue }) => {
         const status = getValue() as PostlandingStatus;
-        return <Badge variant={STATUS_VARIANT[status]}>{status}</Badge>;
+        return <Badge variant={STATUS_VARIANT[status]}>{t(`status.${status}`, { ns: "common" })}</Badge>;
       },
     },
     {
       accessorKey: "updatedAt",
-      header: "Updated",
+      header: t("columns.updated", { ns: "postlanding" }),
       cell: ({ getValue }) => (
         <Caption>{formatDistanceToNow(new Date(getValue() as string), { addSuffix: true })}</Caption>
       ),

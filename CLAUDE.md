@@ -19,77 +19,80 @@ referenced below as §N).
 ## CURRENT STATE — UPDATE THIS EVERY PHASE
 
 ```
-CURRENT PHASE : PHASE (unnumbered) — PWA CRUD
-STATUS        : done — second slice of the Landing/PWA/Postlanding/
-                Pixels CRUD candidate, chosen via AskUserQuestion
-                immediately after Landings landed. apps/internal/pwa
-                (model/handler/service/repository) mirrors
-                apps/internal/landing almost exactly, wired at /pwas in
-                apps/api/main.go. One real validation difference from
-                Landing: startUrl is a relative install path, not run
-                through isValidURL (covered by its own test,
-                TestUpdateAcceptsRelativeStartURL). Same defensive-not-
-                integration-tested 23503-on-Delete precedent as
-                landing/network for flows.pwa_id (no Flow CRUD exists
-                yet to populate it).
-                Frontend: new lib/api/pwa.ts + hooks/use-pwas.ts (mirrors
-                landings' real API layer exactly); pwa-list/-form-sheet/
-                -columns/-row-actions.tsx rewired off stores/pwas.ts
-                (deleted, along with lib/mock/pwas.ts, zero remaining
-                importers) onto the real hooks; loading/error states
-                added. Content Gallery (?gallery=<id> prefill) and Tags
-                integrations untouched. Added a pwa i18n namespace
-                (en+ru, key-parity checked directly).
-                Cross-cutting fix found + shipped this phase: a genuine
-                React hydration race in components/i18n-provider.tsx —
-                its post-mount i18n.changeLanguage() call could fire
-                before a useSearchParams()-driven <Suspense> boundary's
-                own deferred hydration commit (needed for the Content
-                Gallery ?gallery=<id> integration on Landings/PWA/
-                Postlanding), producing a real "Hydration failed" error
-                (auto-recovered by React, not cosmetic). Pre-dated this
-                phase — introduced with I18nProvider itself, already
-                live on /landings, just not caught during that phase's
-                manual testing (absent on pages without
-                useSearchParams(), e.g. /networks, /offers).
-                React.startTransition and a fixed short setTimeout both
-                still raced; fixed with requestIdleCallback
-                (setTimeout(fn,0) Safari fallback), which waits for the
-                main thread to actually go idle instead of guessing a
-                constant. Verified via repeated fresh navigations to
-                both /landings and /pwa with the browser console read
-                directly: zero hydration errors on either. Retroactively
-                fixes the same latent defect on the already-shipped
-                Landings phase with no Landings code touched. See
-                docs/pwa.md.
+CURRENT PHASE : PHASE (unnumbered) — Postlanding CRUD
+STATUS        : done — third and final CRUD-shaped slice of the
+                Landing/PWA/Postlanding/Pixels candidate, right after
+                PWA. apps/internal/postlanding (model/handler/service/
+                repository) mirrors apps/internal/landing/pwa almost
+                exactly, wired at /postlandings in apps/api/main.go. No
+                internal/external split, no server-computed URL (closer
+                to PWA's shape than Landing's). events: at least one
+                required, checked against a curated 6-entry §43 subset
+                (ValidEventTypes) — not a duplicate of the canonical
+                event enum, frontend references the same values with
+                checked parity. Same defensive-not-integration-tested
+                23503-on-Delete precedent as landing/pwa/network for
+                flows.postlanding_id (no Flow CRUD exists yet).
+                Frontend: new lib/api/postlanding.ts + hooks/use-
+                postlandings.ts (mirrors pwa's real API layer exactly);
+                postlanding-list/-form-sheet/-columns/-row-actions.tsx
+                rewired off stores/postlandings.ts (deleted, along with
+                lib/mock/postlandings.ts, zero remaining importers) onto
+                the real hooks; loading/error states added. Content
+                Gallery (?gallery=<id> prefill) integration untouched,
+                only its type import moved to lib/api/postlanding.ts.
+                Added a postlanding i18n namespace (en+ru, key-parity
+                checked directly).
+                Known issue found this phase (not fixed, not a
+                regression): the PWA phase's requestIdleCallback i18n-
+                hydration fix (components/i18n-provider.tsx) mitigates
+                but doesn't fully eliminate the hydration race on
+                useSearchParams()+Suspense pages (Landings/PWA/
+                Postlanding) — reproduced intermittently (~2 of 6 fresh
+                /postlanding navigations) during this phase's manual
+                pass, and confirmed to also still reproduce on /landings
+                when specifically retested. React auto-recovers
+                (discards + re-renders the mismatched subtree); left as
+                a known, non-blocking, non-deterministic issue rather
+                than expanding this phase into a deeper architectural
+                fix (e.g. server-side locale via cookie). See
+                docs/postlanding.md.
                 Verified: go build/vet/gofmt/test ./... all green (new
-                pwa_test.go mirrors landing_test.go's full set plus
-                TestUpdateAcceptsRelativeStartURL); tsc --noEmit/eslint/
-                vitest run/next build (production) all clean. Full
-                manual browser pass against real running api+web dev
-                servers, both locales: created/edited/paused/resumed/
-                duplicated/archived a PWA (manifest preview matched form
-                values live, copy kept non-active status when
-                applicable, archived row's menu correctly dropped to
-                Edit/Duplicate only — matches Landings/Networks);
-                confirmed full Russian rendering throughout. Test PWA
-                row deleted directly from Postgres afterward (no hard-
-                delete in the UI for this entity).
-LAST COMMIT   : feat(pwa): wire PWA CRUD to real Postgres-backed API;
-                fix i18n hydration race shared with Landings
-NEXT          : confirm scope before starting. Landing and PWA are now
-                real; Postlanding is the last piece of that CRUD
-                candidate still mocked. Other candidates: incoming
-                Postback Replay (needs an apps/api-vs-apps/tracker
-                architecture decision — duplicate the conversion engine's
-                dependency graph into apps/api, or have it call
-                apps/tracker's /postback/{networkId} internally — note
-                outgoing Postback Replay already shipped separately, see
-                LAST COMMIT two phases back); FB/TikTok ad-spend import
-                (§74's CostProvider interface, the "later" half of
-                §27-COST — no backend at all yet, a large phase);
-                per-flow Pixels CRUD; or a third i18n locale (cheap per
-                docs/frontend-i18n.md, but none has been requested).
+                postlanding_test.go mirrors landing_test.go's/
+                pwa_test.go's full test set incl. cross-tenant
+                isolation); tsc --noEmit/eslint/vitest run/next build
+                (production) all clean. Full manual browser pass against
+                real running api+web dev servers, Russian locale:
+                created (events multi-select + URL validation both
+                exercised)/edited (full prefill incl. events)/paused/
+                resumed/duplicated (kept paused status, URL, events
+                verbatim)/archived (confirmation dialog name
+                interpolation correct, menu correctly dropped to Edit/
+                Duplicate only — matches Landings/PWA) a postlanding.
+                Test rows deleted directly from Postgres afterward (no
+                hard-delete in the UI for this entity).
+LAST COMMIT   : feat(postlanding): wire Postlanding CRUD to real
+                Postgres-backed API
+NEXT          : confirm scope before starting. Landing, PWA, and
+                Postlanding are now all real — the Landing/PWA/
+                Postlanding/Pixels CRUD candidate is complete except for
+                per-flow Pixels (which needs Flow CRUD to exist first,
+                since pixels attach to flows — likely blocked on the
+                same Flow-CRUD gap as the flows.*_id FK precedents noted
+                above). Other candidates: incoming Postback Replay
+                (needs an apps/api-vs-apps/tracker architecture decision
+                — duplicate the conversion engine's dependency graph
+                into apps/api, or have it call apps/tracker's
+                /postback/{networkId} internally — note outgoing
+                Postback Replay already shipped separately, see
+                CHANGELOG); FB/TikTok ad-spend import (§74's
+                CostProvider interface, the "later" half of §27-COST —
+                no backend at all yet, a large phase); a deeper fix for
+                the i18n hydration race known issue above (e.g.
+                server-side locale detection via cookie, avoiding the
+                client-side changeLanguage() race entirely); or a third
+                i18n locale (cheap per docs/frontend-i18n.md, but none
+                has been requested).
 ```
 
 > At the end of every phase: update the four lines above, add a CHANGELOG entry,

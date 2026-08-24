@@ -1,0 +1,61 @@
+{
+  "list": {
+    "title": "Postlanding",
+    "newButton": "New Postlanding",
+    "searchPlaceholder": "Search postlandings...",
+    "emptyTitle": "No postlandings yet",
+    "emptyDescription": "Add a postlanding page to use after the offer/PWA step of a flow.",
+    "loading": "Loading postlandings…",
+    "loadError": "Couldn't load postlandings"
+  },
+  "columns": {
+    "name": "Name",
+    "url": "URL",
+    "events": "Events",
+    "status": "Status",
+    "updated": "Updated"
+  },
+  "form": {
+    "titleNew": "New Postlanding",
+    "titleEdit": "Edit {{name}}",
+    "titleFromGallery": "New Postlanding — from {{title}}",
+    "description": "Postlandings show after the offer/PWA step and drive engagement events (§28).",
+    "nameLabel": "Name",
+    "namePlaceholder": "Thank You / Upsell",
+    "urlLabel": "URL",
+    "urlPlaceholder": "https://cdn.floxlink.io/psl/thankyou",
+    "eventsLabel": "Events",
+    "eventsHint": "Which of the platform's tracked events this page can fire (§43 event model).",
+    "statusLabel": "Status",
+    "submitCreate": "Create postlanding",
+    "submitEdit": "Save changes",
+    "validation": {
+      "nameMin": "Name must be at least 2 characters",
+      "urlInvalid": "Enter a valid URL",
+      "eventsRequired": "Select at least one event"
+    }
+  },
+  "rowActions": {
+    "actionsAria": "Actions for {{name}}",
+    "edit": "Edit",
+    "pause": "Pause",
+    "resume": "Resume",
+    "duplicate": "Duplicate",
+    "archive": "Archive",
+    "archiveConfirmTitle": "Archive \"{{name}}\"?",
+    "archiveConfirmDescription": "Archived postlandings are hidden from flow pickers going forward. Existing flows that already reference this postlanding keep working. This can be reversed later."
+  },
+  "toast": {
+    "updated": "Postlanding updated",
+    "created": "Postlanding created",
+    "updateError": "Couldn't update postlanding",
+    "createError": "Couldn't create postlanding",
+    "paused": "Postlanding paused",
+    "resumed": "Postlanding resumed",
+    "duplicated": "Postlanding duplicated",
+    "duplicatedSuffix": "{{name}} (Copy)",
+    "archived": "Postlanding archived",
+    "archiveError": "Couldn't archive postlanding",
+    "duplicateError": "Couldn't duplicate postlanding"
+  }
+}
