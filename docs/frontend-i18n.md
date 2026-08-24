@@ -41,8 +41,13 @@ Zustand throughout), this is the natural fit, not a workaround.
 
 ```
 apps/web/src/lib/i18n/
-  config.ts              i18next.init, SUPPORTED_LOCALES, DEFAULT_LOCALE,
-                          detectInitialLocale(), isSupportedLocale()
+  locale.ts               SUPPORTED_LOCALES, DEFAULT_LOCALE, LOCALE_COOKIE,
+                           isSupportedLocale(), resolveLocale() — zero
+                           i18next/react-i18next imports, safe for
+                           app/layout.tsx (a Server Component) to import
+                           directly; see docs/i18n-hydration-fix.md
+  config.ts               createI18nInstance(), NAMESPACES, resources;
+                           re-exports everything from locale.ts too
   config.test.ts          foundation tests (see "Testing" below)
   locales/en/*.json        one file per namespace, English (source)
   locales/ru/*.json        one file per namespace, Russian
@@ -174,26 +179,29 @@ user typed or the backend/a partner network generated.
 
 ## Backend
 
-Untouched. Inspection found no backend requirement this phase couldn't
-avoid — no database schema changes, no translated API responses, no
-Accept-Language handling on `apps/api`. Every domain/enum value already
-flowed through the API in English-coded form (`CPA_HOLD`, `"active"`,
-`"IS_NOT"`, ...) before this phase and still does; only the browser's
-own rendering of those values changed.
+`apps/api` itself untouched — no database schema changes, no translated
+API responses. Every domain/enum value flows through the API in
+English-coded form (`CPA_HOLD`, `"active"`, `"IS_NOT"`, ...); only the
+browser's own rendering of those values changes. `apps/web`'s own Next.js
+server DOES read the `Accept-Language` request header now, as a locale-
+resolution fallback (`lib/i18n/locale.ts`'s `resolveLocale`) — see
+`docs/i18n-hydration-fix.md`; that's `apps/web`'s Node server, not
+`apps/api`.
 
 ## Testing
 
 `apps/web/src/lib/i18n/config.test.ts` (Vitest — newly added to the
 project this phase; run via `npm run test` from `apps/web/`). Covers:
-default locale, `detectInitialLocale`'s persisted-choice-wins/
-unsupported-fallback/browser-language-detection behavior, `en ↔ ru`
-switching, i18next's own fallback for a language with no resource
-bundle at all, a genuinely-missing-key fallback to English (constructed
-via `addResourceBundle`, not relying on an accidental real gap),
-interpolation, English and Russian pluralization (including Russian's
-`few`/`many` forms, not just `one`/`other`), and locale-aware
-`formatUsd`/`formatInt`/`formatPercent` (including that the *value*
-survives the locale change unchanged, only its presentation does).
+default locale, `en ↔ ru` switching, i18next's own fallback for a
+language with no resource bundle at all, a genuinely-missing-key
+fallback to English (constructed via `addResourceBundle`, not relying on
+an accidental real gap), interpolation, English and Russian
+pluralization (including Russian's `few`/`many` forms, not just
+`one`/`other`), and locale-aware `formatUsd`/`formatInt`/`formatPercent`
+(including that the *value* survives the locale change unchanged, only
+its presentation does). `resolveLocale`'s cookie/Accept-Language/default
+precedence and `createI18nInstance`'s per-instance isolation are covered
+separately — see `docs/i18n-hydration-fix.md`.
 
 ## Accessibility
 
@@ -201,14 +209,12 @@ The language switcher (`apps/web/src/components/language-switcher.tsx`,
 topbar, next to the theme toggle) is a standard Radix `Select` with a
 real `aria-label` (`common.language.switcherLabel`) and full keyboard
 navigation inherited from Radix — no custom key handling needed. Options
-are language names ("English", "Русский"), never flags. `<html lang>`
-is kept in sync with the active locale via `I18nProvider`
-(`apps/web/src/components/i18n-provider.tsx`), updated in a `useEffect`
-after mount — see that file's own comment for why (SSR/hydration:
-matches the existing `next-themes`/`ThemeToggle` "start at a known
-default, switch after mount" pattern already in this codebase, so
-server and first-client-render markup always agree and React never logs
-a hydration mismatch).
+are language names ("English", "Русский"), never flags. `<html lang>` is
+set server-side (`app/layout.tsx`, resolved from the persisted cookie/
+Accept-Language header — see `docs/i18n-hydration-fix.md`) to the
+correct value from the very first response, and kept in sync by
+`I18nProvider` (`apps/web/src/components/i18n-provider.tsx`) for any
+*live* language switch after that.
 
 ## What's deliberately deferred
 
@@ -221,16 +227,6 @@ a hydration mismatch).
   gets its own real-backend phase.
 - **A third locale.** The foundation supports adding one cheaply (see
   above), but none was requested this phase.
-- **Server-side/SSR-perfect locale rendering.** The very first paint
-  (server render and the first client render, before mount) is always
-  English, matching `DEFAULT_LOCALE`; a returning Russian-locale user
-  sees a brief flash of English before the post-mount effect switches
-  the UI to their persisted choice. This is the same class of trade-off
-  `next-themes` already makes for theme in this codebase (a "smallest
-  change" client-only foundation, not a routed/cookie-based
-  server-aware one) — a genuinely zero-flash SSR-locale-aware setup
-  would need Next.js middleware/route restructuring, explicitly out of
-  this phase's scope.
 - **`date-fns` locale-aware absolute date formatting** — not needed yet
   since no migrated screen renders one (see "Formatting" above); the
   hook point (`useLocale()`) is already in place for whenever it is.

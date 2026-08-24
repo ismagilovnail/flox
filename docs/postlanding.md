@@ -66,7 +66,11 @@ Same reasoning as Landings/PWA: Postlanding was still mocked when the
 Frontend i18n phase ran. Added a `postlanding` namespace (`en`+`ru`, both
 complete — key-set parity checked directly).
 
-## Known issue: i18n hydration race is mitigated, not eliminated
+## Known issue (resolved in a later phase): i18n hydration race was mitigated, not eliminated
+
+**Update:** closed deterministically in a later phase via server-side
+locale resolution — see `docs/i18n-hydration-fix.md`. The description
+below is kept as the original finding for historical context.
 
 The `requestIdleCallback`-based fix landed in the PWA phase
 (`components/i18n-provider.tsx`) reduces, but does not fully eliminate,

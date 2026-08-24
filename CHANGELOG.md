@@ -5,6 +5,63 @@ per-phase, matching `CLAUDE.md`'s phase protocol. The one exception is
 [Between phases], below: spec amendments and the code changes that follow from
 them land between phases and would otherwise be invisible here.
 
+## [i18n hydration fix] — server-side locale resolution closes the race deterministically
+
+### Scope
+
+Closes the known, non-blocking hydration-race issue the Postlanding phase
+documented (mitigated, not eliminated, by a `requestIdleCallback`-delayed
+`changeLanguage()` call). An `AskUserQuestion` confirmed the trade-off
+before implementing: the only fully deterministic fix requires the
+server to read a locale cookie before rendering, which opts every route
+out of Next.js static prerendering into per-request dynamic rendering —
+accepted, since every route already fetches its real data client-side.
+See `docs/i18n-hydration-fix.md`.
+
+### Changed
+
+- `app/layout.tsx` is now `async`, reads `cookies()`/`headers()`, and
+  renders `<html lang>` + `<I18nProvider initialLocale>` with a
+  server-resolved locale (persisted cookie → Accept-Language → default)
+  instead of always English.
+- New `lib/i18n/locale.ts`: the pure locale-resolution logic
+  (`resolveLocale`, `LOCALE_COOKIE`, `isSupportedLocale`,
+  `SUPPORTED_LOCALES`, `DEFAULT_LOCALE`), with zero `i18next`/
+  `react-i18next` imports so a Server Component can import it directly
+  without pulling react-i18next's context creation into the
+  `react-server` build (which doesn't export `createContext` — the
+  literal failure mode hit and fixed mid-phase). `lib/i18n/config.ts`
+  re-exports the same names for existing "use client" call sites.
+- `lib/i18n/config.ts`'s `createI18nInstance(locale)` replaces the old
+  shared module-level `i18next` singleton for the app's actual runtime
+  path — a fresh, independent instance per call, since `I18nProvider`'s
+  render now runs once per server request (concurrent requests, in
+  principle different locales, on the same Node process) in addition to
+  once per browser tab.
+- `components/i18n-provider.tsx`: `I18nProvider` now takes
+  `initialLocale` as a prop instead of self-detecting via
+  `localStorage`/`navigator.language` in a post-mount effect; its
+  `languageChanged` listener now writes `document.cookie` instead of
+  `localStorage` (plain client-writable cookie, no Server Action/Route
+  Handler round-trip needed for the persisted choice to reach the
+  server on a future request).
+
+### Verified
+
+- `tsc --noEmit`/`eslint`/`vitest run` (21 tests, up from 15) all clean;
+  `next build` confirms all 26 routes moved from `○ (Static)` to
+  `ƒ (Dynamic)` as expected.
+- `curl` (no browser JS involved) confirmed the raw server HTML itself
+  is correct: a `flox-locale=ru` cookie, or an `Accept-Language: ru-RU`
+  header with no cookie, both produced `<html lang="ru">` with Russian
+  text already in the initial response body.
+- Full manual pass against `next start` (production server) + real
+  `api`: 10 full fresh browser navigations across `/postlanding`,
+  `/landings`, `/pwa` (4 with `?gallery=<id>`, the exact condition the
+  original race depended on) — zero hydration errors, read directly from
+  the console each time. Confirmed the live language switcher still
+  works instantly and persists correctly to a fresh navigation.
+
 ## [Incoming Postback Replay] — apps/api now builds the full conversion engine
 
 ### Scope

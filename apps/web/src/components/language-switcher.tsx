@@ -8,10 +8,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 
 /** Small, unobtrusive selector for the topbar — language names, never
  * flags (§9/accessibility), keyboard-navigable via the underlying Radix
- * Select. i18n.language may briefly be a full BCP-47 tag before the
- * detect-on-mount effect settles it to a supported code — the || "en"
- * guards SelectValue's display during that instant, matching how the
- * value only ever gets set to a SUPPORTED_LOCALES member. */
+ * Select. i18n.language is always resolved server-side to a
+ * SUPPORTED_LOCALES member already (lib/i18n/config's resolveLocale);
+ * the isSupportedLocale guard below is cheap insurance, not a real
+ * fallback path. */
 export function LanguageSwitcher() {
   const { t, i18n } = useTranslation("common");
 

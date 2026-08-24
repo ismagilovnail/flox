@@ -19,90 +19,74 @@ referenced below as §N).
 ## CURRENT STATE — UPDATE THIS EVERY PHASE
 
 ```
-CURRENT PHASE : PHASE (unnumbered) — Incoming Postback Replay
-STATUS        : done — resolves the architecture decision the outgoing-
-                replay phase deferred (see prior LAST COMMIT). An
-                AskUserQuestion chose: apps/api now builds the exact same
-                apps/internal/conversion.Service dependency graph
-                apps/tracker/main.go already builds for a real network
-                hit (Redis-cached dedup store — best-effort-at-startup,
-                same as tracker — ClickHouse-backed attribution, async
-                event writer via eventbuf/eventqueue, outgoing-delivery
-                enqueuer, postbacklog attempt logger), rather than
-                apps/api making an internal HTTP call to apps/tracker's
-                /postback/{networkId} (rejected: that endpoint has no
-                operator/admin distinction from a real network hit, so a
-                replay through it would be indistinguishable from a
-                forged network request in the audit trail). Gated behind
-                the same ch != nil startup check the rest of Postback
-                Logs already uses.
-                apps/internal/conversion/replay.go: ReplayNetworkLookup/
-                ReplayRecorder adapt conversion's own types to
-                postbacklogs' IncomingNetworkLookup/IncomingRecorder
-                interfaces — postbacklogs still never imports conversion
-                (conversion -> postbacklogs, one-directionally, same
-                adapter-lives-with-the-engine pattern
-                apps/internal/postback's ReplayEnqueuer already
-                established for outgoing replay). New
-                postbacklogs.Service.ReplayIncoming + POST /postback-
-                logs/replay-incoming: takes the exact fields a
-                PostbackLog row already carries; explicitly checks the
-                resolved network's OrganizationID against the caller's
-                own before calling Record — a check a real network hit
-                doesn't need (its {networkId} URL param IS the tenant
-                scope) but this authenticated-session path does
-                (CLAUDE.md #5), covered by a dedicated cross-tenant test.
-                EventRef doubles as NetworkTxnID on replay (only matters
-                for CPA_REDEP's dedup key — every other status's
-                event_ref is always empty per §45).
-                Frontend: replayIncomingPostback + hooks/use-postback-
-                logs.ts's useReplayIncomingPostback; PostbackReplayButton
-                now branches on direction, surfacing the replay's actual
-                result (success/duplicate/ignored/error) in the toast
-                instead of outgoing's fixed "queued" message.
-                Verified: go build/vet/gofmt/test ./... all green — new
-                postbacklogs.Service.ReplayIncoming unit tests against
-                fakes (happy path incl. exact field mapping, not-found,
-                cross-tenant not-found, required-field validation, not-
-                configured) and new apps/internal/conversion adapter
-                tests (ReplayNetworkLookup's field/error mapping;
-                ReplayRecorder running an actual replay-then-duplicate-
-                replay sequence through a real *conversion.Service — the
-                same harness every other conversion test uses). tsc
-                --noEmit/eslint/vitest run/next build (production) all
-                clean. Full manual browser pass against real running
-                api+tracker+worker+web dev servers: sent a real incoming
-                postback through tracker's actual endpoint with no event
-                mapping configured (a genuine error row), added the
-                mapping, replayed it from the Logs tab. Confirmed
-                directly in ClickHouse: the replay recorded a new success
-                row (correctly unattributed — no real click existed for
-                this synthetic test) and triggered a real outgoing
-                delivery attempt (retrying, unreachable test domain,
-                apps/worker's Deliverer picked it up on its own poll
-                cadence); replaying the identical attempt again correctly
-                came back duplicate with no second event or delivery —
-                confirming CLAUDE.md #3's dedup/money-correctness
-                guarantee holds under a manual re-trigger, not just a
-                network's own retry. Original error row confirmed never
-                mutated. Test network and all its Postgres/ClickHouse
-                rows removed afterward. See docs/postback-logs.md.
-LAST COMMIT   : feat(postback-replay): re-run an incoming postback
-                through the real conversion engine from Postback Logs
-NEXT          : confirm scope before starting. The "Conversions/
-                Postbacks" domain (Conversions, Event Mappings, Postback
-                Logs, both replay directions) is now fully real — no
-                remaining gap in it. Candidates: per-flow Pixels CRUD
-                (blocked on Flow CRUD not existing yet — pixels attach to
-                flows); FB/TikTok ad-spend import (§74's CostProvider
-                interface, the "later" half of §27-COST — no backend at
-                all yet, a large phase); the still-open i18n hydration-
-                race known issue from the Postlanding phase (mitigated,
-                not eliminated — see docs/postlanding.md; a deeper fix
-                would mean server-side locale detection via cookie,
-                avoiding the client-side changeLanguage() race entirely);
-                or a third i18n locale (cheap per docs/frontend-i18n.md,
-                but none has been requested).
+CURRENT PHASE : PHASE (unnumbered) — i18n hydration race, deterministic fix
+STATUS        : done — closes the known issue the Postlanding phase left
+                open (mitigated, not eliminated, by a requestIdleCallback-
+                delayed changeLanguage() call). An AskUserQuestion
+                confirmed the trade-off before implementing: the only
+                fully deterministic fix needs the SERVER to know the
+                locale before rendering (a cookie, read via next/headers'
+                cookies()/headers()), which opts every route out of
+                static prerendering into per-request dynamic rendering —
+                accepted (confirmed via next build: all 26 routes ○
+                Static -> ƒ Dynamic), since every route already fetches
+                real data client-side via TanStack Query.
+                app/layout.tsx is now async, resolves locale server-side
+                (persisted cookie -> Accept-Language header -> default)
+                via new lib/i18n/locale.ts, renders <html lang> and
+                <I18nProvider initialLocale> directly — client hydrates
+                against the exact same value, never re-derived. No post-
+                mount switch left to race a Suspense-deferred hydration
+                commit, because there's nothing left to switch TO after
+                mount for the matching case.
+                lib/i18n/locale.ts split out from config.ts specifically
+                because app/layout.tsx (a Server Component) can't import
+                anything that pulls in react-i18next — it creates a React
+                context at module load, which throws under the
+                react-server build (no createContext export). Hit this
+                literally as a next build failure mid-phase
+                ("createContext is not a function" collecting page data
+                for /landings), fixed by the split; config.ts re-exports
+                locale.ts's names for existing "use client" call sites.
+                createI18nInstance(locale) replaces the old shared
+                module-level i18next singleton for the app's real runtime
+                path — I18nProvider's render now runs once per SERVER
+                REQUEST (concurrent requests, in principle different
+                locales, same Node process) as well as once per browser
+                tab, so a shared mutable global would race; useState(()
+                => createI18nInstance(...)) gives each render path its
+                own instance. Persisting a switcher choice now writes
+                document.cookie directly (no Server Action/Route Handler
+                needed — cookies reach the server regardless of how
+                they're set).
+                Verified: tsc --noEmit/eslint/vitest run (21 tests, up
+                from 15 — new resolveLocale precedence + createI18nInstance
+                isolation tests)/next build all clean. curl (no browser)
+                confirmed the raw server HTML itself is correct pre-JS:
+                Cookie: flox-locale=ru and Accept-Language: ru-RU (no
+                cookie) both produced <html lang="ru"> with Russian text
+                already in the response body. Full manual pass against
+                next start (production server, not next dev) + real api:
+                10 full fresh browser navigations across /postlanding,
+                /landings, /pwa (4 with ?gallery=<id>, the exact condition
+                the original race depended on) — zero hydration errors,
+                read from console each time, not screenshots. Confirmed
+                the live language switcher still works instantly and a
+                subsequent fresh navigation correctly renders the newly-
+                persisted choice server-side. Go backend untouched this
+                phase. See docs/i18n-hydration-fix.md;
+                docs/frontend-i18n.md updated to drop the now-resolved
+                "Server-side/SSR-perfect locale rendering" deferred item.
+LAST COMMIT   : fix(i18n): resolve locale server-side via cookie, closing
+                the hydration race deterministically
+NEXT          : confirm scope before starting. No open known issues
+                remain from prior phases. Candidates: per-flow Pixels
+                CRUD (blocked on Flow CRUD not existing yet — pixels
+                attach to flows); FB/TikTok ad-spend import (§74's
+                CostProvider interface, the "later" half of §27-COST —
+                no backend at all yet, a large phase); or a third i18n
+                locale (cheap per docs/frontend-i18n.md, but none has
+                been requested).
 ```
 
 > At the end of every phase: update the four lines above, add a CHANGELOG entry,

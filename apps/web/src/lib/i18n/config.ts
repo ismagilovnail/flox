@@ -8,16 +8,28 @@
  * see docs/frontend-i18n.md for how to add a locale/namespace later if
  * that changes.
  *
- * SSR note: i18next always initializes with lng = DEFAULT_LOCALE below,
- * so the server render and the FIRST client render agree exactly — no
- * hydration mismatch. I18nProvider (components/i18n-provider.tsx) then
- * switches to the persisted/detected locale in a useEffect, same "flash
- * to the real value after mount" pattern this codebase already uses for
- * theme (components/theme-toggle.tsx's useMounted).
+ * SSR note: the server resolves the active locale per request —
+ * resolveLocale, reading the persisted LOCALE_COOKIE then falling back
+ * to the Accept-Language header — and renders it directly (app/
+ * layout.tsx); the client hydrates against that exact same value,
+ * passed down as a plain prop rather than re-derived from anything
+ * client-only. See components/i18n-provider.tsx for why this closes the
+ * hydration race a prior "always render DEFAULT_LOCALE, flash to the
+ * real value after mount" approach could reduce but never fully
+ * eliminate (docs/postlanding.md documents that approach and its
+ * limits).
+ *
+ * The pure locale-resolution pieces (resolveLocale, LOCALE_COOKIE,
+ * isSupportedLocale, etc.) actually live in lib/i18n/locale.ts, not
+ * here, and are just re-exported below — this file unconditionally
+ * imports react-i18next, which app/layout.tsx (a Server Component)
+ * cannot, so it imports locale.ts directly instead. See that file's own
+ * doc comment.
  */
 import i18next from "i18next";
 import { initReactI18next } from "react-i18next";
 
+import { DEFAULT_LOCALE, isSupportedLocale, LOCALE_COOKIE, resolveLocale, SUPPORTED_LOCALES, type Locale } from "@/lib/i18n/locale";
 import enCommon from "@/lib/i18n/locales/en/common.json";
 import enNav from "@/lib/i18n/locales/en/nav.json";
 import enCampaigns from "@/lib/i18n/locales/en/campaigns.json";
@@ -48,10 +60,13 @@ import ruRoutingSimulator from "@/lib/i18n/locales/ru/routingSimulator.json";
 import ruConversions from "@/lib/i18n/locales/ru/conversions.json";
 import ruPostbacks from "@/lib/i18n/locales/ru/postbacks.json";
 
-export const SUPPORTED_LOCALES = ["en", "ru"] as const;
-export type Locale = (typeof SUPPORTED_LOCALES)[number];
-export const DEFAULT_LOCALE: Locale = "en";
-export const LOCALE_STORAGE_KEY = "flox-locale";
+// Re-exported so existing "use client" call sites can keep importing
+// locale/cookie concerns from this module as before — the actual
+// definitions live in lib/i18n/locale.ts, which app/layout.tsx (a
+// Server Component) imports directly instead, to avoid pulling
+// react-i18next into the server module graph (see locale.ts's doc
+// comment).
+export { DEFAULT_LOCALE, isSupportedLocale, LOCALE_COOKIE, resolveLocale, SUPPORTED_LOCALES, type Locale };
 
 export const NAMESPACES = [
   "common",
@@ -105,36 +120,40 @@ const resources = {
   },
 };
 
-export function isSupportedLocale(value: string): value is Locale {
-  return (SUPPORTED_LOCALES as readonly string[]).includes(value);
-}
-
-/** Persisted choice (localStorage) wins; otherwise the browser's own
- * language, if supported; otherwise DEFAULT_LOCALE. Returns
- * DEFAULT_LOCALE outright during SSR (no window) — callers only need
- * this after mount anyway. */
-export function detectInitialLocale(): Locale {
-  if (typeof window === "undefined") return DEFAULT_LOCALE;
-
-  const stored = window.localStorage.getItem(LOCALE_STORAGE_KEY);
-  if (stored && isSupportedLocale(stored)) return stored;
-
-  const browserLanguage = window.navigator.language?.split("-")[0];
-  if (browserLanguage && isSupportedLocale(browserLanguage)) return browserLanguage;
-
-  return DEFAULT_LOCALE;
-}
-
-if (!i18next.isInitialized) {
-  void i18next.use(initReactI18next).init({
+function initOptions(locale: Locale) {
+  return {
     resources,
-    lng: DEFAULT_LOCALE,
+    lng: locale,
     fallbackLng: DEFAULT_LOCALE,
-    defaultNS: "common",
+    defaultNS: "common" as const,
     ns: NAMESPACES,
     interpolation: { escapeValue: false }, // React already escapes interpolated values
     returnEmptyString: false, // an intentionally-empty translation must not silently render as blank
-  });
+  };
+}
+
+/** Builds a fresh, independent i18next instance — never a shared
+ * module-level singleton. I18nProvider's render runs once server-side
+ * PER REQUEST (Next.js can have multiple requests from different tabs/
+ * users in flight on the same Node process) and once client-side per
+ * browser tab; a shared mutable global's `.language` would race across
+ * concurrent requests resolving to different locales. React's
+ * useState(() => createI18nInstance(locale)) lazy-initializer pattern
+ * guarantees exactly one instance per component lifetime with nothing
+ * shared to race. */
+export function createI18nInstance(locale: Locale) {
+  const instance = i18next.createInstance();
+  void instance.use(initReactI18next).init(initOptions(locale));
+  return instance;
+}
+
+/** A shared, lazily-initialized default instance for this module's own
+ * tests (translation output/pluralization/formatting), where per-
+ * request isolation doesn't matter. The running app never uses this
+ * instance directly — every render path goes through
+ * createI18nInstance. */
+if (!i18next.isInitialized) {
+  void i18next.use(initReactI18next).init(initOptions(DEFAULT_LOCALE));
 }
 
 export default i18next;

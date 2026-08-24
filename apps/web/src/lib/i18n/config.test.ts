@@ -1,23 +1,22 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import i18n, {
   DEFAULT_LOCALE,
-  LOCALE_STORAGE_KEY,
+  LOCALE_COOKIE,
   SUPPORTED_LOCALES,
-  detectInitialLocale,
+  createI18nInstance,
   isSupportedLocale,
+  resolveLocale,
 } from "@/lib/i18n/config";
 import { formatInt, formatPercent, formatUsd } from "@/lib/format";
 import enCommonBundle from "@/lib/i18n/locales/en/common.json";
 
 describe("i18n config", () => {
   beforeEach(async () => {
-    window.localStorage.clear();
     await i18n.changeLanguage(DEFAULT_LOCALE);
   });
 
   afterEach(async () => {
-    window.localStorage.clear();
     await i18n.changeLanguage(DEFAULT_LOCALE);
   });
 
@@ -33,20 +32,8 @@ describe("i18n config", () => {
     expect(isSupportedLocale("fr")).toBe(false);
   });
 
-  it("detectInitialLocale reads a persisted locale from localStorage", () => {
-    window.localStorage.setItem(LOCALE_STORAGE_KEY, "ru");
-    expect(detectInitialLocale()).toBe("ru");
-  });
-
-  it("detectInitialLocale falls back to English for an unsupported persisted value", () => {
-    window.localStorage.setItem(LOCALE_STORAGE_KEY, "fr");
-    expect(detectInitialLocale()).toBe("en");
-  });
-
-  it("detectInitialLocale falls back to English when nothing is persisted and the browser language is unsupported", () => {
-    const spy = vi.spyOn(window.navigator, "language", "get").mockReturnValue("fr-FR");
-    expect(detectInitialLocale()).toBe("en");
-    spy.mockRestore();
+  it("exposes the cookie name app/layout.tsx and components/i18n-provider.tsx both read/write", () => {
+    expect(LOCALE_COOKIE).toBe("flox-locale");
   });
 
   it("switches en -> ru and back, updating translated output", async () => {
@@ -95,6 +82,63 @@ describe("i18n config", () => {
     expect(i18n.t("dataTable.selected", { ns: "common", count: 1 })).toBe("Выбрана 1 строка");
     expect(i18n.t("dataTable.selected", { ns: "common", count: 3 })).toBe("Выбрано 3 строки");
     expect(i18n.t("dataTable.selected", { ns: "common", count: 5 })).toBe("Выбрано 5 строк");
+  });
+});
+
+describe("resolveLocale (server-side resolution — cookie, then Accept-Language, then default)", () => {
+  it("a valid cookie wins outright", () => {
+    expect(resolveLocale("ru", "en-US,en;q=0.9")).toBe("ru");
+  });
+
+  it("falls through an unsupported/corrupted cookie value to Accept-Language", () => {
+    expect(resolveLocale("fr", "ru-RU,ru;q=0.9")).toBe("ru");
+  });
+
+  it("falls back to Accept-Language when there is no cookie", () => {
+    expect(resolveLocale(undefined, "ru-RU,ru;q=0.9,en;q=0.8")).toBe("ru");
+  });
+
+  it("falls back to DEFAULT_LOCALE when neither cookie nor Accept-Language is supported/present", () => {
+    expect(resolveLocale(undefined, "fr-FR,fr;q=0.9")).toBe(DEFAULT_LOCALE);
+    expect(resolveLocale(undefined, undefined)).toBe(DEFAULT_LOCALE);
+    expect(resolveLocale(undefined, null)).toBe(DEFAULT_LOCALE);
+  });
+
+  it("parses only the first Accept-Language entry's primary subtag, ignoring quality values", () => {
+    expect(resolveLocale(undefined, "en-US;q=0.9,ru;q=0.8")).toBe("en");
+  });
+});
+
+describe("createI18nInstance (per-render instance isolation)", () => {
+  it("returns an instance already set to the requested locale", () => {
+    const ru = createI18nInstance("ru");
+    expect(ru.language).toBe("ru");
+    expect(ru.t("actions.save", { ns: "common" })).toBe("Сохранить");
+  });
+
+  // The whole point of createI18nInstance over a shared singleton: two
+  // instances (standing in for two concurrent requests resolving to
+  // different locales) must never observe each other's language.
+  it("two instances are fully independent — changing one never affects the other", async () => {
+    const en = createI18nInstance("en");
+    const ru = createI18nInstance("ru");
+
+    expect(en.language).toBe("en");
+    expect(ru.language).toBe("ru");
+
+    await en.changeLanguage("ru");
+    expect(en.language).toBe("ru");
+    expect(ru.language).toBe("ru"); // unaffected by en's change
+
+    await ru.changeLanguage("en");
+    expect(ru.language).toBe("en");
+    expect(en.language).toBe("ru"); // unaffected by ru's change
+  });
+
+  it("is independent of the module's own shared default instance", async () => {
+    const instance = createI18nInstance("ru");
+    await i18n.changeLanguage("en"); // the shared default instance, unrelated to `instance`
+    expect(instance.language).toBe("ru");
   });
 });
 
