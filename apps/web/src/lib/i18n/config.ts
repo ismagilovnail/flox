@@ -26,6 +26,7 @@ import enTrafficSources from "@/lib/i18n/locales/en/trafficSources.json";
 import enNetworks from "@/lib/i18n/locales/en/networks.json";
 import enLandings from "@/lib/i18n/locales/en/landings.json";
 import enPwa from "@/lib/i18n/locales/en/pwa.json";
+import enPostlanding from "@/lib/i18n/locales/en/postlanding.json";
 import enOffers from "@/lib/i18n/locales/en/offers.json";
 import enStreamSets from "@/lib/i18n/locales/en/streamSets.json";
 import enRoutingSimulator from "@/lib/i18n/locales/en/routingSimulator.json";
@@ -40,6 +41,7 @@ import ruTrafficSources from "@/lib/i18n/locales/ru/trafficSources.json";
 import ruNetworks from "@/lib/i18n/locales/ru/networks.json";
 import ruLandings from "@/lib/i18n/locales/ru/landings.json";
 import ruPwa from "@/lib/i18n/locales/ru/pwa.json";
+import ruPostlanding from "@/lib/i18n/locales/ru/postlanding.json";
 import ruOffers from "@/lib/i18n/locales/ru/offers.json";
 import ruStreamSets from "@/lib/i18n/locales/ru/streamSets.json";
 import ruRoutingSimulator from "@/lib/i18n/locales/ru/routingSimulator.json";
@@ -60,6 +62,7 @@ export const NAMESPACES = [
   "networks",
   "landings",
   "pwa",
+  "postlanding",
   "offers",
   "streamSets",
   "routingSimulator",
@@ -77,6 +80,7 @@ const resources = {
     networks: enNetworks,
     landings: enLandings,
     pwa: enPwa,
+    postlanding: enPostlanding,
     offers: enOffers,
     streamSets: enStreamSets,
     routingSimulator: enRoutingSimulator,
@@ -92,6 +96,7 @@ const resources = {
     networks: ruNetworks,
     landings: ruLandings,
     pwa: ruPwa,
+    postlanding: ruPostlanding,
     offers: ruOffers,
     streamSets: ruStreamSets,
     routingSimulator: ruRoutingSimulator,

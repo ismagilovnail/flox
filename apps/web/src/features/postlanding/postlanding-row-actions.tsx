@@ -3,6 +3,7 @@
 import * as React from "react";
 import { toast } from "sonner";
 import { CopyIcon, MoreHorizontalIcon, PauseIcon, PencilIcon, PlayIcon, Trash2Icon } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
 import { IconButton } from "@/components/ui/icon-button";
 import { Button } from "@/components/ui/button";
@@ -21,64 +22,79 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { usePostlandingsStore } from "@/stores/postlandings";
-import type { Postlanding } from "@/lib/mock/postlandings";
+import { useActivatePostlanding, useArchivePostlanding, useDuplicatePostlanding, usePausePostlanding } from "@/hooks/use-postlandings";
+import type { Postlanding } from "@/lib/api/postlanding";
 
 export function PostlandingRowActions({ postlanding, onEdit }: { postlanding: Postlanding; onEdit: () => void }) {
-  const setStatus = usePostlandingsStore((s) => s.setStatus);
-  const duplicatePostlanding = usePostlandingsStore((s) => s.duplicatePostlanding);
+  const { t } = useTranslation(["postlanding", "common"]);
+  const pause = usePausePostlanding();
+  const activate = useActivatePostlanding();
+  const duplicate = useDuplicatePostlanding();
+  const archive = useArchivePostlanding();
   const [confirmArchive, setConfirmArchive] = React.useState(false);
 
   function togglePause() {
-    const next = postlanding.status === "active" ? "paused" : "active";
-    setStatus(postlanding.id, next);
-    toast(next === "paused" ? "Postlanding paused" : "Postlanding resumed", { description: postlanding.name });
+    const action = postlanding.status === "active" ? pause : activate;
+    action.mutate(postlanding.id, {
+      onSuccess: () =>
+        toast(t(postlanding.status === "active" ? "toast.paused" : "toast.resumed"), { description: postlanding.name }),
+      onError: (err) => toast.error(t("toast.updateError"), { description: err.message }),
+    });
   }
 
-  function duplicate() {
-    duplicatePostlanding(postlanding.id);
-    toast("Postlanding duplicated", { description: `${postlanding.name} (Copy)` });
+  function handleDuplicate() {
+    duplicate.mutate(postlanding.id, {
+      onSuccess: () => toast(t("toast.duplicated"), { description: t("toast.duplicatedSuffix", { name: postlanding.name }) }),
+      onError: (err) => toast.error(t("toast.duplicateError"), { description: err.message }),
+    });
   }
 
-  function archive() {
-    setStatus(postlanding.id, "archived");
-    setConfirmArchive(false);
-    toast("Postlanding archived", { description: postlanding.name });
+  function handleArchive() {
+    archive.mutate(postlanding.id, {
+      onSuccess: () => {
+        setConfirmArchive(false);
+        toast(t("toast.archived"), { description: postlanding.name });
+      },
+      onError: (err) => {
+        setConfirmArchive(false);
+        toast.error(t("toast.archiveError"), { description: err.message });
+      },
+    });
   }
 
   return (
     <>
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <IconButton aria-label={`Actions for ${postlanding.name}`} variant="ghost" size="icon-sm">
+          <IconButton aria-label={t("rowActions.actionsAria", { name: postlanding.name })} variant="ghost" size="icon-sm">
             <MoreHorizontalIcon className="size-4" />
           </IconButton>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
           <DropdownMenuItem onSelect={onEdit}>
-            <PencilIcon className="size-4" /> Edit
+            <PencilIcon className="size-4" /> {t("rowActions.edit")}
           </DropdownMenuItem>
           {postlanding.status !== "archived" && (
             <DropdownMenuItem onSelect={togglePause}>
               {postlanding.status === "active" ? (
                 <>
-                  <PauseIcon className="size-4" /> Pause
+                  <PauseIcon className="size-4" /> {t("rowActions.pause")}
                 </>
               ) : (
                 <>
-                  <PlayIcon className="size-4" /> Resume
+                  <PlayIcon className="size-4" /> {t("rowActions.resume")}
                 </>
               )}
             </DropdownMenuItem>
           )}
-          <DropdownMenuItem onSelect={duplicate}>
-            <CopyIcon className="size-4" /> Duplicate
+          <DropdownMenuItem onSelect={handleDuplicate}>
+            <CopyIcon className="size-4" /> {t("rowActions.duplicate")}
           </DropdownMenuItem>
           {postlanding.status !== "archived" && (
             <>
               <DropdownMenuSeparator />
               <DropdownMenuItem variant="destructive" onSelect={() => setConfirmArchive(true)}>
-                <Trash2Icon className="size-4" /> Archive
+                <Trash2Icon className="size-4" /> {t("rowActions.archive")}
               </DropdownMenuItem>
             </>
           )}
@@ -88,18 +104,15 @@ export function PostlandingRowActions({ postlanding, onEdit }: { postlanding: Po
       <Dialog open={confirmArchive} onOpenChange={setConfirmArchive}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Archive &ldquo;{postlanding.name}&rdquo;?</DialogTitle>
-            <DialogDescription>
-              Archived postlandings are hidden from flow pickers going forward. Existing flows that already
-              reference this postlanding keep working. This can be reversed later.
-            </DialogDescription>
+            <DialogTitle>{t("rowActions.archiveConfirmTitle", { name: postlanding.name })}</DialogTitle>
+            <DialogDescription>{t("rowActions.archiveConfirmDescription")}</DialogDescription>
           </DialogHeader>
           <DialogFooter>
             <Button variant="outline" onClick={() => setConfirmArchive(false)}>
-              Cancel
+              {t("actions.cancel", { ns: "common" })}
             </Button>
-            <Button variant="destructive" onClick={archive}>
-              Archive
+            <Button variant="destructive" onClick={handleArchive} disabled={archive.isPending}>
+              {t("rowActions.archive")}
             </Button>
           </DialogFooter>
         </DialogContent>

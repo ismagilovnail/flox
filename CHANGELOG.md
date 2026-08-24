@@ -5,6 +5,63 @@ per-phase, matching `CLAUDE.md`'s phase protocol. The one exception is
 [Between phases], below: spec amendments and the code changes that follow from
 them land between phases and would otherwise be invisible here.
 
+## [Postlanding] — wired to a real Postgres-backed API
+
+### Scope
+
+Third slice of the Landing/PWA/Postlanding/Pixels CRUD candidate, right
+after [PWA](#pwa--wired-to-a-real-postgres-backed-api-fixes-an-i18n-hydration-race-shared-with-landings).
+`postlandings` (migration 00004) was already flat, no children, real
+schema — same shape as Landings/PWA. Per-flow Pixels stays mocked; this
+phase is Postlanding only. See `docs/postlanding.md`.
+
+### Added
+
+- **`apps/internal/postlanding`**: `model.go`/`handler.go`/`service.go`/
+  `repository.go`, mirroring `apps/internal/landing`/`apps/internal/pwa`'s
+  shape almost exactly, wired at `/postlandings` in `apps/api/main.go`.
+- `events`: at least one required, each value checked against a curated
+  6-entry subset of the §43 event model (`ValidEventTypes`) a postlanding
+  can plausibly fire on — not a duplicate of the canonical event enum,
+  the frontend references the same string values with checked parity.
+- Frontend: `lib/api/postlanding.ts` + `hooks/use-postlandings.ts` (real
+  API layer, mirrors PWA's exactly); `postlanding-list`/`-form-sheet`/
+  `-columns`/`-row-actions.tsx` rewired off the Zustand mock onto the
+  real hooks, with loading/error states added.
+- A `postlanding` i18n namespace (`en`+`ru`, key-set parity checked
+  directly).
+
+### Removed
+
+- `stores/postlandings.ts` and `lib/mock/postlandings.ts` — deleted
+  outright once a grep confirmed zero remaining importers.
+
+### Known issue
+
+- The `requestIdleCallback`-based i18n hydration fix from the PWA phase
+  mitigates but does not fully eliminate the hydration race on pages
+  using `useSearchParams()` inside `<Suspense>` (Landings/PWA/
+  Postlanding). Manual testing this phase reproduced the same
+  "Hydration failed" error intermittently (~2 of 6 fresh `/postlanding`
+  navigations) and confirmed it also reproduces on `/landings` when
+  specifically retested — not a new regression or Postlanding-specific,
+  React auto-recovers, left as a known non-blocking issue rather than
+  expanding scope into a deeper fix. See `docs/postlanding.md`.
+
+### Verified
+
+- Backend: `go build/vet/gofmt/test ./...` all green — `postlanding_test.go`
+  mirrors `landing_test.go`'s/`pwa_test.go`'s full test set.
+- Frontend: `tsc --noEmit`/`eslint`/`vitest run`/`next build` (production)
+  all clean.
+- Full manual browser pass against the real running `api`+`web` dev
+  servers, in Russian locale: created/edited/paused/resumed/duplicated/
+  archived a postlanding (events multi-select and URL validation both
+  exercised, copy kept paused status/URL/events verbatim, archived row's
+  action menu correctly dropped to Edit/Duplicate only); confirmed full
+  Russian rendering throughout. Test postlanding rows deleted directly
+  from Postgres afterward (no hard-delete in the UI for this entity).
+
 ## [PWA] — wired to a real Postgres-backed API; fixes an i18n hydration race shared with Landings
 
 ### Scope

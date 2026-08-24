@@ -18,7 +18,7 @@
  * S3 upload — that's real Phase 27 (integration) work, not this phase's.
  */
 
-import type { PostlandingEventType } from "@/lib/mock/postlandings";
+import type { PostlandingEventType } from "@/lib/api/postlanding";
 
 export type GalleryCategory = "landing_template" | "pwa_template" | "postlanding_template" | "creative_asset";
 export type GallerySource = "system" | "team";
