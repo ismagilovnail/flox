@@ -28,6 +28,7 @@ func NewHandler(svc *Service, logger *slog.Logger) *Handler {
 // tenant.Middleware first — same contract as every other handler.
 func (h *Handler) Register(r chi.Router) {
 	r.Get("/", h.list)
+	r.Post("/replay-outgoing", h.replayOutgoing)
 }
 
 // list answers GET /postback-logs?from=&to=&limit=&offset= — org-wide,
@@ -71,6 +72,26 @@ func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
 	}
 
 	result, err := h.svc.List(r.Context(), orgID, from, to, limit, offset)
+	if err != nil {
+		apierror.Write(w, h.logger, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, result)
+}
+
+// replayOutgoing answers POST /postback-logs/replay-outgoing — re-enqueues
+// a fresh delivery for a past outgoing attempt, off the exact fields a
+// PostbackLog row the browser already has.
+func (h *Handler) replayOutgoing(w http.ResponseWriter, r *http.Request) {
+	orgID, _ := tenant.OrgID(r.Context())
+
+	var in ReplayOutgoingInput
+	if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
+		apierror.Write(w, h.logger, apierror.Validation("could not parse request body", nil))
+		return
+	}
+
+	result, err := h.svc.ReplayOutgoing(r.Context(), orgID, in)
 	if err != nil {
 		apierror.Write(w, h.logger, err)
 		return

@@ -1,12 +1,16 @@
 import type { ColumnDef } from "@tanstack/react-table";
-import { ArrowDownToLineIcon, ArrowUpFromLineIcon } from "lucide-react";
+import { ArrowDownToLineIcon, ArrowUpFromLineIcon, RotateCcwIcon } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
+import { toast } from "sonner";
+import { useTranslation } from "react-i18next";
 import type { TFunction } from "i18next";
 
 import { dataTableFeatures } from "@/components/ui/data-table";
 import { Badge } from "@/components/ui/badge";
+import { IconButton } from "@/components/ui/icon-button";
 import { Caption, Mono } from "@/components/ui/typography";
 import { CPA_STATUS_I18N_KEY } from "@/lib/api/conversions";
+import { useReplayOutgoingPostback } from "@/hooks/use-postback-logs";
 import type { PostbackLog, PostbackResult } from "@/lib/api/postback-logs";
 
 const RESULT_VARIANT: Record<PostbackResult, "success" | "warning" | "danger" | "secondary"> = {
@@ -21,9 +25,36 @@ const RESULT_VARIANT: Record<PostbackResult, "success" | "warning" | "danger" | 
   dead: "danger",
 };
 
-/** No replay action: it's a real write path (re-invoking the conversion
- * engine for an incoming row, or re-enqueuing a delivery for an outgoing
- * one) deliberately scoped out of this phase — see docs/postback-logs.md. */
+/** Outgoing only: re-enqueues a fresh delivery through the same path a
+ * first attempt already takes (§46, apps/internal/postback.Store.Enqueue).
+ * Incoming replay (re-invoking the conversion engine) is still
+ * deliberately deferred — see docs/postback-logs.md. */
+function PostbackReplayButton({ log }: { log: PostbackLog }) {
+  const { t } = useTranslation("postbacks");
+  const replay = useReplayOutgoingPostback();
+
+  if (log.direction !== "outgoing" || !log.status || !log.url) return null;
+
+  return (
+    <IconButton
+      aria-label={t("logs.replayAria", { clickId: log.clickId })}
+      size="icon-sm"
+      disabled={replay.isPending}
+      onClick={() =>
+        replay.mutate(
+          { networkId: log.networkId, clickId: log.clickId, status: log.status!, eventRef: log.eventRef, url: log.url! },
+          {
+            onSuccess: () => toast(t("logs.toast.replayed")),
+            onError: (err) => toast.error(t("logs.toast.replayError"), { description: err.message }),
+          },
+        )
+      }
+    >
+      <RotateCcwIcon className="size-3.5" />
+    </IconButton>
+  );
+}
+
 export function postbackLogColumns(
   t: TFunction,
   networkNameById: Record<string, string>,
@@ -88,6 +119,17 @@ export function postbackLogColumns(
       accessorKey: "eventAt",
       header: t("columns.time", { ns: "postbacks" }),
       cell: ({ getValue }) => <Caption>{formatDistanceToNow(new Date(getValue() as string), { addSuffix: true })}</Caption>,
+    },
+    {
+      id: "actions",
+      header: "",
+      enableSorting: false,
+      enableHiding: false,
+      cell: ({ row }) => (
+        <div className="flex justify-end">
+          <PostbackReplayButton log={row.original} />
+        </div>
+      ),
     },
   ];
 }

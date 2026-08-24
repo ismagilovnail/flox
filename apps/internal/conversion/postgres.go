@@ -50,6 +50,39 @@ func (s *PostgresStore) LastStatus(ctx context.Context, organizationID, clickID 
 	return event.Type(status), true, nil
 }
 
+// FindSuccessID resolves the postbacks row a successful incoming attempt
+// was recorded as, given the exact dedup key (organization_id, click_id,
+// status, event_ref) plus network_id — the id apps/internal/postback's
+// delivery queue needs as source_postback_id (a NOT NULL FK, migration
+// 00014). Record already has this id in-process at enqueue time (see its
+// own doc comment); this method exists for the one case that doesn't —
+// re-enqueuing a delivery for an attempt Record finished long ago
+// (apps/internal/postbacklogs' outgoing replay).
+//
+// eventRef is "" for every status except CPA_REDEP (§45) — a legitimate
+// value, not an omitted filter, since a CPA_REDEP click can have more than
+// one successful row (one per redeposit, each with its own event_ref) and
+// matching on the wrong one would replay the wrong delivery.
+func (s *PostgresStore) FindSuccessID(ctx context.Context, organizationID, networkID, clickID, status, eventRef string) (string, bool, error) {
+	var id string
+	err := s.db.QueryRow(ctx, `
+		SELECT id FROM postbacks
+		WHERE organization_id = $1 AND network_id = $2 AND click_id = $3
+		  AND status = $4 AND event_ref = $5 AND direction = 'incoming' AND result = 'success'
+		ORDER BY created_at DESC
+		LIMIT 1`,
+		organizationID, networkID, clickID, status, eventRef,
+	).Scan(&id)
+
+	if errors.Is(err, pgx.ErrNoRows) {
+		return "", false, nil
+	}
+	if err != nil {
+		return "", false, fmt.Errorf("conversion: finding source postback: %w", err)
+	}
+	return id, true, nil
+}
+
 // direction is hardcoded 'incoming': this package only handles postbacks a
 // network sends TO FLOX. Outgoing (FLOX notifying a network) is Phase 24's
 // postback engine (internal/postback), which reads a success row here via

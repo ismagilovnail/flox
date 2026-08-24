@@ -19,75 +19,83 @@ referenced below as §N).
 ## CURRENT STATE — UPDATE THIS EVERY PHASE
 
 ```
-CURRENT PHASE : PHASE (unnumbered) — Frontend i18n (EN/RU foundation)
-STATUS        : done. Cross-cutting frontend infra phase added ahead of
-                the next domain per direct instruction — not part of the
-                numbered §9 build order. Picked up mid-phase: the
-                react-i18next foundation (lib/i18n/config.ts,
-                I18nProvider, LanguageSwitcher, useLocale()), all 11
-                namespaces' en+ru JSON (fully translated), and the
-                shell/common/Campaigns/Traffic Sources/Networks
-                component migrations already existed from earlier in
-                the session. This pass wired the six remaining
-                real-backed domains to the pre-written keys: Offers,
-                Stream Sets/Filters/Flows, Routing Simulator, Cost (the
-                Campaign detail Cost tab), Conversions, and Postbacks
-                (Event Mapping/Incoming/Outgoing/Logs panels).
-                Zod schemas converted to buildXFormSchema(t) factories
-                (validation messages need the live translator, matching
-                the existing buildSourceFormSchema/buildNetworkFormSchema
-                pattern); column-def factories take t as their first
-                arg (matching networkColumns). Added lib/filters.ts's
-                FILTER_OPERATOR_I18N_KEY (mirrors FIELD_GROUP_I18N_KEY)
-                and made checkRE2Compatible/validateCountryValue take a
-                TFunction; added lib/api/conversions.ts's
-                CPA_STATUS_I18N_KEY (same pattern as
-                SOURCE_TYPE_I18N_KEY), reused by Conversions, Event
-                Mapping, and Postback Logs for CPA status badges.
-                Manual browser verification found two real gaps beyond
-                the six domains' own files: campaign-detail-view.tsx
-                (the Campaign detail page's Overview/Cost/Simulator/
-                Settings tab chrome, stat cards, danger zone) was
-                entirely untranslated despite wrapping the newly-
-                migrated Cost/Simulator/Stream Sets content — wired it
-                to campaigns.json's already-complete but unused detail/
-                overview namespace. components/ui/multi-select.tsx (used
-                by Offers' Countries picker and Stream Sets' Values
-                picker) had a hardcoded "Search {label}..." template
-                that produced a mixed-language string once a translated
-                label was passed in — added common.multiSelect.* keys,
-                switched the component to useTranslation("common")
-                internally (same self-contained pattern data-table.tsx
-                uses). See docs/frontend-i18n.md for the full namespace
-                map and conventions.
-                Verified: tsc --noEmit/eslint/next build (production,
-                all 26 routes) all clean; vitest 15/15 passing; full
-                manual browser pass in both locales against the real
-                running api+web dev servers — created a real network,
-                offer, campaign, stream set (filter condition + device-
-                vocab value), and event mapping; confirmed correct ru
-                rendering across all six domains including a genuine
-                count=0 Russian plural form and the routing simulator's
-                full pipeline trace; confirmed backend-generated strings
-                (SimulateResult.destination.label/.stickyNote) correctly
-                stay in English per the documented backend boundary;
-                switched to en and confirmed the fallback locale still
-                renders correctly. Test network/offer/campaign archived
-                afterward (no hard-delete exists for these entities in
-                the UI).
-LAST COMMIT   : feat(i18n): wire remaining real-backed domains
-                (Offers, Stream Sets, Routing Simulator, Cost,
-                Conversions, Postbacks) to the EN/RU foundation
-NEXT          : confirm scope before starting. The Conversions/Postbacks
-                domain is fully wired except for the deliberately-
-                deferred Replay action (its own follow-on candidate).
-                Other candidates: FB/TikTok ad-spend import (§74's
-                CostProvider interface, the "later" half of §27-COST);
-                Landing/PWA/Postlanding/Pixels CRUD (would unblock the
-                stages the Stream Sets phase had to drop from the Flow
-                editor); Postback Replay itself; or a third i18n locale
-                (the foundation supports adding one cheaply per
-                docs/frontend-i18n.md, but none has been requested).
+CURRENT PHASE : PHASE (unnumbered) — Postback Replay (outgoing only)
+STATUS        : done — confirmed via AskUserQuestion after inspection
+                found incoming and outgoing replay are very different
+                sizes. Outgoing re-enqueues a fresh delivery through the
+                exact apps/internal/postback.Store.Enqueue path a first
+                attempt already takes; self-contained in apps/api, which
+                already has everything it needs (db). Incoming re-
+                invokes apps/internal/conversion.Service.Record, which
+                needs mapping, the dedup/progression store, FX,
+                attribution, an async event writer, and the delivery
+                enqueuer all wired together — the exact dependency graph
+                only apps/tracker has ever needed, not apps/api. Wiring
+                it in means either duplicating that graph into apps/api
+                or apps/api calling apps/tracker's /postback/{networkId}
+                internally — a real architecture decision, deferred
+                again pending that choice.
+                New apps/internal/conversion.PostgresStore.FindSuccessID:
+                resolves a ClickHouse postback_events row back to the
+                Postgres postbacks.id apps/internal/postback's delivery
+                queue needs as its NOT NULL source_postback_id FK
+                (migration 00014), by the exact dedup key (org, network,
+                click_id, status, event_ref) — event_ref matters because
+                a CPA_REDEP click can have more than one successful row,
+                one per redeposit. postbacklogs.PostbackLog now keeps
+                EventRef in its JSON (previously dropped: "the UI never
+                renders it") specifically so the browser can round-trip
+                it back for this lookup. New apps/internal/postback
+                .ReplayEnqueuer adapts postbacklogs.ReplayInput →
+                postback.EnqueueInput, same decoupled-interface pattern
+                Enqueuer (→ conversion.DeliveryEnqueuer) already uses;
+                unlike Enqueuer's best-effort swallow-the-error contract,
+                ReplayEnqueuer's error goes straight back to the HTTP
+                caller since replaying is the entire point of that
+                request. New POST /postback-logs/replay-outgoing on
+                apps/internal/postbacklogs (Service.ReplayOutgoing).
+                Frontend: postback-log-columns.tsx's actions column and
+                RotateCcwIcon button — dropped in the read-only phase —
+                re-added, outgoing rows only; useReplayOutgoingPostback
+                mutation hook; new postbacks.json logs.replayAria/toast
+                keys, en+ru.
+                Verified: go build/vet/gofmt/test ./... all green (new
+                FindSuccessID integration test against real Postgres —
+                event_ref disambiguation between two REDEP rows, tenant
+                isolation, no-match; new ReplayEnqueuer unit test; five
+                new Service.ReplayOutgoing unit tests against fakes);
+                tsc/eslint/next build clean. Full manual browser pass
+                against real running api+tracker+worker+web dev servers
+                (first phase in this arc needing all four — a genuine
+                outgoing delivery only exists once a real incoming
+                postback creates one): real network with an unreachable
+                postback URL, real event mapping, two real incoming
+                postbacks sent through apps/tracker's actual endpoint,
+                apps/worker's Deliverer picked both up and logged
+                retrying attempts, clicked Replay, confirmed via direct
+                Postgres query that a NEW postback_deliveries row was
+                created (fresh id, attempt_count reset to 1, correct
+                source_postback_id) and that the worker picked it up on
+                its own next poll. Confirmed Replay absent on incoming
+                rows; confirmed 422/404 error paths directly. Test
+                network + its Postgres and ClickHouse rows all deleted
+                afterward (a genuine cleanup this time, not archive —
+                these were psql/curl-seeded rows with no UI path at all,
+                not entities the app itself only lets you archive).
+LAST COMMIT   : feat(postback-replay): re-enqueue outgoing deliveries
+                from the Postback Logs UI (incoming replay still
+                deferred)
+NEXT          : confirm scope before starting. Candidates: incoming
+                Postback Replay (needs the apps/api-vs-apps/tracker
+                architecture decision above resolved first); FB/TikTok
+                ad-spend import (§74's CostProvider interface, the
+                "later" half of §27-COST — no backend at all yet, a
+                large phase); Landing/PWA/Postlanding/Pixels CRUD
+                (Postgres schema already migrated, zero Go service-layer
+                packages exist — would unblock stages the Stream Sets
+                phase had to drop from the Flow editor; Landings alone
+                is the smallest slice); or a third i18n locale (cheap
+                per docs/frontend-i18n.md, but none has been requested).
 ```
 
 > At the end of every phase: update the four lines above, add a CHANGELOG entry,

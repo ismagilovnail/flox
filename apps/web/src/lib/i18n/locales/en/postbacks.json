@@ -45,7 +45,12 @@
     "emptyTitle": "No postback activity yet",
     "emptyDescription": "Every incoming and outgoing postback attempt is logged here, success or not.",
     "loading": "Loading postback logs…",
-    "loadError": "Couldn't load postback logs"
+    "loadError": "Couldn't load postback logs",
+    "replayAria": "Replay delivery for {{clickId}}",
+    "toast": {
+      "replayed": "Delivery queued for replay",
+      "replayError": "Couldn't replay delivery"
+    }
   },
   "columns": {
     "direction": "Direction",

@@ -5,6 +5,78 @@ per-phase, matching `CLAUDE.md`'s phase protocol. The one exception is
 [Between phases], below: spec amendments and the code changes that follow from
 them land between phases and would otherwise be invisible here.
 
+## [Postback Replay] — outgoing deliveries can be re-enqueued from the Logs UI
+
+### Scope
+
+`AskUserQuestion` after inspection: incoming and outgoing replay (both
+named as real, buildable, no-new-schema actions when Postback Logs
+deferred them) turned out to be very different sizes. Outgoing needed
+nothing `apps/api` didn't already have. Incoming needs the same
+dependency graph (mapper, dedup store, FX, attribution, async event
+writer, delivery enqueuer) only `apps/tracker` has ever had — wiring it
+into `apps/api` means either duplicating that graph or `apps/api` calling
+`apps/tracker`'s `/postback/{networkId}` internally, a real architecture
+choice. User picked outgoing-only this phase; incoming deferred again
+pending that choice. See `docs/postback-logs.md`.
+
+### Added
+
+- **`apps/internal/conversion.PostgresStore.FindSuccessID`**: resolves a
+  ClickHouse `postback_events` row back to the Postgres `postbacks.id`
+  `apps/internal/postback`'s delivery queue needs as its `NOT NULL
+  source_postback_id` FK (migration 00014), by the exact dedup key
+  (org, network, click_id, status, event_ref) — `event_ref` matters
+  because a CPA_REDEP click can have more than one successful row, one
+  per redeposit.
+- **`apps/internal/postback.ReplayEnqueuer`**: adapts
+  `postbacklogs.ReplayInput` → `postback.EnqueueInput`, the same
+  decoupled-interface-per-consumer pattern `Enqueuer` (→
+  `conversion.DeliveryEnqueuer`) already uses. Unlike `Enqueuer`'s
+  best-effort, error-swallowing contract (correct for a call inside
+  `Record`, where a queuing hiccup must never be reported as a
+  conversion failure), `ReplayEnqueuer`'s error goes straight back to the
+  HTTP caller — replaying is the entire point of that request.
+- **`POST /postback-logs/replay-outgoing`** on `apps/internal
+  /postbacklogs` (new `Service.ReplayOutgoing`): takes the exact fields a
+  `PostbackLog` row already carries client-side, no second fetch, and
+  reuses the exact URL already macro-resolved and dispatched rather than
+  re-resolving against current network config.
+- Frontend: `postback-log-columns.tsx`'s `actions` column and
+  `RotateCcwIcon` button — dropped entirely in the read-only phase — are
+  back, outgoing rows only; `useReplayOutgoingPostback` mutation hook;
+  `lib/api/postback-logs.ts`'s `PostbackLog` keeps `eventRef` in its JSON
+  now (previously dropped — "the UI never renders it" — needed to
+  round-trip back for the replay lookup); new `postbacks.json`
+  `logs.replayAria`/`logs.toast.*` keys, en+ru.
+
+### Verified
+
+- Backend: `go build/vet/gofmt/test ./...` all green — a new
+  `FindSuccessID` integration test against real Postgres (event_ref
+  disambiguation between two REDEP rows, tenant isolation, no-match), a
+  new `ReplayEnqueuer` unit test, five new `Service.ReplayOutgoing` unit
+  tests against fakes.
+- Frontend: `tsc --noEmit`/`eslint`/`next build` (production) all clean.
+- Full manual browser pass against the real running `api` + `tracker` +
+  `worker` + `web` dev servers — the first phase in this arc needing all
+  four, since a genuine outgoing delivery only exists once a real
+  incoming postback creates one: created a real network whose postback
+  URL points at an unreachable local port, a real event mapping, sent
+  two real incoming postbacks through `apps/tracker`'s actual endpoint,
+  confirmed `apps/worker`'s `Deliverer` picked both up and logged
+  `retrying` attempts. Clicked Replay; confirmed the toast and, directly
+  in Postgres, that a **new** `postback_deliveries` row was created
+  (fresh id, `attempt_count` reset to 1, correct `source_postback_id`)
+  and that the worker picked it up on its own next poll. Confirmed
+  Replay is absent on incoming rows. Confirmed error paths directly:
+  malformed org header → 422, missing required field → 422 with field
+  detail, a status never successfully recorded → 404. Test network and
+  every row it produced (Postgres `networks`/`event_mappings`/
+  `postbacks`/`postback_deliveries`, ClickHouse `postback_events`) were
+  deleted outright afterward — psql/curl-seeded rows with no UI path at
+  all, not entities the app itself only lets you archive.
+
 ## [Frontend i18n] — client-side EN/RU internationalization foundation
 
 ### Scope

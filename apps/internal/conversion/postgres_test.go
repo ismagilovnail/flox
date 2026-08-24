@@ -63,6 +63,67 @@ func TestPostgresStoreDedupAndProgression(t *testing.T) {
 	}
 }
 
+// TestPostgresStoreFindSuccessID exercises outgoing replay's one lookup
+// (apps/internal/postbacklogs.Service.ReplayOutgoing) against the real
+// schema: it must resolve the exact success row for a given event_ref, not
+// just any success row for the (network, click, status) triple, and it
+// must never see a different tenant's row.
+func TestPostgresStoreFindSuccessID(t *testing.T) {
+	pool := mustPool(t)
+	ctx := context.Background()
+	orgID := seedOrg(t, ctx, pool)
+	otherOrgID := seedOrg(t, ctx, pool)
+	networkID := seedNetwork(t, ctx, pool, orgID, false)
+	store := conversion.NewPostgresStore(pool)
+	clickID := idgen.New()
+
+	if _, _, err := store.Record(ctx, conversion.Entry{
+		OrganizationID: orgID, NetworkID: networkID, ClickID: clickID,
+		Status: event.CpaRedep, EventRef: "txn-1", Kind: conversion.ResultSuccess,
+	}); err != nil {
+		t.Fatalf("Record txn-1: %v", err)
+	}
+	id2, _, err := store.Record(ctx, conversion.Entry{
+		OrganizationID: orgID, NetworkID: networkID, ClickID: clickID,
+		Status: event.CpaRedep, EventRef: "txn-2", Kind: conversion.ResultSuccess,
+	})
+	if err != nil {
+		t.Fatalf("Record txn-2: %v", err)
+	}
+	if _, _, err := store.Record(ctx, conversion.Entry{
+		OrganizationID: orgID, NetworkID: networkID, ClickID: clickID,
+		Status: event.Type(""), Kind: conversion.ResultError, Message: "no event mapping",
+	}); err != nil {
+		t.Fatalf("Record error row: %v", err)
+	}
+
+	got, found, err := store.FindSuccessID(ctx, orgID, networkID, clickID, string(event.CpaRedep), "txn-2")
+	if err != nil {
+		t.Fatalf("FindSuccessID: %v", err)
+	}
+	if !found || got != id2 {
+		t.Fatalf("FindSuccessID(txn-2) = (%q, %v), want (%q, true) — must resolve the txn-2 row, not txn-1's", got, found, id2)
+	}
+
+	if _, found, err := store.FindSuccessID(ctx, orgID, networkID, clickID, string(event.CpaRedep), "txn-does-not-exist"); err != nil {
+		t.Fatalf("FindSuccessID(unknown event_ref): %v", err)
+	} else if found {
+		t.Fatal("FindSuccessID(unknown event_ref): want not found")
+	}
+
+	if _, found, err := store.FindSuccessID(ctx, orgID, networkID, clickID, string(event.CpaAccept), ""); err != nil {
+		t.Fatalf("FindSuccessID(never-recorded status): %v", err)
+	} else if found {
+		t.Fatal("FindSuccessID(never-recorded status, only an error row exists): want not found")
+	}
+
+	if _, found, err := store.FindSuccessID(ctx, otherOrgID, networkID, clickID, string(event.CpaRedep), "txn-2"); err != nil {
+		t.Fatalf("FindSuccessID(wrong org): %v", err)
+	} else if found {
+		t.Fatal("FindSuccessID(wrong org): want not found — tenant isolation")
+	}
+}
+
 func TestPostgresStoreAcceptDuplicatesBypassesDedupNotProgression(t *testing.T) {
 	pool := mustPool(t)
 	ctx := context.Background()

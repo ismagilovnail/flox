@@ -1,11 +1,16 @@
 /**
- * Postback Logs (§29, §45) — the real API layer for
- * apps/internal/postbacklogs, a thin read layer over ClickHouse's
+ * Postback Logs (§29, §45/§46) — the real API layer for
+ * apps/internal/postbacklogs, a thin layer mostly reading ClickHouse's
  * postback_events. Org-wide, both directions mixed in one list, matching
- * the frontend's single Logs table. Read-only: replay (re-invoking the
- * conversion engine for an incoming row, or re-enqueuing a delivery for
- * an outgoing one) was deliberately scoped out of this phase — see
- * docs/postback-logs.md.
+ * the frontend's single Logs table.
+ *
+ * `replayOutgoingPostback` is the one write this file does: it re-enqueues
+ * a fresh delivery for a past outgoing attempt (the exact fields a
+ * PostbackLog row already carries, no second fetch), through the same
+ * path a first attempt already takes. Incoming replay (re-invoking the
+ * conversion engine for an incoming row) is still deliberately deferred —
+ * see docs/postback-logs.md for why the two turned out to be very
+ * different sizes.
  */
 
 import { apiFetch } from "@/lib/api/client";
@@ -34,6 +39,7 @@ export type PostbackLog = {
   clickId: string;
   status?: CpaStatus;
   rawStatus?: string;
+  eventRef?: string;
   result: PostbackResult;
   message: string;
   attemptCount?: number;
@@ -64,4 +70,22 @@ export function listPostbackLogs(params: ListPostbackLogsParams = {}): Promise<L
       offset: params.offset?.toString(),
     },
   });
+}
+
+export type ReplayOutgoingPostbackInput = {
+  networkId: string;
+  clickId: string;
+  status: CpaStatus;
+  eventRef?: string;
+  url: string;
+};
+
+export type ReplayOutgoingPostbackResult = {
+  deliveryId: string;
+};
+
+/** Re-enqueues a fresh delivery for a past outgoing attempt — pass the
+ * exact fields off the PostbackLog row being replayed, no re-derivation. */
+export function replayOutgoingPostback(input: ReplayOutgoingPostbackInput): Promise<ReplayOutgoingPostbackResult> {
+  return apiFetch("/postback-logs/replay-outgoing", { method: "POST", body: input });
 }

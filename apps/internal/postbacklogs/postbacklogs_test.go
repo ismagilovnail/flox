@@ -44,7 +44,7 @@ func TestListValidatesDateRangeAndClampsLimit(t *testing.T) {
 	repo := &fakeRepo{attemptsByOrg: map[string][]chstore.PostbackAttempt{
 		"org1": {{EventAt: time.Now(), Direction: "incoming", ClickID: "c1", Result: "success"}},
 	}}
-	svc := postbacklogs.NewService(repo)
+	svc := postbacklogs.NewService(repo, nil, nil)
 	ctx := context.Background()
 	now := time.Now()
 
@@ -79,7 +79,7 @@ func TestListPaginates(t *testing.T) {
 			{EventAt: base.Add(2 * time.Minute), Direction: "incoming", ClickID: "c3", Result: "error"},
 		},
 	}}
-	svc := postbacklogs.NewService(repo)
+	svc := postbacklogs.NewService(repo, nil, nil)
 
 	result, err := svc.List(context.Background(), "org1", base.Add(-time.Hour), base.Add(time.Hour), 2, 0)
 	if err != nil {
@@ -90,5 +90,111 @@ func TestListPaginates(t *testing.T) {
 	}
 	if result.Logs[0].ClickID != "c3" {
 		t.Fatalf("List page 1[0].ClickID = %q, want c3 (newest first)", result.Logs[0].ClickID)
+	}
+}
+
+// fakeSourceLookup is an in-memory postbacklogs.SourcePostbackLookup,
+// keyed exactly like the real dedup key it resolves.
+type fakeSourceLookup struct {
+	ids map[[4]string]string // [networkID, clickID, status, eventRef] -> postbacks.id
+}
+
+func (f *fakeSourceLookup) FindSuccessID(_ context.Context, _, networkID, clickID, status, eventRef string) (string, bool, error) {
+	id, ok := f.ids[[4]string{networkID, clickID, status, eventRef}]
+	return id, ok, nil
+}
+
+// fakeEnqueuer is an in-memory postbacklogs.OutgoingEnqueuer, recording
+// every call so a test can assert exactly what got queued.
+type fakeEnqueuer struct {
+	calls  []postbacklogs.ReplayInput
+	nextID string
+}
+
+func (f *fakeEnqueuer) Enqueue(_ context.Context, in postbacklogs.ReplayInput) (string, error) {
+	f.calls = append(f.calls, in)
+	return f.nextID, nil
+}
+
+func TestReplayOutgoingEnqueuesAgainstTheResolvedSourceID(t *testing.T) {
+	lookup := &fakeSourceLookup{ids: map[[4]string]string{
+		{"net1", "click1", "CPA_ACCEPT", ""}: "postback-row-1",
+	}}
+	enq := &fakeEnqueuer{nextID: "delivery-1"}
+	svc := postbacklogs.NewService(nil, lookup, enq)
+
+	result, err := svc.ReplayOutgoing(context.Background(), "org1", postbacklogs.ReplayOutgoingInput{
+		NetworkID: "net1", ClickID: "click1", Status: "CPA_ACCEPT", URL: "https://network.example/pb",
+	})
+	if err != nil {
+		t.Fatalf("ReplayOutgoing: %v", err)
+	}
+	if result.DeliveryID != "delivery-1" {
+		t.Fatalf("DeliveryID = %q, want delivery-1", result.DeliveryID)
+	}
+	if len(enq.calls) != 1 {
+		t.Fatalf("Enqueue calls = %d, want 1", len(enq.calls))
+	}
+	got := enq.calls[0]
+	want := postbacklogs.ReplayInput{
+		OrganizationID: "org1", NetworkID: "net1", SourcePostbackID: "postback-row-1",
+		ClickID: "click1", Status: "CPA_ACCEPT", URL: "https://network.example/pb",
+	}
+	if got != want {
+		t.Fatalf("Enqueue input = %+v, want %+v", got, want)
+	}
+}
+
+// A CPA_REDEP click can have more than one successful row, one per
+// redeposit — event_ref is what tells them apart, so a replay must use
+// the exact one the browser's row carries, not just the first match for
+// (network, click, status).
+func TestReplayOutgoingUsesEventRefToDisambiguateRedeposits(t *testing.T) {
+	lookup := &fakeSourceLookup{ids: map[[4]string]string{
+		{"net1", "click1", "CPA_REDEP", "txn-1"}: "postback-row-1",
+		{"net1", "click1", "CPA_REDEP", "txn-2"}: "postback-row-2",
+	}}
+	enq := &fakeEnqueuer{nextID: "delivery-2"}
+	svc := postbacklogs.NewService(nil, lookup, enq)
+
+	_, err := svc.ReplayOutgoing(context.Background(), "org1", postbacklogs.ReplayOutgoingInput{
+		NetworkID: "net1", ClickID: "click1", Status: "CPA_REDEP", EventRef: "txn-2", URL: "https://network.example/pb",
+	})
+	if err != nil {
+		t.Fatalf("ReplayOutgoing: %v", err)
+	}
+	if enq.calls[0].SourcePostbackID != "postback-row-2" {
+		t.Fatalf("SourcePostbackID = %q, want postback-row-2 (the txn-2 redeposit)", enq.calls[0].SourcePostbackID)
+	}
+}
+
+func TestReplayOutgoingNotFoundWhenNoMatchingSourceRow(t *testing.T) {
+	svc := postbacklogs.NewService(nil, &fakeSourceLookup{ids: map[[4]string]string{}}, &fakeEnqueuer{})
+
+	_, err := svc.ReplayOutgoing(context.Background(), "org1", postbacklogs.ReplayOutgoingInput{
+		NetworkID: "net1", ClickID: "click1", Status: "CPA_ACCEPT", URL: "https://network.example/pb",
+	})
+	if err == nil {
+		t.Fatal("ReplayOutgoing with no matching source row: want an error")
+	}
+}
+
+func TestReplayOutgoingValidatesRequiredFields(t *testing.T) {
+	svc := postbacklogs.NewService(nil, &fakeSourceLookup{}, &fakeEnqueuer{})
+
+	if _, err := svc.ReplayOutgoing(context.Background(), "", postbacklogs.ReplayOutgoingInput{
+		NetworkID: "net1", ClickID: "click1", Status: "CPA_ACCEPT", URL: "https://network.example/pb",
+	}); err == nil {
+		t.Fatal("ReplayOutgoing with empty organization id: want an error")
+	}
+	if _, err := svc.ReplayOutgoing(context.Background(), "org1", postbacklogs.ReplayOutgoingInput{
+		ClickID: "click1", Status: "CPA_ACCEPT", URL: "https://network.example/pb",
+	}); err == nil {
+		t.Fatal("ReplayOutgoing with no networkId: want an error")
+	}
+	if _, err := svc.ReplayOutgoing(context.Background(), "org1", postbacklogs.ReplayOutgoingInput{
+		NetworkID: "net1", ClickID: "click1", Status: "CPA_ACCEPT",
+	}); err == nil {
+		t.Fatal("ReplayOutgoing with no url: want an error")
 	}
 }

@@ -27,6 +27,7 @@ import (
 	"github.com/ismagilovnail/flox/apps/internal/ltv"
 	"github.com/ismagilovnail/flox/apps/internal/network"
 	"github.com/ismagilovnail/flox/apps/internal/offer"
+	"github.com/ismagilovnail/flox/apps/internal/postback"
 	"github.com/ismagilovnail/flox/apps/internal/postbacklogs"
 	"github.com/ismagilovnail/flox/apps/internal/postgres"
 	"github.com/ismagilovnail/flox/apps/internal/routing"
@@ -173,7 +174,15 @@ func run() error {
 			conversionsHandler.Register(r)
 		})
 
-		postbackLogsHandler := postbacklogs.NewHandler(postbacklogs.NewService(events), logger)
+		// Outgoing replay's two dependencies both reuse `db` the same way
+		// every other Postgres-backed handler on this server already does
+		// — conversion.PostgresStore only for its read-only FindSuccessID
+		// (this server never constructs a full conversion.Service; that
+		// stays apps/tracker's job, see docs/postback-logs.md).
+		postbackLogsHandler := postbacklogs.NewHandler(
+			postbacklogs.NewService(events, conversion.NewPostgresStore(db), postback.NewReplayEnqueuer(postback.NewPostgresStore(db))),
+			logger,
+		)
 		srv.Mux().Route("/postback-logs", func(r chi.Router) {
 			r.Use(tenant.Middleware)
 			postbackLogsHandler.Register(r)
