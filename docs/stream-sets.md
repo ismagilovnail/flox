@@ -88,18 +88,44 @@ appends a new stream set after every existing one for the campaign
 event produces and rewrites `priority = index+1` for all of them in one
 transaction — not N individual per-row PATCHes.
 
-## Landing/PWA/Postlanding stages and per-flow Pixels: dropped, not faked
+## Landing/PWA/Postlanding stages: restored (Flow CRUD follow-on phase)
 
-Same precedent as every other domain this session: `flows.landing_id`/
-`pwa_id`/`postlanding_id` and the `stream_set_pixels` join table are real,
-nullable/optional schema — but no `internal/landing`, `internal/pwa`,
-`internal/postlanding`, or `internal/pixel` package exists yet, so their
-pickers would have nothing real to select from. Dropped from both the
-Go API surface and the frontend form entirely (`FlowFunnel`, which
-rendered all three, is deleted outright — replaced by
-`FlowDestinationEditor`, which renders only Offer-or-Redirect + a
-read-only Fallback preview, reusing the generic `FlowNode` component
-unchanged).
+Originally dropped for the reason below; **un-dropped** in a later phase
+once `internal/landing`, `internal/pwa`, and `internal/postlanding` all
+existed for real. `flows.landing_id`/`landing_as_pwa`/`pwa_id`/`pwa_type`/
+`postlanding_id` (migration 00006, previously unused by any CRUD) are now
+read/written by `streamset.Flow`'s `Landing`/`Pwa`/`Postlanding` fields —
+each an always-present struct (`{enabled, ...}`) rather than a pointer, so
+toggling a stage off in the UI keeps its previous pick around instead of
+losing it, matching the columns' own independent `*_enabled` vs. nullable
+`*_id` split.
+
+`Service.checkFlowStagesBelongToOrg` confirms every non-empty landing/pwa/
+postlanding id belongs to the caller's org — same "never trust a
+client-supplied foreign id" reasoning as `resolveFlowNetworks` for
+offer/network ids (CLAUDE.md #5) — checked whenever an id is present, not
+only when its stage is enabled, since a disabled stage's id is still
+persisted. `pwa_type` is nullable with a CHECK constraint that only NULL
+(never `""`) satisfies for an unset stage — `nullIfEmpty` in
+`repository.go` converts the empty-string wire value accordingly before
+every insert.
+
+Frontend: `flow-funnel.tsx` (new) renders the full chain — Landing → PWA →
+Postlanding → the Offer-or-Redirect Destination (delegated to
+`flow-destination-editor.tsx`, unchanged) → Fallback — reusing the
+existing `FlowNode` component (`toggleable`/`configured`/`previewUrl`
+props were already generic; nothing there needed to change) and fetching
+real `useLandings()`/`usePwas()`/`usePostlandings()` alongside the
+existing `useNetworks()`/`useOffers()`. `stream-set-schema.ts` validates
+each stage the same way the destination union already did:
+`landing.enabled && !landingId` → inline error on the picker, same for
+`pwa`'s id and type, same for `postlanding`'s id.
+
+Still out: **per-flow Pixels**. `stream_set_pixels` (migration 00008)
+attaches a pixel to the *Stream Set*, not the Flow — CLAUDE.md's own
+phrasing ("per-flow Pixels") is imprecise; the schema has always scoped
+pixels one level up. No `internal/pixel` package exists yet either way,
+so this stays a separate, still-blocked phase regardless of naming.
 
 ## A real render-loop bug, caught and fixed during manual verification
 
@@ -173,3 +199,35 @@ this phase deliberately, to keep it reviewable — not because it was
 hard, since `routingstore.LoadRoutingConfig` and `routing.Router.Explain`
 already did essentially all the work. It landed in its own phase; see
 [`docs/routing-simulate.md`](routing-simulate.md).
+
+## Verified (Flow funnel stages follow-on phase)
+
+Backend: `go build/vet/gofmt/test ./...` all green, including 2 new
+`streamset` tests (`TestFlowFunnelStagesRoundTrip`: all three stages
+enabled with real seeded landing/pwa/postlanding ids, `AsPwa`/`PwaType`
+set, round-trips identically through Create then a fresh Get;
+`TestFlowFunnelStageValidation`: a stage enabled without its id, an
+invalid `pwaType`, and a disabled stage referencing another org's
+postlanding id are all rejected).
+
+Frontend: `tsc --noEmit`/`eslint`/`vitest run` (21 tests, unchanged —
+this phase added no new frontend unit tests, only backend integration
+tests, since the new logic is almost entirely wiring existing generic
+components to new fields) /`next build` (production) all clean.
+
+Full manual browser pass against the real running `api`+`web` dev
+servers: created a throwaway landing, PWA, and postlanding; opened the
+pre-existing `i18n Test Set` stream set's edit form (a fixture from an
+earlier phase) and enabled all three funnel stages on its one flow —
+selected the real landing (+ "Show as PWA"), the real PWA (type
+defaulted to "Internal" the instant the stage was toggled on, confirmed
+switching it to "External"), and the real postlanding; saved; reloaded
+the page fresh and reopened the edit form — every stage's `Configured`
+badge, selected entity, and `asPwa`/`pwaType` value round-tripped exactly
+through the real Postgres-backed API, not just an optimistic client
+cache. Reverted the fixture's flow back to its original all-disabled
+state directly in Postgres afterward (not deletable through the UI, no
+hard-delete for stream sets' nested flow fields) and deleted the three
+throwaway landing/pwa/postlanding rows via `DELETE FROM ...` once their
+FK references were cleared, restoring the shared `i18n Test Set` fixture
+to exactly its pre-phase state for future sessions.

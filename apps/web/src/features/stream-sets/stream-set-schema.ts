@@ -61,13 +61,11 @@ function buildFilterGroupSchema(t: TFunction): z.ZodType<FilterNodeFormValue & {
   return filterGroupSchema;
 }
 
-/** Landing/PWA/Postlanding stages and per-flow Pixels are gone here —
- * neither has a real backend yet (no internal/landing, internal/pwa,
- * internal/postlanding, or internal/pixel package exists), and their DB
- * columns/tables are nullable/optional specifically so a Flow can exist
- * without them. Dropped from the writable form rather than faked, same
- * precedent as every other domain this session. See
- * docs/stream-sets.md. */
+/** Per-flow Pixels are still gone here — no internal/pixel package exists
+ * (pixels attach to the Stream Set, not the Flow, via stream_set_pixels —
+ * a separate, still-blocked phase). Landing/PWA/Postlanding stages are
+ * back as of this phase, now that internal/landing/pwa/postlanding are
+ * real. See docs/stream-sets.md. */
 function buildDestinationSchema(t: TFunction) {
   return z.union([
     z.object({
@@ -79,12 +77,49 @@ function buildDestinationSchema(t: TFunction) {
   ]);
 }
 
+function buildFlowLandingSchema(t: TFunction) {
+  return z
+    .object({ enabled: z.boolean(), landingId: z.string(), asPwa: z.boolean() })
+    .superRefine((landing, ctx) => {
+      if (landing.enabled && !landing.landingId) {
+        ctx.addIssue({ code: "custom", message: t("form.validation.chooseLanding", { ns: "streamSets" }), path: ["landingId"] });
+      }
+    });
+}
+
+function buildFlowPwaSchema(t: TFunction) {
+  return z
+    .object({ enabled: z.boolean(), pwaId: z.string(), pwaType: z.enum(["internal", "external", "ios_app", ""]) })
+    .superRefine((pwa, ctx) => {
+      if (!pwa.enabled) return;
+      if (!pwa.pwaId) {
+        ctx.addIssue({ code: "custom", message: t("form.validation.choosePwa", { ns: "streamSets" }), path: ["pwaId"] });
+      }
+      if (!pwa.pwaType) {
+        ctx.addIssue({ code: "custom", message: t("form.validation.choosePwaType", { ns: "streamSets" }), path: ["pwaType"] });
+      }
+    });
+}
+
+function buildFlowPostlandingSchema(t: TFunction) {
+  return z
+    .object({ enabled: z.boolean(), postlandingId: z.string() })
+    .superRefine((postlanding, ctx) => {
+      if (postlanding.enabled && !postlanding.postlandingId) {
+        ctx.addIssue({ code: "custom", message: t("form.validation.choosePostlanding", { ns: "streamSets" }), path: ["postlandingId"] });
+      }
+    });
+}
+
 function buildFlowSchema(t: TFunction) {
   return z.object({
     id: z.string(),
     name: z.string().min(1, t("form.validation.flowNameRequired", { ns: "streamSets" })),
     active: z.boolean(),
     weight: z.number().min(0, t("form.validation.weightNegative", { ns: "streamSets" })),
+    landing: buildFlowLandingSchema(t),
+    pwa: buildFlowPwaSchema(t),
+    postlanding: buildFlowPostlandingSchema(t),
     destination: buildDestinationSchema(t),
   });
 }

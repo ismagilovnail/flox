@@ -94,6 +94,9 @@ func (s *Service) Create(ctx context.Context, orgID, campaignID string, in Creat
 	if err != nil {
 		return StreamSet{}, err
 	}
+	if err := s.checkFlowStagesBelongToOrg(ctx, orgID, in.Flows); err != nil {
+		return StreamSet{}, err
+	}
 
 	// Priority is never client-supplied (no field for it in the frontend
 	// form — matching stream-set-schema.ts exactly): a new stream set is
@@ -144,6 +147,9 @@ func (s *Service) Update(ctx context.Context, orgID, campaignID, id string, in U
 			return StreamSet{}, err
 		}
 		in.Flows = &resolved
+		if err := s.checkFlowStagesBelongToOrg(ctx, orgID, *in.Flows); err != nil {
+			return StreamSet{}, err
+		}
 	}
 
 	return s.repo.Update(ctx, orgID, campaignID, id, in)
@@ -165,7 +171,11 @@ func (s *Service) Duplicate(ctx context.Context, orgID, campaignID, id string) (
 
 	flowInputs := make([]FlowInput, len(source.Flows))
 	for i, f := range source.Flows {
-		flowInputs[i] = FlowInput{Name: f.Name, Active: f.Active, Weight: f.Weight, Destination: f.Destination}
+		flowInputs[i] = FlowInput{
+			Name: f.Name, Active: f.Active, Weight: f.Weight,
+			Landing: f.Landing, Pwa: f.Pwa, Postlanding: f.Postlanding,
+			Destination: f.Destination,
+		}
 	}
 
 	existing, err := s.repo.List(ctx, orgID, campaignID)
@@ -224,6 +234,46 @@ func (s *Service) resolveFlowNetworks(ctx context.Context, orgID string, flows [
 	return out, nil
 }
 
+// checkFlowStagesBelongToOrg confirms every non-empty landing/pwa/
+// postlanding id a flow references is a real, org-owned row — the same
+// "never trust a client-supplied foreign id" reasoning resolveFlowNetworks
+// applies to offer/network ids (CLAUDE.md #5). Checked whenever an id is
+// present, not just when its stage is enabled, since a disabled stage's id
+// is still persisted (kept so re-enabling restores the prior pick) and
+// should never silently hold a foreign-org id in the meantime.
+func (s *Service) checkFlowStagesBelongToOrg(ctx context.Context, orgID string, flows []FlowInput) error {
+	for _, f := range flows {
+		if id := f.Landing.LandingID; id != "" {
+			ok, err := s.repo.LandingBelongsToOrg(ctx, orgID, id)
+			if err != nil {
+				return fmt.Errorf("checking landing: %w", err)
+			}
+			if !ok {
+				return apierror.Validation("invalid stream set", map[string]string{"flows": fmt.Sprintf("landing %q not found in this organization", id)})
+			}
+		}
+		if id := f.Pwa.PwaID; id != "" {
+			ok, err := s.repo.PwaBelongsToOrg(ctx, orgID, id)
+			if err != nil {
+				return fmt.Errorf("checking pwa: %w", err)
+			}
+			if !ok {
+				return apierror.Validation("invalid stream set", map[string]string{"flows": fmt.Sprintf("pwa %q not found in this organization", id)})
+			}
+		}
+		if id := f.Postlanding.PostlandingID; id != "" {
+			ok, err := s.repo.PostlandingBelongsToOrg(ctx, orgID, id)
+			if err != nil {
+				return fmt.Errorf("checking postlanding: %w", err)
+			}
+			if !ok {
+				return apierror.Validation("invalid stream set", map[string]string{"flows": fmt.Sprintf("postlanding %q not found in this organization", id)})
+			}
+		}
+	}
+	return nil
+}
+
 func (s *Service) validateFlows(ctx context.Context, orgID string, flows []FlowInput) string {
 	if len(flows) == 0 {
 		return "at least one flow is required"
@@ -234,6 +284,20 @@ func (s *Service) validateFlows(ctx context.Context, orgID string, flows []FlowI
 		}
 		if f.Weight < 0 {
 			return "weight can't be negative"
+		}
+		if f.Landing.Enabled && !idgen.IsValid(f.Landing.LandingID) {
+			return "choose a landing"
+		}
+		if f.Pwa.Enabled {
+			if !idgen.IsValid(f.Pwa.PwaID) {
+				return "choose a PWA"
+			}
+			if !f.Pwa.PwaType.Valid() {
+				return fmt.Sprintf("pwa type must be %q, %q, or %q", PwaTypeInternal, PwaTypeExternal, PwaTypeIOSApp)
+			}
+		}
+		if f.Postlanding.Enabled && !idgen.IsValid(f.Postlanding.PostlandingID) {
+			return "choose a postlanding"
 		}
 		switch f.Destination.Kind {
 		case routing.DestinationOffer:

@@ -211,13 +211,24 @@ func (r *Repository) loadFilterTrees(ctx context.Context, orgID string, streamSe
 	return trees, nil
 }
 
+const flowStageColumns = `landing_enabled, landing_id, landing_as_pwa, pwa_enabled, pwa_id, pwa_type, postlanding_enabled, postlanding_id`
+
+// scanFlowStages fills in the nullable landing/pwa/postlanding columns
+// shared by loadFlows and loadFlowsTx's row-scanning.
+func scanFlowStages(f *Flow, landingID, pwaID, pwaType, postlandingID *string) {
+	f.Landing.LandingID = deref(landingID)
+	f.Pwa.PwaID = deref(pwaID)
+	f.Pwa.PwaType = PwaType(deref(pwaType))
+	f.Postlanding.PostlandingID = deref(postlandingID)
+}
+
 // loadFlows mirrors routingstore.loadFlows's join shape but returns the
 // CRUD-facing Flow (network/offer ids for re-editing) rather than the
 // routing engine's resolved Destination (offer's live URL + active
 // status) — a genuinely different concern (editing vs deciding).
 func (r *Repository) loadFlows(ctx context.Context, orgID string, streamSetIDs []string) (map[string][]Flow, error) {
 	rows, err := r.db.Query(ctx, `
-		SELECT stream_set_id, id, name, active, weight,
+		SELECT stream_set_id, id, name, active, weight, `+flowStageColumns+`,
 		       destination_kind, destination_network_id, destination_offer_id, destination_url
 		FROM flows
 		WHERE stream_set_id = ANY($1) AND organization_id = $2
@@ -232,16 +243,22 @@ func (r *Repository) loadFlows(ctx context.Context, orgID string, streamSetIDs [
 	out := map[string][]Flow{}
 	for rows.Next() {
 		var (
-			setID     string
-			f         Flow
-			kind      string
-			networkID *string
-			offerID   *string
-			url       *string
+			setID                             string
+			f                                 Flow
+			landingID, pwaID, pwaType, postID *string
+			kind                              string
+			networkID, offerID, url           *string
 		)
-		if err := rows.Scan(&setID, &f.ID, &f.Name, &f.Active, &f.Weight, &kind, &networkID, &offerID, &url); err != nil {
+		if err := rows.Scan(
+			&setID, &f.ID, &f.Name, &f.Active, &f.Weight,
+			&f.Landing.Enabled, &landingID, &f.Landing.AsPwa,
+			&f.Pwa.Enabled, &pwaID, &pwaType,
+			&f.Postlanding.Enabled, &postID,
+			&kind, &networkID, &offerID, &url,
+		); err != nil {
 			return nil, fmt.Errorf("streamset: scanning flow: %w", err)
 		}
+		scanFlowStages(&f, landingID, pwaID, pwaType, postID)
 		f.Destination = Destination{
 			Kind:      routing.DestinationKind(kind),
 			NetworkID: deref(networkID),
@@ -344,6 +361,17 @@ func insertFilterGroup(ctx context.Context, tx pgx.Tx, orgID, streamSetID string
 	return nil
 }
 
+// nullIfEmpty turns "" into a nil *string — the flows table's
+// landing_id/pwa_id/pwa_type/postlanding_id columns are nullable, and
+// pwa_type additionally has a CHECK constraint that only NULL (never an
+// empty string) satisfies when the stage is unset.
+func nullIfEmpty(s string) *string {
+	if s == "" {
+		return nil
+	}
+	return &s
+}
+
 func insertFlows(ctx context.Context, tx pgx.Tx, orgID, streamSetID string, in []FlowInput) ([]Flow, error) {
 	flows := make([]Flow, len(in))
 	for i, f := range in {
@@ -355,14 +383,28 @@ func insertFlows(ctx context.Context, tx pgx.Tx, orgID, streamSetID string, in [
 			url = &f.Destination.URL
 		}
 		_, err := tx.Exec(ctx, `
-			INSERT INTO flows (id, organization_id, stream_set_id, name, active, weight, position, destination_kind, destination_network_id, destination_offer_id, destination_url)
-			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
-			flowID, orgID, streamSetID, f.Name, f.Active, f.Weight, i, f.Destination.Kind, networkID, offerID, url,
+			INSERT INTO flows (
+				id, organization_id, stream_set_id, name, active, weight, position,
+				landing_enabled, landing_id, landing_as_pwa,
+				pwa_enabled, pwa_id, pwa_type,
+				postlanding_enabled, postlanding_id,
+				destination_kind, destination_network_id, destination_offer_id, destination_url
+			)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)`,
+			flowID, orgID, streamSetID, f.Name, f.Active, f.Weight, i,
+			f.Landing.Enabled, nullIfEmpty(f.Landing.LandingID), f.Landing.AsPwa,
+			f.Pwa.Enabled, nullIfEmpty(f.Pwa.PwaID), nullIfEmpty(string(f.Pwa.PwaType)),
+			f.Postlanding.Enabled, nullIfEmpty(f.Postlanding.PostlandingID),
+			f.Destination.Kind, networkID, offerID, url,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("streamset: inserting flow: %w", err)
 		}
-		flows[i] = Flow{ID: flowID, Name: f.Name, Active: f.Active, Weight: f.Weight, Destination: f.Destination}
+		flows[i] = Flow{
+			ID: flowID, Name: f.Name, Active: f.Active, Weight: f.Weight,
+			Landing: f.Landing, Pwa: f.Pwa, Postlanding: f.Postlanding,
+			Destination: f.Destination,
+		}
 	}
 	return flows, nil
 }
@@ -553,7 +595,8 @@ func (r *Repository) loadFilterTreesTx(ctx context.Context, tx pgx.Tx, orgID, st
 
 func (r *Repository) loadFlowsTx(ctx context.Context, tx pgx.Tx, orgID, streamSetID string) ([]Flow, error) {
 	rows, err := tx.Query(ctx, `
-		SELECT id, name, active, weight, destination_kind, destination_network_id, destination_offer_id, destination_url
+		SELECT id, name, active, weight, `+flowStageColumns+`,
+		       destination_kind, destination_network_id, destination_offer_id, destination_url
 		FROM flows
 		WHERE stream_set_id = $1 AND organization_id = $2
 		ORDER BY position, id`,
@@ -567,15 +610,21 @@ func (r *Repository) loadFlowsTx(ctx context.Context, tx pgx.Tx, orgID, streamSe
 	flows := []Flow{}
 	for rows.Next() {
 		var (
-			f         Flow
-			kind      string
-			networkID *string
-			offerID   *string
-			url       *string
+			f                                 Flow
+			landingID, pwaID, pwaType, postID *string
+			kind                              string
+			networkID, offerID, url           *string
 		)
-		if err := rows.Scan(&f.ID, &f.Name, &f.Active, &f.Weight, &kind, &networkID, &offerID, &url); err != nil {
+		if err := rows.Scan(
+			&f.ID, &f.Name, &f.Active, &f.Weight,
+			&f.Landing.Enabled, &landingID, &f.Landing.AsPwa,
+			&f.Pwa.Enabled, &pwaID, &pwaType,
+			&f.Postlanding.Enabled, &postID,
+			&kind, &networkID, &offerID, &url,
+		); err != nil {
 			return nil, fmt.Errorf("streamset: scanning flow in tx: %w", err)
 		}
+		scanFlowStages(&f, landingID, pwaID, pwaType, postID)
 		f.Destination = Destination{Kind: routing.DestinationKind(kind), NetworkID: deref(networkID), OfferID: deref(offerID), URL: deref(url)}
 		flows = append(flows, f)
 	}
@@ -639,6 +688,24 @@ func (r *Repository) CampaignBelongsToOrg(ctx context.Context, orgID, campaignID
 func (r *Repository) NetworkBelongsToOrg(ctx context.Context, orgID, networkID string) (bool, error) {
 	var exists bool
 	err := r.db.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM networks WHERE id = $1 AND organization_id = $2)`, networkID, orgID).Scan(&exists)
+	return exists, err
+}
+
+func (r *Repository) LandingBelongsToOrg(ctx context.Context, orgID, landingID string) (bool, error) {
+	var exists bool
+	err := r.db.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM landings WHERE id = $1 AND organization_id = $2)`, landingID, orgID).Scan(&exists)
+	return exists, err
+}
+
+func (r *Repository) PwaBelongsToOrg(ctx context.Context, orgID, pwaID string) (bool, error) {
+	var exists bool
+	err := r.db.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM pwas WHERE id = $1 AND organization_id = $2)`, pwaID, orgID).Scan(&exists)
+	return exists, err
+}
+
+func (r *Repository) PostlandingBelongsToOrg(ctx context.Context, orgID, postlandingID string) (bool, error) {
+	var exists bool
+	err := r.db.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM postlandings WHERE id = $1 AND organization_id = $2)`, postlandingID, orgID).Scan(&exists)
 	return exists, err
 }
 

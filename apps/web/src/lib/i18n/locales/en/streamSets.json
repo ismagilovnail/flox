@@ -62,6 +62,20 @@
     "chooseOfferPlaceholder": "Choose offer",
     "redirectUrlPlaceholder": "https://example.com"
   },
+  "flowFunnel": {
+    "landing": "Landing",
+    "pwa": "PWA",
+    "postlanding": "Postlanding",
+    "chooseLandingPlaceholder": "Choose landing",
+    "choosePwaPlaceholder": "Choose PWA",
+    "choosePostlandingPlaceholder": "Choose postlanding",
+    "showAsPwa": "Show as PWA",
+    "pwaType": {
+      "internal": "Internal",
+      "external": "External",
+      "ios_app": "iOS app"
+    }
+  },
   "flowEditor": {
     "collapseAria": "Collapse flow",
     "expandAria": "Expand flow",
@@ -103,6 +117,10 @@
       "nameMin": "Name must be at least 2 characters",
       "urlInvalid": "Enter a valid URL",
       "chooseOffer": "Choose an offer",
+      "chooseLanding": "Choose a landing",
+      "choosePwa": "Choose a PWA",
+      "choosePwaType": "Choose a PWA type",
+      "choosePostlanding": "Choose a postlanding",
       "flowNameRequired": "Name is required",
       "weightNegative": "Weight can't be negative",
       "atLeastOneFlow": "At least one flow is required",
@@ -126,7 +144,7 @@
     "newButton": "New Stream Set",
     "loading": "Loading stream sets…",
     "loadError": "Couldn't load stream sets",
-    "loadNetworksOffersError": "Couldn't load networks/offers",
+    "loadNetworksOffersError": "Couldn't load networks/offers/landings/PWAs/postlandings",
     "emptyTitle": "No stream sets yet",
     "emptyDescription": "All traffic falls through to the campaign fallback URL until you add one.",
     "reorderError": "Couldn't reorder stream sets"

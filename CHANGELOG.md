@@ -5,6 +5,60 @@ per-phase, matching `CLAUDE.md`'s phase protocol. The one exception is
 [Between phases], below: spec amendments and the code changes that follow from
 them land between phases and would otherwise be invisible here.
 
+## [Flow CRUD] — Landing/PWA/Postlanding funnel stages restored on Flow
+
+### Scope
+
+Confirmed via `AskUserQuestion`: the base Flow entity (name/weight/
+active/destination) already has real CRUD, nested under Stream Sets
+(`docs/stream-sets.md`). What the Stream Sets phase deliberately dropped
+was the Landing → PWA → Postlanding funnel stages ahead of a Flow's
+Destination — the `flows` table (migration 00006) has always had the
+columns (`landing_id`/`landing_as_pwa`, `pwa_id`/`pwa_type`,
+`postlanding_id`), but no `internal/landing`/`pwa`/`postlanding` package
+existed at the time to pick from. They all exist for real now, so this
+phase wires the stages back in. Per-flow Pixels stays out: no
+`internal/pixel` package exists yet, and pixels actually attach to the
+Stream Set (`stream_set_pixels`, migration 00008), not the Flow.
+
+### Changed
+
+- `apps/internal/streamset`: `Flow`/`FlowInput` gained `Landing`/`Pwa`/
+  `Postlanding` fields (`FlowLanding`/`FlowPwa`/`FlowPostlanding`, each
+  an always-present `{enabled, ...}` struct so a disabled stage keeps its
+  last pick rather than losing it). `Service.checkFlowStagesBelongToOrg`
+  confirms every non-empty id belongs to the caller's org before it's
+  persisted (CLAUDE.md #5); `validateFlows` requires an id (and, for
+  PWA, a valid `pwaType`) whenever a stage is enabled.
+  `repository.go`'s `insertFlows`/`loadFlows`/`loadFlowsTx` read/write
+  the 7 new columns; `nullIfEmpty` converts the wire's `""` to `NULL` for
+  `pwa_type`'s CHECK constraint.
+- `apps/web`: new `features/stream-sets/flow-funnel.tsx` renders the
+  full Landing → PWA → Postlanding → Destination → Fallback chain,
+  delegating the last two nodes to the unchanged
+  `flow-destination-editor.tsx`. Fetches real `useLandings()`/
+  `usePwas()`/`usePostlandings()` alongside the existing networks/offers
+  queries. `stream-set-schema.ts` validates each stage the same way the
+  destination union already did. `lib/mock/flow-entities.ts` (the
+  `PwaType`/`PWA_TYPES` enum, never actually mock data) moved into
+  `lib/api/stream-sets.ts`.
+- `docs/landings.md`/`docs/pwa.md`/`docs/postlanding.md`: their Delete
+  sections' "no Flow CRUD exists yet to populate that column" notes
+  updated — the RESTRICT FK is real and reachable now.
+
+### Verified
+
+Backend: `go build/vet/gofmt/test ./...` all green, incl. 2 new
+`streamset` tests (full-funnel round-trip through Create+Get with real
+seeded landing/pwa/postlanding ids; validation rejecting an enabled
+stage with no id, an invalid `pwaType`, and a disabled stage referencing
+another org's postlanding id). Frontend: `tsc --noEmit`/`eslint`/
+`vitest run` (21 tests)/`next build` all clean. Full manual browser pass
+against the real `api`+`web` dev servers: enabled all three stages on a
+real stream set's flow, saved, reloaded fresh, and confirmed every
+selection (incl. `asPwa`/`pwaType`) round-tripped through the real
+Postgres-backed API. See `docs/stream-sets.md`.
+
 ## [i18n hydration fix] — server-side locale resolution closes the race deterministically
 
 ### Scope

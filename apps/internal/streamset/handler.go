@@ -56,10 +56,13 @@ func (h *Handler) get(w http.ResponseWriter, r *http.Request) {
 }
 
 type flowRequest struct {
-	Name        string      `json:"name"`
-	Active      bool        `json:"active"`
-	Weight      int         `json:"weight"`
-	Destination Destination `json:"destination"`
+	Name        string          `json:"name"`
+	Active      bool            `json:"active"`
+	Weight      int             `json:"weight"`
+	Landing     FlowLanding     `json:"landing"`
+	Pwa         FlowPwa         `json:"pwa"`
+	Postlanding FlowPostlanding `json:"postlanding"`
+	Destination Destination     `json:"destination"`
 }
 
 type createRequest struct {
@@ -72,7 +75,11 @@ type createRequest struct {
 func toFlowInputs(reqs []flowRequest) []FlowInput {
 	out := make([]FlowInput, len(reqs))
 	for i, f := range reqs {
-		out[i] = FlowInput{Name: f.Name, Active: f.Active, Weight: f.Weight, Destination: f.Destination}
+		out[i] = FlowInput{
+			Name: f.Name, Active: f.Active, Weight: f.Weight,
+			Landing: f.Landing, Pwa: f.Pwa, Postlanding: f.Postlanding,
+			Destination: f.Destination,
+		}
 	}
 	return out
 }

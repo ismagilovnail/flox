@@ -39,11 +39,32 @@ export type ApiDestination =
   | { kind: "offer"; networkId: string; offerId: string }
   | { kind: "redirect"; url: string };
 
+/** The per-Flow display mode for the PWA stage (how *this* flow shows the
+ * PWA: an internal page, an external redirect, or an iOS app-store link) —
+ * independent of which pwa manifest (pwaId) is selected. Mirrors
+ * apps/internal/streamset.PwaType and the flows table's own pwa_type CHECK
+ * constraint (migration 00006). Not a real entity (unlike Landing/Pwa/
+ * Postlanding below), so it has no id of its own. */
+export type PwaType = "internal" | "external" | "ios_app";
+export const PWA_TYPES: PwaType[] = ["internal", "external", "ios_app"];
+
+/** §25's canonical funnel stages a Flow can optionally run before its
+ * Destination (Landing -> PWA -> Postlanding -> Destination). Each stage
+ * always has an `enabled` flag independent of its id — toggling a stage
+ * off keeps its previous pick around rather than clearing it, matching
+ * apps/internal/streamset's own FlowLanding/FlowPwa/FlowPostlanding. */
+export type ApiFlowLanding = { enabled: boolean; landingId: string; asPwa: boolean };
+export type ApiFlowPwa = { enabled: boolean; pwaId: string; pwaType: PwaType | "" };
+export type ApiFlowPostlanding = { enabled: boolean; postlandingId: string };
+
 export type ApiFlow = {
   id: string;
   name: string;
   active: boolean;
   weight: number;
+  landing: ApiFlowLanding;
+  pwa: ApiFlowPwa;
+  postlanding: ApiFlowPostlanding;
   destination: ApiDestination;
 };
 

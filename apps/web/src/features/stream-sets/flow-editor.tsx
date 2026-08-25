@@ -11,8 +11,11 @@ import { Mono } from "@/components/ui/typography";
 import { Switch } from "@/components/ui/switch";
 import type { Network } from "@/lib/api/networks";
 import type { Offer } from "@/lib/api/offers";
+import type { Landing } from "@/lib/api/landings";
+import type { Pwa } from "@/lib/api/pwa";
+import type { Postlanding } from "@/lib/api/postlanding";
 import type { StreamSetFormValues } from "@/features/stream-sets/stream-set-schema";
-import { FlowDestinationEditor } from "@/features/stream-sets/flow-destination-editor";
+import { FlowFunnel } from "@/features/stream-sets/flow-funnel";
 import { TagBadgeList } from "@/features/tags/tag-badge-list";
 
 type FlowFormValue = StreamSetFormValues["flows"][number];
@@ -23,6 +26,9 @@ export function FlowEditor({
   fallbackUrl,
   networks,
   offers,
+  landings,
+  pwas,
+  postlandings,
   onChange,
   onRemove,
   onDuplicate,
@@ -33,6 +39,9 @@ export function FlowEditor({
   fallbackUrl: string;
   networks: Network[];
   offers: Offer[];
+  landings: Landing[];
+  pwas: Pwa[];
+  postlandings: Postlanding[];
   onChange: (patch: Partial<FlowFormValue>) => void;
   onRemove: () => void;
   onDuplicate: () => void;
@@ -93,7 +102,16 @@ export function FlowEditor({
 
       {expanded && (
         <div className="px-3 pt-1">
-          <FlowDestinationEditor flow={flow} fallbackUrl={fallbackUrl} networks={networks} offers={offers} onChange={onChange} />
+          <FlowFunnel
+            flow={flow}
+            fallbackUrl={fallbackUrl}
+            networks={networks}
+            offers={offers}
+            landings={landings}
+            pwas={pwas}
+            postlandings={postlandings}
+            onChange={onChange}
+          />
         </div>
       )}
     </Card>

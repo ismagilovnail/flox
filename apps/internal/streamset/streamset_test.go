@@ -245,6 +245,94 @@ func TestOfferDestinationDerivesNetworkFromOffer(t *testing.T) {
 	}
 }
 
+// TestFlowFunnelStagesRoundTrip covers the phase this test file's own
+// commit added: Landing/PWA/Postlanding stages wired onto a Flow on top of
+// its Destination, now that internal/landing, internal/pwa, and
+// internal/postlanding all exist for real — see docs/stream-sets.md's
+// "Landing/PWA/Postlanding stages" section.
+func TestFlowFunnelStagesRoundTrip(t *testing.T) {
+	pool := mustPool(t)
+	ctx := context.Background()
+	orgID := seedOrg(t, ctx, pool)
+	campaignID := seedCampaign(t, ctx, pool, orgID)
+	landingID := seedLanding(t, ctx, pool, orgID)
+	pwaID := seedPwa(t, ctx, pool, orgID)
+	postlandingID := seedPostlanding(t, ctx, pool, orgID)
+
+	svc := streamset.NewService(streamset.NewRepository(pool))
+	root := streamset.FilterNode{Kind: streamset.NodeGroup, Joiner: routing.JoinAND}
+
+	flow := redirectFlow("Primary", 100)
+	flow.Landing = streamset.FlowLanding{Enabled: true, LandingID: landingID, AsPwa: true}
+	flow.Pwa = streamset.FlowPwa{Enabled: true, PwaID: pwaID, PwaType: streamset.PwaTypeExternal}
+	flow.Postlanding = streamset.FlowPostlanding{Enabled: true, PostlandingID: postlandingID}
+
+	created, err := svc.Create(ctx, orgID, campaignID, streamset.CreateInput{
+		Name: "Full Funnel", RootFilter: root, Flows: []streamset.FlowInput{flow},
+	})
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	got := created.Flows[0]
+	if !got.Landing.Enabled || got.Landing.LandingID != landingID || !got.Landing.AsPwa {
+		t.Fatalf("Landing = %+v, want enabled with id %q and asPwa true", got.Landing, landingID)
+	}
+	if !got.Pwa.Enabled || got.Pwa.PwaID != pwaID || got.Pwa.PwaType != streamset.PwaTypeExternal {
+		t.Fatalf("Pwa = %+v, want enabled with id %q and type external", got.Pwa, pwaID)
+	}
+	if !got.Postlanding.Enabled || got.Postlanding.PostlandingID != postlandingID {
+		t.Fatalf("Postlanding = %+v, want enabled with id %q", got.Postlanding, postlandingID)
+	}
+
+	fetched, err := svc.Get(ctx, orgID, campaignID, created.ID)
+	if err != nil {
+		t.Fatalf("Get: %v", err)
+	}
+	if fetched.Flows[0].Landing != got.Landing || fetched.Flows[0].Pwa != got.Pwa || fetched.Flows[0].Postlanding != got.Postlanding {
+		t.Fatalf("Get round-trip stages = %+v, want to match Create's response %+v", fetched.Flows[0], got)
+	}
+}
+
+func TestFlowFunnelStageValidation(t *testing.T) {
+	pool := mustPool(t)
+	ctx := context.Background()
+	orgID := seedOrg(t, ctx, pool)
+	campaignID := seedCampaign(t, ctx, pool, orgID)
+
+	svc := streamset.NewService(streamset.NewRepository(pool))
+	root := streamset.FilterNode{Kind: streamset.NodeGroup, Joiner: routing.JoinAND}
+
+	t.Run("landing enabled without an id", func(t *testing.T) {
+		flow := redirectFlow("Primary", 100)
+		flow.Landing = streamset.FlowLanding{Enabled: true}
+		_, err := svc.Create(ctx, orgID, campaignID, streamset.CreateInput{Name: "X", RootFilter: root, Flows: []streamset.FlowInput{flow}})
+		if err == nil {
+			t.Fatal("Create with landing enabled but no landingId succeeded, want a validation error")
+		}
+	})
+
+	t.Run("pwa enabled with an invalid type", func(t *testing.T) {
+		pwaID := seedPwa(t, ctx, pool, orgID)
+		flow := redirectFlow("Primary", 100)
+		flow.Pwa = streamset.FlowPwa{Enabled: true, PwaID: pwaID, PwaType: "desktop"}
+		_, err := svc.Create(ctx, orgID, campaignID, streamset.CreateInput{Name: "X", RootFilter: root, Flows: []streamset.FlowInput{flow}})
+		if err == nil {
+			t.Fatal("Create with an invalid pwaType succeeded, want a validation error")
+		}
+	})
+
+	t.Run("postlanding id from another org is rejected even when disabled", func(t *testing.T) {
+		otherOrg := seedOrg(t, ctx, pool)
+		foreignPostlandingID := seedPostlanding(t, ctx, pool, otherOrg)
+		flow := redirectFlow("Primary", 100)
+		flow.Postlanding = streamset.FlowPostlanding{Enabled: false, PostlandingID: foreignPostlandingID}
+		_, err := svc.Create(ctx, orgID, campaignID, streamset.CreateInput{Name: "X", RootFilter: root, Flows: []streamset.FlowInput{flow}})
+		if err == nil {
+			t.Fatal("Create referencing another org's postlanding id succeeded, want a not-found/validation error")
+		}
+	})
+}
+
 func TestReorderRewritesPriority(t *testing.T) {
 	pool := mustPool(t)
 	ctx := context.Background()
@@ -434,6 +522,46 @@ func seedOffer(t *testing.T, ctx context.Context, pool *pgxpool.Pool, orgID, net
 	)
 	if err != nil {
 		t.Fatalf("seeding offer: %v", err)
+	}
+	return id
+}
+
+func seedLanding(t *testing.T, ctx context.Context, pool *pgxpool.Pool, orgID string) string {
+	t.Helper()
+	id := idgen.New()
+	_, err := pool.Exec(ctx,
+		`INSERT INTO landings (id, organization_id, name, type, url) VALUES ($1, $2, $3, $4, $5)`,
+		id, orgID, "Test Landing", "external", "https://example.com/landing",
+	)
+	if err != nil {
+		t.Fatalf("seeding landing: %v", err)
+	}
+	return id
+}
+
+func seedPwa(t *testing.T, ctx context.Context, pool *pgxpool.Pool, orgID string) string {
+	t.Helper()
+	id := idgen.New()
+	_, err := pool.Exec(ctx,
+		`INSERT INTO pwas (id, organization_id, name, short_name, theme_color, background_color, icon_url, start_url)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+		id, orgID, "Test PWA", "TPWA", "#000000", "#ffffff", "https://example.com/icon.png", "/",
+	)
+	if err != nil {
+		t.Fatalf("seeding pwa: %v", err)
+	}
+	return id
+}
+
+func seedPostlanding(t *testing.T, ctx context.Context, pool *pgxpool.Pool, orgID string) string {
+	t.Helper()
+	id := idgen.New()
+	_, err := pool.Exec(ctx,
+		`INSERT INTO postlandings (id, organization_id, name, url) VALUES ($1, $2, $3, $4)`,
+		id, orgID, "Test Postlanding", "https://example.com/postlanding",
+	)
+	if err != nil {
+		t.Fatalf("seeding postlanding: %v", err)
 	}
 	return id
 }

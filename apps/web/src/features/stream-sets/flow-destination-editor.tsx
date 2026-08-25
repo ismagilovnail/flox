@@ -25,11 +25,12 @@ function Connector() {
   return <div className="ml-[15px] h-3 w-px bg-border" />;
 }
 
-/** Replaces FlowFunnel's Landing/PWA/Postlanding/Offer/Redirect/Fallback
- * chain with just Offer-or-Redirect + Fallback — the three dropped stages
- * have no backend (no internal/landing, internal/pwa, or
- * internal/postlanding package exists yet), so there's nothing real for
- * their pickers to select from. See docs/stream-sets.md. */
+/** The terminal Offer-or-Redirect Destination + read-only Fallback preview
+ * — the last two nodes of FlowFunnel's chain (flow-funnel.tsx renders the
+ * Landing/PWA/Postlanding stages ahead of this and delegates here for the
+ * rest). Kept as its own component/file since a Flow always has exactly
+ * one destination even when every optional stage ahead of it is
+ * disabled — this part of the form is never itself optional. */
 export function FlowDestinationEditor({
   flow,
   fallbackUrl,

@@ -22,6 +22,9 @@ import { genId } from "@/lib/id";
 import type { FilterGroupNode } from "@/lib/filters";
 import type { Network } from "@/lib/api/networks";
 import type { Offer } from "@/lib/api/offers";
+import type { Landing } from "@/lib/api/landings";
+import type { Pwa } from "@/lib/api/pwa";
+import type { Postlanding } from "@/lib/api/postlanding";
 import { FilterGroupBuilder } from "@/features/stream-sets/filter-group-builder";
 import { FlowEditor } from "@/features/stream-sets/flow-editor";
 import { buildStreamSetFormSchema, type StreamSetFormValues } from "@/features/stream-sets/stream-set-schema";
@@ -34,6 +37,9 @@ export function StreamSetFormSheet({
   defaultValues,
   networks,
   offers,
+  landings,
+  pwas,
+  postlandings,
   title,
   submitLabel,
   onSubmit,
@@ -43,6 +49,9 @@ export function StreamSetFormSheet({
   defaultValues: StreamSetFormValues;
   networks: Network[];
   offers: Offer[];
+  landings: Landing[];
+  pwas: Pwa[];
+  postlandings: Postlanding[];
   title: string;
   submitLabel: string;
   onSubmit: (values: StreamSetFormValues) => void;
@@ -160,6 +169,9 @@ export function StreamSetFormSheet({
                     fallbackUrl={fallbackUrl}
                     networks={networks}
                     offers={offers}
+                    landings={landings}
+                    pwas={pwas}
+                    postlandings={postlandings}
                     onChange={(patch) => setValue(`flows.${index}`, { ...flow, ...patch }, { shouldDirty: true, shouldValidate: true })}
                     onRemove={() => flowArray.remove(index)}
                     onDuplicate={() =>
@@ -187,6 +199,9 @@ export function StreamSetFormSheet({
                     name: `Flow ${flowArray.fields.length + 1}`,
                     active: true,
                     weight: 0,
+                    landing: { enabled: false, landingId: "", asPwa: false },
+                    pwa: { enabled: false, pwaId: "", pwaType: "" },
+                    postlanding: { enabled: false, postlandingId: "" },
                     destination: { kind: "offer", networkId: networks[0]?.id ?? "", offerId: "" },
                   })
                 }

@@ -69,12 +69,65 @@ type Destination struct {
 	URL string `json:"url,omitempty"`
 }
 
+// PwaType is the per-Flow display mode for the PWA stage (how *this* flow
+// shows the PWA: an internal page, an external redirect, or an iOS
+// app-store link) — independent of which pwa manifest (pwa_id) is
+// selected. Mirrors the flows table's own pwa_type CHECK constraint
+// (migration 00006) and apps/web's PWA_TYPES.
+type PwaType string
+
+const (
+	PwaTypeInternal PwaType = "internal"
+	PwaTypeExternal PwaType = "external"
+	PwaTypeIOSApp   PwaType = "ios_app"
+)
+
+func (t PwaType) Valid() bool {
+	switch t {
+	case PwaTypeInternal, PwaTypeExternal, PwaTypeIOSApp:
+		return true
+	default:
+		return false
+	}
+}
+
+// FlowLanding/FlowPwa/FlowPostlanding are the funnel stages a Flow can
+// optionally run before its Destination (§25's canonical funnel:
+// Landing -> PWA -> Postlanding -> Destination). Each carries its own
+// Enabled flag independent of whether an id is set — matching the flows
+// table's own landing_enabled/pwa_enabled/postlanding_enabled columns,
+// which are separate from the nullable *_id columns specifically so an
+// operator can toggle a stage off without losing their previous pick.
+type FlowLanding struct {
+	Enabled   bool   `json:"enabled"`
+	LandingID string `json:"landingId,omitempty"`
+	// AsPwa: show this landing as an installable PWA shell. Independent
+	// of the Pwa stage below (its own pwa_id/pwa_type pick a *separate*
+	// PWA manifest to install after the landing, if that stage is also
+	// enabled) — this flag only affects how the landing itself renders.
+	AsPwa bool `json:"asPwa"`
+}
+
+type FlowPwa struct {
+	Enabled bool    `json:"enabled"`
+	PwaID   string  `json:"pwaId,omitempty"`
+	PwaType PwaType `json:"pwaType,omitempty"`
+}
+
+type FlowPostlanding struct {
+	Enabled       bool   `json:"enabled"`
+	PostlandingID string `json:"postlandingId,omitempty"`
+}
+
 type Flow struct {
-	ID          string      `json:"id"`
-	Name        string      `json:"name"`
-	Active      bool        `json:"active"`
-	Weight      int         `json:"weight"`
-	Destination Destination `json:"destination"`
+	ID          string          `json:"id"`
+	Name        string          `json:"name"`
+	Active      bool            `json:"active"`
+	Weight      int             `json:"weight"`
+	Landing     FlowLanding     `json:"landing"`
+	Pwa         FlowPwa         `json:"pwa"`
+	Postlanding FlowPostlanding `json:"postlanding"`
+	Destination Destination     `json:"destination"`
 }
 
 // FlowInput omits ID — Flows are replaced wholesale on every write
@@ -84,6 +137,9 @@ type FlowInput struct {
 	Name        string
 	Active      bool
 	Weight      int
+	Landing     FlowLanding
+	Pwa         FlowPwa
+	Postlanding FlowPostlanding
 	Destination Destination
 }
 

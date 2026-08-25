@@ -36,8 +36,11 @@ shape as `landing.Service` and `network.Service`.
 ## Delete: same defensive-not-tested FK precedent as `landing`/`network`
 
 `flows.pwa_id` (migration 00006) has no `ON DELETE` clause (defaults to
-RESTRICT), but no Flow CRUD exists yet to populate that column.
-`pwa.Repository.Delete` catches Postgres `23503` into `apierror.Conflict`
+RESTRICT). A later phase (see `docs/stream-sets.md`'s "Landing/PWA/
+Postlanding stages: restored" section) wired Flow CRUD to actually
+populate this column, so the RESTRICT is real and reachable now, not
+just defensive scaffolding. `pwa.Repository.Delete` catches Postgres
+`23503` into `apierror.Conflict`
 defensively, matching `landing.Repository.Delete`'s own comment — and,
 deliberately matching that same precedent, isn't given a dedicated
 integration test, since seeding a real `flows` row would mean seeding a

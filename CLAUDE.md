@@ -19,74 +19,64 @@ referenced below as §N).
 ## CURRENT STATE — UPDATE THIS EVERY PHASE
 
 ```
-CURRENT PHASE : PHASE (unnumbered) — i18n hydration race, deterministic fix
-STATUS        : done — closes the known issue the Postlanding phase left
-                open (mitigated, not eliminated, by a requestIdleCallback-
-                delayed changeLanguage() call). An AskUserQuestion
-                confirmed the trade-off before implementing: the only
-                fully deterministic fix needs the SERVER to know the
-                locale before rendering (a cookie, read via next/headers'
-                cookies()/headers()), which opts every route out of
-                static prerendering into per-request dynamic rendering —
-                accepted (confirmed via next build: all 26 routes ○
-                Static -> ƒ Dynamic), since every route already fetches
-                real data client-side via TanStack Query.
-                app/layout.tsx is now async, resolves locale server-side
-                (persisted cookie -> Accept-Language header -> default)
-                via new lib/i18n/locale.ts, renders <html lang> and
-                <I18nProvider initialLocale> directly — client hydrates
-                against the exact same value, never re-derived. No post-
-                mount switch left to race a Suspense-deferred hydration
-                commit, because there's nothing left to switch TO after
-                mount for the matching case.
-                lib/i18n/locale.ts split out from config.ts specifically
-                because app/layout.tsx (a Server Component) can't import
-                anything that pulls in react-i18next — it creates a React
-                context at module load, which throws under the
-                react-server build (no createContext export). Hit this
-                literally as a next build failure mid-phase
-                ("createContext is not a function" collecting page data
-                for /landings), fixed by the split; config.ts re-exports
-                locale.ts's names for existing "use client" call sites.
-                createI18nInstance(locale) replaces the old shared
-                module-level i18next singleton for the app's real runtime
-                path — I18nProvider's render now runs once per SERVER
-                REQUEST (concurrent requests, in principle different
-                locales, same Node process) as well as once per browser
-                tab, so a shared mutable global would race; useState(()
-                => createI18nInstance(...)) gives each render path its
-                own instance. Persisting a switcher choice now writes
-                document.cookie directly (no Server Action/Route Handler
-                needed — cookies reach the server regardless of how
-                they're set).
-                Verified: tsc --noEmit/eslint/vitest run (21 tests, up
-                from 15 — new resolveLocale precedence + createI18nInstance
-                isolation tests)/next build all clean. curl (no browser)
-                confirmed the raw server HTML itself is correct pre-JS:
-                Cookie: flox-locale=ru and Accept-Language: ru-RU (no
-                cookie) both produced <html lang="ru"> with Russian text
-                already in the response body. Full manual pass against
-                next start (production server, not next dev) + real api:
-                10 full fresh browser navigations across /postlanding,
-                /landings, /pwa (4 with ?gallery=<id>, the exact condition
-                the original race depended on) — zero hydration errors,
-                read from console each time, not screenshots. Confirmed
-                the live language switcher still works instantly and a
-                subsequent fresh navigation correctly renders the newly-
-                persisted choice server-side. Go backend untouched this
-                phase. See docs/i18n-hydration-fix.md;
-                docs/frontend-i18n.md updated to drop the now-resolved
-                "Server-side/SSR-perfect locale rendering" deferred item.
-LAST COMMIT   : fix(i18n): resolve locale server-side via cookie, closing
-                the hydration race deterministically
+CURRENT PHASE : PHASE (unnumbered) — Flow CRUD: Landing/PWA/Postlanding
+                funnel stages restored
+STATUS        : done — confirmed via AskUserQuestion that the base Flow
+                entity already had real CRUD (nested under Stream Sets,
+                docs/stream-sets.md); what was missing was the Landing ->
+                PWA -> Postlanding funnel stages ahead of a Flow's
+                Destination, dropped in that earlier phase only because
+                internal/landing/pwa/postlanding didn't exist yet. They
+                do now, so this phase wires them back in — data layer
+                only (Postgres read/write + validation), not the
+                tracker's actual redirect-serving logic over these
+                stages. Per-flow Pixels stays excluded: no internal/pixel
+                package exists, and pixels actually attach to the Stream
+                Set (stream_set_pixels, migration 00008), not the Flow —
+                CLAUDE.md's own "per-flow Pixels" phrasing was imprecise.
+                Backend: streamset.Flow/FlowInput gained Landing/Pwa/
+                Postlanding fields (FlowLanding/FlowPwa/FlowPostlanding,
+                each an always-present {enabled, ...} struct so a
+                disabled stage keeps its last pick). checkFlowStagesBelo
+                ngToOrg confirms every non-empty id belongs to the
+                caller's org (CLAUDE.md #5); validateFlows requires an id
+                (and a valid pwaType for PWA) whenever a stage is
+                enabled. nullIfEmpty converts the wire's "" to NULL for
+                pwa_type's CHECK constraint.
+                Frontend: new flow-funnel.tsx renders the full Landing ->
+                PWA -> Postlanding -> Destination -> Fallback chain,
+                delegating the last two nodes to the unchanged
+                flow-destination-editor.tsx; fetches real useLandings()/
+                usePwas()/usePostlandings(). stream-set-schema.ts
+                validates each stage the same way the destination union
+                already did. lib/mock/flow-entities.ts (never actually
+                mock data) moved into lib/api/stream-sets.ts.
+                Verified: go build/vet/gofmt/test ./... all green incl. 2
+                new streamset tests (full-funnel round-trip through
+                Create+Get; validation rejecting enabled-without-id, an
+                invalid pwaType, and a disabled stage referencing another
+                org's postlanding id). tsc --noEmit/eslint/vitest run (21
+                tests)/next build all clean. Full manual browser pass
+                against the real running api+web dev servers: enabled
+                all three stages on the pre-existing "i18n Test Set"
+                fixture's flow (real landing + "Show as PWA", real PWA
+                incl. switching pwaType Internal->External, real
+                postlanding), saved, reloaded fresh, reopened the edit
+                form — every selection round-tripped through the real
+                Postgres-backed API. Fixture reverted to its original
+                all-disabled state directly in Postgres afterward;
+                throwaway landing/pwa/postlanding test rows deleted.
+                See docs/stream-sets.md's "Landing/PWA/Postlanding
+                stages: restored" section.
+LAST COMMIT   : feat(routing): restore Landing/PWA/Postlanding funnel
+                stages on Flow
 NEXT          : confirm scope before starting. No open known issues
-                remain from prior phases. Candidates: per-flow Pixels
-                CRUD (blocked on Flow CRUD not existing yet — pixels
-                attach to flows); FB/TikTok ad-spend import (§74's
-                CostProvider interface, the "later" half of §27-COST —
-                no backend at all yet, a large phase); or a third i18n
-                locale (cheap per docs/frontend-i18n.md, but none has
-                been requested).
+                remain from prior phases. Candidates: per-flow... er,
+                per-STREAM-SET Pixels CRUD (needs a new internal/pixel
+                package); FB/TikTok ad-spend import (§74's CostProvider
+                interface, the "later" half of §27-COST — no backend at
+                all yet, a large phase); or a third i18n locale (cheap
+                per docs/frontend-i18n.md, but none has been requested).
 ```
 
 > At the end of every phase: update the four lines above, add a CHANGELOG entry,
