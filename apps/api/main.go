@@ -13,6 +13,7 @@ import (
 	"github.com/ClickHouse/clickhouse-go/v2/lib/driver"
 	"github.com/go-chi/chi/v5"
 
+	"github.com/ismagilovnail/flox/apps/internal/adaccount"
 	"github.com/ismagilovnail/flox/apps/internal/analytics"
 	"github.com/ismagilovnail/flox/apps/internal/attribution"
 	"github.com/ismagilovnail/flox/apps/internal/campaign"
@@ -120,6 +121,12 @@ func run() error {
 	srv.Mux().Route("/traffic-sources", func(r chi.Router) {
 		r.Use(tenant.Middleware)
 		trafficSourceHandler.Register(r)
+	})
+
+	adAccountHandler := adaccount.NewHandler(adaccount.NewService(adaccount.NewRepository(db)), logger)
+	srv.Mux().Route("/traffic-sources/{id}/connection", func(r chi.Router) {
+		r.Use(tenant.Middleware)
+		adAccountHandler.Register(r)
 	})
 
 	networkHandler := network.NewHandler(network.NewService(network.NewRepository(db)), logger)

@@ -19,64 +19,79 @@ referenced below as §N).
 ## CURRENT STATE — UPDATE THIS EVERY PHASE
 
 ```
-CURRENT PHASE : PHASE (unnumbered) — Stream Set <-> Pixel attachment
-                (stream_set_pixels), plus a real bug fix
-STATUS        : done — closes out the Landing/PWA/Postlanding/Pixels
-                CRUD sequence: stream_set_pixels (migration 00008) now
-                wired so a Stream Set can fire zero or more real Pixels.
-                Stream-Set-level many-to-many, deliberately not per-Flow
-                — a pixel's own events selection decides WHEN it fires;
-                pixelIds only decides whether it's eligible to for
-                traffic matching that set.
-                Backend: streamset.StreamSet/CreateInput/UpdateInput
-                gained PixelIDs []string; checkPixelIDsBelongToOrg (same
-                never-trust-a-foreign-id reasoning as
-                checkFlowStagesBelongToOrg, CLAUDE.md #5);
-                insertPixelIDs/loadPixelIDs/loadPixelIDsTx mirror
-                insertFlows' replace-wholesale shape. Duplicate copies
-                PixelIDs verbatim.
-                Frontend: stream-set-schema.ts's pixelIds (no .min(1) —
-                zero pixels is normal); stream-set-form-sheet.tsx
-                renders a MultiSelect fed by a new usePixels() fetch.
-                CAUGHT AND FIXED A REAL PRE-EXISTING BUG from the Flow
-                CRUD (funnel-stages) phase: FlowLanding/FlowPwa/
-                FlowPostlanding's id/type fields had json:"...,omitempty"
-                — for a disabled stage (the common case, previously
-                untested by any Update), that dropped the key from the
-                wire entirely instead of sending "". apps/web's
-                corresponding types declare those fields required, so
-                the missing key deserialized to undefined, which
-                z.string()/z.enum([...,""]) both reject. Result: EVERY
-                Stream Set Update silently failed whenever any flow had
-                a disabled stage (near-always) — react-hook-form's
-                default no-onInvalid behavior is a silent no-op, nothing
-                was ever visibly wrong. Create was unaffected. Fixed by
-                dropping omitempty from all four fields. Full diagnostic
-                trail (submitCount/network inspection, raw curl
-                confirming the missing keys, re-verification after the
-                fix) in docs/stream-sets.md.
+CURRENT PHASE : PHASE (unnumbered) — Ad Account Connections, Phase A of
+                FB/TikTok ad-spend import (credential storage)
+STATUS        : done — first slice of §74/§27-COST's ad-spend import,
+                deliberately split into two phases via AskUserQuestion:
+                this phase stores credentials; a later, separate phase
+                builds the real Facebook/TikTok API clients + sync job
+                (only structurally testable, no live Meta/TikTok app
+                credentials exist here). Also confirmed via
+                AskUserQuestion: no OAuth flow (needs a registered app
+                with a public HTTPS callback, doesn't exist in this
+                environment) — an operator pastes a long-lived access
+                token + ad account id instead, fully verifiable end-to-
+                end. traffic_sources.cost_integration (facebook_ads/
+                tiktok_ads) already recorded intent from an earlier
+                phase; this phase plugs a real credential into it.
+                New apps/internal/adaccount package + migration 00018
+                (ad_account_connections: one row per traffic source,
+                UNIQUE on traffic_source_id, no separate status column —
+                the row's existence IS "connected"). Wired at
+                GET/PATCH/DELETE /traffic-sources/{id}/connection (PATCH
+                not PUT, matching this codebase's own convention).
+                access_token stored in plain text (no KMS infra exists
+                anywhere yet) but the JSON-response Connection type has
+                no AccessToken field at all — only a SQL-computed
+                TokenPreview (last 4 chars) is ever read back; flagged as
+                real follow-up hardening, not silently deferred. Declares
+                the §74 CostProvider interface + Credentials/
+                DailySpendRecord types now (nothing calls them yet) so
+                this phase's storage shape is provably sufficient for a
+                later real adapter, not guessed at.
+                Frontend: new AdAccountConnectionSection renders inside
+                the existing Traffic Source edit sheet (SourceFormSheet)
+                whenever the LIVE (useWatch, not defaultValues)
+                costIntegration value is facebook_ads/tiktok_ads.
+                CAUGHT AND FIXED A REAL BUG during this phase's own
+                manual testing: the connect form used a nested <form>
+                inside SourceFormSheet's own outer <form> (invalid HTML)
+                — Chrome's actual behavior fired a native GET submit on
+                "Connect" that put every field, INCLUDING THE RAW ACCESS
+                TOKEN, into the URL as a query string (reproduced live:
+                ?adAccountId=...&accessToken=... in the address bar).
+                Exactly the "never put sensitive data in URL params"
+                case. Fixed by dropping the inner <form> (a plain <div>,
+                button changed to type="button" calling
+                form.handleSubmit(submit) directly from onClick, plus a
+                manual onKeyDown for Enter-to-submit). Full trail in
+                docs/ad-account-connections.md.
                 Verified: go build/vet/gofmt/test ./... all green incl.
-                2 new streamset tests (full pixel-attachment round-trip
-                through Create/Get/Update/Duplicate; unknown and
-                cross-org pixel id rejection). tsc --noEmit/eslint/
-                vitest run (21 tests)/next build all clean. Full manual
-                browser pass against the real running api+web dev
-                servers: created/edited/duplicated a stream set with
-                pixel attachments, raw curl cross-checks of persisted
-                pixelIds at each step — this is where the omitempty bug
-                was caught, fixed, and re-verified (PATCH now returns
-                200, confirmed previously silent/never-sent). Test rows
-                deleted afterward; the shared "i18n Test Set" fixture
-                was never mutated this phase. See docs/stream-sets.md's
-                "Stream Set <-> Pixel attachment" section.
-LAST COMMIT   : fix(streamset): wire Stream Set <-> Pixel attachment,
-                fix silent Update-blocking omitempty bug
+                new adaccount_test.go (connect/get/reconnect-replaces-in-
+                place/disconnect; rejects cost_integration none/manual,
+                accepts tiktok_ads; invalid-shape validation; cross-
+                tenant isolation). tsc --noEmit/eslint/vitest run (21
+                tests)/next build all clean. Full manual browser pass:
+                switched a fixture's costIntegration live (section
+                appeared immediately), confirmed connecting before
+                saving is correctly rejected (422, cost_integration still
+                'none' in Postgres), saved, reconnected — this is where
+                the nested-form bug was caught, fixed, and re-verified
+                (PATCH now 200, no URL leak) — reloaded fresh (round-trip
+                confirmed), disconnected (DELETE 204, 0 rows left),
+                confirmed the section reverted to its empty form. Fixture
+                reverted to cost_integration='none' afterward.
+LAST COMMIT   : feat(adaccount): store ad-network account connections
+                (Phase A of FB/TikTok cost import), fix a token-in-URL
+                bug caught during testing
 NEXT          : confirm scope before starting. No open known issues
-                remain. Candidates: FB/TikTok ad-spend import (§74's
-                CostProvider interface, the "later" half of §27-COST —
-                no backend at all yet, a large phase); or a third i18n
-                locale (cheap per docs/frontend-i18n.md, but none has
-                been requested).
+                remain. Candidates: Phase B of FB/TikTok ad-spend import
+                (real Facebook Ads/TikTok Ads API client adapters +
+                scheduled sync into cost_entries, implementing the
+                CostProvider interface adaccount already declares — only
+                structurally testable, no live Meta/TikTok app
+                credentials exist here); or a third i18n locale (cheap
+                per docs/frontend-i18n.md, but none has been requested).
 ```
 
 > At the end of every phase: update the four lines above, add a CHANGELOG entry,

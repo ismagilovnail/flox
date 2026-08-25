@@ -163,6 +163,7 @@ function SourceFormDialog({ target, onClose }: { target: TrafficSource | null; o
       title={target ? t("form.titleEdit", { name: target.name }) : t("form.titleNew")}
       submitLabel={target ? t("form.submitEdit") : t("form.submitCreate")}
       showStatus={!!target}
+      sourceId={target?.id}
       defaultValues={
         target
           ? {

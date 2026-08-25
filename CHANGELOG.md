@@ -5,6 +5,68 @@ per-phase, matching `CLAUDE.md`'s phase protocol. The one exception is
 [Between phases], below: spec amendments and the code changes that follow from
 them land between phases and would otherwise be invisible here.
 
+## [Ad Account Connections] — Phase A of FB/TikTok ad-spend import: credential storage
+
+### Scope
+
+First slice of §74/§27-COST's ad-spend import, split into two phases
+(confirmed via `AskUserQuestion`): this phase stores ad-account
+credentials so a later phase can pull real spend; that later phase's
+Facebook/TikTok API clients and sync job aren't built yet. Also
+confirmed: no live Meta/TikTok OAuth app exists in this environment (no
+public HTTPS callback URL to register), so connecting an account is a
+manual "paste an access token + ad account id" form rather than an OAuth
+consent flow — fully buildable and verifiable end-to-end here, unlike a
+real OAuth redirect/callback pair would be. `traffic_sources.cost_integration`
+already recorded *intent* (`facebook_ads`/`tiktok_ads`, from an earlier
+phase); this phase is what plugs a real credential into that intent. See
+`docs/ad-account-connections.md`.
+
+### Changed
+
+- New `apps/internal/adaccount`: `model.go`/`handler.go`/`service.go`/
+  `repository.go`, wired at `/traffic-sources/{id}/connection`
+  (`GET`/`PATCH`/`DELETE`, no `{connectionId}` — one connection per
+  source). New migration `00018_ad_account_connections.sql`. Declares
+  the §74 `CostProvider` interface + `Credentials`/`DailySpendRecord`
+  types a later phase's real adapters will implement — called from
+  nowhere yet, declared now so this phase's storage shape is provably
+  sufficient for that future caller.
+- `access_token` stored in plain text (no KMS infra exists anywhere in
+  this codebase yet) but never leaves the Go API as such: `Connection`
+  (the JSON-response type) has no `AccessToken` field at all, only a
+  SQL-computed `TokenPreview` (last 4 characters).
+- `apps/web`: `lib/api/ad-account-connections.ts` + `hooks/use-ad-
+  account-connection.ts`; new `AdAccountConnectionSection`, rendered
+  inside the existing `SourceFormSheet` (Traffic Source edit) whenever
+  the live `costIntegration` value is `facebook_ads`/`tiktok_ads`.
+
+### Fixed
+
+A real bug caught during this phase's own manual verification: the new
+section's connect form used a nested `<form>` inside `SourceFormSheet`'s
+own outer `<form>` — invalid HTML. Chrome's actual behavior wasn't "the
+inner form is ignored": clicking "Connect" fired a native GET submission
+that put every field, **including the raw access token**, into the URL
+as a query string — exactly the "never place sensitive data in URL
+parameters" case. Fixed by removing the inner `<form>` (a plain `<div>`
+instead, with the button changed to `type="button"` calling
+`form.handleSubmit(submit)` directly, plus a manual Enter-to-submit
+handler). See `docs/ad-account-connections.md`'s "A real bug, caught and
+fixed" section for the full reproduction/fix/re-verification trail.
+
+### Verified
+
+Backend: `go build/vet/gofmt/test ./...` all green, incl. new
+`adaccount_test.go` (connect/get/reconnect-replaces-in-place/disconnect;
+rejecting a source with `cost_integration` `none`/`manual`; invalid-shape
+validation; cross-tenant isolation). Frontend: `tsc --noEmit`/`eslint`/
+`vitest run` (21 tests)/`next build` all clean. Full manual browser pass
+against the real running `api`+`web` dev servers — this is where the
+nested-`<form>` bug above was caught, fixed, and re-verified (`PATCH`
+now returns 200 with no URL leak, was previously a silent token-leaking
+GET navigation). See `docs/ad-account-connections.md`.
+
 ## [Stream Set ↔ Pixel attachment] — wires stream_set_pixels, fixes a silent Update-blocking bug
 
 ### Scope

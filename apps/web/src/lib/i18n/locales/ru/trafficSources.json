@@ -21,8 +21,8 @@
   "costIntegration": {
     "none": "Не подключено",
     "manual": "Ручной ввод",
-    "facebookAds": "Facebook Ads (OAuth)",
-    "tiktokAds": "TikTok Ads (OAuth)"
+    "facebookAds": "Facebook Ads",
+    "tiktokAds": "TikTok Ads"
   },
   "sourceType": {
     "facebook": "Facebook",
@@ -45,13 +45,35 @@
     "trackingTemplateLabel": "Шаблон трекинга",
     "trackingTemplatePlaceholder": "https://track.floxlink.io/click?clickid={click_id}&sub1={sub1}",
     "costIntegrationLabel": "Интеграция расходов",
-    "costIntegrationHint": "Записи вручную ведутся по каждой кампании на вкладке «Расходы». OAuth-интеграции с рекламными сетями (Facebook/TikTok) пока не реализованы — этот выбор только фиксирует намерение.",
+    "costIntegrationHint": "Записи вручную ведутся по каждой кампании на вкладке «Расходы». Для Facebook/TikTok ниже можно подключить сохранённый токен доступа — автоматическая синхронизация расходов пока не реализована, это только сохраняет учётные данные для будущей фазы.",
     "statusLabel": "Статус",
     "submitCreate": "Создать источник",
     "submitEdit": "Сохранить изменения",
     "validation": {
       "nameMin": "Название должно содержать не менее 2 символов",
       "urlInvalid": "Введите корректный URL"
+    }
+  },
+  "connection": {
+    "title": "Подключённый рекламный аккаунт",
+    "description": "Сохраняет токен доступа для будущей фазы синхронизации расходов. Пока ничего не подтягивается — подключение или отключение только меняет сохранённые данные.",
+    "loading": "Проверка подключения…",
+    "tokenPreview": "•••• {{last4}}",
+    "adAccountIdLabel": "ID рекламного аккаунта",
+    "adAccountIdPlaceholder": "act_1234567890",
+    "accessTokenLabel": "Токен доступа",
+    "accessTokenPlaceholder": "Вставьте долгосрочный токен доступа",
+    "connect": "Подключить",
+    "disconnect": "Отключить",
+    "validation": {
+      "adAccountIdRequired": "ID рекламного аккаунта обязателен",
+      "accessTokenRequired": "Токен доступа обязателен"
+    },
+    "toast": {
+      "connected": "Рекламный аккаунт подключён",
+      "connectError": "Не удалось подключить рекламный аккаунт",
+      "disconnected": "Рекламный аккаунт отключён",
+      "disconnectError": "Не удалось отключить рекламный аккаунт"
     }
   },
   "rowActions": {

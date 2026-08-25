@@ -1,6 +1,6 @@
 "use client";
 
-import { Controller, useForm } from "react-hook-form";
+import { Controller, useForm, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { useTranslation } from "react-i18next";
@@ -19,6 +19,7 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import { MacroPicker } from "@/components/shared/macro-picker";
+import { AdAccountConnectionSection } from "@/features/traffic-sources/ad-account-connection-section";
 import {
   COST_INTEGRATION_I18N_KEY,
   SOURCE_TYPE_I18N_KEY,
@@ -55,6 +56,7 @@ export function SourceFormSheet({
   title,
   submitLabel,
   showStatus = false,
+  sourceId,
   onSubmit,
 }: {
   open: boolean;
@@ -63,6 +65,10 @@ export function SourceFormSheet({
   title: string;
   submitLabel: string;
   showStatus?: boolean;
+  /** Set only when editing a real, already-saved source — gates the
+   * connected-ad-account section below, since a brand-new source has no
+   * id yet for a connection to attach to. */
+  sourceId?: string;
   onSubmit: (values: SourceFormValues) => void;
 }) {
   const { t } = useTranslation(["trafficSources", "common"]);
@@ -86,6 +92,8 @@ export function SourceFormSheet({
     getValues,
     formState: { errors, isSubmitting },
   } = form;
+
+  const liveCostIntegration = useWatch({ control, name: "costIntegration" });
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
@@ -196,6 +204,10 @@ export function SourceFormSheet({
               </div>
             )}
           </div>
+
+          {sourceId && (liveCostIntegration === "facebook_ads" || liveCostIntegration === "tiktok_ads") && (
+            <AdAccountConnectionSection trafficSourceId={sourceId} provider={liveCostIntegration} />
+          )}
 
           <SheetFooter className="mt-0 flex-row justify-end gap-2 p-0">
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
