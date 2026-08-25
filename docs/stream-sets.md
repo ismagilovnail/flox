@@ -124,8 +124,10 @@ each stage the same way the destination union already did:
 Still out: **per-flow Pixels**. `stream_set_pixels` (migration 00008)
 attaches a pixel to the *Stream Set*, not the Flow — CLAUDE.md's own
 phrasing ("per-flow Pixels") is imprecise; the schema has always scoped
-pixels one level up. No `internal/pixel` package exists yet either way,
-so this stays a separate, still-blocked phase regardless of naming.
+pixels one level up. The Pixel entity itself now has real CRUD (its own
+list/detail page — see [`docs/pixels.md`](pixels.md)), but no CRUD wires
+`stream_sets`/`flows` to a `pixel_id` yet, so attaching pixels to a
+Stream Set stays a separate, still-unstarted phase.
 
 ## A real render-loop bug, caught and fixed during manual verification
 

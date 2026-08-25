@@ -31,6 +31,7 @@ import (
 	"github.com/ismagilovnail/flox/apps/internal/ltv"
 	"github.com/ismagilovnail/flox/apps/internal/network"
 	"github.com/ismagilovnail/flox/apps/internal/offer"
+	"github.com/ismagilovnail/flox/apps/internal/pixel"
 	"github.com/ismagilovnail/flox/apps/internal/postback"
 	"github.com/ismagilovnail/flox/apps/internal/postbacklog"
 	"github.com/ismagilovnail/flox/apps/internal/postbacklogs"
@@ -143,6 +144,12 @@ func run() error {
 	srv.Mux().Route("/postlandings", func(r chi.Router) {
 		r.Use(tenant.Middleware)
 		postlandingHandler.Register(r)
+	})
+
+	pixelHandler := pixel.NewHandler(pixel.NewService(pixel.NewRepository(db)), logger)
+	srv.Mux().Route("/pixels", func(r chi.Router) {
+		r.Use(tenant.Middleware)
+		pixelHandler.Register(r)
 	})
 
 	offerHandler := offer.NewHandler(offer.NewService(offer.NewRepository(db)), logger)

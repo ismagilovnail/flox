@@ -5,6 +5,50 @@ per-phase, matching `CLAUDE.md`'s phase protocol. The one exception is
 [Between phases], below: spec amendments and the code changes that follow from
 them land between phases and would otherwise be invisible here.
 
+## [Pixels] — wired to a real Postgres-backed API
+
+### Scope
+
+Fourth slice of the Landing/PWA/Postlanding/Pixels CRUD candidate list.
+`pixels` was already migrated (migration 00008, alongside `postbacks`
+and the `stream_set_pixels` join table). New `apps/internal/pixel`
+package mirrors `apps/internal/postlanding` almost exactly (flat entity,
+curated §43 event subset, pause/activate/duplicate/archive-via-Update) —
+differs only in having no URL (a pixel's `provider` + `pixelId` identify
+where a conversion is reported, not a page) and no defensive delete-FK
+catch (`stream_set_pixels.pixel_id` `ON DELETE CASCADE`s, unlike
+Landing/PWA/Postlanding's `RESTRICT`-guarded `flows.*_id` columns).
+Explicitly out of scope: attaching pixels to a Stream Set
+(`stream_set_pixels` has no CRUD wiring it to `flows`/`stream_sets` yet)
+— CLAUDE.md's own "per-flow Pixels" phrasing was imprecise; the schema
+has always scoped pixels to the Stream Set, not the Flow. See
+`docs/pixels.md`.
+
+### Changed
+
+- `apps/internal/pixel`: new `model.go`/`handler.go`/`service.go`/
+  `repository.go`, wired at `/pixels` in `apps/api/main.go`.
+- `apps/web`: `lib/api/pixels.ts` + `hooks/use-pixels.ts` (real API
+  layer); `features/pixels/*` rewired off the `stores/pixels.ts` Zustand
+  mock onto the real hooks, with `LoadingState`/`ErrorState` added.
+  `PIXEL_PROVIDER_I18N_KEY` co-located with `PixelProvider`, matching
+  `traffic-sources.ts`'s `SOURCE_TYPE_I18N_KEY` pattern. New `pixels`
+  i18n namespace (`en`+`ru`) — the pixel form was entirely untranslated
+  under the mock. `stores/pixels.ts`/`lib/mock/pixels.ts` deleted
+  outright.
+
+### Verified
+
+Backend: `go build/vet/gofmt/test ./...` all green, incl. new
+`pixel_test.go` mirroring `postlanding_test.go`'s full test set (plus an
+explicit test that an empty `pixelId` is allowed, matching the frontend's
+pre-existing schema). Frontend: `tsc --noEmit`/`eslint`/`vitest run` (21
+tests)/`next build` all clean. Full manual browser pass against the real
+running `api`+`web` dev servers: created, edited, paused, duplicated,
+and archived a pixel, confirming every action round-tripped through the
+real API on a fresh reload; spot-checked the Russian locale on the same
+page. See `docs/pixels.md`.
+
 ## [Flow CRUD] — Landing/PWA/Postlanding funnel stages restored on Flow
 
 ### Scope

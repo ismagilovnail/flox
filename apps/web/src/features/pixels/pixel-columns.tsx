@@ -1,10 +1,11 @@
 import type { ColumnDef } from "@tanstack/react-table";
 import { formatDistanceToNow } from "date-fns";
+import type { TFunction } from "i18next";
 
 import { dataTableFeatures } from "@/components/ui/data-table";
 import { Badge } from "@/components/ui/badge";
 import { Caption, Mono } from "@/components/ui/typography";
-import { PIXEL_PROVIDER_LABELS, type Pixel, type PixelStatus } from "@/lib/mock/pixels";
+import { PIXEL_PROVIDER_I18N_KEY, type Pixel, type PixelStatus } from "@/lib/api/pixels";
 import { PixelRowActions } from "@/features/pixels/pixel-row-actions";
 
 const STATUS_VARIANT: Record<PixelStatus, "success" | "warning" | "secondary"> = {
@@ -13,11 +14,11 @@ const STATUS_VARIANT: Record<PixelStatus, "success" | "warning" | "secondary"> =
   archived: "secondary",
 };
 
-export function pixelColumns(onEdit: (pixel: Pixel) => void): ColumnDef<typeof dataTableFeatures, Pixel>[] {
+export function pixelColumns(t: TFunction, onEdit: (pixel: Pixel) => void): ColumnDef<typeof dataTableFeatures, Pixel>[] {
   return [
     {
       accessorKey: "name",
-      header: "Name",
+      header: t("columns.name", { ns: "pixels" }),
       cell: ({ row }) => (
         <button
           type="button"
@@ -30,17 +31,17 @@ export function pixelColumns(onEdit: (pixel: Pixel) => void): ColumnDef<typeof d
     },
     {
       accessorKey: "provider",
-      header: "Provider",
-      cell: ({ getValue }) => <Badge variant="outline">{PIXEL_PROVIDER_LABELS[getValue() as Pixel["provider"]]}</Badge>,
+      header: t("columns.provider", { ns: "pixels" }),
+      cell: ({ getValue }) => <Badge variant="outline">{t(PIXEL_PROVIDER_I18N_KEY[getValue() as Pixel["provider"]], { ns: "pixels" })}</Badge>,
     },
     {
       accessorKey: "pixelId",
-      header: "Pixel ID",
+      header: t("columns.pixelId", { ns: "pixels" }),
       cell: ({ getValue }) => <Mono className="text-xs">{(getValue() as string) || "—"}</Mono>,
     },
     {
       accessorKey: "events",
-      header: "Events",
+      header: t("columns.events", { ns: "pixels" }),
       cell: ({ getValue }) => {
         const events = getValue() as string[];
         return (
@@ -57,15 +58,15 @@ export function pixelColumns(onEdit: (pixel: Pixel) => void): ColumnDef<typeof d
     },
     {
       accessorKey: "status",
-      header: "Status",
+      header: t("columns.status", { ns: "pixels" }),
       cell: ({ getValue }) => {
         const status = getValue() as PixelStatus;
-        return <Badge variant={STATUS_VARIANT[status]}>{status}</Badge>;
+        return <Badge variant={STATUS_VARIANT[status]}>{t(`status.${status}`, { ns: "common" })}</Badge>;
       },
     },
     {
       accessorKey: "updatedAt",
-      header: "Updated",
+      header: t("columns.updated", { ns: "pixels" }),
       cell: ({ getValue }) => (
         <Caption>{formatDistanceToNow(new Date(getValue() as string), { addSuffix: true })}</Caption>
       ),

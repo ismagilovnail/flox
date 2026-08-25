@@ -44,6 +44,7 @@ import enStreamSets from "@/lib/i18n/locales/en/streamSets.json";
 import enRoutingSimulator from "@/lib/i18n/locales/en/routingSimulator.json";
 import enConversions from "@/lib/i18n/locales/en/conversions.json";
 import enPostbacks from "@/lib/i18n/locales/en/postbacks.json";
+import enPixels from "@/lib/i18n/locales/en/pixels.json";
 
 import ruCommon from "@/lib/i18n/locales/ru/common.json";
 import ruNav from "@/lib/i18n/locales/ru/nav.json";
@@ -59,6 +60,7 @@ import ruStreamSets from "@/lib/i18n/locales/ru/streamSets.json";
 import ruRoutingSimulator from "@/lib/i18n/locales/ru/routingSimulator.json";
 import ruConversions from "@/lib/i18n/locales/ru/conversions.json";
 import ruPostbacks from "@/lib/i18n/locales/ru/postbacks.json";
+import ruPixels from "@/lib/i18n/locales/ru/pixels.json";
 
 // Re-exported so existing "use client" call sites can keep importing
 // locale/cookie concerns from this module as before — the actual
@@ -83,6 +85,7 @@ export const NAMESPACES = [
   "routingSimulator",
   "conversions",
   "postbacks",
+  "pixels",
 ] as const;
 
 const resources = {
@@ -101,6 +104,7 @@ const resources = {
     routingSimulator: enRoutingSimulator,
     conversions: enConversions,
     postbacks: enPostbacks,
+    pixels: enPixels,
   },
   ru: {
     common: ruCommon,
@@ -117,6 +121,7 @@ const resources = {
     routingSimulator: ruRoutingSimulator,
     conversions: ruConversions,
     postbacks: ruPostbacks,
+    pixels: ruPixels,
   },
 };
 

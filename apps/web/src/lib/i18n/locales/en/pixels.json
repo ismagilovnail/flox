@@ -1,0 +1,68 @@
+{
+  "provider": {
+    "facebook": "Facebook Pixel",
+    "tiktok": "TikTok Pixel",
+    "snapchat": "Snap Pixel",
+    "twitter": "X (Twitter) Pixel",
+    "generic": "Generic S2S"
+  },
+  "columns": {
+    "name": "Name",
+    "provider": "Provider",
+    "pixelId": "Pixel ID",
+    "events": "Events",
+    "status": "Status",
+    "updated": "Updated"
+  },
+  "form": {
+    "description": "Client-side ad-platform pixels, fired on the events you pick so the platform can optimize delivery.",
+    "nameLabel": "Name",
+    "namePlaceholder": "Facebook — Sweeps conversions",
+    "providerLabel": "Provider",
+    "pixelIdLabel": "Pixel ID",
+    "pixelIdPlaceholder": "1029384756102938",
+    "eventsLabel": "Events",
+    "statusLabel": "Status",
+    "titleNew": "New Pixel",
+    "titleEdit": "Edit {{name}}",
+    "submitCreate": "Create pixel",
+    "submitEdit": "Save changes",
+    "validation": {
+      "nameMin": "Name must be at least 2 characters",
+      "pixelIdMax": "Pixel ID must be at most 80 characters",
+      "eventsRequired": "Select at least one event"
+    }
+  },
+  "list": {
+    "title": "Pixels",
+    "newButton": "New Pixel",
+    "loading": "Loading pixels…",
+    "loadError": "Couldn't load pixels",
+    "searchPlaceholder": "Search pixels...",
+    "emptyTitle": "No pixels yet",
+    "emptyDescription": "Add a conversion pixel to feed ad-platform optimization."
+  },
+  "toast": {
+    "created": "Pixel created",
+    "createError": "Couldn't create pixel",
+    "updated": "Pixel updated",
+    "updateError": "Couldn't update pixel",
+    "duplicated": "Pixel duplicated",
+    "duplicatedSuffix": "{{name}} (Copy)",
+    "duplicateError": "Couldn't duplicate pixel",
+    "archived": "Pixel archived",
+    "archiveError": "Couldn't archive pixel",
+    "paused": "Pixel paused",
+    "resumed": "Pixel resumed"
+  },
+  "rowActions": {
+    "actionsAria": "Actions for {{name}}",
+    "edit": "Edit",
+    "pause": "Pause",
+    "resume": "Resume",
+    "duplicate": "Duplicate",
+    "archive": "Archive",
+    "archiveConfirmTitle": "Archive \"{{name}}\"?",
+    "archiveConfirmDescription": "Archived pixels stop firing on new events. This can be reversed later."
+  }
+}

@@ -1,0 +1,68 @@
+{
+  "provider": {
+    "facebook": "Facebook Pixel",
+    "tiktok": "TikTok Pixel",
+    "snapchat": "Snap Pixel",
+    "twitter": "X (Twitter) Pixel",
+    "generic": "Generic S2S"
+  },
+  "columns": {
+    "name": "Название",
+    "provider": "Провайдер",
+    "pixelId": "ID пикселя",
+    "events": "События",
+    "status": "Статус",
+    "updated": "Обновлено"
+  },
+  "form": {
+    "description": "Клиентские пиксели рекламных площадок, срабатывающие на выбранные события — так платформа может оптимизировать показы.",
+    "nameLabel": "Название",
+    "namePlaceholder": "Facebook — конверсии Sweeps",
+    "providerLabel": "Провайдер",
+    "pixelIdLabel": "ID пикселя",
+    "pixelIdPlaceholder": "1029384756102938",
+    "eventsLabel": "События",
+    "statusLabel": "Статус",
+    "titleNew": "Новый пиксель",
+    "titleEdit": "Изменить {{name}}",
+    "submitCreate": "Создать пиксель",
+    "submitEdit": "Сохранить изменения",
+    "validation": {
+      "nameMin": "Название должно содержать не менее 2 символов",
+      "pixelIdMax": "ID пикселя должен быть не длиннее 80 символов",
+      "eventsRequired": "Выберите хотя бы одно событие"
+    }
+  },
+  "list": {
+    "title": "Пиксели",
+    "newButton": "Новый пиксель",
+    "loading": "Загрузка пикселей…",
+    "loadError": "Не удалось загрузить пиксели",
+    "searchPlaceholder": "Поиск пикселей...",
+    "emptyTitle": "Пока нет пикселей",
+    "emptyDescription": "Добавьте конверсионный пиксель для оптимизации на стороне рекламной площадки."
+  },
+  "toast": {
+    "created": "Пиксель создан",
+    "createError": "Не удалось создать пиксель",
+    "updated": "Пиксель обновлён",
+    "updateError": "Не удалось обновить пиксель",
+    "duplicated": "Пиксель продублирован",
+    "duplicatedSuffix": "{{name}} (копия)",
+    "duplicateError": "Не удалось продублировать пиксель",
+    "archived": "Пиксель архивирован",
+    "archiveError": "Не удалось архивировать пиксель",
+    "paused": "Пиксель приостановлен",
+    "resumed": "Пиксель возобновлён"
+  },
+  "rowActions": {
+    "actionsAria": "Действия для {{name}}",
+    "edit": "Изменить",
+    "pause": "Приостановить",
+    "resume": "Возобновить",
+    "duplicate": "Дублировать",
+    "archive": "Архивировать",
+    "archiveConfirmTitle": "Архивировать «{{name}}»?",
+    "archiveConfirmDescription": "Архивные пиксели перестают срабатывать на новые события. Это можно отменить позже."
+  }
+}

@@ -3,6 +3,8 @@
 import { Controller, useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
+import { useTranslation } from "react-i18next";
+import type { TFunction } from "i18next";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -20,23 +22,31 @@ import {
 import {
   PIXEL_EVENT_TYPES,
   PIXEL_PROVIDERS,
-  PIXEL_PROVIDER_LABELS,
+  PIXEL_PROVIDER_I18N_KEY,
   type PixelEventType,
   type PixelProvider,
   type PixelStatus,
-} from "@/lib/mock/pixels";
+} from "@/lib/api/pixels";
 
-export const pixelFormSchema = z.object({
-  name: z.string().min(2, "Name must be at least 2 characters").max(100),
-  provider: z.enum(PIXEL_PROVIDERS as [PixelProvider, ...PixelProvider[]]),
-  pixelId: z.string().max(80),
-  events: z.array(z.enum(PIXEL_EVENT_TYPES)).min(1, "Select at least one event"),
-  status: z.enum(["active", "paused", "archived"] as [PixelStatus, ...PixelStatus[]]),
-});
+/** Factory, not a module-level const — see source-form-sheet.tsx's
+ * buildSourceFormSchema for why (Zod messages are user-facing text and
+ * need the live translator). */
+export function buildPixelFormSchema(t: TFunction) {
+  return z.object({
+    name: z.string().min(2, t("form.validation.nameMin", { ns: "pixels" })).max(100),
+    provider: z.enum(PIXEL_PROVIDERS as [PixelProvider, ...PixelProvider[]]),
+    pixelId: z.string().max(80, t("form.validation.pixelIdMax", { ns: "pixels" })),
+    events: z.array(z.enum(PIXEL_EVENT_TYPES)).min(1, t("form.validation.eventsRequired", { ns: "pixels" })),
+    status: z.enum(["active", "paused", "archived"] as [PixelStatus, ...PixelStatus[]]),
+  });
+}
 
-export type PixelFormValues = z.infer<typeof pixelFormSchema>;
+export type PixelFormValues = z.infer<ReturnType<typeof buildPixelFormSchema>>;
 
 const STATUS_OPTIONS: PixelStatus[] = ["active", "paused", "archived"];
+// Event codes are canonical §43 event-model identifiers, not UI text —
+// deliberately left untranslated, same treatment as the Event Mappings
+// panel and Postlanding's form.
 const EVENT_OPTIONS = PIXEL_EVENT_TYPES.map((e) => ({ value: e, label: e }));
 
 export function PixelFormSheet({
@@ -54,8 +64,9 @@ export function PixelFormSheet({
   submitLabel: string;
   onSubmit: (values: PixelFormValues) => void;
 }) {
+  const { t } = useTranslation(["pixels", "common"]);
   const form = useForm<PixelFormValues>({
-    resolver: zodResolver(pixelFormSchema),
+    resolver: zodResolver(buildPixelFormSchema(t)),
     defaultValues: { name: "", provider: "facebook", pixelId: "", events: [], status: "active", ...defaultValues },
   });
 
@@ -71,19 +82,16 @@ export function PixelFormSheet({
       <SheetContent className="w-full gap-0 overflow-y-auto sm:max-w-lg" side="right">
         <SheetHeader>
           <SheetTitle>{title}</SheetTitle>
-          <SheetDescription>
-            Client-side ad-platform pixels, fired on the events you pick so the platform can optimize delivery
-            (§29).
-          </SheetDescription>
+          <SheetDescription>{t("form.description", { ns: "pixels" })}</SheetDescription>
         </SheetHeader>
 
         <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-4 px-4 pb-4">
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="grid gap-1.5">
-              <Label htmlFor="pxl-name">Name</Label>
+              <Label htmlFor="pxl-name">{t("form.nameLabel", { ns: "pixels" })}</Label>
               <Input
                 id="pxl-name"
-                placeholder="Facebook — Sweeps conversions"
+                placeholder={t("form.namePlaceholder", { ns: "pixels" })}
                 {...register("name")}
                 aria-invalid={!!errors.name}
               />
@@ -91,7 +99,7 @@ export function PixelFormSheet({
             </div>
 
             <div className="grid gap-1.5">
-              <Label htmlFor="pxl-provider">Provider</Label>
+              <Label htmlFor="pxl-provider">{t("form.providerLabel", { ns: "pixels" })}</Label>
               <Controller
                 control={control}
                 name="provider"
@@ -103,7 +111,7 @@ export function PixelFormSheet({
                     <SelectContent>
                       {PIXEL_PROVIDERS.map((p) => (
                         <SelectItem key={p} value={p}>
-                          {PIXEL_PROVIDER_LABELS[p]}
+                          {t(PIXEL_PROVIDER_I18N_KEY[p], { ns: "pixels" })}
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -114,10 +122,10 @@ export function PixelFormSheet({
           </div>
 
           <div className="grid gap-1.5">
-            <Label htmlFor="pxl-id">Pixel ID</Label>
+            <Label htmlFor="pxl-id">{t("form.pixelIdLabel", { ns: "pixels" })}</Label>
             <Input
               id="pxl-id"
-              placeholder="1029384756102938"
+              placeholder={t("form.pixelIdPlaceholder", { ns: "pixels" })}
               className="font-mono text-xs"
               {...register("pixelId")}
               aria-invalid={!!errors.pixelId}
@@ -126,13 +134,13 @@ export function PixelFormSheet({
           </div>
 
           <div className="grid gap-1.5">
-            <Label>Events</Label>
+            <Label>{t("form.eventsLabel", { ns: "pixels" })}</Label>
             <Controller
               control={control}
               name="events"
               render={({ field }) => (
                 <MultiSelect
-                  label="Events"
+                  label={t("form.eventsLabel", { ns: "pixels" })}
                   options={EVENT_OPTIONS}
                   selected={field.value}
                   onChange={(values) => field.onChange(values as PixelEventType[])}
@@ -144,7 +152,7 @@ export function PixelFormSheet({
           </div>
 
           <div className="grid gap-1.5">
-            <Label htmlFor="pxl-status">Status</Label>
+            <Label htmlFor="pxl-status">{t("form.statusLabel", { ns: "pixels" })}</Label>
             <Controller
               control={control}
               name="status"
@@ -156,7 +164,7 @@ export function PixelFormSheet({
                   <SelectContent>
                     {STATUS_OPTIONS.map((s) => (
                       <SelectItem key={s} value={s}>
-                        {s}
+                        {t(`status.${s}`, { ns: "common" })}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -167,7 +175,7 @@ export function PixelFormSheet({
 
           <SheetFooter className="mt-0 flex-row justify-end gap-2 p-0">
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
-              Cancel
+              {t("actions.cancel", { ns: "common" })}
             </Button>
             <Button type="submit" disabled={isSubmitting}>
               {submitLabel}

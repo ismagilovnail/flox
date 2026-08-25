@@ -19,64 +19,62 @@ referenced below as §N).
 ## CURRENT STATE — UPDATE THIS EVERY PHASE
 
 ```
-CURRENT PHASE : PHASE (unnumbered) — Flow CRUD: Landing/PWA/Postlanding
-                funnel stages restored
-STATUS        : done — confirmed via AskUserQuestion that the base Flow
-                entity already had real CRUD (nested under Stream Sets,
-                docs/stream-sets.md); what was missing was the Landing ->
-                PWA -> Postlanding funnel stages ahead of a Flow's
-                Destination, dropped in that earlier phase only because
-                internal/landing/pwa/postlanding didn't exist yet. They
-                do now, so this phase wires them back in — data layer
-                only (Postgres read/write + validation), not the
-                tracker's actual redirect-serving logic over these
-                stages. Per-flow Pixels stays excluded: no internal/pixel
-                package exists, and pixels actually attach to the Stream
-                Set (stream_set_pixels, migration 00008), not the Flow —
-                CLAUDE.md's own "per-flow Pixels" phrasing was imprecise.
-                Backend: streamset.Flow/FlowInput gained Landing/Pwa/
-                Postlanding fields (FlowLanding/FlowPwa/FlowPostlanding,
-                each an always-present {enabled, ...} struct so a
-                disabled stage keeps its last pick). checkFlowStagesBelo
-                ngToOrg confirms every non-empty id belongs to the
-                caller's org (CLAUDE.md #5); validateFlows requires an id
-                (and a valid pwaType for PWA) whenever a stage is
-                enabled. nullIfEmpty converts the wire's "" to NULL for
-                pwa_type's CHECK constraint.
-                Frontend: new flow-funnel.tsx renders the full Landing ->
-                PWA -> Postlanding -> Destination -> Fallback chain,
-                delegating the last two nodes to the unchanged
-                flow-destination-editor.tsx; fetches real useLandings()/
-                usePwas()/usePostlandings(). stream-set-schema.ts
-                validates each stage the same way the destination union
-                already did. lib/mock/flow-entities.ts (never actually
-                mock data) moved into lib/api/stream-sets.ts.
-                Verified: go build/vet/gofmt/test ./... all green incl. 2
-                new streamset tests (full-funnel round-trip through
-                Create+Get; validation rejecting enabled-without-id, an
-                invalid pwaType, and a disabled stage referencing another
-                org's postlanding id). tsc --noEmit/eslint/vitest run (21
-                tests)/next build all clean. Full manual browser pass
-                against the real running api+web dev servers: enabled
-                all three stages on the pre-existing "i18n Test Set"
-                fixture's flow (real landing + "Show as PWA", real PWA
-                incl. switching pwaType Internal->External, real
-                postlanding), saved, reloaded fresh, reopened the edit
-                form — every selection round-tripped through the real
-                Postgres-backed API. Fixture reverted to its original
-                all-disabled state directly in Postgres afterward;
-                throwaway landing/pwa/postlanding test rows deleted.
-                See docs/stream-sets.md's "Landing/PWA/Postlanding
-                stages: restored" section.
-LAST COMMIT   : feat(routing): restore Landing/PWA/Postlanding funnel
-                stages on Flow
+CURRENT PHASE : PHASE (unnumbered) — Pixels CRUD wired to a real
+                Postgres-backed API
+STATUS        : done — fourth slice of the Landing/PWA/Postlanding/
+                Pixels CRUD candidate list, following Postlanding's
+                shape almost exactly (pixels was already migrated,
+                migration 00008, alongside postbacks and the
+                stream_set_pixels join table). New apps/internal/pixel
+                package: model/handler/service/repository, wired at
+                /pixels in apps/api/main.go. Differs from Postlanding
+                only in having no URL (provider + pixelId identify where
+                a conversion is reported, not a page) and no defensive
+                delete-FK catch (stream_set_pixels.pixel_id ON DELETE
+                CASCADEs, unlike Landing/PWA/Postlanding's RESTRICT-
+                guarded flows.*_id columns — pixel.Repository.Delete has
+                nothing to catch).
+                Explicitly out of scope: attaching pixels to a Stream
+                Set. stream_set_pixels has no CRUD wiring it to flows/
+                stream_sets yet — CLAUDE.md's own past "per-flow Pixels"
+                phrasing was imprecise; the schema has always scoped
+                pixels to the Stream Set, not the Flow. This phase only
+                built the Pixel entity itself (its own list/detail page).
+                Frontend: lib/api/pixels.ts + hooks/use-pixels.ts (real
+                API layer); features/pixels/* rewired off the
+                stores/pixels.ts Zustand mock onto the real hooks, with
+                LoadingState/ErrorState added. PIXEL_PROVIDER_I18N_KEY
+                co-located with PixelProvider, matching traffic-
+                sources.ts's SOURCE_TYPE_I18N_KEY pattern. New pixels
+                i18n namespace (en+ru) — the mocked pixel form had been
+                entirely untranslated (hardcoded English). stores/
+                pixels.ts/lib/mock/pixels.ts deleted outright.
+                Verified: go build/vet/gofmt/test ./... all green incl.
+                new pixel_test.go mirroring postlanding_test.go's full
+                test set (plus an explicit test that an empty pixelId is
+                allowed, matching the frontend's pre-existing schema).
+                tsc --noEmit/eslint/vitest run (21 tests)/next build all
+                clean. Full manual browser pass against the real running
+                api+web dev servers: created a pixel (real translated
+                provider labels, real event multi-select), reloaded
+                fresh and confirmed the round-trip, edited/paused/
+                duplicated/archived it (archive confirmation dialog,
+                toast, status badge, and action-menu pruning all
+                correct), spot-checked the Russian locale on the same
+                page (sidebar/title/columns/statuses/button all
+                translated, no hydration errors). Test rows deleted
+                directly from Postgres afterward (no hard-delete in the
+                UI for this entity). See docs/pixels.md.
+LAST COMMIT   : feat(pixels): wire Pixels CRUD to real Postgres-backed
+                API
 NEXT          : confirm scope before starting. No open known issues
-                remain from prior phases. Candidates: per-flow... er,
-                per-STREAM-SET Pixels CRUD (needs a new internal/pixel
-                package); FB/TikTok ad-spend import (§74's CostProvider
-                interface, the "later" half of §27-COST — no backend at
-                all yet, a large phase); or a third i18n locale (cheap
-                per docs/frontend-i18n.md, but none has been requested).
+                remain from prior phases. Candidates: per-Stream-Set
+                Pixel attachment (stream_set_pixels CRUD, now that the
+                Pixel entity itself is real); FB/TikTok ad-spend import
+                (§74's CostProvider interface, the "later" half of
+                §27-COST — no backend at all yet, a large phase); or a
+                third i18n locale (cheap per docs/frontend-i18n.md, but
+                none has been requested).
 ```
 
 > At the end of every phase: update the four lines above, add a CHANGELOG entry,
