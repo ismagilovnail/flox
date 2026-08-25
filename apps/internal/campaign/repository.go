@@ -20,20 +20,20 @@ func NewRepository(db *pgxpool.Pool) *Repository {
 	return &Repository{db: db}
 }
 
-const selectColumns = `id, organization_id, traffic_source_id, name, status, fallback_url, notes, created_at, updated_at`
+const selectColumns = `id, organization_id, traffic_source_id, name, status, fallback_url, notes, external_campaign_id, created_at, updated_at`
 
 func scanCampaign(row pgx.Row) (Campaign, error) {
 	var c Campaign
-	err := row.Scan(&c.ID, &c.OrganizationID, &c.TrafficSourceID, &c.Name, &c.Status, &c.FallbackURL, &c.Notes, &c.CreatedAt, &c.UpdatedAt)
+	err := row.Scan(&c.ID, &c.OrganizationID, &c.TrafficSourceID, &c.Name, &c.Status, &c.FallbackURL, &c.Notes, &c.ExternalCampaignID, &c.CreatedAt, &c.UpdatedAt)
 	return c, err
 }
 
 func (r *Repository) Create(ctx context.Context, id, orgID string, in CreateInput) (Campaign, error) {
 	row := r.db.QueryRow(ctx, `
-		INSERT INTO campaigns (id, organization_id, traffic_source_id, name, fallback_url, notes)
-		VALUES ($1, $2, $3, $4, $5, $6)
+		INSERT INTO campaigns (id, organization_id, traffic_source_id, name, fallback_url, notes, external_campaign_id)
+		VALUES ($1, $2, $3, $4, $5, $6, $7)
 		RETURNING `+selectColumns,
-		id, orgID, in.TrafficSourceID, in.Name, in.FallbackURL, in.Notes,
+		id, orgID, in.TrafficSourceID, in.Name, in.FallbackURL, in.Notes, in.ExternalCampaignID,
 	)
 	return scanCampaign(row)
 }
@@ -112,6 +112,9 @@ func (r *Repository) Update(ctx context.Context, orgID, id string, in UpdateInpu
 	if in.Status != nil {
 		sets = append(sets, "status = "+arg(*in.Status))
 	}
+	if in.ExternalCampaignID != nil {
+		sets = append(sets, "external_campaign_id = "+arg(*in.ExternalCampaignID))
+	}
 
 	if len(sets) == 0 {
 		return r.GetByID(ctx, orgID, id)
@@ -139,6 +142,43 @@ func (r *Repository) Delete(ctx context.Context, orgID, id string) error {
 		return apierror.NotFound("campaign not found")
 	}
 	return nil
+}
+
+// ListByExternalID finds every campaign under trafficSourceID whose
+// ExternalCampaignID matches — the match step a later ad-spend sync
+// (§74/§27-COST) uses to attribute a day's ad-platform-reported spend to
+// specific FLOX campaigns. Scoped to trafficSourceID (not just orgID)
+// since a connection's own DailySpendByCampaign results only ever cover
+// that one traffic source's ad account — matching a bare externalID
+// across every campaign in the org would risk attributing spend to a
+// campaign under a completely different, unrelated traffic source that
+// happens to share the same platform campaign id string by coincidence.
+// Returns a slice, not a single Campaign: external_campaign_id has no
+// uniqueness constraint (migration 00019's own comment), so a caller who
+// genuinely maps two FLOX campaigns to one ad-platform campaign gets the
+// full day's spend attributed to both, rather than an arbitrary pick
+// silently dropping one.
+func (r *Repository) ListByExternalID(ctx context.Context, orgID, trafficSourceID, externalCampaignID string) ([]Campaign, error) {
+	rows, err := r.db.Query(ctx, `
+		SELECT `+selectColumns+`
+		FROM campaigns
+		WHERE organization_id = $1 AND traffic_source_id = $2 AND external_campaign_id = $3`,
+		orgID, trafficSourceID, externalCampaignID,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("querying campaigns by external id: %w", err)
+	}
+	defer rows.Close()
+
+	var campaigns []Campaign
+	for rows.Next() {
+		c, err := scanCampaign(rows)
+		if err != nil {
+			return nil, fmt.Errorf("scanning campaign row: %w", err)
+		}
+		campaigns = append(campaigns, c)
+	}
+	return campaigns, rows.Err()
 }
 
 // TrafficSourceBelongsToOrg guards against a cross-tenant reference: the

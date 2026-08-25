@@ -1,18 +1,21 @@
 // Package adaccount implements ad-network account connections (§74/
-// §27-COST): the credential-storage half of Facebook/TikTok ad-spend
-// import. handler → service → repository, one connection per traffic
-// source (matching trafficsource.CostIntegration's own singular design).
+// §27-COST): credential storage (Phase A) plus the CostProvider
+// interface + real Facebook Ads/TikTok Ads adapters (Phase B) that pull
+// spend through those credentials. handler → service → repository, one
+// connection per traffic source (matching trafficsource.CostIntegration's
+// own singular design).
 //
-// This package deliberately stops at storage + validation — nothing here
-// calls Facebook's or TikTok's API yet. A real ad-network sync needs a
-// registered OAuth app with a public callback URL to do a live consent
-// flow; neither exists in this environment, so the connect flow an
-// operator uses is a manual "paste your access token + ad account id"
-// form instead (confirmed via AskUserQuestion before this phase started).
-// The CostProvider interface below documents the exact shape a later
-// phase's real Facebook/TikTok adapters will implement against this
-// package's Connection — declared now so this phase's storage shape is
-// provably sufficient for that future caller, not guessed at.
+// Connecting an account is a manual "paste your access token + ad
+// account id" form, not an OAuth consent flow: a real OAuth flow needs a
+// registered app with a public callback URL, and neither exists in this
+// environment (confirmed via AskUserQuestion before Phase A started).
+// The adapters in this package's facebookads/tiktokads subpackages are
+// real HTTP clients against each platform's actual API shape, but this
+// project has no live Meta/TikTok app credentials to exercise them
+// against — they're verified structurally, against a fake HTTP
+// transport in tests, never against the real Graph/Marketing API
+// (confirmed via AskUserQuestion before Phase B started). See
+// docs/ad-account-connections.md.
 package adaccount
 
 import (
@@ -57,23 +60,36 @@ type Credentials struct {
 	AccessToken string
 }
 
-// CostProvider is the §74 extensibility interface a later phase's real
-// Facebook Ads / TikTok Ads spend adapters implement — one shape so
-// internal/cost's sync path (also a later phase) never needs to
-// special-case a specific vendor. Not called from anywhere in this
-// phase; declared now because designing Connection/ConnectInput without
-// knowing the exact shape a caller needs would be guessing.
+// CostProvider is the §74 extensibility interface the real Facebook Ads/
+// TikTok Ads spend adapters implement — one shape so the sync path never
+// needs to special-case a specific vendor.
+//
+// Broken down by the ad platform's OWN campaign id, not an account-wide
+// total: cost_entries requires a campaign_id (migration 00009, NOT
+// NULL), and a traffic source's connected ad account can fund more than
+// one FLOX campaign (campaigns.traffic_source_id is many-to-one) — an
+// account-level total would have nothing to attribute itself to. The
+// sync matches each record's ExternalCampaignID against
+// campaign.Repository.ListByExternalID (migration 00019) to find which
+// FLOX campaign(s) it belongs to; a record whose id matches nothing
+// simply produces no cost_entries row for that day (CLAUDE.md #6: no
+// cost for a slice shows as "—", never a false zero) rather than an
+// error — an ad account will always have campaigns FLOX doesn't know
+// about (ones an operator hasn't mapped, or genuinely unrelated ones
+// sharing the same ad account for other business reasons).
 type CostProvider interface {
-	// DailySpend returns one record per calendar day in [from, to] for
-	// the given ad account, in the ad platform's own native currency
-	// (never pre-converted — currency normalization to USD happens once
-	// via fx_rates, §50-FX, at the point the record is written into
-	// cost_entries, same as every other cost value in this system).
-	DailySpend(ctx context.Context, creds Credentials, from, to time.Time) ([]DailySpendRecord, error)
+	// DailySpendByCampaign returns one record per (calendar day, ad-
+	// platform campaign) in [from, to] for the given ad account, in the
+	// ad platform's own native currency (never pre-converted — currency
+	// normalization to USD happens once via fx_rates, §50-FX, at the
+	// point a record is written into cost_entries, same as every other
+	// cost value in this system).
+	DailySpendByCampaign(ctx context.Context, creds Credentials, from, to time.Time) ([]DailyCampaignSpendRecord, error)
 }
 
-type DailySpendRecord struct {
-	Date     time.Time
-	Amount   float64
-	Currency string
+type DailyCampaignSpendRecord struct {
+	Date               time.Time
+	ExternalCampaignID string
+	Amount             float64
+	Currency           string
 }

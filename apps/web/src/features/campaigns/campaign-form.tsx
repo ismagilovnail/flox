@@ -28,6 +28,7 @@ export function buildCampaignFormSchema(t: TFunction) {
     name: z.string().min(2, t("form.validation.nameMin", { ns: "campaigns" })).max(80),
     trafficSourceId: z.string().min(1, t("form.validation.sourceRequired", { ns: "campaigns" })),
     fallbackUrl: z.url(t("form.validation.urlInvalid", { ns: "campaigns" })),
+    externalCampaignId: z.string().max(200, t("form.validation.externalCampaignIdMax", { ns: "campaigns" })).optional(),
     notes: z.string().max(500).optional(),
     status: z.enum(["active", "paused", "draft", "archived"] as [CampaignStatus, ...CampaignStatus[]]).optional(),
   });
@@ -58,6 +59,7 @@ export function CampaignForm({
       name: "",
       trafficSourceId: sources[0]?.id ?? "",
       fallbackUrl: "",
+      externalCampaignId: "",
       notes: "",
       status: "draft",
       ...defaultValues,
@@ -133,6 +135,20 @@ export function CampaignForm({
             />
             {errors.fallbackUrl && <p className="text-xs text-danger">{errors.fallbackUrl.message}</p>}
             <p className="text-xs text-muted-foreground">{t("form.fallbackUrlHint", { ns: "campaigns" })}</p>
+          </div>
+
+          <div className="grid gap-1.5">
+            <Label htmlFor="externalCampaignId">{t("form.externalCampaignIdLabel", { ns: "campaigns" })}</Label>
+            <Input
+              id="externalCampaignId"
+              placeholder={t("form.externalCampaignIdPlaceholder", { ns: "campaigns" })}
+              {...register("externalCampaignId")}
+              aria-invalid={!!errors.externalCampaignId}
+            />
+            {errors.externalCampaignId && (
+              <p className="text-xs text-danger">{errors.externalCampaignId.message}</p>
+            )}
+            <p className="text-xs text-muted-foreground">{t("form.externalCampaignIdHint", { ns: "campaigns" })}</p>
           </div>
 
           {showStatus && (

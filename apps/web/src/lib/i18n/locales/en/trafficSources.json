@@ -45,7 +45,7 @@
     "trackingTemplateLabel": "Tracking template",
     "trackingTemplatePlaceholder": "https://track.floxlink.io/click?clickid={click_id}&sub1={sub1}",
     "costIntegrationLabel": "Cost integration",
-    "costIntegrationHint": "Manual entries are logged per campaign on its Cost tab. Facebook/TikTok connect a stored access token below — automatic spend sync isn't built yet, so this only records the credential for a later phase to use.",
+    "costIntegrationHint": "Manual entries are logged per campaign on its Cost tab. Facebook/TikTok connect a stored access token below, then use \"Sync now\" to pull spend for campaigns whose External campaign ID matches — there's no scheduled/automatic sync yet, only on-demand.",
     "statusLabel": "Status",
     "submitCreate": "Create source",
     "submitEdit": "Save changes",
@@ -56,7 +56,7 @@
   },
   "connection": {
     "title": "Connected ad account",
-    "description": "Stores an access token for a later phase's spend sync to use. Nothing pulls data yet — connecting or disconnecting only changes what's on file.",
+    "description": "Stores an access token for the spend sync below. \"Sync now\" pulls the last 30 days of daily campaign spend and writes it to each matching campaign's Cost tab (matched by External campaign ID) — there's no scheduler yet, so it only runs when you click it.",
     "loading": "Checking connection…",
     "tokenPreview": "•••• {{last4}}",
     "adAccountIdLabel": "Ad account ID",
@@ -65,6 +65,8 @@
     "accessTokenPlaceholder": "Paste the long-lived access token",
     "connect": "Connect",
     "disconnect": "Disconnect",
+    "syncNow": "Sync now",
+    "syncing": "Syncing…",
     "validation": {
       "adAccountIdRequired": "Ad account ID is required",
       "accessTokenRequired": "Access token is required"
@@ -73,7 +75,17 @@
       "connected": "Ad account connected",
       "connectError": "Couldn't connect ad account",
       "disconnected": "Ad account disconnected",
-      "disconnectError": "Couldn't disconnect ad account"
+      "disconnectError": "Couldn't disconnect ad account",
+      "synced": "Sync complete",
+      "syncError": "Couldn't sync ad spend"
+    },
+    "syncResult": {
+      "title": "Last sync result",
+      "recordsFetched": "Records fetched",
+      "entriesWritten": "Cost entries written",
+      "unmatchedTitle": "Unmatched external campaign IDs",
+      "unmatchedHint": "No FLOX campaign has this External campaign ID yet — set it on a campaign's Settings tab to start matching.",
+      "unmatchedTruncated": "and more not shown"
     }
   },
   "rowActions": {

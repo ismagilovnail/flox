@@ -13,6 +13,28 @@ package cost
 
 import "time"
 
+// Source identifies where an Entry's amount came from — cost_entries'
+// own CHECK constraint (migration 00009) has always allowed
+// facebook_ads/tiktok_ads alongside manual, but nothing in this package
+// wrote or read anything but "manual" until the ad-spend sync (§74,
+// Phase B) started calling Service.UpsertFromSync.
+type Source string
+
+const (
+	SourceManual      Source = "manual"
+	SourceFacebookAds Source = "facebook_ads"
+	SourceTikTokAds   Source = "tiktok_ads"
+)
+
+func (s Source) Valid() bool {
+	switch s {
+	case SourceManual, SourceFacebookAds, SourceTikTokAds:
+		return true
+	default:
+		return false
+	}
+}
+
 // Entry is one (campaign, traffic source, day) spend record.
 // TrafficSourceID is nil for a campaign-wide entry not attributed to one
 // source — the same optionality cost_entries' own two partial unique
@@ -28,6 +50,7 @@ type Entry struct {
 	// AmountUSD is nil when no fx_rates row exists yet for
 	// (Currency, EntryDate) — CLAUDE.md #6/#7: never invented as 0.
 	AmountUSD       *float64
+	Source          Source
 	CreatedByUserID *string
 	CreatedAt       time.Time
 	UpdatedAt       time.Time
@@ -37,6 +60,18 @@ type Entry struct {
 // — re-submitting the same (campaign, source, day) updates it in place,
 // matching cost_entries' own unique-index-as-identity design (00009's
 // comment: "re-entering the same day updates it, it doesn't stack").
+// No Source field here deliberately: Service.Upsert (the manual-entry
+// write path, the only one an HTTP request can ever reach — upsertRequest
+// in handler.go has no source field to decode into this in the first
+// place) always writes SourceManual; Service.UpsertFromSync (Go-only,
+// called by the sync package, never HTTP-reachable) takes its Source as
+// a separate, explicit parameter instead of a struct field precisely so
+// there's no single shared "trust whatever the caller put here" field
+// that both a public request handler and an internal sync could feed
+// differently. Note the dedup key does NOT include Source: a sync-
+// written day and a manually-entered day for the same (campaign[,
+// traffic source], date) are mutually exclusive — whichever writes last
+// wins, intentional, not an oversight.
 type UpsertInput struct {
 	TrafficSourceID *string
 	EntryDate       time.Time

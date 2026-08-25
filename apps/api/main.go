@@ -14,6 +14,8 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"github.com/ismagilovnail/flox/apps/internal/adaccount"
+	"github.com/ismagilovnail/flox/apps/internal/adaccount/facebookads"
+	"github.com/ismagilovnail/flox/apps/internal/adaccount/tiktokads"
 	"github.com/ismagilovnail/flox/apps/internal/analytics"
 	"github.com/ismagilovnail/flox/apps/internal/attribution"
 	"github.com/ismagilovnail/flox/apps/internal/campaign"
@@ -23,6 +25,7 @@ import (
 	"github.com/ismagilovnail/flox/apps/internal/conversion"
 	"github.com/ismagilovnail/flox/apps/internal/conversions"
 	"github.com/ismagilovnail/flox/apps/internal/cost"
+	"github.com/ismagilovnail/flox/apps/internal/costsync"
 	"github.com/ismagilovnail/flox/apps/internal/eventbuf"
 	"github.com/ismagilovnail/flox/apps/internal/eventmapping"
 	"github.com/ismagilovnail/flox/apps/internal/eventqueue"
@@ -123,11 +126,8 @@ func run() error {
 		trafficSourceHandler.Register(r)
 	})
 
-	adAccountHandler := adaccount.NewHandler(adaccount.NewService(adaccount.NewRepository(db)), logger)
-	srv.Mux().Route("/traffic-sources/{id}/connection", func(r chi.Router) {
-		r.Use(tenant.Middleware)
-		adAccountHandler.Register(r)
-	})
+	adAccountRepo := adaccount.NewRepository(db)
+	adAccountHandler := adaccount.NewHandler(adaccount.NewService(adAccountRepo), logger)
 
 	networkHandler := network.NewHandler(network.NewService(network.NewRepository(db)), logger)
 	srv.Mux().Route("/networks", func(r chi.Router) {
@@ -171,10 +171,32 @@ func run() error {
 		eventMappingHandler.Register(r)
 	})
 
-	costHandler := cost.NewHandler(cost.NewService(cost.NewRepository(db), conversion.NewPostgresFX(db)), logger)
+	costSvc := cost.NewService(cost.NewRepository(db), conversion.NewPostgresFX(db))
+	costHandler := cost.NewHandler(costSvc, logger)
 	srv.Mux().Route("/campaigns/{campaignId}/cost-entries", func(r chi.Router) {
 		r.Use(tenant.Middleware)
 		costHandler.Register(r)
+	})
+
+	// Ad-spend sync (§74/§27-COST, Phase B): "Sync now" pulls a traffic
+	// source's connected ad account's daily campaign spend and writes it
+	// into cost_entries. No live Meta/TikTok app credentials exist in
+	// this environment, so the adapters below are wired for real but only
+	// ever verified structurally (see facebookads_test.go/tiktokads_test.go);
+	// nothing prevents pointing them at the real Graph/Business API once
+	// real credentials exist. Registered in the same Route() block as
+	// adAccountHandler (both mount under /traffic-sources/{id}/connection)
+	// — chi panics if two separate Route() calls claim the identical
+	// pattern, so this can't be two Mount points even though the two
+	// handlers are otherwise independent packages.
+	costSyncHandler := costsync.NewHandler(costsync.NewService(adAccountRepo, campaignRepo, costSvc, costsync.Providers{
+		FacebookAds: facebookads.New(),
+		TikTokAds:   tiktokads.New(),
+	}), logger)
+	srv.Mux().Route("/traffic-sources/{id}/connection", func(r chi.Router) {
+		r.Use(tenant.Middleware)
+		adAccountHandler.Register(r)
+		costSyncHandler.Register(r)
 	})
 
 	streamSetHandler := streamset.NewHandler(streamset.NewService(streamset.NewRepository(db)), logger)

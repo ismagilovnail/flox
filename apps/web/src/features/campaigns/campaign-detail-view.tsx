@@ -68,6 +68,7 @@ export function CampaignDetailView({ id }: { id: string }) {
         name: values.name,
         trafficSourceId: values.trafficSourceId,
         fallbackUrl: values.fallbackUrl,
+        externalCampaignId: values.externalCampaignId ?? "",
         notes: values.notes ?? "",
         status: values.status,
       },
@@ -130,6 +131,7 @@ export function CampaignDetailView({ id }: { id: string }) {
               name: campaign.name,
               trafficSourceId: campaign.trafficSourceId,
               fallbackUrl: campaign.fallbackUrl,
+              externalCampaignId: campaign.externalCampaignId,
               notes: campaign.notes,
               status: campaign.status,
             }}

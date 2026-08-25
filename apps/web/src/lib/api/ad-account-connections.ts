@@ -30,3 +30,18 @@ export function connectAdAccount(trafficSourceId: string, input: ConnectAdAccoun
 export function disconnectAdAccount(trafficSourceId: string): Promise<void> {
   return apiFetch(`/traffic-sources/${trafficSourceId}/connection`, { method: "DELETE" });
 }
+
+/** Mirrors apps/internal/costsync.Result's JSON shape (§74/§27-COST,
+ * Phase B). unmatchedExternalCampaignIds is capped server-side
+ * (costsync.maxUnmatchedListed) — unmatchedExternalCampaignIdsTruncated
+ * is true when more existed than the list shows. */
+export type SyncResult = {
+  recordsFetched: number;
+  entriesWritten: number;
+  unmatchedExternalCampaignIds: string[] | null;
+  unmatchedExternalCampaignIdsTruncated: boolean;
+};
+
+export function syncAdAccount(trafficSourceId: string): Promise<SyncResult> {
+  return apiFetch(`/traffic-sources/${trafficSourceId}/connection/sync`, { method: "POST" });
+}

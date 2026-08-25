@@ -106,6 +106,66 @@ func TestDailyCampaignSpendFlagsIncompleteFXDay(t *testing.T) {
 	}
 }
 
+func TestUpsertRecordsManualSource(t *testing.T) {
+	pool := mustPool(t)
+	ctx := context.Background()
+	orgID := seedOrg(t, ctx, pool)
+	campaignID := seedCampaign(t, ctx, pool, orgID)
+
+	svc := cost.NewService(cost.NewRepository(pool), conversion.NewPostgresFX(pool))
+	day := time.Date(2026, 1, 19, 0, 0, 0, 0, time.UTC)
+
+	entry, err := svc.Upsert(ctx, orgID, campaignID, cost.UpsertInput{EntryDate: day, Amount: 10, Currency: "USD"})
+	if err != nil {
+		t.Fatalf("upsert: %v", err)
+	}
+	if entry.Source != cost.SourceManual {
+		t.Fatalf("Source = %q, want manual — the HTTP-reachable path must never write anything else", entry.Source)
+	}
+}
+
+// TestUpsertFromSync covers the ad-spend sync's write path (§74/§27-COST,
+// Phase B): a real ad-network source is recorded and round-trips through
+// List, and the method structurally refuses to be used to impersonate a
+// manual entry or write a bogus source string.
+func TestUpsertFromSync(t *testing.T) {
+	pool := mustPool(t)
+	ctx := context.Background()
+	orgID := seedOrg(t, ctx, pool)
+	campaignID := seedCampaign(t, ctx, pool, orgID)
+
+	svc := cost.NewService(cost.NewRepository(pool), conversion.NewPostgresFX(pool))
+	day := time.Date(2026, 1, 20, 0, 0, 0, 0, time.UTC)
+
+	entry, err := svc.UpsertFromSync(ctx, orgID, campaignID, cost.UpsertInput{EntryDate: day, Amount: 42, Currency: "USD"}, cost.SourceFacebookAds)
+	if err != nil {
+		t.Fatalf("UpsertFromSync: %v", err)
+	}
+	if entry.Source != cost.SourceFacebookAds {
+		t.Fatalf("Source = %q, want facebook_ads", entry.Source)
+	}
+
+	entries, err := svc.List(ctx, orgID, campaignID, cost.ListFilter{From: day, To: day})
+	if err != nil {
+		t.Fatalf("List: %v", err)
+	}
+	if len(entries) != 1 || entries[0].Source != cost.SourceFacebookAds {
+		t.Fatalf("List = %+v, want exactly one facebook_ads entry", entries)
+	}
+
+	t.Run("rejects SourceManual", func(t *testing.T) {
+		if _, err := svc.UpsertFromSync(ctx, orgID, campaignID, cost.UpsertInput{EntryDate: day.AddDate(0, 0, 1), Amount: 1, Currency: "USD"}, cost.SourceManual); err == nil {
+			t.Fatal("UpsertFromSync accepted SourceManual, want error — a sync must never masquerade as a manual entry")
+		}
+	})
+
+	t.Run("rejects an invalid source string", func(t *testing.T) {
+		if _, err := svc.UpsertFromSync(ctx, orgID, campaignID, cost.UpsertInput{EntryDate: day.AddDate(0, 0, 1), Amount: 1, Currency: "USD"}, cost.Source("bogus")); err == nil {
+			t.Fatal("UpsertFromSync accepted an invalid source, want error")
+		}
+	})
+}
+
 func TestCrossTenantIsolation(t *testing.T) {
 	pool := mustPool(t)
 	ctx := context.Background()

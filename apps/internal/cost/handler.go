@@ -46,6 +46,7 @@ type entryResponse struct {
 	Amount          float64  `json:"amount"`
 	Currency        string   `json:"currency"`
 	AmountUSD       *float64 `json:"amountUsd"`
+	Source          Source   `json:"source"`
 	CreatedAt       string   `json:"createdAt"`
 	UpdatedAt       string   `json:"updatedAt"`
 }
@@ -59,6 +60,7 @@ func toResponse(e Entry) entryResponse {
 		Amount:          e.Amount,
 		Currency:        e.Currency,
 		AmountUSD:       e.AmountUSD,
+		Source:          e.Source,
 		CreatedAt:       e.CreatedAt.Format(time.RFC3339),
 		UpdatedAt:       e.UpdatedAt.Format(time.RFC3339),
 	}

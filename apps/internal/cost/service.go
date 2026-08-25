@@ -64,7 +64,44 @@ func (s *Service) Upsert(ctx context.Context, orgID, campaignID string, in Upser
 		amountUSD = &usd
 	}
 
-	return s.repo.Upsert(ctx, idgen.New(), orgID, campaignID, in, amountUSD)
+	return s.repo.Upsert(ctx, idgen.New(), orgID, campaignID, in, amountUSD, SourceManual)
+}
+
+// UpsertFromSync is Upsert's Go-only counterpart for the ad-spend sync
+// (§74/§27-COST, Phase B) — never reachable from any HTTP route
+// (apps/internal/costsync calls it directly), and source must be a real
+// ad-network value, never SourceManual, so a sync can never masquerade
+// as (and silently overwrite the provenance of) an operator's own
+// manual entry through this path. Shares the exact same validation and
+// FX-conversion logic as Upsert; only the campaign-belongs-to-org check
+// is skipped, since the sync's own caller already resolved campaignID
+// via campaign.Repository.ListByExternalID scoped to this orgID — a
+// second check here would just be a redundant query, not a real
+// tenant-isolation gap (CLAUDE.md #5 is about never trusting a
+// client-supplied id; campaignID here was never client-supplied).
+func (s *Service) UpsertFromSync(ctx context.Context, orgID, campaignID string, in UpsertInput, source Source) (Entry, error) {
+	in.Currency = strings.ToUpper(strings.TrimSpace(in.Currency))
+	if in.TrafficSourceID != nil && strings.TrimSpace(*in.TrafficSourceID) == "" {
+		in.TrafficSourceID = nil
+	}
+
+	if fields := validateUpsert(in); len(fields) > 0 {
+		return Entry{}, apierror.Validation("invalid cost entry", fields)
+	}
+	if source == SourceManual || !source.Valid() {
+		return Entry{}, fmt.Errorf("cost: UpsertFromSync called with invalid source %q", source)
+	}
+
+	usd, ok, err := s.fx.ToUSD(ctx, in.Currency, in.Amount, in.EntryDate)
+	if err != nil {
+		return Entry{}, fmt.Errorf("converting to usd: %w", err)
+	}
+	var amountUSD *float64
+	if ok {
+		amountUSD = &usd
+	}
+
+	return s.repo.Upsert(ctx, idgen.New(), orgID, campaignID, in, amountUSD, source)
 }
 
 func (s *Service) List(ctx context.Context, orgID, campaignID string, filter ListFilter) ([]Entry, error) {

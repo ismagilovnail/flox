@@ -19,42 +19,45 @@ func NewRepository(db *pgxpool.Pool) *Repository {
 	return &Repository{db: db}
 }
 
-const selectColumns = `id, organization_id, campaign_id, traffic_source_id, entry_date, amount, currency, amount_usd, created_by_user_id, created_at, updated_at`
+const selectColumns = `id, organization_id, campaign_id, traffic_source_id, entry_date, amount, currency, amount_usd, source, created_by_user_id, created_at, updated_at`
 
 func scanEntry(row pgx.Row) (Entry, error) {
 	var e Entry
 	err := row.Scan(
 		&e.ID, &e.OrganizationID, &e.CampaignID, &e.TrafficSourceID, &e.EntryDate,
-		&e.Amount, &e.Currency, &e.AmountUSD, &e.CreatedByUserID, &e.CreatedAt, &e.UpdatedAt,
+		&e.Amount, &e.Currency, &e.AmountUSD, &e.Source, &e.CreatedByUserID, &e.CreatedAt, &e.UpdatedAt,
 	)
 	return e, err
 }
 
 // Upsert inserts a new (campaign, source, day) entry or overwrites the
-// existing one — always "manual" source (the only writer this phase has;
-// FB/TikTok import is later work per §27-COST). Two statements, chosen by
+// existing one, tagged with the given Source. Two statements, chosen by
 // whether TrafficSourceID is set, because cost_entries' identity is
 // defined by two separate partial unique indexes (00009) — traffic_source_id
-// IS NULL and IS NOT NULL can't share one ON CONFLICT target.
-func (r *Repository) Upsert(ctx context.Context, id, orgID, campaignID string, in UpsertInput, amountUSD *float64) (Entry, error) {
+// IS NULL and IS NOT NULL can't share one ON CONFLICT target. source is
+// a parameter here (not read off Entry/UpsertInput) so every caller has
+// to say explicitly what it's writing — see UpsertInput's own doc
+// comment for why Service.Upsert/UpsertFromSync split on this instead of
+// sharing one struct field.
+func (r *Repository) Upsert(ctx context.Context, id, orgID, campaignID string, in UpsertInput, amountUSD *float64, source Source) (Entry, error) {
 	var row pgx.Row
 	if in.TrafficSourceID != nil {
 		row = r.db.QueryRow(ctx, `
 			INSERT INTO cost_entries (id, organization_id, campaign_id, traffic_source_id, entry_date, amount, currency, amount_usd, source)
-			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'manual')
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
 			ON CONFLICT (campaign_id, traffic_source_id, entry_date) WHERE traffic_source_id IS NOT NULL
-			DO UPDATE SET amount = EXCLUDED.amount, currency = EXCLUDED.currency, amount_usd = EXCLUDED.amount_usd, updated_at = now()
+			DO UPDATE SET amount = EXCLUDED.amount, currency = EXCLUDED.currency, amount_usd = EXCLUDED.amount_usd, source = EXCLUDED.source, updated_at = now()
 			RETURNING `+selectColumns,
-			id, orgID, campaignID, *in.TrafficSourceID, in.EntryDate, in.Amount, in.Currency, amountUSD,
+			id, orgID, campaignID, *in.TrafficSourceID, in.EntryDate, in.Amount, in.Currency, amountUSD, source,
 		)
 	} else {
 		row = r.db.QueryRow(ctx, `
 			INSERT INTO cost_entries (id, organization_id, campaign_id, traffic_source_id, entry_date, amount, currency, amount_usd, source)
-			VALUES ($1, $2, $3, NULL, $4, $5, $6, $7, 'manual')
+			VALUES ($1, $2, $3, NULL, $4, $5, $6, $7, $8)
 			ON CONFLICT (campaign_id, entry_date) WHERE traffic_source_id IS NULL
-			DO UPDATE SET amount = EXCLUDED.amount, currency = EXCLUDED.currency, amount_usd = EXCLUDED.amount_usd, updated_at = now()
+			DO UPDATE SET amount = EXCLUDED.amount, currency = EXCLUDED.currency, amount_usd = EXCLUDED.amount_usd, source = EXCLUDED.source, updated_at = now()
 			RETURNING `+selectColumns,
-			id, orgID, campaignID, in.EntryDate, in.Amount, in.Currency, amountUSD,
+			id, orgID, campaignID, in.EntryDate, in.Amount, in.Currency, amountUSD, source,
 		)
 	}
 	return scanEntry(row)

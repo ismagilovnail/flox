@@ -69,10 +69,11 @@ func (h *Handler) get(w http.ResponseWriter, r *http.Request) {
 }
 
 type createRequest struct {
-	TrafficSourceID string `json:"trafficSourceId"`
-	Name            string `json:"name"`
-	FallbackURL     string `json:"fallbackUrl"`
-	Notes           string `json:"notes"`
+	TrafficSourceID    string `json:"trafficSourceId"`
+	Name               string `json:"name"`
+	FallbackURL        string `json:"fallbackUrl"`
+	Notes              string `json:"notes"`
+	ExternalCampaignID string `json:"externalCampaignId"`
 }
 
 func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
@@ -85,10 +86,11 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 	}
 
 	c, err := h.svc.Create(r.Context(), orgID, CreateInput{
-		TrafficSourceID: req.TrafficSourceID,
-		Name:            req.Name,
-		FallbackURL:     req.FallbackURL,
-		Notes:           req.Notes,
+		TrafficSourceID:    req.TrafficSourceID,
+		Name:               req.Name,
+		FallbackURL:        req.FallbackURL,
+		Notes:              req.Notes,
+		ExternalCampaignID: req.ExternalCampaignID,
 	})
 	if err != nil {
 		apierror.Write(w, h.logger, err)
@@ -98,11 +100,12 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 }
 
 type updateRequest struct {
-	Name            *string `json:"name"`
-	TrafficSourceID *string `json:"trafficSourceId"`
-	FallbackURL     *string `json:"fallbackUrl"`
-	Notes           *string `json:"notes"`
-	Status          *Status `json:"status"`
+	Name               *string `json:"name"`
+	TrafficSourceID    *string `json:"trafficSourceId"`
+	FallbackURL        *string `json:"fallbackUrl"`
+	Notes              *string `json:"notes"`
+	Status             *Status `json:"status"`
+	ExternalCampaignID *string `json:"externalCampaignId"`
 }
 
 func (h *Handler) update(w http.ResponseWriter, r *http.Request) {
@@ -115,11 +118,12 @@ func (h *Handler) update(w http.ResponseWriter, r *http.Request) {
 	}
 
 	c, err := h.svc.Update(r.Context(), orgID, chi.URLParam(r, "id"), UpdateInput{
-		Name:            req.Name,
-		TrafficSourceID: req.TrafficSourceID,
-		FallbackURL:     req.FallbackURL,
-		Notes:           req.Notes,
-		Status:          req.Status,
+		Name:               req.Name,
+		TrafficSourceID:    req.TrafficSourceID,
+		FallbackURL:        req.FallbackURL,
+		Notes:              req.Notes,
+		Status:             req.Status,
+		ExternalCampaignID: req.ExternalCampaignID,
 	})
 	if err != nil {
 		apierror.Write(w, h.logger, err)

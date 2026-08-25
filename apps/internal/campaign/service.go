@@ -11,9 +11,10 @@ import (
 )
 
 const (
-	nameMinLen  = 2
-	nameMaxLen  = 80
-	notesMaxLen = 500
+	nameMinLen               = 2
+	nameMaxLen               = 80
+	notesMaxLen              = 500
+	externalCampaignIDMaxLen = 200
 )
 
 type Service struct {
@@ -43,6 +44,7 @@ func (s *Service) Get(ctx context.Context, orgID, id string) (Campaign, error) {
 
 func (s *Service) Create(ctx context.Context, orgID string, in CreateInput) (Campaign, error) {
 	in.Name = strings.TrimSpace(in.Name)
+	in.ExternalCampaignID = strings.TrimSpace(in.ExternalCampaignID)
 	if fields := validateCreate(in); len(fields) > 0 {
 		return Campaign{}, apierror.Validation("invalid campaign", fields)
 	}
@@ -77,6 +79,13 @@ func (s *Service) Update(ctx context.Context, orgID, id string, in UpdateInput) 
 	if in.Status != nil && !in.Status.Valid() {
 		fields["status"] = "must be one of active, paused, draft, archived"
 	}
+	if in.ExternalCampaignID != nil {
+		trimmed := strings.TrimSpace(*in.ExternalCampaignID)
+		in.ExternalCampaignID = &trimmed
+		if len(trimmed) > externalCampaignIDMaxLen {
+			fields["externalCampaignId"] = fmt.Sprintf("must be at most %d characters", externalCampaignIDMaxLen)
+		}
+	}
 	if len(fields) > 0 {
 		return Campaign{}, apierror.Validation("invalid campaign", fields)
 	}
@@ -101,6 +110,13 @@ func (s *Service) Delete(ctx context.Context, orgID, id string) error {
 // Duplicate mirrors the frontend's stores/campaigns.ts duplicateCampaign:
 // a fresh id, "{name} (Copy)", forced back to draft — a duplicate is a new
 // starting point, not a running clone of an active campaign.
+// ExternalCampaignID deliberately does NOT carry over: an ad-spend sync
+// (§74/§27-COST) attributes a day's full platform-reported spend to
+// every campaign sharing an external id (ListByExternalID), so copying
+// it here would silently double-count the source campaign's spend onto
+// an unrelated draft the moment the operator later activates it — a
+// mapping like that has to be a deliberate, separate choice, never an
+// implicit side effect of Duplicate.
 func (s *Service) Duplicate(ctx context.Context, orgID, id string) (Campaign, error) {
 	source, err := s.repo.GetByID(ctx, orgID, id)
 	if err != nil {
@@ -166,6 +182,9 @@ func validateCreate(in CreateInput) map[string]string {
 	}
 	if len(in.Notes) > notesMaxLen {
 		fields["notes"] = fmt.Sprintf("must be at most %d characters", notesMaxLen)
+	}
+	if len(in.ExternalCampaignID) > externalCampaignIDMaxLen {
+		fields["externalCampaignId"] = fmt.Sprintf("must be at most %d characters", externalCampaignIDMaxLen)
 	}
 	return fields
 }

@@ -165,3 +165,191 @@ rows in `ad_account_connections` afterward) and confirmed the section
 reverted to its empty connect form. No console errors at any point.
 `cost_integration` reverted to `none` on the fixture directly in
 Postgres afterward, restoring it to its pre-phase state.
+
+---
+
+# Phase B: real Facebook Ads / TikTok Ads API adapters + sync
+
+The second half promised by Phase A above. User confirmed via
+`AskUserQuestion` this phase should build the real adapters + a sync,
+still only structurally verifiable (no live Meta/TikTok app credentials
+exist in this environment) — and separately confirmed a real
+architectural gap raised mid-phase (below) via a second
+`AskUserQuestion`.
+
+## The gap Phase A's `CostProvider` didn't account for: which FLOX campaign?
+
+`cost_entries.campaign_id` is `NOT NULL` (migration 00009), but a
+platform's Insights API reports spend broken down by *its own* campaign
+id, and one traffic source's connected ad account can fund more than one
+FLOX campaign (`campaigns.traffic_source_id` is many-to-one, not
+one-to-one) — nothing tied a synced spend row to a specific FLOX
+campaign. Resolved by adding an optional `external_campaign_id` column
+to `campaigns` (migration 00019, `text NOT NULL DEFAULT ''` — same "empty
+string means unset" convention as `fallback_url`/`notes` on the same
+table) that an operator pastes the ad platform's own campaign id into.
+No uniqueness constraint: an operator can deliberately map two FLOX
+campaigns to one ad-platform campaign (e.g. split-testing two FLOX
+setups against one real ad spend) and the sync attributes the full day's
+spend to both — `campaign.Repository.ListByExternalID` (scoped to
+`(organizationId, trafficSourceId, externalCampaignId)`, never a bare org-
+wide match, since a connection's own results only ever cover one traffic
+source) returns a slice for exactly this reason. A record whose
+`ExternalCampaignID` matches nothing produces no `cost_entries` row for
+that day — CLAUDE.md invariant #6 ("no cost for a slice shows as `—`,
+never a false zero") applies directly; an ad account will always report
+spend for campaigns FLOX doesn't know about.
+
+`adaccount.CostProvider` was revised accordingly, before anything called
+it: `DailySpendByCampaign` (not an account-level total) returning
+`DailyCampaignSpendRecord{Date, ExternalCampaignID, Amount, Currency}` —
+amounts stay in the ad platform's own native currency, USD normalization
+via `fx_rates` (§50-FX) still happens exactly once, at the point a record
+is written into `cost_entries`, same as every other cost value in this
+system.
+
+## Real HTTP adapters, real request shapes, structurally verified
+
+`internal/adaccount/facebookads` — Facebook Graph API Marketing Insights
+(`GET /act_{id}/insights`, `level=campaign`, `time_increment=1`,
+`time_range` JSON-encoded, `fields=campaign_id,spend,account_currency`),
+following `paging.next` (capped at `maxPages=500`) and parsing the real
+Graph API error-body shape (`{"error":{"code","type","message",
+"fbtrace_id"}}`).
+
+`internal/adaccount/tiktokads` — TikTok Business API (`GET
+/report/integrated/get/`, `report_type=BASIC`, `data_level=
+AUCTION_CAMPAIGN`, `dimensions=["campaign_id","stat_time_day"]`,
+`metrics=["spend"]`, `Access-Token` header not a query param — TikTok's
+own convention, unlike Facebook's), paginating on `page_info.total_page`.
+TikTok's reporting endpoint does **not** return currency per row (it's an
+account-level property); a second call to `GET /advertiser/info/` fetches
+it once per sync and stamps every record with it.
+
+Both adapters take an injectable `BaseURL`/`HTTPClient` specifically so
+`*_test.go` can point them at an `httptest.Server` instead of the real
+host — this project has no live Meta/TikTok app credentials, so unit
+tests are the only verification the request/response shapes get. (They
+also, incidentally, got verified against the **real** Graph/Business API
+during this phase's manual pass below — with intentionally-invalid
+tokens, so the only thing exercised for real was "does this project's
+request reach the real endpoint and get a real, correctly-parsed error
+back," never a real spend pull.)
+
+## `cost.Source`: cost_entries finally records where a value came from
+
+`cost_entries.source` (migration 00009's own `CHECK` constraint has
+allowed `facebook_ads`/`tiktok_ads` since that migration) had never
+actually been written as anything but the hardcoded literal `'manual'`
+until this phase. `cost.Service.Upsert` (the only HTTP-reachable write
+path — `upsertRequest` in `handler.go` has no `source` field to decode
+into) always still writes `SourceManual`. A new `cost.Service.
+UpsertFromSync` — Go-only, never wired to any HTTP route — takes `source
+cost.Source` as its own explicit parameter and rejects `SourceManual`/any
+invalid value. This was a deliberate design correction made mid-
+implementation: `Source` was initially just a field on the shared
+`UpsertInput` struct, then reverted specifically because that would make
+"an HTTP client can't set an arbitrary source" true only by the
+incidental fact that `upsertRequest` doesn't happen to populate that
+field — a trust-by-omission gap, not a structural guarantee. Splitting
+into two methods with source only ever an explicit parameter on the
+trusted path is the same "give a trusted-only write its own explicit
+entry point" pattern the previous section's `Credentials` type already
+established (never on `Connection`, the API-response type).
+
+## `internal/costsync`: the orchestrator
+
+New package, `handler → service`, no `repository.go` of its own (reads
+through `adaccount.Repository`, `campaign.Repository`, and writes through
+`cost.Service` directly — it owns no table). `Service.Sync(ctx, orgID,
+trafficSourceID, from, to)`:
+
+1. Reads the traffic source's `cost_integration` and picks the matching
+   `Providers.FacebookAds`/`TikTokAds` (`§74`/invariant #11: providers
+   behind interfaces — this is the sync's one vendor-specific branch).
+2. Reads the real access token via a new `adaccount.Repository.
+   CredentialsByTrafficSourceID` — deliberately added to `*Repository`
+   directly, never to `adaccount.Service` (the public, HTTP-facing type),
+   the same "trusted caller holds the repository directly" split as
+   `cost.Service.UpsertFromSync` above.
+3. Calls the provider, matches each record via `campaign.Repository.
+   ListByExternalID`, writes one `cost_entries` row per matched campaign
+   via `cost.Service.UpsertFromSync` — unmatched records are silently
+   skipped (capped list of up to 20 unmatched external ids returned in
+   `Result` for the UI to surface, plus a truncation flag).
+
+`POST /traffic-sources/{id}/connection/sync` — mounted in the **same**
+`srv.Mux().Route("/traffic-sources/{id}/connection", ...)` block as
+`adaccount`'s own `GET/PATCH/DELETE`, not a second `Route()` call: chi
+panics if two separate `Route()` calls claim the identical literal
+pattern, so `adAccountHandler.Register(r)` and `costSyncHandler.
+Register(r)` both run inside one closure. Query params `from`/`to`
+(`YYYY-MM-DD`) default to a 30-day lookback (`to=today`, `from=today-29`)
+— the same default window `cost` handler's own `parseRange` already
+uses, since ad platforms commonly revise very recent days' reported
+spend and a "Sync now" without explicit dates should re-pull that whole
+window, not just today.
+
+## Frontend
+
+`Campaign.externalCampaignId` added to the campaign form (`campaign-
+form.tsx`, both create and edit — `campaign-detail-view.tsx`'s Settings
+tab pre-fills it from the loaded campaign) and to `CreateCampaignInput`/
+the `Campaign` type in `lib/api/campaigns.ts`.
+
+`AdAccountConnectionSection` (Phase A) gained a "Sync now" button, shown
+only once a connection exists (next to "Disconnect"), and an inline
+result summary card below it (`sync.data`, no extra `useState` needed —
+the mutation's own `data` is enough): records fetched, entries written,
+and a capped, `Badge`-rendered list of unmatched external campaign ids
+with a hint pointing at where to set them. `useSyncAdAccount` invalidates
+every `["cost-entries", ...]` query on success (broad, not scoped to one
+campaign id — the caller only knows `trafficSourceId`, a sync can write
+to any number of campaigns under it, and this is a low-frequency manual
+action so the broad invalidation isn't a real cost).
+
+## Verified
+
+Backend: `gofmt`/`go build ./...`/`go vet ./...`/`go test ./...` all
+green, including new tests in `internal/cost` (`TestUpsertRecordsManualSource`,
+`TestUpsertFromSync` incl. its two rejection cases),
+`internal/adaccount/facebookads` and `.../tiktokads` (httptest.Server-
+backed: single page, pagination, real error-body shape, malformed spend
+value), and `internal/costsync` (matched-campaign write, unmatched
+skip-and-report, two-campaigns-share-one-external-id both get the full
+day's spend, not-connected error, no-provider-for-cost-integration
+error) — all against a real Postgres, per this project's existing
+integration-test convention.
+
+Frontend: `tsc --noEmit`/`eslint`/`vitest run` (21 tests, unchanged)/
+`next build` all clean.
+
+Full manual verification against the real running `api`+`web` dev
+servers, **including real network calls to the actual Facebook Graph API
+and TikTok Business API** (this environment has outbound internet
+access) with intentionally-invalid tokens:
+
+- `curl`-level: created a `facebook_ads` traffic source, confirmed `sync`
+  404s before any connection exists, connected a fake token, created a
+  campaign with a matching `externalCampaignId`, triggered `sync` — got
+  back a real Graph API `OAuthException` (code 190, "Invalid OAuth access
+  token"), logged server-side with full detail, `500` returned to the
+  client with a generic message (no token or internal detail leaked).
+  Repeated for `tiktok_ads` — real Business API error (code 40105,
+  "Access token is incorrect or has been revoked") from the
+  `advertiser/info/` call specifically, confirming the two-call
+  (currency-then-report) design's first call is what's reached first.
+  Server stayed up and serving after both.
+- Browser-level: switched a fixture traffic source's `costIntegration` to
+  `facebook_ads` live in the edit sheet, saved, connected a fake
+  credential (`PATCH` → `200`), clicked "Sync now" — real `POST .../sync`
+  fired, got the same real Graph API `OAuthException` back, and the UI
+  correctly rendered an error toast ("Couldn't sync ad spend" / "internal
+  server error") rather than crashing or showing a blank state. Created a
+  campaign through `/campaigns/new` with `externalCampaignId` filled in,
+  confirmed the value round-tripped through the real API (`GET
+  /campaigns/{id}` after create) and pre-filled correctly on the
+  campaign's own Settings tab.
+- Cleanup: deleted the test campaign, disconnected both fake ad account
+  connections, reverted the Facebook Ads fixture's `cost_integration`
+  back to `none` — matching state before this phase's manual pass.

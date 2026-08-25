@@ -73,6 +73,25 @@ func (r *Repository) Disconnect(ctx context.Context, orgID, trafficSourceID stri
 	return nil
 }
 
+// CredentialsByTrafficSourceID returns the real access token for a
+// trusted, Go-only caller (the ad-spend sync, §74/§27-COST Phase B) —
+// structurally separate from GetByTrafficSourceID's Connection return
+// (no AccessToken field at all, see Connection's own doc comment above
+// selectColumns) so there is no HTTP-reachable code path that could ever
+// be edited into also exposing the raw token; only a caller holding a
+// *Repository directly (never just the public Service) can reach this.
+func (r *Repository) CredentialsByTrafficSourceID(ctx context.Context, orgID, trafficSourceID string) (Credentials, error) {
+	var c Credentials
+	err := r.db.QueryRow(ctx,
+		`SELECT ad_account_id, access_token FROM ad_account_connections WHERE traffic_source_id = $1 AND organization_id = $2`,
+		trafficSourceID, orgID,
+	).Scan(&c.AdAccountID, &c.AccessToken)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return Credentials{}, apierror.NotFound("no ad account connected for this traffic source")
+	}
+	return c, err
+}
+
 // TrafficSourceCostIntegration returns the traffic source's own
 // cost_integration value (a raw query against trafficsource's table,
 // same as streamset.Repository's own cross-domain checks — not an

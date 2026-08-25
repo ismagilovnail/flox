@@ -5,6 +5,74 @@ per-phase, matching `CLAUDE.md`'s phase protocol. The one exception is
 [Between phases], below: spec amendments and the code changes that follow from
 them land between phases and would otherwise be invisible here.
 
+## [Ad Spend Sync] — Phase B of FB/TikTok ad-spend import: real API adapters + sync
+
+### Scope
+
+Second half of §74/§27-COST's ad-spend import, the phase Ad Account
+Connections (below) deliberately deferred. Confirmed via `AskUserQuestion`:
+build the real Facebook Ads/TikTok Ads API adapters + a sync now, still
+only structurally verifiable (no live Meta/TikTok app credentials exist
+in this environment — though this environment does have outbound
+internet access, so both adapters were also exercised against the real
+Graph/Business API with intentionally-invalid tokens during manual
+verification, see below). Mid-phase, found and fixed a real gap Phase A's
+`CostProvider` interface didn't account for: `cost_entries.campaign_id`
+is `NOT NULL` but a platform's spend API reports by its *own* campaign
+id, and one traffic source can fund more than one FLOX campaign — nothing
+mapped a synced record to a specific FLOX campaign. Confirmed via a
+second `AskUserQuestion`: add an optional `externalCampaignId` field to
+Campaign for this matching. See `docs/ad-account-connections.md`'s
+"Phase B" section for full detail.
+
+### Changed
+
+- New migration `00019_campaign_external_id.sql`: `campaigns.external_campaign_id`
+  (nullable-by-convention `text NOT NULL DEFAULT ''`, no uniqueness
+  constraint — two campaigns can deliberately share one ad-platform
+  campaign id). `campaign.Repository.ListByExternalID` matches scoped to
+  `(orgId, trafficSourceId, externalCampaignId)`, returns a slice.
+- `adaccount.CostProvider` revised before anything implemented it:
+  `DailySpendByCampaign` (was an account-level `DailySpend`) returning
+  `DailyCampaignSpendRecord{Date, ExternalCampaignID, Amount, Currency}`.
+- New `apps/internal/adaccount/facebookads` and `.../tiktokads`: real
+  HTTP adapters against Facebook Graph API Marketing Insights and TikTok
+  Business API's integrated report endpoint respectively, each with an
+  injectable `BaseURL`/`HTTPClient` for `httptest.Server`-backed tests.
+- `cost.Source` (`manual`/`facebook_ads`/`tiktok_ads`) finally written —
+  `cost_entries.source`'s `CHECK` constraint has allowed these values
+  since migration 00009 but nothing wrote anything but `'manual'` until
+  now. New `cost.Service.UpsertFromSync` (Go-only, never HTTP-reachable)
+  takes `source` as an explicit parameter, structurally separate from the
+  HTTP-reachable `Service.Upsert` (always `SourceManual`) — not a shared
+  struct field, so an HTTP client can never spoof its provenance.
+- New `apps/internal/costsync`: orchestrates connection credentials →
+  provider call → campaign matching → `cost.Service.UpsertFromSync`
+  writes. `POST /traffic-sources/{id}/connection/sync`, defaulting to a
+  30-day lookback, mounted alongside `adaccount`'s own routes in the same
+  `chi` `Route()` block (two separate `Route()` calls on the identical
+  pattern panics).
+- `apps/web`: `Campaign.externalCampaignId` on the campaign form (create
+  + edit/Settings tab) and API types; `AdAccountConnectionSection` gained
+  a "Sync now" button + inline result summary (records fetched, entries
+  written, capped unmatched-external-id list).
+
+### Verified
+
+Backend: `gofmt`/`go build ./...`/`go vet ./...`/`go test ./...` all
+green — new tests in `internal/cost`, `internal/adaccount/facebookads`,
+`internal/adaccount/tiktokads` (httptest.Server-backed), and
+`internal/costsync` (real-Postgres-backed, matched/unmatched/shared-
+external-id/not-connected/no-provider cases). Frontend: `tsc --noEmit`/
+`eslint`/`vitest run` (21 tests)/`next build` all clean. Full manual pass
+against the real running `api`+`web` dev servers, including real network
+calls to the actual Facebook Graph API and TikTok Business API (real
+`OAuthException`/`40105` errors back from intentionally-invalid tokens,
+logged server-side, generic 500 to the client — no token leaked); a
+campaign created through the UI with `externalCampaignId` round-tripped
+correctly through the real Postgres-backed API. Test fixtures cleaned up
+afterward. See `docs/ad-account-connections.md`.
+
 ## [Ad Account Connections] — Phase A of FB/TikTok ad-spend import: credential storage
 
 ### Scope

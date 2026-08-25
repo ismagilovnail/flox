@@ -6,6 +6,7 @@ import {
   connectAdAccount,
   disconnectAdAccount,
   getAdAccountConnection,
+  syncAdAccount,
   type ConnectAdAccountInput,
 } from "@/lib/api/ad-account-connections";
 import { ApiError } from "@/lib/api/client";
@@ -44,5 +45,19 @@ export function useDisconnectAdAccount(trafficSourceId: string) {
   return useMutation({
     mutationFn: () => disconnectAdAccount(trafficSourceId),
     onSuccess: () => qc.invalidateQueries({ queryKey: connectionKey(trafficSourceId) }),
+  });
+}
+
+/** A sync can write cost_entries for any campaign under this traffic
+ * source (matched by externalCampaignId, §74/§27-COST) — the caller
+ * doesn't know which campaign IDs ahead of time, so this invalidates
+ * every ["cost-entries", ...] query rather than one specific campaign's
+ * (see use-cost-entries.ts's own entriesKey). Sync is a manual, low-
+ * frequency action, so the broad invalidation is not a real cost. */
+export function useSyncAdAccount(trafficSourceId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => syncAdAccount(trafficSourceId),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["cost-entries"] }),
   });
 }

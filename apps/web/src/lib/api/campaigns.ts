@@ -4,10 +4,15 @@ export type CampaignStatus = "active" | "paused" | "draft" | "archived";
 
 /** Mirrors apps/internal/campaign.Campaign's JSON shape exactly (id,
  * organizationId, trafficSourceId, name, status, fallbackUrl, notes,
- * createdAt, updatedAt) — no trackingDomain/trackingId (that's
- * tracking_links, a separate, not-yet-built entity, see
+ * externalCampaignId, createdAt, updatedAt) — no trackingDomain/trackingId
+ * (that's tracking_links, a separate, not-yet-built entity, see
  * docs/frontend-integration.md) and no clicks/conversions/revenue/spend
- * (those need a bulk analytics rollup that doesn't exist yet either). */
+ * (those need a bulk analytics rollup that doesn't exist yet either).
+ * externalCampaignId is the ad platform's own campaign id (§74/§27-COST,
+ * migration 00019) — how the ad-spend sync (POST
+ * /traffic-sources/{id}/connection/sync, see ad-account-connections.ts)
+ * matches a synced day's spend to this campaign. Empty string for the
+ * common case (not funded by a connected ad account, or not mapped yet). */
 export type Campaign = {
   id: string;
   organizationId: string;
@@ -16,6 +21,7 @@ export type Campaign = {
   status: CampaignStatus;
   fallbackUrl: string;
   notes: string;
+  externalCampaignId: string;
   createdAt: string;
   updatedAt: string;
 };
@@ -25,6 +31,7 @@ export type CreateCampaignInput = {
   name: string;
   fallbackUrl: string;
   notes: string;
+  externalCampaignId?: string;
 };
 
 export type UpdateCampaignInput = Partial<CreateCampaignInput> & { status?: CampaignStatus };

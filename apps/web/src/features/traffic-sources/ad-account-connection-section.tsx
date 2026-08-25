@@ -4,7 +4,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { toast } from "sonner";
-import { LinkIcon, Unlink2Icon } from "lucide-react";
+import { LinkIcon, RefreshCwIcon, Unlink2Icon } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import type { TFunction } from "i18next";
 
@@ -13,7 +13,12 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Mono } from "@/components/ui/typography";
-import { useAdAccountConnection, useConnectAdAccount, useDisconnectAdAccount } from "@/hooks/use-ad-account-connection";
+import {
+  useAdAccountConnection,
+  useConnectAdAccount,
+  useDisconnectAdAccount,
+  useSyncAdAccount,
+} from "@/hooks/use-ad-account-connection";
 import type { CostIntegration } from "@/lib/api/traffic-sources";
 
 function buildConnectSchema(t: TFunction) {
@@ -43,6 +48,7 @@ export function AdAccountConnectionSection({
   const connectionQuery = useAdAccountConnection(trafficSourceId);
   const connect = useConnectAdAccount(trafficSourceId);
   const disconnect = useDisconnectAdAccount(trafficSourceId);
+  const sync = useSyncAdAccount(trafficSourceId);
 
   const form = useForm<ConnectFormValues>({
     resolver: zodResolver(buildConnectSchema(t)),
@@ -66,6 +72,16 @@ export function AdAccountConnectionSection({
     });
   }
 
+  function handleSync() {
+    sync.mutate(undefined, {
+      onSuccess: (result) =>
+        toast(t("connection.toast.synced", { ns: "trafficSources" }), {
+          description: t("connection.syncResult.entriesWritten", { ns: "trafficSources" }) + `: ${result.entriesWritten}`,
+        }),
+      onError: (err) => toast.error(t("connection.toast.syncError", { ns: "trafficSources" }), { description: err.message }),
+    });
+  }
+
   return (
     <div className="flex flex-col gap-2 rounded-lg border border-border p-3">
       <div className="flex items-center gap-2">
@@ -77,17 +93,63 @@ export function AdAccountConnectionSection({
       {connectionQuery.isLoading ? (
         <p className="text-xs text-muted-foreground">{t("connection.loading", { ns: "trafficSources" })}</p>
       ) : connectionQuery.data ? (
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <div className="flex items-center gap-2">
-            <LinkIcon className="size-3.5 text-success" />
-            <Mono className="text-xs">{connectionQuery.data.adAccountId}</Mono>
-            <span className="text-xs text-muted-foreground">
-              {t("connection.tokenPreview", { ns: "trafficSources", last4: connectionQuery.data.tokenPreview })}
-            </span>
+        <div className="flex flex-col gap-2">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <LinkIcon className="size-3.5 text-success" />
+              <Mono className="text-xs">{connectionQuery.data.adAccountId}</Mono>
+              <span className="text-xs text-muted-foreground">
+                {t("connection.tokenPreview", { ns: "trafficSources", last4: connectionQuery.data.tokenPreview })}
+              </span>
+            </div>
+            <div className="flex items-center gap-2">
+              <Button type="button" variant="outline" size="sm" onClick={handleSync} disabled={sync.isPending}>
+                <RefreshCwIcon className={`size-3.5 ${sync.isPending ? "animate-spin" : ""}`} />
+                {sync.isPending
+                  ? t("connection.syncing", { ns: "trafficSources" })
+                  : t("connection.syncNow", { ns: "trafficSources" })}
+              </Button>
+              <Button type="button" variant="outline" size="sm" onClick={handleDisconnect} disabled={disconnect.isPending}>
+                <Unlink2Icon className="size-3.5" /> {t("connection.disconnect", { ns: "trafficSources" })}
+              </Button>
+            </div>
           </div>
-          <Button type="button" variant="outline" size="sm" onClick={handleDisconnect} disabled={disconnect.isPending}>
-            <Unlink2Icon className="size-3.5" /> {t("connection.disconnect", { ns: "trafficSources" })}
-          </Button>
+
+          {sync.data && (
+            <div className="flex flex-col gap-1.5 rounded-md border border-border bg-muted/30 p-2.5">
+              <span className="text-xs font-medium">{t("connection.syncResult.title", { ns: "trafficSources" })}</span>
+              <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
+                <span>
+                  {t("connection.syncResult.recordsFetched", { ns: "trafficSources" })}: {sync.data.recordsFetched}
+                </span>
+                <span>
+                  {t("connection.syncResult.entriesWritten", { ns: "trafficSources" })}: {sync.data.entriesWritten}
+                </span>
+              </div>
+              {sync.data.unmatchedExternalCampaignIds && sync.data.unmatchedExternalCampaignIds.length > 0 && (
+                <div className="flex flex-col gap-1">
+                  <span className="text-xs text-muted-foreground">
+                    {t("connection.syncResult.unmatchedTitle", { ns: "trafficSources" })}
+                  </span>
+                  <div className="flex flex-wrap gap-1">
+                    {sync.data.unmatchedExternalCampaignIds.map((id) => (
+                      <Badge key={id} variant="outline" className="font-mono text-[11px]">
+                        {id}
+                      </Badge>
+                    ))}
+                    {sync.data.unmatchedExternalCampaignIdsTruncated && (
+                      <span className="text-xs text-muted-foreground">
+                        {t("connection.syncResult.unmatchedTruncated", { ns: "trafficSources" })}
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    {t("connection.syncResult.unmatchedHint", { ns: "trafficSources" })}
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
         </div>
       ) : (
         // A <form> here (rather than this <div>) would nest inside

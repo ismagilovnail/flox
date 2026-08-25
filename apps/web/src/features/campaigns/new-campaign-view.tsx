@@ -18,6 +18,7 @@ export function NewCampaignView() {
         name: values.name,
         trafficSourceId: values.trafficSourceId,
         fallbackUrl: values.fallbackUrl,
+        externalCampaignId: values.externalCampaignId ?? "",
         notes: values.notes ?? "",
       },
       {

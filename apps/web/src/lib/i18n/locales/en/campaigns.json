@@ -58,6 +58,9 @@
     "fallbackUrlLabel": "Fallback URL",
     "fallbackUrlPlaceholder": "https://example.com/offer-fallback",
     "fallbackUrlHint": "Used when no stream set matches (Phase 7 builds the rules that route around this).",
+    "externalCampaignIdLabel": "External campaign ID",
+    "externalCampaignIdPlaceholder": "e.g. 120211234567890123",
+    "externalCampaignIdHint": "The ad platform's own campaign ID — set this to match this campaign against synced Facebook/TikTok spend.",
     "statusLabel": "Status",
     "notesLabel": "Notes",
     "notesPlaceholder": "Internal notes...",
@@ -65,7 +68,8 @@
     "validation": {
       "nameMin": "Name must be at least 2 characters",
       "sourceRequired": "Select a source",
-      "urlInvalid": "Enter a valid URL"
+      "urlInvalid": "Enter a valid URL",
+      "externalCampaignIdMax": "Must be at most 200 characters"
     }
   },
   "newCampaign": {

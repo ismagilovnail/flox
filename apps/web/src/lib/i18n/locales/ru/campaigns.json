@@ -58,6 +58,9 @@
     "fallbackUrlLabel": "URL по умолчанию",
     "fallbackUrlPlaceholder": "https://example.com/offer-fallback",
     "fallbackUrlHint": "Используется, если ни один набор потоков не совпал (правила для этого добавляются на Фазе 7).",
+    "externalCampaignIdLabel": "ID кампании во внешней системе",
+    "externalCampaignIdPlaceholder": "например, 120211234567890123",
+    "externalCampaignIdHint": "Собственный ID кампании в рекламной площадке — укажите его, чтобы сопоставить эту кампанию с синхронизированными расходами Facebook/TikTok.",
     "statusLabel": "Статус",
     "notesLabel": "Заметки",
     "notesPlaceholder": "Внутренние заметки...",
@@ -65,7 +68,8 @@
     "validation": {
       "nameMin": "Название должно содержать не менее 2 символов",
       "sourceRequired": "Выберите источник",
-      "urlInvalid": "Введите корректный URL"
+      "urlInvalid": "Введите корректный URL",
+      "externalCampaignIdMax": "Не более 200 символов"
     }
   },
   "newCampaign": {

@@ -89,6 +89,90 @@ func TestCrossTenantIsolation(t *testing.T) {
 	}
 }
 
+// TestExternalCampaignID covers the ad-spend sync match column (§74/
+// §27-COST, migration 00019): round-trips through Create/Update, and
+// ListByExternalID scopes to (org, trafficSource) and returns every
+// matching campaign (no uniqueness constraint — two campaigns can
+// deliberately share one ad-platform campaign id).
+func TestExternalCampaignID(t *testing.T) {
+	ctx := context.Background()
+	pool := mustPool(t)
+	orgID := seedOrg(t, ctx, pool)
+	sourceID := seedTrafficSource(t, ctx, pool, orgID)
+
+	repo := campaign.NewRepository(pool)
+	svc := campaign.NewService(repo)
+
+	created, err := svc.Create(ctx, orgID, campaign.CreateInput{
+		TrafficSourceID:    sourceID,
+		Name:               "With External ID",
+		FallbackURL:        "https://example.com/fallback",
+		ExternalCampaignID: "  fb_campaign_123  ",
+	})
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	if created.ExternalCampaignID != "fb_campaign_123" {
+		t.Fatalf("ExternalCampaignID = %q, want trimmed fb_campaign_123", created.ExternalCampaignID)
+	}
+
+	found, err := repo.ListByExternalID(ctx, orgID, sourceID, "fb_campaign_123")
+	if err != nil {
+		t.Fatalf("ListByExternalID: %v", err)
+	}
+	if len(found) != 1 || found[0].ID != created.ID {
+		t.Fatalf("ListByExternalID = %+v, want exactly the created campaign", found)
+	}
+
+	// A second campaign deliberately sharing the same external id: both
+	// come back, no uniqueness constraint silently drops one.
+	second, err := svc.Create(ctx, orgID, campaign.CreateInput{
+		TrafficSourceID:    sourceID,
+		Name:               "Shares The Same External ID",
+		FallbackURL:        "https://example.com/fallback",
+		ExternalCampaignID: "fb_campaign_123",
+	})
+	if err != nil {
+		t.Fatalf("Create second: %v", err)
+	}
+	found, err = repo.ListByExternalID(ctx, orgID, sourceID, "fb_campaign_123")
+	if err != nil {
+		t.Fatalf("ListByExternalID after second create: %v", err)
+	}
+	if len(found) != 2 {
+		t.Fatalf("ListByExternalID = %d campaigns, want 2 (%q and %q)", len(found), created.ID, second.ID)
+	}
+
+	// Scoped to trafficSourceID: a different source's campaign with the
+	// same external id never shows up here.
+	otherSource := seedTrafficSource(t, ctx, pool, orgID)
+	if _, err := svc.Create(ctx, orgID, campaign.CreateInput{
+		TrafficSourceID:    otherSource,
+		Name:               "Different Source, Same External ID",
+		FallbackURL:        "https://example.com/fallback",
+		ExternalCampaignID: "fb_campaign_123",
+	}); err != nil {
+		t.Fatalf("Create under other source: %v", err)
+	}
+	found, err = repo.ListByExternalID(ctx, orgID, sourceID, "fb_campaign_123")
+	if err != nil {
+		t.Fatalf("ListByExternalID after other-source create: %v", err)
+	}
+	if len(found) != 2 {
+		t.Fatalf("ListByExternalID leaked a campaign from a different traffic source: got %d, want 2", len(found))
+	}
+
+	// Update also round-trips it.
+	newExternalID := "fb_campaign_456"
+	updated, err := svc.Update(ctx, orgID, created.ID, campaign.UpdateInput{ExternalCampaignID: &newExternalID})
+	if err != nil {
+		t.Fatalf("Update: %v", err)
+	}
+	if updated.ExternalCampaignID != "fb_campaign_456" {
+		t.Fatalf("ExternalCampaignID after Update = %q, want fb_campaign_456", updated.ExternalCampaignID)
+	}
+}
+
 func mustPool(t *testing.T) *pgxpool.Pool {
 	t.Helper()
 	dsn := os.Getenv("DATABASE_URL")
