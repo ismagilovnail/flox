@@ -80,6 +80,10 @@ export type StreamSet = {
   fallbackUrl: string;
   rootFilter: ApiFilterNode;
   flows: ApiFlow[];
+  /** Which of the org's Pixels this Stream Set fires — a many-to-many via
+   * stream_set_pixels (migration 00008), a Stream-Set-level concern, not
+   * a per-Flow one. See docs/stream-sets.md/docs/pixels.md. */
+  pixelIds: string[];
   createdAt: string;
   updatedAt: string;
 };
@@ -89,6 +93,7 @@ export type CreateStreamSetInput = {
   fallbackUrl: string;
   rootFilter: ApiFilterNode;
   flows: ApiFlowInput[];
+  pixelIds: string[];
 };
 
 export type UpdateStreamSetInput = Partial<CreateStreamSetInput> & { status?: StreamSetStatus };

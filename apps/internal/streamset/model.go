@@ -98,9 +98,24 @@ func (t PwaType) Valid() bool {
 // table's own landing_enabled/pwa_enabled/postlanding_enabled columns,
 // which are separate from the nullable *_id columns specifically so an
 // operator can toggle a stage off without losing their previous pick.
+//
+// No `omitempty` on the id/type fields: they must always be present on
+// the wire as "" when unset, never an absent key. apps/web's ApiFlowLanding/
+// ApiFlowPwa/ApiFlowPostlanding types (and the zod schemas built on them)
+// declare landingId/pwaId/pwaType/postlandingId as required string/enum
+// fields, not optional — an omitted key deserializes to `undefined` in
+// JS, which z.string()/z.enum([...,""]) both reject as invalid. That
+// silently failed client-side validation on every Update whenever any
+// flow had a disabled stage (handleSubmit's default onInvalid is a
+// no-op: no error shown, no request sent) — caught via manual browser
+// testing in the Stream Set <-> Pixel attachment phase, but the bug
+// predates it (introduced when these stages were added). Fixed here,
+// not by loosening the frontend schema, since "" is the actual
+// meaningful unset value the rest of this package already treats it as
+// (see nullIfEmpty in repository.go).
 type FlowLanding struct {
 	Enabled   bool   `json:"enabled"`
-	LandingID string `json:"landingId,omitempty"`
+	LandingID string `json:"landingId"`
 	// AsPwa: show this landing as an installable PWA shell. Independent
 	// of the Pwa stage below (its own pwa_id/pwa_type pick a *separate*
 	// PWA manifest to install after the landing, if that stage is also
@@ -110,13 +125,13 @@ type FlowLanding struct {
 
 type FlowPwa struct {
 	Enabled bool    `json:"enabled"`
-	PwaID   string  `json:"pwaId,omitempty"`
-	PwaType PwaType `json:"pwaType,omitempty"`
+	PwaID   string  `json:"pwaId"`
+	PwaType PwaType `json:"pwaType"`
 }
 
 type FlowPostlanding struct {
 	Enabled       bool   `json:"enabled"`
-	PostlandingID string `json:"postlandingId,omitempty"`
+	PostlandingID string `json:"postlandingId"`
 }
 
 type Flow struct {
@@ -153,8 +168,14 @@ type StreamSet struct {
 	FallbackURL    string     `json:"fallbackUrl"`
 	RootFilter     FilterNode `json:"rootFilter"`
 	Flows          []Flow     `json:"flows"`
-	CreatedAt      time.Time  `json:"createdAt"`
-	UpdatedAt      time.Time  `json:"updatedAt"`
+	// PixelIDs: which of the org's Pixels (apps/internal/pixel) this
+	// Stream Set fires — a many-to-many via stream_set_pixels (migration
+	// 00008), never a per-Flow concern. A pixel's own `events` field (not
+	// referenced here) decides which §43 events actually trigger it; this
+	// list is only "eligible to fire for traffic that matched this set."
+	PixelIDs  []string  `json:"pixelIds"`
+	CreatedAt time.Time `json:"createdAt"`
+	UpdatedAt time.Time `json:"updatedAt"`
 }
 
 type CreateInput struct {
@@ -163,12 +184,14 @@ type CreateInput struct {
 	FallbackURL string
 	RootFilter  FilterNode
 	Flows       []FlowInput
+	PixelIDs    []string
 }
 
 // UpdateInput fields are pointers so PATCH can distinguish "not sent"
 // from "sent" — matching every other domain's UpdateInput this session.
-// RootFilter/Flows, when present, replace the whole tree/array — there is
-// no partial filter-tree or per-flow PATCH, same reasoning as offer_links.
+// RootFilter/Flows/PixelIDs, when present, replace the whole tree/array —
+// there is no partial filter-tree/per-flow/per-pixel PATCH, same
+// reasoning as offer_links.
 type UpdateInput struct {
 	Name        *string
 	Priority    *int
@@ -176,4 +199,5 @@ type UpdateInput struct {
 	FallbackURL *string
 	RootFilter  *FilterNode
 	Flows       *[]FlowInput
+	PixelIDs    *[]string
 }

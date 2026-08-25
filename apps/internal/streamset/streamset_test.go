@@ -333,6 +333,100 @@ func TestFlowFunnelStageValidation(t *testing.T) {
 	})
 }
 
+// TestStreamSetPixelsRoundTrip covers the Stream Set <-> Pixel attachment
+// phase: stream_set_pixels (migration 00008), now that internal/pixel is
+// real. Unlike a Flow's funnel stages, this is a Stream-Set-level
+// many-to-many, not per-Flow — see docs/stream-sets.md.
+func TestStreamSetPixelsRoundTrip(t *testing.T) {
+	pool := mustPool(t)
+	ctx := context.Background()
+	orgID := seedOrg(t, ctx, pool)
+	campaignID := seedCampaign(t, ctx, pool, orgID)
+	pixelA := seedPixel(t, ctx, pool, orgID)
+	pixelB := seedPixel(t, ctx, pool, orgID)
+
+	svc := streamset.NewService(streamset.NewRepository(pool))
+	root := streamset.FilterNode{Kind: streamset.NodeGroup, Joiner: routing.JoinAND}
+
+	created, err := svc.Create(ctx, orgID, campaignID, streamset.CreateInput{
+		Name: "With Pixels", RootFilter: root, Flows: []streamset.FlowInput{redirectFlow("Primary", 100)},
+		PixelIDs: []string{pixelA, pixelB},
+	})
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	if len(created.PixelIDs) != 2 {
+		t.Fatalf("PixelIDs = %v, want 2 entries", created.PixelIDs)
+	}
+
+	fetched, err := svc.Get(ctx, orgID, campaignID, created.ID)
+	if err != nil {
+		t.Fatalf("Get: %v", err)
+	}
+	if len(fetched.PixelIDs) != 2 {
+		t.Fatalf("Get round-trip PixelIDs = %v, want 2 entries", fetched.PixelIDs)
+	}
+
+	// Update replaces the whole set, same as RootFilter/Flows.
+	updated, err := svc.Update(ctx, orgID, campaignID, created.ID, streamset.UpdateInput{PixelIDs: &[]string{pixelA}})
+	if err != nil {
+		t.Fatalf("Update: %v", err)
+	}
+	if len(updated.PixelIDs) != 1 || updated.PixelIDs[0] != pixelA {
+		t.Fatalf("PixelIDs after replace = %v, want [%q]", updated.PixelIDs, pixelA)
+	}
+
+	// A name-only update (PixelIDs not sent) leaves the attachment untouched.
+	newName := "With Pixels (renamed)"
+	renamed, err := svc.Update(ctx, orgID, campaignID, created.ID, streamset.UpdateInput{Name: &newName})
+	if err != nil {
+		t.Fatalf("name-only Update: %v", err)
+	}
+	if len(renamed.PixelIDs) != 1 || renamed.PixelIDs[0] != pixelA {
+		t.Fatalf("a name-only update touched PixelIDs: %v", renamed.PixelIDs)
+	}
+
+	dup, err := svc.Duplicate(ctx, orgID, campaignID, created.ID)
+	if err != nil {
+		t.Fatalf("Duplicate: %v", err)
+	}
+	if len(dup.PixelIDs) != 1 || dup.PixelIDs[0] != pixelA {
+		t.Fatalf("Duplicate PixelIDs = %v, want [%q] copied from the source", dup.PixelIDs, pixelA)
+	}
+}
+
+func TestStreamSetPixelValidation(t *testing.T) {
+	pool := mustPool(t)
+	ctx := context.Background()
+	orgID := seedOrg(t, ctx, pool)
+	campaignID := seedCampaign(t, ctx, pool, orgID)
+	root := streamset.FilterNode{Kind: streamset.NodeGroup, Joiner: routing.JoinAND}
+
+	svc := streamset.NewService(streamset.NewRepository(pool))
+
+	t.Run("unknown pixel id", func(t *testing.T) {
+		_, err := svc.Create(ctx, orgID, campaignID, streamset.CreateInput{
+			Name: "X", RootFilter: root, Flows: []streamset.FlowInput{redirectFlow("Primary", 100)},
+			PixelIDs: []string{"01AAAAAAAAAAAAAAAAAAAAAAAA"},
+		})
+		if err == nil {
+			t.Fatal("Create with an unknown pixel id succeeded, want a validation error")
+		}
+	})
+
+	t.Run("another org's pixel id", func(t *testing.T) {
+		otherOrg := seedOrg(t, ctx, pool)
+		foreignPixel := seedPixel(t, ctx, pool, otherOrg)
+		_, err := svc.Create(ctx, orgID, campaignID, streamset.CreateInput{
+			Name: "X", RootFilter: root, Flows: []streamset.FlowInput{redirectFlow("Primary", 100)},
+			PixelIDs: []string{foreignPixel},
+		})
+		if err == nil {
+			t.Fatal("Create referencing another org's pixel id succeeded, want a not-found/validation error")
+		}
+	})
+}
+
 func TestReorderRewritesPriority(t *testing.T) {
 	pool := mustPool(t)
 	ctx := context.Background()
@@ -562,6 +656,19 @@ func seedPostlanding(t *testing.T, ctx context.Context, pool *pgxpool.Pool, orgI
 	)
 	if err != nil {
 		t.Fatalf("seeding postlanding: %v", err)
+	}
+	return id
+}
+
+func seedPixel(t *testing.T, ctx context.Context, pool *pgxpool.Pool, orgID string) string {
+	t.Helper()
+	id := idgen.New()
+	_, err := pool.Exec(ctx,
+		`INSERT INTO pixels (id, organization_id, name, provider, pixel_id, events) VALUES ($1, $2, $3, $4, $5, $6)`,
+		id, orgID, "Test Pixel", "facebook", "123", []string{"CPA_ACCEPT"},
+	)
+	if err != nil {
+		t.Fatalf("seeding pixel: %v", err)
 	}
 	return id
 }

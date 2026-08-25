@@ -97,6 +97,9 @@ func (s *Service) Create(ctx context.Context, orgID, campaignID string, in Creat
 	if err := s.checkFlowStagesBelongToOrg(ctx, orgID, in.Flows); err != nil {
 		return StreamSet{}, err
 	}
+	if err := s.checkPixelIDsBelongToOrg(ctx, orgID, in.PixelIDs); err != nil {
+		return StreamSet{}, err
+	}
 
 	// Priority is never client-supplied (no field for it in the frontend
 	// form — matching stream-set-schema.ts exactly): a new stream set is
@@ -151,6 +154,11 @@ func (s *Service) Update(ctx context.Context, orgID, campaignID, id string, in U
 			return StreamSet{}, err
 		}
 	}
+	if in.PixelIDs != nil {
+		if err := s.checkPixelIDsBelongToOrg(ctx, orgID, *in.PixelIDs); err != nil {
+			return StreamSet{}, err
+		}
+	}
 
 	return s.repo.Update(ctx, orgID, campaignID, id, in)
 }
@@ -189,6 +197,7 @@ func (s *Service) Duplicate(ctx context.Context, orgID, campaignID, id string) (
 		FallbackURL: source.FallbackURL,
 		RootFilter:  source.RootFilter,
 		Flows:       flowInputs,
+		PixelIDs:    source.PixelIDs,
 	})
 	if err != nil {
 		return StreamSet{}, err
@@ -269,6 +278,25 @@ func (s *Service) checkFlowStagesBelongToOrg(ctx context.Context, orgID string, 
 			if !ok {
 				return apierror.Validation("invalid stream set", map[string]string{"flows": fmt.Sprintf("postlanding %q not found in this organization", id)})
 			}
+		}
+	}
+	return nil
+}
+
+// checkPixelIDsBelongToOrg confirms every pixel id a stream set attaches
+// (stream_set_pixels, migration 00008) is a real, org-owned Pixel row —
+// same "never trust a client-supplied foreign id" reasoning as
+// checkFlowStagesBelongToOrg (CLAUDE.md #5). No idgen.IsValid pre-check
+// is needed here (unlike an enabled Flow stage's required id): an empty
+// or malformed id would simply fail this existence check.
+func (s *Service) checkPixelIDsBelongToOrg(ctx context.Context, orgID string, pixelIDs []string) error {
+	for _, id := range pixelIDs {
+		ok, err := s.repo.PixelBelongsToOrg(ctx, orgID, id)
+		if err != nil {
+			return fmt.Errorf("checking pixel: %w", err)
+		}
+		if !ok {
+			return apierror.Validation("invalid stream set", map[string]string{"pixelIds": fmt.Sprintf("pixel %q not found in this organization", id)})
 		}
 	}
 	return nil

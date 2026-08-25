@@ -5,6 +5,61 @@ per-phase, matching `CLAUDE.md`'s phase protocol. The one exception is
 [Between phases], below: spec amendments and the code changes that follow from
 them land between phases and would otherwise be invisible here.
 
+## [Stream Set ↔ Pixel attachment] — wires stream_set_pixels, fixes a silent Update-blocking bug
+
+### Scope
+
+Closes out the Landing/PWA/Postlanding/Pixels CRUD sequence: wires
+`stream_set_pixels` (migration 00008) so a Stream Set can fire zero or
+more of the now-real Pixel entities. A Stream-Set-level many-to-many,
+deliberately not a per-Flow concern — CLAUDE.md's own past "per-flow
+Pixels" phrasing was imprecise; the schema has always scoped pixels one
+level up. A pixel's own `events` selection still decides *when* it
+fires; `pixelIds` only decides *whether it's eligible to* for traffic
+matching that set. See `docs/stream-sets.md`.
+
+### Changed
+
+- `apps/internal/streamset`: `StreamSet.PixelIDs`/`CreateInput.PixelIDs`/
+  `UpdateInput.PixelIDs`; `Service.checkPixelIDsBelongToOrg` (same
+  never-trust-a-foreign-id reasoning as `checkFlowStagesBelongToOrg`,
+  CLAUDE.md #5); `repository.go`'s `insertPixelIDs`/`loadPixelIDs`/
+  `loadPixelIDsTx` (replace-wholesale, mirroring `insertFlows`'s shape).
+  `Duplicate` copies `PixelIDs` verbatim.
+- `apps/web`: `stream-set-schema.ts`'s `pixelIds` (no `.min(1)` — zero
+  pixels is normal); `stream-set-form-sheet.tsx` renders a `MultiSelect`
+  fed by a new `usePixels()` fetch in `stream-set-list.tsx`.
+
+### Fixed
+
+A real, pre-existing bug from the Flow CRUD (funnel-stages) phase,
+caught only because this phase's manual testing exercised an Update on
+a flow with a *disabled* stage (the common case, previously untested):
+`FlowLanding`/`FlowPwa`/`FlowPostlanding`'s id/type fields had
+`json:"...,omitempty"`, so a disabled stage's `""` value dropped the
+key from the wire entirely instead of sending `""`. `apps/web`'s
+corresponding types declare those fields as required, so the missing
+key deserialized to `undefined` — which `z.string()`/`z.enum([...,""])`
+both reject. Result: **every Stream Set Update silently failed**
+whenever any flow had a disabled stage (near-always) — react-hook-form's
+default no-`onInvalid` behavior is a silent no-op, so nothing was ever
+visibly wrong; Create was unaffected (its default values never omit the
+keys). Fixed by dropping `omitempty` from all four fields. See
+`docs/stream-sets.md`'s "A real bug, caught only by testing Update with
+a disabled stage present" section for the full diagnostic trail.
+
+### Verified
+
+Backend: `go build/vet/gofmt/test ./...` all green, incl. 2 new
+`streamset` tests (full pixel-attachment round-trip through Create/Get/
+Update/Duplicate; unknown and cross-org pixel id rejection). Frontend:
+`tsc --noEmit`/`eslint`/`vitest run` (21 tests)/`next build` all clean.
+Full manual browser pass: created/edited/duplicated a stream set with
+pixel attachments against the real API (raw `curl` cross-checks of the
+persisted `pixelIds` at each step) — this is where the `omitempty` bug
+was caught, fixed, and re-verified (PATCH now returns 200, confirmed
+previously silent). See `docs/stream-sets.md`.
+
 ## [Pixels] — wired to a real Postgres-backed API
 
 ### Scope

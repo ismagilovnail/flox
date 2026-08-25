@@ -121,13 +121,11 @@ each stage the same way the destination union already did:
 `landing.enabled && !landingId` → inline error on the picker, same for
 `pwa`'s id and type, same for `postlanding`'s id.
 
-Still out: **per-flow Pixels**. `stream_set_pixels` (migration 00008)
-attaches a pixel to the *Stream Set*, not the Flow — CLAUDE.md's own
-phrasing ("per-flow Pixels") is imprecise; the schema has always scoped
-pixels one level up. The Pixel entity itself now has real CRUD (its own
-list/detail page — see [`docs/pixels.md`](pixels.md)), but no CRUD wires
-`stream_sets`/`flows` to a `pixel_id` yet, so attaching pixels to a
-Stream Set stays a separate, still-unstarted phase.
+**Update:** `stream_set_pixels` is now wired — see "Stream Set ↔ Pixel
+attachment" below. `stream_set_pixels` (migration 00008) attaches a
+pixel to the *Stream Set*, not the Flow — CLAUDE.md's own past "per-flow
+Pixels" phrasing was imprecise; the schema has always scoped pixels one
+level up. The description above is kept for historical context.
 
 ## A real render-loop bug, caught and fixed during manual verification
 
@@ -233,3 +231,100 @@ hard-delete for stream sets' nested flow fields) and deleted the three
 throwaway landing/pwa/postlanding rows via `DELETE FROM ...` once their
 FK references were cleared, restoring the shared `i18n Test Set` fixture
 to exactly its pre-phase state for future sessions.
+
+## Stream Set ↔ Pixel attachment
+
+Wires `stream_set_pixels` (migration 00008): which of the org's real
+Pixels (`docs/pixels.md`, its own phase) a Stream Set fires. A
+Stream-Set-level many-to-many, deliberately not a per-Flow concern —
+see the "Update" note above the now-historical "per-flow Pixels" section.
+A pixel's own `events` selection decides *when* it fires; `pixelIds`
+here only decides *whether it's eligible to* for traffic matching this
+set.
+
+`StreamSet.PixelIDs []string` (always non-nil on read, `[]string{}` not
+`null`, same convention as `Flows`). `Service.checkPixelIDsBelongToOrg`
+confirms every id is a real, org-owned pixel before it's persisted —
+same "never trust a client-supplied foreign id" reasoning as
+`checkFlowStagesBelongToOrg` (CLAUDE.md #5), checked whenever an id is
+present, not just on write of a changed set. `repository.go`'s
+`insertPixelIDs`/`loadPixelIDs`/`loadPixelIDsTx` mirror `insertFlows`'s
+replace-wholesale shape (`Update`, when `PixelIDs` is sent, deletes and
+reinserts the whole junction-row set) but are simpler — no join, no
+position column, since `stream_set_pixels` is a plain set, not an
+ordered or nested structure. `Delete`'s doc comment updated: unlike
+`flows.landing_id`/`pwa_id`/`postlanding_id`'s `RESTRICT`,
+`stream_set_pixels.pixel_id` `ON DELETE CASCADE`s from `pixels`, so
+deleting a pixel (`internal/pixel`'s own `Delete`) already drops its
+Stream Set attachments — nothing extra needed here for that direction.
+
+Frontend: `stream-set-schema.ts`'s `pixelIds: z.array(z.string())` — no
+`.min(1)`, unlike `flows`; zero pixels is a normal, common configuration.
+`stream-set-form-sheet.tsx` renders a `MultiSelect` (same component
+Postlanding's/Pixel's own event pickers use) fed by a new `usePixels()`
+fetch in `stream-set-list.tsx`, alongside the existing
+networks/offers/landings/pwas/postlandings queries.
+
+### A real bug, caught only by testing Update with a disabled stage present
+
+`FlowLanding`/`FlowPwa`/`FlowPostlanding`'s `LandingID`/`PwaID`/
+`PwaType`/`PostlandingID` fields (added in the funnel-stages phase) had
+`json:"...,omitempty"` tags. For a *disabled* stage (the common case —
+every pre-existing flow has all three stages disabled), those fields
+were `""` in Go, and `omitempty` drops an empty string from the JSON
+entirely — so the wire response for a disabled stage was
+`{"enabled":false,"asPwa":false}`, no `landingId` key at all, not even
+`""`. `apps/web`'s `ApiFlowLanding`/`ApiFlowPwa`/`ApiFlowPostlanding`
+types declare `landingId`/`pwaId`/`pwaType`/`postlandingId` as
+*required* (non-optional) string/enum fields — a genuinely missing key
+deserializes to `undefined` in JS, and `z.string()`/`z.enum([...,""])`
+both reject `undefined` as invalid (neither is `.optional()`).
+
+The practical effect: loading a stream set for edit never threw
+anything (`useForm({defaultValues})` doesn't validate on mount), but
+**every Update silently failed** the moment any flow had a disabled
+stage — i.e. almost always. `handleSubmit(onSubmit)` has no `onInvalid`
+handler configured, so react-hook-form's default behavior on a failed
+validation is a silent no-op: no error shown, no request sent, the sheet
+just stays open. Confirmed via `submitCount`/network-request inspection
+that clicking "Save changes" produced zero HTTP traffic, then confirmed
+via a raw `curl` of the list endpoint that `landingId`/`pwaId`/`pwaType`/
+`postlandingId` were indeed absent, not empty-stringed, for every
+disabled stage. This bug predates this phase (introduced when the
+funnel stages themselves landed) but was only ever exercised by manual
+testing that happened to enable every stage before saving — never a
+save with a stage left disabled, which is the overwhelmingly common
+case in real use.
+
+Fixed by dropping `omitempty` from all four fields — `""` is the
+meaningful "unset" value the rest of the package already treats it as
+(`nullIfEmpty` in `repository.go` converts it to `NULL` at the SQL
+layer), so the wire contract should say so explicitly rather than
+omitting the key. Not fixed by loosening the frontend zod schema
+(`.optional()`), since that would just mask a real "this key must always
+be present" invariant the rest of the code already assumes. Verified via
+a raw `curl` re-check (all four keys now present as `""` for a disabled
+stage) and a full save-with-no-changes browser test against the fix
+(PATCH now returns 200, was silently never sent before).
+
+## Verified (Stream Set ↔ Pixel attachment phase)
+
+Backend: `go build/vet/gofmt/test ./...` all green, incl. 2 new
+`streamset` tests (`TestStreamSetPixelsRoundTrip`: attach two pixels
+through Create, round-trip through Get, replace with one via Update,
+confirm a name-only Update leaves the attachment untouched, confirm
+Duplicate copies it; `TestStreamSetPixelValidation`: an unknown pixel id
+and another org's pixel id are both rejected). Frontend:
+`tsc --noEmit`/`eslint`/`vitest run` (21 tests)/`next build` all clean.
+
+Full manual browser pass against the real running `api`+`web` dev
+servers: created two throwaway pixels; created a new stream set
+attaching one of them (real `POST`, 201, confirmed via a fresh reload);
+edited it to attach both (this is where the `omitempty` bug above was
+caught, fixed, and re-verified — real `PATCH`, 200, confirmed via a
+fresh reload and a raw `curl` of the list endpoint); duplicated it and
+confirmed the copy carried both pixel ids verbatim. No console errors
+at any point. Throwaway stream sets and pixels deleted directly from
+Postgres afterward; the shared `i18n Test Set` fixture was never
+mutated by this phase's testing (its `pixelIds` stayed `[]` throughout)
+so needed no reverting.

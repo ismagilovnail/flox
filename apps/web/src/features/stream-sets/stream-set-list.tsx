@@ -44,11 +44,13 @@ import { useOffers } from "@/hooks/use-offers";
 import { useLandings } from "@/hooks/use-landings";
 import { usePwas } from "@/hooks/use-pwas";
 import { usePostlandings } from "@/hooks/use-postlandings";
+import { usePixels } from "@/hooks/use-pixels";
 import type { Network } from "@/lib/api/networks";
 import type { Offer } from "@/lib/api/offers";
 import type { Landing } from "@/lib/api/landings";
 import type { Pwa } from "@/lib/api/pwa";
 import type { Postlanding } from "@/lib/api/postlanding";
+import type { Pixel } from "@/lib/api/pixels";
 import { StreamSetRow } from "@/features/stream-sets/stream-set-row";
 import { StreamSetFormSheet } from "@/features/stream-sets/stream-set-form-sheet";
 import type { StreamSetFormValues } from "@/features/stream-sets/stream-set-schema";
@@ -70,6 +72,7 @@ function emptyStreamSetForm(firstNetworkId: string): StreamSetFormValues {
         destination: { kind: "offer", networkId: firstNetworkId, offerId: "" },
       },
     ],
+    pixelIds: [],
     fallbackUrl: "",
   };
 }
@@ -80,6 +83,7 @@ function toFormValues(streamSet: StreamSet): StreamSetFormValues {
     status: streamSet.status,
     rootFilter: hydrateRootFilter(streamSet.rootFilter),
     flows: streamSet.flows,
+    pixelIds: streamSet.pixelIds,
     fallbackUrl: streamSet.fallbackUrl,
   };
 }
@@ -98,6 +102,7 @@ function toCreateInput(values: StreamSetFormValues): CreateStreamSetInput {
       postlanding,
       destination,
     })),
+    pixelIds: values.pixelIds,
   };
 }
 
@@ -109,6 +114,7 @@ export function StreamSetList({ campaignId }: { campaignId: string }) {
   const landingsQuery = useLandings();
   const pwasQuery = usePwas();
   const postlandingsQuery = usePostlandings();
+  const pixelsQuery = usePixels();
   const reorder = useReorderStreamSets(campaignId);
 
   const [target, setTarget] = React.useState<{ id: string | null } | null>(null);
@@ -124,6 +130,7 @@ export function StreamSetList({ campaignId }: { campaignId: string }) {
   const landings = landingsQuery.data?.landings ?? [];
   const pwas = pwasQuery.data?.pwas ?? [];
   const postlandings = postlandingsQuery.data?.postlandings ?? [];
+  const pixels = pixelsQuery.data?.pixels ?? [];
 
   function handleDragEnd(event: DragEndEvent) {
     const { active, over } = event;
@@ -159,7 +166,8 @@ export function StreamSetList({ campaignId }: { campaignId: string }) {
     offersQuery.isPending ||
     landingsQuery.isPending ||
     pwasQuery.isPending ||
-    postlandingsQuery.isPending
+    postlandingsQuery.isPending ||
+    pixelsQuery.isPending
   ) {
     return (
       <Card>
@@ -185,8 +193,16 @@ export function StreamSetList({ campaignId }: { campaignId: string }) {
       </Card>
     );
   }
-  if (networksQuery.isError || offersQuery.isError || landingsQuery.isError || pwasQuery.isError || postlandingsQuery.isError) {
-    const err = networksQuery.error ?? offersQuery.error ?? landingsQuery.error ?? pwasQuery.error ?? postlandingsQuery.error;
+  if (
+    networksQuery.isError ||
+    offersQuery.isError ||
+    landingsQuery.isError ||
+    pwasQuery.isError ||
+    postlandingsQuery.isError ||
+    pixelsQuery.isError
+  ) {
+    const err =
+      networksQuery.error ?? offersQuery.error ?? landingsQuery.error ?? pwasQuery.error ?? postlandingsQuery.error ?? pixelsQuery.error;
     return (
       <Card>
         {header}
@@ -200,6 +216,7 @@ export function StreamSetList({ campaignId }: { campaignId: string }) {
               landingsQuery.refetch();
               pwasQuery.refetch();
               postlandingsQuery.refetch();
+              pixelsQuery.refetch();
             }}
           />
         </CardContent>
@@ -241,6 +258,7 @@ export function StreamSetList({ campaignId }: { campaignId: string }) {
           landings={landings}
           pwas={pwas}
           postlandings={postlandings}
+          pixels={pixels}
           campaignId={campaignId}
           firstNetworkId={networks[0]?.id ?? ""}
           onClose={() => setTarget(null)}
@@ -297,6 +315,7 @@ function StreamSetFormDialog({
   landings,
   pwas,
   postlandings,
+  pixels,
   campaignId,
   firstNetworkId,
   onClose,
@@ -307,6 +326,7 @@ function StreamSetFormDialog({
   landings: Landing[];
   pwas: Pwa[];
   postlandings: Postlanding[];
+  pixels: Pixel[];
   campaignId: string;
   firstNetworkId: string;
   onClose: () => void;
@@ -351,6 +371,7 @@ function StreamSetFormDialog({
       landings={landings}
       pwas={pwas}
       postlandings={postlandings}
+      pixels={pixels}
       onSubmit={handleSubmit}
     />
   );

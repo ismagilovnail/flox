@@ -69,11 +69,19 @@ func (r *Repository) List(ctx context.Context, orgID, campaignID string) ([]Stre
 	if err != nil {
 		return nil, err
 	}
+	pixelsBySet, err := r.loadPixelIDs(ctx, orgID, ids)
+	if err != nil {
+		return nil, err
+	}
 	for i := range sets {
 		sets[i].RootFilter = trees[sets[i].ID]
 		sets[i].Flows = flowsBySet[sets[i].ID]
 		if sets[i].Flows == nil {
 			sets[i].Flows = []Flow{}
+		}
+		sets[i].PixelIDs = pixelsBySet[sets[i].ID]
+		if sets[i].PixelIDs == nil {
+			sets[i].PixelIDs = []string{}
 		}
 	}
 	return sets, nil
@@ -107,6 +115,15 @@ func (r *Repository) GetByID(ctx context.Context, orgID, campaignID, id string) 
 	s.Flows = flowsBySet[id]
 	if s.Flows == nil {
 		s.Flows = []Flow{}
+	}
+
+	pixelsBySet, err := r.loadPixelIDs(ctx, orgID, []string{id})
+	if err != nil {
+		return StreamSet{}, err
+	}
+	s.PixelIDs = pixelsBySet[id]
+	if s.PixelIDs == nil {
+		s.PixelIDs = []string{}
 	}
 	return s, nil
 }
@@ -311,6 +328,14 @@ func (r *Repository) Create(ctx context.Context, id, orgID, campaignID string, i
 	}
 	s.Flows = flows
 
+	if err := insertPixelIDs(ctx, tx, orgID, id, in.PixelIDs); err != nil {
+		return StreamSet{}, err
+	}
+	s.PixelIDs = in.PixelIDs
+	if s.PixelIDs == nil {
+		s.PixelIDs = []string{}
+	}
+
 	if err := tx.Commit(ctx); err != nil {
 		return StreamSet{}, fmt.Errorf("streamset: committing create tx: %w", err)
 	}
@@ -498,6 +523,25 @@ func (r *Repository) Update(ctx context.Context, orgID, campaignID, id string, i
 		s.Flows = flows
 	}
 
+	if in.PixelIDs != nil {
+		if _, err := tx.Exec(ctx, `DELETE FROM stream_set_pixels WHERE stream_set_id = $1`, id); err != nil {
+			return StreamSet{}, fmt.Errorf("streamset: clearing pixels: %w", err)
+		}
+		if err := insertPixelIDs(ctx, tx, orgID, id, *in.PixelIDs); err != nil {
+			return StreamSet{}, err
+		}
+		s.PixelIDs = *in.PixelIDs
+		if s.PixelIDs == nil {
+			s.PixelIDs = []string{}
+		}
+	} else {
+		pixelIDs, err := r.loadPixelIDsTx(ctx, tx, orgID, id)
+		if err != nil {
+			return StreamSet{}, err
+		}
+		s.PixelIDs = pixelIDs
+	}
+
 	if err := tx.Commit(ctx); err != nil {
 		return StreamSet{}, fmt.Errorf("streamset: committing update tx: %w", err)
 	}
@@ -631,11 +675,78 @@ func (r *Repository) loadFlowsTx(ctx context.Context, tx pgx.Tx, orgID, streamSe
 	return flows, rows.Err()
 }
 
-// Delete: every child table (filter_groups, filter_conditions, flows)
-// CASCADEs from stream_sets (00006) — nothing else in the schema
-// references stream_sets.id or flows.id as a FK target, so unlike
-// network/offer/trafficsource's Delete, there is no 23503 case to guard
-// against here.
+// insertPixelIDs attaches pixelIDs to streamSetID via stream_set_pixels
+// (migration 00008) — a plain many-to-many junction row per id, no
+// position/ordering column (it's a set, not a sequence). Callers pass
+// already-org-validated ids (Service.checkPixelIDsBelongToOrg).
+func insertPixelIDs(ctx context.Context, tx pgx.Tx, orgID, streamSetID string, pixelIDs []string) error {
+	for _, pixelID := range pixelIDs {
+		if _, err := tx.Exec(ctx,
+			`INSERT INTO stream_set_pixels (organization_id, stream_set_id, pixel_id) VALUES ($1, $2, $3)`,
+			orgID, streamSetID, pixelID,
+		); err != nil {
+			return fmt.Errorf("streamset: inserting stream_set_pixels row: %w", err)
+		}
+	}
+	return nil
+}
+
+// loadPixelIDs mirrors loadFlows' shape but for the far simpler
+// stream_set_pixels junction table — one query, no joins. Ordered by
+// pixel_id only for a deterministic (not meaningful) row order; the
+// attachment is a set, not a sequence.
+func (r *Repository) loadPixelIDs(ctx context.Context, orgID string, streamSetIDs []string) (map[string][]string, error) {
+	rows, err := r.db.Query(ctx, `
+		SELECT stream_set_id, pixel_id
+		FROM stream_set_pixels
+		WHERE stream_set_id = ANY($1) AND organization_id = $2
+		ORDER BY pixel_id`,
+		streamSetIDs, orgID,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("streamset: loading pixel attachments: %w", err)
+	}
+	defer rows.Close()
+
+	out := map[string][]string{}
+	for rows.Next() {
+		var setID, pixelID string
+		if err := rows.Scan(&setID, &pixelID); err != nil {
+			return nil, fmt.Errorf("streamset: scanning pixel attachment: %w", err)
+		}
+		out[setID] = append(out[setID], pixelID)
+	}
+	return out, rows.Err()
+}
+
+func (r *Repository) loadPixelIDsTx(ctx context.Context, tx pgx.Tx, orgID, streamSetID string) ([]string, error) {
+	rows, err := tx.Query(ctx, `
+		SELECT pixel_id FROM stream_set_pixels
+		WHERE stream_set_id = $1 AND organization_id = $2
+		ORDER BY pixel_id`,
+		streamSetID, orgID,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("streamset: reading pixel attachments in tx: %w", err)
+	}
+	defer rows.Close()
+
+	pixelIDs := []string{}
+	for rows.Next() {
+		var pixelID string
+		if err := rows.Scan(&pixelID); err != nil {
+			return nil, fmt.Errorf("streamset: scanning pixel attachment in tx: %w", err)
+		}
+		pixelIDs = append(pixelIDs, pixelID)
+	}
+	return pixelIDs, rows.Err()
+}
+
+// Delete: every child table (filter_groups, filter_conditions, flows,
+// stream_set_pixels) CASCADEs from stream_sets (00006/00008) — nothing
+// else in the schema references stream_sets.id or flows.id as a FK
+// target, so unlike network/offer/trafficsource's Delete, there is no
+// 23503 case to guard against here.
 func (r *Repository) Delete(ctx context.Context, orgID, campaignID, id string) error {
 	tag, err := r.db.Exec(ctx, `DELETE FROM stream_sets WHERE id = $1 AND organization_id = $2 AND campaign_id = $3`, id, orgID, campaignID)
 	if err != nil {
@@ -706,6 +817,12 @@ func (r *Repository) PwaBelongsToOrg(ctx context.Context, orgID, pwaID string) (
 func (r *Repository) PostlandingBelongsToOrg(ctx context.Context, orgID, postlandingID string) (bool, error) {
 	var exists bool
 	err := r.db.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM postlandings WHERE id = $1 AND organization_id = $2)`, postlandingID, orgID).Scan(&exists)
+	return exists, err
+}
+
+func (r *Repository) PixelBelongsToOrg(ctx context.Context, orgID, pixelID string) (bool, error) {
+	var exists bool
+	err := r.db.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM pixels WHERE id = $1 AND organization_id = $2)`, pixelID, orgID).Scan(&exists)
 	return exists, err
 }
 

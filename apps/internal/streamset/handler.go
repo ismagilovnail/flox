@@ -70,6 +70,7 @@ type createRequest struct {
 	FallbackURL string        `json:"fallbackUrl"`
 	RootFilter  FilterNode    `json:"rootFilter"`
 	Flows       []flowRequest `json:"flows"`
+	PixelIDs    []string      `json:"pixelIds"`
 }
 
 func toFlowInputs(reqs []flowRequest) []FlowInput {
@@ -98,6 +99,7 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 		FallbackURL: req.FallbackURL,
 		RootFilter:  req.RootFilter,
 		Flows:       toFlowInputs(req.Flows),
+		PixelIDs:    req.PixelIDs,
 	})
 	if err != nil {
 		apierror.Write(w, h.logger, err)
@@ -112,6 +114,7 @@ type updateRequest struct {
 	FallbackURL *string        `json:"fallbackUrl"`
 	RootFilter  *FilterNode    `json:"rootFilter"`
 	Flows       *[]flowRequest `json:"flows"`
+	PixelIDs    *[]string      `json:"pixelIds"`
 }
 
 func (h *Handler) update(w http.ResponseWriter, r *http.Request) {
@@ -123,7 +126,7 @@ func (h *Handler) update(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	in := UpdateInput{Name: req.Name, Status: req.Status, FallbackURL: req.FallbackURL, RootFilter: req.RootFilter}
+	in := UpdateInput{Name: req.Name, Status: req.Status, FallbackURL: req.FallbackURL, RootFilter: req.RootFilter, PixelIDs: req.PixelIDs}
 	if req.Flows != nil {
 		flows := toFlowInputs(*req.Flows)
 		in.Flows = &flows

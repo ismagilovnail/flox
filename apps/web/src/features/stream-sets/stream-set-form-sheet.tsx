@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
+import { MultiSelect } from "@/components/ui/multi-select";
 import {
   Sheet,
   SheetContent,
@@ -25,6 +26,7 @@ import type { Offer } from "@/lib/api/offers";
 import type { Landing } from "@/lib/api/landings";
 import type { Pwa } from "@/lib/api/pwa";
 import type { Postlanding } from "@/lib/api/postlanding";
+import type { Pixel } from "@/lib/api/pixels";
 import { FilterGroupBuilder } from "@/features/stream-sets/filter-group-builder";
 import { FlowEditor } from "@/features/stream-sets/flow-editor";
 import { buildStreamSetFormSchema, type StreamSetFormValues } from "@/features/stream-sets/stream-set-schema";
@@ -40,6 +42,7 @@ export function StreamSetFormSheet({
   landings,
   pwas,
   postlandings,
+  pixels,
   title,
   submitLabel,
   onSubmit,
@@ -52,6 +55,7 @@ export function StreamSetFormSheet({
   landings: Landing[];
   pwas: Pwa[];
   postlandings: Postlanding[];
+  pixels: Pixel[];
   title: string;
   submitLabel: string;
   onSubmit: (values: StreamSetFormValues) => void;
@@ -212,6 +216,28 @@ export function StreamSetFormSheet({
                 {t("form.totalWeight", { weight: weightSum })}
               </span>
             </div>
+          </div>
+
+          <Separator />
+
+          <div className="flex flex-col gap-3">
+            <div>
+              <h3 className="text-sm font-medium">{t("form.pixelsTitle")}</h3>
+              <p className="text-xs text-muted-foreground">{t("form.pixelsDescription")}</p>
+            </div>
+            <Controller
+              control={control}
+              name="pixelIds"
+              render={({ field }) => (
+                <MultiSelect
+                  label={t("form.pixelsTitle")}
+                  options={pixels.map((p) => ({ value: p.id, label: p.name }))}
+                  selected={field.value}
+                  onChange={field.onChange}
+                  className="w-full"
+                />
+              )}
+            />
           </div>
 
           <Separator />

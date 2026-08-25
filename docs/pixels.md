@@ -73,15 +73,15 @@ ran. Added a new `pixels` namespace (`en`+`ru`, both complete — key-set
 parity checked directly) and registered it in `lib/i18n/config.ts`'s
 `NAMESPACES`.
 
-## Explicitly out of scope: per-Stream-Set Pixel attachment
+## Per-Stream-Set Pixel attachment: wired in a later phase
 
-`stream_set_pixels` (migration 00008) is the join table a Stream Set
-would use to fire zero or more of these Pixels — but no CRUD wires
-`stream_sets`/`flows` to a `pixel_id` yet. `docs/stream-sets.md`'s own
-"per-flow Pixels" phrasing was imprecise: the schema has always scoped
-pixels to the *Stream Set*, not the Flow. This phase only builds the
-Pixel entity itself (its own list/detail page); wiring which pixels a
-given Stream Set fires is a separate, still-unstarted phase.
+At the time this phase closed, `stream_set_pixels` (migration 00008,
+the join table a Stream Set uses to fire zero or more of these Pixels)
+had no CRUD wiring it to `stream_sets`. That landed in its own follow-on
+phase — see `docs/stream-sets.md`'s "Stream Set ↔ Pixel attachment"
+section. `docs/stream-sets.md`'s own past "per-flow Pixels" phrasing was
+imprecise: the schema has always scoped pixels to the *Stream Set*, not
+the Flow.
 
 ## Verified
 

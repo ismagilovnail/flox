@@ -19,62 +19,64 @@ referenced below as §N).
 ## CURRENT STATE — UPDATE THIS EVERY PHASE
 
 ```
-CURRENT PHASE : PHASE (unnumbered) — Pixels CRUD wired to a real
-                Postgres-backed API
-STATUS        : done — fourth slice of the Landing/PWA/Postlanding/
-                Pixels CRUD candidate list, following Postlanding's
-                shape almost exactly (pixels was already migrated,
-                migration 00008, alongside postbacks and the
-                stream_set_pixels join table). New apps/internal/pixel
-                package: model/handler/service/repository, wired at
-                /pixels in apps/api/main.go. Differs from Postlanding
-                only in having no URL (provider + pixelId identify where
-                a conversion is reported, not a page) and no defensive
-                delete-FK catch (stream_set_pixels.pixel_id ON DELETE
-                CASCADEs, unlike Landing/PWA/Postlanding's RESTRICT-
-                guarded flows.*_id columns — pixel.Repository.Delete has
-                nothing to catch).
-                Explicitly out of scope: attaching pixels to a Stream
-                Set. stream_set_pixels has no CRUD wiring it to flows/
-                stream_sets yet — CLAUDE.md's own past "per-flow Pixels"
-                phrasing was imprecise; the schema has always scoped
-                pixels to the Stream Set, not the Flow. This phase only
-                built the Pixel entity itself (its own list/detail page).
-                Frontend: lib/api/pixels.ts + hooks/use-pixels.ts (real
-                API layer); features/pixels/* rewired off the
-                stores/pixels.ts Zustand mock onto the real hooks, with
-                LoadingState/ErrorState added. PIXEL_PROVIDER_I18N_KEY
-                co-located with PixelProvider, matching traffic-
-                sources.ts's SOURCE_TYPE_I18N_KEY pattern. New pixels
-                i18n namespace (en+ru) — the mocked pixel form had been
-                entirely untranslated (hardcoded English). stores/
-                pixels.ts/lib/mock/pixels.ts deleted outright.
+CURRENT PHASE : PHASE (unnumbered) — Stream Set <-> Pixel attachment
+                (stream_set_pixels), plus a real bug fix
+STATUS        : done — closes out the Landing/PWA/Postlanding/Pixels
+                CRUD sequence: stream_set_pixels (migration 00008) now
+                wired so a Stream Set can fire zero or more real Pixels.
+                Stream-Set-level many-to-many, deliberately not per-Flow
+                — a pixel's own events selection decides WHEN it fires;
+                pixelIds only decides whether it's eligible to for
+                traffic matching that set.
+                Backend: streamset.StreamSet/CreateInput/UpdateInput
+                gained PixelIDs []string; checkPixelIDsBelongToOrg (same
+                never-trust-a-foreign-id reasoning as
+                checkFlowStagesBelongToOrg, CLAUDE.md #5);
+                insertPixelIDs/loadPixelIDs/loadPixelIDsTx mirror
+                insertFlows' replace-wholesale shape. Duplicate copies
+                PixelIDs verbatim.
+                Frontend: stream-set-schema.ts's pixelIds (no .min(1) —
+                zero pixels is normal); stream-set-form-sheet.tsx
+                renders a MultiSelect fed by a new usePixels() fetch.
+                CAUGHT AND FIXED A REAL PRE-EXISTING BUG from the Flow
+                CRUD (funnel-stages) phase: FlowLanding/FlowPwa/
+                FlowPostlanding's id/type fields had json:"...,omitempty"
+                — for a disabled stage (the common case, previously
+                untested by any Update), that dropped the key from the
+                wire entirely instead of sending "". apps/web's
+                corresponding types declare those fields required, so
+                the missing key deserialized to undefined, which
+                z.string()/z.enum([...,""]) both reject. Result: EVERY
+                Stream Set Update silently failed whenever any flow had
+                a disabled stage (near-always) — react-hook-form's
+                default no-onInvalid behavior is a silent no-op, nothing
+                was ever visibly wrong. Create was unaffected. Fixed by
+                dropping omitempty from all four fields. Full diagnostic
+                trail (submitCount/network inspection, raw curl
+                confirming the missing keys, re-verification after the
+                fix) in docs/stream-sets.md.
                 Verified: go build/vet/gofmt/test ./... all green incl.
-                new pixel_test.go mirroring postlanding_test.go's full
-                test set (plus an explicit test that an empty pixelId is
-                allowed, matching the frontend's pre-existing schema).
-                tsc --noEmit/eslint/vitest run (21 tests)/next build all
-                clean. Full manual browser pass against the real running
-                api+web dev servers: created a pixel (real translated
-                provider labels, real event multi-select), reloaded
-                fresh and confirmed the round-trip, edited/paused/
-                duplicated/archived it (archive confirmation dialog,
-                toast, status badge, and action-menu pruning all
-                correct), spot-checked the Russian locale on the same
-                page (sidebar/title/columns/statuses/button all
-                translated, no hydration errors). Test rows deleted
-                directly from Postgres afterward (no hard-delete in the
-                UI for this entity). See docs/pixels.md.
-LAST COMMIT   : feat(pixels): wire Pixels CRUD to real Postgres-backed
-                API
+                2 new streamset tests (full pixel-attachment round-trip
+                through Create/Get/Update/Duplicate; unknown and
+                cross-org pixel id rejection). tsc --noEmit/eslint/
+                vitest run (21 tests)/next build all clean. Full manual
+                browser pass against the real running api+web dev
+                servers: created/edited/duplicated a stream set with
+                pixel attachments, raw curl cross-checks of persisted
+                pixelIds at each step — this is where the omitempty bug
+                was caught, fixed, and re-verified (PATCH now returns
+                200, confirmed previously silent/never-sent). Test rows
+                deleted afterward; the shared "i18n Test Set" fixture
+                was never mutated this phase. See docs/stream-sets.md's
+                "Stream Set <-> Pixel attachment" section.
+LAST COMMIT   : fix(streamset): wire Stream Set <-> Pixel attachment,
+                fix silent Update-blocking omitempty bug
 NEXT          : confirm scope before starting. No open known issues
-                remain from prior phases. Candidates: per-Stream-Set
-                Pixel attachment (stream_set_pixels CRUD, now that the
-                Pixel entity itself is real); FB/TikTok ad-spend import
-                (§74's CostProvider interface, the "later" half of
-                §27-COST — no backend at all yet, a large phase); or a
-                third i18n locale (cheap per docs/frontend-i18n.md, but
-                none has been requested).
+                remain. Candidates: FB/TikTok ad-spend import (§74's
+                CostProvider interface, the "later" half of §27-COST —
+                no backend at all yet, a large phase); or a third i18n
+                locale (cheap per docs/frontend-i18n.md, but none has
+                been requested).
 ```
 
 > At the end of every phase: update the four lines above, add a CHANGELOG entry,

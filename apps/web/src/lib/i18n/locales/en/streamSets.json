@@ -105,6 +105,8 @@
     "flowsDescription": "Each flow routes to an Offer or a Redirect URL. Weight is a raw number — the engine normalizes it to a percentage across active flows.",
     "addFlow": "Add flow",
     "totalWeight": "Total weight: {{weight}}",
+    "pixelsTitle": "Pixels",
+    "pixelsDescription": "Which of your ad-platform pixels are eligible to fire for traffic that matches this stream set. A pixel's own event selection decides when it actually fires.",
     "fallbackLabel": "Fallback URL (optional)",
     "fallbackPlaceholder": "Falls back to the campaign fallback if empty",
     "fallbackHint": "Used if this set matches but no flow can be resolved. Otherwise the campaign fallback applies.",
@@ -144,7 +146,7 @@
     "newButton": "New Stream Set",
     "loading": "Loading stream sets…",
     "loadError": "Couldn't load stream sets",
-    "loadNetworksOffersError": "Couldn't load networks/offers/landings/PWAs/postlandings",
+    "loadNetworksOffersError": "Couldn't load networks/offers/landings/PWAs/postlandings/pixels",
     "emptyTitle": "No stream sets yet",
     "emptyDescription": "All traffic falls through to the campaign fallback URL until you add one.",
     "reorderError": "Couldn't reorder stream sets"

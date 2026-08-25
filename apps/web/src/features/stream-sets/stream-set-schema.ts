@@ -61,11 +61,6 @@ function buildFilterGroupSchema(t: TFunction): z.ZodType<FilterNodeFormValue & {
   return filterGroupSchema;
 }
 
-/** Per-flow Pixels are still gone here — no internal/pixel package exists
- * (pixels attach to the Stream Set, not the Flow, via stream_set_pixels —
- * a separate, still-blocked phase). Landing/PWA/Postlanding stages are
- * back as of this phase, now that internal/landing/pwa/postlanding are
- * real. See docs/stream-sets.md. */
 function buildDestinationSchema(t: TFunction) {
   return z.union([
     z.object({
@@ -133,6 +128,11 @@ export function buildStreamSetFormSchema(t: TFunction) {
     status: z.enum(["active", "paused"]),
     rootFilter: buildFilterGroupSchema(t),
     flows: z.array(buildFlowSchema(t)).min(1, t("form.validation.atLeastOneFlow", { ns: "streamSets" })),
+    // A Stream-Set-level attachment (stream_set_pixels), not a per-Flow
+    // concern — zero pixels is a valid, common configuration (an operator
+    // may not want any ad-platform pixel firing for this set), so no
+    // .min(1) here, unlike flows.
+    pixelIds: z.array(z.string()),
     fallbackUrl: z.union([z.literal(""), z.url(t("form.validation.urlInvalid", { ns: "streamSets" }))]),
   });
 }
