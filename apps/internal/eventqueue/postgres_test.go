@@ -141,6 +141,72 @@ func TestRequeuePutsRowsBackAsDueAtNextAttemptAt(t *testing.T) {
 	_ = q.Delete(ctx, []string{id})
 }
 
+func TestDepthReflectsQueuedAndProcessingNotDeleted(t *testing.T) {
+	pool := mustPool(t)
+	ctx := context.Background()
+	orgID := seedOrg(t, ctx, pool)
+	q := eventqueue.NewPostgresQueue(pool)
+
+	before, err := q.Depth(ctx)
+	if err != nil {
+		t.Fatalf("Depth (before): %v", err)
+	}
+
+	clickID := idgen.New()
+	events := []event.Event{
+		{Type: event.SourceClick, OrganizationID: orgID, ClickID: clickID, EventAt: time.Now().UTC()},
+		{Type: event.LandView, OrganizationID: orgID, ClickID: clickID, EventAt: time.Now().UTC()},
+		{Type: event.PwaView, OrganizationID: orgID, ClickID: clickID, EventAt: time.Now().UTC()},
+	}
+	if err := q.EnqueueBatch(ctx, events); err != nil {
+		t.Fatalf("EnqueueBatch: %v", err)
+	}
+
+	afterEnqueue, err := q.Depth(ctx)
+	if err != nil {
+		t.Fatalf("Depth (after enqueue): %v", err)
+	}
+	if afterEnqueue != before+3 {
+		t.Fatalf("Depth after enqueueing 3 = %d, want %d (before=%d)", afterEnqueue, before+3, before)
+	}
+
+	// Claiming moves rows to 'processing', not out of the queue — Depth
+	// must still count them (a slow ClickHouse insert shouldn't make the
+	// backlog gauge dip to zero mid-flush).
+	claimed, err := q.ClaimDue(ctx, 100)
+	if err != nil {
+		t.Fatalf("ClaimDue: %v", err)
+	}
+	var ids []string
+	for _, c := range claimed {
+		if c.Event.ClickID == clickID {
+			ids = append(ids, c.ID)
+		}
+	}
+	if len(ids) != 3 {
+		t.Fatalf("claimed %d matching events, want 3", len(ids))
+	}
+
+	afterClaim, err := q.Depth(ctx)
+	if err != nil {
+		t.Fatalf("Depth (after claim): %v", err)
+	}
+	if afterClaim != afterEnqueue {
+		t.Fatalf("Depth after claiming (still undeleted) = %d, want unchanged at %d", afterClaim, afterEnqueue)
+	}
+
+	if err := q.Delete(ctx, ids); err != nil {
+		t.Fatalf("Delete: %v", err)
+	}
+	afterDelete, err := q.Depth(ctx)
+	if err != nil {
+		t.Fatalf("Depth (after delete): %v", err)
+	}
+	if afterDelete != before {
+		t.Fatalf("Depth after deleting = %d, want back to %d", afterDelete, before)
+	}
+}
+
 func mustPool(t *testing.T) *pgxpool.Pool {
 	t.Helper()
 	dsn := os.Getenv("DATABASE_URL")

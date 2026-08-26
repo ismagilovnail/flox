@@ -4,6 +4,9 @@ import (
 	"context"
 	"fmt"
 	"sort"
+	"time"
+
+	"github.com/ismagilovnail/flox/apps/internal/metrics"
 )
 
 // Engine is the concrete Router.
@@ -21,8 +24,14 @@ var _ Router = (*Engine)(nil)
 
 // Resolve is §38's exact interface method — the production hot-path
 // decision, returning only what apps/tracker/apps/worker need to act.
+// Timed for §53's routing_latency metric — Explain (below), used by
+// /routing/simulate and this package's own conformance tests rather than
+// the hot path, deliberately is not, so the metric reflects real
+// production decisions only.
 func (e *Engine) Resolve(ctx context.Context, req RequestContext) (RouteResult, error) {
+	start := time.Now()
 	result, _, err := e.resolve(req)
+	metrics.RoutingLatencySeconds.Observe(time.Since(start).Seconds())
 	return result, err
 }
 

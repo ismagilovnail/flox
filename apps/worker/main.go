@@ -25,6 +25,11 @@
 //     state to claim, just "sync everyone again every N hours" — so it
 //     runs on a time.Ticker (costsync.Scheduler.RunLoop) rather than
 //     PollLoop's claim/idle shape.
+//
+// §53/Phase 29: GET /metrics (Prometheus) joins /health on this binary's
+// bare mux, and a fifth background goroutine (eventqueue.PollDepth)
+// refreshes the event_queue_depth gauge on the same time.Ticker shape as
+// costSyncScheduler above.
 package main
 
 import (
@@ -35,6 +40,8 @@ import (
 	"os/signal"
 	"syscall"
 	"time"
+
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 
 	"github.com/ismagilovnail/flox/apps/internal/adaccount"
 	"github.com/ismagilovnail/flox/apps/internal/adaccount/facebookads"
@@ -48,6 +55,7 @@ import (
 	"github.com/ismagilovnail/flox/apps/internal/costsync"
 	"github.com/ismagilovnail/flox/apps/internal/eventqueue"
 	"github.com/ismagilovnail/flox/apps/internal/logging"
+	"github.com/ismagilovnail/flox/apps/internal/metrics"
 	"github.com/ismagilovnail/flox/apps/internal/postback"
 	"github.com/ismagilovnail/flox/apps/internal/postbacklog"
 	"github.com/ismagilovnail/flox/apps/internal/postgres"
@@ -86,6 +94,12 @@ const (
 // last sync"), so re-running a few times a day catches those revisions
 // without re-fetching so often it risks the ad platforms' own rate limits.
 const costSyncInterval = 6 * time.Hour
+
+// queueDepthPollInterval: how often §53's event_queue_depth gauge is
+// refreshed. A plain SELECT count(*) — cheap enough to run often, but
+// there is no reason to poll faster than anyone will actually look at a
+// dashboard.
+const queueDepthPollInterval = 15 * time.Second
 
 func main() {
 	if err := run(); err != nil {
@@ -144,24 +158,34 @@ func run() error {
 	costSyncScheduler := costsync.NewScheduler(costSyncSvc, adAccountRepo, logger)
 
 	attemptLogQueue := postbacklog.NewPostgresQueue(db, logger)
+	// otelhttp.NewTransport gives each outbound postback delivery its own
+	// trace (§53's "trace IDs") — there's no inbound request to inherit a
+	// trace context from here (this fires from a poll loop, not an HTTP
+	// handler), so each call becomes its own root span. A no-op when no
+	// OTel endpoint is configured (telemetry.Setup's own doc comment).
+	postbackClient := &http.Client{Transport: otelhttp.NewTransport(http.DefaultTransport)}
 	deliverer := postback.NewDeliverer(
 		postback.NewPostgresStore(db),
-		http.DefaultClient,
+		postbackClient,
 		postbacklog.NewDeliveryAttemptLogger(attemptLogQueue),
 		logger,
 	)
-	flusher := eventqueue.NewFlusher(eventqueue.NewPostgresQueue(db), chEvents, logger)
+	eventQueue := eventqueue.NewPostgresQueue(db)
+	flusher := eventqueue.NewFlusher(eventQueue, chEvents, logger)
 	attemptFlusher := postbacklog.NewFlusher(attemptLogQueue, chEvents, logger)
 
-	// A bare health endpoint for orchestration liveness probes — this
-	// binary has no inbound routing otherwise, its work is the poll loops
-	// below.
+	// A bare mux for orchestration liveness probes + the Prometheus
+	// scrape target — this binary has no other inbound routing, its work
+	// is the poll loops below.
+	mux := http.NewServeMux()
+	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"status":"ok"}`))
+	})
+	mux.Handle("/metrics", metrics.Handler())
 	healthSrv := &http.Server{
-		Addr: cfg.HTTPAddr,
-		Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			w.Header().Set("Content-Type", "application/json")
-			_, _ = w.Write([]byte(`{"status":"ok"}`))
-		}),
+		Addr:              cfg.HTTPAddr,
+		Handler:           mux,
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 	go func() {
@@ -182,6 +206,9 @@ func run() error {
 
 	logger.Info("ad spend sync scheduler starting", "interval", costSyncInterval)
 	go costSyncScheduler.RunLoop(ctx, costSyncInterval)
+
+	logger.Info("event queue depth poller starting", "interval", queueDepthPollInterval)
+	go eventqueue.PollDepth(ctx, eventQueue, metrics.EventQueueDepth, queueDepthPollInterval, logger)
 
 	<-ctx.Done()
 	logger.Info("shutting down")

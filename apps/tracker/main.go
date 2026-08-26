@@ -28,6 +28,7 @@ import (
 	"github.com/ismagilovnail/flox/apps/internal/eventbuf"
 	"github.com/ismagilovnail/flox/apps/internal/eventqueue"
 	"github.com/ismagilovnail/flox/apps/internal/logging"
+	"github.com/ismagilovnail/flox/apps/internal/metrics"
 	"github.com/ismagilovnail/flox/apps/internal/postback"
 	"github.com/ismagilovnail/flox/apps/internal/postbacklog"
 	"github.com/ismagilovnail/flox/apps/internal/postgres"
@@ -80,6 +81,7 @@ func run() error {
 	// upstream only ever sees the eventbuf.Sink interface.
 	events := eventbuf.New(eventqueue.NewSink(eventqueue.NewPostgresQueue(db)), logger, eventbuf.Config{})
 	defer events.Close()
+	metrics.RegisterEventBufStats(events)
 
 	handler := &Handler{
 		store:      routingstore.New(db),
@@ -147,16 +149,22 @@ func run() error {
 
 	r := chi.NewRouter()
 	r.Use(middleware.RealIP)
+	// RequestID + echoing it back is a plain context.WithValue and one
+	// response header write — negligible next to the hot path's real
+	// costs (DB reads, routing). It is NOT the per-request logging
+	// middleware apps/api uses (requestLogger, apps/internal/httpserver):
+	// that would mean one synchronous slog.Logger.Info call per click,
+	// which IS duplicate work (§53 request-ID correlation is satisfied by
+	// the header alone; the durable record of the click is the async
+	// event, not a log line).
+	r.Use(middleware.RequestID)
+	r.Use(echoRequestID)
 	r.Use(middleware.Recoverer)
-	// Deliberately no per-request logging middleware on this router: the
-	// redirect path is latency-budgeted (p50 < 20ms, non-negotiable #9)
-	// and every click already produces a structured event through the
-	// async writer. A second synchronous log line per click would be
-	// duplicate work on the hot path.
 	r.Get("/health", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(`{"status":"ok"}`))
 	})
+	r.Handle("/metrics", metrics.Handler())
 	handler.Register(r)
 	postbackHandler.Register(r)
 
@@ -192,4 +200,17 @@ func logStats(logger *slog.Logger, events *eventbuf.Writer) {
 	s := events.Stats()
 	logger.Info("event writer stats",
 		"enqueued", s.Enqueued, "written", s.Written, "dropped", s.Dropped, "failed", s.Failed)
+}
+
+// echoRequestID mirrors apps/internal/httpserver's own responseRequestID —
+// duplicated rather than imported, since that package is documented as
+// apps/api's own chi router builder and pulling it in here for one six-line
+// helper would be a heavier coupling than just repeating it.
+func echoRequestID(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if id := middleware.GetReqID(r.Context()); id != "" {
+			w.Header().Set("X-Request-Id", id)
+		}
+		next.ServeHTTP(w, r)
+	})
 }

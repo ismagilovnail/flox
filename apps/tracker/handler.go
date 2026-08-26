@@ -14,6 +14,7 @@ import (
 	"github.com/ismagilovnail/flox/apps/internal/event"
 	"github.com/ismagilovnail/flox/apps/internal/eventbuf"
 	"github.com/ismagilovnail/flox/apps/internal/idgen"
+	"github.com/ismagilovnail/flox/apps/internal/metrics"
 	"github.com/ismagilovnail/flox/apps/internal/routing"
 	"github.com/ismagilovnail/flox/apps/internal/routingstore"
 )
@@ -36,7 +37,27 @@ func (h *Handler) Register(r chi.Router) {
 	r.Get("/t/{trackingID}", h.track)
 }
 
+// trackOutcome labels §53's tracking_requests_total counter — kept to a
+// handful of fixed values (low label cardinality is a hard Prometheus
+// requirement; anything per-campaign or per-slug here would be a
+// cardinality explosion).
+type trackOutcome string
+
+const (
+	outcomeRedirected trackOutcome = "redirected"
+	outcomeBlocked    trackOutcome = "blocked"
+	outcomeNotFound   trackOutcome = "not_found"
+	outcomeError      trackOutcome = "error"
+)
+
 func (h *Handler) track(w http.ResponseWriter, r *http.Request) {
+	start := time.Now()
+	outcome := outcomeError // default: any early return below that doesn't set this explicitly was a genuine error path
+	defer func() {
+		metrics.TrackingLatencySeconds.Observe(time.Since(start).Seconds())
+		metrics.TrackingRequestsTotal.WithLabelValues(string(outcome)).Inc()
+	}()
+
 	ctx := r.Context()
 	slug := chi.URLParam(r, "trackingID")
 	host := hostWithoutPort(r.Host)
@@ -47,6 +68,7 @@ func (h *Handler) track(w http.ResponseWriter, r *http.Request) {
 			// An unknown tracking link is not a routing decision — no
 			// campaign means no configuration, no click to attribute, and
 			// nothing to record. 404 and stop.
+			outcome = outcomeNotFound
 			http.NotFound(w, r)
 			return
 		}
@@ -60,6 +82,7 @@ func (h *Handler) track(w http.ResponseWriter, r *http.Request) {
 	// does not model, handled here where the campaign's status actually
 	// lives.
 	if link.CampaignStatus != "active" {
+		outcome = outcomeNotFound
 		http.NotFound(w, r)
 		return
 	}
@@ -114,6 +137,7 @@ func (h *Handler) track(w http.ResponseWriter, r *http.Request) {
 		ev.Type = event.SourceFilter
 		ev.FilterReason = result.Reason
 		h.events.Enqueue(ev)
+		outcome = outcomeBlocked
 		http.NotFound(w, r)
 		return
 	}
@@ -123,6 +147,7 @@ func (h *Handler) track(w http.ResponseWriter, r *http.Request) {
 	}
 
 	h.events.Enqueue(ev)
+	outcome = outcomeRedirected
 
 	// 302, not 301: a permanently-cached redirect would bypass the tracker
 	// entirely on the next click, losing both the event and any future

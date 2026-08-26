@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/ismagilovnail/flox/apps/internal/event"
+	"github.com/ismagilovnail/flox/apps/internal/metrics"
 )
 
 // flushRetryDelay is how long a failed ClickHouse batch waits before the
@@ -57,17 +58,23 @@ func (f *Flusher) RunOnce(ctx context.Context, limit int) (int, error) {
 		ids[i] = c.ID
 	}
 
-	if err := f.ch.InsertBatch(ctx, events); err != nil {
-		f.logger.Error("clickhouse batch insert failed, requeueing", "error", err, "count", len(claimed))
+	insertStart := time.Now()
+	insertErr := f.ch.InsertBatch(ctx, events)
+	metrics.EventProcessingLatencySeconds.Observe(time.Since(insertStart).Seconds())
+
+	if insertErr != nil {
+		f.logger.Error("clickhouse batch insert failed, requeueing", "error", insertErr, "count", len(claimed))
 		if reqErr := f.consumer.Requeue(ctx, ids, time.Now().UTC().Add(flushRetryDelay)); reqErr != nil {
 			f.logger.Error("requeueing failed event batch", "error", reqErr)
 		}
+		metrics.EventsRequeuedTotal.Add(float64(len(claimed)))
 		return len(claimed), nil
 	}
 
 	if err := f.consumer.Delete(ctx, ids); err != nil {
 		f.logger.Error("deleting flushed events", "error", err)
 	}
+	metrics.EventsPersistedTotal.Add(float64(len(claimed)))
 	return len(claimed), nil
 }
 

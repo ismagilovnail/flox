@@ -5,6 +5,56 @@ per-phase, matching `CLAUDE.md`'s phase protocol. The one exception is
 [Between phases], below: spec amendments and the code changes that follow from
 them land between phases and would otherwise be invisible here.
 
+## [Observability] — Phase 29: Prometheus metrics, tracker request IDs, traced postback delivery
+
+### Scope
+
+Structured logging and OpenTelemetry tracing already existed (Phase 16+);
+this phase's real gap was metrics — no client library, no `/metrics`
+endpoint, none of §53's nine tracked metrics existed. Confirmed via
+`AskUserQuestion`: `prometheus/client_golang` (not the OTel metrics SDK),
+plus a real Prometheus server added to `infra/docker-compose.dev.yml` for
+genuine scrape verification. See `docs/observability.md` for full detail,
+including why `event_loss` is modeled as two counters (not one — the two
+sides live in different binaries) and why `postback_deliveries_total` has
+three outcome values, not §53's literal two.
+
+### Changed
+
+- New `apps/internal/metrics` package: all nine `flox_`-namespaced
+  collectors, `promauto`-registered, plus `Handler()` for `/metrics`.
+- `apps/tracker`: `middleware.RequestID` + an `X-Request-Id` echo (not the
+  full per-request logging middleware `apps/api` uses — a context value
+  and one header write, not a synchronous log line per click, so §41's
+  latency budget is untouched); `tracking_requests_total`/
+  `tracking_latency_seconds` around the whole redirect handler.
+- `internal/routing.Engine.Resolve`, `apps/internal/postback.Deliverer`,
+  `apps/internal/analytics.Service`, and `eventqueue.Flusher` each gained
+  their own metric at the natural instrumentation point; new
+  `eventqueue.PostgresQueue.Depth`/`PollDepth` for the queue-depth gauge;
+  new `metrics.RegisterEventBufStats` exposes `eventbuf.Writer`'s
+  existing atomic counters as `CounterFunc`s (its internals untouched).
+- `apps/worker`: a fifth background goroutine (queue-depth polling), and
+  its postback delivery `http.Client` now wraps `otelhttp.NewTransport`
+  — each delivery attempt becomes its own trace.
+- `/metrics` added to `apps/api`, `apps/tracker`, `apps/worker`.
+- New `prometheus` service + `infra/prometheus.yml`, scraping all three
+  binaries on the host via `host.docker.internal` (`extra_hosts` for
+  Linux Docker Engine compatibility).
+
+### Verified
+
+`gofmt`/`go build ./...`/`go vet ./...`/`go test ./...` green repo-wide,
+including two new test files (`internal/metrics`, and a `Depth()` test in
+`internal/eventqueue`). Full manual pass: started all three binaries plus
+a real Prometheus container, confirmed all three scrape targets `up` via
+`/api/v1/targets`, then generated genuine traffic for every one of the
+nine metrics (a real tracking-link click end to end through
+tracker→Postgres queue→worker→ClickHouse, a real failing postback
+delivery, a real authenticated analytics query) and confirmed each value
+via Prometheus's own query API — not just a local curl. No unexpected
+errors in any binary's logs. All test fixtures deleted afterward.
+
 ## [Auth / Organizations / RBAC] — Phase 28B: frontend integration
 
 ### Scope

@@ -1,0 +1,23 @@
+# §53/Phase 29 dev-stack scrape config. apps/api, apps/tracker, and
+# apps/worker run on the HOST (via `go run`, matching this whole repo's
+# dev workflow — infra/docker-compose.dev.yml only ever ran the data
+# stores), not as containers in this compose network, so Prometheus
+# reaches them via host.docker.internal (see the prometheus service's own
+# extra_hosts entry in docker-compose.dev.yml — required for that name to
+# resolve on Linux Docker Engine; Docker Desktop provides it natively).
+# Ports match API_URL/TRACKER_URL/WORKER_URL's defaults in .env.example.
+global:
+  scrape_interval: 15s
+
+scrape_configs:
+  - job_name: flox-api
+    static_configs:
+      - targets: ["host.docker.internal:8080"]
+
+  - job_name: flox-tracker
+    static_configs:
+      - targets: ["host.docker.internal:8081"]
+
+  - job_name: flox-worker
+    static_configs:
+      - targets: ["host.docker.internal:8082"]

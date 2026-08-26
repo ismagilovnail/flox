@@ -115,3 +115,17 @@ func (q *PostgresQueue) Requeue(ctx context.Context, ids []string, next time.Tim
 	}
 	return nil
 }
+
+// Depth counts rows not yet delivered to ClickHouse — both 'queued' (due
+// or waiting for next_attempt_at) and 'processing' (claimed by a Flusher,
+// mid-InsertBatch) — for §53's event_queue_depth gauge (see PollDepth).
+// 'processing' rows are normally claimed and cleared within one RunOnce,
+// but counting only 'queued' would undercount the true backlog during a
+// slow ClickHouse insert.
+func (q *PostgresQueue) Depth(ctx context.Context) (int, error) {
+	var n int
+	if err := q.db.QueryRow(ctx, `SELECT count(*) FROM event_queue WHERE status IN ('queued', 'processing')`).Scan(&n); err != nil {
+		return 0, fmt.Errorf("eventqueue: counting queue depth: %w", err)
+	}
+	return n, nil
+}

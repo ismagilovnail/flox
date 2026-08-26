@@ -19,129 +19,117 @@ referenced below as §N).
 ## CURRENT STATE — UPDATE THIS EVERY PHASE
 
 ```
-CURRENT PHASE : PHASE 28B — AUTH / RBAC + TENANT ISOLATION (frontend half)
-STATUS        : done — wires apps/web to Phase 28A's real auth API. New
-                login/signup/accept-invite pages (none existed before,
-                not even mocked), route protection, and the pre-existing
-                mock Team page switched onto the real /team/* endpoints.
-                NEXT_PUBLIC_DEV_ORG_ID is gone entirely.
-                New (auth) route group (bare centered layout, no sidebar/
-                topbar): /login, /signup, /accept-invite (reads ?token=
-                via PageProps' searchParams — a Server Component prop —
-                not useSearchParams, avoiding that hook's own Suspense-
-                boundary requirement). New "auth" i18n namespace (RHF+Zod
-                forms, matching this project's current convention) — the
-                pre-existing Team feature files were left on their
-                original hardcoded English rather than partially
-                retrofitting i18n into only what this phase touched.
-                lib/api/client.ts: credentials:"include" replaces the
-                X-Organization-Id header; httpserver's CORS gained
-                AllowCredentials:true + a single explicit AllowedOrigins
-                entry (fetch spec forbids "*" with credentials).
-                New src/proxy.ts (THIS NEXT.JS VERSION, 16.3, RENAMED
-                middleware.js TO proxy.js — middleware.js still works but
-                is deprecated) — redirects based on session-cookie
-                PRESENCE only (checked, documented explicitly as a UX
-                convenience, never the enforcement boundary); new
-                components/shell/auth-guard.tsx is the defense-in-depth
-                layer behind it that actually calls GET /auth/me, catching
-                a present-but-expired/revoked cookie (suspended/removed
-                mid-session, or past 30-day expiry) and redirecting
-                client-side instead of leaving a signed-out visitor on an
-                app shell whose every fetch silently 401s.
-                Team page: new lib/api/team.ts + hooks/use-team.ts replace
-                stores/team.ts FOR THE TEAM PAGE ONLY.
-                hooks/use-current-member.ts and stores/team.ts itself were
-                DELIBERATELY LEFT UNTOUCHED — custom-metrics/content-
-                gallery/referral (still fully mock, not wired to a real
-                backend) key their own "who am I" role-gating against that
-                mock roster's ids; rewiring identity there ahead of their
-                own backend-integration phase would have silently broken
-                their "is this mine" checks against still-mock seed data.
-                lib/mock/team.ts's Role/ROLES/PERMISSIONS/ROLE_PERMISSIONS
-                stayed exactly as-is (still accurate, still what
-                RolesPermissionsPanel displays) — only TeamMember/
-                TEAM_MEMBERS/ActivityEntry/TEAM_ACTIVITY were left behind
-                by the real Team page. Invite/resend show the real link in
-                a copy-to-clipboard reveal dialog (same pattern as
-                api-keys-panel.tsx's key reveal), not a fake "email sent"
-                toast.
-                RBAC-aware navigation — a REAL GAP FOUND VIA MANUAL
-                TESTING, not requested up front: a signed-in Viewer could
-                click "Team" and land on a bare permission-denied
-                ErrorState card, exactly what §52's "frontend permissions
-                are only UX" is supposed to prevent. Fixed with
-                NavItem.requiredPermission (lib/nav.ts, set to "team.read"
-                on Team only) + visibleNavGroups(groups, permissions),
-                applied in both nav-content.tsx (sidebar) and
-                command-menu.tsx (⌘K), reading useMe().data?.permissions.
-                MemberList/member-columns.tsx additionally hide "Invite
-                member", disable the role Select, and hide row-actions
-                when lacking team.write (e.g. Manager: has team.read, not
-                team.write) — server 403s remain the real enforcement,
-                this just stops offering controls that were never going
-                to work.
-                TWO REAL BUGS CAUGHT DURING MANUAL TESTING (not code
-                review): (1) AcceptInviteForm's useForm({values:{...}})
-                re-applied a FRESH object literal on every render, so
-                every keystroke into the password field silently reset
-                the whole form — symptom was "submit does nothing."
-                Fixed: defaultValues + a one-time effect/ref-guarded
-                form.setValue prefill instead. (2) internal/auth's own Go
-                test suite created real rows in the shared dev Postgres
-                but NEVER DELETED THEM (every other package's test suite
-                does) — 3 earlier test runs during Phase 28A had left 51
-                organizations + dozens of orphaned users rows sitting in
-                the dev DB, only discovered when post-testing cleanup row
-                counts looked wrong. Fixed: t.Cleanup added to
-                signupOrg/uniqueEmail; the pre-existing backlog (and this
-                phase's own manual-test fixtures) purged by hand — dev DB
-                confirmed back to its pre-testing state (1 pre-existing
-                Phase 27 Dev Org fixture, 0 users, 0 sessions).
-                Verified: gofmt/go build/vet/test ./... unchanged and
-                green (no Go code changed except the test-cleanup fix).
-                next typegen (needed once, for /accept-invite's PageProps
-                type) / tsc --noEmit / eslint . / vitest run (21 tests,
-                unchanged) / next build all clean. Full manual browser
-                pass (Claude-in-Chrome) against the real running apps/api
-                + apps/web dev servers ON MATCHING DEFAULT PORTS (8080/
-                3000 — required for CORS/cookies to actually work; Phase
-                28A's own curl pass had used a nonstandard 18080 for
-                apps/api, which would silently fail CORS from a real
-                3000-origin browser): signed-out /overview correctly
-                redirected to /login; signup created a real org and
-                rendered the full app shell with the REAL org name
-                (WorkspaceSelector) and REAL user initials/name/email
-                (UserMenu, no more MOCK_USER); /team showed one real
-                member with genuine "last active"; invited a Viewer
-                through the real sheet, got a real accept-invite link;
-                opened it in a second tab, the public preview correctly
-                showed org/role (localized to Russian per the browser's
-                Accept-Language, confirming the new i18n namespace
-                loads), accepting logged the invitee straight in; the
-                Viewer's sidebar correctly had NO "Team" link at all and
-                their /auth/me showed exactly ["analytics.read",
-                "campaign.read"]; back as Owner, suspended then removed
-                the Viewer via the real row-actions menu, member count
-                updated live with no reload; Activity tab showed all 4
-                real audit entries with human-readable labels and correct
-                actor names; logout cleared the cookie and a subsequent
-                direct /team visit redirected to /login again; spot-
-                checked content-gallery still renders correctly against
-                its own untouched mock, confirming use-current-member/
-                stores/team.ts were genuinely left alone. Zero console
-                errors throughout. All fixtures from both this phase's
-                and Phase 28A's manual passes deleted afterward.
-LAST COMMIT   : feat(auth): wire apps/web to real sessions and RBAC
-                (Phase 28B)
+CURRENT PHASE : PHASE 29 — OBSERVABILITY
+STATUS        : done — structured logging and OpenTelemetry tracing
+                already existed (Phase 16+); this phase's real gap was
+                Prometheus metrics, closed via a new apps/internal/metrics
+                package (prometheus/client_golang, confirmed via
+                AskUserQuestion over the OTel metrics SDK — simpler, no
+                collector hop needed just to export as Prometheus
+                anyway). All nine §53 tracked metrics now exist:
+                tracking_requests/tracking_latency (apps/tracker's
+                track() handler, outcome-labeled: redirected/blocked/
+                not_found/error), routing_latency (internal/routing.
+                Engine.Resolve, timed wherever it's called — hot path AND
+                /routing/simulate, each in their own process), event_
+                processing_latency (eventqueue.Flusher's ClickHouse
+                InsertBatch call), event_queue_depth (new eventqueue.
+                PollDepth goroutine in apps/worker, 15s ticker, a new
+                PostgresQueue.Depth() counting 'queued'+'processing' so
+                it doesn't dip to zero mid-flush), event_loss/postback_
+                success/postback_failure/analytics_latency — see below
+                and docs/observability.md for exactly how each maps to
+                real metric names.
+                event_loss is DELIBERATELY TWO COUNTERS, NOT ONE:
+                enqueued (apps/tracker, from eventbuf.Writer.Stats() —
+                exposed via new metrics.RegisterEventBufStats as
+                CounterFuncs reading eventbuf's OWN existing atomics,
+                zero changes to eventbuf's internals) vs persisted
+                (apps/worker, from eventqueue.Flusher) — the two sides
+                live in DIFFERENT BINARIES, so a dashboard derives loss
+                via PromQL rate-subtraction; pre-computing and storing a
+                single "loss" value would need one process to know both
+                sides' counts, which is backwards from how Prometheus
+                counters are supposed to work. Confirmed by reading
+                eventbuf.Writer.write() directly: a failed sink write is
+                never retried, so dropped/failed really are permanent
+                loss, while eventqueue.Flusher's failed ClickHouse insert
+                requeues forever (no dead-letter) — NOT loss, tracked
+                separately as events_requeued_total.
+                postback_deliveries_total{outcome} has THREE outcome
+                values (success/retrying/dead), not §53's literal two —
+                "retrying" (will be attempted again) vs "dead" (exhausted
+                MaxAttempts, genuinely lost) already exists as postback.
+                DeliveryStatus and collapsing it at the metric layer
+                would throw away information a dashboard can always
+                re-derive (sum outcome!="success") but never recover.
+                apps/tracker gained middleware.RequestID + an X-Request-Id
+                echo (NOT the full per-request logging middleware apps/
+                api uses — a context value + one header write, negligible
+                next to a synchronous slog call per click, which Phase
+                21's own comment on this router already ruled out as
+                "duplicate work" on the §41 hot path; this phase respects
+                that same p50<20ms/p95<50ms budget by construction, every
+                new hot-path metric call is an in-memory atomic, nothing
+                that blocks). apps/worker's postback delivery http.Client
+                now wraps otelhttp.NewTransport — each delivery attempt
+                becomes its own trace (root span, no inbound request to
+                inherit context from). Deeper custom spans elsewhere
+                (routing decisions, conversion recording) are an
+                explicit, separate follow-up, not done here — apps/api
+                already had otelhttp.NewHandler covering every inbound
+                request before this phase.
+                /metrics added to all three binaries (apps/worker's bare
+                http.HandlerFunc became a small http.ServeMux since a
+                HandlerFunc alone serves only one path).
+                New prometheus service in infra/docker-compose.dev.yml +
+                infra/prometheus.yml (confirmed via AskUserQuestion, for
+                real-scrape verification over curl-only) — scrapes all
+                three binaries via host.docker.internal (they run on the
+                HOST via `go run`, matching this whole repo's dev
+                workflow; extra_hosts:host-gateway makes that hostname
+                resolve on Linux Docker Engine).
+                Verified: gofmt/go build/vet/test ./... green repo-wide,
+                incl. 2 new test files (internal/metrics: /metrics serves
+                all 9 metric families, RegisterEventBufStats against a
+                real eventbuf.Writer; internal/eventqueue: new Depth()
+                test covering enqueue/claim/delete transitions). Full
+                manual pass: started all three binaries + a REAL
+                Prometheus container, confirmed all 3 scrape targets
+                "up" via /api/v1/targets (the real integration risk in
+                this phase, worked first try). Seeded one real org/
+                campaign/domain/tracking-link fixture, hit it 3x + one
+                unknown slug: tracking_requests_total{outcome=
+                "redirected"}=3, {outcome="not_found"}=1 confirmed via
+                Prometheus's OWN QUERY API (not just curl), each real
+                redirect carrying a genuine X-Request-Id header. Same 3
+                clicks traced end to end: tracker's events_enqueued_total
+                =3 -> worker's events_persisted_total=3 (as 3 separately
+                job-labeled series in ONE Prometheus query, proving the
+                two-counters-two-binaries design actually works, not
+                just compiles), event_queue_depth back to 0 once drained.
+                Inserted one real postback_deliveries row pointing at an
+                intentionally unreachable URL — worker's Deliverer
+                attempted it for real (connection refused), postback_
+                deliveries_total{outcome="retrying"}=1 matched the row's
+                own delivery_status in Postgres exactly. Signed up a real
+                user (Phase 28's real auth) and called a real analytics
+                endpoint: analytics_query_latency_seconds_count{endpoint=
+                "campaign_daily"}=1. Zero unexpected errors in any
+                binary's logs throughout. All fixtures deleted afterward,
+                confirmed zero count on every LIKE 'Metrics%' pattern.
+LAST COMMIT   : feat(observability): Prometheus metrics, tracker request
+                IDs, traced postback delivery (Phase 29)
 NEXT          : confirm scope before starting. No open known issues
-                remain for Auth/RBAC. Known limitations documented in
-                docs/auth.md (unchanged from Phase 28A): no RBAC on pre-
-                existing domain routes (an explicit separate follow-up,
-                confirmed out of scope for both 28A and 28B), no email
-                delivery/password reset/MFA/API-key auth/org switcher/
-                session-cleanup job — none requested. Phase 28
-                (Auth/Organizations/RBAC) is now fully done end-to-end.
+                remain for Observability. Known limitations documented in
+                docs/observability.md: no custom tracing spans beyond
+                apps/api's existing inbound-request instrumentation +
+                this phase's new postback-delivery outbound span (an
+                explicit, separate follow-up); apps/tracker still has no
+                per-request logging or inbound otelhttp wrapping (§41
+                latency budget, deliberate, unchanged since Phase 21); no
+                Grafana dashboard (Prometheus's own query UI only, per
+                AskUserQuestion scope) — none requested.
 
 ```
 

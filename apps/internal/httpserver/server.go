@@ -1,10 +1,10 @@
 // Package httpserver builds apps/api's chi router: request ID, structured
 // request logging, panic recovery, OTel instrumentation, and the health/
-// readiness endpoints (§33). Route registration for real resources
-// (campaigns, offers, ...) lives in each domain package (internal/campaign/
-// handler.go, ...) and is mounted onto Server.Mux() from cmd/api/main.go —
-// this file only owns cross-cutting middleware and the two endpoints every
-// phase needs.
+// readiness/metrics endpoints (§33, §53). Route registration for real
+// resources (campaigns, offers, ...) lives in each domain package
+// (internal/campaign/handler.go, ...) and is mounted onto Server.Mux()
+// from cmd/api/main.go — this file only owns cross-cutting middleware and
+// the endpoints every phase needs.
 package httpserver
 
 import (
@@ -17,6 +17,8 @@ import (
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/cors"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
+
+	"github.com/ismagilovnail/flox/apps/internal/metrics"
 )
 
 // Pinger is satisfied by *pgxpool.Pool — kept as a narrow interface here so
@@ -58,6 +60,9 @@ func New(logger *slog.Logger, serviceName string, db Pinger, ch Pinger, appURL s
 
 	r.Get("/health", healthHandler)
 	r.Get("/ready", readyHandler(db, ch))
+	// §53/Phase 29: unauthenticated, same convention as /health — a
+	// scrape target on an internal network, never a route a browser hits.
+	r.Handle("/metrics", metrics.Handler())
 
 	return &Server{mux: r, router: otelhttp.NewHandler(r, serviceName)}
 }

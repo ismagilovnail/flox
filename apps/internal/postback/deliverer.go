@@ -7,6 +7,8 @@ import (
 	"log/slog"
 	"net/http"
 	"time"
+
+	"github.com/ismagilovnail/flox/apps/internal/metrics"
 )
 
 // attemptTimeout bounds a single delivery HTTP call. A network's postback
@@ -119,7 +121,13 @@ func (d *Deliverer) fail(ctx context.Context, del Delivery, statusCode int, mess
 	d.logAttempt(ctx, del, StatusRetrying, statusCode, message)
 }
 
+// logAttempt is every attempt/fail outcome's one common call site (success,
+// retrying, dead) — the natural, single place to record §53's
+// postback_deliveries_total{outcome} alongside the existing audit log
+// write, rather than duplicating an Inc() call at each of the three
+// decision points in attempt/fail above.
 func (d *Deliverer) logAttempt(ctx context.Context, del Delivery, result DeliveryStatus, responseStatusCode int, message string) {
+	metrics.PostbackDeliveriesTotal.WithLabelValues(string(result)).Inc()
 	d.attempts.LogAttempt(ctx, AttemptRecord{
 		OrganizationID:     del.OrganizationID,
 		NetworkID:          del.NetworkID,

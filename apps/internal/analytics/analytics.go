@@ -13,6 +13,7 @@ import (
 
 	"github.com/ismagilovnail/flox/apps/internal/apierror"
 	"github.com/ismagilovnail/flox/apps/internal/chstore"
+	"github.com/ismagilovnail/flox/apps/internal/metrics"
 )
 
 // Repository is the narrow slice of chstore.EventStore this package needs
@@ -57,6 +58,7 @@ func (s *Service) CampaignDaily(ctx context.Context, organizationID, campaignID 
 	if err := s.validateRange(organizationID, campaignID, from, to); err != nil {
 		return nil, err
 	}
+	defer observeLatency("campaign_daily")()
 	return s.repo.DailyCampaignCounts(ctx, organizationID, campaignID, from, to)
 }
 
@@ -66,5 +68,16 @@ func (s *Service) CampaignDailyRevenue(ctx context.Context, organizationID, camp
 	if err := s.validateRange(organizationID, campaignID, from, to); err != nil {
 		return nil, err
 	}
+	defer observeLatency("campaign_daily_revenue")()
 	return s.repo.DailyCampaignRevenue(ctx, organizationID, campaignID, from, to)
+}
+
+// observeLatency times only the ClickHouse round trip (validation already
+// ran by the time either method above defers this) — call it, then defer
+// its return value so the Observe happens on return, not on call.
+func observeLatency(endpoint string) func() {
+	start := time.Now()
+	return func() {
+		metrics.AnalyticsQueryLatencySeconds.WithLabelValues(endpoint).Observe(time.Since(start).Seconds())
+	}
 }
