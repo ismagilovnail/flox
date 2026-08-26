@@ -83,8 +83,8 @@ STATUS        : done — automates Phase B's previously manual-only "Sync
                 phase (nothing user-facing changed — the manual "Sync
                 now" button and its result card, from Phase B, are
                 untouched).
-LAST COMMIT   : (pending) feat(costsync): automated sync scheduler
-                (Phase C of FB/TikTok ad-spend import)
+LAST COMMIT   : feat(costsync): automated ad-spend sync scheduler
+                (Phase C of FB/TikTok import)
 NEXT          : confirm scope before starting. No open known issues
                 remain. Candidate: a third i18n locale (cheap per
                 docs/frontend-i18n.md, but none has been requested). No
