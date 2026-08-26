@@ -19,77 +19,122 @@ referenced below as §N).
 ## CURRENT STATE — UPDATE THIS EVERY PHASE
 
 ```
-CURRENT PHASE : PHASE (unnumbered) — Ad Spend Sync Scheduler, Phase C of
-                FB/TikTok ad-spend import (automated recurring sync)
-STATUS        : done — automates Phase B's previously manual-only "Sync
-                now" (POST .../connection/sync) with a recurring
-                background job. Confirmed via AskUserQuestion after Phase
-                B shipped with no open issues: new scope, not part of
-                either of the two confirmed FB/TikTok phases before it —
-                the manual endpoint is unchanged and still works, for
-                forcing a sync between scheduled runs.
-                New adaccount.Repository.ListAllConnections — the one
-                deliberately org-unscoped query in that package (every
-                other method takes an orgID and filters on it); lists
-                every connected ad account across every org, since a
-                scheduler has no single tenant's request to scope from.
-                Lives only on *Repository (never Service), never HTTP-
-                reachable — same trust boundary as Phase B's
-                CredentialsByTrafficSourceID.
-                New costsync.Scheduler (RunOnce/RunLoop): re-runs
-                Service.Sync for every connection on a plain time.Ticker,
-                NOT apps/worker's existing PollLoop(batchSize, idle)
-                claim-a-batch shape — there's no per-connection "due"
-                state to claim, just "sync everyone again every N hours."
-                RunOnce lists every connection then Syncs each in turn
-                using the same 30-day default lookback as an on-demand
-                sync; one connection's Sync failing (expired token,
-                transient API error) is logged and skipped, NEVER aborts
-                the rest of the batch — losing org B's sync to org A's
-                bad token would be a silent, tenant-isolation-adjacent
-                failure mode. RunLoop wraps RunOnce in the ticker; a
-                RunOnce error (e.g. the ListAllConnections query itself
-                failing) is logged and the loop waits for its next tick
-                rather than exiting.
-                apps/worker/main.go wires it in: constructs the same
-                adaccount/campaign/cost/costsync.Providers combination
-                apps/api/main.go already builds for the manual endpoint,
-                launches go costSyncScheduler.RunLoop(ctx,
-                costSyncInterval) alongside the three existing poll
-                loops. costSyncInterval = 6 * time.Hour, a plain const
-                (no env var — matches the existing loops' own non-
-                configurable batch/idle constants).
-                Verified: go build/vet/gofmt/test ./... all green incl.
-                new tests adaccount.TestListAllConnections (cross-org,
-                excludes an unconnected source),
-                costsync.TestSchedulerRunOnceSyncsEveryConnection,
-                TestSchedulerRunOnceContinuesPastAFailingConnection, and
-                TestSchedulerRunLoopStopsOnContextCancel (pure unit test,
-                no DB) — all against real Postgres except the last. Full
-                manual pass: started apps/worker against the real dev
-                Postgres/ClickHouse/Redis stack with an empty database,
-                confirmed its first tick logged
-                "connections_attempted":0; then seeded one real Postgres
-                row (org + facebook_ads traffic source + a connection
-                with an intentionally-invalid token) and restarted — the
-                scheduler's first tick picked it up and made A REAL
-                NETWORK CALL TO THE LIVE FACEBOOK GRAPH API, getting back
-                the same genuine OAuthException (code 190) Phase B's own
-                manual pass got, logged with full detail (org id, traffic
-                source id, full error), followed by the run finishing
-                normally and the worker continuing to serve. Test
-                fixtures (org, cascade-deleted traffic source +
-                connection) deleted afterward. No frontend changes this
-                phase (nothing user-facing changed — the manual "Sync
-                now" button and its result card, from Phase B, are
-                untouched).
-LAST COMMIT   : feat(costsync): automated ad-spend sync scheduler
-                (Phase C of FB/TikTok import)
-NEXT          : confirm scope before starting. No open known issues
-                remain. Candidate: a third i18n locale (cheap per
-                docs/frontend-i18n.md, but none has been requested). No
-                other FB/TikTok ad-spend import work remains queued —
-                Phases A, B, and C are all done.
+CURRENT PHASE : PHASE 28A — AUTH / RBAC + TENANT ISOLATION (backend half)
+STATUS        : done — real authentication, sessions, organizations,
+                memberships, and role-based authorization (§52), replacing
+                apps/internal/tenant's original X-Organization-Id-header
+                stand-in. Confirmed via 3x AskUserQuestion before starting:
+                (1) split into 28A backend-only now / 28B frontend
+                integration as a separate later phase; (2) server-side
+                sessions in an HTTP-only cookie, not JWTs — trivially
+                revocable, no rotation/denylist machinery; (3) inviting a
+                team member generates a shareable accept-invite LINK, not
+                a real sent email (no SMTP/email-provider integration
+                exists anywhere in this project — same situation Ad
+                Account Connections hit with OAuth and resolved the same
+                way). A 4th AskUserQuestion mid-plan confirmed RBAC
+                enforcement (RequirePermission) is wired onto this
+                package's own team/membership endpoints ONLY — sweeping
+                permission checks across every pre-existing domain route
+                (campaigns/offers/sources/pixels/stream-sets/cost/...) is
+                an explicit, separate follow-up phase, not done here.
+                Tenant isolation (§36-TENANCY) is unaffected either way —
+                already enforced everywhere via org-scoped repositories,
+                orthogonal to role-based checks within one org.
+                New migration 00020: users.password_hash (empty-string
+                sentinel = "shell user, invite not yet accepted"), a
+                sessions table (token stored only as a SHA-256 hash, same
+                precedent as api_keys.key_hash), memberships.
+                invite_token_hash/invite_token_expires_at (an invite IS a
+                membership row with status='invited', not a separate
+                table), and role_permissions seeded to match apps/web's
+                src/lib/mock/team.ts ROLE_PERMISSIONS exactly cell-for-
+                cell (verified via psql query).
+                New apps/internal/auth package (handler+team_handler ->
+                service -> repository -> model/crypto, same layering as
+                every domain): signup (org+Owner+session in one tx),
+                login (resolves which org a multi-membership user meant;
+                a precomputed dummy bcrypt hash keeps a nonexistent-email
+                attempt from being measurably faster than a wrong-
+                password one), logout, GET /auth/me (role + full
+                permission list — UX gating only per §52, "frontend
+                permissions are only UX"; every mutating endpoint still
+                checks server-side independently), invite / GET
+                /auth/invites/{token} preview / accept-invite / resend-
+                invite (resend invalidates the OLD token), and full
+                membership CRUD under /team/* (list/invite/update-role-
+                or-status/resend/remove + /team/activity reading
+                audit_logs, migration 00010, unused until now — populated
+                only by this package's own membership actions, same
+                explicit-scope-boundary reasoning as the RBAC sweep).
+                Every mutation refuses to touch a membership whose role is
+                Owner (matches member-row-actions.tsx's own "no actions
+                for the Owner row," enforced server-side too) and role can
+                never be SET to Owner via this API either — exactly one
+                per org, created at signup. Suspending/removing a member
+                revokes their session on their VERY NEXT REQUEST
+                (ResolveSession's own query requires status='active' in
+                the same join) plus proactively deletes their session rows
+                (belt-and-suspenders).
+                apps/internal/tenant: Middleware (a fixed function reading
+                X-Organization-Id) became NewMiddleware(SessionResolver,
+                logger), constructed once in apps/api/main.go with
+                *auth.Service — SessionResolver is declared IN tenant (not
+                imported from auth) so there's no import cycle (auth ->
+                tenant for OrgID/UserID; tenant does NOT import auth).
+                Every other domain package's own handlers needed ZERO
+                code changes — mechanical sed of all 17
+                r.Use(tenant.Middleware) call sites in main.go to
+                r.Use(tenantMiddleware); they still only ever read
+                tenant.OrgID(ctx) (+ new tenant.UserID(ctx)).
+                apps/internal/httpserver: CORS AllowCredentials flipped to
+                true (cookie must travel on apps/web's cross-origin
+                fetch), X-Organization-Id dropped from AllowedHeaders (no
+                route accepts it anymore). New apierror.Unauthorized(401)/
+                Forbidden(403) constructors (first use in this project).
+                Verified: go build/vet/gofmt/test ./... green across the
+                ENTIRE repo — all ~15 pre-existing domain packages' own
+                tests pass unchanged (they call services/repositories
+                directly in Go, never through HTTP, so the middleware
+                swap touched zero of them). 20 new internal/auth tests
+                against real Postgres: signup/login/logout, session
+                resolution, invite->preview->accept->login (incl. "cannot
+                replay an accepted token" and Analyst's actual permission
+                set), invite validation (rejects Owner, rejects a
+                duplicate member), resend-invalidates-old-token,
+                role/status update + activity log, Owner-protection
+                (cannot change own role or remove self), member removal
+                revokes access, cross-tenant isolation (org B cannot
+                update/remove/see org A's memberships or activity — §36-
+                TENANCY's own DoD requirement), and the RequirePermission
+                middleware (200 vs 403 by role). Full manual curl pass
+                (no frontend to click through yet — Phase 28B's job)
+                against the real running apps/api dev stack: confirmed
+                X-Organization-Id-only access now 401s; signup ->
+                Set-Cookie -> GET /auth/me -> GET /campaigns (an untouched
+                pre-existing domain) succeeding through the SAME cookie
+                with zero code changes to campaign's own package; invite
+                -> public preview -> accept-invite auto-login; invited
+                Viewer's /auth/me showed exactly
+                ["analytics.read","campaign.read"] and their own invite
+                attempt correctly 403'd; Owner suspended the Viewer whose
+                EXISTING session immediately 401'd on its very next
+                request with no re-login needed to observe it; Owner's own
+                self-removal attempt correctly 422'd; GET /team/activity
+                showed all 5 real audit entries in order; logout cleared
+                the cookie and it 401'd afterward. Test fixtures (org,
+                cascade-deleted user/membership/sessions) deleted
+                afterward. No frontend changes this phase — apps/web still
+                runs on NEXT_PUBLIC_DEV_ORG_ID + the mock Team store.
+LAST COMMIT   : feat(auth): sessions, organizations, and RBAC (Phase 28A)
+NEXT          : Phase 28B (frontend integration — login/signup pages, wire
+                Team page to the real API, replace NEXT_PUBLIC_DEV_ORG_ID)
+                has NOT been started; confirm scope before beginning it or
+                anything else. Known limitations documented in
+                docs/auth.md: no RBAC on pre-existing domain routes (an
+                explicit separate follow-up), no email delivery/password
+                reset/MFA/API-key auth/org switcher/session-cleanup job —
+                none requested.
 ```
 
 > At the end of every phase: update the four lines above, add a CHANGELOG entry,

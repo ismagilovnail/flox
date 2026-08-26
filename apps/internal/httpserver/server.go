@@ -34,6 +34,11 @@ type Server struct {
 // /ready simply skips that check rather than reporting it unavailable.
 // appURL is apps/web's own origin, the one CORS-allowed origin (Phase 27:
 // the browser calls this API directly from a different origin in dev).
+// AllowCredentials must be true (§52/Phase 28): the session cookie
+// tenant.NewMiddleware now requires only travels on a cross-origin fetch
+// when the browser is told the response allows credentialed requests —
+// paired with a single explicit AllowedOrigins entry, never "*", which
+// the fetch spec forbids combining with credentials anyway.
 func New(logger *slog.Logger, serviceName string, db Pinger, ch Pinger, appURL string) *Server {
 	r := chi.NewRouter()
 
@@ -46,8 +51,8 @@ func New(logger *slog.Logger, serviceName string, db Pinger, ch Pinger, appURL s
 	r.Use(cors.Handler(cors.Options{
 		AllowedOrigins:   []string{appURL},
 		AllowedMethods:   []string{http.MethodGet, http.MethodPost, http.MethodPatch, http.MethodDelete},
-		AllowedHeaders:   []string{"Content-Type", "X-Organization-Id"},
-		AllowCredentials: false,
+		AllowedHeaders:   []string{"Content-Type"},
+		AllowCredentials: true,
 		MaxAge:           300,
 	}))
 
@@ -60,7 +65,7 @@ func New(logger *slog.Logger, serviceName string, db Pinger, ch Pinger, appURL s
 // Mux is where domain packages mount their own route groups, e.g.:
 //
 //	srv.Mux().Route("/campaigns", func(r chi.Router) {
-//	    r.Use(tenant.Middleware)
+//	    r.Use(tenantMiddleware)
 //	    campaignHandler.Register(r)
 //	})
 func (s *Server) Mux() chi.Router {

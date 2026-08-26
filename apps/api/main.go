@@ -18,6 +18,7 @@ import (
 	"github.com/ismagilovnail/flox/apps/internal/adaccount/tiktokads"
 	"github.com/ismagilovnail/flox/apps/internal/analytics"
 	"github.com/ismagilovnail/flox/apps/internal/attribution"
+	"github.com/ismagilovnail/flox/apps/internal/auth"
 	"github.com/ismagilovnail/flox/apps/internal/campaign"
 	"github.com/ismagilovnail/flox/apps/internal/chconn"
 	"github.com/ismagilovnail/flox/apps/internal/chstore"
@@ -112,17 +113,38 @@ func run() error {
 
 	srv := httpserver.New(logger, cfg.OTelServiceName, db, ch, cfg.AppURL)
 
+	// Auth/RBAC (§52, Phase 28A). authSvc.ResolveSession implements
+	// tenant.SessionResolver — tenantMiddleware below replaces the old
+	// X-Organization-Id-header stand-in tenant.Middleware used to be, for
+	// every route mounted under it, with zero changes to those routes'
+	// own handlers (they still only ever read tenant.OrgID(ctx)).
+	// secureCookies is false in development (a Secure cookie is dropped
+	// by browsers over plain http, and this dev stack has no TLS
+	// termination in front of apps/api).
+	authRepo := auth.NewRepository(db)
+	authSvc := auth.NewService(authRepo, cfg.AppURL)
+	authHandler := auth.NewHandler(authSvc, logger, cfg.Env != "development")
+	teamHandler := auth.NewTeamHandler(authSvc, logger)
+	tenantMiddleware := tenant.NewMiddleware(authSvc, logger)
+
+	authHandler.RegisterPublic(srv.Mux())
+	srv.Mux().Group(func(r chi.Router) {
+		r.Use(tenantMiddleware)
+		authHandler.RegisterAuthenticated(r)
+		teamHandler.Register(r)
+	})
+
 	campaignRepo := campaign.NewRepository(db)
 	campaignSvc := campaign.NewService(campaignRepo)
 	campaignHandler := campaign.NewHandler(campaignSvc, logger)
 	srv.Mux().Route("/campaigns", func(r chi.Router) {
-		r.Use(tenant.Middleware)
+		r.Use(tenantMiddleware)
 		campaignHandler.Register(r)
 	})
 
 	trafficSourceHandler := trafficsource.NewHandler(trafficsource.NewService(trafficsource.NewRepository(db)), logger)
 	srv.Mux().Route("/traffic-sources", func(r chi.Router) {
-		r.Use(tenant.Middleware)
+		r.Use(tenantMiddleware)
 		trafficSourceHandler.Register(r)
 	})
 
@@ -131,50 +153,50 @@ func run() error {
 
 	networkHandler := network.NewHandler(network.NewService(network.NewRepository(db)), logger)
 	srv.Mux().Route("/networks", func(r chi.Router) {
-		r.Use(tenant.Middleware)
+		r.Use(tenantMiddleware)
 		networkHandler.Register(r)
 	})
 
 	landingHandler := landing.NewHandler(landing.NewService(landing.NewRepository(db)), logger)
 	srv.Mux().Route("/landings", func(r chi.Router) {
-		r.Use(tenant.Middleware)
+		r.Use(tenantMiddleware)
 		landingHandler.Register(r)
 	})
 
 	pwaHandler := pwa.NewHandler(pwa.NewService(pwa.NewRepository(db)), logger)
 	srv.Mux().Route("/pwas", func(r chi.Router) {
-		r.Use(tenant.Middleware)
+		r.Use(tenantMiddleware)
 		pwaHandler.Register(r)
 	})
 
 	postlandingHandler := postlanding.NewHandler(postlanding.NewService(postlanding.NewRepository(db)), logger)
 	srv.Mux().Route("/postlandings", func(r chi.Router) {
-		r.Use(tenant.Middleware)
+		r.Use(tenantMiddleware)
 		postlandingHandler.Register(r)
 	})
 
 	pixelHandler := pixel.NewHandler(pixel.NewService(pixel.NewRepository(db)), logger)
 	srv.Mux().Route("/pixels", func(r chi.Router) {
-		r.Use(tenant.Middleware)
+		r.Use(tenantMiddleware)
 		pixelHandler.Register(r)
 	})
 
 	offerHandler := offer.NewHandler(offer.NewService(offer.NewRepository(db)), logger)
 	srv.Mux().Route("/offers", func(r chi.Router) {
-		r.Use(tenant.Middleware)
+		r.Use(tenantMiddleware)
 		offerHandler.Register(r)
 	})
 
 	eventMappingHandler := eventmapping.NewHandler(eventmapping.NewService(eventmapping.NewRepository(db)), logger)
 	srv.Mux().Route("/event-mappings", func(r chi.Router) {
-		r.Use(tenant.Middleware)
+		r.Use(tenantMiddleware)
 		eventMappingHandler.Register(r)
 	})
 
 	costSvc := cost.NewService(cost.NewRepository(db), conversion.NewPostgresFX(db))
 	costHandler := cost.NewHandler(costSvc, logger)
 	srv.Mux().Route("/campaigns/{campaignId}/cost-entries", func(r chi.Router) {
-		r.Use(tenant.Middleware)
+		r.Use(tenantMiddleware)
 		costHandler.Register(r)
 	})
 
@@ -194,14 +216,14 @@ func run() error {
 		TikTokAds:   tiktokads.New(),
 	}), logger)
 	srv.Mux().Route("/traffic-sources/{id}/connection", func(r chi.Router) {
-		r.Use(tenant.Middleware)
+		r.Use(tenantMiddleware)
 		adAccountHandler.Register(r)
 		costSyncHandler.Register(r)
 	})
 
 	streamSetHandler := streamset.NewHandler(streamset.NewService(streamset.NewRepository(db)), logger)
 	srv.Mux().Route("/campaigns/{campaignId}/stream-sets", func(r chi.Router) {
-		r.Use(tenant.Middleware)
+		r.Use(tenantMiddleware)
 		streamSetHandler.Register(r)
 	})
 
@@ -209,7 +231,7 @@ func run() error {
 		routingsimulate.NewService(routingstore.New(db), &routing.Engine{}), logger,
 	)
 	srv.Mux().Route("/campaigns/{campaignId}/routing/simulate", func(r chi.Router) {
-		r.Use(tenant.Middleware)
+		r.Use(tenantMiddleware)
 		routingSimulateHandler.Register(r)
 	})
 
@@ -219,20 +241,20 @@ func run() error {
 		analyticsSvc := analytics.NewService(events)
 		analyticsHandler := analytics.NewHandler(analyticsSvc, logger)
 		srv.Mux().Route("/analytics", func(r chi.Router) {
-			r.Use(tenant.Middleware)
+			r.Use(tenantMiddleware)
 			analyticsHandler.Register(r)
 		})
 
 		ltvSvc := ltv.NewService(events)
 		ltvHandler := ltv.NewHandler(ltvSvc, logger)
 		srv.Mux().Route("/analytics/ltv", func(r chi.Router) {
-			r.Use(tenant.Middleware)
+			r.Use(tenantMiddleware)
 			ltvHandler.Register(r)
 		})
 
 		conversionsHandler := conversions.NewHandler(conversions.NewService(events), logger)
 		srv.Mux().Route("/conversions", func(r chi.Router) {
-			r.Use(tenant.Middleware)
+			r.Use(tenantMiddleware)
 			conversionsHandler.Register(r)
 		})
 
@@ -292,7 +314,7 @@ func run() error {
 			logger,
 		)
 		srv.Mux().Route("/postback-logs", func(r chi.Router) {
-			r.Use(tenant.Middleware)
+			r.Use(tenantMiddleware)
 			postbackLogsHandler.Register(r)
 		})
 	}

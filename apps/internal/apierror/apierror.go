@@ -34,6 +34,19 @@ func Conflict(message string) *Error {
 	return &Error{Status: http.StatusConflict, Code: "conflict", Message: message}
 }
 
+// Unauthorized means the request has no valid session/credential at all —
+// distinct from Forbidden, which means a real session exists but lacks a
+// specific permission. First use: §52/Phase 28 auth.
+func Unauthorized(message string) *Error {
+	return &Error{Status: http.StatusUnauthorized, Code: "unauthorized", Message: message}
+}
+
+// Forbidden means an authenticated session exists but its role lacks the
+// permission a route requires (§52's server-side RBAC enforcement).
+func Forbidden(message string) *Error {
+	return &Error{Status: http.StatusForbidden, Code: "forbidden", Message: message}
+}
+
 // Write renders err as this package's JSON error envelope. Any error not
 // constructed via this package (a repository returning a raw pgx error, a
 // bug) is logged with detail server-side and rendered to the client as an

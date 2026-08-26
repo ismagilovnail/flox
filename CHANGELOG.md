@@ -5,6 +5,66 @@ per-phase, matching `CLAUDE.md`'s phase protocol. The one exception is
 [Between phases], below: spec amendments and the code changes that follow from
 them land between phases and would otherwise be invisible here.
 
+## [Auth / Organizations / RBAC] — Phase 28A: sessions, invites, and role-based access control
+
+### Scope
+
+Confirmed via `AskUserQuestion`: real authentication and RBAC on the Go
+side (§52), split from the frontend integration that wires it into
+`apps/web` (Phase 28B, not started). Also confirmed: server-side sessions
+in an HTTP-only cookie (not JWTs), invites as a shareable link (not a real
+sent email — no SMTP integration exists anywhere in this project), and
+RBAC enforcement wired onto this phase's own team/membership endpoints
+only (sweeping permission checks across every pre-existing domain route
+is an explicit, separate follow-up). See `docs/auth.md` for full detail.
+
+### Changed
+
+- New migration `00020_auth_sessions_rbac.sql`: `users.password_hash`
+  (empty-string sentinel for a not-yet-accepted invite's shell user), a
+  `sessions` table (token stored only as a SHA-256 hash, same precedent as
+  `api_keys.key_hash`), `memberships.invite_token_hash`/
+  `invite_token_expires_at`, and `role_permissions` seeded to match
+  `apps/web`'s `ROLE_PERMISSIONS` mock exactly.
+- New `apps/internal/auth` package: signup (creates org + Owner in one
+  transaction), login (resolves which org a multi-membership user meant,
+  constant-time-ish against email enumeration via a dummy bcrypt
+  comparison), logout, `GET /auth/me` (role + permission list, for
+  frontend UX gating only — enforcement stays server-side), invite/
+  preview-invite/accept-invite/resend-invite, and full membership CRUD
+  (`/team/members`, `/team/activity`) — every write behind a new
+  `RequirePermission` middleware backed by `role_permissions`.
+- `apps/internal/tenant`: `Middleware` (a fixed function reading
+  `X-Organization-Id`) became `NewMiddleware(SessionResolver, logger)`,
+  constructed once in `apps/api/main.go` with `*auth.Service`. Every other
+  domain package's own handlers needed zero changes — they still only
+  ever read `tenant.OrgID(ctx)` (plus a new `tenant.UserID(ctx)`).
+- `apps/internal/httpserver`: CORS `AllowCredentials: true` (required for
+  the session cookie to travel on `apps/web`'s cross-origin `fetch`
+  calls), `X-Organization-Id` dropped from `AllowedHeaders` (no route
+  accepts it anymore).
+
+### Verified
+
+`gofmt`/`go build ./...`/`go vet ./...`/`go test ./...` green across the
+**entire** repo, including 20 new `internal/auth` tests against real
+Postgres (signup/login/logout, session resolution, invite→accept→login,
+resend invalidates the old token, role/status updates, Owner-protection,
+member removal revokes access, cross-tenant isolation across
+update/remove/list/activity, and the `RequirePermission` middleware).
+Full manual `curl` pass against the real running `apps/api` dev stack:
+confirmed the old `X-Organization-Id`-only path now 401s, then walked the
+whole flow with a real cookie jar — signup, `GET /campaigns` (an
+untouched pre-existing domain) succeeding through the same session
+cookie, invite → public preview → accept-invite auto-login, a Viewer's
+restricted `/auth/me` permissions and a correctly-403'd write attempt, an
+Owner suspending the Viewer whose *existing* session immediately 401'd on
+its next request with no re-login needed to observe it, a blocked
+self-removal attempt by the Owner, a real five-entry activity log, and
+logout clearing the cookie. No frontend changes this phase (Phase 28B's
+job) — `apps/web` still runs on `NEXT_PUBLIC_DEV_ORG_ID` + the mock Team
+store.
+
 ## [Ad Spend Sync Scheduler] — Phase C of FB/TikTok ad-spend import: automated recurring sync
 
 ### Scope
