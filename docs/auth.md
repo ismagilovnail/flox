@@ -1,11 +1,11 @@
 # Auth / Organizations / RBAC (§52, Phase 28)
 
 Split into two phases (confirmed via `AskUserQuestion` before starting):
-**Phase 28A** (this doc) builds the real backend — authentication,
-sessions, organizations, memberships, and role-based authorization,
-replacing `apps/internal/tenant`'s original `X-Organization-Id`-header
-stand-in. **Phase 28B**, separate and not yet started, wires `apps/web`'s
-existing mock Team UI and a not-yet-built login/signup UI to this API.
+**Phase 28A** builds the real backend — authentication, sessions,
+organizations, memberships, and role-based authorization, replacing
+`apps/internal/tenant`'s original `X-Organization-Id`-header stand-in.
+**Phase 28B** (second half of this doc) wires `apps/web`'s existing mock
+Team UI, and a newly-built login/signup/accept-invite UI, to that API.
 
 ## Scope decisions (all confirmed via `AskUserQuestion`)
 
@@ -296,3 +296,197 @@ exists yet to click through — Phase 28B's job):
 
 No frontend changes this phase (Phase 28B's job) — `apps/web` still uses
 `NEXT_PUBLIC_DEV_ORG_ID` + the mock Team store; neither was touched.
+
+# Phase 28B: frontend integration
+
+Wires `apps/web` to Phase 28A's API: a new login/signup/accept-invite UI
+(none of it existed before, not even as a mock), route protection, and
+the existing mock Team page switched onto the real `/team/*` endpoints.
+`NEXT_PUBLIC_DEV_ORG_ID` is gone entirely — every request is scoped by
+session cookie now, not a developer-set org id.
+
+## `lib/api/client.ts`
+
+`apiFetch` sends `credentials: "include"` instead of an
+`X-Organization-Id` header, and no longer throws `MissingDevOrgError`
+(deleted along with the env var). `apps/internal/httpserver`'s CORS
+config flipped `AllowCredentials` to `true` with a single explicit
+`AllowedOrigins` entry (`cfg.AppURL`) — required for the session cookie
+to travel on `apps/web`'s cross-origin `fetch` calls; the fetch spec
+forbids combining a wildcard origin with credentialed requests.
+
+## New `(auth)` route group
+
+`(auth)/layout.tsx` is a bare centered-card shell — no sidebar/topbar,
+nothing to navigate to before a session exists. Three pages:
+`/login`, `/signup`, `/accept-invite` (reads `?token=` via `PageProps`'
+`searchParams`, a Server Component prop, rather than the client-only
+`useSearchParams` — avoids that hook's own Suspense-boundary requirement
+entirely). Each is a thin `page.tsx` wrapping a `features/auth/*-form.tsx`
+(React Hook Form + Zod, i18n via a new `auth` namespace — the one new
+UI surface this phase adds, so it follows this project's current i18n
+convention; the pre-existing Team feature files, which predate that
+convention and were never migrated, were left exactly as they already
+were, hardcoded English, rather than partially retrofitting i18n into
+only the parts this phase happened to touch).
+
+**A real bug caught during manual testing, not code review:**
+`AcceptInviteForm` originally pre-filled the name field via
+`useForm({ values: {...} })`. `useForm`'s `values` option *re-applies on
+every render*, and the object literal passed to it
+(`{ name: preview.data?.email.split("@")[0] ?? "", password: "" }`) is a
+new reference every render — so every keystroke into the password field
+triggered a re-render, which reset the whole form back to that literal,
+silently wiping the password the invitee had just typed. The symptom in
+the browser was exactly "the submit button does nothing" — the form was
+resetting itself out from under the user faster than they could finish
+typing. Fixed with `defaultValues: { name: "", password: "" }` plus a
+one-time `useEffect`/`useRef` guard that calls `form.setValue("name",
+...)` exactly once when the invite preview first loads. Lesson for any
+future form here: `values` is for a form that should stay in sync with
+external state for its whole lifetime (rare); a one-time prefill from
+async data almost always wants `defaultValues` + an effect instead.
+
+## Route protection: `proxy.ts`, not `middleware.ts`
+
+This Next.js version (16.3) renamed the `middleware.js` file convention
+to `proxy.js` — `middleware.js` still works but is deprecated. `src/
+proxy.ts` checks only whether the `flox_session` cookie is *present*
+(`SESSION_COOKIE_NAME`, manually kept in sync with
+`apps/internal/tenant.CookieName` — no shared constant between the Go and
+TypeScript codebases), redirecting an unauthenticated visitor to
+`/login` for every path except a small `PUBLIC_PATHS` allowlist (`/`,
+`/login`, `/signup`, `/accept-invite`, `/style-guide`), and redirecting
+an already-authenticated visitor away from `/login`/`/signup`. This is a
+UX convenience only, stated explicitly in its own doc comment — it never
+validates the cookie, since that would mean an API round trip on every
+navigation. The real enforcement boundary is unchanged: apps/api.
+
+`components/shell/auth-guard.tsx` is the defense-in-depth layer behind
+it, wrapping `(app)/layout.tsx`'s children: it's what actually calls
+`GET /auth/me`, so a cookie that's *present but expired/revoked* (past
+its 30-day expiry, or a membership suspended/removed mid-session) is
+caught here — `useMe()`'s `data === null` triggers a client-side redirect
+to `/login` instead of leaving the visitor on an app shell whose every
+fetch would otherwise silently 401.
+
+## Team page: mock → real API
+
+New `lib/api/team.ts` (`Membership`, `ActivityEntry` — mirrors
+`apps/internal/auth`'s JSON exactly) and `hooks/use-team.ts` replace
+`stores/team.ts`'s Zustand store *for the Team page only*.
+`lib/mock/team.ts`'s `Role`/`ROLES`/`PERMISSIONS`/`ROLE_PERMISSIONS`
+stayed exactly as they were (still an accurate reference table matching
+`role_permissions`' seed data, still what `RolesPermissionsPanel`
+displays) — only `TeamMember`/`TEAM_MEMBERS`/`ActivityEntry`/
+`TEAM_ACTIVITY` and the `useTeamStore` mock itself were left behind by
+the real Team page.
+
+**Deliberately NOT touched: `hooks/use-current-member.ts` and
+`stores/team.ts`.** Three other, still-mock features
+(`custom-metrics`, `content-gallery`, `referral`) call
+`useCurrentMember()` for their own "who am I, what can I manage"
+role-gating, keyed against `stores/team.ts`'s mock member ids
+(`"mem_owner"`, etc.). Rewiring that hook onto the real session's user id
+would have silently broken every "is this mine" check those three
+features run against their own still-mock seed data — they aren't wired
+to a real backend yet, and giving them a real identity ahead of their own
+backend-integration phase is exactly the kind of unrequested, silently
+destructive change CLAUDE.md warns against. They keep working exactly as
+before, on the old mock, until each gets its own Phase.
+
+Invite creation/resend now show the real link in a copy-to-clipboard
+dialog (same "reveal a secret once" pattern as
+`features/settings/api-keys-panel.tsx`'s API key reveal) instead of a
+"we sent an email" toast that would have been a lie — there's no email
+delivery (see Phase 28A's own scope decision above).
+
+## RBAC-aware navigation (a real gap found via manual testing)
+
+Before this fix, a signed-in Viewer (whose only permissions are
+`analytics.read`/`campaign.read`) could still click "Team" in the
+sidebar — the link was unconditionally rendered — and land on a bare
+`ErrorState` card reading "missing permission: team.read." The API was
+doing exactly what it should; the frontend just wasn't hiding a link
+that was always going to fail for that role, which is precisely what
+§52's "frontend permissions are only UX" is supposed to prevent.
+
+Fixed with `NavItem.requiredPermission` (`lib/nav.ts`) — set to
+`"team.read"` on the Team entry only, the one item this phase's RBAC
+actually covers — and a `visibleNavGroups(groups, permissions)` filter
+applied in both `nav-content.tsx` (the sidebar) and `command-menu.tsx`
+(⌘K), reading `useMe().data?.permissions`. `MemberList`/`member-columns.tsx`
+additionally hide the "Invite member" button, disable the role `Select`,
+and hide the row-actions menu entirely when the caller lacks
+`team.write` (e.g. a Manager, who has `team.read` but not `team.write`)
+— server-side 403s are still the real enforcement (verified via the
+Viewer's own invite attempt correctly 403ing before this UI-gating
+existed), this just stops offering controls that were never going to
+work.
+
+## Verified
+
+`gofmt`/`go build ./...`/`go vet ./...`/`go test ./...` still green
+(unchanged — no Go code changed this phase). Frontend: `next typegen`
+(needed once for the new `/accept-invite` route's `PageProps` type),
+`tsc --noEmit`, `eslint .`, `vitest run` (21 tests, unchanged), and
+`next build` all clean.
+
+Full manual browser pass (Claude-in-Chrome) against the real running
+`apps/api` + `apps/web` dev servers on their default ports (`8080`/
+`3000`, matching `APP_URL`/CORS exactly — this phase's own manual
+Phase 28A pass had used a nonstandard `18080` for `apps/api`, which
+would have failed CORS against a `3000`-origin browser):
+
+- Visiting `/overview` signed-out correctly redirected to `/login`
+  (proxy.ts). Signing up created a real org, redirected to `/overview`,
+  and rendered the full authenticated app shell — sidebar showed the
+  real org name (`WorkspaceSelector`), topbar showed the real user's
+  initials/name/email (`UserMenu`).
+- `/team` showed exactly one real member (the new Owner), "last active"
+  genuinely populated. Invited a Viewer through the real "Invite member"
+  sheet (role dropdown correctly excluded "Owner") — got back a real
+  `http://localhost:3000/accept-invite?token=...` link in the reveal
+  dialog.
+- Opened that link in a second tab: the public preview correctly
+  rendered "Join Browser Test Org, invited as Viewer" (localized to
+  Russian per this browser's `Accept-Language`, confirming the new
+  `auth` i18n namespace loads correctly). Submitting created the
+  invitee's password and logged them straight into `/overview`.
+- The invited Viewer's sidebar correctly had no "Team" link at all
+  (the nav-gating fix above); their `GET /auth/me` showed exactly
+  `["analytics.read","campaign.read"]`.
+- Back as the Owner: suspended the Viewer via the real row-actions menu,
+  changed their status, then removed them — member count went from 2
+  back to 1 in the real table, no page reload. The Activity tab showed
+  all four real audit-log entries (invited, invite accepted, suspended,
+  removed) with human-readable labels and the correct actor names.
+  Roles & Permissions tab still renders correctly (static, unchanged).
+- Logged out via the real menu item — redirected to `/login`, and a
+  subsequent direct navigation to `/team` redirected to `/login` again
+  (cookie actually cleared, not just a client-side route change).
+- Spot-checked that the three still-mock features this phase
+  deliberately didn't touch (`/content-gallery`) still render correctly
+  against their own mock store, confirming `useCurrentMember`/
+  `stores/team.ts` were genuinely left alone.
+- No console errors at any point in the flow.
+- Cleanup: deleted every organization/user this manual pass created
+  (`Browser Test Org` and its owner/invitee, plus `Curl Test Org` and
+  its fixtures from Phase 28A's own manual pass, discovered still
+  present in the dev database while re-checking row counts here).
+
+**A second real bug caught during this cleanup, not code review:** the
+`internal/auth` Go test suite's own `signupOrg`/`uniqueEmail` helpers
+created real rows in the shared dev Postgres on every run but never
+deleted them (unlike every other package's own `seedOrg` helper, which
+does) — three earlier `go test ./internal/auth/...` runs during Phase
+28A had left 51 organizations and dozens of orphaned `users` rows sitting
+in the dev database. Fixed by adding `t.Cleanup` to both helpers
+(`signupOrg` deletes the org, cascading its memberships/sessions;
+`uniqueEmail` separately deletes the `users` row by email, since
+`organizations` has no FK from `users` to cascade through) — verified by
+running the suite again and confirming zero new rows survived. The
+pre-existing 51-organization backlog, plus this phase's own manual-test
+fixtures, were purged by hand afterward; the dev database now matches its
+state before either phase's testing began (one pre-existing `Phase 27 Dev
+Org` fixture, zero users, zero sessions).

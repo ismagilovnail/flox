@@ -4,8 +4,9 @@ import * as React from "react";
 import { useRouter } from "next/navigation";
 import { useTranslation } from "react-i18next";
 
-import { COMMAND_GROUPS } from "@/lib/nav";
+import { COMMAND_GROUPS, visibleNavGroups } from "@/lib/nav";
 import { useCommandMenuStore } from "@/stores/command-menu";
+import { useMe } from "@/hooks/use-auth";
 import {
   Command,
   CommandDialog,
@@ -22,6 +23,8 @@ export function CommandMenu() {
   const toggle = useCommandMenuStore((s) => s.toggle);
   const router = useRouter();
   const { t } = useTranslation("nav");
+  const me = useMe();
+  const groups = visibleNavGroups(COMMAND_GROUPS, me.data?.permissions);
 
   React.useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
@@ -45,7 +48,7 @@ export function CommandMenu() {
         <CommandInput placeholder={t("commandPalette.searchPlaceholder")} />
         <CommandList>
           <CommandEmpty>{t("commandPalette.noResults")}</CommandEmpty>
-          {COMMAND_GROUPS.map((group, i) => (
+          {groups.map((group, i) => (
             <CommandGroup
               key={group.label ?? i}
               heading={group.label ? t(group.label) : t("commandPalette.defaultGroupHeading")}

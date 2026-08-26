@@ -19,122 +19,130 @@ referenced below as §N).
 ## CURRENT STATE — UPDATE THIS EVERY PHASE
 
 ```
-CURRENT PHASE : PHASE 28A — AUTH / RBAC + TENANT ISOLATION (backend half)
-STATUS        : done — real authentication, sessions, organizations,
-                memberships, and role-based authorization (§52), replacing
-                apps/internal/tenant's original X-Organization-Id-header
-                stand-in. Confirmed via 3x AskUserQuestion before starting:
-                (1) split into 28A backend-only now / 28B frontend
-                integration as a separate later phase; (2) server-side
-                sessions in an HTTP-only cookie, not JWTs — trivially
-                revocable, no rotation/denylist machinery; (3) inviting a
-                team member generates a shareable accept-invite LINK, not
-                a real sent email (no SMTP/email-provider integration
-                exists anywhere in this project — same situation Ad
-                Account Connections hit with OAuth and resolved the same
-                way). A 4th AskUserQuestion mid-plan confirmed RBAC
-                enforcement (RequirePermission) is wired onto this
-                package's own team/membership endpoints ONLY — sweeping
-                permission checks across every pre-existing domain route
-                (campaigns/offers/sources/pixels/stream-sets/cost/...) is
-                an explicit, separate follow-up phase, not done here.
-                Tenant isolation (§36-TENANCY) is unaffected either way —
-                already enforced everywhere via org-scoped repositories,
-                orthogonal to role-based checks within one org.
-                New migration 00020: users.password_hash (empty-string
-                sentinel = "shell user, invite not yet accepted"), a
-                sessions table (token stored only as a SHA-256 hash, same
-                precedent as api_keys.key_hash), memberships.
-                invite_token_hash/invite_token_expires_at (an invite IS a
-                membership row with status='invited', not a separate
-                table), and role_permissions seeded to match apps/web's
-                src/lib/mock/team.ts ROLE_PERMISSIONS exactly cell-for-
-                cell (verified via psql query).
-                New apps/internal/auth package (handler+team_handler ->
-                service -> repository -> model/crypto, same layering as
-                every domain): signup (org+Owner+session in one tx),
-                login (resolves which org a multi-membership user meant;
-                a precomputed dummy bcrypt hash keeps a nonexistent-email
-                attempt from being measurably faster than a wrong-
-                password one), logout, GET /auth/me (role + full
-                permission list — UX gating only per §52, "frontend
-                permissions are only UX"; every mutating endpoint still
-                checks server-side independently), invite / GET
-                /auth/invites/{token} preview / accept-invite / resend-
-                invite (resend invalidates the OLD token), and full
-                membership CRUD under /team/* (list/invite/update-role-
-                or-status/resend/remove + /team/activity reading
-                audit_logs, migration 00010, unused until now — populated
-                only by this package's own membership actions, same
-                explicit-scope-boundary reasoning as the RBAC sweep).
-                Every mutation refuses to touch a membership whose role is
-                Owner (matches member-row-actions.tsx's own "no actions
-                for the Owner row," enforced server-side too) and role can
-                never be SET to Owner via this API either — exactly one
-                per org, created at signup. Suspending/removing a member
-                revokes their session on their VERY NEXT REQUEST
-                (ResolveSession's own query requires status='active' in
-                the same join) plus proactively deletes their session rows
-                (belt-and-suspenders).
-                apps/internal/tenant: Middleware (a fixed function reading
-                X-Organization-Id) became NewMiddleware(SessionResolver,
-                logger), constructed once in apps/api/main.go with
-                *auth.Service — SessionResolver is declared IN tenant (not
-                imported from auth) so there's no import cycle (auth ->
-                tenant for OrgID/UserID; tenant does NOT import auth).
-                Every other domain package's own handlers needed ZERO
-                code changes — mechanical sed of all 17
-                r.Use(tenant.Middleware) call sites in main.go to
-                r.Use(tenantMiddleware); they still only ever read
-                tenant.OrgID(ctx) (+ new tenant.UserID(ctx)).
-                apps/internal/httpserver: CORS AllowCredentials flipped to
-                true (cookie must travel on apps/web's cross-origin
-                fetch), X-Organization-Id dropped from AllowedHeaders (no
-                route accepts it anymore). New apierror.Unauthorized(401)/
-                Forbidden(403) constructors (first use in this project).
-                Verified: go build/vet/gofmt/test ./... green across the
-                ENTIRE repo — all ~15 pre-existing domain packages' own
-                tests pass unchanged (they call services/repositories
-                directly in Go, never through HTTP, so the middleware
-                swap touched zero of them). 20 new internal/auth tests
-                against real Postgres: signup/login/logout, session
-                resolution, invite->preview->accept->login (incl. "cannot
-                replay an accepted token" and Analyst's actual permission
-                set), invite validation (rejects Owner, rejects a
-                duplicate member), resend-invalidates-old-token,
-                role/status update + activity log, Owner-protection
-                (cannot change own role or remove self), member removal
-                revokes access, cross-tenant isolation (org B cannot
-                update/remove/see org A's memberships or activity — §36-
-                TENANCY's own DoD requirement), and the RequirePermission
-                middleware (200 vs 403 by role). Full manual curl pass
-                (no frontend to click through yet — Phase 28B's job)
-                against the real running apps/api dev stack: confirmed
-                X-Organization-Id-only access now 401s; signup ->
-                Set-Cookie -> GET /auth/me -> GET /campaigns (an untouched
-                pre-existing domain) succeeding through the SAME cookie
-                with zero code changes to campaign's own package; invite
-                -> public preview -> accept-invite auto-login; invited
-                Viewer's /auth/me showed exactly
-                ["analytics.read","campaign.read"] and their own invite
-                attempt correctly 403'd; Owner suspended the Viewer whose
-                EXISTING session immediately 401'd on its very next
-                request with no re-login needed to observe it; Owner's own
-                self-removal attempt correctly 422'd; GET /team/activity
-                showed all 5 real audit entries in order; logout cleared
-                the cookie and it 401'd afterward. Test fixtures (org,
-                cascade-deleted user/membership/sessions) deleted
-                afterward. No frontend changes this phase — apps/web still
-                runs on NEXT_PUBLIC_DEV_ORG_ID + the mock Team store.
-LAST COMMIT   : feat(auth): sessions, organizations, and RBAC (Phase 28A)
-NEXT          : Phase 28B (frontend integration — login/signup pages, wire
-                Team page to the real API, replace NEXT_PUBLIC_DEV_ORG_ID)
-                has NOT been started; confirm scope before beginning it or
-                anything else. Known limitations documented in
-                docs/auth.md: no RBAC on pre-existing domain routes (an
-                explicit separate follow-up), no email delivery/password
-                reset/MFA/API-key auth/org switcher/session-cleanup job —
-                none requested.
+CURRENT PHASE : PHASE 28B — AUTH / RBAC + TENANT ISOLATION (frontend half)
+STATUS        : done — wires apps/web to Phase 28A's real auth API. New
+                login/signup/accept-invite pages (none existed before,
+                not even mocked), route protection, and the pre-existing
+                mock Team page switched onto the real /team/* endpoints.
+                NEXT_PUBLIC_DEV_ORG_ID is gone entirely.
+                New (auth) route group (bare centered layout, no sidebar/
+                topbar): /login, /signup, /accept-invite (reads ?token=
+                via PageProps' searchParams — a Server Component prop —
+                not useSearchParams, avoiding that hook's own Suspense-
+                boundary requirement). New "auth" i18n namespace (RHF+Zod
+                forms, matching this project's current convention) — the
+                pre-existing Team feature files were left on their
+                original hardcoded English rather than partially
+                retrofitting i18n into only what this phase touched.
+                lib/api/client.ts: credentials:"include" replaces the
+                X-Organization-Id header; httpserver's CORS gained
+                AllowCredentials:true + a single explicit AllowedOrigins
+                entry (fetch spec forbids "*" with credentials).
+                New src/proxy.ts (THIS NEXT.JS VERSION, 16.3, RENAMED
+                middleware.js TO proxy.js — middleware.js still works but
+                is deprecated) — redirects based on session-cookie
+                PRESENCE only (checked, documented explicitly as a UX
+                convenience, never the enforcement boundary); new
+                components/shell/auth-guard.tsx is the defense-in-depth
+                layer behind it that actually calls GET /auth/me, catching
+                a present-but-expired/revoked cookie (suspended/removed
+                mid-session, or past 30-day expiry) and redirecting
+                client-side instead of leaving a signed-out visitor on an
+                app shell whose every fetch silently 401s.
+                Team page: new lib/api/team.ts + hooks/use-team.ts replace
+                stores/team.ts FOR THE TEAM PAGE ONLY.
+                hooks/use-current-member.ts and stores/team.ts itself were
+                DELIBERATELY LEFT UNTOUCHED — custom-metrics/content-
+                gallery/referral (still fully mock, not wired to a real
+                backend) key their own "who am I" role-gating against that
+                mock roster's ids; rewiring identity there ahead of their
+                own backend-integration phase would have silently broken
+                their "is this mine" checks against still-mock seed data.
+                lib/mock/team.ts's Role/ROLES/PERMISSIONS/ROLE_PERMISSIONS
+                stayed exactly as-is (still accurate, still what
+                RolesPermissionsPanel displays) — only TeamMember/
+                TEAM_MEMBERS/ActivityEntry/TEAM_ACTIVITY were left behind
+                by the real Team page. Invite/resend show the real link in
+                a copy-to-clipboard reveal dialog (same pattern as
+                api-keys-panel.tsx's key reveal), not a fake "email sent"
+                toast.
+                RBAC-aware navigation — a REAL GAP FOUND VIA MANUAL
+                TESTING, not requested up front: a signed-in Viewer could
+                click "Team" and land on a bare permission-denied
+                ErrorState card, exactly what §52's "frontend permissions
+                are only UX" is supposed to prevent. Fixed with
+                NavItem.requiredPermission (lib/nav.ts, set to "team.read"
+                on Team only) + visibleNavGroups(groups, permissions),
+                applied in both nav-content.tsx (sidebar) and
+                command-menu.tsx (⌘K), reading useMe().data?.permissions.
+                MemberList/member-columns.tsx additionally hide "Invite
+                member", disable the role Select, and hide row-actions
+                when lacking team.write (e.g. Manager: has team.read, not
+                team.write) — server 403s remain the real enforcement,
+                this just stops offering controls that were never going
+                to work.
+                TWO REAL BUGS CAUGHT DURING MANUAL TESTING (not code
+                review): (1) AcceptInviteForm's useForm({values:{...}})
+                re-applied a FRESH object literal on every render, so
+                every keystroke into the password field silently reset
+                the whole form — symptom was "submit does nothing."
+                Fixed: defaultValues + a one-time effect/ref-guarded
+                form.setValue prefill instead. (2) internal/auth's own Go
+                test suite created real rows in the shared dev Postgres
+                but NEVER DELETED THEM (every other package's test suite
+                does) — 3 earlier test runs during Phase 28A had left 51
+                organizations + dozens of orphaned users rows sitting in
+                the dev DB, only discovered when post-testing cleanup row
+                counts looked wrong. Fixed: t.Cleanup added to
+                signupOrg/uniqueEmail; the pre-existing backlog (and this
+                phase's own manual-test fixtures) purged by hand — dev DB
+                confirmed back to its pre-testing state (1 pre-existing
+                Phase 27 Dev Org fixture, 0 users, 0 sessions).
+                Verified: gofmt/go build/vet/test ./... unchanged and
+                green (no Go code changed except the test-cleanup fix).
+                next typegen (needed once, for /accept-invite's PageProps
+                type) / tsc --noEmit / eslint . / vitest run (21 tests,
+                unchanged) / next build all clean. Full manual browser
+                pass (Claude-in-Chrome) against the real running apps/api
+                + apps/web dev servers ON MATCHING DEFAULT PORTS (8080/
+                3000 — required for CORS/cookies to actually work; Phase
+                28A's own curl pass had used a nonstandard 18080 for
+                apps/api, which would silently fail CORS from a real
+                3000-origin browser): signed-out /overview correctly
+                redirected to /login; signup created a real org and
+                rendered the full app shell with the REAL org name
+                (WorkspaceSelector) and REAL user initials/name/email
+                (UserMenu, no more MOCK_USER); /team showed one real
+                member with genuine "last active"; invited a Viewer
+                through the real sheet, got a real accept-invite link;
+                opened it in a second tab, the public preview correctly
+                showed org/role (localized to Russian per the browser's
+                Accept-Language, confirming the new i18n namespace
+                loads), accepting logged the invitee straight in; the
+                Viewer's sidebar correctly had NO "Team" link at all and
+                their /auth/me showed exactly ["analytics.read",
+                "campaign.read"]; back as Owner, suspended then removed
+                the Viewer via the real row-actions menu, member count
+                updated live with no reload; Activity tab showed all 4
+                real audit entries with human-readable labels and correct
+                actor names; logout cleared the cookie and a subsequent
+                direct /team visit redirected to /login again; spot-
+                checked content-gallery still renders correctly against
+                its own untouched mock, confirming use-current-member/
+                stores/team.ts were genuinely left alone. Zero console
+                errors throughout. All fixtures from both this phase's
+                and Phase 28A's manual passes deleted afterward.
+LAST COMMIT   : feat(auth): wire apps/web to real sessions and RBAC
+                (Phase 28B)
+NEXT          : confirm scope before starting. No open known issues
+                remain for Auth/RBAC. Known limitations documented in
+                docs/auth.md (unchanged from Phase 28A): no RBAC on pre-
+                existing domain routes (an explicit separate follow-up,
+                confirmed out of scope for both 28A and 28B), no email
+                delivery/password reset/MFA/API-key auth/org switcher/
+                session-cleanup job — none requested. Phase 28
+                (Auth/Organizations/RBAC) is now fully done end-to-end.
+
 ```
 
 > At the end of every phase: update the four lines above, add a CHANGELOG entry,

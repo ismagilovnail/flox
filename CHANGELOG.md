@@ -5,6 +5,74 @@ per-phase, matching `CLAUDE.md`'s phase protocol. The one exception is
 [Between phases], below: spec amendments and the code changes that follow from
 them land between phases and would otherwise be invisible here.
 
+## [Auth / Organizations / RBAC] — Phase 28B: frontend integration
+
+### Scope
+
+Wires `apps/web` to Phase 28A's real auth API. New: login/signup/
+accept-invite pages (none existed before, not even as a mock), route
+protection (`proxy.ts` + a client-side `AuthGuard`), and the pre-existing
+mock Team page switched onto the real `/team/*` endpoints.
+`NEXT_PUBLIC_DEV_ORG_ID` is gone — every request is scoped by session
+cookie now. See `docs/auth.md`'s "Phase 28B" section for full detail.
+
+### Changed
+
+- `lib/api/client.ts`: `credentials: "include"` replaces the
+  `X-Organization-Id` header; `apps/internal/httpserver`'s CORS gained
+  `AllowCredentials: true`.
+- New `(auth)` route group (`/login`, `/signup`, `/accept-invite`) and a
+  new `auth` i18n namespace — the pre-existing Team feature files were
+  left on their original hardcoded English rather than partially
+  retrofitting i18n into only the parts this phase touched.
+- New `src/proxy.ts` (this Next.js version renamed `middleware.js` to
+  `proxy.js`) redirects based on session-cookie *presence* only (a UX
+  convenience, not the enforcement boundary); `components/shell/
+  auth-guard.tsx` is the defense-in-depth layer that actually calls
+  `GET /auth/me` and catches a present-but-expired/revoked cookie.
+- Team page: new `lib/api/team.ts`/`hooks/use-team.ts` replace
+  `stores/team.ts` for the Team page only — `hooks/use-current-member.ts`
+  and `stores/team.ts` itself were deliberately left untouched, since
+  three other still-mock features (custom-metrics, content-gallery,
+  referral) key their own role-gating against that mock roster and
+  aren't wired to a real backend yet.
+- New `lib/nav.ts` `requiredPermission`/`visibleNavGroups`: the sidebar
+  and ⌘K palette now hide "Team" for a role lacking `team.read`, and the
+  Team page itself hides/disables write controls for a role lacking
+  `team.write` — found via manual testing (a Viewer could click through
+  to a bare permission-denied error page before this fix).
+
+### Fixed
+
+- A real bug caught in manual testing: `AcceptInviteForm`'s
+  `useForm({ values: {...} })` re-applied a fresh object literal on every
+  render, silently resetting the password field on every keystroke — the
+  submit button appeared to do nothing. Fixed with `defaultValues` + a
+  one-time effect-based prefill instead.
+- A real bug caught while cleaning up test fixtures: `internal/auth`'s Go
+  test suite created real rows in the shared dev Postgres but never
+  deleted them (every other package's test suite does) — three earlier
+  runs had left 51 organizations and dozens of orphaned `users` rows
+  behind. Added `t.Cleanup` to `signupOrg`/`uniqueEmail`; purged the
+  pre-existing backlog by hand.
+
+### Verified
+
+`gofmt`/`go build ./...`/`go vet ./...`/`go test ./...` unchanged and
+green (no Go code changed this phase, aside from the test-cleanup fix
+above). Frontend: `next typegen`, `tsc --noEmit`, `eslint .`,
+`vitest run` (21 tests), `next build` all clean. Full manual browser
+pass (Claude-in-Chrome) against the real running dev stack on matching
+ports (`8080`/`3000`, required for CORS): signup → real org/session →
+app shell with real org/user displayed; invite → real shareable link →
+accepted in a second tab → invitee's restricted permissions and hidden
+nav confirmed; suspend → remove via the real UI, member count updating
+live; real 4-entry activity log with human-readable labels; logout
+clearing the cookie and re-redirecting on the next protected-route hit;
+spot-checked the untouched mock features (content-gallery) still work.
+No console errors. All test fixtures (this pass's and the pre-existing
+Phase 28A backlog found during cleanup) deleted afterward.
+
 ## [Auth / Organizations / RBAC] — Phase 28A: sessions, invites, and role-based access control
 
 ### Scope

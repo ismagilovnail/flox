@@ -54,7 +54,10 @@ export function InviteMemberSheet({
       <SheetContent className="w-full gap-0 overflow-y-auto sm:max-w-md" side="right">
         <SheetHeader>
           <SheetTitle>Invite team member</SheetTitle>
-          <SheetDescription>They&apos;ll get an email invite. Roles determine what they can see and edit (§52).</SheetDescription>
+          <SheetDescription>
+            You&apos;ll get a link to send them yourself — there&apos;s no email delivery yet. Roles determine what
+            they can see and edit (§52).
+          </SheetDescription>
         </SheetHeader>
 
         <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-4 px-4 pb-4">

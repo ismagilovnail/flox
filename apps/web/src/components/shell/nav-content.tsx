@@ -5,8 +5,9 @@ import { usePathname } from "next/navigation";
 import { useTranslation } from "react-i18next";
 
 import { cn } from "@/lib/utils";
-import { NAV_GROUPS } from "@/lib/nav";
+import { NAV_GROUPS, visibleNavGroups } from "@/lib/nav";
 import { WorkspaceSelector } from "@/components/shell/workspace-selector";
+import { useMe } from "@/hooks/use-auth";
 
 export function NavContent({
   collapsed = false,
@@ -17,6 +18,8 @@ export function NavContent({
 }) {
   const pathname = usePathname();
   const { t } = useTranslation("nav");
+  const me = useMe();
+  const groups = visibleNavGroups(NAV_GROUPS, me.data?.permissions);
 
   return (
     <div className="flex h-full flex-col gap-1 p-2">
@@ -24,7 +27,7 @@ export function NavContent({
         <WorkspaceSelector collapsed={collapsed} />
       </div>
       <nav className="flex flex-1 flex-col gap-4 overflow-y-auto">
-        {NAV_GROUPS.map((group, i) => (
+        {groups.map((group, i) => (
           <div key={group.label ?? i} className="flex flex-col gap-0.5">
             {group.label && !collapsed && (
               <span className="px-2 py-1 text-[0.6875rem] font-medium uppercase tracking-wide text-muted-foreground">

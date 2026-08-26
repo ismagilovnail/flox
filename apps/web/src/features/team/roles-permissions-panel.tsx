@@ -10,8 +10,8 @@ export function RolesPermissionsPanel() {
     <div className="flex flex-col gap-4">
       <Alert>
         <AlertDescription>
-          Fixed roles, not custom ones — matches §52. Enforcement is server-side once Phase 28 lands; this
-          reference is what the UI already gates toward.
+          Fixed roles, not custom ones — matches §52. Enforcement is server-side (this Team page itself is
+          permission-gated by it); other domains don&apos;t check permissions yet, only tenant isolation.
         </AlertDescription>
       </Alert>
 

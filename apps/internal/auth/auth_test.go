@@ -36,7 +36,12 @@ func newService(pool *pgxpool.Pool) *auth.Service {
 // signupOrg is the one way this package's tests create an org — no
 // separate SQL seeder, because Signup itself is the code under test for
 // org creation, and every other test needs a real signed-up owner anyway.
-func signupOrg(t *testing.T, ctx context.Context, svc *auth.Service, orgName, ownerEmail string) auth.Result {
+// Registers cleanup deleting the organization (cascades to its users/
+// memberships/sessions, migration 00001/00020's ON DELETE CASCADE) so
+// repeated test runs against a real, persistent dev Postgres don't leave
+// permanent rows behind — every other package's own seedOrg helper
+// (adaccount_test.go, costsync_test.go, ...) does the same.
+func signupOrg(t *testing.T, ctx context.Context, pool *pgxpool.Pool, svc *auth.Service, orgName, ownerEmail string) auth.Result {
 	t.Helper()
 	res, err := svc.Signup(ctx, auth.SignupInput{
 		OrganizationName: orgName,
@@ -47,6 +52,9 @@ func signupOrg(t *testing.T, ctx context.Context, svc *auth.Service, orgName, ow
 	if err != nil {
 		t.Fatalf("signup: %v", err)
 	}
+	t.Cleanup(func() {
+		_, _ = pool.Exec(context.Background(), `DELETE FROM organizations WHERE id = $1`, res.Organization.ID)
+	})
 	return res
 }
 
@@ -56,9 +64,20 @@ func signupOrg(t *testing.T, ctx context.Context, svc *auth.Service, orgName, ow
 // Invite's own lowercase normalization — TestLoginSucceedsAndFailsCorrectly's
 // "case-insensitive email" case constructs its own uppercased variant
 // specifically to exercise that normalization.
-func uniqueEmail(t *testing.T) string {
+//
+// Every real user account this test file ever creates (a signupOrg
+// Owner, or an Invite's shell user) traces back to one of these calls —
+// signupOrg's own cleanup only cascades an org's memberships/sessions
+// away (organizations has no FK from users, so a user row survives its
+// org being deleted), so this is the one place that also deletes the
+// underlying users row, covering both cases with no separate tracking.
+func uniqueEmail(t *testing.T, pool *pgxpool.Pool) string {
 	t.Helper()
-	return "test-" + lower(idgen.New()) + "@example.com"
+	email := "test-" + lower(idgen.New()) + "@example.com"
+	t.Cleanup(func() {
+		_, _ = pool.Exec(context.Background(), `DELETE FROM users WHERE lower(email) = lower($1)`, email)
+	})
+	return email
 }
 
 func lower(s string) string {
@@ -76,7 +95,7 @@ func TestSignupCreatesOrgOwnerAndSession(t *testing.T) {
 	svc := newService(pool)
 	ctx := context.Background()
 
-	res := signupOrg(t, ctx, svc, "Acme Traffic", uniqueEmail(t))
+	res := signupOrg(t, ctx, pool, svc, "Acme Traffic", uniqueEmail(t, pool))
 
 	if res.RoleKey != "Owner" {
 		t.Fatalf("RoleKey = %q, want Owner", res.RoleKey)
@@ -101,9 +120,9 @@ func TestSignupRejectsDuplicateEmail(t *testing.T) {
 	pool := mustPool(t)
 	svc := newService(pool)
 	ctx := context.Background()
-	email := uniqueEmail(t)
+	email := uniqueEmail(t, pool)
 
-	signupOrg(t, ctx, svc, "First Org", email)
+	signupOrg(t, ctx, pool, svc, "First Org", email)
 
 	if _, err := svc.Signup(ctx, auth.SignupInput{OrganizationName: "Second Org", Name: "Someone Else", Email: email, Password: "another-long-password"}); err == nil {
 		t.Fatal("Signup with an already-registered email succeeded, want a conflict error")
@@ -116,10 +135,10 @@ func TestSignupValidatesInput(t *testing.T) {
 	ctx := context.Background()
 
 	cases := []auth.SignupInput{
-		{OrganizationName: "", Name: "A", Email: uniqueEmail(t), Password: "longenough1"},
-		{OrganizationName: "Org", Name: "", Email: uniqueEmail(t), Password: "longenough1"},
+		{OrganizationName: "", Name: "A", Email: uniqueEmail(t, pool), Password: "longenough1"},
+		{OrganizationName: "Org", Name: "", Email: uniqueEmail(t, pool), Password: "longenough1"},
 		{OrganizationName: "Org", Name: "A", Email: "not-an-email", Password: "longenough1"},
-		{OrganizationName: "Org", Name: "A", Email: uniqueEmail(t), Password: "short"},
+		{OrganizationName: "Org", Name: "A", Email: uniqueEmail(t, pool), Password: "short"},
 	}
 	for i, in := range cases {
 		if _, err := svc.Signup(ctx, in); err == nil {
@@ -132,8 +151,8 @@ func TestLoginSucceedsAndFailsCorrectly(t *testing.T) {
 	pool := mustPool(t)
 	svc := newService(pool)
 	ctx := context.Background()
-	email := uniqueEmail(t)
-	signupOrg(t, ctx, svc, "Login Org", email)
+	email := uniqueEmail(t, pool)
+	signupOrg(t, ctx, pool, svc, "Login Org", email)
 
 	t.Run("correct password", func(t *testing.T) {
 		res, err := svc.Login(ctx, auth.LoginInput{Email: email, Password: "correct-horse-battery-staple"})
@@ -152,7 +171,7 @@ func TestLoginSucceedsAndFailsCorrectly(t *testing.T) {
 	})
 
 	t.Run("unknown email", func(t *testing.T) {
-		if _, err := svc.Login(ctx, auth.LoginInput{Email: uniqueEmail(t), Password: "whatever-password"}); err == nil {
+		if _, err := svc.Login(ctx, auth.LoginInput{Email: uniqueEmail(t, pool), Password: "whatever-password"}); err == nil {
 			t.Fatal("Login with an unregistered email succeeded, want an error")
 		}
 	})
@@ -182,7 +201,7 @@ func TestLogout(t *testing.T) {
 	pool := mustPool(t)
 	svc := newService(pool)
 	ctx := context.Background()
-	res := signupOrg(t, ctx, svc, "Logout Org", uniqueEmail(t))
+	res := signupOrg(t, ctx, pool, svc, "Logout Org", uniqueEmail(t, pool))
 
 	if err := svc.Logout(ctx, res.Token); err != nil {
 		t.Fatalf("Logout: %v", err)
@@ -206,7 +225,7 @@ func TestMeReturnsRoleAndPermissions(t *testing.T) {
 	pool := mustPool(t)
 	svc := newService(pool)
 	ctx := context.Background()
-	res := signupOrg(t, ctx, svc, "Me Org", uniqueEmail(t))
+	res := signupOrg(t, ctx, pool, svc, "Me Org", uniqueEmail(t, pool))
 
 	who, err := svc.Me(ctx, res.User.ID, res.Organization.ID)
 	if err != nil {
@@ -230,8 +249,8 @@ func TestInviteAcceptAndPermissions(t *testing.T) {
 	pool := mustPool(t)
 	svc := newService(pool)
 	ctx := context.Background()
-	owner := signupOrg(t, ctx, svc, "Invite Org", uniqueEmail(t))
-	invitedEmail := uniqueEmail(t)
+	owner := signupOrg(t, ctx, pool, svc, "Invite Org", uniqueEmail(t, pool))
+	invitedEmail := uniqueEmail(t, pool)
 
 	inviteURL, err := svc.Invite(ctx, owner.Organization.ID, owner.User.ID, auth.InviteInput{Name: "Invited Analyst", Email: invitedEmail, RoleKey: "Analyst"})
 	if err != nil {
@@ -303,13 +322,13 @@ func TestInviteRejectsOwnerRoleAndDuplicateMember(t *testing.T) {
 	pool := mustPool(t)
 	svc := newService(pool)
 	ctx := context.Background()
-	owner := signupOrg(t, ctx, svc, "Dup Org", uniqueEmail(t))
+	owner := signupOrg(t, ctx, pool, svc, "Dup Org", uniqueEmail(t, pool))
 
-	if _, err := svc.Invite(ctx, owner.Organization.ID, owner.User.ID, auth.InviteInput{Name: "X", Email: uniqueEmail(t), RoleKey: "Owner"}); err == nil {
+	if _, err := svc.Invite(ctx, owner.Organization.ID, owner.User.ID, auth.InviteInput{Name: "X", Email: uniqueEmail(t, pool), RoleKey: "Owner"}); err == nil {
 		t.Fatal("Invite with role=Owner succeeded, want a validation error")
 	}
 
-	email := uniqueEmail(t)
+	email := uniqueEmail(t, pool)
 	if _, err := svc.Invite(ctx, owner.Organization.ID, owner.User.ID, auth.InviteInput{Name: "First", Email: email, RoleKey: "Viewer"}); err != nil {
 		t.Fatalf("first Invite: %v", err)
 	}
@@ -322,9 +341,9 @@ func TestResendInviteInvalidatesThePreviousToken(t *testing.T) {
 	pool := mustPool(t)
 	svc := newService(pool)
 	ctx := context.Background()
-	owner := signupOrg(t, ctx, svc, "Resend Org", uniqueEmail(t))
+	owner := signupOrg(t, ctx, pool, svc, "Resend Org", uniqueEmail(t, pool))
 
-	inviteURL, err := svc.Invite(ctx, owner.Organization.ID, owner.User.ID, auth.InviteInput{Name: "Bob", Email: uniqueEmail(t), RoleKey: "Viewer"})
+	inviteURL, err := svc.Invite(ctx, owner.Organization.ID, owner.User.ID, auth.InviteInput{Name: "Bob", Email: uniqueEmail(t, pool), RoleKey: "Viewer"})
 	if err != nil {
 		t.Fatalf("Invite: %v", err)
 	}
@@ -362,9 +381,9 @@ func TestUpdateMembershipRoleAndSuspend(t *testing.T) {
 	pool := mustPool(t)
 	svc := newService(pool)
 	ctx := context.Background()
-	owner := signupOrg(t, ctx, svc, "Update Org", uniqueEmail(t))
+	owner := signupOrg(t, ctx, pool, svc, "Update Org", uniqueEmail(t, pool))
 
-	inviteURL, err := svc.Invite(ctx, owner.Organization.ID, owner.User.ID, auth.InviteInput{Name: "Carol", Email: uniqueEmail(t), RoleKey: "Viewer"})
+	inviteURL, err := svc.Invite(ctx, owner.Organization.ID, owner.User.ID, auth.InviteInput{Name: "Carol", Email: uniqueEmail(t, pool), RoleKey: "Viewer"})
 	if err != nil {
 		t.Fatalf("Invite: %v", err)
 	}
@@ -422,9 +441,9 @@ func TestUpdateMembershipRejectsAssigningOwnerRole(t *testing.T) {
 	pool := mustPool(t)
 	svc := newService(pool)
 	ctx := context.Background()
-	owner := signupOrg(t, ctx, svc, "Owner Role Org", uniqueEmail(t))
+	owner := signupOrg(t, ctx, pool, svc, "Owner Role Org", uniqueEmail(t, pool))
 
-	inviteURL, _ := svc.Invite(ctx, owner.Organization.ID, owner.User.ID, auth.InviteInput{Name: "Dave", Email: uniqueEmail(t), RoleKey: "Viewer"})
+	inviteURL, _ := svc.Invite(ctx, owner.Organization.ID, owner.User.ID, auth.InviteInput{Name: "Dave", Email: uniqueEmail(t, pool), RoleKey: "Viewer"})
 	accepted, err := svc.AcceptInvite(ctx, auth.AcceptInviteInput{Token: tokenFromURL(t, inviteURL), Name: "Dave", Password: "daves-long-password"})
 	if err != nil {
 		t.Fatalf("AcceptInvite: %v", err)
@@ -447,7 +466,7 @@ func TestCannotModifyOrRemoveTheOwner(t *testing.T) {
 	pool := mustPool(t)
 	svc := newService(pool)
 	ctx := context.Background()
-	owner := signupOrg(t, ctx, svc, "Protect Owner Org", uniqueEmail(t))
+	owner := signupOrg(t, ctx, pool, svc, "Protect Owner Org", uniqueEmail(t, pool))
 
 	members, err := svc.ListMembers(ctx, owner.Organization.ID)
 	if err != nil {
@@ -471,9 +490,9 @@ func TestRemoveMemberRevokesAccess(t *testing.T) {
 	pool := mustPool(t)
 	svc := newService(pool)
 	ctx := context.Background()
-	owner := signupOrg(t, ctx, svc, "Remove Org", uniqueEmail(t))
+	owner := signupOrg(t, ctx, pool, svc, "Remove Org", uniqueEmail(t, pool))
 
-	inviteURL, _ := svc.Invite(ctx, owner.Organization.ID, owner.User.ID, auth.InviteInput{Name: "Eve", Email: uniqueEmail(t), RoleKey: "Viewer"})
+	inviteURL, _ := svc.Invite(ctx, owner.Organization.ID, owner.User.ID, auth.InviteInput{Name: "Eve", Email: uniqueEmail(t, pool), RoleKey: "Viewer"})
 	accepted, err := svc.AcceptInvite(ctx, auth.AcceptInviteInput{Token: tokenFromURL(t, inviteURL), Name: "Eve", Password: "eves-long-password"})
 	if err != nil {
 		t.Fatalf("AcceptInvite: %v", err)
@@ -501,13 +520,13 @@ func TestLoginRequiresOrganizationIDWhenMultipleActiveMemberships(t *testing.T) 
 	pool := mustPool(t)
 	svc := newService(pool)
 	ctx := context.Background()
-	email := uniqueEmail(t)
+	email := uniqueEmail(t, pool)
 
-	orgA := signupOrg(t, ctx, svc, "Multi Org A", email)
+	orgA := signupOrg(t, ctx, pool, svc, "Multi Org A", email)
 
 	// Invite the same email into a second org and accept — this user now
 	// holds two active memberships.
-	ownerB := signupOrg(t, ctx, svc, "Multi Org B", uniqueEmail(t))
+	ownerB := signupOrg(t, ctx, pool, svc, "Multi Org B", uniqueEmail(t, pool))
 	inviteURL, err := svc.Invite(ctx, ownerB.Organization.ID, ownerB.User.ID, auth.InviteInput{Name: "Multi User", Email: email, RoleKey: "Viewer"})
 	if err != nil {
 		t.Fatalf("Invite: %v", err)
@@ -536,8 +555,8 @@ func TestCrossTenantIsolation(t *testing.T) {
 	pool := mustPool(t)
 	svc := newService(pool)
 	ctx := context.Background()
-	orgA := signupOrg(t, ctx, svc, "Tenant A", uniqueEmail(t))
-	orgB := signupOrg(t, ctx, svc, "Tenant B", uniqueEmail(t))
+	orgA := signupOrg(t, ctx, pool, svc, "Tenant A", uniqueEmail(t, pool))
+	orgB := signupOrg(t, ctx, pool, svc, "Tenant B", uniqueEmail(t, pool))
 
 	membersA, err := svc.ListMembers(ctx, orgA.Organization.ID)
 	if err != nil || len(membersA) != 1 {
@@ -568,7 +587,7 @@ func TestCrossTenantIsolation(t *testing.T) {
 		}
 	})
 	t.Run("activity never mixes orgs", func(t *testing.T) {
-		_, _ = svc.Invite(ctx, orgA.Organization.ID, orgA.User.ID, auth.InviteInput{Name: "X", Email: uniqueEmail(t), RoleKey: "Viewer"})
+		_, _ = svc.Invite(ctx, orgA.Organization.ID, orgA.User.ID, auth.InviteInput{Name: "X", Email: uniqueEmail(t, pool), RoleKey: "Viewer"})
 		activityB, err := svc.ListActivity(ctx, orgB.Organization.ID)
 		if err != nil {
 			t.Fatalf("ListActivity for org B: %v", err)
@@ -595,9 +614,9 @@ func TestRequirePermissionMiddleware(t *testing.T) {
 	pool := mustPool(t)
 	svc := newService(pool)
 	ctx := context.Background()
-	owner := signupOrg(t, ctx, svc, "Middleware Org", uniqueEmail(t))
+	owner := signupOrg(t, ctx, pool, svc, "Middleware Org", uniqueEmail(t, pool))
 
-	inviteURL, _ := svc.Invite(ctx, owner.Organization.ID, owner.User.ID, auth.InviteInput{Name: "Viewer Person", Email: uniqueEmail(t), RoleKey: "Viewer"})
+	inviteURL, _ := svc.Invite(ctx, owner.Organization.ID, owner.User.ID, auth.InviteInput{Name: "Viewer Person", Email: uniqueEmail(t, pool), RoleKey: "Viewer"})
 	viewer, err := svc.AcceptInvite(ctx, auth.AcceptInviteInput{Token: tokenFromURL(t, inviteURL), Name: "Viewer Person", Password: "viewers-long-password"})
 	if err != nil {
 		t.Fatalf("AcceptInvite: %v", err)

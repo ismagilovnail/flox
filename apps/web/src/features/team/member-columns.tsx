@@ -6,7 +6,8 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Caption } from "@/components/ui/typography";
-import { ROLES, type MemberStatus, type Role, type TeamMember } from "@/lib/mock/team";
+import { ROLES, type MemberStatus, type Role } from "@/lib/mock/team";
+import type { Membership } from "@/lib/api/team";
 import { MemberRowActions } from "@/features/team/member-row-actions";
 
 const STATUS_VARIANT: Record<MemberStatus, "success" | "warning" | "secondary"> = {
@@ -24,7 +25,10 @@ function initials(name: string) {
     .toUpperCase();
 }
 
-export function memberColumns(onRoleChange: (member: TeamMember, role: Role) => void): ColumnDef<typeof dataTableFeatures, TeamMember>[] {
+export function memberColumns(
+  onRoleChange: (member: Membership, role: Role) => void,
+  canWrite: boolean,
+): ColumnDef<typeof dataTableFeatures, Membership>[] {
   return [
     {
       accessorKey: "name",
@@ -50,7 +54,7 @@ export function memberColumns(onRoleChange: (member: TeamMember, role: Role) => 
           <Select
             value={member.role}
             onValueChange={(role) => onRoleChange(member, role as Role)}
-            disabled={member.role === "Owner"}
+            disabled={member.role === "Owner" || !canWrite}
           >
             <SelectTrigger size="sm" className="w-32">
               <SelectValue />
@@ -88,9 +92,7 @@ export function memberColumns(onRoleChange: (member: TeamMember, role: Role) => 
       enableSorting: false,
       enableHiding: false,
       cell: ({ row }) => (
-        <div className="flex justify-end">
-          <MemberRowActions member={row.original} />
-        </div>
+        <div className="flex justify-end">{canWrite && <MemberRowActions member={row.original} />}</div>
       ),
     },
   ];

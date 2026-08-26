@@ -1,23 +1,31 @@
 /**
  * The real frontend API boundary (Phase 27, §51). Every domain that has a
- * live Go backend now calls through here instead of a Zustand mock store —
+ * live Go backend calls through here instead of a Zustand mock store —
  * `lib/api/routing.ts`'s own doc comment already promised this file's
- * shape: "Phase 27 only ever changes this file's body," now true for
- * campaigns/traffic-sources/analytics/ltv too.
+ * shape: "Phase 27 only ever changes this file's body."
  *
- * Tenant scoping: there is no session/auth yet (Phase 28) — the Go backend
- * derives organization_id from an X-Organization-Id header
- * (apps/internal/tenant), and this client sends it from
- * NEXT_PUBLIC_DEV_ORG_ID, an explicit, temporary, developer-set stand-in
- * for "whoever is logged in." This is the same interim mechanism
- * apps/internal/tenant's own doc comment names ("today: manual testing...
- * eventually: Phase 27's frontend integration") — Phase 28 replaces both
- * halves of this at once (the header lookup server-side, the env var
- * here), and nothing downstream of either changes.
+ * Tenant scoping (Phase 28B): apps/internal/tenant derives organization_id
+ * from a session cookie now, not a client-supplied header — this client no
+ * longer sends anything identifying "who's asking" itself at all.
+ * `credentials: "include"` is what makes the browser attach that cookie on
+ * every cross-origin call to apps/api (a different origin from apps/web in
+ * dev, and possibly in production too) — without it the cookie set by
+ * lib/api/auth.ts's login/signup/acceptInvite would never be sent back.
+ * apps/internal/httpserver's CORS config has AllowCredentials: true and a
+ * single explicit AllowedOrigins entry to make this legal (the fetch spec
+ * forbids combining a wildcard origin with credentialed requests).
+ *
+ * A 401 here means "not signed in" — every caller either already expects
+ * that (useMe, see hooks/use-auth.ts, treats it as a normal "logged out"
+ * state, not an error) or lets it surface as an ApiError like any other
+ * failure; there's no global interceptor redirecting to /login on 401,
+ * since that would fire on a stale tab's background refetch even when the
+ * user is mid-way through, say, filling out a form on another tab. Route
+ * protection is proxy.ts's job (a UX redirect only — apps/api is the real
+ * enforcement boundary regardless of what the browser does).
  */
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080";
-const DEV_ORG_ID = process.env.NEXT_PUBLIC_DEV_ORG_ID ?? "";
 
 export class ApiError extends Error {
   code: string;
@@ -33,19 +41,6 @@ export class ApiError extends Error {
   }
 }
 
-/** Thrown by every call below when NEXT_PUBLIC_DEV_ORG_ID isn't set, rather
- * than silently sending an empty header and letting the Go side's own
- * validation produce a confusing 422 far from where the real problem is. */
-export class MissingDevOrgError extends Error {
-  constructor() {
-    super(
-      "NEXT_PUBLIC_DEV_ORG_ID is not set. There is no auth yet (Phase 28) — " +
-        "set it in .env.local to a real organization id to use the app against live data.",
-    );
-    this.name = "MissingDevOrgError";
-  }
-}
-
 type RequestOptions = {
   method?: "GET" | "POST" | "PATCH" | "DELETE";
   body?: unknown;
@@ -53,8 +48,6 @@ type RequestOptions = {
 };
 
 export async function apiFetch<T>(path: string, options: RequestOptions = {}): Promise<T> {
-  if (!DEV_ORG_ID) throw new MissingDevOrgError();
-
   const url = new URL(path, API_URL);
   if (options.searchParams) {
     for (const [key, value] of Object.entries(options.searchParams)) {
@@ -64,8 +57,8 @@ export async function apiFetch<T>(path: string, options: RequestOptions = {}): P
 
   const res = await fetch(url, {
     method: options.method ?? "GET",
+    credentials: "include",
     headers: {
-      "X-Organization-Id": DEV_ORG_ID,
       ...(options.body !== undefined ? { "Content-Type": "application/json" } : {}),
     },
     body: options.body !== undefined ? JSON.stringify(options.body) : undefined,

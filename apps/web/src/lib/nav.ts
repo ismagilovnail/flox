@@ -28,6 +28,15 @@ export type NavItem = {
   label: string;
   href: string;
   icon: LucideIcon;
+  /** §52/Phase 28B: a permission key from GET /auth/me's `permissions`
+   * list required to see this item at all — e.g. "team.read" for Team,
+   * since a Viewer (analytics.read/campaign.read only) can't call any
+   * /team/* endpoint and would otherwise land on a bare permission-denied
+   * error page after clicking a nav link that was always going to fail
+   * for them. Undefined means "everyone with a session can see this,"
+   * the case for every existing item — this phase only gates the one
+   * domain (team) it actually built server-side RBAC for. */
+  requiredPermission?: string;
 };
 
 export type NavGroup = {
@@ -92,7 +101,7 @@ export const NAV_GROUPS: NavGroup[] = [
   },
   {
     items: [
-      { label: "items.team", href: "/team", icon: UsersIcon },
+      { label: "items.team", href: "/team", icon: UsersIcon, requiredPermission: "team.read" },
       { label: "items.settings", href: "/settings", icon: SettingsIcon },
     ],
   },
@@ -113,6 +122,19 @@ export const COMMAND_GROUPS: NavGroup[] = NAV_GROUPS.reduce<NavGroup[]>(
   },
   [],
 );
+
+/** Drops nav items whose requiredPermission isn't in `permissions`, and
+ * any group left with no items. `permissions` undefined (still loading,
+ * or the caller doesn't have it) shows everything — AuthGuard already
+ * guarantees GET /auth/me has resolved by the time any (app) nav
+ * actually renders, so in practice this only ever runs with a real list. */
+export function visibleNavGroups(groups: NavGroup[], permissions: string[] | undefined): NavGroup[] {
+  if (!permissions) return groups;
+  const granted = new Set(permissions);
+  return groups
+    .map((g) => ({ ...g, items: g.items.filter((item) => !item.requiredPermission || granted.has(item.requiredPermission)) }))
+    .filter((g) => g.items.length > 0);
+}
 
 export function findNavItem(pathname: string): NavItem | undefined {
   return NAV_ITEMS.find(

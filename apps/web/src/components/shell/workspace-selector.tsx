@@ -1,68 +1,29 @@
 "use client";
 
-import * as React from "react";
-import { CheckIcon, ChevronsUpDownIcon, PlusIcon } from "lucide-react";
-
 import { cn } from "@/lib/utils";
-import { Button } from "@/components/ui/button";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+import { useMe } from "@/hooks/use-auth";
 
-const WORKSPACES = [
-  { id: "org_1", name: "Nail Ismagilov" },
-  { id: "org_2", name: "Blue Ridge Media" },
-  { id: "org_3", name: "Apex Traffic" },
-];
-
+/**
+ * Real workspace name (Phase 28B) — no dropdown of other workspaces
+ * anymore: a session is scoped to exactly one organization
+ * (apps/internal/tenant, §36-TENANCY), and nothing in this backend
+ * supports switching organizations mid-session yet (see docs/auth.md's
+ * "Known limitations" — a user invited into a second org logs into
+ * either one by choosing at login time, not by switching after the
+ * fact). This is a read-only display now, not a stand-in for a feature
+ * that doesn't exist server-side.
+ */
 export function WorkspaceSelector({ collapsed }: { collapsed?: boolean }) {
-  const [activeId, setActiveId] = React.useState(WORKSPACES[0].id);
-  const active = WORKSPACES.find((w) => w.id === activeId) ?? WORKSPACES[0];
+  const me = useMe();
+  if (!me.data) return null;
+  const name = me.data.organization.name;
 
   return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <Button
-          variant="ghost"
-          className={cn(
-            "h-9 w-full justify-start gap-2 px-2",
-            collapsed && "justify-center px-0",
-          )}
-        >
-          <span className="flex size-5 shrink-0 items-center justify-center rounded-md bg-primary text-[0.6875rem] font-semibold text-primary-foreground">
-            {active.name.slice(0, 1)}
-          </span>
-          {!collapsed && (
-            <>
-              <span className="flex-1 truncate text-left text-sm font-medium">
-                {active.name}
-              </span>
-              <ChevronsUpDownIcon className="size-3.5 shrink-0 text-muted-foreground" />
-            </>
-          )}
-        </Button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="start" className="w-56">
-        {WORKSPACES.map((ws) => (
-          <DropdownMenuItem key={ws.id} onSelect={() => setActiveId(ws.id)}>
-            <span className="flex size-5 shrink-0 items-center justify-center rounded-md bg-secondary text-[0.6875rem] font-semibold">
-              {ws.name.slice(0, 1)}
-            </span>
-            {ws.name}
-            {ws.id === activeId && (
-              <CheckIcon className="ml-auto size-3.5 text-primary" />
-            )}
-          </DropdownMenuItem>
-        ))}
-        <DropdownMenuSeparator />
-        <DropdownMenuItem>
-          <PlusIcon className="size-4" /> New workspace
-        </DropdownMenuItem>
-      </DropdownMenuContent>
-    </DropdownMenu>
+    <div className={cn("flex h-9 w-full items-center gap-2 px-2", collapsed && "justify-center px-0")}>
+      <span className="flex size-5 shrink-0 items-center justify-center rounded-md bg-primary text-[0.6875rem] font-semibold text-primary-foreground">
+        {name.slice(0, 1).toUpperCase()}
+      </span>
+      {!collapsed && <span className="flex-1 truncate text-left text-sm font-medium">{name}</span>}
+    </div>
   );
 }
