@@ -92,6 +92,29 @@ func (r *Repository) CredentialsByTrafficSourceID(ctx context.Context, orgID, tr
 	return c, err
 }
 
+// ListAllConnections returns every connected ad account across every org —
+// deliberately unscoped by orgID, unlike every other method here, since its
+// only caller is the ad-spend sync scheduler (§74/§27-COST) driven by a
+// timer, not a tenant's request. Never HTTP-reachable: there is no handler
+// anywhere in this package that calls it.
+func (r *Repository) ListAllConnections(ctx context.Context) ([]ConnectionRef, error) {
+	rows, err := r.db.Query(ctx, `SELECT organization_id, traffic_source_id FROM ad_account_connections ORDER BY organization_id, traffic_source_id`)
+	if err != nil {
+		return nil, fmt.Errorf("listing ad account connections: %w", err)
+	}
+	defer rows.Close()
+
+	var refs []ConnectionRef
+	for rows.Next() {
+		var ref ConnectionRef
+		if err := rows.Scan(&ref.OrganizationID, &ref.TrafficSourceID); err != nil {
+			return nil, fmt.Errorf("scanning ad account connection: %w", err)
+		}
+		refs = append(refs, ref)
+	}
+	return refs, rows.Err()
+}
+
 // TrafficSourceCostIntegration returns the traffic source's own
 // cost_integration value (a raw query against trafficsource's table,
 // same as streamset.Repository's own cross-domain checks — not an

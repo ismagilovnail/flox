@@ -19,96 +19,77 @@ referenced below as §N).
 ## CURRENT STATE — UPDATE THIS EVERY PHASE
 
 ```
-CURRENT PHASE : PHASE (unnumbered) — Ad Spend Sync, Phase B of FB/TikTok
-                ad-spend import (real API adapters + sync)
-STATUS        : done — second half of §74/§27-COST's ad-spend import,
-                the half Phase A (credential storage) deliberately
-                deferred. Confirmed via AskUserQuestion: build the real
-                Facebook Ads/TikTok Ads API adapters + a sync now (only
-                structurally testable in principle — no live Meta/TikTok
-                app credentials exist here — though this environment DOES
-                have outbound internet access, so both adapters also got
-                exercised against the REAL Graph/Business API with
-                intentionally-invalid tokens during manual verification;
-                see below).
-                Found and fixed a real architectural gap mid-phase (not
-                user-requested, found via inspection): cost_entries.
-                campaign_id is NOT NULL but a platform's spend API
-                reports by ITS OWN campaign id, and one traffic source
-                can fund more than one FLOX campaign — nothing mapped a
-                synced record to a specific FLOX campaign. Raised via a
-                second AskUserQuestion; user picked "add an external
-                campaign ID field" — new campaigns.external_campaign_id
-                (migration 00019, nullable-by-convention, no uniqueness
-                constraint since two campaigns can deliberately share one
-                ad-platform campaign id) + campaign.Repository.
-                ListByExternalID (scoped to org+trafficSource, returns a
-                slice). adaccount.CostProvider revised before anything
-                implemented it: DailySpendByCampaign (not an account-
-                level total) returning DailyCampaignSpendRecord{Date,
-                ExternalCampaignID, Amount, Currency}.
-                New apps/internal/adaccount/facebookads (real Graph API
-                Marketing Insights, level=campaign, paginated via
-                paging.next) and .../tiktokads (real Business API
-                integrated report + a second advertiser/info/ call for
-                currency, which TikTok's report endpoint omits per-row) —
-                both with injectable BaseURL/HTTPClient for
-                httptest.Server-backed tests.
-                cost.Source (manual/facebook_ads/tiktok_ads) finally
-                written — cost_entries.source's CHECK constraint allowed
-                these since migration 00009 but nothing wrote anything
-                but 'manual' until now. New cost.Service.UpsertFromSync
-                (Go-only, never HTTP-reachable) takes source as an
-                explicit parameter, deliberately NOT a field on the
-                shared UpsertInput struct (self-caught mid-implementation
-                design correction: a shared field would make "HTTP can't
-                spoof source" true only by accident, not structurally).
-                New apps/internal/costsync package (handler+service, no
-                own repository — reads through adaccount.Repository/
-                campaign.Repository, writes through cost.Service):
-                credentials -> provider call -> campaign match -> write,
-                unmatched records skipped (CLAUDE.md #6: shows as "—",
-                never a false zero) and reported back capped at 20.
-                POST /traffic-sources/{id}/connection/sync, 30-day
-                default lookback, mounted in the SAME chi Route() block
-                as adaccount's own GET/PATCH/DELETE (two Route() calls on
-                the identical pattern panics).
-                Frontend: Campaign.externalCampaignId on the campaign
-                form (create + Settings tab edit) and API types;
-                AdAccountConnectionSection (Phase A) gained a "Sync now"
-                button + inline result card (records fetched, entries
-                written, capped unmatched-external-id badges).
+CURRENT PHASE : PHASE (unnumbered) — Ad Spend Sync Scheduler, Phase C of
+                FB/TikTok ad-spend import (automated recurring sync)
+STATUS        : done — automates Phase B's previously manual-only "Sync
+                now" (POST .../connection/sync) with a recurring
+                background job. Confirmed via AskUserQuestion after Phase
+                B shipped with no open issues: new scope, not part of
+                either of the two confirmed FB/TikTok phases before it —
+                the manual endpoint is unchanged and still works, for
+                forcing a sync between scheduled runs.
+                New adaccount.Repository.ListAllConnections — the one
+                deliberately org-unscoped query in that package (every
+                other method takes an orgID and filters on it); lists
+                every connected ad account across every org, since a
+                scheduler has no single tenant's request to scope from.
+                Lives only on *Repository (never Service), never HTTP-
+                reachable — same trust boundary as Phase B's
+                CredentialsByTrafficSourceID.
+                New costsync.Scheduler (RunOnce/RunLoop): re-runs
+                Service.Sync for every connection on a plain time.Ticker,
+                NOT apps/worker's existing PollLoop(batchSize, idle)
+                claim-a-batch shape — there's no per-connection "due"
+                state to claim, just "sync everyone again every N hours."
+                RunOnce lists every connection then Syncs each in turn
+                using the same 30-day default lookback as an on-demand
+                sync; one connection's Sync failing (expired token,
+                transient API error) is logged and skipped, NEVER aborts
+                the rest of the batch — losing org B's sync to org A's
+                bad token would be a silent, tenant-isolation-adjacent
+                failure mode. RunLoop wraps RunOnce in the ticker; a
+                RunOnce error (e.g. the ListAllConnections query itself
+                failing) is logged and the loop waits for its next tick
+                rather than exiting.
+                apps/worker/main.go wires it in: constructs the same
+                adaccount/campaign/cost/costsync.Providers combination
+                apps/api/main.go already builds for the manual endpoint,
+                launches go costSyncScheduler.RunLoop(ctx,
+                costSyncInterval) alongside the three existing poll
+                loops. costSyncInterval = 6 * time.Hour, a plain const
+                (no env var — matches the existing loops' own non-
+                configurable batch/idle constants).
                 Verified: go build/vet/gofmt/test ./... all green incl.
-                new tests in internal/cost, internal/adaccount/
-                facebookads, internal/adaccount/tiktokads (httptest.
-                Server-backed), internal/costsync (real-Postgres-backed:
-                matched/unmatched/shared-external-id/not-connected/no-
-                provider). tsc --noEmit/eslint/vitest run (21 tests)/next
-                build all clean. Full manual pass against real running
-                api+web dev servers INCLUDING REAL NETWORK CALLS TO THE
-                ACTUAL FACEBOOK GRAPH API AND TIKTOK BUSINESS API: fake
-                tokens got back real OAuthException (code 190)/TikTok
-                code 40105 errors, logged server-side with full detail,
-                generic 500 to the client (no token leaked), server
-                stayed up throughout. Browser pass: connected a fake
-                credential live, clicked Sync now, got a real Graph API
-                error rendered as a correct error toast (no crash/blank
-                state); created a campaign via /campaigns/new with
-                externalCampaignId, confirmed it round-tripped through
-                the real API and pre-filled on the Settings tab. All test
-                fixtures cleaned up afterward (campaign deleted, both
-                fake connections disconnected, Facebook Ads fixture's
-                cost_integration reverted to 'none').
-LAST COMMIT   : feat(costsync): real Facebook/TikTok ad-spend adapters +
-                sync (Phase B), add campaign external ID matching
+                new tests adaccount.TestListAllConnections (cross-org,
+                excludes an unconnected source),
+                costsync.TestSchedulerRunOnceSyncsEveryConnection,
+                TestSchedulerRunOnceContinuesPastAFailingConnection, and
+                TestSchedulerRunLoopStopsOnContextCancel (pure unit test,
+                no DB) — all against real Postgres except the last. Full
+                manual pass: started apps/worker against the real dev
+                Postgres/ClickHouse/Redis stack with an empty database,
+                confirmed its first tick logged
+                "connections_attempted":0; then seeded one real Postgres
+                row (org + facebook_ads traffic source + a connection
+                with an intentionally-invalid token) and restarted — the
+                scheduler's first tick picked it up and made A REAL
+                NETWORK CALL TO THE LIVE FACEBOOK GRAPH API, getting back
+                the same genuine OAuthException (code 190) Phase B's own
+                manual pass got, logged with full detail (org id, traffic
+                source id, full error), followed by the run finishing
+                normally and the worker continuing to serve. Test
+                fixtures (org, cascade-deleted traffic source +
+                connection) deleted afterward. No frontend changes this
+                phase (nothing user-facing changed — the manual "Sync
+                now" button and its result card, from Phase B, are
+                untouched).
+LAST COMMIT   : (pending) feat(costsync): automated sync scheduler
+                (Phase C of FB/TikTok ad-spend import)
 NEXT          : confirm scope before starting. No open known issues
                 remain. Candidate: a third i18n locale (cheap per
                 docs/frontend-i18n.md, but none has been requested). No
                 other FB/TikTok ad-spend import work remains queued —
-                Phases A and B both done; a scheduler/cron for the sync
-                (currently manual "Sync now" only) would be new scope,
-                not part of either confirmed phase, and hasn't been
-                requested.
+                Phases A, B, and C are all done.
 ```
 
 > At the end of every phase: update the four lines above, add a CHANGELOG entry,

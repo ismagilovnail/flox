@@ -3,7 +3,7 @@
 // deployed and scaled independently of the redirect hot path — exactly the
 // same reasoning apps/tracker's own doc comment gives.
 //
-// Three poll loops run here:
+// Three poll loops and one interval scheduler run here:
 //   - internal/postback (§46, Phase 24): outgoing postback delivery —
 //     claim due rows from postback_deliveries and dispatch them, with
 //     exponential backoff and a dead-letter state after repeated failure.
@@ -16,6 +16,15 @@
 //     log — both directions (conversion's incoming outcomes, postback's
 //     outgoing delivery attempts) claimed in batches and written to
 //     ClickHouse's postback_events.
+//   - internal/costsync (§74/§27-COST): the automated counterpart to the
+//     API's on-demand POST .../connection/sync — on a fixed interval
+//     (costSyncInterval below), pulls ad spend for every connected
+//     Facebook/TikTok ad account across every org and writes matching
+//     campaigns' cost_entries. Unlike the three loops above, this isn't a
+//     claim-a-batch-of-due-rows queue drain — there's no per-row "due"
+//     state to claim, just "sync everyone again every N hours" — so it
+//     runs on a time.Ticker (costsync.Scheduler.RunLoop) rather than
+//     PollLoop's claim/idle shape.
 package main
 
 import (
@@ -27,9 +36,16 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/ismagilovnail/flox/apps/internal/adaccount"
+	"github.com/ismagilovnail/flox/apps/internal/adaccount/facebookads"
+	"github.com/ismagilovnail/flox/apps/internal/adaccount/tiktokads"
+	"github.com/ismagilovnail/flox/apps/internal/campaign"
 	"github.com/ismagilovnail/flox/apps/internal/chconn"
 	"github.com/ismagilovnail/flox/apps/internal/chstore"
 	"github.com/ismagilovnail/flox/apps/internal/config"
+	"github.com/ismagilovnail/flox/apps/internal/conversion"
+	"github.com/ismagilovnail/flox/apps/internal/cost"
+	"github.com/ismagilovnail/flox/apps/internal/costsync"
 	"github.com/ismagilovnail/flox/apps/internal/eventqueue"
 	"github.com/ismagilovnail/flox/apps/internal/logging"
 	"github.com/ismagilovnail/flox/apps/internal/postback"
@@ -62,6 +78,14 @@ const (
 	attemptLogPollBatchSize = 20
 	attemptLogPollIdle      = 5 * time.Second
 )
+
+// costSyncInterval: how often every connected Facebook/TikTok ad account
+// gets re-synced. Both platforms' reporting APIs commonly revise very
+// recent days' spend after the fact (the same reason costsync's own
+// defaultLookbackDays re-pulls a 30-day window every run, not just "since
+// last sync"), so re-running a few times a day catches those revisions
+// without re-fetching so often it risks the ad platforms' own rate limits.
+const costSyncInterval = 6 * time.Hour
 
 func main() {
 	if err := run(); err != nil {
@@ -112,6 +136,13 @@ func run() error {
 	}
 	chEvents := chstore.NewEventStore(ch)
 
+	adAccountRepo := adaccount.NewRepository(db)
+	costSyncSvc := costsync.NewService(adAccountRepo, campaign.NewRepository(db), cost.NewService(cost.NewRepository(db), conversion.NewPostgresFX(db)), costsync.Providers{
+		FacebookAds: facebookads.New(),
+		TikTokAds:   tiktokads.New(),
+	})
+	costSyncScheduler := costsync.NewScheduler(costSyncSvc, adAccountRepo, logger)
+
 	attemptLogQueue := postbacklog.NewPostgresQueue(db, logger)
 	deliverer := postback.NewDeliverer(
 		postback.NewPostgresStore(db),
@@ -148,6 +179,9 @@ func run() error {
 
 	logger.Info("postback attempt log poll loop starting", "batch_size", attemptLogPollBatchSize, "idle", attemptLogPollIdle)
 	go attemptFlusher.PollLoop(ctx, attemptLogPollBatchSize, attemptLogPollIdle)
+
+	logger.Info("ad spend sync scheduler starting", "interval", costSyncInterval)
+	go costSyncScheduler.RunLoop(ctx, costSyncInterval)
 
 	<-ctx.Done()
 	logger.Info("shutting down")

@@ -93,3 +93,13 @@ type DailyCampaignSpendRecord struct {
 	Amount             float64
 	Currency           string
 }
+
+// ConnectionRef identifies one connected ad account for a trusted, Go-only
+// batch caller — the ad-spend sync scheduler (§74/§27-COST) — that must
+// iterate every connection across every org on a timer, unlike every other
+// method on this package's repository, which is scoped to one orgID because
+// it serves one tenant's HTTP request. Never HTTP-reachable.
+type ConnectionRef struct {
+	OrganizationID  string
+	TrafficSourceID string
+}

@@ -5,6 +5,55 @@ per-phase, matching `CLAUDE.md`'s phase protocol. The one exception is
 [Between phases], below: spec amendments and the code changes that follow from
 them land between phases and would otherwise be invisible here.
 
+## [Ad Spend Sync Scheduler] — Phase C of FB/TikTok ad-spend import: automated recurring sync
+
+### Scope
+
+Confirmed via `AskUserQuestion` after Phase B shipped with no open issues:
+automate the previously manual-only "Sync now" (`POST
+.../connection/sync`) with a recurring background job. New scope, not
+part of either of the two confirmed FB/TikTok phases before it — the
+manual endpoint stays, unchanged, as a way to force a sync between
+scheduled runs. See `docs/ad-account-connections.md`'s "Phase C" section
+for full detail.
+
+### Changed
+
+- New `adaccount.Repository.ListAllConnections` — the one deliberately
+  org-unscoped query in that package (every other method takes an
+  `orgID`): lists every connected ad account across every org for a
+  scheduler with no single tenant's request to scope from. Lives only on
+  `*Repository`, never `Service`; never HTTP-reachable — same trust
+  boundary as Phase B's `CredentialsByTrafficSourceID`.
+- New `costsync.Scheduler` (`RunOnce`/`RunLoop`): re-runs `Service.Sync`
+  for every connection on a `time.Ticker`, not `apps/worker`'s existing
+  `PollLoop` claim-a-batch shape — there's no per-connection "due" state,
+  just "sync everyone again every N hours." One connection's `Sync`
+  failing (expired token, transient API error) is logged and skipped,
+  never aborting the rest of the batch; a `RunOnce` error is logged and
+  the loop waits for its next tick rather than exiting.
+- `apps/worker/main.go`: wires the scheduler alongside the three existing
+  poll loops, `costSyncInterval = 6 * time.Hour` (a plain const, matching
+  the existing loops' non-env-configurable batch/idle constants).
+
+### Verified
+
+`gofmt`/`go build ./...`/`go vet ./...`/`go test ./...` all green,
+including new tests: `adaccount.TestListAllConnections`,
+`costsync.TestSchedulerRunOnceSyncsEveryConnection`,
+`TestSchedulerRunOnceContinuesPastAFailingConnection`, and
+`TestSchedulerRunLoopStopsOnContextCancel` — all against real Postgres
+except the last, a pure unit test. Full manual pass: started
+`apps/worker` against the real dev stack with an empty database (its
+first tick logged `connections_attempted:0`), then seeded one real
+Postgres row (org + `facebook_ads` traffic source + a connection with an
+intentionally-invalid token) and restarted — the scheduler's first tick
+picked it up and made a **real network call to the live Facebook Graph
+API**, getting back the same genuine `OAuthException` (code 190) Phase
+B's own manual pass got, logged with full detail, followed by the run
+finishing normally and the worker continuing to serve. Test fixtures
+deleted afterward.
+
 ## [Ad Spend Sync] — Phase B of FB/TikTok ad-spend import: real API adapters + sync
 
 ### Scope

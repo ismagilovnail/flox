@@ -144,6 +144,51 @@ func TestCrossTenantIsolation(t *testing.T) {
 	})
 }
 
+func TestListAllConnections(t *testing.T) {
+	pool := mustPool(t)
+	ctx := context.Background()
+	orgA := seedOrg(t, ctx, pool)
+	orgB := seedOrg(t, ctx, pool)
+	sourceA := seedTrafficSource(t, ctx, pool, orgA, "facebook_ads")
+	sourceB := seedTrafficSource(t, ctx, pool, orgB, "tiktok_ads")
+	sourceUnconnected := seedTrafficSource(t, ctx, pool, orgA, "facebook_ads")
+
+	repo := adaccount.NewRepository(pool)
+	if _, err := repo.Connect(ctx, idgen.New(), orgA, sourceA, adaccount.ConnectInput{AdAccountID: "act_a", AccessToken: "token-a-1234567890"}); err != nil {
+		t.Fatalf("connecting org A: %v", err)
+	}
+	if _, err := repo.Connect(ctx, idgen.New(), orgB, sourceB, adaccount.ConnectInput{AdAccountID: "adv_b", AccessToken: "token-b-1234567890"}); err != nil {
+		t.Fatalf("connecting org B: %v", err)
+	}
+
+	refs, err := repo.ListAllConnections(ctx)
+	if err != nil {
+		t.Fatalf("ListAllConnections: %v", err)
+	}
+
+	want := map[string]bool{sourceA: false, sourceB: false}
+	for _, ref := range refs {
+		if ref.TrafficSourceID == sourceA {
+			if ref.OrganizationID != orgA {
+				t.Fatalf("connection for sourceA has organization_id %q, want %q", ref.OrganizationID, orgA)
+			}
+			want[sourceA] = true
+		}
+		if ref.TrafficSourceID == sourceB {
+			if ref.OrganizationID != orgB {
+				t.Fatalf("connection for sourceB has organization_id %q, want %q", ref.OrganizationID, orgB)
+			}
+			want[sourceB] = true
+		}
+		if ref.TrafficSourceID == sourceUnconnected {
+			t.Fatalf("ListAllConnections returned the unconnected traffic source %q", sourceUnconnected)
+		}
+	}
+	if !want[sourceA] || !want[sourceB] {
+		t.Fatalf("ListAllConnections = %+v, want both org A's and org B's connections present", refs)
+	}
+}
+
 func mustPool(t *testing.T) *pgxpool.Pool {
 	t.Helper()
 	dsn := os.Getenv("DATABASE_URL")

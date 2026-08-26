@@ -1,4 +1,6 @@
-# Ad Account Connections (§74/§27-COST) — Phase A: credential storage
+# Ad Account Connections (§74/§27-COST)
+
+# Phase A: credential storage
 
 First slice of the FB/TikTok ad-spend import candidate. Split into two
 phases (confirmed via `AskUserQuestion` before starting): **this phase**
@@ -353,3 +355,111 @@ access) with intentionally-invalid tokens:
 - Cleanup: deleted the test campaign, disconnected both fake ad account
   connections, reverted the Facebook Ads fixture's `cost_integration`
   back to `none` — matching state before this phase's manual pass.
+
+# Phase C: sync scheduler
+
+Phase B's "Sync now" button (`POST .../connection/sync`) was manual-only
+by design — no scheduler existed. This phase automates it: a background
+job in `apps/worker` re-syncs every connected ad account on a fixed
+interval, with no change to the manual endpoint (an operator can still
+force an immediate sync between scheduled runs).
+
+## Why a ticker, not `PollLoop`
+
+`apps/worker`'s three existing loops (`postback.Deliverer`,
+`eventqueue.Flusher`, `postbacklog.Flusher`) all share one shape: claim a
+batch of *due* rows from a queue table, process them, and idle briefly
+if the batch was empty or partial (`PollLoop(ctx, batchSize, idle)`).
+That shape fits a backlog that grows between polls. Ad-spend sync has no
+such backlog — there's no per-connection "due" state, just "everyone
+gets synced again every N hours" — so `costsync.Scheduler.RunLoop(ctx,
+interval)` uses a plain `time.Ticker` instead: run once immediately on
+start, then again every `interval`, forever, until `ctx` is done.
+
+## New: `adaccount.Repository.ListAllConnections`
+
+Every other method on `adaccount.Repository` takes an `orgID` and scopes
+its query to it — correct for a handler serving one tenant's request,
+but wrong for a scheduler that must find *every* connected ad account
+across *every* org on its own timer, with no request to scope from.
+`ListAllConnections(ctx) ([]ConnectionRef, error)` is deliberately the
+one unscoped query in this package: it lives directly on `*Repository`
+(never on `Service`, same "only a trusted Go-only caller holding the
+repository directly" pattern as `CredentialsByTrafficSourceID`, Phase B)
+and is never reachable from any HTTP route. `ConnectionRef` carries only
+`OrganizationID`/`TrafficSourceID` — exactly what `costsync.Service.Sync`
+needs to run for one connection; the credential lookup itself still goes
+through the existing, per-connection `CredentialsByTrafficSourceID` once
+`Sync` is called for that ref.
+
+## `costsync.Scheduler`
+
+`NewScheduler(svc *Service, connections connectionLister, logger
+*slog.Logger) *Scheduler` — `connectionLister` is a one-method interface
+(`ListAllConnections`) satisfied by `*adaccount.Repository`, narrowed the
+same way `Providers`' own `adaccount.CostProvider` interface is, so tests
+substitute a fake instead of a real Postgres pool.
+
+- `RunOnce(ctx) (int, error)` lists every connection, then calls
+  `Service.Sync` for each one in turn using the same 30-day
+  (`defaultLookbackDays`) window an on-demand "Sync now" defaults to —
+  both ad platforms commonly revise very recent days' reported spend, so
+  every scheduled run re-pulls the whole window rather than tracking a
+  "since last sync" cursor. **One connection's `Sync` failing (expired
+  token, a transient API error, a traffic source that got disconnected
+  mid-run) is logged and skipped — it never aborts the rest of the
+  batch.** Losing org B's sync to org A's bad token would be a silent,
+  cross-tenant-shaped failure mode; CLAUDE.md invariant #5 (tenant
+  isolation) reads most naturally as "no org's data leaks to another,"
+  but this is the adjacent case — no org's *background job* should be
+  starvable by another org's broken credential either.
+- `RunLoop(ctx, interval)` wraps `RunOnce` in the ticker described above.
+  A `RunOnce` error (e.g. the initial `ListAllConnections` query itself
+  failing — a DB blip) is logged and the loop waits for its next tick
+  rather than exiting; a scheduler that gave up permanently after one bad
+  listing would silently stop syncing *everyone's* spend until the whole
+  worker process was restarted, which is worse than trying again in
+  `costSyncInterval`.
+
+## Wiring: `apps/worker/main.go`
+
+`costSyncInterval = 6 * time.Hour` (a plain const, same convention as the
+existing poll loops' `postbackPollBatchSize`/`eventPollIdle` etc. — no
+env var, since none of the other three loops' timing is
+env-configurable either). The worker constructs the same
+`adaccount.Repository`/`campaign.Repository`/`cost.Service`/
+`costsync.Providers{FacebookAds: facebookads.New(), TikTokAds:
+tiktokads.New()}` combination `apps/api/main.go` already builds for the
+manual endpoint, wraps it in `costsync.NewScheduler(...)`, and launches
+`go costSyncScheduler.RunLoop(ctx, costSyncInterval)` alongside the three
+existing `go x.PollLoop(...)` calls.
+
+## Verified
+
+Backend: `gofmt`/`go build ./...`/`go vet ./...`/`go test ./...` all
+green, including new tests — `adaccount.TestListAllConnections` (cross-
+org, and confirms an unconnected traffic source is excluded) and
+`costsync`'s `TestSchedulerRunOnceSyncsEveryConnection` (two different
+orgs, two different providers, one `RunOnce`),
+`TestSchedulerRunOnceContinuesPastAFailingConnection` (a broken
+connection ahead of a good one in the list; the good one's cost entry
+still gets written), and `TestSchedulerRunLoopStopsOnContextCancel` —
+all against real Postgres per this project's integration-test
+convention, plus one pure-unit test needing no database at all.
+
+Full manual pass: started `apps/worker` against the real dev Postgres/
+ClickHouse/Redis stack and confirmed, from its own logs, that
+`RunLoop`'s immediate first tick ran with zero connections
+(`"connections_attempted":0`) on a clean database. Then, with the worker
+stopped, seeded one real row directly in Postgres — an org, a
+`facebook_ads` traffic source, and an `ad_account_connections` row with
+an intentionally-invalid token — and restarted the worker: its first
+tick picked up the seeded connection and made a **real network call to
+the live Facebook Graph API**, which came back with the same genuine
+`OAuthException` (code 190, "Invalid OAuth access token") Phase B's own
+manual pass got, logged with the connection's `organization_id`/
+`traffic_source_id` and the full error, followed immediately by
+`"scheduled ad spend sync run finished","connections_attempted":1` — the
+loop correctly treats a failed sync as "attempted," not a crash, and
+keeps running. Test fixtures (org, cascade-deleted traffic source +
+connection) were deleted afterward.
