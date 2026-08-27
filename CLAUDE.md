@@ -19,106 +19,78 @@ referenced below as §N).
 ## CURRENT STATE — UPDATE THIS EVERY PHASE
 
 ```
-CURRENT PHASE : PHASE 30 — SECURITY HARDENING
-STATUS        : done — §54's four defenses, each closing a gap that had
-                zero authentication/throttling/host-validation before
-                this phase. Full detail in docs/security.md; summary:
-                (1) Incoming postback auth: networks.postback_secret_hash
-                (migration 00021, hashed at rest, DEFAULT '' sentinel
-                that can never match any hashed input). apps/tracker's
-                POST /postback/{networkId} used to trust the path ULID
-                alone; now requires ?secret=... checked with
-                subtle.ConstantTimeCompare against the stored hash
-                before recording any conversion. Raw secret is returned
-                exactly once — network.Service.Create's CreateResult and
-                the new RegeneratePostbackSecret response — never from
-                List/Get/Update/Duplicate. Duplicate gets its own fresh
-                secret, never the source's. apps/web: PostbackSecretDialog
-                (reveal-once, copy button) after create and after the new
-                "Regenerate incoming secret" row action.
-                (2) CSRF: new tenant.RequireSameOrigin closes the gap
-                SameSite=Lax alone doesn't (a cross-site fetch/XHR with
-                credentials:"include" can still attach a Lax cookie in
-                some browsers) — rejects a mutating request whose Origin
-                header is PRESENT and != APP_URL; an ABSENT Origin is
-                allowed (non-browser client, not a browser silently
-                omitting it). Mounted before session resolution in
-                apps/api/main.go, standalone on pre-session signup/
-                login/accept-invite too (blocks login CSRF).
-                (3) Rate limiting: new apps/internal/ratelimit, a fixed-
-                window Redis counter, FAILS OPEN on a Redis error (same
-                stance as every other Redis-optional path in this
-                codebase — a limiter that failed closed would turn a
-                Redis outage into a full API outage). General 300/min-
-                per-IP across all of apps/api (httpserver, exempting
-                /health//ready//metrics via an exemptPaths wrapper — see
-                Fixed below), a stricter 20/15min-per-IP on
-                /auth/login+/auth/signup. Deliberately NOT on apps/
-                tracker's redirect hot path (§41 budget) — a synchronous
-                Redis round trip on every click would blow it outright.
-                (4) SSRF: new apps/internal/urlsafety. ValidateURL is
-                the cheap save-time check (network.Service create/
-                update: scheme + literal-IP-range rejection).
-                SafeDialContext is the real defense — set as apps/
-                worker's postback-delivery http.Client's Transport.
-                DialContext, it resolves the host and validates the IP
-                AT CONNECTION TIME, then dials that exact validated IP
-                (never the hostname again), closing the DNS-rebinding
-                gap a save-time-only check can't catch (a hostname
-                resolving to a public IP at save time can be repointed
-                at a private/metadata IP by delivery time). Forbidden:
-                loopback/private/link-local(+169.254.169.254 metadata)/
-                unspecified.
-                FIXED DURING THIS PHASE'S OWN VALIDATION: apps/internal/
-                httpserver.New originally called r.Use(limiter...) AFTER
-                /health//ready//metrics were already registered on the
-                same chi mux — chi panics on that ordering ("all
-                middlewares must be defined before routes"), so apps/api
-                failed to start at all. The original comment's reasoning
-                ("Use only affects routes added after it in the same
-                router scope") is true for an inline Group/With sub-
-                router but NOT for the root mux itself. Caught because
-                this phase's manual pass actually tried to start the
-                real binary rather than stopping at go build (build/vet
-                don't catch a startup-time panic). Fixed: Use moved
-                before route registration; a new exemptPaths(mw,
-                paths...) wrapper keeps the three infra routes bypassing
-                the limiter without depending on registration order.
+CURRENT PHASE : PHASE 31 — PERFORMANCE
+STATUS        : done — §56's brief (benchmark tracking/routing/classifier/
+                postback/analytics, hit tracking p50<20ms/p95<50ms, load-
+                test for zero event loss, optimize only after
+                measurement) is fully satisfied by measurement alone: NO
+                CODE CHANGED THIS PHASE, because nothing needed it. Full
+                numbers, methodology, and caveats in docs/performance.md;
+                summary:
+                Go benchmarks (all against the real local dev Postgres/
+                ClickHouse, none mocked): routing.Resolve 2.5us,
+                Resolve_Sticky 0.27us, classifier.Classify 1.7us — three
+                orders of magnitude under budget, pure in-memory.
+                routingstore.LoadRoutingConfig 0.40ms + ResolveTrackingLink
+                0.086ms are the real cost (5 sequential Postgres queries,
+                no cache in front of routingstore — measurement is *why*
+                one wasn't added: the cost it'd remove is already
+                negligible). apps/tracker's BenchmarkTrack (the whole §41
+                hot path through a real net/http mux, event enqueue
+                discarded not written so it isolates from the worker's
+                independent ClickHouse-write cost): 0.51ms serial, 0.084ms
+                16-way parallel — ~39x headroom under the 20ms p50 target
+                before any concurrency credit at all. postback (1.7ms) and
+                analytics (~2ms, seeded ~6k ClickHouse rows) both
+                benchmarked too though neither carries an explicit SLA
+                (tracker/postback.go's own doc comment: postback is
+                deliberately NOT on the §41 budget).
+                Load test: a real apps/tracker binary (not in-process),
+                hit by vegeta at 300/1000/3000/6000 req/s sustained
+                (6,000-47,997 requests/run) via a new manual seeding tool
+                (apps/cmd/loadtestseed, not wired into any service).
+                p50 stayed 0.64-0.99ms and p95 1.0-1.5ms at every rate
+                tested, including 6000 req/s (300x the first run) with no
+                degradation. Zero event loss confirmed three independent
+                ways after every run: flox_events_enqueued_total ==
+                flox_events_queue_written_total (Prometheus, exact match
+                at all 4 cumulative totals: 12002/27002/57002/104999),
+                flox_events_buffer_dropped_total and
+                _queue_write_failed_total held at 0 throughout (the
+                10,000-deep in-memory buffer never once filled even at
+                6000 req/s), and a direct `SELECT count(*) FROM
+                event_queue` matched 104999 exactly against real Postgres
+                — durable, not just counter-reported.
+                Caveats (full list in docs/performance.md): loopback-only
+                (no real network hop between tracker and its stores),
+                single instance / single-tenant load (no contention from
+                other orgs sharing the pool), every load-test click hit
+                the campaign fallback (seeded stream sets require bot=0
+                and vegeta's UA doesn't clear real geo/ASN — no vendor
+                wired up yet — so the weighted-draw path wasn't under
+                load; BenchmarkResolve's in-memory numbers already show
+                that path costs <3us regardless), ClickHouse benchmarked
+                at ~6k rows (one campaign-month), not verified at 10-100x
+                that volume.
                 Verified: gofmt/go build/go vet/go test -count=1 ./...
-                green repo-wide (forced, not cached), incl. 4 new test
-                files (internal/ratelimit, internal/urlsafety,
-                internal/tenant/tenant_test.go, tracker/
-                postback_secret_test.go) + new cases in internal/
-                network/network_test.go. tsc --noEmit/eslint/next build
-                clean on apps/web. Full manual pass against the REAL
-                running api+tracker binaries (after fixing the startup
-                panic above, migration 00021 already applied to the dev
-                DB): signed up a real user, created a real network,
-                confirmed the returned postbackSecret gates apps/
-                tracker's postback endpoint end to end (missing secret
-                -> 401, wrong secret -> 401, correct secret -> passes
-                auth and reaches real business logic), confirmed
-                RegeneratePostbackSecret invalidates the old secret
-                immediately and the new one works. Confirmed
-                RequireSameOrigin: cross-origin Origin -> 403, matching-
-                origin -> 200s/normal errors, no Origin -> also passes
-                (curl, no browser). Confirmed urlsafety.ValidateURL
-                rejects both a cloud-metadata URL (169.254.169.254) and
-                a loopback URL at network-create time (422). Confirmed
-                the /auth/login rate limit actually trips (429) once the
-                20-per-15min threshold is crossed. All fixtures (user,
-                org, network, sessions) deleted afterward, confirmed
-                zero rows remaining.
-LAST COMMIT   : feat(security): postback secrets, CSRF, rate limiting,
-                SSRF protection (Phase 30)
+                green repo-wide, incl. 5 new bench_test.go files
+                (internal/routing, internal/classifier,
+                internal/routingstore, apps/tracker x2,
+                internal/analytics). No frontend touched this phase
+                (backend-only), so no tsc/eslint/next build run. All
+                fixtures (load-test organization + cascade-deleted
+                children + event_queue rows, per-benchmark Postgres orgs,
+                per-benchmark ClickHouse rows) deleted afterward via
+                loadtestseed cleanup / t.Cleanup/b.Cleanup, confirmed
+                zero Postgres rows remaining (organizations count back to
+                the 1 pre-existing dev org).
+LAST COMMIT   : perf: Phase 31 benchmarks + load test (no code changes —
+                measurement showed none needed)
 NEXT          : confirm scope before starting. No open known issues
-                remain for Security Hardening. Known limitations
-                documented in docs/security.md: no CAPTCHA/device-
-                fingerprinting on auth endpoints (rate limiting is the
-                only brute-force defense); rate limiting is per-IP only,
-                not distributed-attacker-aware (an infra/WAF concern);
-                no CSP/security-header hardening (out of scope, not
-                requested).
+                remain for Performance. Per §9 the next fixed phase is
+                Phase 32 — E2E TESTING (§57): the full Create
+                organization -> ... -> Analytics + LTV scenario, every
+                step verified.
 
 ```
 

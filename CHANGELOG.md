@@ -5,6 +5,56 @@ per-phase, matching `CLAUDE.md`'s phase protocol. The one exception is
 [Between phases], below: spec amendments and the code changes that follow from
 them land between phases and would otherwise be invisible here.
 
+## [Performance] — Phase 31: benchmarks + load test, no code changes
+
+### Scope
+
+§56's brief: benchmark tracking/routing/classifier/postback/analytics, hit
+tracking p50 < 20ms / p95 < 50ms, load-test for zero event loss, optimize
+only after measurement. Measurement showed every number already clears its
+target by 1-2 orders of magnitude on the real code path against the real
+local dev stack — no optimization work was warranted or done. Full detail,
+numbers, and reproduction commands in `docs/performance.md`.
+
+### Added (measurement tooling only — no production code changed)
+
+- `internal/routing/bench_test.go`, `internal/classifier/bench_test.go`:
+  pure in-memory benchmarks (`BenchmarkResolve`/`_Sticky`,
+  `BenchmarkClassify`/`ParseUserAgent`) — 0.27-2.5 µs/op, three orders of
+  magnitude under budget.
+- `internal/routingstore/bench_test.go`: `BenchmarkLoadRoutingConfig`
+  (0.40 ms) and `BenchmarkResolveTrackingLink` (0.086 ms) against a real
+  Postgres — the two DB round trips that make up nearly all of §41's
+  actual cost.
+- `apps/tracker/bench_test.go`, `apps/tracker/postback_bench_test.go`:
+  `BenchmarkTrack` (0.51 ms serial, 0.084 ms 16-way parallel — the whole
+  §41 hot path through a real `net/http` mux), `BenchmarkPostback`
+  (1.7 ms, no SLA — explicitly off the §41 budget per `tracker/postback.go`'s
+  own doc comment).
+- `internal/analytics/bench_test.go`: `BenchmarkCampaignDaily`/
+  `CampaignDailyRevenue` (~2 ms) against a real ClickHouse seeded with
+  ~6,000 rows.
+- `apps/cmd/loadtestseed`: a small manual tool (`seed`/`cleanup <orgId>`)
+  seeding a real campaign for the load test below — not wired into any
+  service.
+
+### Verified
+
+`gofmt`/`go build ./...`/`go vet ./...`/`go test -count=1 ./...` green
+repo-wide, including all five new `bench_test.go` files.
+
+A real `apps/tracker` binary, load-tested with `vegeta` at 300/1,000/
+3,000/6,000 req/s sustained (6,000-47,997 requests per run): p50 stayed at
+0.64-0.99 ms and p95 at 1.0-1.5 ms across every rate, with **zero event
+loss** confirmed three independent ways after each run —
+`flox_events_enqueued_total` == `flox_events_queue_written_total`
+(Prometheus), `flox_events_buffer_dropped_total` /
+`_queue_write_failed_total` stayed at 0, and a direct
+`SELECT count(*) FROM event_queue` matched the cumulative enqueued count
+(104,999) exactly. All load-test fixtures (organization, cascade-deleted
+children, `event_queue` rows) deleted afterward via
+`loadtestseed cleanup`, confirmed zero rows remaining.
+
 ## [Security Hardening] — Phase 30: postback secrets, CSRF, rate limiting, SSRF
 
 ### Scope
