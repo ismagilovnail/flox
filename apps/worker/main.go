@@ -60,6 +60,7 @@ import (
 	"github.com/ismagilovnail/flox/apps/internal/postbacklog"
 	"github.com/ismagilovnail/flox/apps/internal/postgres"
 	"github.com/ismagilovnail/flox/apps/internal/telemetry"
+	"github.com/ismagilovnail/flox/apps/internal/urlsafety"
 )
 
 // postbackPollBatchSize/postbackPollIdle: how many due postback deliveries
@@ -163,7 +164,27 @@ func run() error {
 	// trace context from here (this fires from a poll loop, not an HTTP
 	// handler), so each call becomes its own root span. A no-op when no
 	// OTel endpoint is configured (telemetry.Setup's own doc comment).
-	postbackClient := &http.Client{Transport: otelhttp.NewTransport(http.DefaultTransport)}
+	//
+	// DialContext: urlsafety.SafeDialContext (§54/Phase 30) — del.URL is
+	// built from a network operator's own postback_url template
+	// (macro-substituted, apps/internal/macro), so this is the one
+	// outbound call in this codebase that fetches an operator-supplied
+	// destination. network.Service.isValidURL only ever ran once, at
+	// save time; SafeDialContext is the delivery-time recheck that
+	// actually stops an SSRF attempt, including one that only appears
+	// after the URL was saved (DNS rebinding). A fresh *http.Transport
+	// rather than http.DefaultTransport, since DialContext can't be set
+	// on the shared package-level default without mutating it for every
+	// other caller in this process — the other field values here match
+	// http.DefaultTransport's own defaults.
+	safeTransport := &http.Transport{
+		DialContext:           urlsafety.SafeDialContext,
+		MaxIdleConns:          100,
+		IdleConnTimeout:       90 * time.Second,
+		TLSHandshakeTimeout:   10 * time.Second,
+		ExpectContinueTimeout: time.Second,
+	}
+	postbackClient := &http.Client{Transport: otelhttp.NewTransport(safeTransport)}
 	deliverer := postback.NewDeliverer(
 		postback.NewPostgresStore(db),
 		postbackClient,

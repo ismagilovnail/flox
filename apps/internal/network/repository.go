@@ -65,14 +65,32 @@ func (r *Repository) GetByID(ctx context.Context, orgID, id string) (Network, er
 	return n, err
 }
 
-func (r *Repository) Create(ctx context.Context, id, orgID string, in CreateInput) (Network, error) {
+func (r *Repository) Create(ctx context.Context, id, orgID string, in CreateInput, postbackSecretHash string) (Network, error) {
 	row := r.db.QueryRow(ctx, `
-		INSERT INTO networks (id, organization_id, name, postback_url, accept_duplicates)
-		VALUES ($1, $2, $3, $4, $5)
+		INSERT INTO networks (id, organization_id, name, postback_url, accept_duplicates, postback_secret_hash)
+		VALUES ($1, $2, $3, $4, $5, $6)
 		RETURNING `+selectColumns,
-		id, orgID, in.Name, in.PostbackURL, in.AcceptDuplicates,
+		id, orgID, in.Name, in.PostbackURL, in.AcceptDuplicates, postbackSecretHash,
 	)
 	return scanNetwork(row)
+}
+
+// RegenerateSecret overwrites a network's postback_secret_hash in place —
+// the old secret stops working the instant this commits, same
+// "resending/regenerating invalidates the previous one" precedent as
+// apps/internal/auth's own invite-resend.
+func (r *Repository) RegenerateSecret(ctx context.Context, orgID, id, postbackSecretHash string) error {
+	tag, err := r.db.Exec(ctx,
+		`UPDATE networks SET postback_secret_hash = $1 WHERE id = $2 AND organization_id = $3`,
+		postbackSecretHash, id, orgID,
+	)
+	if err != nil {
+		return fmt.Errorf("network: regenerating postback secret: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return apierror.NotFound("network not found")
+	}
+	return nil
 }
 
 func (r *Repository) Update(ctx context.Context, orgID, id string, in UpdateInput) (Network, error) {

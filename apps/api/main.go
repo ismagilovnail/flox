@@ -12,6 +12,7 @@ import (
 
 	"github.com/ClickHouse/clickhouse-go/v2/lib/driver"
 	"github.com/go-chi/chi/v5"
+	"github.com/redis/go-redis/v9"
 
 	"github.com/ismagilovnail/flox/apps/internal/adaccount"
 	"github.com/ismagilovnail/flox/apps/internal/adaccount/facebookads"
@@ -43,6 +44,7 @@ import (
 	"github.com/ismagilovnail/flox/apps/internal/postgres"
 	"github.com/ismagilovnail/flox/apps/internal/postlanding"
 	"github.com/ismagilovnail/flox/apps/internal/pwa"
+	"github.com/ismagilovnail/flox/apps/internal/ratelimit"
 	"github.com/ismagilovnail/flox/apps/internal/rediscache"
 	"github.com/ismagilovnail/flox/apps/internal/routing"
 	"github.com/ismagilovnail/flox/apps/internal/routingsimulate"
@@ -111,7 +113,32 @@ func run() error {
 		ch = chConn
 	}
 
-	srv := httpserver.New(logger, cfg.OTelServiceName, db, ch, cfg.AppURL)
+	// Redis, connected here (rather than down where it was previously only
+	// used, inside the ClickHouse-gated conversion-replay block) so
+	// apps/internal/ratelimit can use it too — §54/Phase 30 rate limiting
+	// needs to guard /auth/login and /auth/signup, both registered well
+	// before that block. Best-effort at startup, same stance as every
+	// other Redis-optional path in this codebase (conversion.RedisStore
+	// below reuses this exact client instead of opening a second
+	// connection): a rate limiter that failed closed on a down Redis
+	// would turn a cache outage into a full API outage.
+	var rdb *redis.Client
+	if cfg.RedisURL != "" {
+		redisCtx, cancelRedis := context.WithTimeout(ctx, 5*time.Second)
+		client, redisErr := rediscache.NewClient(redisCtx, cfg.RedisURL)
+		cancelRedis()
+		if redisErr != nil {
+			logger.Warn("redis unavailable at startup, rate limiting and conversion progression checks degrade", "error", redisErr)
+		} else {
+			defer client.Close()
+			rdb = client
+		}
+	} else {
+		logger.Warn("REDIS_URL not set, rate limiting and conversion progression checks degrade")
+	}
+	limiter := ratelimit.New(rdb, logger)
+
+	srv := httpserver.New(logger, cfg.OTelServiceName, db, ch, cfg.AppURL, limiter)
 
 	// Auth/RBAC (§52, Phase 28A). authSvc.ResolveSession implements
 	// tenant.SessionResolver — tenantMiddleware below replaces the old
@@ -125,9 +152,40 @@ func run() error {
 	authSvc := auth.NewService(authRepo, cfg.AppURL)
 	authHandler := auth.NewHandler(authSvc, logger, cfg.Env != "development")
 	teamHandler := auth.NewTeamHandler(authSvc, logger)
-	tenantMiddleware := tenant.NewMiddleware(authSvc, logger)
 
-	authHandler.RegisterPublic(srv.Mux())
+	// §54/Phase 30: RequireSameOrigin runs OUTSIDE (before) session
+	// resolution — rejecting a forged cross-origin mutation is cheaper
+	// and safer than first looking up whose session it claims to be.
+	// tenantMiddleware keeps its original name/type (func(http.Handler)
+	// http.Handler) even though it's now two middlewares composed, so
+	// none of this file's 17 r.Use(tenantMiddleware) call sites change.
+	csrfCheck := tenant.RequireSameOrigin(cfg.AppURL, logger)
+	sessionCheck := tenant.NewMiddleware(authSvc, logger)
+	tenantMiddleware := func(next http.Handler) http.Handler { return csrfCheck(sessionCheck(next)) }
+
+	// signup/login/accept-invite are POST (mutating) but pre-session, so
+	// they can't go through tenantMiddleware (which requires a cookie
+	// that doesn't exist yet) — csrfCheck alone still guards them against
+	// login CSRF (forcing a victim's browser to authenticate as an
+	// attacker-controlled account, so the victim unknowingly saves real
+	// data into it).
+	//
+	// authRateLimit is deliberately much stricter than httpserver's own
+	// general per-IP ceiling (300/min) — these are exactly the routes
+	// §54's "brute-force credential stuffing" concern is about
+	// (repeatedly trying passwords against /auth/login, or hammering
+	// /auth/signup). 20 requests per 15 minutes per IP is generous for a
+	// real user who mistypes a password a few times, tight for a script.
+	const (
+		authRateLimit       = 20
+		authRateLimitWindow = 15 * time.Minute
+	)
+	authLimit := limiter.Middleware("auth", ratelimit.ClientIP, authRateLimit, authRateLimitWindow)
+	srv.Mux().Group(func(r chi.Router) {
+		r.Use(csrfCheck)
+		r.Use(authLimit)
+		authHandler.RegisterPublic(r)
+	})
 	srv.Mux().Group(func(r chi.Router) {
 		r.Use(tenantMiddleware)
 		authHandler.RegisterAuthenticated(r)
@@ -273,19 +331,14 @@ func run() error {
 		convEvents := eventbuf.New(eventqueue.NewSink(eventqueue.NewPostgresQueue(db)), logger, eventbuf.Config{})
 		defer convEvents.Close()
 
+		// Reuses rdb (connected once, near the top of run(), so
+		// apps/internal/ratelimit can also use it) rather than opening a
+		// second Redis connection.
 		var convStore conversion.Store = conversion.NewPostgresStore(db)
-		if cfg.RedisURL != "" {
-			redisCtx, cancelRedis := context.WithTimeout(ctx, 5*time.Second)
-			rdb, err := rediscache.NewClient(redisCtx, cfg.RedisURL)
-			cancelRedis()
-			if err != nil {
-				logger.Warn("redis unavailable at startup, conversion progression checks will read Postgres directly", "error", err)
-			} else {
-				defer rdb.Close()
-				convStore = conversion.NewRedisStore(convStore, rdb, logger)
-			}
+		if rdb != nil {
+			convStore = conversion.NewRedisStore(convStore, rdb, logger)
 		} else {
-			logger.Warn("REDIS_URL not set, conversion progression checks will read Postgres directly")
+			logger.Warn("redis unavailable, conversion progression checks will read Postgres directly")
 		}
 
 		attributionSvc := attribution.NewService(chstore.NewClickResolver(chConn))

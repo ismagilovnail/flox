@@ -176,11 +176,11 @@ var _ NetworkLookup = (*PostgresNetworkLookup)(nil)
 func (l *PostgresNetworkLookup) ByID(ctx context.Context, networkID string) (Network, error) {
 	var n Network
 	err := l.db.QueryRow(ctx, `
-		SELECT id, organization_id, accept_duplicates, status, postback_url
+		SELECT id, organization_id, accept_duplicates, status, postback_url, postback_secret_hash
 		FROM networks
 		WHERE id = $1`,
 		networkID,
-	).Scan(&n.ID, &n.OrganizationID, &n.AcceptDuplicates, &n.Status, &n.PostbackURL)
+	).Scan(&n.ID, &n.OrganizationID, &n.AcceptDuplicates, &n.Status, &n.PostbackURL, &n.PostbackSecretHash)
 
 	if errors.Is(err, pgx.ErrNoRows) {
 		return Network{}, ErrNetworkNotFound

@@ -5,6 +5,82 @@ per-phase, matching `CLAUDE.md`'s phase protocol. The one exception is
 [Between phases], below: spec amendments and the code changes that follow from
 them land between phases and would otherwise be invisible here.
 
+## [Security Hardening] — Phase 30: postback secrets, CSRF, rate limiting, SSRF
+
+### Scope
+
+Four independent §54 defenses closing gaps that had zero
+authentication/throttling/host-validation before this phase: incoming
+postback authentication, CSRF (cross-site fetch with credentials), abuse
+rate limiting, and SSRF on outbound postback delivery. See
+`docs/security.md` for full detail on each.
+
+### Changed
+
+- `networks.postback_secret_hash` (migration `00021`, hashed at rest,
+  one-way, `DEFAULT ''` sentinel): `apps/internal/network` gains
+  `crypto.go` (secret generation/hashing), `Service.RegeneratePostbackSecret`,
+  and a `POST /networks/{id}/regenerate-postback-secret` route. The raw
+  secret is returned exactly once — in `POST /networks`'s response
+  (`CreateResult.PostbackSecret`) and in the regenerate response — never
+  from any other `Network` read.
+- `apps/tracker/postback.go`: `?secret=...` is now required and checked
+  with `subtle.ConstantTimeCompare` against the stored hash before any
+  conversion is recorded.
+- New `apps/internal/tenant.RequireSameOrigin`: rejects a mutating
+  (`POST`/`PATCH`/`PUT`/`DELETE`) request whose `Origin` header is present
+  and doesn't match `APP_URL`; a request with no `Origin` (non-browser
+  client) is allowed through. Mounted before session resolution in
+  `apps/api/main.go`, including standalone on the pre-session
+  signup/login/accept-invite routes.
+- New `apps/internal/ratelimit` package: a fixed-window Redis counter,
+  fails open on a Redis error. A general 300 req/min-per-IP ceiling across
+  all of `apps/api` (`apps/internal/httpserver`, exempting
+  `/health`/`/ready`/`/metrics`), and a stricter 20 req/15min-per-IP
+  ceiling on `/auth/login`/`/auth/signup`. Deliberately not applied to
+  `apps/tracker`'s redirect hot path (§41 latency budget).
+- New `apps/internal/urlsafety` package: `ValidateURL` (save-time
+  scheme/literal-IP check, wired into `network.Service` create/update) and
+  `SafeDialContext` (the authoritative defense — resolves and validates the
+  IP at connection time, closing the DNS-rebinding gap a save-time-only
+  check can't catch), wired as `apps/worker`'s postback-delivery
+  `http.Client`'s `Transport.DialContext`.
+- `apps/web`: a `PostbackSecretDialog` (reveal-once, copy button) shown
+  after network creation and after "Regenerate incoming secret" in the row
+  actions menu.
+
+### Fixed
+
+- `apps/internal/httpserver.New` originally called `r.Use(limiter...)`
+  *after* `/health`/`/ready`/`/metrics` were already registered on the same
+  chi mux — chi panics on that ordering ("all middlewares must be defined
+  before routes"), so `apps/api` failed to start at all. Fixed by moving
+  the `Use` call before route registration and adding an `exemptPaths`
+  wrapper so those three routes still bypass the general rate limit
+  without depending on registration order. Caught during this phase's
+  manual verification pass (the binary panicked on first startup attempt).
+
+### Verified
+
+`gofmt`/`go build ./...`/`go vet ./...`/`go test -count=1 ./...` green
+repo-wide, including four new test files (`internal/ratelimit`,
+`internal/urlsafety`, `internal/tenant/tenant_test.go`,
+`tracker/postback_secret_test.go`) plus new cases in
+`internal/network/network_test.go`. `tsc --noEmit`, `eslint`, and
+`next build` all clean on `apps/web`.
+
+Full manual pass against real running binaries (after fixing the startup
+panic above): signed up a real user, created a real network, confirmed the
+returned `postbackSecret` gates `apps/tracker`'s postback endpoint (missing
+secret → 401, wrong secret → 401, correct secret → passes through to real
+business logic), confirmed `RegeneratePostbackSecret` immediately
+invalidates the old secret and the new one works. Confirmed
+`RequireSameOrigin`: cross-origin `Origin` → 403, matching-origin and
+no-`Origin` → pass. Confirmed `urlsafety.ValidateURL` rejects both a
+cloud-metadata URL (`169.254.169.254`) and a loopback URL at network-create
+time. Confirmed the auth rate limit trips (`429`) after the configured
+threshold. All fixtures (user, org, network, sessions) deleted afterward.
+
 ## [Observability] — Phase 29: Prometheus metrics, tracker request IDs, traced postback delivery
 
 ### Scope

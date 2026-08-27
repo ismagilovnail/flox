@@ -31,6 +31,7 @@ func (h *Handler) Register(r chi.Router) {
 	r.Post("/{id}/duplicate", h.duplicate)
 	r.Post("/{id}/pause", h.pause)
 	r.Post("/{id}/activate", h.activate)
+	r.Post("/{id}/regenerate-postback-secret", h.regeneratePostbackSecret)
 }
 
 func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
@@ -68,7 +69,7 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	n, err := h.svc.Create(r.Context(), orgID, CreateInput{
+	result, err := h.svc.Create(r.Context(), orgID, CreateInput{
 		Name:             req.Name,
 		PostbackURL:      req.PostbackURL,
 		AcceptDuplicates: req.AcceptDuplicates,
@@ -77,7 +78,16 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 		apierror.Write(w, h.logger, err)
 		return
 	}
-	writeJSON(w, http.StatusCreated, n)
+	writeJSON(w, http.StatusCreated, createResponse{Network: result.Network, PostbackSecret: result.PostbackSecret})
+}
+
+// createResponse embeds Network's own fields alongside postbackSecret —
+// the ONE response that ever carries the plaintext secret (§54/Phase 30:
+// CreateResult's own doc comment). regeneratePostbackSecret below returns
+// just the secret string, deliberately not re-echoing the whole network.
+type createResponse struct {
+	Network
+	PostbackSecret string `json:"postbackSecret"`
 }
 
 type updateRequest struct {
@@ -136,6 +146,18 @@ func (h *Handler) pause(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, n)
+}
+
+func (h *Handler) regeneratePostbackSecret(w http.ResponseWriter, r *http.Request) {
+	orgID, _ := tenant.OrgID(r.Context())
+	secret, err := h.svc.RegeneratePostbackSecret(r.Context(), orgID, chi.URLParam(r, "id"))
+	if err != nil {
+		apierror.Write(w, h.logger, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, struct {
+		PostbackSecret string `json:"postbackSecret"`
+	}{secret})
 }
 
 func (h *Handler) activate(w http.ResponseWriter, r *http.Request) {

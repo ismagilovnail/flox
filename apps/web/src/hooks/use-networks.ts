@@ -10,6 +10,7 @@ import {
   getNetwork,
   listNetworks,
   pauseNetwork,
+  regeneratePostbackSecret,
   updateNetwork,
   type CreateNetworkInput,
   type UpdateNetworkInput,
@@ -72,6 +73,15 @@ export function useActivateNetwork() {
       qc.invalidateQueries({ queryKey: networksKey });
       qc.invalidateQueries({ queryKey: networkKey(id) });
     },
+  });
+}
+
+export function useRegeneratePostbackSecret() {
+  return useMutation({
+    mutationFn: (id: string) => regeneratePostbackSecret(id),
+    // Nothing cached needs invalidating — Network's own fields never
+    // change, and the secret itself is never part of any cached query
+    // (it only ever appears in this mutation's own response).
   });
 }
 

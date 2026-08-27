@@ -47,6 +47,13 @@ func Forbidden(message string) *Error {
 	return &Error{Status: http.StatusForbidden, Code: "forbidden", Message: message}
 }
 
+// TooManyRequests means apps/internal/ratelimit's own Redis-backed
+// counter rejected the request (§54/Phase 30) — never returned for any
+// other reason.
+func TooManyRequests(message string) *Error {
+	return &Error{Status: http.StatusTooManyRequests, Code: "rate_limited", Message: message}
+}
+
 // Write renders err as this package's JSON error envelope. Any error not
 // constructed via this package (a repository returning a raw pgx error, a
 // bug) is logged with detail server-side and rendered to the client as an

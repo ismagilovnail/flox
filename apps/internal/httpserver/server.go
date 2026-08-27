@@ -1,10 +1,10 @@
 // Package httpserver builds apps/api's chi router: request ID, structured
-// request logging, panic recovery, OTel instrumentation, and the health/
-// readiness/metrics endpoints (§33, §53). Route registration for real
-// resources (campaigns, offers, ...) lives in each domain package
-// (internal/campaign/handler.go, ...) and is mounted onto Server.Mux()
-// from cmd/api/main.go — this file only owns cross-cutting middleware and
-// the endpoints every phase needs.
+// request logging, panic recovery, OTel instrumentation, a general rate
+// limit, and the health/readiness/metrics endpoints (§33, §53, §54).
+// Route registration for real resources (campaigns, offers, ...) lives in
+// each domain package (internal/campaign/handler.go, ...) and is mounted
+// onto Server.Mux() from cmd/api/main.go — this file only owns cross-
+// cutting middleware and the endpoints every phase needs.
 package httpserver
 
 import (
@@ -19,6 +19,19 @@ import (
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 
 	"github.com/ismagilovnail/flox/apps/internal/metrics"
+	"github.com/ismagilovnail/flox/apps/internal/ratelimit"
+)
+
+// generalRateLimit/generalRateLimitWindow: a broad per-IP ceiling across
+// every domain route (§54/Phase 30) — generous enough not to bother a
+// real dashboard session (TanStack Query re-fetching several resources,
+// ⌘K searches, ...) while still bounding a scripted abuse attempt. Auth
+// endpoints layer a much stricter, separate limit on top of this one
+// (apps/api/main.go) — this general limit alone isn't tuned for brute-
+// force protection.
+const (
+	generalRateLimit       = 300
+	generalRateLimitWindow = time.Minute
 )
 
 // Pinger is satisfied by *pgxpool.Pool — kept as a narrow interface here so
@@ -41,7 +54,7 @@ type Server struct {
 // when the browser is told the response allows credentialed requests —
 // paired with a single explicit AllowedOrigins entry, never "*", which
 // the fetch spec forbids combining with credentials anyway.
-func New(logger *slog.Logger, serviceName string, db Pinger, ch Pinger, appURL string) *Server {
+func New(logger *slog.Logger, serviceName string, db Pinger, ch Pinger, appURL string, limiter *ratelimit.Limiter) *Server {
 	r := chi.NewRouter()
 
 	r.Use(middleware.RequestID)
@@ -57,6 +70,14 @@ func New(logger *slog.Logger, serviceName string, db Pinger, ch Pinger, appURL s
 		AllowCredentials: true,
 		MaxAge:           300,
 	}))
+
+	// §54/Phase 30. chi panics if Use is called after any route is
+	// registered on this mux ("all middlewares must be defined before
+	// routes"), so this must come before health/ready/metrics below —
+	// exemptPaths is what actually keeps an orchestrator's liveness probe
+	// or a Prometheus scrape from ever tripping a rate limit meant for
+	// abuse on domain routes, not registration order.
+	r.Use(exemptPaths(limiter.Middleware("api", ratelimit.ClientIP, generalRateLimit, generalRateLimitWindow), "/health", "/ready", "/metrics"))
 
 	r.Get("/health", healthHandler)
 	r.Get("/ready", readyHandler(db, ch))
@@ -79,6 +100,26 @@ func (s *Server) Mux() chi.Router {
 
 func (s *Server) Handler() http.Handler {
 	return s.router
+}
+
+// exemptPaths wraps mw so an exact-match path bypasses it entirely — used
+// to keep infra health checks and metrics scrapes off the general rate
+// limit without depending on chi route-registration order.
+func exemptPaths(mw func(http.Handler) http.Handler, paths ...string) func(http.Handler) http.Handler {
+	exempt := make(map[string]bool, len(paths))
+	for _, p := range paths {
+		exempt[p] = true
+	}
+	return func(next http.Handler) http.Handler {
+		wrapped := mw(next)
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if exempt[r.URL.Path] {
+				next.ServeHTTP(w, r)
+				return
+			}
+			wrapped.ServeHTTP(w, r)
+		})
+	}
 }
 
 // responseRequestID echoes chi's generated request ID back as a response

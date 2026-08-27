@@ -23,6 +23,15 @@ import (
 	"github.com/ismagilovnail/flox/apps/internal/apierror"
 )
 
+// mutatingMethods is what RequireSameOrigin gates — GET/HEAD/OPTIONS never
+// change state, so there is nothing for CSRF to forge.
+var mutatingMethods = map[string]bool{
+	http.MethodPost:   true,
+	http.MethodPatch:  true,
+	http.MethodPut:    true,
+	http.MethodDelete: true,
+}
+
 // CookieName is the session cookie apps/internal/auth sets on
 // signup/login/accept-invite and clears on logout.
 const CookieName = "flox_session"
@@ -61,6 +70,40 @@ func NewMiddleware(resolver SessionResolver, logger *slog.Logger) func(http.Hand
 			ctx := context.WithValue(r.Context(), contextKey{}, orgID)
 			ctx = context.WithValue(ctx, userContextKey{}, userID)
 			next.ServeHTTP(w, r.WithContext(ctx))
+		})
+	}
+}
+
+// RequireSameOrigin is §54's CSRF defense: SameSite=Lax on the session
+// cookie (apps/internal/auth's own doc comment on setSessionCookie)
+// already blocks the classic cross-site-form-POST CSRF, but not a
+// cross-site fetch/XHR issued with credentials:"include" — Lax still
+// attaches the cookie to those in some browsers/configurations. This
+// closes that gap with the modern, simpler alternative to a double-
+// submit CSRF token: reject any mutating (POST/PATCH/PUT/DELETE) request
+// whose Origin header is PRESENT and does not match appURL exactly.
+//
+// Deliberately does NOT reject a request with no Origin header at all —
+// browsers always send Origin on a cross-origin fetch/XHR and on same-
+// origin state-changing requests per the Fetch spec, so an absent Origin
+// means a non-browser client (curl, an operator's own script, a health
+// check) rather than a browser silently omitting it; rejecting those
+// too would break legitimate API access for no CSRF benefit (a non-
+// browser client was never subject to SameSite/CORS in the first place).
+//
+// Mount before (outside) the session-resolving middleware — rejecting a
+// forged cross-origin request is cheaper and safer to do before ever
+// looking up whose session it claims to be.
+func RequireSameOrigin(appURL string, logger *slog.Logger) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if mutatingMethods[r.Method] {
+				if origin := r.Header.Get("Origin"); origin != "" && origin != appURL {
+					apierror.Write(w, logger, apierror.Forbidden("cross-origin request rejected"))
+					return
+				}
+			}
+			next.ServeHTTP(w, r)
 		})
 	}
 }

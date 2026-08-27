@@ -49,3 +49,13 @@ type UpdateInput struct {
 	AcceptDuplicates *bool
 	Status           *Status
 }
+
+// CreateResult is Service.Create's return shape — PostbackSecret appears
+// here, once, and nowhere else: Network itself (returned by every other
+// read — List/Get/Update/Duplicate) never carries it, matching the one-
+// way-hash-at-rest precedent this shares with apps/internal/auth's
+// session/invite tokens (§54/Phase 30).
+type CreateResult struct {
+	Network        Network
+	PostbackSecret string
+}

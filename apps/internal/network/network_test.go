@@ -18,12 +18,16 @@ func TestCreateGetUpdateDelete(t *testing.T) {
 
 	svc := network.NewService(network.NewRepository(pool))
 
-	created, err := svc.Create(ctx, orgID, network.CreateInput{
+	result, err := svc.Create(ctx, orgID, network.CreateInput{
 		Name:        "AffTrust CPA",
 		PostbackURL: "https://afftrust.example/postback?click_id={click_id}",
 	})
 	if err != nil {
 		t.Fatalf("Create: %v", err)
+	}
+	created := result.Network
+	if result.PostbackSecret == "" {
+		t.Fatal("Create returned an empty PostbackSecret")
 	}
 	if created.Status != network.StatusActive {
 		t.Fatalf("Status = %q, want active (the DB default)", created.Status)
@@ -72,10 +76,11 @@ func TestPauseActivateTransitions(t *testing.T) {
 	orgID := seedOrg(t, ctx, pool)
 
 	svc := network.NewService(network.NewRepository(pool))
-	created, err := svc.Create(ctx, orgID, network.CreateInput{Name: "Toggle Network", PostbackURL: "https://example.com/pb"})
+	createResult, err := svc.Create(ctx, orgID, network.CreateInput{Name: "Toggle Network", PostbackURL: "https://example.com/pb"})
 	if err != nil {
 		t.Fatalf("Create: %v", err)
 	}
+	created := createResult.Network
 
 	paused, err := svc.Pause(ctx, orgID, created.ID)
 	if err != nil || paused.Status != network.StatusPaused {
@@ -108,10 +113,11 @@ func TestDuplicateKeepsStatus(t *testing.T) {
 	orgID := seedOrg(t, ctx, pool)
 
 	svc := network.NewService(network.NewRepository(pool))
-	created, err := svc.Create(ctx, orgID, network.CreateInput{Name: "Original", PostbackURL: "https://example.com/pb"})
+	createResult, err := svc.Create(ctx, orgID, network.CreateInput{Name: "Original", PostbackURL: "https://example.com/pb"})
 	if err != nil {
 		t.Fatalf("Create: %v", err)
 	}
+	created := createResult.Network
 	if _, err := svc.Pause(ctx, orgID, created.ID); err != nil {
 		t.Fatalf("Pause: %v", err)
 	}
@@ -141,10 +147,11 @@ func TestDeleteCascadesToOffers(t *testing.T) {
 	orgID := seedOrg(t, ctx, pool)
 
 	svc := network.NewService(network.NewRepository(pool))
-	created, err := svc.Create(ctx, orgID, network.CreateInput{Name: "Cascading Network", PostbackURL: "https://example.com/pb"})
+	createResult, err := svc.Create(ctx, orgID, network.CreateInput{Name: "Cascading Network", PostbackURL: "https://example.com/pb"})
 	if err != nil {
 		t.Fatalf("Create: %v", err)
 	}
+	created := createResult.Network
 
 	offerID := idgen.New()
 	_, err = pool.Exec(ctx,
@@ -175,10 +182,11 @@ func TestCrossTenantIsolation(t *testing.T) {
 	orgB := seedOrg(t, ctx, pool)
 
 	svc := network.NewService(network.NewRepository(pool))
-	created, err := svc.Create(ctx, orgA, network.CreateInput{Name: "Org A Network", PostbackURL: "https://example.com/pb"})
+	createResult, err := svc.Create(ctx, orgA, network.CreateInput{Name: "Org A Network", PostbackURL: "https://example.com/pb"})
 	if err != nil {
 		t.Fatalf("creating for org A: %v", err)
 	}
+	created := createResult.Network
 
 	t.Run("get", func(t *testing.T) {
 		if _, err := svc.Get(ctx, orgB, created.ID); err == nil {
@@ -205,6 +213,70 @@ func TestCrossTenantIsolation(t *testing.T) {
 			t.Fatalf("org B saw %d of org A's networks, want 0", len(networks))
 		}
 	})
+}
+
+func TestPostbackSecretShownOnceAndRegenerateInvalidatesTheOld(t *testing.T) {
+	pool := mustPool(t)
+	ctx := context.Background()
+	orgID := seedOrg(t, ctx, pool)
+	svc := network.NewService(network.NewRepository(pool))
+
+	result, err := svc.Create(ctx, orgID, network.CreateInput{Name: "Secret Network", PostbackURL: "https://example.com/pb"})
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	if result.PostbackSecret == "" {
+		t.Fatal("Create returned an empty PostbackSecret")
+	}
+
+	firstHash := postbackSecretHash(t, ctx, pool, result.Network.ID)
+	if firstHash == "" {
+		t.Fatal("postback_secret_hash was never persisted")
+	}
+
+	newSecret, err := svc.RegeneratePostbackSecret(ctx, orgID, result.Network.ID)
+	if err != nil {
+		t.Fatalf("RegeneratePostbackSecret: %v", err)
+	}
+	if newSecret == "" {
+		t.Fatal("RegeneratePostbackSecret returned an empty secret")
+	}
+	if newSecret == result.PostbackSecret {
+		t.Fatal("RegeneratePostbackSecret returned the same secret as Create")
+	}
+
+	secondHash := postbackSecretHash(t, ctx, pool, result.Network.ID)
+	if secondHash == firstHash {
+		t.Fatal("postback_secret_hash did not change after RegeneratePostbackSecret — the old secret would still work")
+	}
+}
+
+func TestTwoNetworksGetDifferentPostbackSecrets(t *testing.T) {
+	pool := mustPool(t)
+	ctx := context.Background()
+	orgID := seedOrg(t, ctx, pool)
+	svc := network.NewService(network.NewRepository(pool))
+
+	a, err := svc.Create(ctx, orgID, network.CreateInput{Name: "Network A", PostbackURL: "https://example.com/pb"})
+	if err != nil {
+		t.Fatalf("Create A: %v", err)
+	}
+	b, err := svc.Create(ctx, orgID, network.CreateInput{Name: "Network B", PostbackURL: "https://example.com/pb"})
+	if err != nil {
+		t.Fatalf("Create B: %v", err)
+	}
+	if a.PostbackSecret == b.PostbackSecret {
+		t.Fatal("two different networks got the same postback secret")
+	}
+}
+
+func postbackSecretHash(t *testing.T, ctx context.Context, pool *pgxpool.Pool, networkID string) string {
+	t.Helper()
+	var hash string
+	if err := pool.QueryRow(ctx, `SELECT postback_secret_hash FROM networks WHERE id = $1`, networkID).Scan(&hash); err != nil {
+		t.Fatalf("reading postback_secret_hash: %v", err)
+	}
+	return hash
 }
 
 func mustPool(t *testing.T) *pgxpool.Pool {

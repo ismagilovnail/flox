@@ -48,9 +48,18 @@
     "pause": "Pause",
     "resume": "Resume",
     "duplicate": "Duplicate",
+    "regenerateSecret": "Regenerate incoming secret",
     "archive": "Archive",
     "archiveConfirmTitle": "Archive \"{{name}}\"?",
     "archiveConfirmDescription": "Archived networks are hidden from offer/flow pickers going forward. Existing flows that already reference this network keep working. This can be reversed later."
+  },
+  "postbackSecret": {
+    "title": "Incoming postback secret",
+    "description": "Append ?secret=... with this value to the incoming postback URL you give {{networkId}} — FLOX rejects any postback missing it or with the wrong one. Shown once; if you lose it, regenerate a new one from the row menu.",
+    "copyAria": "Copy postback secret",
+    "copied": "Secret copied",
+    "done": "Done",
+    "regenerateError": "Couldn't regenerate the postback secret"
   },
   "toast": {
     "updated": "Network updated",

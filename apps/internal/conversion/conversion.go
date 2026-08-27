@@ -109,6 +109,13 @@ type Network struct {
 	// network has no outgoing integration configured, and the handler must
 	// not populate Postback.PostbackURL in that case.
 	PostbackURL string
+	// PostbackSecretHash authenticates an INCOMING postback (the opposite
+	// direction from PostbackURL) — §54/Phase 30: apps/tracker's
+	// PostbackHandler hashes the request's own secret param and compares
+	// it against this before ever calling Service.Record. Never exposed
+	// outside this package (Network carries no json tags at all — it's
+	// never serialized to a client response, only consumed internally).
+	PostbackSecretHash string
 }
 
 var ErrNetworkNotFound = errors.New("conversion: network not found")

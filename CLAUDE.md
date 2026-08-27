@@ -19,117 +19,106 @@ referenced below as §N).
 ## CURRENT STATE — UPDATE THIS EVERY PHASE
 
 ```
-CURRENT PHASE : PHASE 29 — OBSERVABILITY
-STATUS        : done — structured logging and OpenTelemetry tracing
-                already existed (Phase 16+); this phase's real gap was
-                Prometheus metrics, closed via a new apps/internal/metrics
-                package (prometheus/client_golang, confirmed via
-                AskUserQuestion over the OTel metrics SDK — simpler, no
-                collector hop needed just to export as Prometheus
-                anyway). All nine §53 tracked metrics now exist:
-                tracking_requests/tracking_latency (apps/tracker's
-                track() handler, outcome-labeled: redirected/blocked/
-                not_found/error), routing_latency (internal/routing.
-                Engine.Resolve, timed wherever it's called — hot path AND
-                /routing/simulate, each in their own process), event_
-                processing_latency (eventqueue.Flusher's ClickHouse
-                InsertBatch call), event_queue_depth (new eventqueue.
-                PollDepth goroutine in apps/worker, 15s ticker, a new
-                PostgresQueue.Depth() counting 'queued'+'processing' so
-                it doesn't dip to zero mid-flush), event_loss/postback_
-                success/postback_failure/analytics_latency — see below
-                and docs/observability.md for exactly how each maps to
-                real metric names.
-                event_loss is DELIBERATELY TWO COUNTERS, NOT ONE:
-                enqueued (apps/tracker, from eventbuf.Writer.Stats() —
-                exposed via new metrics.RegisterEventBufStats as
-                CounterFuncs reading eventbuf's OWN existing atomics,
-                zero changes to eventbuf's internals) vs persisted
-                (apps/worker, from eventqueue.Flusher) — the two sides
-                live in DIFFERENT BINARIES, so a dashboard derives loss
-                via PromQL rate-subtraction; pre-computing and storing a
-                single "loss" value would need one process to know both
-                sides' counts, which is backwards from how Prometheus
-                counters are supposed to work. Confirmed by reading
-                eventbuf.Writer.write() directly: a failed sink write is
-                never retried, so dropped/failed really are permanent
-                loss, while eventqueue.Flusher's failed ClickHouse insert
-                requeues forever (no dead-letter) — NOT loss, tracked
-                separately as events_requeued_total.
-                postback_deliveries_total{outcome} has THREE outcome
-                values (success/retrying/dead), not §53's literal two —
-                "retrying" (will be attempted again) vs "dead" (exhausted
-                MaxAttempts, genuinely lost) already exists as postback.
-                DeliveryStatus and collapsing it at the metric layer
-                would throw away information a dashboard can always
-                re-derive (sum outcome!="success") but never recover.
-                apps/tracker gained middleware.RequestID + an X-Request-Id
-                echo (NOT the full per-request logging middleware apps/
-                api uses — a context value + one header write, negligible
-                next to a synchronous slog call per click, which Phase
-                21's own comment on this router already ruled out as
-                "duplicate work" on the §41 hot path; this phase respects
-                that same p50<20ms/p95<50ms budget by construction, every
-                new hot-path metric call is an in-memory atomic, nothing
-                that blocks). apps/worker's postback delivery http.Client
-                now wraps otelhttp.NewTransport — each delivery attempt
-                becomes its own trace (root span, no inbound request to
-                inherit context from). Deeper custom spans elsewhere
-                (routing decisions, conversion recording) are an
-                explicit, separate follow-up, not done here — apps/api
-                already had otelhttp.NewHandler covering every inbound
-                request before this phase.
-                /metrics added to all three binaries (apps/worker's bare
-                http.HandlerFunc became a small http.ServeMux since a
-                HandlerFunc alone serves only one path).
-                New prometheus service in infra/docker-compose.dev.yml +
-                infra/prometheus.yml (confirmed via AskUserQuestion, for
-                real-scrape verification over curl-only) — scrapes all
-                three binaries via host.docker.internal (they run on the
-                HOST via `go run`, matching this whole repo's dev
-                workflow; extra_hosts:host-gateway makes that hostname
-                resolve on Linux Docker Engine).
-                Verified: gofmt/go build/vet/test ./... green repo-wide,
-                incl. 2 new test files (internal/metrics: /metrics serves
-                all 9 metric families, RegisterEventBufStats against a
-                real eventbuf.Writer; internal/eventqueue: new Depth()
-                test covering enqueue/claim/delete transitions). Full
-                manual pass: started all three binaries + a REAL
-                Prometheus container, confirmed all 3 scrape targets
-                "up" via /api/v1/targets (the real integration risk in
-                this phase, worked first try). Seeded one real org/
-                campaign/domain/tracking-link fixture, hit it 3x + one
-                unknown slug: tracking_requests_total{outcome=
-                "redirected"}=3, {outcome="not_found"}=1 confirmed via
-                Prometheus's OWN QUERY API (not just curl), each real
-                redirect carrying a genuine X-Request-Id header. Same 3
-                clicks traced end to end: tracker's events_enqueued_total
-                =3 -> worker's events_persisted_total=3 (as 3 separately
-                job-labeled series in ONE Prometheus query, proving the
-                two-counters-two-binaries design actually works, not
-                just compiles), event_queue_depth back to 0 once drained.
-                Inserted one real postback_deliveries row pointing at an
-                intentionally unreachable URL — worker's Deliverer
-                attempted it for real (connection refused), postback_
-                deliveries_total{outcome="retrying"}=1 matched the row's
-                own delivery_status in Postgres exactly. Signed up a real
-                user (Phase 28's real auth) and called a real analytics
-                endpoint: analytics_query_latency_seconds_count{endpoint=
-                "campaign_daily"}=1. Zero unexpected errors in any
-                binary's logs throughout. All fixtures deleted afterward,
-                confirmed zero count on every LIKE 'Metrics%' pattern.
-LAST COMMIT   : feat(observability): Prometheus metrics, tracker request
-                IDs, traced postback delivery (Phase 29)
+CURRENT PHASE : PHASE 30 — SECURITY HARDENING
+STATUS        : done — §54's four defenses, each closing a gap that had
+                zero authentication/throttling/host-validation before
+                this phase. Full detail in docs/security.md; summary:
+                (1) Incoming postback auth: networks.postback_secret_hash
+                (migration 00021, hashed at rest, DEFAULT '' sentinel
+                that can never match any hashed input). apps/tracker's
+                POST /postback/{networkId} used to trust the path ULID
+                alone; now requires ?secret=... checked with
+                subtle.ConstantTimeCompare against the stored hash
+                before recording any conversion. Raw secret is returned
+                exactly once — network.Service.Create's CreateResult and
+                the new RegeneratePostbackSecret response — never from
+                List/Get/Update/Duplicate. Duplicate gets its own fresh
+                secret, never the source's. apps/web: PostbackSecretDialog
+                (reveal-once, copy button) after create and after the new
+                "Regenerate incoming secret" row action.
+                (2) CSRF: new tenant.RequireSameOrigin closes the gap
+                SameSite=Lax alone doesn't (a cross-site fetch/XHR with
+                credentials:"include" can still attach a Lax cookie in
+                some browsers) — rejects a mutating request whose Origin
+                header is PRESENT and != APP_URL; an ABSENT Origin is
+                allowed (non-browser client, not a browser silently
+                omitting it). Mounted before session resolution in
+                apps/api/main.go, standalone on pre-session signup/
+                login/accept-invite too (blocks login CSRF).
+                (3) Rate limiting: new apps/internal/ratelimit, a fixed-
+                window Redis counter, FAILS OPEN on a Redis error (same
+                stance as every other Redis-optional path in this
+                codebase — a limiter that failed closed would turn a
+                Redis outage into a full API outage). General 300/min-
+                per-IP across all of apps/api (httpserver, exempting
+                /health//ready//metrics via an exemptPaths wrapper — see
+                Fixed below), a stricter 20/15min-per-IP on
+                /auth/login+/auth/signup. Deliberately NOT on apps/
+                tracker's redirect hot path (§41 budget) — a synchronous
+                Redis round trip on every click would blow it outright.
+                (4) SSRF: new apps/internal/urlsafety. ValidateURL is
+                the cheap save-time check (network.Service create/
+                update: scheme + literal-IP-range rejection).
+                SafeDialContext is the real defense — set as apps/
+                worker's postback-delivery http.Client's Transport.
+                DialContext, it resolves the host and validates the IP
+                AT CONNECTION TIME, then dials that exact validated IP
+                (never the hostname again), closing the DNS-rebinding
+                gap a save-time-only check can't catch (a hostname
+                resolving to a public IP at save time can be repointed
+                at a private/metadata IP by delivery time). Forbidden:
+                loopback/private/link-local(+169.254.169.254 metadata)/
+                unspecified.
+                FIXED DURING THIS PHASE'S OWN VALIDATION: apps/internal/
+                httpserver.New originally called r.Use(limiter...) AFTER
+                /health//ready//metrics were already registered on the
+                same chi mux — chi panics on that ordering ("all
+                middlewares must be defined before routes"), so apps/api
+                failed to start at all. The original comment's reasoning
+                ("Use only affects routes added after it in the same
+                router scope") is true for an inline Group/With sub-
+                router but NOT for the root mux itself. Caught because
+                this phase's manual pass actually tried to start the
+                real binary rather than stopping at go build (build/vet
+                don't catch a startup-time panic). Fixed: Use moved
+                before route registration; a new exemptPaths(mw,
+                paths...) wrapper keeps the three infra routes bypassing
+                the limiter without depending on registration order.
+                Verified: gofmt/go build/go vet/go test -count=1 ./...
+                green repo-wide (forced, not cached), incl. 4 new test
+                files (internal/ratelimit, internal/urlsafety,
+                internal/tenant/tenant_test.go, tracker/
+                postback_secret_test.go) + new cases in internal/
+                network/network_test.go. tsc --noEmit/eslint/next build
+                clean on apps/web. Full manual pass against the REAL
+                running api+tracker binaries (after fixing the startup
+                panic above, migration 00021 already applied to the dev
+                DB): signed up a real user, created a real network,
+                confirmed the returned postbackSecret gates apps/
+                tracker's postback endpoint end to end (missing secret
+                -> 401, wrong secret -> 401, correct secret -> passes
+                auth and reaches real business logic), confirmed
+                RegeneratePostbackSecret invalidates the old secret
+                immediately and the new one works. Confirmed
+                RequireSameOrigin: cross-origin Origin -> 403, matching-
+                origin -> 200s/normal errors, no Origin -> also passes
+                (curl, no browser). Confirmed urlsafety.ValidateURL
+                rejects both a cloud-metadata URL (169.254.169.254) and
+                a loopback URL at network-create time (422). Confirmed
+                the /auth/login rate limit actually trips (429) once the
+                20-per-15min threshold is crossed. All fixtures (user,
+                org, network, sessions) deleted afterward, confirmed
+                zero rows remaining.
+LAST COMMIT   : feat(security): postback secrets, CSRF, rate limiting,
+                SSRF protection (Phase 30)
 NEXT          : confirm scope before starting. No open known issues
-                remain for Observability. Known limitations documented in
-                docs/observability.md: no custom tracing spans beyond
-                apps/api's existing inbound-request instrumentation +
-                this phase's new postback-delivery outbound span (an
-                explicit, separate follow-up); apps/tracker still has no
-                per-request logging or inbound otelhttp wrapping (§41
-                latency budget, deliberate, unchanged since Phase 21); no
-                Grafana dashboard (Prometheus's own query UI only, per
-                AskUserQuestion scope) — none requested.
+                remain for Security Hardening. Known limitations
+                documented in docs/security.md: no CAPTCHA/device-
+                fingerprinting on auth endpoints (rate limiting is the
+                only brute-force defense); rate limiting is per-IP only,
+                not distributed-attacker-aware (an infra/WAF concern);
+                no CSP/security-header hardening (out of scope, not
+                requested).
 
 ```
 

@@ -3,7 +3,7 @@
 import * as React from "react";
 import Link from "next/link";
 import { toast } from "sonner";
-import { BarChart3Icon, CopyIcon, MoreHorizontalIcon, PauseIcon, PencilIcon, PlayIcon, Trash2Icon } from "lucide-react";
+import { BarChart3Icon, CopyIcon, KeyRoundIcon, MoreHorizontalIcon, PauseIcon, PencilIcon, PlayIcon, Trash2Icon } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 import { IconButton } from "@/components/ui/icon-button";
@@ -23,8 +23,15 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { useActivateNetwork, useArchiveNetwork, useDuplicateNetwork, usePauseNetwork } from "@/hooks/use-networks";
+import {
+  useActivateNetwork,
+  useArchiveNetwork,
+  useDuplicateNetwork,
+  usePauseNetwork,
+  useRegeneratePostbackSecret,
+} from "@/hooks/use-networks";
 import { viewStatisticsHref } from "@/features/analytics/view-statistics-link";
+import { PostbackSecretDialog } from "@/features/networks/network-list";
 import type { Network } from "@/lib/api/networks";
 
 export function NetworkRowActions({ network, onEdit }: { network: Network; onEdit: () => void }) {
@@ -33,7 +40,16 @@ export function NetworkRowActions({ network, onEdit }: { network: Network; onEdi
   const activate = useActivateNetwork();
   const duplicate = useDuplicateNetwork();
   const archive = useArchiveNetwork();
+  const regenerateSecret = useRegeneratePostbackSecret();
   const [confirmArchive, setConfirmArchive] = React.useState(false);
+  const [revealedSecret, setRevealedSecret] = React.useState<string | null>(null);
+
+  function handleRegenerateSecret() {
+    regenerateSecret.mutate(network.id, {
+      onSuccess: (result) => setRevealedSecret(result.postbackSecret),
+      onError: (err) => toast.error(t("postbackSecret.regenerateError"), { description: err.message }),
+    });
+  }
 
   function togglePause() {
     const action = network.status === "active" ? pause : activate;
@@ -96,6 +112,9 @@ export function NetworkRowActions({ network, onEdit }: { network: Network; onEdi
           <DropdownMenuItem onSelect={handleDuplicate}>
             <CopyIcon className="size-4" /> {t("rowActions.duplicate")}
           </DropdownMenuItem>
+          <DropdownMenuItem onSelect={handleRegenerateSecret}>
+            <KeyRoundIcon className="size-4" /> {t("rowActions.regenerateSecret")}
+          </DropdownMenuItem>
           {network.status !== "archived" && (
             <>
               <DropdownMenuSeparator />
@@ -123,6 +142,10 @@ export function NetworkRowActions({ network, onEdit }: { network: Network; onEdi
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {revealedSecret && (
+        <PostbackSecretDialog networkId={network.id} secret={revealedSecret} onDone={() => setRevealedSecret(null)} />
+      )}
     </>
   );
 }

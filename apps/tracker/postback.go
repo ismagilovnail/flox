@@ -1,6 +1,9 @@
 package main
 
 import (
+	"crypto/sha256"
+	"crypto/subtle"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"log/slog"
@@ -72,6 +75,19 @@ func (h *PostbackHandler) handle(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// §54/Phase 30: {networkId} alone used to be the only check — any
+	// client that observed or guessed it could POST arbitrary conversion
+	// data as that network. secret is the value embedded in the incoming
+	// postback URL FLOX hands the network operator (migration 00021,
+	// network.Service.Create/RegeneratePostbackSecret); an empty stored
+	// hash (a network created before this existed, or one that somehow
+	// still has the '' sentinel) can never match any hashed input, so it
+	// safely rejects every postback rather than needing a separate check.
+	if !validPostbackSecret(r.FormValue("secret"), network.PostbackSecretHash) {
+		writeJSON(w, http.StatusUnauthorized, postbackResponse{Result: "error", Message: "invalid or missing secret"})
+		return
+	}
+
 	p := conversion.Postback{
 		OrganizationID:   network.OrganizationID,
 		NetworkID:        network.ID,
@@ -110,6 +126,20 @@ func (h *PostbackHandler) handle(w http.ResponseWriter, r *http.Request) {
 		Status:  string(result.Status),
 		Message: result.Message,
 	})
+}
+
+// validPostbackSecret hashes the incoming request's secret and compares
+// it against the network's stored hash using a constant-time comparison
+// (subtle.ConstantTimeCompare) — an early-exit == comparison here would
+// leak how many leading bytes matched through response timing, letting an
+// attacker recover the secret byte-by-byte.
+func validPostbackSecret(provided, storedHash string) bool {
+	if provided == "" || storedHash == "" {
+		return false
+	}
+	sum := sha256.Sum256([]byte(provided))
+	providedHash := hex.EncodeToString(sum[:])
+	return subtle.ConstantTimeCompare([]byte(providedHash), []byte(storedHash)) == 1
 }
 
 func writeJSON(w http.ResponseWriter, status int, v any) {

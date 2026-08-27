@@ -35,8 +35,17 @@ export function getNetwork(id: string): Promise<Network> {
   return apiFetch(`/networks/${id}`);
 }
 
-export function createNetwork(input: CreateNetworkInput): Promise<Network> {
+/** postbackSecret is the ONE time this ever appears in a response — the
+ * value a network operator pastes into the incoming-postback URL FLOX
+ * gives them (?secret=...). Not re-derivable afterward except by calling
+ * regeneratePostbackSecret, which invalidates the old one (apps/internal/
+ * network's own one-way-hash-at-rest design, §54/Phase 30). */
+export function createNetwork(input: CreateNetworkInput): Promise<Network & { postbackSecret: string }> {
   return apiFetch("/networks", { method: "POST", body: input });
+}
+
+export function regeneratePostbackSecret(id: string): Promise<{ postbackSecret: string }> {
+  return apiFetch(`/networks/${id}/regenerate-postback-secret`, { method: "POST" });
 }
 
 export function updateNetwork(id: string, input: UpdateNetworkInput): Promise<Network> {

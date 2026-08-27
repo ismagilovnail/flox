@@ -3,11 +3,11 @@ package network
 import (
 	"context"
 	"fmt"
-	"net/url"
 	"strings"
 
 	"github.com/ismagilovnail/flox/apps/internal/apierror"
 	"github.com/ismagilovnail/flox/apps/internal/idgen"
+	"github.com/ismagilovnail/flox/apps/internal/urlsafety"
 )
 
 const (
@@ -31,12 +31,34 @@ func (s *Service) Get(ctx context.Context, orgID, id string) (Network, error) {
 	return s.repo.GetByID(ctx, orgID, id)
 }
 
-func (s *Service) Create(ctx context.Context, orgID string, in CreateInput) (Network, error) {
+func (s *Service) Create(ctx context.Context, orgID string, in CreateInput) (CreateResult, error) {
 	in.Name = strings.TrimSpace(in.Name)
 	if fields := validateCreate(in); len(fields) > 0 {
-		return Network{}, apierror.Validation("invalid network", fields)
+		return CreateResult{}, apierror.Validation("invalid network", fields)
 	}
-	return s.repo.Create(ctx, idgen.New(), orgID, in)
+	secret, secretHash, err := newPostbackSecret()
+	if err != nil {
+		return CreateResult{}, err
+	}
+	n, err := s.repo.Create(ctx, idgen.New(), orgID, in, secretHash)
+	if err != nil {
+		return CreateResult{}, err
+	}
+	return CreateResult{Network: n, PostbackSecret: secret}, nil
+}
+
+// RegeneratePostbackSecret issues a fresh secret and invalidates the
+// previous one immediately — for when an operator suspects theirs leaked,
+// or simply lost it (it's shown once and never stored recoverably).
+func (s *Service) RegeneratePostbackSecret(ctx context.Context, orgID, id string) (string, error) {
+	secret, secretHash, err := newPostbackSecret()
+	if err != nil {
+		return "", err
+	}
+	if err := s.repo.RegenerateSecret(ctx, orgID, id, secretHash); err != nil {
+		return "", err
+	}
+	return secret, nil
 }
 
 func (s *Service) Update(ctx context.Context, orgID, id string, in UpdateInput) (Network, error) {
@@ -49,7 +71,7 @@ func (s *Service) Update(ctx context.Context, orgID, id string, in UpdateInput) 
 			fields["name"] = fmt.Sprintf("must be %d-%d characters", nameMinLen, nameMaxLen)
 		}
 	}
-	if in.PostbackURL != nil && !isValidURL(*in.PostbackURL) {
+	if in.PostbackURL != nil && urlsafety.ValidateURL(*in.PostbackURL) != nil {
 		fields["postbackUrl"] = "must be a valid absolute URL"
 	}
 	if in.Status != nil && !in.Status.Valid() {
@@ -68,18 +90,26 @@ func (s *Service) Delete(ctx context.Context, orgID, id string) error {
 
 // Duplicate keeps status as-is, same reasoning as
 // trafficsource.Service.Duplicate: no draft-equivalent status exists to
-// reset to, and the mock store this replaced never reset it either.
+// reset to, and the mock store this replaced never reset it either. Gets
+// its own fresh postback secret — never the source network's — so two
+// networks never end up sharing one credential; the duplicate's secret
+// is not returned here (Network never carries it), matching Update/
+// List/Get: an operator who needs it calls RegeneratePostbackSecret.
 func (s *Service) Duplicate(ctx context.Context, orgID, id string) (Network, error) {
 	source, err := s.repo.GetByID(ctx, orgID, id)
 	if err != nil {
 		return Network{}, err
 	}
 
+	_, secretHash, err := newPostbackSecret()
+	if err != nil {
+		return Network{}, err
+	}
 	created, err := s.repo.Create(ctx, idgen.New(), orgID, CreateInput{
 		Name:             source.Name + " (Copy)",
 		PostbackURL:      source.PostbackURL,
 		AcceptDuplicates: source.AcceptDuplicates,
-	})
+	}, secretHash)
 	if err != nil {
 		return Network{}, err
 	}
@@ -127,13 +157,8 @@ func validateCreate(in CreateInput) map[string]string {
 	if len(in.Name) < nameMinLen || len(in.Name) > nameMaxLen {
 		fields["name"] = fmt.Sprintf("must be %d-%d characters", nameMinLen, nameMaxLen)
 	}
-	if !isValidURL(in.PostbackURL) {
+	if urlsafety.ValidateURL(in.PostbackURL) != nil {
 		fields["postbackUrl"] = "must be a valid absolute URL"
 	}
 	return fields
-}
-
-func isValidURL(raw string) bool {
-	u, err := url.ParseRequestURI(raw)
-	return err == nil && (u.Scheme == "http" || u.Scheme == "https") && u.Host != ""
 }
