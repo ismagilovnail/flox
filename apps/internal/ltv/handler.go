@@ -146,7 +146,14 @@ func (h *Handler) parseParams(w http.ResponseWriter, r *http.Request) (orgID str
 			apierror.Write(w, h.logger, apierror.Validation("invalid to date, want YYYY-MM-DD", nil))
 			return "", "", chstore.LTVFilter{}, false
 		}
-		to = parsed
+		// chstore.LTVFilter's anchor query is a half-open `event_at >= from
+		// AND event_at < to` range (internal/chstore/ltv.go) — a bare
+		// date-only `to` parses as that day's midnight, which would exclude
+		// every anchor event from `to` itself. End-of-day makes a same-day
+		// `to` actually include today, matching internal/conversions'
+		// handler, which applies the identical adjustment for the identical
+		// reason.
+		to = parsed.Add(24*time.Hour - time.Nanosecond)
 	}
 
 	filter = chstore.LTVFilter{

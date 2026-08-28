@@ -19,78 +19,87 @@ referenced below as §N).
 ## CURRENT STATE — UPDATE THIS EVERY PHASE
 
 ```
-CURRENT PHASE : PHASE 31 — PERFORMANCE
-STATUS        : done — §56's brief (benchmark tracking/routing/classifier/
-                postback/analytics, hit tracking p50<20ms/p95<50ms, load-
-                test for zero event loss, optimize only after
-                measurement) is fully satisfied by measurement alone: NO
-                CODE CHANGED THIS PHASE, because nothing needed it. Full
-                numbers, methodology, and caveats in docs/performance.md;
-                summary:
-                Go benchmarks (all against the real local dev Postgres/
-                ClickHouse, none mocked): routing.Resolve 2.5us,
-                Resolve_Sticky 0.27us, classifier.Classify 1.7us — three
-                orders of magnitude under budget, pure in-memory.
-                routingstore.LoadRoutingConfig 0.40ms + ResolveTrackingLink
-                0.086ms are the real cost (5 sequential Postgres queries,
-                no cache in front of routingstore — measurement is *why*
-                one wasn't added: the cost it'd remove is already
-                negligible). apps/tracker's BenchmarkTrack (the whole §41
-                hot path through a real net/http mux, event enqueue
-                discarded not written so it isolates from the worker's
-                independent ClickHouse-write cost): 0.51ms serial, 0.084ms
-                16-way parallel — ~39x headroom under the 20ms p50 target
-                before any concurrency credit at all. postback (1.7ms) and
-                analytics (~2ms, seeded ~6k ClickHouse rows) both
-                benchmarked too though neither carries an explicit SLA
-                (tracker/postback.go's own doc comment: postback is
-                deliberately NOT on the §41 budget).
-                Load test: a real apps/tracker binary (not in-process),
-                hit by vegeta at 300/1000/3000/6000 req/s sustained
-                (6,000-47,997 requests/run) via a new manual seeding tool
-                (apps/cmd/loadtestseed, not wired into any service).
-                p50 stayed 0.64-0.99ms and p95 1.0-1.5ms at every rate
-                tested, including 6000 req/s (300x the first run) with no
-                degradation. Zero event loss confirmed three independent
-                ways after every run: flox_events_enqueued_total ==
-                flox_events_queue_written_total (Prometheus, exact match
-                at all 4 cumulative totals: 12002/27002/57002/104999),
-                flox_events_buffer_dropped_total and
-                _queue_write_failed_total held at 0 throughout (the
-                10,000-deep in-memory buffer never once filled even at
-                6000 req/s), and a direct `SELECT count(*) FROM
-                event_queue` matched 104999 exactly against real Postgres
-                — durable, not just counter-reported.
-                Caveats (full list in docs/performance.md): loopback-only
-                (no real network hop between tracker and its stores),
-                single instance / single-tenant load (no contention from
-                other orgs sharing the pool), every load-test click hit
-                the campaign fallback (seeded stream sets require bot=0
-                and vegeta's UA doesn't clear real geo/ASN — no vendor
-                wired up yet — so the weighted-draw path wasn't under
-                load; BenchmarkResolve's in-memory numbers already show
-                that path costs <3us regardless), ClickHouse benchmarked
-                at ~6k rows (one campaign-month), not verified at 10-100x
-                that volume.
-                Verified: gofmt/go build/go vet/go test -count=1 ./...
-                green repo-wide, incl. 5 new bench_test.go files
-                (internal/routing, internal/classifier,
-                internal/routingstore, apps/tracker x2,
-                internal/analytics). No frontend touched this phase
-                (backend-only), so no tsc/eslint/next build run. All
-                fixtures (load-test organization + cascade-deleted
-                children + event_queue rows, per-benchmark Postgres orgs,
-                per-benchmark ClickHouse rows) deleted afterward via
-                loadtestseed cleanup / t.Cleanup/b.Cleanup, confirmed
-                zero Postgres rows remaining (organizations count back to
-                the 1 pre-existing dev org).
-LAST COMMIT   : perf: Phase 31 benchmarks + load test (no code changes —
-                measurement showed none needed)
+CURRENT PHASE : PHASE 32 — E2E TESTING
+STATUS        : done — §57's full scenario (Create organization -> Create
+                source -> Create network -> Create offer -> Create landing
+                -> Create Stream Set incl. nested flow + filter -> Create
+                campaign -> Enter cost -> Generate tracking URL -> Click ->
+                Route -> Record event -> Receive conversion (HOLD -> ACCEPT
+                -> REDEP) -> Attribute conversion -> Send postback ->
+                Analytics + LTV) is now one automated Go test
+                (apps/e2e/scenario_test.go), every step verified against
+                real running apps/api + apps/tracker + apps/worker over
+                real Postgres/ClickHouse/Redis — no mocks, no in-process
+                httptest server. Full detail, gotchas, and the known
+                product gap below in docs/e2e-testing.md.
+                Scope decisions (both confirmed with the user before
+                writing code, per THE ONE RULE): (1) an automated Go
+                integration test, not a manual walkthrough or a
+                Playwright/browser-driven UI pass; (2) the test expects
+                apps/api/apps/tracker/apps/worker already running
+                (FLOX_E2E_API_URL/TRACKER_URL/APP_URL env vars,
+                t.Skip if unreachable or DATABASE_URL/CLICKHOUSE_URL
+                unset) rather than spawning the three binaries itself —
+                matches the documented local dev workflow, zero new
+                process-spawning infra.
+                Known product gap, not silently worked around: there is
+                no HTTP API anywhere for "generate a tracking URL" (no
+                /domains or /tracking-links routes in apps/api — only
+                apps/cmd/loadtestseed's raw SQL, from Phase 31, has ever
+                written those tables). The test seeds the same two rows
+                the same way loadtestseed does, directly over its own
+                Postgres connection, rather than expanding this phase into
+                building the missing endpoint. Real backend work for a
+                future phase.
+                One real product bug found and fixed by actually running
+                this against live services (not just by writing the test):
+                apps/internal/ltv/handler.go's parseParams parsed a bare
+                date-only `to` as that date's midnight, and
+                apps/internal/chstore's LTVFilter query is a half-open
+                `event_at >= from AND event_at < to` range — so
+                `?to=<today>` silently excluded every same-day LTV cohort
+                anchor, including the one this scenario itself creates.
+                Fixed to match apps/internal/conversions' handler, which
+                already carried the correct end-of-day (+23:59:59.999)
+                adjustment for the identical reason. The scenario's
+                ?from=today&to=today LTV assertions are this fix's
+                regression coverage.
+                One test-design bug found and fixed during its own
+                development (not a product bug): an earlier version
+                polled Postgres event_queue for the click's id as a "fast
+                path" before ClickHouse — event_queue is a claim-and-
+                delete work queue (apps/worker's flusher marks a row
+                'processing' then deletes it once ClickHouse accepts it),
+                not a durable log, so that poll raced the worker's own
+                poll loop and produced a real intermittent failure. Fixed
+                by reading the click only from ClickHouse (already the
+                only state attribution depends on downstream).
+                Verified: gofmt/go vet/go build/go test -count=1 ./...
+                green repo-wide (incl. the new apps/e2e package and the
+                ltv fix), run against real apps/api + apps/tracker +
+                apps/worker started per the documented local dev
+                workflow against the real (persisted) local Postgres/
+                ClickHouse/Redis containers. TestFullFunnel run 3x
+                consecutively with -count=1 to confirm it isn't flaky
+                after the event_queue race was fixed — 3/3 pass. No
+                frontend touched this phase (backend-only, same stance as
+                Phase 31), so no tsc/eslint/next build run. Fixtures
+                (organization + cascade-deleted children, ClickHouse
+                click/tracking/conversion/postback rows) deleted in
+                t.Cleanup on every run including failures, confirmed zero
+                leftover rows (organizations count back to the 1
+                pre-existing dev org; postback_deliveries back to 0).
+LAST COMMIT   : (pending — this phase not yet committed)
 NEXT          : confirm scope before starting. No open known issues
-                remain for Performance. Per §9 the next fixed phase is
-                Phase 32 — E2E TESTING (§57): the full Create
-                organization -> ... -> Analytics + LTV scenario, every
-                step verified.
+                remain for E2E Testing itself. Per §9 the next fixed
+                phase is Phase 33 — PRODUCTION (§61): Dockerfiles,
+                docker-compose.dev.yml/test.yml, deployment docs, env
+                documentation, backup/migration strategy, monitoring,
+                alerts.
+                Separately tracked, not blocking: the missing tracking-URL
+                generation API (no /domains or /tracking-links endpoints)
+                is real product-surface work worth its own phase or a
+                slice of a nearby one.
 
 ```
 

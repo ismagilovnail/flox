@@ -5,6 +5,64 @@ per-phase, matching `CLAUDE.md`'s phase protocol. The one exception is
 [Between phases], below: spec amendments and the code changes that follow from
 them land between phases and would otherwise be invisible here.
 
+## [E2E Testing] — Phase 32: full-funnel scenario test
+
+### Scope
+
+§57's brief: one continuous scenario — Create organization -> Create
+source -> Create network -> Create offer -> Create landing -> Create
+Stream Set (nested flow + filter) -> Create campaign -> Enter cost ->
+Generate tracking URL -> Click -> Route -> Record event -> Receive
+conversion (HOLD -> ACCEPT -> REDEP) -> Attribute conversion -> Send
+postback -> Analytics + LTV — verifying every step. Two scope decisions
+confirmed with the user first: an automated Go test (not a manual
+walkthrough or browser-driven UI pass), against already-running
+`apps/api`/`apps/tracker`/`apps/worker` (not spawned by the test itself).
+Full detail, gotchas, and the tracking-URL product gap in
+`docs/e2e-testing.md`.
+
+### Added
+
+- `apps/e2e/scenario_test.go` (`TestFullFunnel`): drives the entire
+  scenario over real HTTP against real running services and real
+  Postgres/ClickHouse/Redis — no mocks. `t.Skip`s with a clear message
+  when `DATABASE_URL`/`CLICKHOUSE_URL` are unset or the services aren't
+  reachable, so `go test ./...` stays green without them running.
+  Fixtures clean up in `t.Cleanup` on both pass and failure.
+- `docs/e2e-testing.md`: how to run it, the missing tracking-URL API
+  gap, and the two real bugs this phase's own test-writing surfaced
+  (below).
+
+### Fixed
+
+- `internal/ltv/handler.go`'s `parseParams` parsed a bare date-only `to`
+  as that date's midnight; `internal/chstore`'s `LTVFilter` query is a
+  half-open `event_at >= from AND event_at < to` range, so `?to=<today>`
+  silently excluded every same-day LTV cohort anchor. Now adds
+  `23:59:59.999` to a same-day `to`, matching `internal/conversions`'
+  handler, which already had the identical fix for the identical reason.
+  Found by the E2E scenario's own LTV assertions failing against a real
+  `to=today` query.
+
+### Known issues
+
+- No HTTP API exists for "generate a tracking URL" (no `/domains` or
+  `/tracking-links` endpoints anywhere in `apps/api` — only
+  `apps/cmd/loadtestseed`'s raw SQL has ever written those tables). The
+  E2E test seeds the same two rows the same way, directly over its own
+  Postgres connection, rather than expanding this phase into building the
+  missing endpoint. Real backend work for a future phase.
+
+### Verified
+
+`gofmt`/`go vet`/`go build ./...`/`go test -count=1 ./...` green
+repo-wide (including the new `apps/e2e` package and the `ltv` fix),
+against real `apps/api`/`apps/tracker`/`apps/worker` started per the
+documented local dev workflow. `TestFullFunnel` run 3x consecutively with
+`-count=1` after fixing an event-queue polling race in the test itself
+(see `docs/e2e-testing.md`) — 3/3 pass. No frontend touched this phase.
+All fixtures deleted afterward, confirmed zero leftover rows.
+
 ## [Performance] — Phase 31: benchmarks + load test, no code changes
 
 ### Scope
