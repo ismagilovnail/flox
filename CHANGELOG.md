@@ -5,6 +5,77 @@ per-phase, matching `CLAUDE.md`'s phase protocol. The one exception is
 [Between phases], below: spec amendments and the code changes that follow from
 them land between phases and would otherwise be invisible here.
 
+## [Production] — Phase 33: Dockerfiles, deployment, monitoring, alerts
+
+### Scope
+
+§61's full checklist for all eight services (web/api/tracker/worker/
+postgres/clickhouse/redis/object-storage): Dockerfiles,
+docker-compose.dev.yml, docker-compose.test.yml, production deployment
+docs, environment documentation, backup strategy, migration strategy,
+monitoring, alerts. Full detail in `docs/deployment.md`,
+`docs/environment.md`, `docs/backup.md`, `docs/migrations.md`.
+
+### Added
+
+- `apps/api/Dockerfile` (also builds a `migrate` target — a one-shot
+  goose runner for `apps/api/migrations`), `apps/tracker/Dockerfile`,
+  `apps/worker/Dockerfile`, `apps/web/Dockerfile` — all four built and
+  smoke-tested standalone before being wired into compose.
+- `apps/web/next.config.ts`: `output: "standalone"`, needed for a
+  minimal production image. `apps/web/src/app/api/health/route.ts`: new
+  container health-check route.
+- `infra/docker-compose.test.yml`: the full containerized stack, all 8
+  services, built from this repo's own Dockerfiles — brought up for
+  real, verified with a real signup through the containerized `api` and
+  real `/metrics` scrapes on all three Go services, then torn down.
+- `infra/alerts.yml`: 8 Prometheus alerting rules over Phase 29's nine
+  tracked metrics (tracking latency vs CLAUDE.md non-negotiable #9's own
+  50ms p95 budget, event loss, queue backlog, postback dead-letter rate,
+  analytics latency, service-down) — `promtool`-validated and confirmed
+  loaded into a real Prometheus. `infra/prometheus.yml` now loads it via
+  `rule_files:`.
+- `docs/deployment.md`, `docs/environment.md`, `docs/backup.md`,
+  `docs/migrations.md` — new.
+
+### Fixed
+
+- `apps/web/src/proxy.ts`'s session-guard middleware was redirecting the
+  new `/api/health` route to `/login` (its matcher didn't exclude it,
+  unlike `_next/static`/`favicon.ico`) — found by actually curling the
+  built container, not assumed working. Matcher now excludes
+  `api/health` alongside the existing static-asset exclusions.
+
+### Known issues
+
+- `docker-compose.test.yml`, run once without an explicit Compose
+  project name, shared the "infra" default project name with
+  `docker-compose.dev.yml` and briefly recreated the dev stack's live
+  data-store containers under the test config. No data was lost (named
+  volumes survive `down` without `-v`; the dev stack reattached its
+  original volumes intact on `up -d`), but this is exactly the kind of
+  mistake worth naming: fixed permanently with an explicit `name:
+  flox-test` in `docker-compose.test.yml`, documented there and in
+  `docs/deployment.md`.
+- The missing tracking-URL generation API (flagged in Phase 32) remains
+  open — not touched this phase, real product-surface work for its own
+  phase or a slice of a nearby one.
+
+### Verified
+
+`gofmt`/`go vet`/`go build`/`go test -count=1 ./...` green repo-wide;
+`tsc`/`eslint`/`vitest` clean on `apps/web`. `docker compose -f
+infra/docker-compose.test.yml up --build` brought all 8 containers to
+healthy; a real `POST /auth/signup` through the containerized `api`
+succeeded (real CSRF/Origin check, real Postgres write, real session
+cookie), `apps/web`'s `/login` served 200 through the containerized
+frontend, and `/metrics` on `api`/`tracker`/`worker` returned 43/47/43
+`flox_` series respectively. `docs/backup.md`'s Postgres/ClickHouse
+commands were run for real against the dev stack before being written
+down. All fixtures and the test stack itself torn down afterward
+(`down -v`); dev stack confirmed unaffected (`organizations` count back
+to 1, original dev org intact).
+
 ## [E2E Testing] — Phase 32: full-funnel scenario test
 
 ### Scope

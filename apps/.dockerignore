@@ -1,0 +1,11 @@
+# Build context for apps/api, apps/tracker, apps/worker's Dockerfiles is
+# this whole apps/ directory (the single Go module root the three
+# binaries share, ARCHITECTURE.md's "modular monolith") — everything
+# below is real but irrelevant to a Go build, and web/ in particular is
+# large enough (node_modules) to make every Go image build slow without
+# this.
+web/node_modules
+web/.next
+web/coverage
+**/*_test.go
+**/.git

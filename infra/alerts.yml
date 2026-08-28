@@ -1,0 +1,125 @@
+# Prometheus alerting rules (§61, Phase 33). Every threshold ties
+# directly to a number this project already committed to elsewhere —
+# CLAUDE.md non-negotiable #9's tracking latency budget, §45's zero-loss
+# guarantee — rather than an invented one, and every metric name here is
+# one of the nine docs/observability.md (§53, Phase 29) already wired up
+# and verified against real traffic; this phase adds no new metrics, only
+# rules over the existing ones.
+#
+# Loaded by infra/prometheus.yml (dev) via `rule_files:`, and by any
+# production Prometheus the same way — see docs/deployment.md's
+# monitoring section. Validate with `promtool check rules infra/alerts.yml`
+# after editing.
+#
+# No Alertmanager service ships anywhere in this repo (docker-compose.dev/
+# test.yml included): routing an alert to Slack/email/PagerDuty needs a
+# real receiver and credential this project has never had a use for
+# outside this file, and standing up an Alertmanager with no real
+# receiver behind it would be exactly the "fake API that looks real"
+# CLAUDE.md forbids. These rules ARE real and Prometheus evaluates them
+# regardless (visible under its own Alerts tab) — wiring a receiver is a
+# real deployment's job. See docs/deployment.md for a documented (not
+# run) Alertmanager config example.
+groups:
+  - name: flox.tracking
+    rules:
+      - alert: TrackingLatencyBudgetExceeded
+        # CLAUDE.md non-negotiable #9: "tracking p50 < 20ms / p95 < 50ms
+        # (excl. third-party latency)". 0.05 here is a literal bucket
+        # boundary in apps/internal/metrics.hotPathBuckets, chosen
+        # specifically to match this budget — see that file's own comment.
+        expr: histogram_quantile(0.95, sum(rate(flox_tracking_latency_seconds_bucket[5m])) by (le)) > 0.05
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "apps/tracker p95 redirect latency exceeds the 50ms budget"
+          description: "p95 tracking latency has been above 50ms for 5m — CLAUDE.md non-negotiable #9's hot-path budget is broken. Check for a slow routingstore query, ClickHouse/Postgres contention, or a co-located CPU-bound process."
+
+      - alert: TrackingServiceDown
+        expr: up{job="flox-tracker"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "apps/tracker is down"
+          description: "Prometheus has not scraped a healthy apps/tracker instance for 1m — every tracking link is failing to redirect."
+
+  - name: flox.events
+    rules:
+      - alert: EventLossDetected
+        # §43/CLAUDE.md's event model has no tolerance for silent loss —
+        # these two counters (docs/observability.md's "Why event_loss is
+        # two counters, not one") are each genuine, permanent loss by
+        # construction: a full in-memory buffer, or a batch that failed
+        # writing into Postgres event_queue and is never retried.
+        expr: rate(flox_events_buffer_dropped_total[5m]) > 0 or rate(flox_events_queue_write_failed_total[5m]) > 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "apps/tracker is losing click/conversion events"
+          description: "flox_events_buffer_dropped_total or flox_events_queue_write_failed_total is increasing — real, permanent event loss (CLAUDE.md's tracked-events invariant), not a retryable condition. Check apps/tracker's own logs and Postgres health immediately."
+
+      - alert: EventQueueBacklogGrowing
+        # Phase 31's own load test never saw this gauge exceed a handful
+        # of rows even at 6,000 req/s sustained (docs/performance.md) — a
+        # sustained five-figure backlog means apps/worker's flush loop
+        # (batch 500/idle 2s) has fallen behind real traffic or ClickHouse
+        # is unreachable, not routine jitter.
+        expr: flox_event_queue_depth > 10000
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Postgres event_queue backlog is growing"
+          description: "flox_event_queue_depth has been above 10,000 for 10m — apps/worker's flush loop is falling behind. Events are not yet lost (still durable in Postgres) but analytics/attribution are increasingly stale until this drains."
+
+  - name: flox.postbacks
+    rules:
+      - alert: PostbackDeliveryDeadLetterRateHigh
+        # "dead" = apps/internal/postback exhausted MaxAttempts —
+        # genuinely, permanently lost per docs/observability.md's own
+        # definition, distinct from "retrying" (still in flight).
+        expr: |
+          sum(rate(flox_postback_deliveries_total{outcome="dead"}[15m]))
+            /
+          sum(rate(flox_postback_deliveries_total[15m]))
+          > 0.05
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: "More than 5% of outgoing postback deliveries are dead-lettering"
+          description: "A network operator's postback_url is likely unreachable, rejecting FLOX's requests, or urlsafety is blocking it (§54 SSRF guard) — check apps/worker's Deliverer logs and the affected network's configured postback_url."
+
+  - name: flox.analytics
+    rules:
+      - alert: AnalyticsQueryLatencyHigh
+        expr: histogram_quantile(0.95, sum(rate(flox_analytics_query_latency_seconds_bucket[15m])) by (le, endpoint)) > 2
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: "ClickHouse analytics queries are slow (p95 > 2s)"
+          description: "{{ $labels.endpoint }} p95 latency has been above 2s for 15m — check ClickHouse load/disk, or whether data volume has outgrown docs/performance.md's ~6k-row benchmark baseline."
+
+  - name: flox.services
+    rules:
+      - alert: APIServiceDown
+        expr: up{job="flox-api"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "apps/api is down"
+          description: "Prometheus has not scraped a healthy apps/api instance for 1m — the entire control-plane API (campaigns, auth, analytics, everything apps/web depends on) is unreachable."
+
+      - alert: WorkerServiceDown
+        expr: up{job="flox-worker"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "apps/worker is down"
+          description: "Prometheus has not scraped a healthy apps/worker instance for 1m — event flushing, outgoing postback delivery, and ad-spend sync have all stopped. Events remain durable in Postgres (see EventQueueBacklogGrowing) but nothing is draining them."

@@ -19,87 +19,91 @@ referenced below as §N).
 ## CURRENT STATE — UPDATE THIS EVERY PHASE
 
 ```
-CURRENT PHASE : PHASE 32 — E2E TESTING
-STATUS        : done — §57's full scenario (Create organization -> Create
-                source -> Create network -> Create offer -> Create landing
-                -> Create Stream Set incl. nested flow + filter -> Create
-                campaign -> Enter cost -> Generate tracking URL -> Click ->
-                Route -> Record event -> Receive conversion (HOLD -> ACCEPT
-                -> REDEP) -> Attribute conversion -> Send postback ->
-                Analytics + LTV) is now one automated Go test
-                (apps/e2e/scenario_test.go), every step verified against
-                real running apps/api + apps/tracker + apps/worker over
-                real Postgres/ClickHouse/Redis — no mocks, no in-process
-                httptest server. Full detail, gotchas, and the known
-                product gap below in docs/e2e-testing.md.
-                Scope decisions (both confirmed with the user before
-                writing code, per THE ONE RULE): (1) an automated Go
-                integration test, not a manual walkthrough or a
-                Playwright/browser-driven UI pass; (2) the test expects
-                apps/api/apps/tracker/apps/worker already running
-                (FLOX_E2E_API_URL/TRACKER_URL/APP_URL env vars,
-                t.Skip if unreachable or DATABASE_URL/CLICKHOUSE_URL
-                unset) rather than spawning the three binaries itself —
-                matches the documented local dev workflow, zero new
-                process-spawning infra.
-                Known product gap, not silently worked around: there is
-                no HTTP API anywhere for "generate a tracking URL" (no
-                /domains or /tracking-links routes in apps/api — only
-                apps/cmd/loadtestseed's raw SQL, from Phase 31, has ever
-                written those tables). The test seeds the same two rows
-                the same way loadtestseed does, directly over its own
-                Postgres connection, rather than expanding this phase into
-                building the missing endpoint. Real backend work for a
-                future phase.
-                One real product bug found and fixed by actually running
-                this against live services (not just by writing the test):
-                apps/internal/ltv/handler.go's parseParams parsed a bare
-                date-only `to` as that date's midnight, and
-                apps/internal/chstore's LTVFilter query is a half-open
-                `event_at >= from AND event_at < to` range — so
-                `?to=<today>` silently excluded every same-day LTV cohort
-                anchor, including the one this scenario itself creates.
-                Fixed to match apps/internal/conversions' handler, which
-                already carried the correct end-of-day (+23:59:59.999)
-                adjustment for the identical reason. The scenario's
-                ?from=today&to=today LTV assertions are this fix's
-                regression coverage.
-                One test-design bug found and fixed during its own
-                development (not a product bug): an earlier version
-                polled Postgres event_queue for the click's id as a "fast
-                path" before ClickHouse — event_queue is a claim-and-
-                delete work queue (apps/worker's flusher marks a row
-                'processing' then deletes it once ClickHouse accepts it),
-                not a durable log, so that poll raced the worker's own
-                poll loop and produced a real intermittent failure. Fixed
-                by reading the click only from ClickHouse (already the
-                only state attribution depends on downstream).
+CURRENT PHASE : PHASE 33 — PRODUCTION
+STATUS        : done — §61's full list (Dockerfiles, docker-compose.dev.
+                yml, docker-compose.test.yml, production deployment docs,
+                environment documentation, backup strategy, migration
+                strategy, monitoring, alerts) delivered for all eight
+                services (web/api/tracker/worker/postgres/clickhouse/
+                redis/object-storage). Every artifact was actually run,
+                not just authored:
+                Dockerfiles: apps/api/Dockerfile (+ its `migrate` target,
+                a one-shot goose runner), apps/tracker/Dockerfile,
+                apps/worker/Dockerfile, apps/web/Dockerfile (needed
+                next.config.ts's output:"standalone" added, plus a new
+                GET /api/health route). All four built clean; each image
+                run standalone and its /health (web: /api/health)
+                confirmed 200 before being wired into compose.
+                infra/docker-compose.test.yml: the full containerized
+                stack, built and brought up for real (`docker compose -f
+                infra/docker-compose.test.yml up --build`) — all 8
+                containers reached healthy, then verified with a real
+                signup (POST /auth/signup through the containerized api,
+                real CSRF/Origin check, real Postgres write, real session
+                cookie) and real /metrics scrapes on api/tracker/worker
+                (43/47/43 flox_ series respectively) through the
+                containerized web frontend (GET /login returned 200).
+                Fixtures cleaned up, stack torn down (`down -v`)
+                afterward.
+                Found and fixed one real near-miss while validating this:
+                the first `docker compose -f infra/docker-compose.test.
+                yml up` (no explicit project name yet) shared Compose's
+                default "infra" project name with docker-compose.dev.yml
+                and RECREATED the dev stack's live postgres/clickhouse/
+                redis/minio containers under the test config instead of
+                creating separate ones. Data survived (`down` without
+                `-v` never touches named volumes; docker-compose.dev.yml
+                itself was unchanged, so `up -d` on it reattached the
+                original volumes intact — verified: organizations count
+                back to 1, "Phase 27 Dev Org" intact) but the containers
+                and their identity were briefly replaced mid-session.
+                Fixed permanently with an explicit `name: flox-test` at
+                the top of docker-compose.test.yml, documented in both
+                that file and docs/deployment.md so it can't recur.
+                infra/alerts.yml: 8 Prometheus alerting rules over
+                Phase 29's nine already-wired metrics (tracking latency
+                vs CLAUDE.md non-negotiable #9's own 50ms p95 budget,
+                event loss, event queue backlog, postback dead-letter
+                rate, analytics latency, 3x service-down) —
+                `promtool check rules` clean, and confirmed loaded via a
+                real dev-stack Prometheus's own /api/v1/rules (all 8
+                present). infra/prometheus.yml now loads them via
+                rule_files:; docker-compose.dev.yml's prometheus service
+                gained the matching volume mount. No Alertmanager ships
+                anywhere (no real notification receiver has ever existed
+                in this project — see infra/alerts.yml's own comment);
+                docs/deployment.md documents an example config, not run.
+                docs/deployment.md, docs/environment.md, docs/backup.md,
+                docs/migrations.md: new. backup.md's Postgres/ClickHouse
+                commands were run for real against the dev stack (a real
+                pg_dump, a real ClickHouse Native-format table export)
+                before being written down, not copied from memory.
+                environment.md's "NODE_ENV only gates secureCookies"
+                claim came from grepping the actual Go source for every
+                cfg.Env/NODE_ENV reference, not assumption.
+                No tracking-URL generation API question from Phase 32
+                revisited or touched this phase — still open, still
+                separately tracked below.
                 Verified: gofmt/go vet/go build/go test -count=1 ./...
-                green repo-wide (incl. the new apps/e2e package and the
-                ltv fix), run against real apps/api + apps/tracker +
-                apps/worker started per the documented local dev
-                workflow against the real (persisted) local Postgres/
-                ClickHouse/Redis containers. TestFullFunnel run 3x
-                consecutively with -count=1 to confirm it isn't flaky
-                after the event_queue race was fixed — 3/3 pass. No
-                frontend touched this phase (backend-only, same stance as
-                Phase 31), so no tsc/eslint/next build run. Fixtures
-                (organization + cascade-deleted children, ClickHouse
-                click/tracking/conversion/postback rows) deleted in
-                t.Cleanup on every run including failures, confirmed zero
-                leftover rows (organizations count back to the 1
-                pre-existing dev org; postback_deliveries back to 0).
-LAST COMMIT   : feat(testing): full-funnel E2E scenario test (Phase 32)
+                green repo-wide; tsc/eslint/vitest clean on apps/web
+                (next.config.ts and proxy.ts both changed this phase —
+                proxy.ts needed a matcher fix after the new /api/health
+                route was found to be redirected to /login by the
+                existing session-guard middleware, caught by actually
+                curling the built container rather than assumed working).
+LAST COMMIT   : feat(infra): Dockerfiles, deployment stack, alerts (Phase 33)
 NEXT          : confirm scope before starting. No open known issues
-                remain for E2E Testing itself. Per §9 the next fixed
-                phase is Phase 33 — PRODUCTION (§61): Dockerfiles,
-                docker-compose.dev.yml/test.yml, deployment docs, env
-                documentation, backup/migration strategy, monitoring,
-                alerts.
+                remain for Production itself. Per §9 the next fixed phase
+                is Phase 34 — FINAL AUDIT (§62): UX/UI/accessibility/
+                security/tenant isolation/performance/database/API/
+                routing/attribution/analytics/LTV/testing/observability/
+                documentation audit, plus a repo-wide search for
+                TODO/FIXME/mock/dummy/temporary/hardcoded/console.log/
+                debugger leftovers to remove or document.
                 Separately tracked, not blocking: the missing tracking-URL
-                generation API (no /domains or /tracking-links endpoints)
-                is real product-surface work worth its own phase or a
-                slice of a nearby one.
+                generation API (no /domains or /tracking-links endpoints,
+                flagged in Phase 32) is real product-surface work worth
+                its own phase or a slice of a nearby one — still open.
 
 ```
 

@@ -9,6 +9,14 @@
 global:
   scrape_interval: 15s
 
+# §61/Phase 33: alerting rules, evaluated against these same scrape
+# targets. No Alertmanager is configured here (dev has no receiver to
+# route to) — see infra/alerts.yml's own comment and docs/deployment.md.
+# Rules still evaluate and show under Prometheus's own Alerts tab
+# (http://localhost:9090/alerts) without one.
+rule_files:
+  - alerts.yml
+
 scrape_configs:
   - job_name: flox-api
     static_configs:

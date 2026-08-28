@@ -215,3 +215,16 @@ just a local `curl /metrics`:
   rows, and the signed-up user/org), confirmed a zero count on every
   `LIKE 'Metrics%'` pattern afterward, then stopped all three manually-
   started binaries.
+
+## Alerting (§61, Phase 33)
+
+`infra/alerts.yml` adds real Prometheus alerting rules over these same
+nine metrics — `TrackingLatencyBudgetExceeded` (`histogram_quantile`
+against CLAUDE.md non-negotiable #9's own 50ms p95 budget),
+`EventLossDetected`/`EventQueueBacklogGrowing`,
+`PostbackDeliveryDeadLetterRateHigh`, `AnalyticsQueryLatencyHigh`, and
+three `up == 0` service-down rules. `infra/prometheus.yml` loads them via
+`rule_files:` — validated with `promtool check rules infra/alerts.yml`
+and confirmed loaded via a real dev-stack Prometheus's own
+`/api/v1/rules`. See `docs/deployment.md`'s monitoring section for the
+production story, including why no Alertmanager ships in this repo.

@@ -1,0 +1,207 @@
+# Full containerized stack (§61, Phase 33): every service in §61's list —
+# web, api, tracker, worker, postgres, clickhouse, redis, object-storage —
+# built from this repo's own Dockerfiles and wired together, published to
+# the same host ports docker-compose.dev.yml's data stores use plus
+# 3000/8080/8081/8082 for the four apps (matching .env.example's defaults)
+# so it's driveable exactly like the local `go run`/`npm run dev` dev
+# workflow, just fully containerized instead.
+#
+# This is NOT docker-compose.dev.yml with the apps added — dev
+# deliberately keeps the four app binaries on the host (see
+# docker-compose.dev.yml's own file, unchanged) so `go run`/hot reload
+# stays fast. This file exists to prove the images this phase's
+# Dockerfiles produce actually build and boot correctly together — the
+# real risk any Dockerfile authoring carries — and as a template for a
+# real deployment (docs/deployment.md); it is not part of the day-to-day
+# dev loop.
+#
+#   docker compose -f infra/docker-compose.test.yml up --build
+#
+# Credentials below are throwaway, compose-internal values, same as
+# docker-compose.dev.yml — see docs/environment.md for what MUST change
+# before any of this is pointed at a real deployment.
+#
+# `name:` below is load-bearing, not decoration: Compose's default
+# project name is the containing directory's basename ("infra" for both
+# this file and docker-compose.dev.yml), and two compose files sharing a
+# project name share its container/volume namespace — `docker compose -f
+# docker-compose.test.yml up` would silently RECREATE docker-compose.dev.
+# yml's already-running postgres/clickhouse/redis/minio containers
+# (matched by service name) instead of creating separate ones. Found by
+# actually running this file the first time: it stopped and reconfigured
+# the real dev Postgres container mid-session. Data survived (`docker
+# compose down` without `-v` never touches named volumes, and dev's own
+# volumes/docker-compose.dev.yml were untouched — `docker compose -f
+# docker-compose.dev.yml up -d` reattached them intact), but the explicit
+# name below is what actually prevents a recurrence.
+name: flox-test
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: flox
+      POSTGRES_PASSWORD: flox
+      POSTGRES_DB: flox
+    ports:
+      - "5433:5432" # offset from dev's 5432 so both stacks can run at once
+    volumes:
+      - postgres_test_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U flox -d flox"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  clickhouse:
+    image: clickhouse/clickhouse-server:24-alpine
+    environment:
+      CLICKHOUSE_DB: flox
+      CLICKHOUSE_USER: flox
+      CLICKHOUSE_PASSWORD: ""
+      CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: 1
+    ports:
+      - "8124:8123" # offset from dev's 8123
+    volumes:
+      - clickhouse_test_data:/var/lib/clickhouse
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://127.0.0.1:8123/ping || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6380:6379" # offset from dev's 6379
+    volumes:
+      - redis_test_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  minio:
+    image: minio/minio:latest
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: flox-minio-admin
+      MINIO_ROOT_PASSWORD: flox-minio-secret
+    ports:
+      - "9002:9000" # offset from dev's 9000
+      - "9003:9001"
+    volumes:
+      - minio_test_data:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # One-shot goose runner (docs/migrations.md) — applies every Postgres
+  # migration once, before api/tracker/worker start, so none of them race
+  # each other applying schema changes. ClickHouse's own schema has no
+  # separate step here: chstore.Migrate's idempotent CREATE ... IF NOT
+  # EXISTS runs automatically inside apps/api and apps/worker at their own
+  # startup (unchanged from dev) — see docs/migrations.md for why the two
+  # stores use different strategies.
+  migrate:
+    build:
+      context: ../apps
+      dockerfile: api/Dockerfile
+      target: migrate
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command: ["postgres://flox:flox@postgres:5432/flox?sslmode=disable", "up"]
+
+  api:
+    build:
+      context: ../apps
+      dockerfile: api/Dockerfile
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      clickhouse:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgres://flox:flox@postgres:5432/flox?sslmode=disable
+      CLICKHOUSE_URL: http://clickhouse:8123
+      CLICKHOUSE_DATABASE: flox
+      CLICKHOUSE_USER: flox
+      CLICKHOUSE_PASSWORD: ""
+      REDIS_URL: redis://redis:6379/0
+      # A real browser's Origin header is whatever host:port it navigated
+      # to (localhost:3000, since web's port is published to the host
+      # below) — apps/internal/tenant.RequireSameOrigin (§54/Phase 30
+      # CSRF) compares against this literally, so it must match that, not
+      # the container-internal "web" service name.
+      APP_URL: http://localhost:3000
+    ports:
+      - "8080:8080"
+
+  tracker:
+    build:
+      context: ../apps
+      dockerfile: tracker/Dockerfile
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      clickhouse:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgres://flox:flox@postgres:5432/flox?sslmode=disable
+      CLICKHOUSE_URL: http://clickhouse:8123
+      CLICKHOUSE_DATABASE: flox
+      CLICKHOUSE_USER: flox
+      CLICKHOUSE_PASSWORD: ""
+      REDIS_URL: redis://redis:6379/0
+    ports:
+      - "8081:8081"
+
+  worker:
+    build:
+      context: ../apps
+      dockerfile: worker/Dockerfile
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      clickhouse:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgres://flox:flox@postgres:5432/flox?sslmode=disable
+      CLICKHOUSE_URL: http://clickhouse:8123
+      CLICKHOUSE_DATABASE: flox
+      CLICKHOUSE_USER: flox
+      CLICKHOUSE_PASSWORD: ""
+    ports:
+      - "8082:8082"
+
+  web:
+    build:
+      context: ../apps/web
+      dockerfile: Dockerfile
+      args:
+        # Baked into the client bundle at build time (Next.js's own
+        # NEXT_PUBLIC_* rule — see apps/web/Dockerfile's comment): must be
+        # the URL a visitor's *browser* reaches, i.e. api's host-published
+        # port, never the container-internal "api" hostname.
+        NEXT_PUBLIC_API_URL: http://localhost:8080
+    depends_on:
+      api:
+        condition: service_healthy
+    ports:
+      - "3000:3000"
+
+volumes:
+  postgres_test_data:
+  clickhouse_test_data:
+  redis_test_data:
+  minio_test_data:

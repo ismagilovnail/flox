@@ -43,5 +43,10 @@ export function proxy(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/((?!_next/static|_next/image|favicon.ico).*)"],
+  // api/health excluded alongside the existing static-asset exclusions:
+  // it's a container/orchestrator liveness probe (§61, Phase 33's
+  // apps/web/Dockerfile HEALTHCHECK), not a user-facing page, and must
+  // answer 200 regardless of session state or it stops meaning "the
+  // server is up."
+  matcher: ["/((?!_next/static|_next/image|favicon.ico|api/health).*)"],
 };
