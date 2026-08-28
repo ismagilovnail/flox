@@ -89,7 +89,7 @@ STATUS        : done — §57's full scenario (Create organization -> Create
                 t.Cleanup on every run including failures, confirmed zero
                 leftover rows (organizations count back to the 1
                 pre-existing dev org; postback_deliveries back to 0).
-LAST COMMIT   : (pending — this phase not yet committed)
+LAST COMMIT   : feat(testing): full-funnel E2E scenario test (Phase 32)
 NEXT          : confirm scope before starting. No open known issues
                 remain for E2E Testing itself. Per §9 the next fixed
                 phase is Phase 33 — PRODUCTION (§61): Dockerfiles,
