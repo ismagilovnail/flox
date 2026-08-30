@@ -43,22 +43,71 @@ STATUS        : done — §62's full checklist audited (UX/UI/accessibility/
                 undersold the true scope. Concretely, CLAUDE.md
                 non-negotiable #12 (custom-metric formula safety) is
                 unenforceable today: no formula-evaluation engine exists
-                anywhere, frontend or backend.
-                Everything else audited clean, or fixed directly:
-                routing single-source-of-truth (invariant #1 — routing
-                simulator only calls /routing/simulate, no TS
-                reimplementation), deterministic weighted pick + sticky-
-                cookie-is-truth (#4, §38), tenant isolation (all 19 route
-                groups in apps/api/main.go sit behind tenantMiddleware;
-                repository-layer spot checks all filter on
-                organization_id), CSRF/secrets/postback-dedup (#3), no
-                hardcoded secrets, .env correctly gitignored, tracker hot
-                path (#9 — Handler.track never blocks on persistence or
-                analytics; eventbuf.Writer.Enqueue is a non-blocking
-                channel send), DB indexes on tenant-scoped hot tables,
-                infra/alerts.yml's 8 rules cross-checked against actual
-                metric names (all resolve), go build/vet/test -count=1
-                ./... and tsc/eslint clean.
+                anywhere, frontend or backend. Same root cause also
+                explains the standalone Analytics report builder
+                (`features/analytics/*`, dimension/funnel report UI) and
+                the Overview dashboard (`(app)/overview`) still reading
+                `lib/mock/analytics.ts`/`lib/mock/dashboard.ts`: the real
+                `/analytics` backend only ever shipped two fixed
+                campaign-scoped endpoints (daily clicks, daily revenue —
+                genuinely wired via `hooks/use-campaign-analytics.ts`),
+                never the flexible multi-dimension/funnel query capability
+                that page's UI needs. Legitimately deferred, not a wiring
+                bug — noted here so it doesn't get mis-filed as one later.
+                Three real bugs were found and fixed (not just documented):
+                (1) `campaign-cost-entries.tsx`'s delete action had zero
+                confirmation step, violating CLAUDE.md's destructive-
+                action rule — every sibling row-actions file (network,
+                traffic source, postlanding) correctly gates delete behind
+                a Dialog, this one didn't; now it does, with matching
+                cost.json i18n keys (en+ru). (2) A stale doc comment in
+                `apps/internal/routing/weighted.go` claimed the frontend
+                had "a temporary simulator mock" mirroring the Go pick
+                logic — no such file has existed for a while; the routing
+                simulator has genuinely been a thin client over
+                `/routing/simulate` all along (invariant #1 upheld in
+                practice, the comment was just wrong). (3)
+                `use-current-member.ts`'s comment claimed "no auth session
+                yet (that's Phase 28)" — false, real `/auth/me` has
+                existed since Phase 28; the actual reason this hook still
+                reads the mock team roster (Custom Metrics/Referral/
+                Content Gallery have no backend of their own yet, and
+                switching identity source ahead of each feature's own
+                integration phase would break their mock "is this mine"
+                checks) is now stated accurately instead.
+                Also removed as dead code (zero importers, confirmed by
+                grep before deletion): `stores/{campaigns,offers,
+                event-mappings}.ts` and `lib/mock/{offers,event-mappings,
+                conversions}.ts` — all six pre-date the real API clients
+                that replaced them and were never cleaned up.
+                `lib/mock/campaigns.ts` was NOT deleted — `tag-
+                assignments.ts` (the live, still-deferred Tags mock)
+                still imports it for realistic fixture data.
+                Everything else audited clean: routing single-source-of-
+                truth (routing simulator only calls /routing/simulate, no
+                TS reimplementation), deterministic weighted pick +
+                sticky-cookie-is-truth (#4, §38), tenant isolation (all 19
+                route groups in apps/api/main.go sit behind
+                tenantMiddleware; repository-layer spot checks across 13+
+                domains all filter on organization_id; the only two
+                queries missing an explicit org_id filter are in
+                auth/repository.go's AcceptInvite, which is correctly
+                scoped upstream by a verified invite token instead),
+                CSRF/secrets/postback-dedup (#3 — event_ref enforced in
+                code, not just convention), no hardcoded secrets, .env
+                correctly gitignored, tracker hot path (#9 — Handler.track
+                never blocks on persistence or analytics; eventbuf.
+                Writer.Enqueue is a non-blocking channel send), DB indexes
+                on tenant-scoped hot tables, ClickHouse sort keys lead
+                with organization_id, LTV/cohort currency handling (#7 —
+                FX rate looked up at the event's OccurredAt, never
+                time.Now()), OpenTelemetry tracing genuinely wired (real
+                OTLP exporter + otelhttp instrumentation on all 3
+                binaries, not just imported), no sensitive data (passwords/
+                tokens/secrets) in any log call site, infra/alerts.yml's 8
+                rules cross-checked against actual metric names (all
+                resolve), go build/vet/test -count=1 ./... and tsc/eslint
+                clean.
                 Fixed: apps/web/src/app/globals.css gained the one global
                 `@media (prefers-reduced-motion: reduce)` rule (§66) —
                 previously absent entirely, so no component respected
@@ -70,20 +119,42 @@ STATUS        : done — §62's full checklist audited (UX/UI/accessibility/
                 1.0-1.5ms against the 50ms budget with defaults as-is),
                 but a previously-undocumented production tuning knob;
                 documented the DATABASE_URL?pool_max_conns= path.
+                Known gaps documented, not fixed this phase (real scoped
+                work, not audit-phase actions): (a) the seven-domain
+                frontend-integration gap above; (b) the standalone
+                Analytics report builder + Overview dashboard's missing
+                multi-dimension backend, above; (c) the shared DataTable
+                component (`components/ui/data-table.tsx`) never got
+                column resizing or CSV/export wired despite both being in
+                CLAUDE.md's own UX-floor table rules (§64) — sorting,
+                pagination, column visibility, search/filter are all
+                real and used consistently, resizing/export are not, and
+                this is repo-wide (every table), not per-table; (d)
+                repository/handler-layer Go packages (network, offer,
+                pixel, campaign, streamset, cost, and ~18 others — see
+                `go test -cover` output) sit at 0.0% unit-test coverage —
+                DB-backed logic is exercised only via the Phase 32 e2e
+                scenario and manual dev-stack verification. Core
+                computation packages are well covered (routing 81.7%,
+                ltv 67.0%, attribution/event/macro/metrics 100%).
                 Verified: gofmt -l/go vet/go build/go test -count=1
                 ./... clean repo-wide; tsc --noEmit/eslint clean on
                 apps/web.
-LAST COMMIT   : docs(audit): Phase 34 final audit — reduced motion, pool sizing docs
-NEXT          : confirm scope before starting. Two real candidates, not
+LAST COMMIT   : fix(audit): close Phase 34 findings — cost-entry confirm dialog, dead code, stale comments
+NEXT          : confirm scope before starting. Real candidates, not
                 ranked: (a) the seven-domain frontend-integration gap
                 above (Domains, Settings, Tags, Custom Metrics, Report
                 Presets, Referral, Content Gallery) — likely several
                 phases' worth, probably slice-by-slice like the earlier
                 domain-integration phases (Traffic Sources, Networks/
-                Offers, Stream Sets) rather than one giant phase; (b) per
-                §9's fixed phase order, Phase 34 was the last listed
-                phase — anything past it is v3-scope work the user
-                should scope explicitly, not an assumed default.
+                Offers, Stream Sets) rather than one giant phase; (b) a
+                real multi-dimension /analytics backend for the report
+                builder + dashboard, replacing their mock data; (c) the
+                DataTable column-resize/export gap; (d) repository/
+                handler-layer unit test coverage. Per §9's fixed phase
+                order, Phase 34 was the last listed phase — anything past
+                it is v3-scope/hardening work the user should scope
+                explicitly, not an assumed default.
 
 ```
 

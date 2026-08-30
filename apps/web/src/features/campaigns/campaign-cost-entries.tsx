@@ -16,6 +16,14 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { DataTable, dataTableFeatures } from "@/components/ui/data-table";
 import { LoadingState } from "@/components/ui/loading-state";
 import { ErrorState } from "@/components/ui/error-state";
@@ -50,7 +58,7 @@ function today(): string {
 function costEntryColumns(
   t: TFunction,
   sourceNameById: Record<string, string>,
-  onDelete: (id: string) => void,
+  onDeleteRequest: (id: string) => void,
 ): ColumnDef<typeof dataTableFeatures, CostEntry>[] {
   return [
     { accessorKey: "entryDate", header: t("columns.date", { ns: "cost" }) },
@@ -84,7 +92,7 @@ function costEntryColumns(
       enableHiding: false,
       cell: ({ row }) => (
         <div className="flex justify-end">
-          <IconButton aria-label={t("list.deleteAria", { ns: "cost" })} onClick={() => onDelete(row.original.id)}>
+          <IconButton aria-label={t("list.deleteAria", { ns: "cost" })} onClick={() => onDeleteRequest(row.original.id)}>
             <Trash2Icon className="size-4" />
           </IconButton>
         </div>
@@ -102,6 +110,8 @@ export function CampaignCostEntries({ campaignId }: { campaignId: string }) {
   const sourcesQuery = useTrafficSources();
   const upsert = useUpsertCostEntry(campaignId);
   const del = useDeleteCostEntry(campaignId);
+
+  const [confirmDeleteId, setConfirmDeleteId] = React.useState<string | null>(null);
 
   const sources = sourcesQuery.data?.trafficSources ?? [];
   const sourceNameById = React.useMemo(() => {
@@ -141,8 +151,14 @@ export function CampaignCostEntries({ campaignId }: { campaignId: string }) {
 
   function handleDelete(id: string) {
     del.mutate(id, {
-      onSuccess: () => toast(t("toast.removed")),
-      onError: (err) => toast.error(t("toast.removeError"), { description: err.message }),
+      onSuccess: () => {
+        setConfirmDeleteId(null);
+        toast(t("toast.removed"));
+      },
+      onError: (err) => {
+        setConfirmDeleteId(null);
+        toast.error(t("toast.removeError"), { description: err.message });
+      },
     });
   }
 
@@ -224,7 +240,7 @@ export function CampaignCostEntries({ campaignId }: { campaignId: string }) {
         <ErrorState title={t("list.loadError")} description={entriesQuery.error.message} onRetry={() => entriesQuery.refetch()} />
       ) : (
         <DataTable
-          columns={costEntryColumns(t, sourceNameById, handleDelete)}
+          columns={costEntryColumns(t, sourceNameById, setConfirmDeleteId)}
           data={entriesQuery.data.entries}
           emptyTitle={t("list.emptyTitle")}
           emptyDescription={t("list.emptyDescription")}
@@ -232,6 +248,27 @@ export function CampaignCostEntries({ campaignId }: { campaignId: string }) {
           getRowId={(row) => row.id}
         />
       )}
+
+      <Dialog open={confirmDeleteId !== null} onOpenChange={(open) => !open && setConfirmDeleteId(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{t("list.deleteConfirmTitle")}</DialogTitle>
+            <DialogDescription>{t("list.deleteConfirmDescription")}</DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setConfirmDeleteId(null)}>
+              {t("actions.cancel", { ns: "common" })}
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={() => confirmDeleteId && handleDelete(confirmDeleteId)}
+              disabled={del.isPending}
+            >
+              {t("list.deleteConfirmAction")}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

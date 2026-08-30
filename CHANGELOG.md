@@ -39,20 +39,58 @@ TODO/FIXME/mock/dummy/temporary/hardcoded/console.log/debugger leftovers.
   API" version of this (the Domains slice); the true gap is six more
   domains wide. Left open deliberately — building six backends is not an
   audit-phase action — but now accurately tracked below and in CLAUDE.md.
-- Everything else audited clean or was fixed directly (below): routing
-  single-source-of-truth (invariant #1: the routing simulator only calls
-  `/routing/simulate`, no TS reimplementation found), deterministic
-  weighted pick and sticky-cookie-is-truth (invariants #4/§38), tenant
-  isolation (every one of 19 route groups in `apps/api/main.go` sits
-  behind `tenantMiddleware`; repository layer spot-checks all filter on
-  `organization_id`), CSRF/secrets/postback-dedup (invariant #3), no
-  hardcoded secrets, `.env` correctly gitignored, tracker hot path
-  (invariant #9 — `Handler.track` never blocks on persistence or
-  analytics; `eventbuf.Writer.Enqueue` is a non-blocking channel send),
-  DB indexes on tenant-scoped hot tables, Prometheus alert rules in
-  `infra/alerts.yml` cross-checked against actual metric names (all
-  resolve), `go build`/`vet`/`test -count=1 ./...` and `tsc`/`eslint`
-  clean, zero TODO/FIXME/console.log/debugger left in source.
+- **Related, same root cause:** the standalone Analytics report builder
+  (`features/analytics/*`) and the Overview dashboard (`(app)/overview`)
+  are also still 100% mock-data-driven. Unlike the seven domains above,
+  this isn't "never integrated" — the real `/analytics` backend exists
+  and is correctly wired elsewhere (`hooks/use-campaign-analytics.ts`
+  calls it for the campaign-detail chart) — it just never grew the
+  multi-dimension/funnel query capability this page's UI needs.
+  Legitimately deferred, not a wiring bug.
+- **Three real bugs found and fixed, not just documented:**
+  1. `campaign-cost-entries.tsx` deleted a cost entry with zero
+     confirmation, violating CLAUDE.md's destructive-action rule — every
+     sibling row-actions file (network, traffic source, postlanding)
+     gates delete behind a `Dialog`; this one didn't. Fixed, with new
+     `cost.json` i18n keys (en+ru).
+  2. `apps/internal/routing/weighted.go`'s doc comment claimed the
+     frontend had "a temporary simulator mock" mirroring the Go pick
+     logic — that file hasn't existed for a while; the simulator has
+     genuinely been a thin `/routing/simulate` client all along
+     (invariant #1 was never actually violated, the comment was just
+     stale). Corrected.
+  3. `use-current-member.ts`'s comment claimed "no auth session yet
+     (that's Phase 28)" — false, real `/auth/me` has existed since Phase
+     28. The actual reason it still reads the mock team roster (Custom
+     Metrics/Referral/Content Gallery have no backend of their own yet,
+     and switching identity source ahead of their integration phase
+     would break their mock "is this mine" checks) is now stated
+     accurately.
+- **Dead code removed** (zero importers, confirmed by grep before
+  deletion): `apps/web/src/stores/{campaigns,offers,event-mappings}.ts`
+  and `apps/web/src/lib/mock/{offers,event-mappings,conversions}.ts` —
+  all six pre-date the real API clients that replaced them.
+  `lib/mock/campaigns.ts` was kept — `tag-assignments.ts` (the live,
+  still-deferred Tags mock) still imports it.
+- Everything else audited clean: routing single-source-of-truth,
+  deterministic weighted pick and sticky-cookie-is-truth (invariants
+  #4/§38), tenant isolation (every one of 19 route groups in
+  `apps/api/main.go` sits behind `tenantMiddleware`; repository layer
+  spot-checked across 13+ domains, all filter on `organization_id` — the
+  only two queries without an explicit filter are `auth/repository.go`'s
+  `AcceptInvite`, correctly scoped upstream by a verified invite token
+  instead), CSRF/secrets/postback-dedup (invariant #3 — `event_ref`
+  enforced in code, not convention), no hardcoded secrets, `.env`
+  correctly gitignored, tracker hot path (invariant #9), DB indexes on
+  tenant-scoped hot tables, ClickHouse sort keys lead with
+  `organization_id`, LTV/cohort currency handling (invariant #7 — FX
+  rate looked up at the event's `OccurredAt`, never "now"), OpenTelemetry
+  tracing genuinely wired (real OTLP exporter + `otelhttp` instrumentation
+  on all 3 binaries), no sensitive data in any log call site, Prometheus
+  alert rules in `infra/alerts.yml` cross-checked against actual metric
+  names (all resolve), `go build`/`vet`/`test -count=1 ./...` and
+  `tsc`/`eslint` clean, zero TODO/FIXME/console.log/debugger left in
+  source.
 
 ### Fixed
 
@@ -65,11 +103,26 @@ TODO/FIXME/mock/dummy/temporary/hardcoded/console.log/debugger leftovers.
   p95 1.0–1.5ms against the 50ms budget with defaults), but an
   undocumented production knob; added the `DATABASE_URL?pool_max_conns=`
   tuning path.
+- `campaign-cost-entries.tsx` delete confirmation dialog, the two stale
+  comments, and the six dead files above — see Findings.
 
 ### Known issues
 
 - The seven-domain frontend-integration gap above — tracked in CLAUDE.md
   CURRENT STATE, not blocking, needs its own phase(s).
+- The Analytics report builder / Overview dashboard's missing
+  multi-dimension backend, above.
+- `components/ui/data-table.tsx` (the shared table every list screen
+  uses) never got column resizing or CSV/export wired, despite both
+  being in CLAUDE.md's own table rules (§64) — sorting, pagination,
+  column visibility, and search/filter are all real and consistently
+  used; resizing and export are structurally absent repo-wide.
+- Repository/handler-layer Go packages (network, offer, pixel, campaign,
+  streamset, cost, and ~18 others) sit at 0.0% unit-test coverage —
+  DB-backed logic is exercised only via the Phase 32 e2e scenario and
+  manual dev-stack verification. Core computation packages are well
+  covered (routing 81.7%, ltv 67.0%, attribution/event/macro/metrics
+  100%).
 
 ### Verified
 

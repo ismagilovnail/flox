@@ -27,7 +27,10 @@
     "loading": "Loading spend entries…",
     "loadError": "Couldn't load spend entries",
     "emptyTitle": "No spend logged yet",
-    "emptyDescription": "Add a day's spend above to start tracking Profit/ROI/CPA on the Overview tab."
+    "emptyDescription": "Add a day's spend above to start tracking Profit/ROI/CPA on the Overview tab.",
+    "deleteConfirmTitle": "Delete this spend entry?",
+    "deleteConfirmDescription": "This removes it from Profit/ROI/CPA calculations. This can't be undone.",
+    "deleteConfirmAction": "Delete"
   },
   "toast": {
     "saved": "Spend saved",

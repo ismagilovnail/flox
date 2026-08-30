@@ -3,10 +3,14 @@
 import { useTeamStore } from "@/stores/team";
 
 /** Matches the mock signed-in user (Owner) already seeded in stores/team.ts.
- * There is no auth session yet (that's Phase 28) — every role-gated feature
- * (Custom Metrics, Referral, Content Gallery, …) needs the same "who am I,
- * what can I manage" lookup, so it lives here once instead of being
- * re-declared per feature. */
+ * Deliberately NOT wired to the real GET /auth/me session (which has existed
+ * since Phase 28) — Custom Metrics, Referral, and Content Gallery are all
+ * still reading from lib/mock/* fixtures with no backend of their own,
+ * and switching their "who am I, what can I manage" identity source to the
+ * real session ahead of each feature's own backend-integration phase would
+ * silently break their "is this mine" checks against still-mock seed data
+ * that only knows about mock member ids. Revisit this alongside whichever
+ * phase gives each of those three features a real backend. */
 const CURRENT_USER_MEMBER_ID = "mem_owner";
 
 export function useCurrentMember() {

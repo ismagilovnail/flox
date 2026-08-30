@@ -41,12 +41,13 @@ func VisitHash(key string) uint64 {
 // pickWeighted selects one flow out of a stream set's flows, deterministically
 // (§38).
 //
-// It is the Go half of a contract the frontend's temporary simulator mock
-// mirrors (lib/routing-simulate.ts's pickWeightedFlow): given the same key and
-// the same weights, both must select the same flow. The key itself is derived
-// by the caller — the tracker fingerprints the visit, the simulator derives it
-// from the form — because what identifies "the same visit" is an HTTP concern
-// this package deliberately knows nothing about.
+// It backs both the tracker's live redirect decision and the routing
+// simulator UI, which calls this same logic through the /routing/simulate
+// API rather than reimplementing it in TypeScript (invariant #1 — single
+// source of truth). The key itself is derived by the caller — the tracker
+// fingerprints the visit, the simulate endpoint derives it from the request
+// — because what identifies "the same visit" is an HTTP concern this package
+// deliberately knows nothing about.
 //
 // Eligibility is decided BEFORE the draw: only flows that are both Active and
 // carry a positive weight enter it, and the shares are relative to the sum of
