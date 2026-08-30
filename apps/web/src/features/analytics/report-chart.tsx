@@ -88,7 +88,10 @@ export function ReportLineChart({
       title="Trend"
       action={<MetricPicker metrics={metrics} value={activeMetric} onChange={setMetric} />}
     >
-      <ReactECharts option={option} notMerge style={{ height: "100%", width: "100%" }} opts={{ renderer: "svg" }} />
+      {/* key={mode}: remount on theme change instead of letting zrender
+          animate the transition — see line-metric-chart.tsx's comment on
+          the interpolate1DArray crash this avoids. */}
+      <ReactECharts key={mode} option={option} notMerge style={{ height: "100%", width: "100%" }} opts={{ renderer: "svg" }} />
     </ChartCard>
   );
 }
@@ -139,7 +142,10 @@ export function ReportBarChart({
       title="Breakdown"
       action={<MetricPicker metrics={metrics} value={activeMetric} onChange={setMetric} />}
     >
-      <ReactECharts option={option} notMerge style={{ height: "100%", width: "100%" }} opts={{ renderer: "svg" }} />
+      {/* key={mode}: remount on theme change instead of letting zrender
+          animate the transition — see line-metric-chart.tsx's comment on
+          the interpolate1DArray crash this avoids. */}
+      <ReactECharts key={mode} option={option} notMerge style={{ height: "100%", width: "100%" }} opts={{ renderer: "svg" }} />
     </ChartCard>
   );
 }

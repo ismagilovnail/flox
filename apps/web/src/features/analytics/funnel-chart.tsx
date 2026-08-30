@@ -75,7 +75,10 @@ export function FunnelChart() {
       </CardHeader>
       <CardContent className="grid grid-cols-1 gap-4 lg:grid-cols-[1.2fr_1fr]">
         <div className="h-96">
-          <ReactECharts option={option} notMerge style={{ height: "100%", width: "100%" }} opts={{ renderer: "svg" }} />
+          {/* key={mode}: remount on theme change instead of letting zrender
+              animate the transition — see line-metric-chart.tsx's comment
+              on the interpolate1DArray crash this avoids. */}
+          <ReactECharts key={mode} option={option} notMerge style={{ height: "100%", width: "100%" }} opts={{ renderer: "svg" }} />
         </div>
         <div className="flex flex-col gap-1.5 self-center">
           {steps.map((s, i) => {

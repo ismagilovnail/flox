@@ -64,7 +64,14 @@ export function LineMetricChart({
 
   return (
     <ChartCard title={title} action={action}>
+      {/* key={mode}: without it, toggling theme calls setOption on the
+          existing zrender instance, which animates from the old option to
+          the new one and throws "Cannot read properties of undefined
+          (reading 'length')" inside zrender's interpolate1DArray mid-
+          transition (reproduced 2026-08-30). Remounting sidesteps the
+          animated-transition code path entirely. */}
       <ReactECharts
+        key={mode}
         option={option}
         notMerge
         style={{ height: "100%", width: "100%" }}
