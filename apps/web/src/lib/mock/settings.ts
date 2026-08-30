@@ -19,9 +19,11 @@ export const TIMEZONES = [
   "Asia/Singapore",
 ];
 
-/** Matches the mock signed-in workspace in components/shell/workspace-selector.tsx. */
+/** This Settings page (§30's organization/API-keys/integrations panels)
+ * has no real backend yet — components/shell/workspace-selector.tsx is
+ * real (Phase 28B, GET /auth/me) and no longer reads this fixture. */
 export const ORG_SETTINGS: OrgSettings = {
-  name: "Nail Ismagilov",
+  name: "Acme Media",
   timezone: "UTC",
   currency: "USD",
 };

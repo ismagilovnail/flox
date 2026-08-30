@@ -57,13 +57,16 @@ export type TeamMember = {
   lastActiveAt: string | null;
 };
 
-/** The Owner row matches the mock signed-in user in components/shell/user-menu.tsx —
- * this IS the workspace owner, not a stand-in. */
+/** The Owner row is the "current member" hooks/use-current-member.ts reads
+ * for Custom Metrics/Referral/Content Gallery (none of which have a real
+ * backend yet — see that hook's own doc comment). components/shell/
+ * user-menu.tsx and workspace-selector.tsx are real (Phase 28B, GET
+ * /auth/me) and no longer read this fixture. */
 export const TEAM_MEMBERS: TeamMember[] = [
   {
     id: "mem_owner",
-    name: "Nail Ismagilov",
-    email: "nailismagilovnick@gmail.com",
+    name: "Alex Rivera",
+    email: "alex@floxlink.io",
     role: "Owner",
     status: "active",
     invitedAt: "2026-01-15T00:00:00Z",
