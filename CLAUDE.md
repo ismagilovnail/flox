@@ -19,91 +19,71 @@ referenced below as §N).
 ## CURRENT STATE — UPDATE THIS EVERY PHASE
 
 ```
-CURRENT PHASE : PHASE 33 — PRODUCTION
-STATUS        : done — §61's full list (Dockerfiles, docker-compose.dev.
-                yml, docker-compose.test.yml, production deployment docs,
-                environment documentation, backup strategy, migration
-                strategy, monitoring, alerts) delivered for all eight
-                services (web/api/tracker/worker/postgres/clickhouse/
-                redis/object-storage). Every artifact was actually run,
-                not just authored:
-                Dockerfiles: apps/api/Dockerfile (+ its `migrate` target,
-                a one-shot goose runner), apps/tracker/Dockerfile,
-                apps/worker/Dockerfile, apps/web/Dockerfile (needed
-                next.config.ts's output:"standalone" added, plus a new
-                GET /api/health route). All four built clean; each image
-                run standalone and its /health (web: /api/health)
-                confirmed 200 before being wired into compose.
-                infra/docker-compose.test.yml: the full containerized
-                stack, built and brought up for real (`docker compose -f
-                infra/docker-compose.test.yml up --build`) — all 8
-                containers reached healthy, then verified with a real
-                signup (POST /auth/signup through the containerized api,
-                real CSRF/Origin check, real Postgres write, real session
-                cookie) and real /metrics scrapes on api/tracker/worker
-                (43/47/43 flox_ series respectively) through the
-                containerized web frontend (GET /login returned 200).
-                Fixtures cleaned up, stack torn down (`down -v`)
-                afterward.
-                Found and fixed one real near-miss while validating this:
-                the first `docker compose -f infra/docker-compose.test.
-                yml up` (no explicit project name yet) shared Compose's
-                default "infra" project name with docker-compose.dev.yml
-                and RECREATED the dev stack's live postgres/clickhouse/
-                redis/minio containers under the test config instead of
-                creating separate ones. Data survived (`down` without
-                `-v` never touches named volumes; docker-compose.dev.yml
-                itself was unchanged, so `up -d` on it reattached the
-                original volumes intact — verified: organizations count
-                back to 1, "Phase 27 Dev Org" intact) but the containers
-                and their identity were briefly replaced mid-session.
-                Fixed permanently with an explicit `name: flox-test` at
-                the top of docker-compose.test.yml, documented in both
-                that file and docs/deployment.md so it can't recur.
-                infra/alerts.yml: 8 Prometheus alerting rules over
-                Phase 29's nine already-wired metrics (tracking latency
-                vs CLAUDE.md non-negotiable #9's own 50ms p95 budget,
-                event loss, event queue backlog, postback dead-letter
-                rate, analytics latency, 3x service-down) —
-                `promtool check rules` clean, and confirmed loaded via a
-                real dev-stack Prometheus's own /api/v1/rules (all 8
-                present). infra/prometheus.yml now loads them via
-                rule_files:; docker-compose.dev.yml's prometheus service
-                gained the matching volume mount. No Alertmanager ships
-                anywhere (no real notification receiver has ever existed
-                in this project — see infra/alerts.yml's own comment);
-                docs/deployment.md documents an example config, not run.
-                docs/deployment.md, docs/environment.md, docs/backup.md,
-                docs/migrations.md: new. backup.md's Postgres/ClickHouse
-                commands were run for real against the dev stack (a real
-                pg_dump, a real ClickHouse Native-format table export)
-                before being written down, not copied from memory.
-                environment.md's "NODE_ENV only gates secureCookies"
-                claim came from grepping the actual Go source for every
-                cfg.Env/NODE_ENV reference, not assumption.
-                No tracking-URL generation API question from Phase 32
-                revisited or touched this phase — still open, still
-                separately tracked below.
-                Verified: gofmt/go vet/go build/go test -count=1 ./...
-                green repo-wide; tsc/eslint/vitest clean on apps/web
-                (next.config.ts and proxy.ts both changed this phase —
-                proxy.ts needed a matcher fix after the new /api/health
-                route was found to be redirected to /login by the
-                existing session-guard middleware, caught by actually
-                curling the built container rather than assumed working).
-LAST COMMIT   : feat(infra): Dockerfiles, deployment stack, alerts (Phase 33)
-NEXT          : confirm scope before starting. No open known issues
-                remain for Production itself. Per §9 the next fixed phase
-                is Phase 34 — FINAL AUDIT (§62): UX/UI/accessibility/
+CURRENT PHASE : PHASE 34 — FINAL AUDIT
+STATUS        : done — §62's full checklist audited (UX/UI/accessibility/
                 security/tenant isolation/performance/database/API/
                 routing/attribution/analytics/LTV/testing/observability/
-                documentation audit, plus a repo-wide search for
-                TODO/FIXME/mock/dummy/temporary/hardcoded/console.log/
-                debugger leftovers to remove or document.
-                Separately tracked, not blocking: the missing tracking-URL
-                generation API (no /domains or /tracking-links endpoints,
-                flagged in Phase 32) is real product-surface work worth
-                its own phase or a slice of a nearby one — still open.
+                documentation), plus the repo-wide TODO/FIXME/mock/dummy/
+                temporary/hardcoded/console.log/debugger sweep. Zero
+                TODO/FIXME/console.log/debugger found in source.
+                Headline finding (not fixed this phase — real product-
+                surface work, not an audit-phase action): seven whole
+                frontend feature domains were built frontend-first
+                (Phases 14/14.5-14.9) against apps/web/src/lib/mock/*.ts
+                and never taken through a backend-integration phase —
+                Domains, Settings (organization/API-keys/integrations
+                panels), Tags, Custom Metrics, Report Presets, Referral,
+                Content Gallery. Confirmed by absence: no matching
+                apps/internal/* Go package, no apps/web/src/lib/api/*.ts
+                client, no route in apps/api/main.go for any of the
+                seven; their zustand stores import straight from lib/
+                mock/. This is wider than the "missing tracking-URL
+                generation API" gap Phase 32 flagged (that was only the
+                Domains slice of it) — CURRENT STATE previously
+                undersold the true scope. Concretely, CLAUDE.md
+                non-negotiable #12 (custom-metric formula safety) is
+                unenforceable today: no formula-evaluation engine exists
+                anywhere, frontend or backend.
+                Everything else audited clean, or fixed directly:
+                routing single-source-of-truth (invariant #1 — routing
+                simulator only calls /routing/simulate, no TS
+                reimplementation), deterministic weighted pick + sticky-
+                cookie-is-truth (#4, §38), tenant isolation (all 19 route
+                groups in apps/api/main.go sit behind tenantMiddleware;
+                repository-layer spot checks all filter on
+                organization_id), CSRF/secrets/postback-dedup (#3), no
+                hardcoded secrets, .env correctly gitignored, tracker hot
+                path (#9 — Handler.track never blocks on persistence or
+                analytics; eventbuf.Writer.Enqueue is a non-blocking
+                channel send), DB indexes on tenant-scoped hot tables,
+                infra/alerts.yml's 8 rules cross-checked against actual
+                metric names (all resolve), go build/vet/test -count=1
+                ./... and tsc/eslint clean.
+                Fixed: apps/web/src/app/globals.css gained the one global
+                `@media (prefers-reduced-motion: reduce)` rule (§66) —
+                previously absent entirely, so no component respected
+                the OS setting. docs/deployment.md gained a Connection
+                pool sizing section documenting that none of the four Go
+                binaries set explicit Postgres/Redis pool limits
+                (pgxpool.New/redis.Options both ride library defaults) —
+                not a bug (Phase 31's real load test measured p95
+                1.0-1.5ms against the 50ms budget with defaults as-is),
+                but a previously-undocumented production tuning knob;
+                documented the DATABASE_URL?pool_max_conns= path.
+                Verified: gofmt -l/go vet/go build/go test -count=1
+                ./... clean repo-wide; tsc --noEmit/eslint clean on
+                apps/web.
+LAST COMMIT   : docs(audit): Phase 34 final audit — reduced motion, pool sizing docs
+NEXT          : confirm scope before starting. Two real candidates, not
+                ranked: (a) the seven-domain frontend-integration gap
+                above (Domains, Settings, Tags, Custom Metrics, Report
+                Presets, Referral, Content Gallery) — likely several
+                phases' worth, probably slice-by-slice like the earlier
+                domain-integration phases (Traffic Sources, Networks/
+                Offers, Stream Sets) rather than one giant phase; (b) per
+                §9's fixed phase order, Phase 34 was the last listed
+                phase — anything past it is v3-scope work the user
+                should scope explicitly, not an assumed default.
 
 ```
 

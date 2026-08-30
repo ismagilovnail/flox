@@ -170,3 +170,18 @@
     font-variant-numeric: tabular-nums;
   }
 }
+
+/* §66 ACCESSIBILITY: reduced motion. Radix/tw-animate-css animations and
+   Tailwind transitions otherwise run unconditionally — this is the one
+   global switch that makes every one of them respect the OS setting
+   without touching each component. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

@@ -5,6 +5,77 @@ per-phase, matching `CLAUDE.md`'s phase protocol. The one exception is
 [Between phases], below: spec amendments and the code changes that follow from
 them land between phases and would otherwise be invisible here.
 
+## [Final Audit] — Phase 34: repo-wide audit, one real product-surface gap surfaced
+
+### Scope
+
+§62's full checklist: UX/UI/accessibility/security/tenant isolation/
+performance/database/API/routing/attribution/analytics/LTV/testing/
+observability/documentation audit, plus a repo-wide search for
+TODO/FIXME/mock/dummy/temporary/hardcoded/console.log/debugger leftovers.
+
+### Findings
+
+- **Major, not fixed this phase (real product-surface work):** seven
+  whole frontend feature domains — Domains, Settings (organization/
+  API-keys/integrations panels), Tags, Custom Metrics, Report Presets,
+  Referral, Content Gallery — were built frontend-first in Phases 14/
+  14.5–14.9 against `apps/web/src/lib/mock/*.ts` and were never taken
+  through a backend-integration phase, unlike every other domain (Stream
+  Sets, Networks/Offers, Traffic Sources, Conversions, Postback Logs,
+  etc., each of which got its own "wired to a real…API" phase). Confirmed
+  by absence: no `apps/internal/{tags,custommetrics,referral,
+  contentgallery,domains,settings}` Go package, no matching
+  `apps/web/src/lib/api/*.ts` client, no route registered in
+  `apps/api/main.go`; their zustand stores (`apps/web/src/stores/{tags,
+  custom-metrics,domains,referral,content-gallery,settings,report-
+  presets}.ts`) import directly from `lib/mock/`. Concretely: CLAUDE.md
+  non-negotiable #12 (custom-metric formula safety — division-by-zero →
+  empty, registry-stable ids, no LTV mixing, team-private scope) is
+  currently unenforceable because no formula-evaluation engine exists
+  anywhere, frontend or backend — `apps/internal/analytics/analytics.go`
+  only mentions "custom metrics" in a comment. CLAUDE.md's CURRENT STATE
+  previously flagged only the narrower "missing tracking-URL generation
+  API" version of this (the Domains slice); the true gap is six more
+  domains wide. Left open deliberately — building six backends is not an
+  audit-phase action — but now accurately tracked below and in CLAUDE.md.
+- Everything else audited clean or was fixed directly (below): routing
+  single-source-of-truth (invariant #1: the routing simulator only calls
+  `/routing/simulate`, no TS reimplementation found), deterministic
+  weighted pick and sticky-cookie-is-truth (invariants #4/§38), tenant
+  isolation (every one of 19 route groups in `apps/api/main.go` sits
+  behind `tenantMiddleware`; repository layer spot-checks all filter on
+  `organization_id`), CSRF/secrets/postback-dedup (invariant #3), no
+  hardcoded secrets, `.env` correctly gitignored, tracker hot path
+  (invariant #9 — `Handler.track` never blocks on persistence or
+  analytics; `eventbuf.Writer.Enqueue` is a non-blocking channel send),
+  DB indexes on tenant-scoped hot tables, Prometheus alert rules in
+  `infra/alerts.yml` cross-checked against actual metric names (all
+  resolve), `go build`/`vet`/`test -count=1 ./...` and `tsc`/`eslint`
+  clean, zero TODO/FIXME/console.log/debugger left in source.
+
+### Fixed
+
+- `apps/web/src/app/globals.css`: added the one global
+  `@media (prefers-reduced-motion: reduce)` rule (§66 accessibility) —
+  previously absent entirely; no component respected the OS setting.
+- `docs/deployment.md`: documented that none of the four Go binaries set
+  explicit Postgres/Redis pool limits (`pgxpool.New`/`redis.Options` both
+  use library defaults) — not a bug (Phase 31's real load test measured
+  p95 1.0–1.5ms against the 50ms budget with defaults), but an
+  undocumented production knob; added the `DATABASE_URL?pool_max_conns=`
+  tuning path.
+
+### Known issues
+
+- The seven-domain frontend-integration gap above — tracked in CLAUDE.md
+  CURRENT STATE, not blocking, needs its own phase(s).
+
+### Verified
+
+`go build`/`go vet`/`gofmt -l`/`go test -count=1 ./...` clean repo-wide;
+`tsc --noEmit`/`eslint` clean on `apps/web`.
+
 ## [Production] — Phase 33: Dockerfiles, deployment, monitoring, alerts
 
 ### Scope

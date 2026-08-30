@@ -108,6 +108,31 @@ plain `/health` for liveness (should the process itself be restarted).
 - **`apps/web`** is a stateless Next.js server — scales horizontally with
   no special coordination either.
 
+### Connection pool sizing
+
+None of the four Go binaries set explicit pool limits in code —
+`internal/postgres.NewPool` calls `pgxpool.New(ctx, databaseURL)` with no
+`pgxpool.Config`, and `internal/chconn.NewConn` opens the ClickHouse HTTP
+client with no `MaxOpenConns`/`MaxIdleConns`. Both client libraries fall
+back to their own defaults (pgx: `max(4, runtime.NumCPU())` connections
+per pool; clickhouse-go: unbounded HTTP client pooling), which is fine at
+dev-stack scale but is a real knob to turn under production concurrency,
+especially for `apps/tracker`, which opens one pool per replica and issues
+several Postgres round trips per click (`routingstore.LoadRoutingConfig`).
+Tune it without a code change via the DSN itself — pgx reads pool
+settings straight out of the connection string:
+
+```text
+DATABASE_URL=postgres://user:pass@host:5432/flox?pool_max_conns=50&pool_min_conns=5
+```
+
+`internal/rediscache` is in the same position — no explicit `PoolSize` on
+its `redis.Options`, so it also rides the go-redis client's default. The
+one outbound client that *does* set explicit limits is unrelated to any
+datastore: `apps/worker`'s postback-delivery HTTP transport
+(`MaxIdleConns: 100`, `apps/worker/main.go`), sized for the partner
+webhooks it calls, not for Postgres/ClickHouse/Redis.
+
 ## Monitoring and alerting
 
 `docs/observability.md` (Phase 29) already covers the nine tracked
