@@ -33,6 +33,7 @@ export function FunnelChart() {
     return {
       textStyle: base.textStyle,
       animationDuration: base.animationDuration,
+      animationDurationUpdate: base.animationDurationUpdate,
       tooltip: {
         ...base.tooltip,
         trigger: "item" as const,

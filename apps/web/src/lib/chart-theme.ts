@@ -42,6 +42,21 @@ export function chartBaseOption(mode: ChartMode) {
     textStyle: { fontFamily: FONT_SANS, color: t.text },
     animationDuration: 250,
     animationEasing: "cubicOut" as const,
+    // 0, not omitted: we reproduced "Cannot read properties of undefined
+    // (reading 'length')" inside zrender's interpolate1DArray on theme
+    // toggle (fixed separately with key={mode} on each ReactECharts) —
+    // that crash comes from zrender's setOption transition interpolating
+    // between two series[].data arrays point-by-point, which breaks the
+    // same way whenever the array *length* differs between the old and
+    // new option, not just when identity changes. A re-fetch (TanStack
+    // Query's default refetch-on-window-focus, a filter change) can hand
+    // ECharts a differently-sized array on a chart that key={mode} does
+    // NOT remount, so the same crash is reachable there too even though
+    // we haven't reproduced that path directly (no seeded campaign data
+    // to refetch against, 2026-08-31). Disabling just the *update*
+    // transition keeps the 250ms initial reveal (animationDuration
+    // above) while removing the only code path that can hit this.
+    animationDurationUpdate: 0,
     grid: { left: 8, right: 8, top: 24, bottom: 8, containLabel: true },
     xAxis: {
       type: "time" as const,
