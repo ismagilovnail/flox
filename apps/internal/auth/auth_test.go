@@ -627,7 +627,7 @@ func TestRequirePermissionMiddleware(t *testing.T) {
 
 	handlerFor := func(userID, orgID string) http.Handler {
 		protected := requireWrite(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(http.StatusOK) }))
-		return tenant.NewMiddleware(fixedResolver{orgID: orgID, userID: userID}, logger)(protected)
+		return tenant.NewMiddleware(fixedResolver{orgID: orgID, userID: userID}, logger, false)(protected)
 	}
 
 	newRequest := func() *http.Request {

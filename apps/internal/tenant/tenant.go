@@ -52,7 +52,12 @@ type SessionResolver interface {
 // NewMiddleware builds the chi-compatible middleware every tenant-scoped
 // route mounts. A request with no session cookie, or one ResolveSession
 // rejects, never reaches a handler.
-func NewMiddleware(resolver SessionResolver, logger *slog.Logger) func(http.Handler) http.Handler {
+//
+// secureCookies must match the Secure attribute auth.Handler used when it
+// set the cookie (false in local dev, true anywhere served over HTTPS) —
+// clearing a cookie is itself a Set-Cookie, and a mismatched Secure flag
+// means the browser won't recognize it as the same cookie to overwrite.
+func NewMiddleware(resolver SessionResolver, logger *slog.Logger, secureCookies bool) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			cookie, err := r.Cookie(CookieName)
@@ -63,6 +68,18 @@ func NewMiddleware(resolver SessionResolver, logger *slog.Logger) func(http.Hand
 
 			orgID, userID, err := resolver.ResolveSession(r.Context(), cookie.Value)
 			if err != nil {
+				// A present-but-invalid cookie (expired, revoked, or its
+				// session row gone) left uncleared would keep proxy.ts's
+				// cookie-*presence* check convinced the visitor is signed
+				// in forever: it bounces /login back to /overview, whose
+				// AuthGuard 401s here and bounces back to /login — an
+				// infinite redirect loop with no error surfaced anywhere,
+				// which is exactly what a stale dev session produced
+				// (2026-08-30, reported as a black screen with nothing
+				// loading). Clearing it here means the very next hit
+				// breaks the loop on its own, no manual cookie-clear
+				// needed.
+				clearSessionCookie(w, secureCookies)
 				apierror.Write(w, logger, err)
 				return
 			}
@@ -72,6 +89,22 @@ func NewMiddleware(resolver SessionResolver, logger *slog.Logger) func(http.Hand
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	}
+}
+
+// clearSessionCookie mirrors apps/internal/auth.Handler's own (unexported)
+// clearSessionCookie — duplicated rather than imported because tenant must
+// not import auth (see the package doc comment on the import-cycle this
+// avoids). Keep the two in sync if either cookie's attributes change.
+func clearSessionCookie(w http.ResponseWriter, secureCookies bool) {
+	http.SetCookie(w, &http.Cookie{
+		Name:     CookieName,
+		Value:    "",
+		Path:     "/",
+		MaxAge:   -1,
+		HttpOnly: true,
+		Secure:   secureCookies,
+		SameSite: http.SameSiteLaxMode,
+	})
 }
 
 // RequireSameOrigin is §54's CSRF defense: SameSite=Lax on the session

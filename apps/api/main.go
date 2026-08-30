@@ -160,7 +160,7 @@ func run() error {
 	// http.Handler) even though it's now two middlewares composed, so
 	// none of this file's 17 r.Use(tenantMiddleware) call sites change.
 	csrfCheck := tenant.RequireSameOrigin(cfg.AppURL, logger)
-	sessionCheck := tenant.NewMiddleware(authSvc, logger)
+	sessionCheck := tenant.NewMiddleware(authSvc, logger, cfg.Env != "development")
 	tenantMiddleware := func(next http.Handler) http.Handler { return csrfCheck(sessionCheck(next)) }
 
 	// signup/login/accept-invite are POST (mutating) but pre-session, so
