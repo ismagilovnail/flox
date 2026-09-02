@@ -6,6 +6,10 @@
 #
 #   docker build -f apps/web/Dockerfile -t flox/web \
 #     --build-arg NEXT_PUBLIC_API_URL=https://api.example.com apps/web
+#
+# infra/docker-compose.dev.yml's `web` service targets `deps` (below) and
+# runs `npm run dev` against a bind-mounted apps/web tree instead of using
+# the production `builder`/`web` stages — hot reload, no host networking.
 
 # ---------- dependencies ----------
 FROM node:24-alpine AS deps

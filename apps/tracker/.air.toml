@@ -1,0 +1,19 @@
+# Hot-reload config for the tracker Dockerfile's `dev` stage (infra/
+# docker-compose.dev.yml). Only used inside that container — irrelevant to
+# a host `go run`/`make tracker-build` workflow.
+root = "."
+tmp_dir = "tmp/tracker"
+
+[build]
+cmd = "go build -o ./tmp/tracker/bin ./tracker"
+bin = "tmp/tracker/bin"
+include_ext = ["go"]
+exclude_dir = ["tmp", "bin", "web", "e2e"]
+delay = 200
+stop_on_error = true
+
+[log]
+time = false
+
+[misc]
+clean_on_exit = false

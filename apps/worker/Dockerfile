@@ -5,6 +5,11 @@
 # file's comment:
 #
 #   docker build -f apps/worker/Dockerfile -t flox/worker apps/
+#
+# The `dev` target (infra/docker-compose.dev.yml) is what actually runs
+# locally day to day: air hot-reload over a bind-mounted apps/ tree,
+# reachable by other containers as "worker" on the compose network — no
+# host networking involved.
 
 # ---------- build ----------
 FROM golang:1.27-alpine AS builder
@@ -20,6 +25,29 @@ COPY . .
 
 ARG VERSION=dev
 RUN go build -trimpath -ldflags "-s -w -X main.version=${VERSION}" -o /out/worker ./worker
+
+# ---------- dev (air hot reload, infra/docker-compose.dev.yml) ----------
+# Not layered on `builder` on purpose: the whole point of this stage is
+# that `apps/` gets bind-mounted over /src at container start (compose's
+# `volumes:`), overwriting whatever COPY put there at build time — only
+# the go.mod/go.sum download below needs to happen at build time, so a
+# source change never requires an image rebuild, just an air restart.
+FROM golang:1.27-alpine AS dev
+
+ENV CGO_ENABLED=0 GOOS=linux
+RUN go install github.com/air-verse/air@v1.61.7
+
+WORKDIR /src
+COPY go.mod go.sum ./
+RUN go mod download
+COPY . .
+
+EXPOSE 8082
+# tmp_dir (worker/.air.toml) has to exist before air's watcher will
+# create it under it — and since apps/ is bind-mounted over /src at
+# container start (replacing whatever COPY put there at build time),
+# that can only happen here, not via an image-build-time RUN.
+ENTRYPOINT ["sh", "-c", "mkdir -p tmp/worker && exec air -c worker/.air.toml"]
 
 # ---------- runtime ----------
 FROM alpine:3.21 AS worker

@@ -1,18 +1,23 @@
-# Local dev infrastructure (§33, Phase 16). Values match .env.example
-# exactly so `cp .env.example .env` + `docker compose -f
-# infra/docker-compose.dev.yml up -d` need no edits to work together.
+# Local dev infrastructure AND the four app binaries (§33, Phase 16;
+# containerized dev loop added later — see infra/README.md). Every FLOX
+# service runs as a container on this file's one default bridge network,
+# addressed by service name (postgres, clickhouse, redis, minio, mailhog,
+# api, tracker, worker, web) — nothing here uses host networking, and
+# nothing needs to: `docker compose -f infra/docker-compose.dev.yml up -d`
+# is the whole dev stack.
 #
-# apps/api doesn't connect to any of these yet (Phase 16 has no DB/cache
-# calls) — this file exists now because Postgres (Phase 17), ClickHouse
-# (Phase 22-ish), and Redis (Phase 39-ish for sticky cache; wired for real
-# starting Phase 23, as the conversion engine's progression-check fast path
-# — see apps/internal/conversion/redis.go) all need somewhere to run
-# locally, and standing the containers up once is easier than re-deriving
-# the compose file service-by-service later.
+# api/tracker/worker build the `dev` target of their own Dockerfile (air
+# hot-reload over a bind-mounted apps/ tree — code edits restart the
+# binary in ~1s, no image rebuild); web targets the `deps` stage and runs
+# `npm run dev` the same way. Go module/build caches and web's
+# node_modules/.next live in named volumes so a container recreate
+# doesn't redownload/rebuild everything from scratch.
 #
-# prometheus (§53, Phase 29) is the one service here that scrapes OUT to
-# the host rather than being scraped/connected to BY apps/api et al — see
-# prometheus.yml's own comment.
+# Values match .env.example's defaults for anything driven from the host
+# (goose CLI, `go test`, etc.) — the app containers below override
+# DATABASE_URL/CLICKHOUSE_URL/REDIS_URL/S3_ENDPOINT to the in-network
+# service names instead of localhost, same pattern as
+# docker-compose.test.yml.
 services:
   postgres:
     image: postgres:16-alpine
@@ -80,14 +85,188 @@ services:
       timeout: 5s
       retries: 10
 
+  mailhog:
+    # Not part of any §N in the spec — this project has no SMTP/email-
+    # provider integration anywhere yet (see apps/internal/auth/model.go's
+    # own comment: team invites deliberately generate a copyable link
+    # instead of a real email, an explicit Phase 28 scope decision).
+    # Added ahead of that so a real SMTP client has somewhere to send to
+    # in dev the moment it's built — catches outgoing mail instead of
+    # actually delivering it, web UI at :8025 to inspect what was "sent".
+    # No healthcheck: the image ships no shell/wget/nc to run one with,
+    # and nothing else here depends_on it.
+    image: mailhog/mailhog:v1.0.1
+    ports:
+      - "1025:1025" # SMTP — matches SMTP_URL in .env.example
+      - "8025:8025" # web UI
+
+  # One-shot goose runner (docs/migrations.md) — applies every Postgres
+  # migration before api/tracker/worker start, so none of them race each
+  # other applying schema changes. Same `migrate` Dockerfile target
+  # docker-compose.test.yml uses. ClickHouse needs no equivalent step:
+  # chstore.Migrate's idempotent CREATE ... IF NOT EXISTS runs inside
+  # apps/api and apps/worker at their own startup (docs/migrations.md).
+  migrate:
+    build:
+      context: ../apps
+      dockerfile: api/Dockerfile
+      target: migrate
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command: ["postgres://flox:flox@postgres:5432/flox?sslmode=disable", "up"]
+
+  api:
+    build:
+      context: ../apps
+      dockerfile: api/Dockerfile
+      target: dev
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      clickhouse:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      mailhog:
+        condition: service_started
+    environment:
+      DATABASE_URL: postgres://flox:flox@postgres:5432/flox?sslmode=disable
+      CLICKHOUSE_URL: http://clickhouse:8123
+      CLICKHOUSE_DATABASE: flox
+      CLICKHOUSE_USER: flox
+      CLICKHOUSE_PASSWORD: ""
+      REDIS_URL: redis://redis:6379/0
+      S3_ENDPOINT: http://minio:9000
+      S3_REGION: us-east-1
+      S3_BUCKET: flox
+      S3_ACCESS_KEY_ID: flox-minio-admin
+      S3_SECRET_ACCESS_KEY: flox-minio-secret
+      # apps/internal/auth's signup flow sends a real email-verification
+      # link over this — mailhog catches it (web UI at :8025) instead of
+      # actually delivering it, same as every other dev credential here.
+      SMTP_URL: smtp://mailhog:1025
+      MAIL_FROM: "FLOX <no-reply@floxlink.io>"
+      # The browser's own Origin (localhost:3000, web's host-published
+      # port) — apps/internal/tenant.RequireSameOrigin (§54 CSRF) compares
+      # against this literally, so it must never be the in-network "web"
+      # hostname. Same reasoning as docker-compose.test.yml's api service.
+      APP_URL: http://localhost:3000
+    volumes:
+      - ../apps:/src
+      - api_go_mod_cache:/go/pkg/mod
+      - api_go_build_cache:/root/.cache/go-build
+    ports:
+      - "8080:8080"
+    healthcheck:
+      # web's depends_on below needs this — the `dev` Dockerfile stage
+      # has no HEALTHCHECK of its own (only the production runtime stage
+      # does), so it's declared here instead.
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://127.0.0.1:8080/health || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 20s
+
+  tracker:
+    build:
+      context: ../apps
+      dockerfile: tracker/Dockerfile
+      target: dev
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      clickhouse:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgres://flox:flox@postgres:5432/flox?sslmode=disable
+      CLICKHOUSE_URL: http://clickhouse:8123
+      CLICKHOUSE_DATABASE: flox
+      CLICKHOUSE_USER: flox
+      CLICKHOUSE_PASSWORD: ""
+      REDIS_URL: redis://redis:6379/0
+    volumes:
+      - ../apps:/src
+      - tracker_go_mod_cache:/go/pkg/mod
+      - tracker_go_build_cache:/root/.cache/go-build
+    ports:
+      - "8081:8081"
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://127.0.0.1:8081/health || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 20s
+
+  worker:
+    build:
+      context: ../apps
+      dockerfile: worker/Dockerfile
+      target: dev
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      clickhouse:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgres://flox:flox@postgres:5432/flox?sslmode=disable
+      CLICKHOUSE_URL: http://clickhouse:8123
+      CLICKHOUSE_DATABASE: flox
+      CLICKHOUSE_USER: flox
+      CLICKHOUSE_PASSWORD: ""
+      REDIS_URL: redis://redis:6379/0
+      S3_ENDPOINT: http://minio:9000
+      S3_REGION: us-east-1
+      S3_BUCKET: flox
+      S3_ACCESS_KEY_ID: flox-minio-admin
+      S3_SECRET_ACCESS_KEY: flox-minio-secret
+    volumes:
+      - ../apps:/src
+      - worker_go_mod_cache:/go/pkg/mod
+      - worker_go_build_cache:/root/.cache/go-build
+    ports:
+      - "8082:8082"
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://127.0.0.1:8082/health || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 20s
+
+  web:
+    build:
+      context: ../apps/web
+      dockerfile: Dockerfile
+      target: deps
+    working_dir: /app
+    command: ["npm", "run", "dev"]
+    environment:
+      # NEXT_PUBLIC_* is inlined into the client bundle only at `next
+      # build` time — `next dev` reads it live from process env on every
+      # request instead, so (unlike the production `web` stage) this
+      # needs no --build-arg. Must be the URL a visitor's *browser*
+      # reaches (api's host-published port), never the in-network "api"
+      # hostname — see apps/web/Dockerfile's own note.
+      NEXT_PUBLIC_API_URL: http://localhost:8080
+    depends_on:
+      api:
+        condition: service_healthy
+    volumes:
+      - ../apps/web:/app
+      - web_node_modules:/app/node_modules
+      - web_next_cache:/app/.next
+    ports:
+      - "3000:3000"
+
   prometheus:
-    # §53/Phase 29. Scrapes apps/api, apps/tracker, and apps/worker on the
-    # HOST (see prometheus.yml's own comment) — extra_hosts is what makes
-    # host.docker.internal resolve on Linux Docker Engine; Docker Desktop
-    # (Mac/Windows) already provides it and ignores this harmlessly.
+    # §53/Phase 29. Scrapes api/tracker/worker by their compose service
+    # name (see prometheus.yml) now that all three run as containers on
+    # this same network — no host networking needed.
     image: prom/prometheus:v3.1.0
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
     volumes:
       - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
       # §61/Phase 33: alerting rules (infra/alerts.yml) — prometheus.yml's
@@ -110,3 +289,11 @@ volumes:
   redis_data:
   minio_data:
   prometheus_data:
+  api_go_mod_cache:
+  api_go_build_cache:
+  tracker_go_mod_cache:
+  tracker_go_build_cache:
+  worker_go_mod_cache:
+  worker_go_build_cache:
+  web_node_modules:
+  web_next_cache:
