@@ -3,7 +3,7 @@
 import * as React from "react";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { ChevronDownIcon, CopyIcon, GripVerticalIcon, MoreHorizontalIcon, Trash2Icon } from "lucide-react";
+import { ChevronDownIcon, CopyIcon, GripVerticalIcon, Trash2Icon } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 import { Badge } from "@/components/ui/badge";
@@ -23,12 +23,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import { FILTER_OPERATOR_I18N_KEY, countConditions, describeFilterTree, type FilterOperator } from "@/lib/filters";
 import { hydrateRootFilter, type ApiFlow, type StreamSet } from "@/lib/api/stream-sets";
 import type { Network } from "@/lib/api/networks";
@@ -137,21 +131,22 @@ export function StreamSetRow({
                 onCheckedChange={onToggleStatus}
                 aria-label={streamSet.status === "active" ? t("row.disableAria") : t("row.enableAria")}
               />
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <IconButton aria-label={t("row.moreActionsAria", { name: streamSet.name })} size="icon-sm">
-                    <MoreHorizontalIcon className="size-3.5" />
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <IconButton aria-label={t("row.duplicate")} size="icon-sm" onClick={onDuplicate}>
+                    <CopyIcon className="size-3.5" />
                   </IconButton>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end">
-                  <DropdownMenuItem onSelect={onDuplicate}>
-                    <CopyIcon className="size-4" /> {t("row.duplicate")}
-                  </DropdownMenuItem>
-                  <DropdownMenuItem variant="destructive" onSelect={() => setConfirmDelete(true)}>
-                    <Trash2Icon className="size-4" /> {t("row.delete")}
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
+                </TooltipTrigger>
+                <TooltipContent>{t("row.duplicate")}</TooltipContent>
+              </Tooltip>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <IconButton aria-label={t("row.delete")} size="icon-sm" onClick={() => setConfirmDelete(true)}>
+                    <Trash2Icon className="size-3.5" />
+                  </IconButton>
+                </TooltipTrigger>
+                <TooltipContent>{t("row.delete")}</TooltipContent>
+              </Tooltip>
               <IconButton
                 aria-label={expanded ? t("row.collapseAria", { name: streamSet.name }) : t("row.expandAria", { name: streamSet.name })}
                 size="icon-sm"
