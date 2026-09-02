@@ -225,7 +225,7 @@ export function TrackingLinks({ campaignId }: { campaignId: string }) {
             />
           ) : (
             <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-4">
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <div className="grid gap-1.5">
                   <Label htmlFor="tl-domain">{t("trackingLinks.domainLabel")}</Label>
                   <Controller
@@ -264,12 +264,6 @@ export function TrackingLinks({ campaignId }: { campaignId: string }) {
                     <p className="text-xs text-muted-foreground">{t("trackingLinks.slugHelp")}</p>
                   )}
                 </div>
-
-                <div className="flex items-end">
-                  <Button type="submit" disabled={isSubmitting} className="w-full sm:w-auto">
-                    {t("trackingLinks.submitButton")}
-                  </Button>
-                </div>
               </div>
 
               {selectedDomain && slugPreview && (
@@ -277,6 +271,12 @@ export function TrackingLinks({ campaignId }: { campaignId: string }) {
                   http://{selectedDomain.domain}/t/{slugPreview.toLowerCase()}
                 </Mono>
               )}
+
+              <div className="flex justify-end">
+                <Button type="submit" disabled={isSubmitting}>
+                  {t("trackingLinks.submitButton")}
+                </Button>
+              </div>
             </form>
           )}
         </CardContent>
