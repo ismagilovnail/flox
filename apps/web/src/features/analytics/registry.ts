@@ -1,3 +1,5 @@
+import type { TFunction } from "i18next";
+
 import { formatUsd, formatInt } from "@/lib/format";
 
 export type DimensionKey =
@@ -37,6 +39,13 @@ export const DIMENSIONS: { key: DimensionKey; label: string }[] = [
   { key: "network", label: "Network" },
 ];
 
+/** `.label` above stays English (relied on as-is by the not-yet-localized
+ * Custom Metrics feature) — the report builder's own screens call these
+ * instead, which go through the `analytics` namespace. */
+export function dimensionLabel(t: TFunction, key: DimensionKey): string {
+  return t(`dimensions.${key}`, { ns: "analytics" });
+}
+
 export type MetricKey =
   | "clicks"
   | "uniqueClicks"
@@ -70,6 +79,10 @@ export const METRICS: { key: MetricKey; label: string; format: MetricFormat }[] 
   { key: "cpa", label: "CPA", format: "currency" },
   { key: "epc", label: "EPC", format: "currency" },
 ];
+
+export function metricLabel(t: TFunction, key: MetricKey): string {
+  return t(`metrics.${key}`, { ns: "analytics" });
+}
 
 export const TIMEZONES = [
   "UTC",

@@ -116,6 +116,18 @@ func (s *Service) DailyCampaignSpend(ctx context.Context, orgID, campaignID stri
 	return s.repo.DailyCampaignSpend(ctx, orgID, campaignID, from, to)
 }
 
+// SpendByCampaign and DailySpendForOrg back Phase 35's analytics report
+// builder/dashboard (apps/internal/analytics.Service.CostSource) — thin
+// passthroughs, same as DailyCampaignSpend above; org-wide queries need
+// no extra per-campaign ownership check, orgID already scopes them.
+func (s *Service) SpendByCampaign(ctx context.Context, orgID string, from, to time.Time) ([]CampaignSpend, error) {
+	return s.repo.SpendByCampaign(ctx, orgID, from, to)
+}
+
+func (s *Service) DailySpendForOrg(ctx context.Context, orgID string, from, to time.Time) ([]DailySpend, error) {
+	return s.repo.DailySpendForOrg(ctx, orgID, from, to)
+}
+
 func validateUpsert(in UpsertInput) map[string]string {
 	fields := map[string]string{}
 	if in.EntryDate.IsZero() {

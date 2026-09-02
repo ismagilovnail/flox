@@ -94,3 +94,13 @@ type DailySpend struct {
 	AmountUSD    float64
 	AllConverted bool
 }
+
+// CampaignSpend is one campaign's total spend across a date range, every
+// traffic source summed together — the shape Phase 35's report builder
+// and Overview dashboard need (cost per campaign, not per campaign per
+// day) rather than DailySpend's daily granularity.
+type CampaignSpend struct {
+	CampaignID   string
+	AmountUSD    float64
+	AllConverted bool
+}

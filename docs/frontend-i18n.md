@@ -56,13 +56,18 @@ apps/web/src/lib/i18n/
 One JSON file per **namespace**, one namespace per **domain/feature** —
 not one giant dictionary (§3's explicit requirement). Current namespaces:
 `common` (shared chrome: buttons, DataTable, loading/error defaults,
-shared status words), `nav` (sidebar/breadcrumbs/command menu/topbar
-search), `campaigns`, `cost` (the Campaigns detail page's Cost tab —
-its own namespace despite living in `features/campaigns/`, since it was
-named as its own migration priority), `trafficSources`, `networks`,
-`offers`, `streamSets`, `routingSimulator`, `conversions`, `postbacks`
-(covers Event Mappings, Postback Logs, and the Incoming/Outgoing tabs on
-the same Postbacks page).
+shared status words, `DateRangePicker`'s presets/placeholder), `nav`
+(sidebar/breadcrumbs/command menu/topbar search), `campaigns`, `cost`
+(the Campaigns detail page's Cost tab — its own namespace despite living
+in `features/campaigns/`, since it was named as its own migration
+priority), `trafficSources`, `networks`, `offers`, `streamSets`,
+`routingSimulator`, `conversions`, `postbacks` (covers Event Mappings,
+Postback Logs, and the Incoming/Outgoing tabs on the same Postbacks
+page), `auth` (login/signup/accept-invite/verify-email), `analytics`
+(the standalone report builder), `dashboard` (`/overview` — added later,
+outside this phase's original scope, after a user report that the page
+still read as unmigrated; text-only, see the number-formatting note
+below).
 
 Resources are bundled statically (JSON imported directly into
 `config.ts`, `resolveJsonModule` already enabled in `tsconfig.json`) —
@@ -133,6 +138,16 @@ exact prior en-US-pinned behavior unchanged. Only call sites inside the
 migrated real screens pass a live locale, via
 `apps/web/src/hooks/use-locale.ts`'s `useLocale()` hook.
 
+**As of `dashboard`'s later text migration (see above), `useLocale()`
+has zero real call sites anywhere in the app** — every screen's numbers,
+`dashboard`'s included, still render `$14,655.87`-style regardless of
+UI language. `dashboard`'s KPI cards/charts/tables use `formatUsd`/
+`formatInt` with no `locale` argument, deliberately kept that way rather
+than becoming the one page with locale-aware numbers while every other
+migrated screen stays en-US-pinned — that inconsistency would read worse
+than the current uniform gap. Wiring `useLocale()` in for real is a
+separate, repo-wide follow-up, not a per-page one.
+
 **A locale change never touches the underlying value.** These functions
 only change digit grouping, decimal separator, and symbol placement
 (`Intl.NumberFormat` under the hood) — the numeric value and the ISO
@@ -147,10 +162,21 @@ convention doesn't obviously need localizing on its own merits — this
 phase did not add `date-fns/locale`-based month/weekday name
 localization, since none of the migrated screens render an actual
 calendar date string (only relative "N time ago" captions, which read
-fine in either language without a locale-specific format call). If a
-future screen renders an absolute date (e.g. "March 5, 2026"), pass
-`date-fns`'s own `locale` option (`import { ru } from "date-fns/locale"`)
-keyed off `useLocale()`, the same way `formatUsd` takes one.
+fine in either language without a locale-specific format call).
+
+Done later, for the one component that DOES render absolute calendar
+date strings: `components/ui/date-range-picker.tsx` (shared by
+`/overview` and `/analytics`) now passes `date-fns`'s own `locale` option
+(`import { ru, enUS } from "date-fns/locale"`, keyed off `i18n.language`
+directly — not `useLocale()`, since this component predates that hook
+having any real caller, see above) to both its trigger-label `format()`
+call and the `Calendar`'s own `locale` prop — the latter is what
+`react-day-picker` uses to render "июль 2026"/"пн вт ср..." instead of
+"July 2026"/"Su Mo Tu...". `components/ui/calendar.tsx` already forwarded
+a `locale` prop to `DayPicker`; nothing there needed changing, it just had
+no caller passing one until now. Follow this exact pattern
+(`date-fns/locale` import + `i18n.language`, or `useLocale()` once it has
+real callers) for any future screen that renders an absolute date.
 
 **Timezone semantics are untouched.** No formatting call in this phase
 changed which timezone a timestamp is interpreted in — only how the

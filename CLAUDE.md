@@ -19,6 +19,93 @@ referenced below as §N).
 ## CURRENT STATE — UPDATE THIS EVERY PHASE
 
 ```
+CURRENT PHASE : PHASE 35 — REAL MULTI-DIMENSION /ANALYTICS BACKEND
+STATUS        : done — apps/internal/analytics/report.go +
+                apps/internal/chstore/report.go (Report/Timeseries/
+                Breakdown/Funnel/Dashboard) replace the mock data the
+                report builder (features/analytics/*) and /overview
+                dashboard ran on since their Phase 14/14.5 frontend-first
+                build. 11 of the report builder's 16 named dimensions are
+                backed (5 — landing/pwa/postlanding/offer/network — have
+                no column anywhere in the event pipeline yet, confirmed
+                as later work, not faked). Cost joins only at campaign
+                granularity or coarser (cost_entries is campaign+day
+                grained in Postgres); every other dimension combination
+                correctly returns null cost/profit/roi/roas/cpc/cpa,
+                never a fabricated 0 (CLAUDE.md #6). New HTTP surface:
+                POST /analytics/{report,timeseries,breakdown,funnel,
+                dashboard}, JSON body. Frontend: hooks/use-analytics-
+                report.ts + lib/api/analytics.ts additions replace
+                aggregate.ts's client-side aggregateReport/
+                aggregateTimeSeries/aggregateByDimension (deleted) and
+                lib/mock/{analytics,dashboard}.ts's generators (deleted,
+                lib/mock/dashboard.ts removed outright) — ReportTable's
+                existing ReportRow/custom-metric-formula code needed no
+                changes since API responses map onto that exact shape.
+                No Top Offers card on /overview (offer isn't a backed
+                dimension — dropped, not faked). Full design, dimension
+                whitelist, and known-gaps writeup in
+                docs/analytics-report-api.md; CHANGELOG's own Phase 35
+                entry has the fix/verification detail.
+                This phase also committed three other pieces of already-
+                finished work found sitting uncommitted in the tree (see
+                CHANGELOG for each): containerizing the dev stack (api/
+                tracker/worker/web now run as containers with air hot-
+                reload, dropping the last host-network-shaped thing in
+                the repo), gating login behind email verification (real
+                SMTP mailer, new /auth/verify-email + /auth/resend-
+                verification), and closing the recurring ECharts/zrender
+                animation crash for good (animation: false as the master
+                kill switch) plus russifying /overview and the shared
+                date-range picker, plus a small unrelated i18n pass on
+                the analytics report builder screens.
+                Found and fixed two real bugs: (1) apps/api/main.go
+                didn't compile — analytics.NewService's second
+                (CostSource) parameter was added in an interrupted
+                earlier session but the call site was never updated to
+                pass costSvc. (2) The already-written dashboard mapping
+                this phase inherited had KpiGrid showing a fabricated $0
+                for Spend/Profit instead of "—" whenever an org has zero
+                cost_entries rows — PeriodMetrics.spend/.profit are now
+                nullable end to end, rendering "—" like the ROI/CPA tiles
+                already did.
+                Verified: gofmt/go vet/go build/go test -count=1 ./...
+                clean repo-wide, including chstore's report tests run
+                against a REAL ClickHouse container (not mocked) —
+                dimension grouping/filtering/by-day/cross-tenant
+                isolation all pass. Full containerized dev stack brought
+                up; signed up a real test org; curl'd all five new
+                endpoints (empty-state, then non-empty after inserting
+                real ClickHouse rows) — correct aggregation and null-cost
+                cascade. Real browser pass (Claude-in-Chrome): /overview
+                and all four /analytics report-builder tabs render real
+                data with no console errors for both an empty org and the
+                seeded one; a published custom metric correctly evaluates
+                to "—" against a null-cost row. tsc --noEmit/eslint clean
+                on apps/web.
+LAST COMMIT   : (pending — see NEXT)
+UNCOMMITTED   : none — this phase's commit(s) include everything that was
+                previously sitting uncommitted (containerization, email
+                verification, the zrender fix, dashboard/analytics i18n)
+                alongside Phase 35's own work.
+NEXT          : confirm scope before starting. Real candidates, not
+                ranked: (a) the six remaining frontend-integration gaps —
+                Domains, Settings, Tags, Custom Metrics, Report Presets,
+                Referral, Content Gallery (Analytics/Overview's own gap
+                is now closed by this phase); (b) a "distinct values for
+                dimension X" endpoint for the report builder's filter-
+                value dropdown (currently still a fixed mock pool, see
+                docs/analytics-report-api.md); (c) campaign_id/flow_id ->
+                display name resolution in Top Campaigns/Top Flows; (d)
+                the DataTable column-resize/export gap; (e) repository/
+                handler-layer unit test coverage.
+
+```
+
+<details>
+<summary>Superseded — Phase 34 audit (kept for history, see above for current state)</summary>
+
+```
 CURRENT PHASE : PHASE 34 — FINAL AUDIT
 STATUS        : done — §62's full checklist audited (UX/UI/accessibility/
                 security/tenant isolation/performance/database/API/
@@ -141,6 +228,58 @@ STATUS        : done — §62's full checklist audited (UX/UI/accessibility/
                 ./... clean repo-wide; tsc --noEmit/eslint clean on
                 apps/web.
 LAST COMMIT   : fix(audit): close Phase 34 findings — cost-entry confirm dialog, dead code, stale comments
+UNCOMMITTED   : between-phases infra work (user-scoped, see CHANGELOG's
+                "[Between phases] — containerize the dev stack, drop host
+                networking"): infra/docker-compose.dev.yml now runs
+                api/tracker/worker/web themselves as containers (each
+                Go service's Dockerfile gained a `dev` target — air
+                hot-reload over a bind-mounted apps/ tree — web reuses
+                its existing `deps` stage with `npm run dev`), not just
+                the data stores. Removed the last host-network-shaped
+                thing in the repo: prometheus's `extra_hosts:
+                host-gateway` + `host.docker.internal` scrape targets,
+                now `api:8080`/`tracker:8081`/`worker:8082` by compose
+                service name. Root Makefile rewritten around `docker
+                compose` instead of host `go run`/`npm run dev` + PID
+                files. Verified end-to-end: full stack up, all 9
+                containers healthy, all 4 app containers'
+                `NetworkMode` is the compose bridge network (not
+                `host`), hot reload confirmed live.
+                Second, later batch of uncommitted work, same session
+                (see CHANGELOG's "[Between phases] — gate login behind
+                email verification"): registration used to auto-login
+                immediately with no proof of email ownership — user-
+                reported as an incomplete registration flow. Signup no
+                longer creates a session; it emails a real verification
+                link instead (new apps/internal/mailer, a real net/smtp
+                client — the SMTP_URL/mailhog infra from the first batch
+                above was staged exactly for this), and Login now 403s
+                unverified accounts with a distinct email_not_verified
+                code. New migration 00022 (users.email_verified_at +
+                verification token columns, existing rows grandfathered
+                verified). New POST /auth/verify-email (auto-logs in,
+                same AcceptInvite-style token consumption) and POST
+                /auth/resend-verification (silent/anti-enumeration).
+                AcceptInvite also marks accounts verified (clicking an
+                invite link is equally strong proof of inbox access) —
+                without this, invited teammates would be permanently
+                locked out by Login's new check. apps/web: new "check
+                your email" post-signup panel, new /verify-email page,
+                login's new resend-on-unverified action. 8 new Go tests;
+                existing 21-test suite needed zero changes (signupOrg
+                helper's signature/return shape unchanged, now routes
+                through a spy Mailer + the real verify step internally).
+                Found and fixed two real bugs along the way: a stuck-
+                loading React bug in the new verify-email page (useQuery
+                fixed what useMutation-fired-from-an-effect couldn't —
+                full writeup in docs/auth.md) and leftover host-run
+                api/tracker/worker/web processes (from before the first
+                batch's containerization) blocking the new containers'
+                ports. Full curl + real-browser verification, all
+                documented in docs/auth.md. Not yet committed — waiting
+                on the user re: how to handle the other unrelated
+                uncommitted work already in the tree (analytics-report
+                i18n) before commit.
 NEXT          : confirm scope before starting. Real candidates, not
                 ranked: (a) the seven-domain frontend-integration gap
                 above (Domains, Settings, Tags, Custom Metrics, Report
@@ -157,6 +296,8 @@ NEXT          : confirm scope before starting. Real candidates, not
                 explicitly, not an assumed default.
 
 ```
+
+</details>
 
 > At the end of every phase: update the four lines above, add a CHANGELOG entry,
 > commit, then STOP and wait. Do not roll into the next phase automatically.

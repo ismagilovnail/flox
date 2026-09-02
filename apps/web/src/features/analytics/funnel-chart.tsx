@@ -3,42 +3,41 @@
 import * as React from "react";
 import ReactECharts from "echarts-for-react";
 import { useTheme } from "next-themes";
+import { useTranslation } from "react-i18next";
+import type { TFunction } from "i18next";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Mono, Caption } from "@/components/ui/typography";
 import { chartBaseOption, CHART_COLORS, type ChartMode } from "@/lib/chart-theme";
 import { formatInt } from "@/lib/format";
-import { generateFunnelMock } from "@/lib/mock/analytics";
+import type { FunnelStepData } from "@/lib/api/analytics";
 
-const STEP_LABELS: Record<string, string> = {
-  SOURCE_CLICK: "Source Click",
-  LAND_VIEW: "Landing View",
-  LAND_CLICK: "Landing Click",
-  PWA_VIEW: "PWA View",
-  PWA_INSTALL: "PWA Install",
-  CPA_HOLD: "CPA Hold",
-  CPA_ACCEPT: "CPA Accept",
-  CPA_REDEP: "CPA Redeposit",
-};
+function stepLabel(t: TFunction, step: string): string {
+  return t(`funnelSteps.${step}`, { ns: "analytics", defaultValue: step });
+}
 
-export function FunnelChart() {
+export function FunnelChart({ steps }: { steps: FunnelStepData[] }) {
+  const { t } = useTranslation("analytics");
   const { resolvedTheme } = useTheme();
   const mode: ChartMode = resolvedTheme === "light" ? "light" : "dark";
 
-  const steps = React.useMemo(() => generateFunnelMock(), []);
-  const first = steps[0].value;
+  const first = steps[0]?.value || 1;
 
   const option = React.useMemo(() => {
     const base = chartBaseOption(mode);
     return {
       textStyle: base.textStyle,
+      // Threaded explicitly (this option is hand-built, not spread from
+      // base) — `animation` especially: without it this chart would be
+      // the one place animation stayed on. See lib/chart-theme.ts.
+      animation: base.animation,
       animationDuration: base.animationDuration,
       animationDurationUpdate: base.animationDurationUpdate,
       tooltip: {
         ...base.tooltip,
         trigger: "item" as const,
         formatter: (p: { name: string; value: number }) =>
-          `${p.name}<br/>${formatInt(p.value)} (${((p.value / first) * 100).toFixed(1)}% of ${STEP_LABELS.SOURCE_CLICK})`,
+          `${p.name}<br/>${formatInt(p.value)} (${((p.value / first) * 100).toFixed(1)}% of ${stepLabel(t, "SOURCE_CLICK")})`,
       },
       series: [
         {
@@ -56,7 +55,7 @@ export function FunnelChart() {
             position: "inside" as const,
             color: "#fff",
             fontSize: 11,
-            formatter: (p: { name: string }) => STEP_LABELS[p.name] ?? p.name,
+            formatter: (p: { name: string }) => stepLabel(t, p.name),
           },
           itemStyle: { color: CHART_COLORS.primary, borderColor: "transparent" },
           data: steps.map((s, i) => ({
@@ -67,12 +66,12 @@ export function FunnelChart() {
         },
       ],
     };
-  }, [mode, steps, first]);
+  }, [mode, steps, first, t]);
 
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Conversion Funnel</CardTitle>
+        <CardTitle>{t("charts.funnelTitle")}</CardTitle>
       </CardHeader>
       <CardContent className="grid grid-cols-1 gap-4 lg:grid-cols-[1.2fr_1fr]">
         <div className="h-96">
@@ -84,7 +83,7 @@ export function FunnelChart() {
         <div className="flex flex-col gap-1.5 self-center">
           {steps.map((s, i) => {
             const prev = i > 0 ? steps[i - 1].value : s.value;
-            const stepRate = i > 0 ? (s.value / prev) * 100 : 100;
+            const stepRate = i > 0 ? (prev > 0 ? (s.value / prev) * 100 : 0) : 100;
             const totalRate = (s.value / first) * 100;
             return (
               <div
@@ -93,7 +92,7 @@ export function FunnelChart() {
               >
                 <div className="flex flex-col">
                   <span className="text-sm font-medium text-foreground">
-                    {STEP_LABELS[s.step]}
+                    {stepLabel(t, s.step)}
                   </span>
                   <Caption>{s.step}</Caption>
                 </div>

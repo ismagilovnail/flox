@@ -40,22 +40,36 @@ export function chartBaseOption(mode: ChartMode) {
   const t = TOKENS[mode];
   return {
     textStyle: { fontFamily: FONT_SANS, color: t.text },
-    animationDuration: 250,
+    // ECharts animation is OFF for every chart in this app, deliberately.
+    //
+    // zrender's Animator crashes with "Cannot read properties of
+    // undefined (reading 'length')" (interpolate1DArray, reading `p0.
+    // length` of a line/area series' `shape.points` keyframe) whenever a
+    // Track is still stepping after the chart state it was built against
+    // is gone. Five separate triggers for that were found and "fixed"
+    // one at a time before landing here — theme toggle, a re-fetch
+    // resizing series[].data, a `smooth` line with <2 points, rapidly
+    // cycling the date-range presets, and finally just navigating
+    // between two chart pages (/analytics -> /overview) while a chart
+    // that mounted moments ago is disposed mid-animation.
+    //
+    // `animationDuration: 0` (the previous attempt) was NOT enough:
+    // ECharts still *creates* the Animator and registers its Clip in
+    // zrender's per-instance animation loop, it just finishes in one
+    // frame — and that one frame is all the race needs. `animation:
+    // false` is the actual kill switch: no Animator is constructed at
+    // all, so there is nothing left to step against a disposed chart.
+    // The duration fields below are kept only so the intent survives if
+    // someone flips `animation` back on without reading this.
+    //
+    // Cost: charts render at their final state instantly, with no reveal
+    // or transition. Acceptable — a dense operator console (§63-68's
+    // "trading-terminal control plane, not a generic admin dashboard")
+    // reads fine without them, and five recurrences say this library's
+    // animation path cannot be relied on here.
+    animation: false,
+    animationDuration: 0,
     animationEasing: "cubicOut" as const,
-    // 0, not omitted: we reproduced "Cannot read properties of undefined
-    // (reading 'length')" inside zrender's interpolate1DArray on theme
-    // toggle (fixed separately with key={mode} on each ReactECharts) —
-    // that crash comes from zrender's setOption transition interpolating
-    // between two series[].data arrays point-by-point, which breaks the
-    // same way whenever the array *length* differs between the old and
-    // new option, not just when identity changes. A re-fetch (TanStack
-    // Query's default refetch-on-window-focus, a filter change) can hand
-    // ECharts a differently-sized array on a chart that key={mode} does
-    // NOT remount, so the same crash is reachable there too even though
-    // we haven't reproduced that path directly (no seeded campaign data
-    // to refetch against, 2026-08-31). Disabling just the *update*
-    // transition keeps the 250ms initial reveal (animationDuration
-    // above) while removing the only code path that can hit this.
     animationDurationUpdate: 0,
     grid: { left: 8, right: 8, top: 24, bottom: 8, containLabel: true },
     xAxis: {

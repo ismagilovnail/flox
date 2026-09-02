@@ -3,6 +3,7 @@
 import * as React from "react";
 import type { DateRange } from "react-day-picker";
 import { ArrowDownIcon, ArrowUpIcon, PlusIcon } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
 import { DateRangePicker } from "@/components/ui/date-range-picker";
 import { MultiSelect } from "@/components/ui/multi-select";
@@ -24,7 +25,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { DIMENSIONS, METRICS, TIMEZONES, type DimensionKey, type MetricKey } from "@/features/analytics/registry";
+import { DIMENSIONS, METRICS, TIMEZONES, dimensionLabel as dimensionLabelFor, metricLabel as metricLabelFor, type DimensionKey, type MetricKey } from "@/features/analytics/registry";
 import type { FilterCondition } from "@/features/analytics/aggregate";
 import { dimensionValues } from "@/lib/mock/analytics";
 
@@ -39,13 +40,12 @@ export type ReportControlsState = {
   compare: boolean;
 };
 
-const dimensionLabel = (key: DimensionKey) => DIMENSIONS.find((d) => d.key === key)?.label ?? key;
-
 function AddFilterPopover({
   onAdd,
 }: {
   onAdd: (f: FilterCondition) => void;
 }) {
+  const { t } = useTranslation("analytics");
   const [open, setOpen] = React.useState(false);
   const [dimension, setDimension] = React.useState<DimensionKey>("country");
   const [value, setValue] = React.useState<string>(dimensionValues("country")[0]);
@@ -55,13 +55,13 @@ function AddFilterPopover({
       <PopoverTrigger asChild>
         <Button variant="outline" size="sm" className="gap-1.5">
           <PlusIcon className="size-3.5" />
-          Filter
+          {t("controls.filter")}
         </Button>
       </PopoverTrigger>
       <PopoverContent className="w-64" align="start">
         <div className="flex flex-col gap-3">
           <div className="grid gap-1.5">
-            <Label>Dimension</Label>
+            <Label>{t("controls.dimension")}</Label>
             <Select
               value={dimension}
               onValueChange={(v) => {
@@ -76,14 +76,14 @@ function AddFilterPopover({
               <SelectContent>
                 {DIMENSIONS.map((d) => (
                   <SelectItem key={d.key} value={d.key}>
-                    {d.label}
+                    {dimensionLabelFor(t, d.key)}
                   </SelectItem>
                 ))}
               </SelectContent>
             </Select>
           </div>
           <div className="grid gap-1.5">
-            <Label>Value</Label>
+            <Label>{t("controls.value")}</Label>
             <Select value={value} onValueChange={setValue}>
               <SelectTrigger className="w-full">
                 <SelectValue />
@@ -104,7 +104,7 @@ function AddFilterPopover({
               setOpen(false);
             }}
           >
-            Add filter
+            {t("controls.addFilter")}
           </Button>
         </div>
       </PopoverContent>
@@ -119,11 +119,12 @@ export function ReportControls({
   state: ReportControlsState;
   onChange: (patch: Partial<ReportControlsState>) => void;
 }) {
+  const { t } = useTranslation(["analytics", "streamSets"]);
   const sortOptions = [
-    ...state.dimensions.map((d) => ({ value: d, label: dimensionLabel(d) })),
+    ...state.dimensions.map((d) => ({ value: d, label: dimensionLabelFor(t, d) })),
     ...state.metrics.map((m) => ({
       value: m,
-      label: METRICS.find((x) => x.key === m)?.label ?? m,
+      label: metricLabelFor(t, m),
     })),
   ];
 
@@ -149,8 +150,8 @@ export function ReportControls({
         </Select>
 
         <MultiSelect
-          label="Dimensions"
-          options={DIMENSIONS.map((d) => ({ value: d.key, label: d.label }))}
+          label={t("controls.dimensionsLabel")}
+          options={DIMENSIONS.map((d) => ({ value: d.key, label: dimensionLabelFor(t, d.key) }))}
           selected={state.dimensions}
           onChange={(values) => {
             const dimensions = values as DimensionKey[];
@@ -163,8 +164,8 @@ export function ReportControls({
         />
 
         <MultiSelect
-          label="Metrics"
-          options={METRICS.map((m) => ({ value: m.key, label: m.label }))}
+          label={t("controls.metricsLabel")}
+          options={METRICS.map((m) => ({ value: m.key, label: metricLabelFor(t, m.key) }))}
           selected={state.metrics}
           onChange={(values) => onChange({ metrics: values as MetricKey[] })}
           className="w-48"
@@ -176,13 +177,13 @@ export function ReportControls({
           disabled={state.dimensions.length === 0}
         >
           <SelectTrigger className="w-44" size="sm">
-            <span className="text-muted-foreground">Group by:</span>
+            <span className="text-muted-foreground">{t("controls.groupBy")}</span>
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
             {state.dimensions.map((d) => (
               <SelectItem key={d} value={d}>
-                {dimensionLabel(d)}
+                {dimensionLabelFor(t, d)}
               </SelectItem>
             ))}
           </SelectContent>
@@ -194,7 +195,7 @@ export function ReportControls({
             onValueChange={(key) => onChange({ sort: { ...state.sort, key } })}
           >
             <SelectTrigger className="w-40" size="sm">
-              <span className="text-muted-foreground">Sort:</span>
+              <span className="text-muted-foreground">{t("controls.sort")}</span>
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -206,7 +207,7 @@ export function ReportControls({
             </SelectContent>
           </Select>
           <IconButton
-            aria-label={state.sort.dir === "asc" ? "Sort descending" : "Sort ascending"}
+            aria-label={state.sort.dir === "asc" ? t("controls.sortDescendingAria") : t("controls.sortAscendingAria")}
             variant="outline"
             size="icon-sm"
             onClick={() =>
@@ -228,7 +229,7 @@ export function ReportControls({
             onCheckedChange={(compare) => onChange({ compare })}
           />
           <Label htmlFor="compare" className="text-xs">
-            Compare
+            {t("controls.compare")}
           </Label>
         </div>
       </div>
@@ -240,8 +241,8 @@ export function ReportControls({
             {state.filters.map((f, i) => (
               <FilterChip
                 key={`${f.dimension}-${f.value}-${i}`}
-                field={dimensionLabel(f.dimension)}
-                operator="is"
+                field={dimensionLabelFor(t, f.dimension)}
+                operator={t("filters.operators.is", { ns: "streamSets" })}
                 value={f.value}
                 onRemove={() =>
                   onChange({ filters: state.filters.filter((_, idx) => idx !== i) })

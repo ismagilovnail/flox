@@ -93,7 +93,7 @@ func benchAnalyticsFixture(b *testing.B) (svc *analytics.Service, orgID, campaig
 		}
 	})
 
-	return analytics.NewService(store), orgID, campaignID, from, to
+	return analytics.NewService(store, nil), orgID, campaignID, from, to
 }
 
 // BenchmarkCampaignDaily and BenchmarkCampaignDailyRevenue measure

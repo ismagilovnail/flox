@@ -5,6 +5,371 @@ per-phase, matching `CLAUDE.md`'s phase protocol. The one exception is
 [Between phases], below: spec amendments and the code changes that follow from
 them land between phases and would otherwise be invisible here.
 
+## [Between phases] — Phase 35: real multi-dimension `/analytics` backend
+
+### Scope
+
+User-scoped, post-Phase-34 (§9's fixed phase order ended at 34; NEXT
+candidate (b) from CLAUDE.md's own CURRENT STATE): replace the mock data
+the report builder (`features/analytics/*`) and `/overview` dashboard had
+run on since their Phase 14/14.5 frontend-first build with a real backend.
+Full design, endpoint list, dimension whitelist, and known gaps in
+`docs/analytics-report-api.md` — this entry is the summary.
+
+### Added
+
+- `apps/internal/analytics/report.go` + `apps/internal/chstore/report.go`:
+  `Service.Report`/`Timeseries`/`Breakdown`/`Funnel`/`Dashboard` — 0-4
+  dimension group-by, filtering, sorting, a daily timeseries, the §43
+  funnel, and `/overview`'s KPI+daily+Top-N shape, all built on three
+  ClickHouse queries (click/land/conversion) merged by group key, joined
+  with a Postgres cost lookup at campaign granularity or coarser.
+  `cost.Service` gained `SpendByCampaign`/`DailySpendForOrg` to back the
+  join. 11 of the report builder's 16 named dimensions are backed (5 —
+  landing/pwa/postlanding/offer/network — have no column anywhere in the
+  event pipeline yet, confirmed as later work, not faked).
+- `apps/internal/analytics/handler.go`: `POST /analytics/{report,
+  timeseries,breakdown,funnel,dashboard}` — JSON body, not query string
+  (structured/variable-length input, same reason `/routing/simulate` is
+  POST).
+- `apps/web`: `lib/api/analytics.ts` gained the matching client functions;
+  new `hooks/use-analytics-report.ts` (TanStack Query). `analytics-view.tsx`
+  and `dashboard-view.tsx` now fetch real data — `features/analytics/
+  aggregate.ts`'s client-side `aggregateReport`/`aggregateTimeSeries`/
+  `aggregateByDimension` and `lib/mock/{analytics,dashboard}.ts`'s
+  generators are deleted (zero remaining callers); `ReportTable`'s
+  existing `ReportRow`/custom-metric-formula-evaluation code needed no
+  changes since the API client maps responses onto that exact shape.
+  `lib/mock/dashboard.ts` deleted outright; `PerformanceRow`/
+  `PeriodMetrics` moved to `features/dashboard/metrics.ts`. No Top Offers
+  card on `/overview` (`offer` isn't a backed dimension — dropped, not
+  faked). New `en/ru` `analytics.json` i18n pass on the report builder
+  screens (unrelated small piece of work found already sitting uncommitted
+  alongside this).
+
+### Fixed (found during this work, not pre-existing)
+
+- `apps/api/main.go` didn't compile: `analytics.NewService` had gained a
+  second (`CostSource`) parameter as part of this work in an earlier,
+  interrupted session, but the call site was never updated. Fixed by
+  passing the already-constructed `costSvc`.
+- Dashboard's KPI tiles were showing a fabricated `$0` for Spend/Profit
+  whenever an org had zero `cost_entries` rows, instead of "—" —
+  `PeriodMetrics.spend`/`.profit` were typed as plain `number` with a
+  `?? 0` fallback in the API-response mapping, silently violating CLAUDE.md
+  #6 ("no cost data on file must render as '—', never a fabricated 0") the
+  same rule the rest of this phase's code was careful to honor. Both
+  fields are now `number | null`; `KpiGrid` renders "—" for null, matching
+  the ROI/CPA tiles it already handled that way.
+
+### Known issues (real gaps, not silently faked)
+
+- No "distinct values for dimension X" endpoint — the report builder's
+  filter-value dropdown still suggests from `lib/mock/analytics.ts`'s
+  fixed pool. Filtering by an arbitrary value still round-trips correctly;
+  an unseen value just yields a legitimate empty report.
+- `TopCampaigns`/`TopFlows` show the raw `campaign_id`/`flow_id`, not a
+  resolved display name — `chstore`'s dimension whitelist has no name
+  join yet.
+- Reports grouped by `os`/`browser`/`language` can't show
+  conversion-derived metrics (conversion_events has no columns for them) —
+  correctly `null`, not silently wrong.
+- The Report Presets feature (`report-preset-bar.tsx`, still mocked, a
+  separate unintegrated domain) keeps its own fixed "now" anchor for
+  relative presets; this phase's two views moved to the real `new Date()`.
+  Applying a preset now computes a different absolute range than the
+  view's own default — not reconciled here, since fixing it means
+  deciding what "now" means for a feature this phase didn't touch.
+
+### Verified
+
+`gofmt`/`go vet`/`go build`/`go test -count=1 ./...` clean repo-wide,
+including `apps/internal/chstore`'s report tests run against a real
+ClickHouse container (not mocked) — dimension grouping, filtering, by-day,
+cross-tenant isolation all pass. Full containerized dev stack up; signed
+up a real test org; `curl`'d all five endpoints (empty-state, then
+non-empty after inserting real ClickHouse rows) — correct aggregation and
+null-cost cascade. Real browser pass: `/overview` and all four
+`/analytics` report-builder tabs render real data with no console errors
+for both an empty org and the seeded one; a published custom metric
+correctly evaluates to "—" against a null-cost row. `tsc --noEmit`/
+`eslint` clean on `apps/web`.
+
+## [Between phases] — russify /overview and the shared date-range picker
+
+User reported `/overview` "not fully russified." The whole `features/
+dashboard/*` tree (`dashboard-view.tsx`, `kpi-grid.tsx`, `top-tables.tsx`)
+predates `docs/frontend-i18n.md`'s migration phase entirely and had zero
+`useTranslation` calls — every KPI label, chart title, "Top X" table
+title/column header/search placeholder/empty state was a hardcoded
+English literal, invisible to the `ru` locale. New `dashboard` i18n
+namespace (en+ru) covers all of it; `TopTable` now takes an `entity`
+prop (`"campaigns" | "offers" | "countries" | "flows"`) instead of raw
+`title`/`nameHeader` strings, so the Russian genitive-plural search/empty
+copy ("Поиск кампаний...", "Нет кампаний") lives in the namespace, not
+composed from an English template at the call site (composing it would
+have produced grammatically wrong Russian).
+
+Separately, `components/ui/date-range-picker.tsx` (shared by `/overview`
+and `/analytics`) had its own gap: the Today/Last 7 days/Last 30 days
+presets, the "Select date range" placeholder, and — more visibly — the
+`Calendar` popover's month names and weekday headers ("July 2026", "Su Mo
+Tu...") stayed in English regardless of UI language, even with every
+surrounding word translated. `components/ui/calendar.tsx` already
+forwarded a `locale` prop to `react-day-picker`'s `DayPicker`, it just
+had no caller passing one. Fixed by threading `date-fns/locale`'s `ru`/
+`enUS` (keyed off `i18n.language`) through both the trigger label's
+`format()` call and the `Calendar`'s `locale` prop — verified in-browser
+that "июл. 13, 2026 – авг. 11, 2026" and an "июль 2026" / "пн вт ср..."
+calendar both render correctly, on `/analytics` too since it shares the
+same component. Also verified English still renders correctly
+(`flox-locale=en` cookie) with no missing-key fallback artifacts.
+
+Known, deliberate gap, documented rather than silently left: dashboard's
+numbers (`formatUsd`/`formatInt`) still render en-US-pinned regardless of
+locale — `useLocale()` (the hook `docs/frontend-i18n.md` names for this)
+has zero real call sites anywhere in the app, not just here, so making
+dashboard the one page with locale-aware numbers would read as a new,
+different inconsistency rather than fixing the old one. See that doc's
+updated number-formatting note.
+
+## [Between phases] — close the recurring zrender animation crash for good
+
+User hit `Cannot read properties of undefined (reading 'length')` inside
+zrender's `interpolate1DArray` (thrown from an active animation frame,
+`Track.step`/`Clip.step`) twice in the same session, on two different
+pages — the same crash class three prior commits (`4d54170`, `640df09`)
+had already partially fixed. Each fix closed one specific trigger, not
+the underlying issue, so a new trigger kept surfacing:
+
+1. **`/analytics`, Line tab, narrow date range.** `features/analytics/
+   report-chart.tsx`'s `ReportLineChart` was the one `smooth` line series
+   in the codebase that hadn't gotten the `animation: points.length > 1`
+   guard `line-metric-chart.tsx`/`funnel-chart.tsx` already carry —
+   reachable any time a date range/filter combination narrows
+   `aggregateTimeSeries` down to 0 or 1 matching dates. Fixed with the
+   same guard; confirmed via a single-day date-range selection (empty
+   panel afterward, no crash) and grepped the whole frontend for every
+   `smooth:` usage to confirm no instance remained unguarded.
+2. **`/overview`, rapidly clicking the date-range picker's Today/Last 7
+   days/Last 30 days presets.** This one broke through *all three* prior
+   fixes at once: `key={mode}` (theme-change remount),
+   `animationDurationUpdate: 0` (update-transition disable), and the
+   `points.length > 1` guard from (1) above (`current` always had way
+   more than 1 point here). Root cause turned out to be one level up
+   from all of them — `setOption` with `notMerge` plays a fresh *initial*
+   reveal animation every call, and `animationDurationUpdate` never
+   applied to that path in the first place. Firing legitimate preset
+   clicks in quick succession (well within normal human click speed) can
+   start a new reveal while a prior one's zrender `Track` is still
+   stepping, and that stale `Track` is what throws. Reproduced directly —
+   scripted rapid preset clicking (`apps/web/src/components/ui/
+   date-range-picker.tsx`'s three presets, cycled) threw this exact error
+   **thousands of times** in a few seconds against the pre-fix build.
+   First attempt: set `chartBaseOption`'s `animationDuration` (the
+   initial-reveal knob) to `0` alongside the existing
+   `animationDurationUpdate: 0`. That made the scripted preset stress
+   test pass (60 clicks, 10ms apart, zero errors) — but it was **not**
+   the categorical fix it was written up as, see (3).
+3. **Simply navigating `/analytics` -> `/overview`**, reported right
+   after (2) shipped, proving `animationDuration: 0` had only made the
+   race *narrower*, not impossible. `animationDuration: 0` does not stop
+   ECharts constructing an `Animator` and registering its `Clip` in
+   zrender's animation loop — it just finishes in one frame, and one
+   frame is all the race needs when a chart is disposed mid-mount by a
+   route change. Worse, the per-component `animation: points.length > 1`
+   lines (from (1), and the pre-existing one in `line-metric-chart.tsx`)
+   were actively **re-enabling** animation for every chart with 2+ points
+   — i.e. every real chart — overriding the base option's intent.
+   **Actual fix:** `animation: false` in `chartBaseOption`, the master
+   kill switch — no `Animator` is constructed at all, so nothing can
+   step against a disposed chart. The two `animation: points.length > 1`
+   overrides were removed (they defeated it), and `funnel-chart.tsx`,
+   which hand-builds its option rather than spreading the base, now
+   threads `animation: base.animation` explicitly. Cost: charts render
+   at their final state with no reveal or transition — accepted, five
+   recurrences say this library's animation path can't be relied on
+   here, and a dense operator console reads fine without it.
+   Re-verified against every known trigger on the fixed build: 30 slow
+   + 12 brutal (25-40ms dwell) `/analytics`<->`/overview` navigation
+   cycles with the Line/Funnel chart tabs mounting and being disposed
+   mid-mount, 10 date-range preset changes, 10 theme toggles, and the
+   user's exact reported flow at human speed — zero console errors in
+   all of them, charts still rendering correctly.
+
+## [Between phases] — gate login behind email verification
+
+### Scope
+
+User request, post-Phase 34 (v3-scope, explicitly scoped, not a numbered
+phase): registration let a new Owner straight into the app the instant
+they submitted the signup form, with no proof they controlled the email
+address they registered — "the registration flow isn't complete: send a
+confirmation email after signup and only allow signing in once it's
+confirmed." Landed in the same session as the previous entry
+("containerize the dev stack") — that entry's mailhog service is what
+makes this one possible: it was staged ahead of exactly this.
+
+### Added
+
+- Migration `00022_email_verification.sql`: `users.email_verified_at`
+  (nullable — `NULL` = unverified; every pre-existing row backfilled to
+  `now()` so this gates new signups without locking out anyone already
+  in the database) plus `email_verification_token_hash`/`_expires_at`
+  (one-way-hash-at-rest, same shape as `memberships.invite_token_hash`).
+- `apps/internal/mailer` (new package): a real SMTP client (stdlib
+  `net/smtp`) — the first place this codebase actually sends outbound
+  email, versus the invite flow's copyable link. New `SMTP_URL`/
+  `MAIL_FROM` config, wired into `apps/api/main.go`; dev points at
+  `infra/docker-compose.dev.yml`'s `mailhog`.
+- `apps/internal/auth`: `Signup` now creates the org/Owner/user
+  unverified and emails a verification link instead of returning a
+  session — `POST /auth/verify-email` consumes it (auto-logs in when the
+  account has exactly one active org membership, the common case);
+  `POST /auth/resend-verification` re-sends, silently, regardless of
+  whether the email exists or is already verified (anti-enumeration,
+  same stance as the existing dummy-password-hash timing defense).
+  `Login` now checks `email_verified_at`, returning a distinct
+  `email_not_verified` code (only once the password is already
+  confirmed correct) instead of the generic wrong-credentials message.
+  `AcceptInvite` also marks the account verified — receiving and
+  clicking an invite link is the same proof of inbox ownership, and
+  without this an invited teammate could never pass `Login`'s new check.
+- `apps/web`: signup now shows a "check your email" panel instead of
+  redirecting into the app; new `/verify-email` page (`VerifyEmailPanel`)
+  handles the emailed link's loading/success/invalid states with a
+  resend action; the login form renders a distinct "resend the
+  verification email" action when it gets the new error code. New
+  `auth.json` i18n keys (en+ru). `proxy.ts`'s `PUBLIC_PATHS` gained
+  `/verify-email`.
+- Test coverage: 8 new `apps/internal/auth` tests (blocked-before-verify
+  login, verify-and-log-in, invalid/expired token, resend issues a fresh
+  token and invalidates the old one, resend is silent for unknown/
+  already-verified emails) using a spy `Mailer` the existing
+  `signupOrg` test helper now routes through — every one of the 21
+  pre-existing tests in that file needed zero changes, since the helper
+  kept its exact same signature and `auth.Result` return shape.
+  `apps/e2e`'s full-funnel scenario updated to mark its own signup
+  verified via direct SQL (pragmatic — it isn't testing the verification
+  flow itself, `auth_test.go` does that end to end) then log in for a
+  real session, instead of relying on signup's old auto-login.
+
+### Fixed (found during this work, not pre-existing)
+
+- A real React bug in the new `VerifyEmailPanel`: the first
+  implementation fired verification via `useMutation` triggered from a
+  `useEffect`+`useRef` mount-guard. In the browser, the network call and
+  its `onSuccess` callback both genuinely fired and resolved (confirmed
+  with temporary logging) but the component's own render never picked
+  up the result — stuck on the loading skeleton forever despite
+  `/auth/me` confirming a session had actually been created. Fixed by
+  switching to `useQuery` (`enabled`/`retry: false`/`staleTime:
+  Infinity`), the same shape `usePreviewInvite` already uses for an
+  identical "fetch once for this URL token on mount" case — no manual
+  effect or ref needed, and the bug didn't reproduce after. Full
+  writeup in `docs/auth.md`'s "Email verification" section.
+- A real Docker bug from the previous entry surfaced again in passing
+  while testing this one: leftover host-run `api`/`tracker`/`worker`/
+  `next dev` processes from before the dev-stack containerization were
+  still bound to 8080/8081/8082/3000, blocking the new containers from
+  starting — stopped them (they're exactly what that migration was
+  meant to replace).
+
+### Verified
+
+Full `curl` round trip (signup → blocked login → mailhog's real REST API
+→ verify → session cookie → login now succeeds → silent resend) and a
+full browser pass (Claude-in-Chrome) against the real containerized dev
+stack, both documented in detail in `docs/auth.md`. `gofmt`/`go vet`/
+`go build`/`go test -count=1 ./...` (all packages) and `tsc --noEmit`/
+`eslint`/`vitest run`/`next typegen` all clean.
+
+### Known issues
+
+- `Signup` fails the whole request if the verification email can't be
+  sent (a down/misconfigured relay) even though the account row already
+  exists in the database by then — a retried signup against the same
+  email correctly 409s, which could confuse someone hitting this rare
+  edge case. No outbox/retry queue was built for it (real added
+  complexity, not requested); recovery is `ResendVerification` once the
+  relay recovers, but the caller has to already know to try it since
+  they never saw a successful signup response.
+
+## [Between phases] — containerize the dev stack, drop host networking
+
+### Scope
+
+User request, post-Phase 34 (v3-scope/hardening, explicitly scoped, not a
+numbered phase): package every FLOX service in Docker for local dev and
+stop relying on host networking. Before this, `infra/docker-compose.dev.yml`
+only ran the data stores (postgres/clickhouse/redis/minio/mailhog/
+prometheus) — api/tracker/worker/web ran on the host via `go run`/`npm run
+dev` (a deliberate Phase 16 choice, for fast hot-reload), and Prometheus
+reached them via `host.docker.internal`/`extra_hosts: host-gateway` — the
+one place anything here touched something host-network-shaped.
+`docker-compose.test.yml` already fully containerized all eight services
+with no host-network trick, but as a production-target build with no hot
+reload — not usable as the day-to-day dev loop.
+
+### Added
+
+- `dev` Dockerfile target for `apps/api`, `apps/tracker`, `apps/worker`:
+  [air](https://github.com/air-verse/air) hot-reload over a bind-mounted
+  `apps/` tree — a source edit rebuilds and restarts the binary in
+  place, no image rebuild. New `apps/{api,tracker,worker}/.air.toml`
+  configs. `apps/web/Dockerfile`'s existing `deps` stage is reused the
+  same way (`npm run dev` against a bind-mounted `apps/web`).
+- `infra/docker-compose.dev.yml`: `migrate` (one-shot goose runner, same
+  Dockerfile target `docker-compose.test.yml` uses), `api`, `tracker`,
+  `worker`, `web` services, all on the file's one default bridge network,
+  addressed by compose service name. Go module/build caches and web's
+  node_modules/.next live in per-service named volumes (a first attempt
+  sharing one `go_mod_cache`/`go_build_cache` volume across api/tracker/
+  worker hit a real Docker race — three containers populating the same
+  fresh named volume from their own image layer concurrently — fixed by
+  giving each service its own volume instead).
+- `prometheus`'s `extra_hosts: host-gateway` entry removed; `infra/
+  prometheus.yml`'s scrape targets now point at `api:8080`/`tracker:8081`/
+  `worker:8082` (compose service names) instead of
+  `host.docker.internal:PORT`.
+- Root `Makefile` rewritten around `docker compose -f
+  infra/docker-compose.dev.yml` (`make up`/`down`/`restart`/`status`/
+  `<svc>-logs`/`<svc>-restart`) instead of host `go run`/`npm run dev` +
+  PID files — `.pids/`'s now-stale `.gitignore` entry removed.
+  `migrate-up`/`-down`/`-status` and `fmt`/`vet`/`test`/`lint`/`check`
+  are unchanged (still host toolchain — validation, not a service).
+  `test-stack-*` targets (`docker-compose.test.yml`) unchanged.
+
+### Fixed
+
+- api/tracker/worker's `dev` `ENTRYPOINT` now runs `mkdir -p tmp/<svc>`
+  before `air`: air's configured `tmp_dir` has to exist before its
+  watcher will create files under it, and since `apps/` is bind-mounted
+  over `/src` at container start (replacing whatever `COPY` put there at
+  build time), that directory can only be created at container start, not
+  image-build time.
+
+### Verified
+
+Built every image (`docker compose -f infra/docker-compose.dev.yml
+build`); brought the full stack up — all nine containers healthy,
+`api`/`tracker`/`worker`/`web` all reachable on their host-published
+ports, `docker inspect`'s `NetworkMode` is `infra_default` (the compose
+bridge network) for all four, not `host`; Prometheus's own `/api/v1/
+targets` shows all three Go services `up` via their service-name scrape
+URL. Confirmed hot reload live: edited `apps/api/main.go` while the stack
+was running, air detected it, rebuilt, and restarted the server in
+~2s (reverted after). `gofmt -l`/`go vet`/`go build`/`go test -count=1
+./...` clean repo-wide (no Go/TS source changed by this work, only
+Dockerfiles/compose/Makefile/docs).
+
+### Known issues
+
+- Each app container's own Go module/build cache volume starts cold on
+  first `make up` (a few seconds to `go mod download` inside the `dev`
+  image build) — same cost the old host workflow paid once per machine,
+  now paid once per volume instead.
+
 ## [Final Audit] — Phase 34: repo-wide audit, one real product-surface gap surfaced
 
 ### Scope

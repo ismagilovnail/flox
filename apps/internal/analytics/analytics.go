@@ -1,10 +1,13 @@
 // Package analytics is the "analytics service" pipeline stage (§47/§48): a
-// thin read layer over chstore's materialized aggregates, exposed as REST
-// endpoints by apps/api. Deliberately narrow — two queries, two endpoints
-// (click/filter volume, conversion revenue) — proving the pipeline's last
-// two stages work end to end; the real analytics surface (per-GEO/per-
-// source/per-offer breakdowns, the metrics registry, custom metrics) is
-// later work once Phase 27's frontend integration needs it.
+// read layer over chstore's event tables and materialized aggregates,
+// exposed as REST endpoints by apps/api. Started narrow — two queries,
+// two endpoints (click/filter volume, conversion revenue) for one
+// campaign, proving the pipeline's last two stages worked end to end.
+// Phase 35 (post-Phase-34, user-scoped — see CLAUDE.md CURRENT STATE) is
+// the real analytics surface that narrow start deferred: multi-dimension
+// group-by (report.go's Report/Breakdown), a daily timeseries, the §43
+// funnel, and the Overview dashboard — replacing apps/web's mock data for
+// both /analytics and /overview.
 package analytics
 
 import (
@@ -13,6 +16,7 @@ import (
 
 	"github.com/ismagilovnail/flox/apps/internal/apierror"
 	"github.com/ismagilovnail/flox/apps/internal/chstore"
+	"github.com/ismagilovnail/flox/apps/internal/cost"
 	"github.com/ismagilovnail/flox/apps/internal/metrics"
 )
 
@@ -22,6 +26,28 @@ import (
 type Repository interface {
 	DailyCampaignCounts(ctx context.Context, organizationID, campaignID string, from, to time.Time) ([]chstore.DailyCount, error)
 	DailyCampaignRevenue(ctx context.Context, organizationID, campaignID string, from, to time.Time) ([]chstore.DailyRevenue, error)
+	ReportClicks(ctx context.Context, q chstore.ReportQuery) ([]chstore.ClickAgg, error)
+	ReportLandViews(ctx context.Context, q chstore.ReportQuery) ([]chstore.LandAgg, error)
+	ReportConversions(ctx context.Context, q chstore.ReportQuery) ([]chstore.ConversionAgg, error)
+	FunnelCounts(ctx context.Context, organizationID string, from, to time.Time) (map[string]uint64, error)
+}
+
+// CostSource is the narrow slice of *cost.Service Phase 35 needs — same
+// decoupling pattern as Repository above. Referencing cost.CampaignSpend/
+// cost.DailySpend directly (rather than package-local equivalents) mirrors
+// how Repository above already references chstore's own result types
+// instead of redeclaring them; both are plain data-transfer shapes, not
+// business logic, so importing them costs nothing this package doesn't
+// already pay for chstore.
+//
+// Optional: a nil CostSource (e.g. an environment with no cost package
+// wired in yet) simply means every report row's Cost/Profit/ROI/ROAS/
+// CPC/CPA comes back nil — the same "no cost data on file" null CLAUDE.md
+// #6 already requires for a real but empty cost_entries table, not a
+// different code path.
+type CostSource interface {
+	SpendByCampaign(ctx context.Context, organizationID string, from, to time.Time) ([]cost.CampaignSpend, error)
+	DailySpendForOrg(ctx context.Context, organizationID string, from, to time.Time) ([]cost.DailySpend, error)
 }
 
 // maxRangeDays bounds how wide a query can ask for. Not in §47 — a
@@ -32,9 +58,14 @@ const maxRangeDays = 366
 
 type Service struct {
 	repo Repository
+	cost CostSource
 }
 
-func NewService(repo Repository) *Service { return &Service{repo: repo} }
+// costSource may be nil — see CostSource's own doc comment on what that
+// means for report output.
+func NewService(repo Repository, costSource CostSource) *Service {
+	return &Service{repo: repo, cost: costSource}
+}
 
 func (s *Service) validateRange(organizationID, campaignID string, from, to time.Time) error {
 	if organizationID == "" {

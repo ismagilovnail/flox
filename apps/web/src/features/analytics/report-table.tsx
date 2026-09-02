@@ -1,8 +1,9 @@
 import type { ColumnDef } from "@tanstack/react-table";
+import { useTranslation } from "react-i18next";
 
 import { DataTable, dataTableFeatures } from "@/components/ui/data-table";
 import { Mono } from "@/components/ui/typography";
-import { DIMENSIONS, METRICS, formatMetric, type DimensionKey, type MetricKey } from "@/features/analytics/registry";
+import { METRICS, dimensionLabel, metricLabel, formatMetric, type DimensionKey, type MetricKey } from "@/features/analytics/registry";
 import type { ReportRow } from "@/features/analytics/aggregate";
 import { evaluateFormula } from "@/lib/formula-engine";
 import type { CustomMetric } from "@/lib/mock/custom-metrics";
@@ -20,19 +21,21 @@ export function ReportTable({
    * evaluated live against each row's own metrics, same formula engine everywhere. */
   customMetrics?: CustomMetric[];
 }) {
+  const { t } = useTranslation("analytics");
+
   const columns: ColumnDef<typeof dataTableFeatures, ReportRow>[] = [
     ...(dimensions.length === 0
       ? [
           {
             id: "all",
-            header: "All traffic",
-            accessorFn: () => "All traffic",
+            header: t("table.allTraffic"),
+            accessorFn: () => t("table.allTraffic"),
           } satisfies ColumnDef<typeof dataTableFeatures, ReportRow>,
         ]
       : dimensions.map(
           (d): ColumnDef<typeof dataTableFeatures, ReportRow> => ({
             id: d,
-            header: DIMENSIONS.find((x) => x.key === d)?.label ?? d,
+            header: dimensionLabel(t, d),
             accessorFn: (row) => row.dims[d] ?? "",
           }),
         )),
@@ -40,7 +43,7 @@ export function ReportTable({
       const meta = METRICS.find((x) => x.key === m)!;
       return {
         id: m,
-        header: meta.label,
+        header: metricLabel(t, m),
         accessorFn: (row) => row.metrics[m],
         cell: ({ getValue }) => <Mono>{formatMetric(getValue() as number | null, meta.format)}</Mono>,
       };
@@ -57,9 +60,9 @@ export function ReportTable({
     <DataTable
       columns={columns}
       data={rows}
-      searchPlaceholder="Search rows..."
-      emptyTitle="No data for this selection"
-      emptyDescription="Widen the date range or remove a filter."
+      searchPlaceholder={t("table.searchPlaceholder")}
+      emptyTitle={t("table.emptyTitle")}
+      emptyDescription={t("table.emptyDescription")}
       pageSize={10}
     />
   );

@@ -32,6 +32,12 @@ export function LineMetricChart({
   const option = React.useMemo(() => {
     const base = chartBaseOption(mode);
     return {
+      // NB: do not add an `animation:` key here. This used to carry
+      // `animation: points.length > 1` as a narrow guard against the
+      // zrender interpolate1DArray crash; once chart-theme.ts turned
+      // animation off wholesale (see its comment), that line was the
+      // thing turning it back ON for every chart with 2+ points, which
+      // is every real one — it kept the crash alive.
       ...base,
       tooltip: {
         ...base.tooltip,

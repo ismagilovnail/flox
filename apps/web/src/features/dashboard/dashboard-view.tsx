@@ -2,55 +2,71 @@
 
 import * as React from "react";
 import type { DateRange } from "react-day-picker";
+import { useTranslation } from "react-i18next";
 
 import { DateRangePicker } from "@/components/ui/date-range-picker";
 import { LineMetricChart } from "@/components/charts/line-metric-chart";
+import { LoadingState } from "@/components/ui/loading-state";
+import { ErrorState } from "@/components/ui/error-state";
 import { CHART_COLORS } from "@/lib/chart-theme";
 import { formatUsd, formatInt } from "@/lib/format";
-import type { DashboardMock } from "@/lib/mock/dashboard";
 import { KpiGrid } from "@/features/dashboard/kpi-grid";
 import { TopTable } from "@/features/dashboard/top-tables";
-import { aggregate } from "@/features/dashboard/metrics";
+import { metricsFromApi, performanceRowFromApi } from "@/features/dashboard/metrics";
+import { useDashboardReport } from "@/hooks/use-analytics-report";
 
-function toDate(iso: string) {
-  return new Date(`${iso}T00:00:00Z`);
+function daysBetween(from: Date, to: Date) {
+  return Math.max(Math.round((to.getTime() - from.getTime()) / 86_400_000) + 1, 1);
 }
 
-export function DashboardView({ mock }: { mock: DashboardMock }) {
-  const { daily } = mock;
-  const lastDate = toDate(daily[daily.length - 1].date);
-  const defaultFrom = new Date(lastDate);
-  defaultFrom.setUTCDate(defaultFrom.getUTCDate() - 29);
+export function DashboardView() {
+  const { t } = useTranslation("dashboard");
 
-  const [range, setRange] = React.useState<DateRange | undefined>({
-    from: defaultFrom,
-    to: lastDate,
-  });
+  const defaultTo = React.useMemo(() => new Date(), []);
+  const defaultFrom = React.useMemo(() => {
+    const d = new Date(defaultTo);
+    d.setUTCDate(d.getUTCDate() - 29);
+    return d;
+  }, [defaultTo]);
+
+  const [range, setRange] = React.useState<DateRange | undefined>({ from: defaultFrom, to: defaultTo });
 
   const from = range?.from ?? defaultFrom;
-  const to = range?.to ?? range?.from ?? lastDate;
+  const to = range?.to ?? range?.from ?? defaultTo;
 
-  const current = daily.filter((p) => {
-    const d = toDate(p.date);
-    return d >= from && d <= to;
-  });
-  const spanDays = Math.max(current.length, 1);
+  const spanDays = daysBetween(from, to);
   const prevTo = new Date(from);
   prevTo.setUTCDate(prevTo.getUTCDate() - 1);
   const prevFrom = new Date(prevTo);
   prevFrom.setUTCDate(prevFrom.getUTCDate() - (spanDays - 1));
-  const previous = daily.filter((p) => {
-    const d = toDate(p.date);
-    return d >= prevFrom && d <= prevTo;
-  });
 
-  const currentMetrics = aggregate(current);
-  const previousMetrics = aggregate(previous.length > 0 ? previous : current);
+  const currentQuery = useDashboardReport(from, to);
+  const previousQuery = useDashboardReport(prevFrom, prevTo);
+
+  if (currentQuery.isPending) {
+    return <LoadingState label={t("loading")} />;
+  }
+  if (currentQuery.isError) {
+    return (
+      <ErrorState
+        title={t("loadError")}
+        description={currentQuery.error.message}
+        onRetry={() => currentQuery.refetch()}
+      />
+    );
+  }
+
+  const data = currentQuery.data;
+  const currentMetrics = metricsFromApi(data.totals);
+  // Falls back to the current period when the comparison window hasn't
+  // resolved yet (still loading, or errored) — renders as "no change"
+  // rather than a second loading/error state for a secondary comparison.
+  const previousMetrics = metricsFromApi(previousQuery.data?.totals ?? data.totals);
 
   return (
     <div className="flex flex-col gap-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-2xl font-semibold tracking-tight">Overview</h1>
+        <h1 className="text-2xl font-semibold tracking-tight">{t("title")}</h1>
         <DateRangePicker value={range} onChange={setRange} />
       </div>
 
@@ -58,36 +74,38 @@ export function DashboardView({ mock }: { mock: DashboardMock }) {
 
       <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
         <LineMetricChart
-          title="Revenue"
-          points={current.map((p) => ({ date: p.date, value: p.revenue }))}
+          title={t("charts.revenue")}
+          points={data.daily.map((p) => ({ date: p.day, value: p.metrics.revenue ?? 0 }))}
           color={CHART_COLORS.success}
           valueFormatter={formatUsd}
         />
         <LineMetricChart
-          title="Spend"
-          points={current.map((p) => ({ date: p.date, value: p.spend }))}
+          title={t("charts.spend")}
+          points={data.daily.map((p) => ({ date: p.day, value: p.metrics.cost ?? 0 }))}
           color={CHART_COLORS.danger}
           valueFormatter={formatUsd}
         />
         <LineMetricChart
-          title="Profit"
-          points={current.map((p) => ({ date: p.date, value: p.profit }))}
+          title={t("charts.profit")}
+          points={data.daily.map((p) => ({ date: p.day, value: p.metrics.profit ?? 0 }))}
           color={CHART_COLORS.primary}
           valueFormatter={formatUsd}
         />
         <LineMetricChart
-          title="Conversions"
-          points={current.map((p) => ({ date: p.date, value: p.conversions }))}
+          title={t("charts.conversions")}
+          points={data.daily.map((p) => ({ date: p.day, value: p.metrics.conversions ?? 0 }))}
           color={CHART_COLORS.warning}
           valueFormatter={formatInt}
         />
       </div>
 
+      {/* No Top Offers card — "offer" isn't a backed report dimension yet
+          (DashboardResult's own doc comment); dropped rather than rendered
+          against fake data. */}
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-        <TopTable title="Top Campaigns" nameHeader="Campaign" rows={mock.topCampaigns} />
-        <TopTable title="Top Offers" nameHeader="Offer" rows={mock.topOffers} />
-        <TopTable title="Top Countries" nameHeader="Country" rows={mock.topCountries} />
-        <TopTable title="Top Flows" nameHeader="Flow" rows={mock.topFlows} />
+        <TopTable entity="campaigns" rows={data.topCampaigns.map((r) => performanceRowFromApi(r, "campaign"))} />
+        <TopTable entity="countries" rows={data.topCountries.map((r) => performanceRowFromApi(r, "country"))} />
+        <TopTable entity="flows" rows={data.topFlows.map((r) => performanceRowFromApi(r, "flow"))} />
       </div>
     </div>
   );

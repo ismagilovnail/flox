@@ -27,9 +27,25 @@ func (r *fakeRepo) DailyCampaignRevenue(_ context.Context, _, _ string, _, _ tim
 	return r.revenue, nil
 }
 
+func (r *fakeRepo) ReportClicks(_ context.Context, _ chstore.ReportQuery) ([]chstore.ClickAgg, error) {
+	return nil, nil
+}
+
+func (r *fakeRepo) ReportLandViews(_ context.Context, _ chstore.ReportQuery) ([]chstore.LandAgg, error) {
+	return nil, nil
+}
+
+func (r *fakeRepo) ReportConversions(_ context.Context, _ chstore.ReportQuery) ([]chstore.ConversionAgg, error) {
+	return nil, nil
+}
+
+func (r *fakeRepo) FunnelCounts(_ context.Context, _ string, _, _ time.Time) (map[string]uint64, error) {
+	return nil, nil
+}
+
 func TestCampaignDailyReturnsRepositoryResult(t *testing.T) {
 	repo := &fakeRepo{counts: []chstore.DailyCount{{Type: event.SourceClick, EventCount: 3}}}
-	svc := analytics.NewService(repo)
+	svc := analytics.NewService(repo, nil)
 
 	from := time.Date(2026, 8, 1, 0, 0, 0, 0, time.UTC)
 	to := time.Date(2026, 8, 7, 0, 0, 0, 0, time.UTC)
@@ -46,7 +62,7 @@ func TestCampaignDailyReturnsRepositoryResult(t *testing.T) {
 }
 
 func TestCampaignDailyRejectsMissingOrgOrCampaign(t *testing.T) {
-	svc := analytics.NewService(&fakeRepo{})
+	svc := analytics.NewService(&fakeRepo{}, nil)
 	from := time.Now()
 	to := from
 
@@ -59,7 +75,7 @@ func TestCampaignDailyRejectsMissingOrgOrCampaign(t *testing.T) {
 }
 
 func TestCampaignDailyRejectsInvertedRange(t *testing.T) {
-	svc := analytics.NewService(&fakeRepo{})
+	svc := analytics.NewService(&fakeRepo{}, nil)
 	to := time.Now()
 	from := to.AddDate(0, 0, 1) // after `to`
 
@@ -70,7 +86,7 @@ func TestCampaignDailyRejectsInvertedRange(t *testing.T) {
 
 func TestCampaignDailyRevenueReturnsRepositoryResult(t *testing.T) {
 	repo := &fakeRepo{revenue: []chstore.DailyRevenue{{Type: event.CpaAccept, EventCount: 2, RevenueUSD: 150}}}
-	svc := analytics.NewService(repo)
+	svc := analytics.NewService(repo, nil)
 
 	from := time.Date(2026, 8, 1, 0, 0, 0, 0, time.UTC)
 	to := time.Date(2026, 8, 7, 0, 0, 0, 0, time.UTC)
@@ -87,7 +103,7 @@ func TestCampaignDailyRevenueReturnsRepositoryResult(t *testing.T) {
 }
 
 func TestCampaignDailyRevenueRejectsSameValidationAsCounts(t *testing.T) {
-	svc := analytics.NewService(&fakeRepo{})
+	svc := analytics.NewService(&fakeRepo{}, nil)
 	if _, err := svc.CampaignDailyRevenue(context.Background(), "", "camp-1", time.Now(), time.Now()); err == nil {
 		t.Fatal("expected an error for a missing organization id")
 	}
@@ -95,7 +111,7 @@ func TestCampaignDailyRevenueRejectsSameValidationAsCounts(t *testing.T) {
 
 func TestCampaignDailyRejectsRangeTooWide(t *testing.T) {
 	repo := &fakeRepo{}
-	svc := analytics.NewService(repo)
+	svc := analytics.NewService(repo, nil)
 	from := time.Date(2020, 1, 1, 0, 0, 0, 0, time.UTC)
 	to := from.AddDate(2, 0, 0) // 2 years
 

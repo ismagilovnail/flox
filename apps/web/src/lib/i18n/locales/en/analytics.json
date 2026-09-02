@@ -1,0 +1,104 @@
+{
+  "view": {
+    "title": "Analytics",
+    "loading": "Loading report...",
+    "loadError": "Couldn't load this report"
+  },
+  "presets": {
+    "label": "Presets:",
+    "save": "Save as preset",
+    "saveTooltip": "Saves the current columns, metrics, grouping, period, and timezone.",
+    "updateAria": "Update {{name}} with the current view",
+    "deleteAria": "Delete {{name}}",
+    "dialog": {
+      "updateTitle": "Update preset",
+      "createTitle": "Save current view as a preset",
+      "updateDescription": "Replaces this preset's saved configuration with the report you're looking at now.",
+      "createDescription": "Reusable, team-scoped — reapplying it later reproduces this exact report.",
+      "nameLabel": "Name",
+      "namePlaceholder": "Source Performance — 7d",
+      "cancel": "Cancel",
+      "saveChanges": "Save changes",
+      "savePreset": "Save preset"
+    },
+    "toast": {
+      "applied": "Preset applied",
+      "updated": "Preset updated",
+      "saved": "Preset saved",
+      "deleted": "Preset deleted"
+    }
+  },
+  "controls": {
+    "filter": "Filter",
+    "dimension": "Dimension",
+    "value": "Value",
+    "addFilter": "Add filter",
+    "dimensionsLabel": "Dimensions",
+    "metricsLabel": "Metrics",
+    "groupBy": "Group by:",
+    "sort": "Sort:",
+    "sortAscendingAria": "Sort ascending",
+    "sortDescendingAria": "Sort descending",
+    "compare": "Compare"
+  },
+  "table": {
+    "searchPlaceholder": "Search rows...",
+    "emptyTitle": "No data for this selection",
+    "emptyDescription": "Widen the date range or remove a filter.",
+    "allTraffic": "All traffic"
+  },
+  "tabs": {
+    "table": "Table",
+    "line": "Line",
+    "bar": "Bar",
+    "funnel": "Funnel"
+  },
+  "charts": {
+    "trend": "Trend",
+    "breakdown": "Breakdown",
+    "funnelTitle": "Conversion Funnel"
+  },
+  "dimensions": {
+    "campaign": "Campaign",
+    "source": "Source",
+    "country": "Country",
+    "region": "Region",
+    "city": "City",
+    "device": "Device",
+    "platform": "Platform",
+    "os": "OS",
+    "browser": "Browser",
+    "language": "Language",
+    "flow": "Flow",
+    "landing": "Landing",
+    "pwa": "PWA",
+    "postlanding": "Postlanding",
+    "offer": "Offer",
+    "network": "Network"
+  },
+  "metrics": {
+    "clicks": "Clicks",
+    "uniqueClicks": "Unique Clicks",
+    "conversions": "Conversions",
+    "revenue": "Revenue",
+    "cost": "Cost",
+    "profit": "Profit",
+    "roi": "ROI",
+    "roas": "ROAS",
+    "ctr": "CTR",
+    "cvr": "CVR",
+    "cpc": "CPC",
+    "cpa": "CPA",
+    "epc": "EPC"
+  },
+  "funnelSteps": {
+    "SOURCE_CLICK": "Source Click",
+    "LAND_VIEW": "Landing View",
+    "LAND_CLICK": "Landing Click",
+    "PWA_VIEW": "PWA View",
+    "PWA_INSTALL": "PWA Install",
+    "CPA_HOLD": "CPA Hold",
+    "CPA_ACCEPT": "CPA Accept",
+    "CPA_REDEP": "CPA Redeposit"
+  }
+}

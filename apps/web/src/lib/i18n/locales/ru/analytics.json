@@ -1,0 +1,104 @@
+{
+  "view": {
+    "title": "Аналитика",
+    "loading": "Загрузка отчёта...",
+    "loadError": "Не удалось загрузить отчёт"
+  },
+  "presets": {
+    "label": "Пресеты:",
+    "save": "Сохранить как пресет",
+    "saveTooltip": "Сохраняет текущие столбцы, метрики, группировку, период и часовой пояс.",
+    "updateAria": "Обновить «{{name}}» текущим видом",
+    "deleteAria": "Удалить «{{name}}»",
+    "dialog": {
+      "updateTitle": "Обновить пресет",
+      "createTitle": "Сохранить текущий вид как пресет",
+      "updateDescription": "Заменит сохранённую конфигурацию этого пресета текущим отчётом.",
+      "createDescription": "Переиспользуемый, общий для команды — повторное применение воссоздаст точно такой же отчёт.",
+      "nameLabel": "Название",
+      "namePlaceholder": "Эффективность источников — 7д",
+      "cancel": "Отмена",
+      "saveChanges": "Сохранить изменения",
+      "savePreset": "Сохранить пресет"
+    },
+    "toast": {
+      "applied": "Пресет применён",
+      "updated": "Пресет обновлён",
+      "saved": "Пресет сохранён",
+      "deleted": "Пресет удалён"
+    }
+  },
+  "controls": {
+    "filter": "Фильтр",
+    "dimension": "Измерение",
+    "value": "Значение",
+    "addFilter": "Добавить фильтр",
+    "dimensionsLabel": "Измерения",
+    "metricsLabel": "Метрики",
+    "groupBy": "Группировка:",
+    "sort": "Сортировка:",
+    "sortAscendingAria": "По возрастанию",
+    "sortDescendingAria": "По убыванию",
+    "compare": "Сравнение"
+  },
+  "table": {
+    "searchPlaceholder": "Поиск по строкам...",
+    "emptyTitle": "Нет данных для этой выборки",
+    "emptyDescription": "Расширьте диапазон дат или уберите фильтр.",
+    "allTraffic": "Весь трафик"
+  },
+  "tabs": {
+    "table": "Таблица",
+    "line": "Линия",
+    "bar": "Столбцы",
+    "funnel": "Воронка"
+  },
+  "charts": {
+    "trend": "Тренд",
+    "breakdown": "Разбивка",
+    "funnelTitle": "Воронка конверсии"
+  },
+  "dimensions": {
+    "campaign": "Кампания",
+    "source": "Источник",
+    "country": "Страна",
+    "region": "Регион",
+    "city": "Город",
+    "device": "Устройство",
+    "platform": "Платформа",
+    "os": "ОС",
+    "browser": "Браузер",
+    "language": "Язык",
+    "flow": "Поток",
+    "landing": "Лендинг",
+    "pwa": "PWA",
+    "postlanding": "Постлендинг",
+    "offer": "Оффер",
+    "network": "Сеть"
+  },
+  "metrics": {
+    "clicks": "Клики",
+    "uniqueClicks": "Уникальные клики",
+    "conversions": "Конверсии",
+    "revenue": "Доход",
+    "cost": "Расход",
+    "profit": "Прибыль",
+    "roi": "ROI",
+    "roas": "ROAS",
+    "ctr": "CTR",
+    "cvr": "CVR",
+    "cpc": "CPC",
+    "cpa": "CPA",
+    "epc": "EPC"
+  },
+  "funnelSteps": {
+    "SOURCE_CLICK": "Клик источника",
+    "LAND_VIEW": "Просмотр лендинга",
+    "LAND_CLICK": "Клик лендинга",
+    "PWA_VIEW": "Просмотр PWA",
+    "PWA_INSTALL": "Установка PWA",
+    "CPA_HOLD": "CPA Холд",
+    "CPA_ACCEPT": "CPA Принято",
+    "CPA_REDEP": "CPA Редеп"
+  }
+}

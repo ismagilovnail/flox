@@ -9,6 +9,7 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"github.com/ismagilovnail/flox/apps/internal/apierror"
+	"github.com/ismagilovnail/flox/apps/internal/chstore"
 	"github.com/ismagilovnail/flox/apps/internal/tenant"
 )
 
@@ -28,6 +29,16 @@ func NewHandler(svc *Service, logger *slog.Logger) *Handler {
 func (h *Handler) Register(r chi.Router) {
 	r.Get("/campaigns/{campaignId}/daily", h.campaignDaily)
 	r.Get("/campaigns/{campaignId}/daily-revenue", h.campaignDailyRevenue)
+
+	// Phase 35's multi-dimension surface. POST+JSON body, not GET+query —
+	// dims/filters/sort are structured, variable-length shapes, the same
+	// reason routingsimulate.Handler's /simulate is POST (see that
+	// package's own handler.go).
+	r.Post("/report", h.report)
+	r.Post("/timeseries", h.timeseries)
+	r.Post("/breakdown", h.breakdown)
+	r.Post("/funnel", h.funnel)
+	r.Post("/dashboard", h.dashboard)
 }
 
 type dailyCountResponse struct {
@@ -112,6 +123,294 @@ func (h *Handler) parseRangeParams(w http.ResponseWriter, r *http.Request) (orgI
 		to = parsed
 	}
 	return orgID, campaignID, from, to, true
+}
+
+// --- Phase 35: Report/Timeseries/Breakdown/Funnel/Dashboard ---
+
+// metricValuesResponse is MetricValues with explicit JSON tags —
+// MetricValues itself stays tag-free since apps/internal/analytics's own
+// callers (LTV, tests) never serialize it directly, and a pointer field
+// marshals to `null` on its own, which is exactly what CLAUDE.md #6's "no
+// cost data on file" contract needs on the wire.
+type metricValuesResponse struct {
+	Clicks       uint64   `json:"clicks"`
+	UniqueClicks uint64   `json:"uniqueClicks"`
+	Conversions  *uint64  `json:"conversions"`
+	Revenue      *float64 `json:"revenue"`
+	Cost         *float64 `json:"cost"`
+	Profit       *float64 `json:"profit"`
+	ROI          *float64 `json:"roi"`
+	ROAS         *float64 `json:"roas"`
+	CTR          float64  `json:"ctr"`
+	CVR          float64  `json:"cvr"`
+	CPC          *float64 `json:"cpc"`
+	CPA          *float64 `json:"cpa"`
+	EPC          float64  `json:"epc"`
+}
+
+func metricValuesToResponse(m MetricValues) metricValuesResponse {
+	return metricValuesResponse{
+		Clicks: m.Clicks, UniqueClicks: m.UniqueClicks, Conversions: m.Conversions,
+		Revenue: m.Revenue, Cost: m.Cost, Profit: m.Profit, ROI: m.ROI, ROAS: m.ROAS,
+		CTR: m.CTR, CVR: m.CVR, CPC: m.CPC, CPA: m.CPA, EPC: m.EPC,
+	}
+}
+
+// reportRowResponse serializes a ReportRow — Day set (Dims omitted) for a
+// timeseries row, Dims set (Day omitted) for a report/breakdown/dashboard-
+// breakdown row, mirroring ReportRow's own doc comment.
+type reportRowResponse struct {
+	Day     *string              `json:"day,omitempty"`
+	Dims    map[string]string    `json:"dims,omitempty"`
+	Metrics metricValuesResponse `json:"metrics"`
+}
+
+func reportRowToResponse(row ReportRow) reportRowResponse {
+	resp := reportRowResponse{Metrics: metricValuesToResponse(row.Metrics)}
+	if row.Day != nil {
+		d := row.Day.Format(dateLayout)
+		resp.Day = &d
+	}
+	if len(row.DimValues) > 0 {
+		resp.Dims = make(map[string]string, len(row.DimValues))
+		for k, v := range row.DimValues {
+			resp.Dims[string(k)] = v
+		}
+	}
+	return resp
+}
+
+func reportRowsToResponse(rows []ReportRow) []reportRowResponse {
+	out := make([]reportRowResponse, len(rows))
+	for i, row := range rows {
+		out[i] = reportRowToResponse(row)
+	}
+	return out
+}
+
+type reportFilterRequest struct {
+	Dimension string `json:"dimension"`
+	Value     string `json:"value"`
+}
+
+func parseReportFilters(in []reportFilterRequest) []chstore.ReportFilter {
+	out := make([]chstore.ReportFilter, len(in))
+	for i, f := range in {
+		out[i] = chstore.ReportFilter{Dimension: chstore.ReportDimension(f.Dimension), Value: f.Value}
+	}
+	return out
+}
+
+func parseReportDims(in []string) []chstore.ReportDimension {
+	out := make([]chstore.ReportDimension, len(in))
+	for i, d := range in {
+		out[i] = chstore.ReportDimension(d)
+	}
+	return out
+}
+
+// parseDateRangeBody parses two YYYY-MM-DD body fields — the JSON-body
+// counterpart of parseRangeParams' query-string parsing above, for the
+// endpoints below that take from/to alongside other structured fields a
+// query string can't express cleanly.
+func parseDateRangeBody(fromStr, toStr string) (from, to time.Time, err error) {
+	from, err = time.Parse(dateLayout, fromStr)
+	if err != nil {
+		return time.Time{}, time.Time{}, apierror.Validation("invalid from date, want YYYY-MM-DD", map[string]string{"from": "invalid"})
+	}
+	to, err = time.Parse(dateLayout, toStr)
+	if err != nil {
+		return time.Time{}, time.Time{}, apierror.Validation("invalid to date, want YYYY-MM-DD", map[string]string{"to": "invalid"})
+	}
+	return from, to, nil
+}
+
+type reportRequest struct {
+	Dims    []string              `json:"dims"`
+	Filters []reportFilterRequest `json:"filters"`
+	From    string                `json:"from"`
+	To      string                `json:"to"`
+	Sort    struct {
+		Key string `json:"key"`
+		Dir string `json:"dir"`
+	} `json:"sort"`
+}
+
+// report answers POST /analytics/report — the report builder table's
+// endpoint (0-4 dims, filter, sort, every §50 metric per group).
+func (h *Handler) report(w http.ResponseWriter, r *http.Request) {
+	orgID, _ := tenant.OrgID(r.Context())
+	var req reportRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		apierror.Write(w, h.logger, apierror.Validation("invalid JSON body", nil))
+		return
+	}
+	from, to, err := parseDateRangeBody(req.From, req.To)
+	if err != nil {
+		apierror.Write(w, h.logger, err)
+		return
+	}
+
+	rows, err := h.svc.Report(r.Context(), orgID, ReportInput{
+		Dims:    parseReportDims(req.Dims),
+		Filters: parseReportFilters(req.Filters),
+		From:    from,
+		To:      to,
+		Sort:    SortSpec{Key: req.Sort.Key, Dir: req.Sort.Dir},
+	})
+	if err != nil {
+		apierror.Write(w, h.logger, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"rows": reportRowsToResponse(rows)})
+}
+
+type timeseriesRequest struct {
+	Filters []reportFilterRequest `json:"filters"`
+	From    string                `json:"from"`
+	To      string                `json:"to"`
+}
+
+// timeseries answers POST /analytics/timeseries — one row per day, every
+// metric included so the client can switch which one it plots without a
+// second request (TimeseriesInput's own doc comment).
+func (h *Handler) timeseries(w http.ResponseWriter, r *http.Request) {
+	orgID, _ := tenant.OrgID(r.Context())
+	var req timeseriesRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		apierror.Write(w, h.logger, apierror.Validation("invalid JSON body", nil))
+		return
+	}
+	from, to, err := parseDateRangeBody(req.From, req.To)
+	if err != nil {
+		apierror.Write(w, h.logger, err)
+		return
+	}
+
+	rows, err := h.svc.Timeseries(r.Context(), orgID, TimeseriesInput{
+		Filters: parseReportFilters(req.Filters),
+		From:    from,
+		To:      to,
+	})
+	if err != nil {
+		apierror.Write(w, h.logger, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"rows": reportRowsToResponse(rows)})
+}
+
+type breakdownRequest struct {
+	Dim     string                `json:"dim"`
+	Metric  string                `json:"metric"`
+	Filters []reportFilterRequest `json:"filters"`
+	From    string                `json:"from"`
+	To      string                `json:"to"`
+	Limit   int                   `json:"limit"`
+}
+
+// breakdown answers POST /analytics/breakdown — the bar chart's endpoint
+// (exactly one dimension, sorted by one metric descending, top-N).
+func (h *Handler) breakdown(w http.ResponseWriter, r *http.Request) {
+	orgID, _ := tenant.OrgID(r.Context())
+	var req breakdownRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		apierror.Write(w, h.logger, apierror.Validation("invalid JSON body", nil))
+		return
+	}
+	from, to, err := parseDateRangeBody(req.From, req.To)
+	if err != nil {
+		apierror.Write(w, h.logger, err)
+		return
+	}
+
+	rows, err := h.svc.Breakdown(r.Context(), orgID, BreakdownInput{
+		Dim:     chstore.ReportDimension(req.Dim),
+		Metric:  req.Metric,
+		Filters: parseReportFilters(req.Filters),
+		From:    from,
+		To:      to,
+		Limit:   req.Limit,
+	})
+	if err != nil {
+		apierror.Write(w, h.logger, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"rows": reportRowsToResponse(rows)})
+}
+
+type rangeRequest struct {
+	From string `json:"from"`
+	To   string `json:"to"`
+}
+
+type funnelStepResponse struct {
+	Step  string `json:"step"`
+	Value uint64 `json:"value"`
+}
+
+// funnel answers POST /analytics/funnel — the §43 funnel's per-stage
+// totals for the requested range.
+func (h *Handler) funnel(w http.ResponseWriter, r *http.Request) {
+	orgID, _ := tenant.OrgID(r.Context())
+	var req rangeRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		apierror.Write(w, h.logger, apierror.Validation("invalid JSON body", nil))
+		return
+	}
+	from, to, err := parseDateRangeBody(req.From, req.To)
+	if err != nil {
+		apierror.Write(w, h.logger, err)
+		return
+	}
+
+	steps, err := h.svc.Funnel(r.Context(), orgID, from, to)
+	if err != nil {
+		apierror.Write(w, h.logger, err)
+		return
+	}
+	resp := make([]funnelStepResponse, len(steps))
+	for i, s := range steps {
+		resp[i] = funnelStepResponse{Step: s.Step, Value: s.Value}
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"steps": resp})
+}
+
+type dashboardResponse struct {
+	Totals       metricValuesResponse `json:"totals"`
+	Daily        []reportRowResponse  `json:"daily"`
+	TopCampaigns []reportRowResponse  `json:"topCampaigns"`
+	TopCountries []reportRowResponse  `json:"topCountries"`
+	TopFlows     []reportRowResponse  `json:"topFlows"`
+}
+
+// dashboard answers POST /analytics/dashboard — /overview's own endpoint
+// (KPI totals, a daily series, three Top-N breakdowns; see DashboardResult's
+// own doc comment on why there's no Top Offers here).
+func (h *Handler) dashboard(w http.ResponseWriter, r *http.Request) {
+	orgID, _ := tenant.OrgID(r.Context())
+	var req rangeRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		apierror.Write(w, h.logger, apierror.Validation("invalid JSON body", nil))
+		return
+	}
+	from, to, err := parseDateRangeBody(req.From, req.To)
+	if err != nil {
+		apierror.Write(w, h.logger, err)
+		return
+	}
+
+	result, err := h.svc.Dashboard(r.Context(), orgID, from, to)
+	if err != nil {
+		apierror.Write(w, h.logger, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, dashboardResponse{
+		Totals:       metricValuesToResponse(result.Totals),
+		Daily:        reportRowsToResponse(result.Daily),
+		TopCampaigns: reportRowsToResponse(result.TopCampaigns),
+		TopCountries: reportRowsToResponse(result.TopCountries),
+		TopFlows:     reportRowsToResponse(result.TopFlows),
+	})
 }
 
 func writeJSON(w http.ResponseWriter, status int, body any) {

@@ -1,0 +1,43 @@
+{
+  "title": "Обзор",
+  "loading": "Загрузка обзора...",
+  "loadError": "Не удалось загрузить обзор",
+  "kpi": {
+    "revenue": "Доход",
+    "spend": "Расход",
+    "profit": "Прибыль",
+    "roi": "ROI",
+    "clicks": "Клики",
+    "conversions": "Конверсии",
+    "cvr": "CVR",
+    "cpa": "CPA"
+  },
+  "charts": {
+    "revenue": "Доход",
+    "spend": "Расход",
+    "profit": "Прибыль",
+    "conversions": "Конверсии"
+  },
+  "topTables": {
+    "campaignsTitle": "Топ кампаний",
+    "offersTitle": "Топ офферов",
+    "countriesTitle": "Топ стран",
+    "flowsTitle": "Топ потоков",
+    "campaignHeader": "Кампания",
+    "offerHeader": "Оффер",
+    "countryHeader": "Страна",
+    "flowHeader": "Поток",
+    "clicksHeader": "Клики",
+    "cvrHeader": "CVR",
+    "revenueHeader": "Доход",
+    "roiHeader": "ROI",
+    "campaignsSearchPlaceholder": "Поиск кампаний...",
+    "campaignsEmptyTitle": "Нет кампаний",
+    "offersSearchPlaceholder": "Поиск офферов...",
+    "offersEmptyTitle": "Нет офферов",
+    "countriesSearchPlaceholder": "Поиск стран...",
+    "countriesEmptyTitle": "Нет стран",
+    "flowsSearchPlaceholder": "Поиск потоков...",
+    "flowsEmptyTitle": "Нет потоков"
+  }
+}

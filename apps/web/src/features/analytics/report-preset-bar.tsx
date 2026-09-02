@@ -3,6 +3,7 @@
 import * as React from "react";
 import { toast } from "sonner";
 import { PencilIcon, PlusIcon, StarIcon, XIcon } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -32,6 +33,7 @@ export function ReportPresetBar({
   state: ReportControlsState;
   onApply: (patch: Partial<ReportControlsState>) => void;
 }) {
+  const { t } = useTranslation("analytics");
   const presets = useReportPresetsStore((s) => s.presets);
   const createPreset = useReportPresetsStore((s) => s.createPreset);
   const updatePreset = useReportPresetsStore((s) => s.updatePreset);
@@ -48,7 +50,7 @@ export function ReportPresetBar({
       timezone: preset.timezone,
       dateRange: periodToDateRange(preset.period, TODAY),
     });
-    toast("Preset applied", { description: preset.name });
+    toast(t("presets.toast.applied"), { description: preset.name });
   }
 
   function openSaveDialog(target: ReportPreset | null) {
@@ -69,23 +71,23 @@ export function ReportPresetBar({
     };
     if (dialogTarget) {
       updatePreset(dialogTarget.id, input);
-      toast("Preset updated", { description: trimmed });
+      toast(t("presets.toast.updated"), { description: trimmed });
     } else {
       createPreset(input);
-      toast("Preset saved", { description: trimmed });
+      toast(t("presets.toast.saved"), { description: trimmed });
     }
     setDialogTarget(undefined);
   }
 
   function handleDelete(preset: ReportPreset) {
     if (deletePreset(preset.id)) {
-      toast("Preset deleted", { description: preset.name });
+      toast(t("presets.toast.deleted"), { description: preset.name });
     }
   }
 
   return (
     <div className="flex flex-wrap items-center gap-1.5">
-      <span className="text-xs text-muted-foreground">Presets:</span>
+      <span className="text-xs text-muted-foreground">{t("presets.label")}</span>
       {presets.map((preset) => (
         <div key={preset.id} className="flex items-center overflow-hidden rounded-md border border-border">
           <button
@@ -99,7 +101,7 @@ export function ReportPresetBar({
           {!preset.isDefault && (
             <>
               <IconButton
-                aria-label={`Update ${preset.name} with the current view`}
+                aria-label={t("presets.updateAria", { name: preset.name })}
                 size="icon-sm"
                 variant="ghost"
                 className="rounded-none border-l border-border"
@@ -108,7 +110,7 @@ export function ReportPresetBar({
                 <PencilIcon className="size-3" />
               </IconButton>
               <IconButton
-                aria-label={`Delete ${preset.name}`}
+                aria-label={t("presets.deleteAria", { name: preset.name })}
                 size="icon-sm"
                 variant="ghost"
                 className="rounded-none border-l border-border"
@@ -124,38 +126,36 @@ export function ReportPresetBar({
       <Tooltip>
         <TooltipTrigger asChild>
           <Button variant="outline" size="sm" onClick={() => openSaveDialog(null)}>
-            <PlusIcon className="size-3.5" /> Save as preset
+            <PlusIcon className="size-3.5" /> {t("presets.save")}
           </Button>
         </TooltipTrigger>
-        <TooltipContent>Saves the current columns, metrics, grouping, period, and timezone.</TooltipContent>
+        <TooltipContent>{t("presets.saveTooltip")}</TooltipContent>
       </Tooltip>
 
       <Dialog open={dialogTarget !== undefined} onOpenChange={(open) => !open && setDialogTarget(undefined)}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>{dialogTarget ? "Update preset" : "Save current view as a preset"}</DialogTitle>
+            <DialogTitle>{dialogTarget ? t("presets.dialog.updateTitle") : t("presets.dialog.createTitle")}</DialogTitle>
             <DialogDescription>
-              {dialogTarget
-                ? "Replaces this preset's saved configuration with the report you're looking at now."
-                : "Reusable, team-scoped (§27.5) — reapplying it later reproduces this exact report."}
+              {dialogTarget ? t("presets.dialog.updateDescription") : t("presets.dialog.createDescription")}
             </DialogDescription>
           </DialogHeader>
           <div className="grid gap-1.5">
-            <Label htmlFor="preset-name">Name</Label>
+            <Label htmlFor="preset-name">{t("presets.dialog.nameLabel")}</Label>
             <Input
               id="preset-name"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder="Source Performance — 7d"
+              placeholder={t("presets.dialog.namePlaceholder")}
               autoFocus
             />
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setDialogTarget(undefined)}>
-              Cancel
+              {t("presets.dialog.cancel")}
             </Button>
             <Button onClick={submitDialog} disabled={!name.trim()}>
-              {dialogTarget ? "Save changes" : "Save preset"}
+              {dialogTarget ? t("presets.dialog.saveChanges") : t("presets.dialog.savePreset")}
             </Button>
           </DialogFooter>
         </DialogContent>

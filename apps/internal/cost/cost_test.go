@@ -106,6 +106,90 @@ func TestDailyCampaignSpendFlagsIncompleteFXDay(t *testing.T) {
 	}
 }
 
+func TestSpendByCampaignSumsAcrossCampaignsAndSources(t *testing.T) {
+	pool := mustPool(t)
+	ctx := context.Background()
+	orgID := seedOrg(t, ctx, pool)
+	campaignA := seedCampaign(t, ctx, pool, orgID)
+	campaignB := seedCampaign(t, ctx, pool, orgID)
+	sourceID := seedTrafficSource(t, ctx, pool, orgID)
+
+	svc := cost.NewService(cost.NewRepository(pool), conversion.NewPostgresFX(pool))
+	day1 := time.Date(2026, 2, 1, 0, 0, 0, 0, time.UTC)
+	day2 := time.Date(2026, 2, 2, 0, 0, 0, 0, time.UTC)
+
+	if _, err := svc.Upsert(ctx, orgID, campaignA, cost.UpsertInput{EntryDate: day1, Amount: 100, Currency: "USD"}); err != nil {
+		t.Fatalf("upsert A day1: %v", err)
+	}
+	if _, err := svc.Upsert(ctx, orgID, campaignA, cost.UpsertInput{TrafficSourceID: &sourceID, EntryDate: day2, Amount: 50, Currency: "USD"}); err != nil {
+		t.Fatalf("upsert A day2 (source-scoped): %v", err)
+	}
+	if _, err := svc.Upsert(ctx, orgID, campaignB, cost.UpsertInput{EntryDate: day1, Amount: 20, Currency: "USD"}); err != nil {
+		t.Fatalf("upsert B day1: %v", err)
+	}
+
+	spend, err := svc.SpendByCampaign(ctx, orgID, day1, day2)
+	if err != nil {
+		t.Fatalf("SpendByCampaign: %v", err)
+	}
+	byCampaign := map[string]cost.CampaignSpend{}
+	for _, s := range spend {
+		byCampaign[s.CampaignID] = s
+	}
+	if byCampaign[campaignA].AmountUSD != 150 {
+		t.Fatalf("campaign A spend = %v, want 150 (100 + 50 across both sources)", byCampaign[campaignA].AmountUSD)
+	}
+	if byCampaign[campaignB].AmountUSD != 20 {
+		t.Fatalf("campaign B spend = %v, want 20", byCampaign[campaignB].AmountUSD)
+	}
+}
+
+func TestSpendByCampaignEmptyForOrgWithNoEntries(t *testing.T) {
+	pool := mustPool(t)
+	ctx := context.Background()
+	orgID := seedOrg(t, ctx, pool)
+
+	svc := cost.NewService(cost.NewRepository(pool), conversion.NewPostgresFX(pool))
+	spend, err := svc.SpendByCampaign(ctx, orgID, time.Now().AddDate(0, -1, 0), time.Now())
+	if err != nil {
+		t.Fatalf("SpendByCampaign: %v", err)
+	}
+	// A brand-new org with zero cost_entries must get zero rows back, not
+	// a row with AmountUSD=0 — "no data at all" and "confirmed zero spend"
+	// are different things (CLAUDE.md #6), and it's the caller's job
+	// (apps/internal/analytics.Service) to treat "campaign absent from
+	// this slice" as null cost, not fabricate a zero.
+	if len(spend) != 0 {
+		t.Fatalf("spend = %+v, want empty for an org with no cost_entries at all", spend)
+	}
+}
+
+func TestDailySpendForOrgSumsAcrossCampaigns(t *testing.T) {
+	pool := mustPool(t)
+	ctx := context.Background()
+	orgID := seedOrg(t, ctx, pool)
+	campaignA := seedCampaign(t, ctx, pool, orgID)
+	campaignB := seedCampaign(t, ctx, pool, orgID)
+
+	svc := cost.NewService(cost.NewRepository(pool), conversion.NewPostgresFX(pool))
+	day := time.Date(2026, 2, 5, 0, 0, 0, 0, time.UTC)
+
+	if _, err := svc.Upsert(ctx, orgID, campaignA, cost.UpsertInput{EntryDate: day, Amount: 30, Currency: "USD"}); err != nil {
+		t.Fatalf("upsert A: %v", err)
+	}
+	if _, err := svc.Upsert(ctx, orgID, campaignB, cost.UpsertInput{EntryDate: day, Amount: 45, Currency: "USD"}); err != nil {
+		t.Fatalf("upsert B: %v", err)
+	}
+
+	spend, err := svc.DailySpendForOrg(ctx, orgID, day, day)
+	if err != nil {
+		t.Fatalf("DailySpendForOrg: %v", err)
+	}
+	if len(spend) != 1 || spend[0].AmountUSD != 75 {
+		t.Fatalf("spend = %+v, want exactly 1 day totaling 75 (30 + 45 across both campaigns)", spend)
+	}
+}
+
 func TestUpsertRecordsManualSource(t *testing.T) {
 	pool := mustPool(t)
 	ctx := context.Background()

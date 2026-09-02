@@ -154,3 +154,62 @@ func (r *Repository) DailyCampaignSpend(ctx context.Context, orgID, campaignID s
 	}
 	return out, rows.Err()
 }
+
+// SpendByCampaign sums amount_usd per campaign, across every traffic
+// source and every day in [from, to] — Phase 35's report builder and
+// Overview dashboard need this (cost is only ever computable when a
+// report's grouping resolves to campaign granularity or coarser; see
+// apps/internal/analytics's own doc comment on why) and DailyCampaignSpend
+// above doesn't fit: that's one campaign's spend broken out by day, this
+// is every campaign's spend for the org collapsed to one total each.
+func (r *Repository) SpendByCampaign(ctx context.Context, orgID string, from, to time.Time) ([]CampaignSpend, error) {
+	rows, err := r.db.Query(ctx, `
+		SELECT campaign_id, COALESCE(SUM(amount_usd), 0), bool_and(amount_usd IS NOT NULL)
+		FROM cost_entries
+		WHERE organization_id = $1 AND entry_date >= $2 AND entry_date <= $3
+		GROUP BY campaign_id`,
+		orgID, from, to,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("querying spend by campaign: %w", err)
+	}
+	defer rows.Close()
+
+	var out []CampaignSpend
+	for rows.Next() {
+		var c CampaignSpend
+		if err := rows.Scan(&c.CampaignID, &c.AmountUSD, &c.AllConverted); err != nil {
+			return nil, fmt.Errorf("scanning spend-by-campaign row: %w", err)
+		}
+		out = append(out, c)
+	}
+	return out, rows.Err()
+}
+
+// DailySpendForOrg sums amount_usd per day across every campaign and
+// traffic source for the whole org — the Overview dashboard's Spend
+// chart/KPI, the org-wide counterpart to DailyCampaignSpend.
+func (r *Repository) DailySpendForOrg(ctx context.Context, orgID string, from, to time.Time) ([]DailySpend, error) {
+	rows, err := r.db.Query(ctx, `
+		SELECT entry_date, COALESCE(SUM(amount_usd), 0), bool_and(amount_usd IS NOT NULL)
+		FROM cost_entries
+		WHERE organization_id = $1 AND entry_date >= $2 AND entry_date <= $3
+		GROUP BY entry_date
+		ORDER BY entry_date`,
+		orgID, from, to,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("querying daily org spend: %w", err)
+	}
+	defer rows.Close()
+
+	var out []DailySpend
+	for rows.Next() {
+		var d DailySpend
+		if err := rows.Scan(&d.Day, &d.AmountUSD, &d.AllConverted); err != nil {
+			return nil, fmt.Errorf("scanning daily org spend row: %w", err)
+		}
+		out = append(out, d)
+	}
+	return out, rows.Err()
+}

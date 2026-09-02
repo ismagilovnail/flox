@@ -1,0 +1,43 @@
+{
+  "title": "Overview",
+  "loading": "Loading overview...",
+  "loadError": "Couldn't load the overview",
+  "kpi": {
+    "revenue": "Revenue",
+    "spend": "Spend",
+    "profit": "Profit",
+    "roi": "ROI",
+    "clicks": "Clicks",
+    "conversions": "Conversions",
+    "cvr": "CVR",
+    "cpa": "CPA"
+  },
+  "charts": {
+    "revenue": "Revenue",
+    "spend": "Spend",
+    "profit": "Profit",
+    "conversions": "Conversions"
+  },
+  "topTables": {
+    "campaignsTitle": "Top Campaigns",
+    "offersTitle": "Top Offers",
+    "countriesTitle": "Top Countries",
+    "flowsTitle": "Top Flows",
+    "campaignHeader": "Campaign",
+    "offerHeader": "Offer",
+    "countryHeader": "Country",
+    "flowHeader": "Flow",
+    "clicksHeader": "Clicks",
+    "cvrHeader": "CVR",
+    "revenueHeader": "Revenue",
+    "roiHeader": "ROI",
+    "campaignsSearchPlaceholder": "Search campaigns...",
+    "campaignsEmptyTitle": "No campaigns",
+    "offersSearchPlaceholder": "Search offers...",
+    "offersEmptyTitle": "No offers",
+    "countriesSearchPlaceholder": "Search countries...",
+    "countriesEmptyTitle": "No countries",
+    "flowsSearchPlaceholder": "Search flows...",
+    "flowsEmptyTitle": "No flows"
+  }
+}

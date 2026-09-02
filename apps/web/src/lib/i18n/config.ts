@@ -46,6 +46,8 @@ import enConversions from "@/lib/i18n/locales/en/conversions.json";
 import enPostbacks from "@/lib/i18n/locales/en/postbacks.json";
 import enPixels from "@/lib/i18n/locales/en/pixels.json";
 import enAuth from "@/lib/i18n/locales/en/auth.json";
+import enAnalytics from "@/lib/i18n/locales/en/analytics.json";
+import enDashboard from "@/lib/i18n/locales/en/dashboard.json";
 
 import ruCommon from "@/lib/i18n/locales/ru/common.json";
 import ruNav from "@/lib/i18n/locales/ru/nav.json";
@@ -63,6 +65,8 @@ import ruConversions from "@/lib/i18n/locales/ru/conversions.json";
 import ruPostbacks from "@/lib/i18n/locales/ru/postbacks.json";
 import ruPixels from "@/lib/i18n/locales/ru/pixels.json";
 import ruAuth from "@/lib/i18n/locales/ru/auth.json";
+import ruAnalytics from "@/lib/i18n/locales/ru/analytics.json";
+import ruDashboard from "@/lib/i18n/locales/ru/dashboard.json";
 
 // Re-exported so existing "use client" call sites can keep importing
 // locale/cookie concerns from this module as before — the actual
@@ -89,6 +93,8 @@ export const NAMESPACES = [
   "postbacks",
   "pixels",
   "auth",
+  "analytics",
+  "dashboard",
 ] as const;
 
 const resources = {
@@ -109,6 +115,8 @@ const resources = {
     postbacks: enPostbacks,
     pixels: enPixels,
     auth: enAuth,
+    analytics: enAnalytics,
+    dashboard: enDashboard,
   },
   ru: {
     common: ruCommon,
@@ -127,6 +135,8 @@ const resources = {
     postbacks: ruPostbacks,
     pixels: ruPixels,
     auth: ruAuth,
+    analytics: ruAnalytics,
+    dashboard: ruDashboard,
   },
 };
 

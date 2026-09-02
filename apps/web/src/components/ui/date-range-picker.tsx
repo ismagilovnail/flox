@@ -3,7 +3,9 @@
 import * as React from "react"
 import { CalendarIcon } from "lucide-react"
 import { format } from "date-fns"
+import { enUS, ru } from "date-fns/locale"
 import type { DateRange } from "react-day-picker"
+import { useTranslation } from "react-i18next"
 
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
@@ -14,20 +16,11 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover"
 
-const PRESETS: { label: string; range: () => DateRange }[] = [
-  {
-    label: "Today",
-    range: () => ({ from: new Date(), to: new Date() }),
-  },
-  {
-    label: "Last 7 days",
-    range: () => ({ from: addDays(-6), to: new Date() }),
-  },
-  {
-    label: "Last 30 days",
-    range: () => ({ from: addDays(-29), to: new Date() }),
-  },
-]
+// date-fns locale for both the "Jul 13, 2026" trigger label and the
+// Calendar's month/weekday names (Calendar forwards this straight to
+// react-day-picker's own `locale` prop — see its own comment). Keyed by
+// i18n.language rather than a second locale concept of its own.
+const DATE_FNS_LOCALES = { en: enUS, ru } as const
 
 function addDays(offset: number) {
   const d = new Date()
@@ -44,13 +37,21 @@ function DateRangePicker({
   value?: DateRange
   onChange?: (range: DateRange | undefined) => void
 }) {
+  const { t, i18n } = useTranslation("common")
   const [open, setOpen] = React.useState(false)
+  const dateFnsLocale = DATE_FNS_LOCALES[i18n.language as keyof typeof DATE_FNS_LOCALES] ?? enUS
+
+  const PRESETS = [
+    { label: t("dateRangePicker.today"), range: () => ({ from: new Date(), to: new Date() }) },
+    { label: t("dateRangePicker.last7Days"), range: () => ({ from: addDays(-6), to: new Date() }) },
+    { label: t("dateRangePicker.last30Days"), range: () => ({ from: addDays(-29), to: new Date() }) },
+  ]
 
   const label = value?.from
     ? value.to && value.to.getTime() !== value.from.getTime()
-      ? `${format(value.from, "MMM d, yyyy")} – ${format(value.to, "MMM d, yyyy")}`
-      : format(value.from, "MMM d, yyyy")
-    : "Select date range"
+      ? `${format(value.from, "MMM d, yyyy", { locale: dateFnsLocale })} – ${format(value.to, "MMM d, yyyy", { locale: dateFnsLocale })}`
+      : format(value.from, "MMM d, yyyy", { locale: dateFnsLocale })
+    : t("dateRangePicker.selectRange")
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -87,6 +88,7 @@ function DateRangePicker({
             onSelect={onChange}
             numberOfMonths={2}
             defaultMonth={value?.from}
+            locale={dateFnsLocale}
           />
         </div>
       </PopoverContent>
