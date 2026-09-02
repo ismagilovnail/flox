@@ -83,7 +83,10 @@ STATUS        : done — apps/internal/analytics/report.go +
                 seeded one; a published custom metric correctly evaluates
                 to "—" against a null-cost row. tsc --noEmit/eslint clean
                 on apps/web.
-LAST COMMIT   : (pending — see NEXT)
+LAST COMMIT   : feat(analytics): real multi-dimension /analytics backend
+                (Phase 35) — cfe3390, preceded by 6aa98df feat(auth): gate
+                login behind email verification and b3306ff feat(infra):
+                containerize the dev stack, drop host networking
 UNCOMMITTED   : none — this phase's commit(s) include everything that was
                 previously sitting uncommitted (containerization, email
                 verification, the zrender fix, dashboard/analytics i18n)
