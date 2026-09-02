@@ -54,8 +54,9 @@ STATUS        : done — user shared a reference tracker's campaign edit
                 those numbers would have to be fabricated.
                 Fixed a stale streamSets.json string claiming the
                 fallback URL lived "in Settings" (en+ru).
-LAST COMMIT   : (pending — see NEXT)
-UNCOMMITTED   : none once this phase's commit lands.
+LAST COMMIT   : feat(web): campaign edit page as a two-column layout,
+                inline stream-set editing — a92c9b5
+UNCOMMITTED   : none.
 NEXT          : confirm scope before starting — same real candidates as
                 before (see superseded block below), plus, if ever
                 wanted: a stream_set_id column on click/tracking/
