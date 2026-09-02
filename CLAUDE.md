@@ -67,8 +67,9 @@ STATUS        : done — apps/internal/domain + apps/internal/trackinglink
                 302-redirects to the campaign's configured offer — the
                 real click path, not a mocked-looking success screen.
                 tsc --noEmit/eslint clean.
-LAST COMMIT   : (pending — see NEXT)
-UNCOMMITTED   : none once this phase's commit lands.
+LAST COMMIT   : feat(domains): real Domains + Tracking Links CRUD, fix
+                draft-campaign activation — aa25993
+UNCOMMITTED   : none.
 NEXT          : confirm scope before starting. Real candidates, not
                 ranked: (a) the six remaining frontend-integration gaps —
                 Domains' own UI still isn't localized (separate from
