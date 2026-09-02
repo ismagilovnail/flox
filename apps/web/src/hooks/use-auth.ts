@@ -8,7 +8,9 @@ import {
   login,
   logout,
   previewInvite,
+  resendVerification,
   signup,
+  verifyEmail,
   type AcceptInviteInput,
   type LoginInput,
   type SignupInput,
@@ -40,11 +42,41 @@ export function useMe() {
   });
 }
 
+// No meKey invalidation on success — signup no longer creates a session
+// (see lib/api/auth.ts's SignupResponse doc comment), so "who am I" is
+// unchanged by it. useVerifyEmail below is the one that can actually
+// start a session.
 export function useSignup() {
-  const qc = useQueryClient();
   return useMutation({
     mutationFn: (input: SignupInput) => signup(input),
-    onSuccess: () => qc.invalidateQueries({ queryKey: meKey }),
+  });
+}
+
+// useQuery, not useMutation — despite the underlying request being a POST
+// (it consumes a one-time token), the shape this needs is exactly
+// usePreviewInvite's below: "fetch once for this token, on mount, cache
+// against it" — no manual useEffect+useRef mount-guard required, React
+// Query's own enabled+queryKey semantics already do that. staleTime:
+// Infinity because the token is single-use — a refetch would just 404
+// against an already-consumed one, never anything worth re-requesting.
+export function useVerifyEmail(token: string) {
+  const qc = useQueryClient();
+  return useQuery({
+    queryKey: ["auth", "verify-email", token],
+    queryFn: async () => {
+      const res = await verifyEmail(token);
+      if (res.loggedIn) qc.invalidateQueries({ queryKey: meKey });
+      return res;
+    },
+    enabled: !!token,
+    retry: false,
+    staleTime: Infinity,
+  });
+}
+
+export function useResendVerification() {
+  return useMutation({
+    mutationFn: (email: string) => resendVerification(email),
   });
 }
 

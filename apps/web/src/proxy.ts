@@ -19,7 +19,7 @@ import type { NextRequest } from "next/server";
  */
 const SESSION_COOKIE_NAME = "flox_session";
 
-const PUBLIC_PATHS = new Set(["/", "/login", "/signup", "/accept-invite", "/style-guide"]);
+const PUBLIC_PATHS = new Set(["/", "/login", "/signup", "/accept-invite", "/verify-email", "/style-guide"]);
 
 export function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;

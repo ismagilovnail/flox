@@ -33,6 +33,12 @@
     "pagination_many": "Страница {{page}} из {{total}} · {{count}} строк",
     "pagination_other": "Страница {{page}} из {{total}} · {{count}} строки"
   },
+  "dateRangePicker": {
+    "today": "Сегодня",
+    "last7Days": "Последние 7 дней",
+    "last30Days": "Последние 30 дней",
+    "selectRange": "Выберите период"
+  },
   "states": {
     "loading": "Загрузка",
     "errorTitle": "Что-то пошло не так"

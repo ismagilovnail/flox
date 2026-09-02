@@ -29,6 +29,12 @@
     "pagination_one": "Page {{page}} of {{total}} · {{count}} row",
     "pagination_other": "Page {{page}} of {{total}} · {{count}} rows"
   },
+  "dateRangePicker": {
+    "today": "Today",
+    "last7Days": "Last 7 days",
+    "last30Days": "Last 30 days",
+    "selectRange": "Select date range"
+  },
   "states": {
     "loading": "Loading",
     "errorTitle": "Something went wrong"

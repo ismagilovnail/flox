@@ -24,6 +24,12 @@ const (
 	// inviteTTL: long enough that an invite sent on a Friday is still
 	// good the following Monday.
 	inviteTTL = 7 * 24 * time.Hour
+	// emailVerificationTTL: shorter than inviteTTL on purpose — this link
+	// goes to the email the signer-upper just typed into the form they're
+	// still looking at, not one sent days later to a teammate who might
+	// be away; 24h covers "check your email after lunch" without leaving
+	// a long-lived unauthenticated bearer token sitting in an inbox.
+	emailVerificationTTL = 24 * time.Hour
 	// activityListLimit mirrors the mock TEAM_ACTIVITY feed's own size —
 	// this is a recent-activity panel, not a paginated audit log browser
 	// (nothing in apps/web asks for pagination here).
@@ -39,15 +45,25 @@ var invitableRoles = map[string]bool{
 	"Admin": true, "Manager": true, "Buyer": true, "Analyst": true, "Viewer": true,
 }
 
+// Mailer is the narrow slice of apps/internal/mailer.Client this package
+// needs — the same decoupled-interface-per-consumer pattern
+// apps/internal/postbacklogs.OutgoingEnqueuer already uses, so this
+// package never imports apps/internal/mailer directly (only apps/api's
+// wiring does).
+type Mailer interface {
+	Send(ctx context.Context, to, subject, body string) error
+}
+
 type Service struct {
 	repo   *Repository
 	appURL string
+	mailer Mailer
 }
 
-// appURL is apps/web's own origin (config.AppURL) — an invite link points
-// there, at a page Phase 28B builds (see docs/auth.md).
-func NewService(repo *Repository, appURL string) *Service {
-	return &Service{repo: repo, appURL: appURL}
+// appURL is apps/web's own origin (config.AppURL) — an invite link, and
+// now the email-verification link Signup sends, both point there.
+func NewService(repo *Repository, appURL string, mailer Mailer) *Service {
+	return &Service{repo: repo, appURL: appURL, mailer: mailer}
 }
 
 // dummyPasswordHash exists purely so Login always pays bcrypt's comparison
@@ -65,7 +81,15 @@ func mustHashOnce(s string) string {
 	return h
 }
 
-func (s *Service) Signup(ctx context.Context, in SignupInput) (Result, error) {
+// Signup creates the organization, its Owner, and the Owner's membership —
+// all real, immediately — but deliberately does NOT create a session or
+// return one: the account can't sign in until it proves it controls the
+// email it just typed in, by following the link this sends there. That
+// proof is the entire point of email verification; returning a session
+// (or the verification link itself) from this same response would let
+// anyone who can POST here as anyone@somewhere-they-don't-control finish
+// "verifying" without ever touching that inbox. See VerifyEmail.
+func (s *Service) Signup(ctx context.Context, in SignupInput) (SignupResult, error) {
 	in.OrganizationName = strings.TrimSpace(in.OrganizationName)
 	in.Name = strings.TrimSpace(in.Name)
 	in.Email = strings.TrimSpace(strings.ToLower(in.Email))
@@ -84,19 +108,49 @@ func (s *Service) Signup(ctx context.Context, in SignupInput) (Result, error) {
 		fields["password"] = fmt.Sprintf("must be at least %d characters", minPasswordLength)
 	}
 	if len(fields) > 0 {
-		return Result{}, apierror.Validation("invalid signup", fields)
+		return SignupResult{}, apierror.Validation("invalid signup", fields)
 	}
 
 	hash, err := hashPassword(in.Password)
 	if err != nil {
-		return Result{}, err
+		return SignupResult{}, err
 	}
 
-	orgID, userID, membershipID := idgen.New(), idgen.New(), idgen.New()
-	if err := s.repo.CreateOrgWithOwner(ctx, orgID, in.OrganizationName, userID, in.Name, in.Email, hash, membershipID); err != nil {
-		return Result{}, err
+	token, tokenHash, err := newBearerToken()
+	if err != nil {
+		return SignupResult{}, err
 	}
-	return s.createSession(ctx, userID, orgID, in.Name, in.Email, "Owner", in.OrganizationName)
+	expiresAt := time.Now().Add(emailVerificationTTL)
+
+	orgID, userID, membershipID := idgen.New(), idgen.New(), idgen.New()
+	if err := s.repo.CreateOrgWithOwner(ctx, orgID, in.OrganizationName, userID, in.Name, in.Email, hash, membershipID, tokenHash, expiresAt); err != nil {
+		return SignupResult{}, err
+	}
+
+	if err := s.sendVerificationEmail(ctx, in.Email, token); err != nil {
+		// The account row already exists (unverified) even though this
+		// request reports failure — a down/misconfigured relay is an ops
+		// problem (apierror.Write logs the wrapped error server-side),
+		// not something worth a half-successful response shape for. A
+		// retried signup against the same email correctly 409s; recovery
+		// from here is ResendVerification once the relay is back.
+		return SignupResult{}, fmt.Errorf("auth: signup succeeded but sending the verification email failed: %w", err)
+	}
+
+	return SignupResult{
+		User:         User{ID: userID, Name: in.Name, Email: in.Email},
+		Organization: Organization{ID: orgID, Name: in.OrganizationName},
+	}, nil
+}
+
+func (s *Service) sendVerificationEmail(ctx context.Context, to, token string) error {
+	link := strings.TrimRight(s.appURL, "/") + "/verify-email?token=" + token
+	subject := "Confirm your FLOX email"
+	body := "Welcome to FLOX!\n\n" +
+		"Confirm your email address to activate your workspace:\n" +
+		link + "\n\n" +
+		"This link expires in 24 hours. If you didn't create a FLOX account, you can ignore this email."
+	return s.mailer.Send(ctx, to, subject, body)
 }
 
 func (s *Service) Login(ctx context.Context, in LoginInput) (Result, error) {
@@ -112,6 +166,20 @@ func (s *Service) Login(ctx context.Context, in LoginInput) (Result, error) {
 	}
 	if !checkPassword(hashToCheck, in.Password) || !found {
 		return Result{}, apierror.Unauthorized("invalid email or password")
+	}
+	// Checked only after the password is confirmed correct — revealing
+	// "unverified" to someone who doesn't already know the password would
+	// leak account existence the same way a distinct "no such email"
+	// error would (dummyPasswordHash above exists for exactly this
+	// reason). Code "email_not_verified", not "unauthorized": apps/web's
+	// login form renders a distinct "resend the verification email" CTA
+	// for this one, not the generic wrong-password message.
+	if row.EmailVerifiedAt == nil {
+		return Result{}, &apierror.Error{
+			Status:  http.StatusForbidden,
+			Code:    "email_not_verified",
+			Message: "confirm your email before signing in — check your inbox for the verification link",
+		}
 	}
 
 	memberships, err := s.repo.activeMembershipsByUser(ctx, row.ID)
@@ -160,6 +228,79 @@ func (s *Service) createSession(ctx context.Context, userID, orgID, userName, us
 		Organization: Organization{ID: orgID, Name: orgName},
 		RoleKey:      roleKey,
 	}, nil
+}
+
+// VerifyEmailResult is VerifyEmail's return: the email is verified either
+// way once err is nil — Session is populated only when the account had
+// exactly one active organization membership to auto-log into (the
+// overwhelmingly common case: a signup verifying its own brand-new
+// Owner membership seconds after creating it). A user somehow holding
+// zero or multiple active memberships at verification time (e.g. also
+// separately accepted an invite in the interim) still gets verified,
+// just without an automatic session — apps/web sends them to /login
+// instead of straight into the app for that edge case.
+type VerifyEmailResult struct {
+	Session *Result
+}
+
+// VerifyEmail consumes a signup's emailed link — same one-time-token
+// shape as AcceptInvite (find by hash, must be unexpired), but there's no
+// separate "preview" step first (nothing to show before consuming: no
+// name/role choice the way an invite has). Clicking the link IS proof of
+// inbox access, exactly as strong as AcceptInvite's own proof (typing a
+// fresh password into that same request) — so this auto-logs in the same
+// way AcceptInvite does, not a separate "verified, now go log in by hand"
+// step for the common case.
+func (s *Service) VerifyEmail(ctx context.Context, token string) (VerifyEmailResult, error) {
+	userID, name, email, err := s.repo.FindUserByVerificationToken(ctx, hashToken(token))
+	if err != nil {
+		return VerifyEmailResult{}, err
+	}
+	if err := s.repo.MarkEmailVerified(ctx, userID); err != nil {
+		return VerifyEmailResult{}, err
+	}
+
+	memberships, err := s.repo.activeMembershipsByUser(ctx, userID)
+	if err != nil {
+		return VerifyEmailResult{}, err
+	}
+	if len(memberships) != 1 {
+		return VerifyEmailResult{}, nil
+	}
+
+	res, err := s.createSession(ctx, userID, memberships[0].OrganizationID, name, email, memberships[0].RoleKey, memberships[0].OrganizationName)
+	if err != nil {
+		return VerifyEmailResult{}, err
+	}
+	return VerifyEmailResult{Session: &res}, nil
+}
+
+// ResendVerification issues a fresh verification token and re-sends the
+// email — always nil-error and silent about whether the account exists
+// or is already verified, the same anti-enumeration stance
+// dummyPasswordHash gives Login: a caller who doesn't already know
+// exactly which of "no such account" / "already verified" / "email just
+// sent" happened can't use this endpoint to probe which emails are
+// registered.
+func (s *Service) ResendVerification(ctx context.Context, email string) error {
+	email = strings.TrimSpace(strings.ToLower(email))
+
+	userID, found, err := s.repo.FindUnverifiedUserByEmail(ctx, email)
+	if err != nil {
+		return err
+	}
+	if !found {
+		return nil
+	}
+
+	token, tokenHash, err := newBearerToken()
+	if err != nil {
+		return err
+	}
+	if err := s.repo.SetEmailVerificationToken(ctx, userID, tokenHash, time.Now().Add(emailVerificationTTL)); err != nil {
+		return err
+	}
+	return s.sendVerificationEmail(ctx, email, token)
 }
 
 func (s *Service) Logout(ctx context.Context, token string) error {

@@ -36,6 +36,8 @@ func NewHandler(svc *Service, logger *slog.Logger, secureCookies bool) *Handler 
 // calls any of these.
 func (h *Handler) RegisterPublic(r chi.Router) {
 	r.Post("/auth/signup", h.signup)
+	r.Post("/auth/verify-email", h.verifyEmail)
+	r.Post("/auth/resend-verification", h.resendVerification)
 	r.Post("/auth/login", h.login)
 	r.Get("/auth/invites/{token}", h.previewInvite)
 	r.Post("/auth/accept-invite", h.acceptInvite)
@@ -133,8 +135,70 @@ func (h *Handler) signup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	h.setSessionCookie(w, res.Token, res.ExpiresAt)
-	writeJSON(w, http.StatusCreated, toAuthResponse(res))
+	// No Set-Cookie here — see auth.Service.Signup's own doc comment on
+	// why signup doesn't return a session anymore. apps/web renders this
+	// as a "check your email" screen, not a redirect into the app.
+	writeJSON(w, http.StatusCreated, struct {
+		User         userResponse         `json:"user"`
+		Organization organizationResponse `json:"organization"`
+	}{
+		User:         userResponse{ID: res.User.ID, Name: res.User.Name, Email: res.User.Email},
+		Organization: organizationResponse{ID: res.Organization.ID, Name: res.Organization.Name},
+	})
+}
+
+func (h *Handler) verifyEmail(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		Token string `json:"token"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		apierror.Write(w, h.logger, apierror.Validation("invalid request body", nil))
+		return
+	}
+
+	res, err := h.svc.VerifyEmail(r.Context(), body.Token)
+	if err != nil {
+		apierror.Write(w, h.logger, err)
+		return
+	}
+
+	if res.Session != nil {
+		h.setSessionCookie(w, res.Session.Token, res.Session.ExpiresAt)
+		writeJSON(w, http.StatusOK, struct {
+			Verified bool         `json:"verified"`
+			LoggedIn bool         `json:"loggedIn"`
+			Auth     authResponse `json:"auth"`
+		}{Verified: true, LoggedIn: true, Auth: toAuthResponse(*res.Session)})
+		return
+	}
+
+	writeJSON(w, http.StatusOK, struct {
+		Verified bool `json:"verified"`
+		LoggedIn bool `json:"loggedIn"`
+	}{Verified: true, LoggedIn: false})
+}
+
+// resendVerification always responds 200 with the same body regardless of
+// whether the email exists/is already verified/was actually re-sent —
+// see Service.ResendVerification's own comment on why that's deliberate,
+// not an error being swallowed.
+func (h *Handler) resendVerification(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		Email string `json:"email"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		apierror.Write(w, h.logger, apierror.Validation("invalid request body", nil))
+		return
+	}
+
+	if err := h.svc.ResendVerification(r.Context(), body.Email); err != nil {
+		apierror.Write(w, h.logger, err)
+		return
+	}
+
+	writeJSON(w, http.StatusOK, struct {
+		Message string `json:"message"`
+	}{"if that email has a pending verification, a new link was just sent"})
 }
 
 func (h *Handler) login(w http.ResponseWriter, r *http.Request) {

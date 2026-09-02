@@ -13,7 +13,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { useLogin } from "@/hooks/use-auth";
+import { useLogin, useResendVerification } from "@/hooks/use-auth";
 import { ApiError } from "@/lib/api/client";
 
 function buildLoginSchema(t: TFunction) {
@@ -29,6 +29,7 @@ export function LoginForm() {
   const { t } = useTranslation("auth");
   const router = useRouter();
   const login = useLogin();
+  const resend = useResendVerification();
 
   const form = useForm<LoginFormValues>({
     resolver: zodResolver(buildLoginSchema(t)),
@@ -42,6 +43,11 @@ export function LoginForm() {
   }
 
   const error = login.error instanceof ApiError ? login.error : null;
+  // apps/internal/auth.Service.Login's distinct "email_not_verified" code
+  // (§ its own comment: only revealed once the password is already
+  // confirmed correct) gets a "resend the link" CTA instead of the
+  // generic error message every other login failure renders as.
+  const unverified = error?.code === "email_not_verified";
 
   return (
     <Card>
@@ -51,9 +57,31 @@ export function LoginForm() {
       </CardHeader>
       <CardContent>
         <form onSubmit={form.handleSubmit(onSubmit)} className="flex flex-col gap-4">
-          {error && (
+          {error && !unverified && (
             <Alert variant="destructive">
               <AlertDescription>{error.message}</AlertDescription>
+            </Alert>
+          )}
+
+          {unverified && (
+            <Alert variant="destructive">
+              <AlertDescription className="flex flex-col gap-2">
+                <span>{error.message}</span>
+                {resend.isSuccess ? (
+                  <span className="text-foreground">{t("signup.checkEmail.resendSuccess")}</span>
+                ) : (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="self-start"
+                    disabled={resend.isPending}
+                    onClick={() => resend.mutate(form.getValues("email"))}
+                  >
+                    {t("signup.checkEmail.resendButton")}
+                  </Button>
+                )}
+              </AlertDescription>
             </Alert>
           )}
 

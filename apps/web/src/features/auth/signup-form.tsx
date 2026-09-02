@@ -1,19 +1,20 @@
 "use client";
 
+import * as React from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { useRouter } from "next/navigation";
 import { useTranslation } from "react-i18next";
 import type { TFunction } from "i18next";
 import Link from "next/link";
+import { MailIcon } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { useSignup } from "@/hooks/use-auth";
+import { useResendVerification, useSignup } from "@/hooks/use-auth";
 import { ApiError } from "@/lib/api/client";
 
 function buildSignupSchema(t: TFunction) {
@@ -29,8 +30,12 @@ type SignupFormValues = z.infer<ReturnType<typeof buildSignupSchema>>;
 
 export function SignupForm() {
   const { t } = useTranslation("auth");
-  const router = useRouter();
   const signup = useSignup();
+  // Signup no longer logs in — see useSignup's own doc comment. Once it
+  // succeeds, this swaps the form out for a "check your email" panel
+  // (below) instead of redirecting into the app; email is only used
+  // there, so a plain ref-free string state is enough.
+  const [verifyEmailAddress, setVerifyEmailAddress] = React.useState<string | null>(null);
 
   const form = useForm<SignupFormValues>({
     resolver: zodResolver(buildSignupSchema(t)),
@@ -39,11 +44,15 @@ export function SignupForm() {
 
   function onSubmit(values: SignupFormValues) {
     signup.mutate(values, {
-      onSuccess: () => router.push("/overview"),
+      onSuccess: (res) => setVerifyEmailAddress(res.user.email),
     });
   }
 
   const error = signup.error instanceof ApiError ? signup.error : null;
+
+  if (verifyEmailAddress) {
+    return <CheckEmailPanel email={verifyEmailAddress} />;
+  }
 
   return (
     <Card>
@@ -124,6 +133,40 @@ export function SignupForm() {
             </Link>
           </p>
         </form>
+      </CardContent>
+    </Card>
+  );
+}
+
+/** Post-signup success state — an org+account now exists, but there's no
+ * session yet (see useSignup's own doc comment), so this replaces the
+ * form rather than the usual "success toast + redirect" this app uses
+ * elsewhere: there's genuinely nowhere in the app to redirect into until
+ * the emailed link is clicked. */
+function CheckEmailPanel({ email }: { email: string }) {
+  const { t } = useTranslation("auth");
+  const resend = useResendVerification();
+
+  return (
+    <Card>
+      <CardHeader className="items-center text-center">
+        <MailIcon className="mb-2 size-8 text-muted-foreground" aria-hidden="true" />
+        <CardTitle>{t("signup.checkEmail.title")}</CardTitle>
+        <CardDescription>{t("signup.checkEmail.description", { email })}</CardDescription>
+      </CardHeader>
+      <CardContent className="flex flex-col items-center gap-3">
+        {resend.isSuccess ? (
+          <Alert>
+            <AlertDescription>{t("signup.checkEmail.resendSuccess")}</AlertDescription>
+          </Alert>
+        ) : (
+          <Button variant="outline" onClick={() => resend.mutate(email)} disabled={resend.isPending}>
+            {t("signup.checkEmail.resendButton")}
+          </Button>
+        )}
+        <Link href="/login" className="text-sm font-medium text-foreground underline underline-offset-4">
+          {t("signup.loginLink")}
+        </Link>
       </CardContent>
     </Card>
   );

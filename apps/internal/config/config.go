@@ -25,6 +25,14 @@ type Config struct {
 	// be blocked before ever reaching a handler.
 	AppURL string
 
+	// --- SMTP / email ---
+	// SMTPURL: apps/internal/mailer.New's input (e.g.
+	// "smtp://localhost:1025" in dev, against infra/docker-compose.dev.yml's
+	// mailhog catcher). MailFrom: the From header every outbound email
+	// (currently just auth's email-verification send) carries.
+	SMTPURL  string
+	MailFrom string
+
 	// --- OpenTelemetry ---
 	OTelExporterOTLPEndpoint string
 	OTelServiceName          string
@@ -84,6 +92,9 @@ func load(portVar, portDefault, defaultServiceName string) (Config, error) {
 		HTTPAddr: fmt.Sprintf(":%d", port),
 		LogLevel: getEnv("LOG_LEVEL", "info"),
 		AppURL:   getEnv("APP_URL", "http://localhost:3000"),
+
+		SMTPURL:  getEnv("SMTP_URL", "smtp://localhost:1025"),
+		MailFrom: getEnv("MAIL_FROM", "FLOX <no-reply@floxlink.io>"),
 
 		OTelExporterOTLPEndpoint: getEnv("OTEL_EXPORTER_OTLP_ENDPOINT", ""),
 		OTelServiceName:          getEnv("OTEL_SERVICE_NAME", defaultServiceName),

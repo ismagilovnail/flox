@@ -249,7 +249,10 @@ func (s *scenario) get(path string, out any, wantStatus int) {
 
 func (s *scenario) createOrganization() {
 	s.t.Helper()
-	var resp struct {
+	email := "e2e-" + strings.ToLower(idgen.New()) + "@example.test"
+	password := "correct horse battery staple 1"
+
+	var signupResp struct {
 		Organization struct {
 			ID   string `json:"id"`
 			Name string `json:"name"`
@@ -258,14 +261,29 @@ func (s *scenario) createOrganization() {
 	s.post("/auth/signup", map[string]string{
 		"organizationName": "E2E Org " + idgen.New(),
 		"name":             "E2E Tester",
-		"email":            "e2e-" + strings.ToLower(idgen.New()) + "@example.test",
-		"password":         "correct horse battery staple 1",
-	}, &resp, http.StatusCreated)
-	if resp.Organization.ID == "" {
+		"email":            email,
+		"password":         password,
+	}, &signupResp, http.StatusCreated)
+	if signupResp.Organization.ID == "" {
 		s.t.Fatal("signup: response carried no organization id")
 	}
-	s.orgID = resp.Organization.ID
+	s.orgID = signupResp.Organization.ID
 	s.t.Logf("created organization %s", s.orgID)
+
+	// Signup no longer returns a session — the account can't log in until
+	// it verifies the email apps/internal/auth just sent (this scenario's
+	// own SMTP config points at infra/docker-compose.dev.yml's mailhog
+	// catcher, not a real inbox this test could read). This funnel isn't
+	// testing the verification flow itself — apps/internal/auth's own
+	// auth_test.go does that end to end with a real captured send — so
+	// pragmatically mark the row verified directly, same
+	// query-past-a-step-this-scenario-isn't-testing precedent as
+	// seedTrackingLink below, then log in for real to get the session
+	// cookie the rest of this funnel needs.
+	if _, err := s.pg.Exec(context.Background(), `UPDATE users SET email_verified_at = now() WHERE lower(email) = lower($1)`, email); err != nil {
+		s.t.Fatalf("marking e2e user verified: %v", err)
+	}
+	s.post("/auth/login", map[string]string{"email": email, "password": password}, nil, http.StatusOK)
 }
 
 func (s *scenario) createTrafficSource() {

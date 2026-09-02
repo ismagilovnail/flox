@@ -6,13 +6,19 @@
 //   - Server-side sessions in an HTTP-only cookie, not JWTs — trivially
 //     revocable, no rotation/denylist machinery (see migration 00020's own
 //     comment on the sessions table).
-//   - Inviting a team member generates a shareable accept-invite link
-//     (a token embedded in a URL apps/web will render/copy in Phase 28B),
-//     not a real sent email — this project has no SMTP/email-provider
-//     integration anywhere, the same situation Ad Account Connections hit
-//     with OAuth (no registered app to redirect through) and resolved the
-//     same way: build the real mechanism up to the boundary that requires
-//     infrastructure this environment doesn't have.
+//   - Inviting a team member generates a shareable accept-invite link (a
+//     token embedded in a URL apps/web renders/copies), not a real sent
+//     email — at the time this phase shipped, this project had no SMTP/
+//     email-provider integration anywhere, the same situation Ad Account
+//     Connections hit with OAuth (no registered app to redirect through)
+//     and resolved the same way: build the real mechanism up to the
+//     boundary that requires infrastructure this environment doesn't
+//     have. That boundary has since been crossed — see Mailer below and
+//     Signup's own comment (signup's email-verification link is a real
+//     sent email) — but invites deliberately stayed a copyable link even
+//     after: an org admin sending a teammate a link they can also just
+//     paste into Slack/whatever is a reasonable product choice on its
+//     own, not merely the absence of infrastructure anymore.
 //   - RBAC permission enforcement (RequirePermission below) is wired onto
 //     this package's own team/membership endpoints only. Retrofitting it
 //     onto every pre-existing domain route (campaigns, offers, sources,
@@ -62,6 +68,18 @@ type SignupInput struct {
 	Name             string
 	Email            string
 	Password         string
+}
+
+// SignupResult is what Signup returns — deliberately NOT Result: no
+// session token, because no session exists yet. The account can't sign in
+// until VerifyEmail consumes the link Signup emails to Email — see
+// service.go's own comment on Signup for why (the whole point of this is
+// proving the signer-upper controls that inbox; handing back a session,
+// or the verification link itself, on this same response would defeat
+// that entirely).
+type SignupResult struct {
+	User         User
+	Organization Organization
 }
 
 // LoginInput.OrganizationID is optional: required only to disambiguate a

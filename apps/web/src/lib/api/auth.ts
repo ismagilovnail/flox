@@ -40,6 +40,26 @@ export type SignupInput = {
   password: string;
 };
 
+/** Signup no longer returns a session (apps/internal/auth.Service.Signup's
+ * own comment: the account can't sign in until it verifies the email this
+ * call sends a link to) — this is deliberately NOT AuthResponse, there is
+ * no `role`/session to report yet. */
+export type SignupResponse = {
+  user: AuthUser;
+  organization: AuthOrganization;
+};
+
+export type VerifyEmailResponse = {
+  verified: boolean;
+  /** True only when the account had exactly one active org membership to
+   * auto-log into (apps/internal/auth.Service.VerifyEmail's own comment
+   * — true for the overwhelming majority of real verifications). `auth`
+   * is present exactly when this is true; the session cookie is already
+   * set as a side effect of the response by then. */
+  loggedIn: boolean;
+  auth?: AuthResponse;
+};
+
 export type LoginInput = {
   email: string;
   password: string;
@@ -62,8 +82,21 @@ export type InvitePreview = {
   role: Role;
 };
 
-export function signup(input: SignupInput): Promise<AuthResponse> {
+export function signup(input: SignupInput): Promise<SignupResponse> {
   return apiFetch("/auth/signup", { method: "POST", body: input });
+}
+
+export function verifyEmail(token: string): Promise<VerifyEmailResponse> {
+  return apiFetch("/auth/verify-email", { method: "POST", body: { token } });
+}
+
+/** Always resolves — apps/internal/auth.Service.ResendVerification is
+ * deliberately silent about whether the email exists/was already
+ * verified/was actually re-sent (anti-enumeration), so there's no
+ * distinct failure branch for a caller to handle here beyond a genuine
+ * network/server error. */
+export function resendVerification(email: string): Promise<{ message: string }> {
+  return apiFetch("/auth/resend-verification", { method: "POST", body: { email } });
 }
 
 export function login(input: LoginInput): Promise<AuthResponse> {

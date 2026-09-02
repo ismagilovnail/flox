@@ -35,6 +35,7 @@ import (
 	"github.com/ismagilovnail/flox/apps/internal/landing"
 	"github.com/ismagilovnail/flox/apps/internal/logging"
 	"github.com/ismagilovnail/flox/apps/internal/ltv"
+	"github.com/ismagilovnail/flox/apps/internal/mailer"
 	"github.com/ismagilovnail/flox/apps/internal/network"
 	"github.com/ismagilovnail/flox/apps/internal/offer"
 	"github.com/ismagilovnail/flox/apps/internal/pixel"
@@ -148,8 +149,19 @@ func run() error {
 	// secureCookies is false in development (a Secure cookie is dropped
 	// by browsers over plain http, and this dev stack has no TLS
 	// termination in front of apps/api).
+	// Signup's email-verification link is the one place this codebase
+	// sends a real outbound email (§ auth.Service.Signup's own comment) —
+	// mailer.New only parses SMTP_URL, it doesn't dial anything at
+	// startup, so an unreachable relay surfaces on the first send
+	// attempt, not here.
+	mail, err := mailer.New(cfg.SMTPURL, cfg.MailFrom)
+	if err != nil {
+		logger.Error("mailer configuration failed", "error", err)
+		return err
+	}
+
 	authRepo := auth.NewRepository(db)
-	authSvc := auth.NewService(authRepo, cfg.AppURL)
+	authSvc := auth.NewService(authRepo, cfg.AppURL, mail)
 	authHandler := auth.NewHandler(authSvc, logger, cfg.Env != "development")
 	teamHandler := auth.NewTeamHandler(authSvc, logger)
 
@@ -296,7 +308,7 @@ func run() error {
 	if ch != nil {
 		events := chstore.NewEventStore(ch)
 
-		analyticsSvc := analytics.NewService(events)
+		analyticsSvc := analytics.NewService(events, costSvc)
 		analyticsHandler := analytics.NewHandler(analyticsSvc, logger)
 		srv.Mux().Route("/analytics", func(r chi.Router) {
 			r.Use(tenantMiddleware)

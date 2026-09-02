@@ -46,6 +46,16 @@ mode, minification — not a FLOX-specific gate; it's unrelated to the
 | `API_URL` / `TRACKER_URL` / `WORKER_URL` | `http://localhost:8080/8081/8082` | Only the **port digits** are read (`config.parsePort`) — these decide each binary's bind port, nothing else. Safe to leave as the container's internal port even behind a reverse proxy that exposes a different public URL. |
 | `LOG_LEVEL` | `info` | `info` in production too; `debug` only for active incident investigation — every log line is JSON (`apps/internal/logging`), fine for either volume in most log pipelines |
 
+**Container-internal URLs, dev.** The dev values in this reference
+(`localhost:5432`, `localhost:8123`, …) are what the HOST needs — `.env`,
+the goose CLI, `go test`, a browser hitting `apps/web`. Inside
+`infra/docker-compose.dev.yml`'s own network, `api`/`tracker`/`worker`
+reach `postgres`/`clickhouse`/`redis`/`minio`/`mailhog` by compose service
+name instead (`postgres://flox:flox@postgres:5432/flox`, etc. — set as
+each service's own `environment:` block in that file, not read from
+`.env`), same pattern `docker-compose.test.yml` already used. No host
+networking is involved anywhere in either file.
+
 ### PostgreSQL
 
 `DATABASE_URL` — dev: the throwaway `flox`/`flox`/`flox` credentials in
@@ -89,6 +99,23 @@ No secret to configure — session and invite tokens are random
 (`crypto/rand`), never signed or encrypted, and stored hashed (SHA-256).
 There is no JWT signing key anywhere in this system to rotate or protect.
 See `docs/auth.md`.
+
+### SMTP / email
+
+`SMTP_URL`/`MAIL_FROM` — consumed by `apps/internal/mailer` (a real SMTP
+client, stdlib `net/smtp`), used by `apps/internal/auth`'s signup
+email-verification flow (`docs/auth.md`'s own "Email verification"
+section) — the one place this codebase sends a real outbound email. Team
+invites still generate a copyable link instead (a deliberate product
+choice, not an infrastructure gap — see that doc). Dev runs
+`infra/docker-compose.dev.yml`'s `mailhog` container as a catch-all SMTP
+sink (`smtp://localhost:1025`; inbox web UI at `http://localhost:8025`,
+or its REST API at `http://localhost:8025/api/v2/messages`). Point
+`SMTP_URL` at a real provider (SES, Postmark, SMTP relay, …) — with
+credentials in the URL, `smtp://user:pass@host:port`, if it needs auth —
+only for staging/production; `MAIL_FROM` should also become a real,
+deliverability-sane From address at that point (SPF/DKIM configured for
+its domain), not `floxlink.io`'s placeholder value.
 
 ### OpenTelemetry
 

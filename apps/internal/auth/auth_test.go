@@ -2,6 +2,7 @@ package auth_test
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -9,6 +10,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/ismagilovnail/flox/apps/internal/apierror"
 	"github.com/ismagilovnail/flox/apps/internal/auth"
 	"github.com/ismagilovnail/flox/apps/internal/idgen"
 	"github.com/ismagilovnail/flox/apps/internal/logging"
@@ -29,8 +31,26 @@ func mustPool(t *testing.T) *pgxpool.Pool {
 	return pool
 }
 
+// testMailer captures the most recently "sent" email instead of actually
+// sending one — package-level and shared across every newService(pool)
+// call in this file rather than threaded through every call site's
+// signature, which is safe because nothing in this file runs its
+// subtests in parallel (no t.Parallel() calls) — signupOrg below reads
+// lastBody immediately after the one Signup call that wrote it, with no
+// other test's Signup/ResendVerification able to interleave.
+type testMailer struct {
+	lastTo, lastBody string
+}
+
+func (m *testMailer) Send(_ context.Context, to, _, body string) error {
+	m.lastTo, m.lastBody = to, body
+	return nil
+}
+
+var sharedTestMailer = &testMailer{}
+
 func newService(pool *pgxpool.Pool) *auth.Service {
-	return auth.NewService(auth.NewRepository(pool), "http://localhost:3000")
+	return auth.NewService(auth.NewRepository(pool), "http://localhost:3000", sharedTestMailer)
 }
 
 // signupOrg is the one way this package's tests create an org — no
@@ -41,9 +61,18 @@ func newService(pool *pgxpool.Pool) *auth.Service {
 // repeated test runs against a real, persistent dev Postgres don't leave
 // permanent rows behind — every other package's own seedOrg helper
 // (adaccount_test.go, costsync_test.go, ...) does the same.
+// signupOrg drives the real Signup -> (click the emailed link) ->
+// VerifyEmail sequence and hands back the session VerifyEmail produces —
+// same auth.Result shape and same call-site contract every test in this
+// file already expects, so adding email verification ahead of login
+// didn't require touching any of them. "Clicking the link" is reading
+// sharedTestMailer.lastBody (populated by Signup's call to Send,
+// intercepted above instead of actually going out over SMTP) and pulling
+// the token out of the verification URL inside it, exactly like
+// tokenFromURL does for an invite URL below.
 func signupOrg(t *testing.T, ctx context.Context, pool *pgxpool.Pool, svc *auth.Service, orgName, ownerEmail string) auth.Result {
 	t.Helper()
-	res, err := svc.Signup(ctx, auth.SignupInput{
+	signupRes, err := svc.Signup(ctx, auth.SignupInput{
 		OrganizationName: orgName,
 		Name:             "Test Owner",
 		Email:            ownerEmail,
@@ -53,9 +82,20 @@ func signupOrg(t *testing.T, ctx context.Context, pool *pgxpool.Pool, svc *auth.
 		t.Fatalf("signup: %v", err)
 	}
 	t.Cleanup(func() {
-		_, _ = pool.Exec(context.Background(), `DELETE FROM organizations WHERE id = $1`, res.Organization.ID)
+		_, _ = pool.Exec(context.Background(), `DELETE FROM organizations WHERE id = $1`, signupRes.Organization.ID)
 	})
-	return res
+
+	if sharedTestMailer.lastTo != ownerEmail {
+		t.Fatalf("verification email was sent to %q, want %q", sharedTestMailer.lastTo, ownerEmail)
+	}
+	verifyRes, err := svc.VerifyEmail(ctx, tokenFromBody(t, sharedTestMailer.lastBody))
+	if err != nil {
+		t.Fatalf("verify-email: %v", err)
+	}
+	if verifyRes.Session == nil {
+		t.Fatal("VerifyEmail returned no session for a fresh signup's own single active membership")
+	}
+	return *verifyRes.Session
 }
 
 // uniqueEmail is deliberately all-lowercase (idgen.New()'s Crockford
@@ -144,6 +184,125 @@ func TestSignupValidatesInput(t *testing.T) {
 		if _, err := svc.Signup(ctx, in); err == nil {
 			t.Fatalf("case %d: Signup with invalid input succeeded, want a validation error", i)
 		}
+	}
+}
+
+func TestLoginBlockedBeforeEmailVerification(t *testing.T) {
+	pool := mustPool(t)
+	svc := newService(pool)
+	ctx := context.Background()
+	email := uniqueEmail(t, pool)
+
+	signupRes, err := svc.Signup(ctx, auth.SignupInput{
+		OrganizationName: "Unverified Org", Name: "Not Yet Verified", Email: email, Password: "correct-horse-battery-staple",
+	})
+	if err != nil {
+		t.Fatalf("signup: %v", err)
+	}
+	t.Cleanup(func() {
+		_, _ = pool.Exec(context.Background(), `DELETE FROM organizations WHERE id = $1`, signupRes.Organization.ID)
+	})
+
+	_, err = svc.Login(ctx, auth.LoginInput{Email: email, Password: "correct-horse-battery-staple"})
+	if err == nil {
+		t.Fatal("Login before email verification succeeded, want an error")
+	}
+	var apiErr *apierror.Error
+	if !errors.As(err, &apiErr) || apiErr.Code != "email_not_verified" {
+		t.Fatalf("Login error = %v, want code email_not_verified", err)
+	}
+}
+
+func TestVerifyEmailLogsInAndConsumesTheToken(t *testing.T) {
+	pool := mustPool(t)
+	svc := newService(pool)
+	ctx := context.Background()
+	email := uniqueEmail(t, pool)
+
+	signupRes, err := svc.Signup(ctx, auth.SignupInput{
+		OrganizationName: "Verify Org", Name: "Verifier", Email: email, Password: "correct-horse-battery-staple",
+	})
+	if err != nil {
+		t.Fatalf("signup: %v", err)
+	}
+	t.Cleanup(func() {
+		_, _ = pool.Exec(context.Background(), `DELETE FROM organizations WHERE id = $1`, signupRes.Organization.ID)
+	})
+	token := tokenFromBody(t, sharedTestMailer.lastBody)
+
+	verifyRes, err := svc.VerifyEmail(ctx, token)
+	if err != nil {
+		t.Fatalf("VerifyEmail: %v", err)
+	}
+	if verifyRes.Session == nil || verifyRes.Session.RoleKey != "Owner" {
+		t.Fatalf("VerifyEmail session = %+v, want a session with role Owner", verifyRes.Session)
+	}
+
+	// Now that it's verified, Login succeeds.
+	if _, err := svc.Login(ctx, auth.LoginInput{Email: email, Password: "correct-horse-battery-staple"}); err != nil {
+		t.Fatalf("Login after verification: %v", err)
+	}
+
+	// The token cannot be replayed.
+	if _, err := svc.VerifyEmail(ctx, token); err == nil {
+		t.Fatal("VerifyEmail succeeded twice with the same token, want an error the second time")
+	}
+}
+
+func TestVerifyEmailRejectsInvalidToken(t *testing.T) {
+	pool := mustPool(t)
+	svc := newService(pool)
+	ctx := context.Background()
+
+	if _, err := svc.VerifyEmail(ctx, "not-a-real-token"); err == nil {
+		t.Fatal("VerifyEmail accepted a token that was never issued")
+	}
+}
+
+func TestResendVerificationIssuesAFreshTokenAndInvalidatesTheOld(t *testing.T) {
+	pool := mustPool(t)
+	svc := newService(pool)
+	ctx := context.Background()
+	email := uniqueEmail(t, pool)
+
+	signupRes, err := svc.Signup(ctx, auth.SignupInput{
+		OrganizationName: "Resend Verify Org", Name: "Resender", Email: email, Password: "correct-horse-battery-staple",
+	})
+	if err != nil {
+		t.Fatalf("signup: %v", err)
+	}
+	t.Cleanup(func() {
+		_, _ = pool.Exec(context.Background(), `DELETE FROM organizations WHERE id = $1`, signupRes.Organization.ID)
+	})
+	oldToken := tokenFromBody(t, sharedTestMailer.lastBody)
+
+	if err := svc.ResendVerification(ctx, email); err != nil {
+		t.Fatalf("ResendVerification: %v", err)
+	}
+	newToken := tokenFromBody(t, sharedTestMailer.lastBody)
+
+	if _, err := svc.VerifyEmail(ctx, oldToken); err == nil {
+		t.Fatal("the pre-resend token still verifies, want it invalidated")
+	}
+	if _, err := svc.VerifyEmail(ctx, newToken); err != nil {
+		t.Fatalf("VerifyEmail with the freshly-resent token: %v", err)
+	}
+}
+
+func TestResendVerificationIsSilentForUnknownOrAlreadyVerifiedEmail(t *testing.T) {
+	pool := mustPool(t)
+	svc := newService(pool)
+	ctx := context.Background()
+
+	// Anti-enumeration: neither case is distinguishable from the caller's
+	// side, both just report success.
+	if err := svc.ResendVerification(ctx, uniqueEmail(t, pool)); err != nil {
+		t.Fatalf("ResendVerification for an unregistered email: %v", err)
+	}
+
+	verified := signupOrg(t, ctx, pool, svc, "Already Verified Org", uniqueEmail(t, pool))
+	if err := svc.ResendVerification(ctx, verified.User.Email); err != nil {
+		t.Fatalf("ResendVerification for an already-verified email: %v", err)
 	}
 }
 
@@ -661,6 +820,27 @@ func tokenFromURL(t *testing.T, rawURL string) string {
 		t.Fatalf("invite URL %q has no token query param", rawURL)
 	}
 	return rawURL[i+len(marker):]
+}
+
+// tokenFromBody is tokenFromURL's counterpart for a token embedded inside
+// a longer plain-text email body (auth.Service.sendVerificationEmail's
+// link isn't the last thing in the message the way an invite URL is on
+// its own) — reads up to the next whitespace instead of to the end of
+// the string.
+func tokenFromBody(t *testing.T, body string) string {
+	t.Helper()
+	const marker = "token="
+	i := indexOf(body, marker)
+	if i < 0 {
+		t.Fatalf("email body %q has no token query param", body)
+	}
+	rest := body[i+len(marker):]
+	for j, r := range rest {
+		if r == '\n' || r == '\r' || r == ' ' {
+			return rest[:j]
+		}
+	}
+	return rest
 }
 
 func indexOf(s, substr string) int {

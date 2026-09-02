@@ -28,10 +28,12 @@ func isUniqueViolation(err error) bool {
 }
 
 // CreateOrgWithOwner is signup's single transaction: a brand new
-// organization, a brand new user, and an Owner membership binding them —
-// all three or none, so a partial failure never leaves an org with no
-// Owner or a user with no org.
-func (r *Repository) CreateOrgWithOwner(ctx context.Context, orgID, orgName, userID, name, email, passwordHash, membershipID string) error {
+// organization, a brand new user (unverified — verificationTokenHash/
+// Expires set in the same INSERT rather than a separate UPDATE, so there
+// is never a moment where the row exists without a way to verify it), and
+// an Owner membership binding them — all three or none, so a partial
+// failure never leaves an org with no Owner or a user with no org.
+func (r *Repository) CreateOrgWithOwner(ctx context.Context, orgID, orgName, userID, name, email, passwordHash, membershipID, verificationTokenHash string, verificationTokenExpiresAt time.Time) error {
 	tx, err := r.db.Begin(ctx)
 	if err != nil {
 		return fmt.Errorf("auth: beginning signup tx: %w", err)
@@ -41,7 +43,11 @@ func (r *Repository) CreateOrgWithOwner(ctx context.Context, orgID, orgName, use
 	if _, err := tx.Exec(ctx, `INSERT INTO organizations (id, name) VALUES ($1, $2)`, orgID, orgName); err != nil {
 		return fmt.Errorf("auth: creating organization: %w", err)
 	}
-	if _, err := tx.Exec(ctx, `INSERT INTO users (id, email, name, password_hash) VALUES ($1, $2, $3, $4)`, userID, email, name, passwordHash); err != nil {
+	if _, err := tx.Exec(ctx,
+		`INSERT INTO users (id, email, name, password_hash, email_verification_token_hash, email_verification_token_expires_at)
+		 VALUES ($1, $2, $3, $4, $5, $6)`,
+		userID, email, name, passwordHash, verificationTokenHash, verificationTokenExpiresAt,
+	); err != nil {
 		if isUniqueViolation(err) {
 			return apierror.Conflict("an account with this email already exists")
 		}
@@ -61,10 +67,11 @@ func (r *Repository) CreateOrgWithOwner(ctx context.Context, orgID, orgName, use
 }
 
 type userAuthRow struct {
-	ID           string
-	Name         string
-	Email        string
-	PasswordHash string
+	ID              string
+	Name            string
+	Email           string
+	PasswordHash    string
+	EmailVerifiedAt *time.Time
 }
 
 // findUserByEmail reports found=false (not an error) when no such user
@@ -72,12 +79,66 @@ type userAuthRow struct {
 // lookup failure without leaking which one happened to the client (both
 // render as the same generic "invalid email or password").
 func (r *Repository) findUserByEmail(ctx context.Context, email string) (row userAuthRow, found bool, err error) {
-	err = r.db.QueryRow(ctx, `SELECT id, name, email, password_hash FROM users WHERE lower(email) = lower($1)`, email).
-		Scan(&row.ID, &row.Name, &row.Email, &row.PasswordHash)
+	err = r.db.QueryRow(ctx, `SELECT id, name, email, password_hash, email_verified_at FROM users WHERE lower(email) = lower($1)`, email).
+		Scan(&row.ID, &row.Name, &row.Email, &row.PasswordHash, &row.EmailVerifiedAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return userAuthRow{}, false, nil
 	}
 	return row, err == nil, err
+}
+
+// FindUserByVerificationToken reports NotFound for both "no such token"
+// and "token expired" — same one error shape either way, since the
+// client-visible remedy (ask for a new link via ResendVerification) is
+// identical for both.
+func (r *Repository) FindUserByVerificationToken(ctx context.Context, tokenHash string) (userID, name, email string, err error) {
+	err = r.db.QueryRow(ctx, `
+		SELECT id, name, email FROM users
+		WHERE email_verification_token_hash = $1 AND email_verification_token_expires_at > now()`,
+		tokenHash,
+	).Scan(&userID, &name, &email)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return "", "", "", apierror.NotFound("verification link is invalid or has expired")
+	}
+	return userID, name, email, err
+}
+
+// MarkEmailVerified clears the token columns in the same statement as
+// setting email_verified_at — same "can't be replayed" property
+// AcceptInvite's own token-clearing UPDATE relies on (migration 00020's
+// invite_token_hash), just on users instead of memberships.
+func (r *Repository) MarkEmailVerified(ctx context.Context, userID string) error {
+	_, err := r.db.Exec(ctx, `
+		UPDATE users
+		SET email_verified_at = now(), email_verification_token_hash = NULL, email_verification_token_expires_at = NULL
+		WHERE id = $1`, userID)
+	if err != nil {
+		return fmt.Errorf("auth: marking email verified: %w", err)
+	}
+	return nil
+}
+
+// FindUnverifiedUserByEmail reports found=false for "no such account" AND
+// for "found but already verified" — ResendVerification treats both as a
+// silent no-op (see its own comment on why), so this doesn't need to
+// distinguish them any further than that.
+func (r *Repository) FindUnverifiedUserByEmail(ctx context.Context, email string) (userID string, found bool, err error) {
+	err = r.db.QueryRow(ctx, `SELECT id FROM users WHERE lower(email) = lower($1) AND email_verified_at IS NULL`, email).Scan(&userID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return "", false, nil
+	}
+	return userID, err == nil, err
+}
+
+func (r *Repository) SetEmailVerificationToken(ctx context.Context, userID, tokenHash string, expiresAt time.Time) error {
+	_, err := r.db.Exec(ctx,
+		`UPDATE users SET email_verification_token_hash = $1, email_verification_token_expires_at = $2 WHERE id = $3`,
+		tokenHash, expiresAt, userID,
+	)
+	if err != nil {
+		return fmt.Errorf("auth: setting email verification token: %w", err)
+	}
+	return nil
 }
 
 type activeMembershipRow struct {
@@ -383,7 +444,19 @@ func (r *Repository) AcceptInvite(ctx context.Context, membershipID, userID, nam
 	}
 	defer tx.Rollback(ctx)
 
-	if _, err := tx.Exec(ctx, `UPDATE users SET password_hash = $1, name = $2 WHERE id = $3`, passwordHash, name, userID); err != nil {
+	// email_verified_at = now() here too: receiving and clicking the
+	// invite link at this specific address is exactly the same proof of
+	// inbox ownership Signup's own verification link relies on — an
+	// invited teammate who never goes through Signup's flow would
+	// otherwise be permanently unable to log in (Login requires
+	// email_verified_at IS NOT NULL). COALESCE so re-accepting after
+	// already being verified some other way (e.g. later re-invited to a
+	// second org with the same email) never rewinds an existing
+	// timestamp.
+	if _, err := tx.Exec(ctx,
+		`UPDATE users SET password_hash = $1, name = $2, email_verified_at = COALESCE(email_verified_at, now()) WHERE id = $3`,
+		passwordHash, name, userID,
+	); err != nil {
 		return fmt.Errorf("auth: setting password: %w", err)
 	}
 	tag, err := tx.Exec(ctx, `

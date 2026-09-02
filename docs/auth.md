@@ -13,12 +13,17 @@ Team UI, and a newly-built login/signup/accept-invite UI, to that API.
   revocable (`DELETE` the row) with no rotation/denylist machinery to get
   wrong — see migration `00020`'s own comment on the `sessions` table.
 - **Inviting a team member generates a shareable accept-invite link**, not
-  a real sent email. This project has no SMTP/email-provider integration
-  anywhere (checked before deciding) — the same situation Ad Account
-  Connections hit with OAuth (no registered app to redirect through) and
-  resolved the same way: build the real mechanism up to the boundary that
-  needs infrastructure this environment doesn't have, rather than fake an
-  "email sent" success state.
+  a real sent email. At the time this decision was made, this project had
+  no SMTP/email-provider integration anywhere (checked before deciding) —
+  the same situation Ad Account Connections hit with OAuth (no registered
+  app to redirect through) and resolved the same way: build the real
+  mechanism up to the boundary that needs infrastructure this environment
+  doesn't have, rather than fake an "email sent" success state. That
+  boundary was later crossed for a different reason (see "Email
+  verification" below — signup gained a real emailed link, `apps/internal/
+  mailer`), but invites deliberately stayed a copyable link even after: a
+  reasonable product choice on its own, not merely the absence of
+  infrastructure anymore.
 - **RBAC permission enforcement (`RequirePermission`) is wired onto this
   package's own team/membership endpoints only.** §52 also calls for
   enforcing authorization server-side across the whole product, but
@@ -90,17 +95,77 @@ Verified below).
 ### Signup
 
 `POST /auth/signup` — one transaction: a brand new organization, a brand
-new user, and an `Owner` membership binding them, all three or none.
-Validates org name/name/email shape/password length (≥ 8) before ever
-touching the database. Returns the same `authResponse` shape as login and
-sets the session cookie.
+new user (unverified — `email_verified_at` starts `NULL`), and an `Owner`
+membership binding them, all three or none. Validates org name/name/email
+shape/password length (≥ 8) before ever touching the database. Returns
+just `{user, organization}` — **no session, no cookie** (see Email
+verification below for why) — a different shape from login/accept-invite's
+`authResponse`.
+
+### Email verification (post-Phase-34, user-scoped — CHANGELOG's
+"containerize the dev stack" entry's sibling, same session)
+
+Added after the fact: signup used to auto-login immediately. It doesn't
+anymore — an account can't sign in until it proves it controls the email
+address it registered with, by following a link `Signup` sends there.
+
+- Migration `00022_email_verification.sql`: `users` gains
+  `email_verified_at` (nullable timestamp — `NULL` = unverified, same
+  "absent sentinel, no separate nullability check needed at read sites"
+  style as `password_hash`'s own `''` sentinel) and
+  `email_verification_token_hash`/`_expires_at` (same one-way-hash-at-rest,
+  same partial-unique-index shape as `memberships.invite_token_hash` —
+  token lives on the row it verifies rather than a separate table, for
+  the identical reason: "a verified user IS this same row transitioning,
+  not a new entity"). Every user that existed before this migration ran
+  is backfilled to `email_verified_at = now()` — the migration gates NEW
+  signups, it must not lock out existing accounts.
+- `apps/internal/mailer` (new package): a real SMTP client (stdlib
+  `net/smtp`, no third-party dependency) — the first (and so far only)
+  place this codebase actually sends outbound email, as opposed to the
+  invite flow's copyable link. `SMTP_URL`/`MAIL_FROM` (`.env.example`);
+  dev points at `infra/docker-compose.dev.yml`'s `mailhog` catcher.
+  `auth.Mailer` is the narrow interface `auth.Service` actually consumes
+  (same decoupled-interface-per-consumer pattern as
+  `postbacklogs.OutgoingEnqueuer`) — only `apps/api/main.go`'s wiring
+  imports `mailer` directly.
+- `POST /auth/verify-email` `{token}` — consumes the emailed link (same
+  find-by-hash-must-be-unexpired shape as `AcceptInvite`'s own token
+  check). No separate "preview" step first — nothing to show before
+  consuming, unlike an invite's org name/role. Auto-logs in afterward
+  (sets the session cookie, same as `AcceptInvite`) *when* the account
+  has exactly one active org membership at that moment — the
+  overwhelming common case (a signup verifying the Owner membership it
+  just created). Zero or multiple active memberships (a rare edge:
+  separately invited into another org in the interim) still verifies,
+  just without an automatic session — the response's `loggedIn: false`
+  tells `apps/web` to send the visitor to `/login` instead of redirecting
+  into the app.
+- `POST /auth/resend-verification` `{email}` — always `200`, regardless
+  of whether the email exists, is already verified, or was actually
+  re-sent. Same anti-enumeration stance as `dummyPasswordHash` above: a
+  caller who can't distinguish "no such account" from "already verified"
+  from "sent" can't use this to probe which emails are registered.
+- `AcceptInvite` also sets `email_verified_at` (via `COALESCE`, never
+  rewinding an already-set timestamp) at the same moment it activates the
+  membership — receiving and clicking an invite link at a given address
+  is exactly the same proof of inbox ownership `Signup`'s own
+  verification link relies on. Without this, an invited teammate who
+  never goes through `Signup`'s own flow would be permanently unable to
+  log in.
 
 ### Login
 
 `POST /auth/login` — looks up the user by email (case-insensitive),
 checks the password (against the real hash if found, the dummy hash if
-not — see above), then resolves *which* organization the session should
-be scoped to:
+not — see above), checks `email_verified_at IS NOT NULL` (**only** once
+the password is already confirmed correct — revealing "unverified" to a
+caller who doesn't already know the password would leak account
+existence the same way a distinct "no such email" error would; the
+distinct `email_not_verified` code, not `unauthorized`, is what lets
+`apps/web`'s login form render a "resend the link" action instead of the
+generic wrong-password message), then resolves *which* organization the
+session should be scoped to:
 
 - Zero active memberships → 401 (an invited-but-not-yet-accepted or
   suspended-everywhere account can't log in at all).
@@ -219,11 +284,12 @@ credentialed requests anyway.
   sources, pixels, stream sets, cost, ...): none of them check permissions
   yet — any authenticated member of an org can call any of their
   endpoints regardless of role. Confirmed as a separate follow-up phase.
-- **No email delivery.** Invites produce a link an inviter must send
-  manually (Slack, copy-paste, whatever) — there is no SMTP/provider
-  integration to send it automatically.
-- **No password reset / email verification / MFA.** Not requested; §52
-  doesn't call for them either.
+- **Invites still have no email delivery** — the link an inviter sends is
+  still manual (Slack, copy-paste, whatever), a deliberate product choice
+  now (see "Email verification" above), not an infrastructure gap.
+- **No password reset / MFA.** Email verification shipped later (see
+  above) — not requested at the time this phase's scope was confirmed,
+  and password reset/MFA still aren't; §52 doesn't call for them either.
 - **No API-key authentication.** `api_keys` (migration `00010`) still
   exists and is still completely unused — this phase only built session-
   cookie auth, matching what the user's original request ("Auth /
@@ -318,11 +384,13 @@ forbids combining a wildcard origin with credentialed requests.
 ## New `(auth)` route group
 
 `(auth)/layout.tsx` is a bare centered-card shell — no sidebar/topbar,
-nothing to navigate to before a session exists. Three pages:
-`/login`, `/signup`, `/accept-invite` (reads `?token=` via `PageProps`'
-`searchParams`, a Server Component prop, rather than the client-only
-`useSearchParams` — avoids that hook's own Suspense-boundary requirement
-entirely). Each is a thin `page.tsx` wrapping a `features/auth/*-form.tsx`
+nothing to navigate to before a session exists. Four pages: `/login`,
+`/signup`, `/accept-invite`, and `/verify-email` (added later, same
+session as email verification itself — see that section above; reads
+`?token=` the same `PageProps`-`searchParams` way `/accept-invite` does,
+a Server Component prop rather than the client-only `useSearchParams`,
+avoiding that hook's own Suspense-boundary requirement entirely). Each is
+a thin `page.tsx` wrapping a `features/auth/*-form.tsx`/`*-panel.tsx`
 (React Hook Form + Zod, i18n via a new `auth` namespace — the one new
 UI surface this phase adds, so it follows this project's current i18n
 convention; the pre-existing Team feature files, which predate that
@@ -347,6 +415,29 @@ future form here: `values` is for a form that should stay in sync with
 external state for its whole lifetime (rare); a one-time prefill from
 async data almost always wants `defaultValues` + an effect instead.
 
+**A second real bug, same family, caught the same way in
+`VerifyEmailPanel`:** the first implementation fired verification via
+`useMutation` triggered from a `useEffect`+`useRef` mount-guard (the
+"run this once on mount" shape `usePreviewInvite` above already solves
+differently). In the browser, the network call and its `onSuccess`
+callback both genuinely fired and resolved — confirmed with temporary
+`console.log`s — but the component's own render never picked up the
+resulting state; the page stayed on the loading skeleton forever even
+though `/auth/me` (checked directly) showed a session had actually been
+created. Root cause not fully isolated (possibly an interaction between
+a mount-triggered mutation and this project's Turbopack dev/Fast-Refresh
+setup specifically — `useMutation`-triggered-by-button-click, the
+pattern login/signup/accept-invite/resend all actually use, was never
+affected). Fixed by dropping `useMutation` for this one case entirely and
+using `useQuery` instead (`useVerifyEmail(token)`, `enabled: !!token`,
+`retry: false`, `staleTime: Infinity`) — exactly `usePreviewInvite`'s own
+shape, no manual effect or ref needed, and the bug didn't reproduce
+after. Lesson: a "fetch/consume this once based on a URL param" flow —
+even one with a mutating side effect server-side — fits `useQuery`'s
+`enabled`+`queryKey` semantics better than `useMutation` fired from an
+effect; reach for the latter only when a user action (a click) is what
+actually triggers the call.
+
 ## Route protection: `proxy.ts`, not `middleware.ts`
 
 This Next.js version (16.3) renamed the `middleware.js` file convention
@@ -356,7 +447,8 @@ proxy.ts` checks only whether the `flox_session` cookie is *present*
 `apps/internal/tenant.CookieName` — no shared constant between the Go and
 TypeScript codebases), redirecting an unauthenticated visitor to
 `/login` for every path except a small `PUBLIC_PATHS` allowlist (`/`,
-`/login`, `/signup`, `/accept-invite`, `/style-guide`), and redirecting
+`/login`, `/signup`, `/accept-invite`, `/verify-email`, `/style-guide`),
+and redirecting
 an already-authenticated visitor away from `/login`/`/signup`. This is a
 UX convenience only, stated explicitly in its own doc comment — it never
 validates the cookie, since that would mean an API round trip on every
@@ -398,8 +490,9 @@ before, on the old mock, until each gets its own Phase.
 Invite creation/resend now show the real link in a copy-to-clipboard
 dialog (same "reveal a secret once" pattern as
 `features/settings/api-keys-panel.tsx`'s API key reveal) instead of a
-"we sent an email" toast that would have been a lie — there's no email
-delivery (see Phase 28A's own scope decision above).
+"we sent an email" toast — deliberate, not a limitation (see the scope
+decision above and "Email verification"'s own note on why invites stayed
+this way even after real email delivery existed for signup).
 
 ## RBAC-aware navigation (a real gap found via manual testing)
 
@@ -490,3 +583,34 @@ pre-existing 51-organization backlog, plus this phase's own manual-test
 fixtures, were purged by hand afterward; the dev database now matches its
 state before either phase's testing began (one pre-existing `Phase 27 Dev
 Org` fixture, zero users, zero sessions).
+
+## Email verification — Verified (post-Phase-34, user-scoped)
+
+`gofmt`/`go build ./...`/`go vet ./...`/`go test -count=1 ./...` (all
+packages, including new `apps/internal/mailer` and the auth suite's own
+8 new tests) clean. Frontend: `next typegen` (new `/verify-email` route),
+`tsc --noEmit`, `eslint`, `vitest run` (21 tests, unchanged) all clean.
+
+Full manual pass against the real containerized dev stack
+(`infra/docker-compose.dev.yml` — api/tracker/worker/web/mailhog all
+running as containers, §see infra's own CHANGELOG entry) plus a real
+browser (Claude-in-Chrome):
+
+- `curl` round trip first: signup → `201`, no `Set-Cookie` → login before
+  verifying → `403 email_not_verified` → mailhog's real REST API showed
+  the actual sent email with a working `/verify-email?token=...` link →
+  `POST /auth/verify-email` → `200`, `Set-Cookie` present, `loggedIn:
+  true` → `GET /auth/me` with that cookie → `200` → login now succeeds
+  normally → resend-verification against the now-verified email → silent
+  `200` as designed.
+- Browser pass: signed up through the real form → landed on the "check
+  your email" panel (correctly localized to Russian) instead of the app
+  shell. Logging in against that same unverified account rendered the
+  `email_not_verified` error with a working "resend" button. Opened the
+  real mailhog-delivered link → briefly showed the loading skeleton →
+  (after the `useQuery` fix described above) redirected straight into
+  `/overview`, `WorkspaceSelector` showing the real new org name. A
+  garbage/already-consumed token correctly rendered the invalid-link
+  card with its own resend-by-email form.
+- Cleanup: every organization this pass created deleted from the dev
+  database afterward.
