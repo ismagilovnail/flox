@@ -24,7 +24,7 @@ import {
   type DomainPurpose,
   type DomainStatus,
   type Registrar,
-} from "@/lib/mock/domains";
+} from "@/lib/api/domains";
 
 const DNS_PROVIDERS: DnsProvider[] = ["cloudflare", "route53", "unmanaged"];
 const REGISTRARS: Registrar[] = ["namecheap", "godaddy", "cloudflare_registrar", "unmanaged"];

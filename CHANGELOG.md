@@ -5,6 +5,57 @@ per-phase, matching `CLAUDE.md`'s phase protocol. The one exception is
 [Between phases], below: spec amendments and the code changes that follow from
 them land between phases and would otherwise be invisible here.
 
+## [Between phases] — Domains + Tracking Links: the missing "send traffic here" CRUD
+
+User created a campaign and reported two problems: no way to tell it was
+active, and no link anywhere to send traffic to. Full writeup, including
+the exact tenant-isolation reasoning for the new package, in
+`docs/domains-tracking-links.md` — summary here.
+
+### Fixed
+
+- `campaign-row-actions.tsx`'s row menu had no Activate action for a
+  `draft` campaign (only Pause/Resume, gated on `status !== "draft"`) —
+  the backend's `Activate` already handled `draft` fine, this was a
+  frontend-only gap. Now shows "Activate" for a draft campaign in the same
+  menu slot.
+
+### Added
+
+- `apps/internal/domain` (new): real `Domain` CRUD
+  (`GET/POST /domains`, `GET/PATCH/DELETE /domains/{id}`) — replaces
+  `apps/web`'s mock-only Domains page. No registrar/DNS/SSL automation
+  (none exists in this repo); status/ssl/registrar/dnsProvider are
+  operator-set fields, not automated — the mock's "Verify ownership"/
+  "Issue SSL" quick actions are dropped, not carried forward as fake
+  automation.
+- `apps/internal/trackinglink` (new): the (domain, slug) → campaign
+  mapping CRUD (`GET/POST /campaigns/{campaignId}/tracking-links`,
+  `PATCH/DELETE .../{id}`) — the write side of the `tracking_links` table
+  `apps/tracker`'s real hot path has read from since migration 00007.
+  Returns a computed `url` (`http://{domain}/t/{slug}`) so the frontend
+  never reconstructs the tracker's own URL shape itself.
+- `apps/web`: `features/domains/*` switched to real API calls
+  (`lib/mock/domains.ts`/`stores/domains.ts` deleted outright); new
+  `features/campaigns/tracking-links.tsx` at the top of a campaign's
+  Overview tab — create a link (domain picker, slug input, live URL
+  preview), a table of existing links with copy/pause/delete. Fully
+  localized (new `trackingLinks` keys in `campaigns.json`, en+ru) — unlike
+  the Domains page itself, which stays English (pre-existing, separately
+  scoped gap, not touched here).
+
+### Verified
+
+`go build`/`go vet`/`go test -count=1 ./...` clean, including both new
+packages' repository tests against real Postgres (cross-org domain
+conflict, cross-org domain/campaign rejection on tracking-link create,
+duplicate-slug conflict). Real browser pass against the actual reporting
+user's own account: added a real domain, created a tracking link on their
+real campaign from the Overview tab, and confirmed with a direct `curl`
+against the real containerized tracker that it 302-redirects to the
+campaign's configured offer — the real click path end to end, not a
+mocked-looking success screen. `tsc --noEmit`/`eslint` clean.
+
 ## [Between phases] — Phase 35: real multi-dimension `/analytics` backend
 
 ### Scope

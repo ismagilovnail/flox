@@ -38,9 +38,10 @@ export function CampaignRowActions({ campaign }: { campaign: Campaign }) {
 
   function togglePause() {
     const action = campaign.status === "active" ? pause : activate;
+    const toastKey =
+      campaign.status === "active" ? "toast.paused" : campaign.status === "draft" ? "toast.activated" : "toast.resumed";
     action.mutate(campaign.id, {
-      onSuccess: () =>
-        toast(t(campaign.status === "active" ? "toast.paused" : "toast.resumed"), { description: campaign.name }),
+      onSuccess: () => toast(t(toastKey), { description: campaign.name }),
       onError: (err) => toast.error(t("toast.updateError"), { description: err.message }),
     });
   }
@@ -82,7 +83,7 @@ export function CampaignRowActions({ campaign }: { campaign: Campaign }) {
               <ExternalLinkIcon className="size-4" /> {t("rowActions.open")}
             </Link>
           </DropdownMenuItem>
-          {campaign.status !== "archived" && campaign.status !== "draft" && (
+          {campaign.status !== "archived" && (
             <DropdownMenuItem onSelect={togglePause}>
               {campaign.status === "active" ? (
                 <>
@@ -90,7 +91,8 @@ export function CampaignRowActions({ campaign }: { campaign: Campaign }) {
                 </>
               ) : (
                 <>
-                  <PlayIcon className="size-4" /> {t("rowActions.resume")}
+                  <PlayIcon className="size-4" />{" "}
+                  {t(campaign.status === "draft" ? "rowActions.activate" : "rowActions.resume")}
                 </>
               )}
             </DropdownMenuItem>

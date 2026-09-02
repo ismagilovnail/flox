@@ -72,6 +72,41 @@
       "externalCampaignIdMax": "Must be at most 200 characters"
     }
   },
+  "trackingLinks": {
+    "title": "Tracking Links",
+    "description": "The URL you send traffic to — resolves through this campaign's stream sets and flows.",
+    "domainLabel": "Domain",
+    "domainPlaceholder": "Select a domain",
+    "slugLabel": "Slug",
+    "slugPlaceholder": "summer-promo",
+    "slugHelp": "Lowercase letters, numbers, and hyphens only.",
+    "submitButton": "Create link",
+    "noDomainsTitle": "No tracking domains yet",
+    "noDomainsDescription": "Park a domain before creating a tracking link for this campaign.",
+    "manageDomainsLink": "Add a domain",
+    "loading": "Loading tracking links...",
+    "loadError": "Couldn't load tracking links",
+    "emptyTitle": "No tracking links yet",
+    "emptyDescription": "Create one above to get a URL to send traffic to.",
+    "urlHeader": "URL",
+    "statusHeader": "Status",
+    "copyAria": "Copy tracking link",
+    "copiedToast": "Link copied",
+    "pause": "Pause",
+    "resume": "Resume",
+    "deleteAria": "Delete tracking link",
+    "deleteConfirmTitle": "Delete this tracking link?",
+    "deleteConfirmDescription": "Traffic already sent to this URL will stop resolving. This cannot be undone.",
+    "deleteConfirmAction": "Delete",
+    "toast": {
+      "created": "Tracking link created",
+      "createError": "Couldn't create tracking link",
+      "updated": "Tracking link updated",
+      "updateError": "Couldn't update tracking link",
+      "removed": "Tracking link deleted",
+      "removeError": "Couldn't delete tracking link"
+    }
+  },
   "newCampaign": {
     "title": "New Campaign",
     "submitButton": "Create campaign"
@@ -81,6 +116,7 @@
     "open": "Open",
     "pause": "Pause",
     "resume": "Resume",
+    "activate": "Activate",
     "duplicate": "Duplicate",
     "archive": "Archive",
     "archiveConfirmTitle": "Archive \"{{name}}\"?",
@@ -93,6 +129,7 @@
     "createError": "Couldn't create campaign",
     "paused": "Campaign paused",
     "resumed": "Campaign resumed",
+    "activated": "Campaign activated",
     "duplicated": "Campaign duplicated",
     "duplicatedSuffix": "{{name}} (Copy)",
     "duplicateError": "Couldn't duplicate campaign",

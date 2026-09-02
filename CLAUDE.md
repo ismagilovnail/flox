@@ -19,6 +19,77 @@ referenced below as §N).
 ## CURRENT STATE — UPDATE THIS EVERY PHASE
 
 ```
+CURRENT PHASE : DOMAINS + TRACKING LINKS (user-scoped, post-Phase-34)
+STATUS        : done — apps/internal/domain + apps/internal/trackinglink
+                (new packages) are the real CRUD the domains/tracking_links
+                tables (migration 00007) never had — apps/tracker's hot
+                path already read them for real, but nothing let an
+                operator populate them, and apps/web's Domains page was
+                pure mock data. User reported creating a campaign and
+                finding no way to tell it was active and no link to send
+                traffic to. Two root causes, both fixed:
+                (1) campaign-row-actions.tsx's row menu had no Activate
+                action for a draft campaign (backend already supported
+                it — frontend-only gap, now fixed).
+                (2) No tracking-link UI anywhere. New POST /domains +
+                GET/PATCH/DELETE /domains/{id}; new POST /campaigns/
+                {campaignId}/tracking-links + PATCH/DELETE .../{id},
+                returning a computed url (http://{domain}/t/{slug})
+                matching apps/tracker's own /t/{trackingID} route. No
+                registrar/DNS/SSL automation (none exists in this repo) —
+                status/ssl/registrar/dnsProvider are operator-set fields,
+                same honest shape as campaign.Status; the mock's "Verify
+                ownership"/"Issue SSL" quick actions were dropped, not
+                carried forward as fake automation.
+                apps/web: features/domains/* switched to real API calls,
+                lib/mock/domains.ts + stores/domains.ts deleted outright.
+                New features/campaigns/tracking-links.tsx at the top of a
+                campaign's Overview tab (domain picker, slug input, live
+                URL preview, copy/pause/delete on existing links) — fully
+                localized (new campaigns.json trackingLinks keys, en+ru),
+                unlike the Domains page itself which stays English
+                (pre-existing, separately-scoped gap, not touched here).
+                Full design + the two tenant-isolation checks that
+                actually matter in trackinglink.Repository.Create
+                (domain_id from the request body, campaign_id from the
+                route — neither re-validated against org elsewhere the
+                way a plain List/Get already is) written up in
+                docs/domains-tracking-links.md.
+                Verified: go build/vet/test -count=1 ./... clean,
+                including both new packages' own repository tests against
+                real Postgres (cross-org domain conflict, cross-org
+                domain/campaign rejection on tracking-link create,
+                duplicate-slug conflict). Real browser pass against the
+                actual reporting user's own account and real campaign
+                (not a synthetic test org): added a real domain, created a
+                tracking link from the Overview tab, and confirmed with a
+                direct curl against the real containerized tracker that it
+                302-redirects to the campaign's configured offer — the
+                real click path, not a mocked-looking success screen.
+                tsc --noEmit/eslint clean.
+LAST COMMIT   : (pending — see NEXT)
+UNCOMMITTED   : none once this phase's commit lands.
+NEXT          : confirm scope before starting. Real candidates, not
+                ranked: (a) the six remaining frontend-integration gaps —
+                Domains' own UI still isn't localized (separate from
+                today's fix, which only added the backend + the campaign-
+                side tracking-links UI), Settings, Tags, Custom Metrics,
+                Report Presets, Referral, Content Gallery; (b) a "distinct
+                values for dimension X" endpoint for the analytics report
+                builder's filter-value dropdown (docs/analytics-report-
+                api.md); (c) campaign_id/flow_id -> display name
+                resolution in Top Campaigns/Top Flows; (d) the DataTable
+                column-resize/export gap; (e) repository/handler-layer
+                unit test coverage; (f) real registrar/DNS/SSL automation
+                for Domains, if ever wanted — today's fix deliberately
+                left status/ssl as operator-declared, not automated.
+
+```
+
+<details>
+<summary>Superseded — Phase 35 (kept for history, see above for current state)</summary>
+
+```
 CURRENT PHASE : PHASE 35 — REAL MULTI-DIMENSION /ANALYTICS BACKEND
 STATUS        : done — apps/internal/analytics/report.go +
                 apps/internal/chstore/report.go (Report/Timeseries/
@@ -104,6 +175,8 @@ NEXT          : confirm scope before starting. Real candidates, not
                 handler-layer unit test coverage.
 
 ```
+
+</details>
 
 <details>
 <summary>Superseded — Phase 34 audit (kept for history, see above for current state)</summary>

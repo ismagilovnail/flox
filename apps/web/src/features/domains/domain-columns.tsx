@@ -4,7 +4,7 @@ import { formatDistanceToNow } from "date-fns";
 import { dataTableFeatures } from "@/components/ui/data-table";
 import { Badge } from "@/components/ui/badge";
 import { Caption } from "@/components/ui/typography";
-import type { Domain, DomainStatus, SslStatus } from "@/lib/mock/domains";
+import type { Domain, DomainStatus, SslStatus } from "@/lib/api/domains";
 import { DomainRowActions } from "@/features/domains/domain-row-actions";
 
 const STATUS_VARIANT: Record<DomainStatus, "success" | "warning" | "danger" | "secondary"> = {

@@ -28,6 +28,7 @@ import (
 	"github.com/ismagilovnail/flox/apps/internal/conversions"
 	"github.com/ismagilovnail/flox/apps/internal/cost"
 	"github.com/ismagilovnail/flox/apps/internal/costsync"
+	"github.com/ismagilovnail/flox/apps/internal/domain"
 	"github.com/ismagilovnail/flox/apps/internal/eventbuf"
 	"github.com/ismagilovnail/flox/apps/internal/eventmapping"
 	"github.com/ismagilovnail/flox/apps/internal/eventqueue"
@@ -53,6 +54,7 @@ import (
 	"github.com/ismagilovnail/flox/apps/internal/streamset"
 	"github.com/ismagilovnail/flox/apps/internal/telemetry"
 	"github.com/ismagilovnail/flox/apps/internal/tenant"
+	"github.com/ismagilovnail/flox/apps/internal/trackinglink"
 	"github.com/ismagilovnail/flox/apps/internal/trafficsource"
 )
 
@@ -216,6 +218,18 @@ func run() error {
 	srv.Mux().Route("/traffic-sources", func(r chi.Router) {
 		r.Use(tenantMiddleware)
 		trafficSourceHandler.Register(r)
+	})
+
+	domainHandler := domain.NewHandler(domain.NewService(domain.NewRepository(db)), logger)
+	srv.Mux().Route("/domains", func(r chi.Router) {
+		r.Use(tenantMiddleware)
+		domainHandler.Register(r)
+	})
+
+	trackingLinkHandler := trackinglink.NewHandler(trackinglink.NewService(trackinglink.NewRepository(db)), logger)
+	srv.Mux().Route("/campaigns/{campaignId}/tracking-links", func(r chi.Router) {
+		r.Use(tenantMiddleware)
+		trackingLinkHandler.Register(r)
 	})
 
 	adAccountRepo := adaccount.NewRepository(db)

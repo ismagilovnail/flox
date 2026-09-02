@@ -29,6 +29,7 @@ import { useCampaignDailySpend } from "@/hooks/use-cost-entries";
 import { CampaignRowActions } from "@/features/campaigns/campaign-row-actions";
 import { CampaignForm, type CampaignFormValues } from "@/features/campaigns/campaign-form";
 import { CampaignCostEntries } from "@/features/campaigns/campaign-cost-entries";
+import { TrackingLinks } from "@/features/campaigns/tracking-links";
 import { StreamSetList } from "@/features/stream-sets/stream-set-list";
 import { RoutingSimulatorView } from "@/features/routing-simulator/routing-simulator-view";
 
@@ -113,6 +114,7 @@ export function CampaignDetailView({ id }: { id: string }) {
         </TabsList>
 
         <TabsContent value="overview" className="flex flex-col gap-6">
+          <TrackingLinks campaignId={campaign.id} />
           <CampaignOverview campaignId={campaign.id} />
           <StreamSetList campaignId={campaign.id} />
         </TabsContent>
