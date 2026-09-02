@@ -114,9 +114,26 @@ export function CampaignDetailView({ id }: { id: string }) {
         </TabsList>
 
         <TabsContent value="overview" className="flex flex-col gap-6">
-          <TrackingLinks campaignId={campaign.id} />
+          <div className="grid grid-cols-1 gap-6 lg:grid-cols-[360px_1fr] lg:items-start">
+            <div className="flex flex-col gap-6">
+              <CampaignForm
+                defaultValues={{
+                  name: campaign.name,
+                  trafficSourceId: campaign.trafficSourceId,
+                  fallbackUrl: campaign.fallbackUrl,
+                  externalCampaignId: campaign.externalCampaignId,
+                  notes: campaign.notes,
+                  status: campaign.status,
+                }}
+                showStatus
+                submitLabel={t("detail.saveChanges")}
+                onSubmit={handleSettingsSubmit}
+              />
+              <TrackingLinks campaignId={campaign.id} />
+            </div>
+            <StreamSetList campaignId={campaign.id} />
+          </div>
           <CampaignOverview campaignId={campaign.id} />
-          <StreamSetList campaignId={campaign.id} />
         </TabsContent>
 
         <TabsContent value="cost" className="flex flex-col gap-6">
@@ -128,20 +145,6 @@ export function CampaignDetailView({ id }: { id: string }) {
         </TabsContent>
 
         <TabsContent value="settings" className="flex flex-col gap-6">
-          <CampaignForm
-            defaultValues={{
-              name: campaign.name,
-              trafficSourceId: campaign.trafficSourceId,
-              fallbackUrl: campaign.fallbackUrl,
-              externalCampaignId: campaign.externalCampaignId,
-              notes: campaign.notes,
-              status: campaign.status,
-            }}
-            showStatus
-            submitLabel={t("detail.saveChanges")}
-            onSubmit={handleSettingsSubmit}
-          />
-
           <Card className="border-danger/30">
             <CardHeader>
               <CardTitle>{t("detail.dangerZoneTitle")}</CardTitle>

@@ -5,6 +5,61 @@ per-phase, matching `CLAUDE.md`'s phase protocol. The one exception is
 [Between phases], below: spec amendments and the code changes that follow from
 them land between phases and would otherwise be invisible here.
 
+## [Between phases] — campaign edit page: two-column layout matching a reference tracker UI
+
+User shared a screenshot of another tracker's campaign edit page (compact
+settings + tracking-link block on the left, a wide Stream Sets panel on
+the right) and asked for the same block layout. Restructured the
+campaign detail view's Overview tab: `CampaignForm` moved out of the
+Settings tab into a `lg:grid-cols-[360px_1fr]` left column alongside
+`TrackingLinks`, with `StreamSetList` in the wider right column; KPI
+stats + revenue chart stay full-width below both. The Settings tab now
+holds only the danger-zone (archive) card — editing the name/source/
+fallback/status/notes fields happens inline in Overview instead of a
+separate tab.
+
+Also added a real name-search box to `StreamSetList` (the reference's
+own search bar) — filters the visible list client-side; drag-to-reorder
+is disabled while a filter is active (dragging a filtered subset would
+silently reorder the full list underneath it via index, not identity).
+
+Follow-up, same session: user clarified they specifically wanted
+Keitaro-style inline editing, not a Sheet — "New Stream Set" should
+create immediately (no dialog) and clicking a row should expand its
+editor in place. Delivered:
+
+- `StreamSetFormSheet` deleted outright; its exact form (same fields,
+  same validation, same `StreamSetFormValues`/Zod schema, same
+  `FilterGroupBuilder`/`FlowEditor`/pixel `MultiSelect` sub-components —
+  nothing about the editing logic changed) now lives in
+  `stream-set-editor.tsx`, rendered directly under a row when expanded
+  instead of inside a `Sheet`. Filters/Pixels sit side by side above
+  Rotation, matching the reference's own sub-layout.
+- `StreamSetRow` owns its own expand/collapse state (chevron toggle,
+  clicking the name); the pencil "edit" icon is gone since the whole row
+  is now the affordance.
+- `StreamSetList`'s "New Stream Set" button calls `createStreamSet`
+  directly instead of opening a dialog first. This needed a real default
+  offer: the backend rejects an empty `offerId` on create (`streamset.
+  Service`'s own "offer %q not found" check — the previous Sheet flow
+  never hit this because client-side Zod validation always blocked an
+  empty-offer submission before it reached the API). Defaults the new
+  set's flow to the org's first offer/network and disables the button
+  when the org has none yet, alongside the pre-existing no-networks case.
+- Also wired `useDeleteStreamSet` (existed in `hooks/use-stream-sets.ts`,
+  unused until now) into the row's menu with a confirm dialog, matching
+  the reference's trash icon — a natural companion to inline editing,
+  not previously exposed anywhere in the UI.
+
+Still not attempted: the reference's per-row Уники/Депозиты/Доход stat
+columns — no ClickHouse column ties an event to a specific stream set
+(only `campaign_id`/`flow_id`), so those numbers would have to be
+fabricated. A real, separately-scoped gap if ever wanted, not overlooked.
+
+Fixed along the way: `streamSets.json`'s list description still said the
+fallback URL lived "in Settings," stale now that it's edited on the same
+page (en+ru).
+
 ## [Between phases] — Domains + Tracking Links: the missing "send traffic here" CRUD
 
 User created a campaign and reported two problems: no way to tell it was

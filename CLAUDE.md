@@ -19,6 +19,54 @@ referenced below as §N).
 ## CURRENT STATE — UPDATE THIS EVERY PHASE
 
 ```
+CURRENT PHASE : CAMPAIGN EDIT PAGE LAYOUT (user-scoped, post-Phase-34)
+STATUS        : done — user shared a reference tracker's campaign edit
+                screenshot (compact settings + tracking-link block left,
+                wide Stream Sets panel right) and asked for the same
+                block layout. campaign-detail-view.tsx's Overview tab
+                restructured into a lg:grid-cols-[360px_1fr] two-column
+                layout: CampaignForm (moved out of Settings) + TrackingLinks
+                on the left, StreamSetList on the right; KPI stats/chart
+                stay full-width below. Settings tab now holds only the
+                danger zone. Added a real name-search box to StreamSetList
+                (drag-to-reorder disabled while filtered, to avoid
+                reordering a partial view by index).
+                Follow-up in the same session: user clarified they
+                specifically wanted Keitaro-style inline row editing, not
+                a Sheet. StreamSetFormSheet deleted outright; its exact
+                form (same fields/validation/sub-components, nothing about
+                the editing logic changed) now lives in stream-set-
+                editor.tsx, rendered inline under a row when expanded
+                (StreamSetRow owns its own expand/collapse state, chevron
+                + name click toggle it). "New Stream Set" now creates
+                immediately via createStreamSet — no dialog — defaulting
+                the new set's flow to the org's first offer/network
+                (the backend rejects an empty offerId; the old Sheet flow
+                never hit this since client-side Zod validation always
+                blocked that submission first). Button disabled when the
+                org has no offers yet, alongside the pre-existing
+                no-networks case. Also wired the pre-existing but unused
+                useDeleteStreamSet hook into the row menu with a confirm
+                dialog, matching the reference's trash icon.
+                Not done, real gap if ever wanted: per-row Уники/
+                Депозиты/Доход columns — no ClickHouse column ties an
+                event to a stream_set_id, only campaign_id/flow_id, so
+                those numbers would have to be fabricated.
+                Fixed a stale streamSets.json string claiming the
+                fallback URL lived "in Settings" (en+ru).
+LAST COMMIT   : (pending — see NEXT)
+UNCOMMITTED   : none once this phase's commit lands.
+NEXT          : confirm scope before starting — same real candidates as
+                before (see superseded block below), plus, if ever
+                wanted: a stream_set_id column on click/tracking/
+                conversion events so per-set stats could be real.
+
+```
+
+<details>
+<summary>Superseded — Domains + Tracking Links (kept for history, see above for current state)</summary>
+
+```
 CURRENT PHASE : DOMAINS + TRACKING LINKS (user-scoped, post-Phase-34)
 STATUS        : done — apps/internal/domain + apps/internal/trackinglink
                 (new packages) are the real CRUD the domains/tracking_links
@@ -86,6 +134,8 @@ NEXT          : confirm scope before starting. Real candidates, not
                 left status/ssl as operator-declared, not automated.
 
 ```
+
+</details>
 
 <details>
 <summary>Superseded — Phase 35 (kept for history, see above for current state)</summary>

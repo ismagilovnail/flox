@@ -142,14 +142,17 @@
   },
   "list": {
     "title": "Stream Sets",
-    "description": "Evaluated top-to-bottom by priority — the first set whose filters match wins. No match falls back to the campaign fallback in Settings.",
+    "description": "Evaluated top-to-bottom by priority — the first set whose filters match wins. No match falls back to the campaign's own fallback URL.",
     "newButton": "New Stream Set",
     "loading": "Loading stream sets…",
     "loadError": "Couldn't load stream sets",
     "loadNetworksOffersError": "Couldn't load networks/offers/landings/PWAs/postlandings/pixels",
     "emptyTitle": "No stream sets yet",
     "emptyDescription": "All traffic falls through to the campaign fallback URL until you add one.",
-    "reorderError": "Couldn't reorder stream sets"
+    "reorderError": "Couldn't reorder stream sets",
+    "searchPlaceholder": "Search by name...",
+    "noResultsTitle": "No stream sets match your search",
+    "noResultsDescription": "Try a different name."
   },
   "toast": {
     "duplicated": "Stream set duplicated",
@@ -157,15 +160,23 @@
     "updateError": "Couldn't update stream set",
     "updated": "Stream set updated",
     "created": "Stream set created",
-    "createError": "Couldn't create stream set"
+    "createError": "Couldn't create stream set",
+    "removed": "Stream set deleted",
+    "removeError": "Couldn't delete stream set"
   },
   "row": {
     "reorderAria": "Reorder {{name}}",
     "disableAria": "Disable stream set",
     "enableAria": "Enable stream set",
     "editAria": "Edit {{name}}",
+    "expandAria": "Expand {{name}}",
+    "collapseAria": "Collapse {{name}}",
     "moreActionsAria": "More actions for {{name}}",
     "duplicate": "Duplicate",
+    "delete": "Delete",
+    "deleteConfirmTitle": "Delete \"{{name}}\"?",
+    "deleteConfirmDescription": "Traffic that would have matched this stream set falls through to the next one, or to the campaign fallback URL. This cannot be undone.",
+    "deleteConfirmAction": "Delete",
     "noFilters": "No filters — matches all traffic",
     "noOffer": "No offer"
   }
