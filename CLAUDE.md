@@ -60,14 +60,9 @@ STATUS        : done — follow-up to the Click Log phase below, which
                 startup, lookups falling back to empty. Fixtures removed
                 from infra/geoip/ afterward — no real GeoLite2 data
                 obtained or tested (no MaxMind account available).
-LAST COMMIT   : (pending — this phase not yet committed)
-UNCOMMITTED   : this phase's own work (see STATUS above) — apps/internal/
-                classifier/maxmind/* (incl. testdata/*.mmdb),
-                apps/internal/config/config.go, apps/tracker/main.go,
-                apps/go.mod/go.sum, .env.example,
-                infra/docker-compose.dev.yml, infra/geoip/README.md,
-                .gitignore, docs/geoip.md, docs/click-log.md (one caveat
-                line updated), this CHANGELOG entry. Same pre-existing
+LAST COMMIT   : feat(classifier): real Geo/ASN provider via MaxMind
+                GeoLite2 — de24d58
+UNCOMMITTED   : none of this phase's own work. Same pre-existing
                 unrelated uncommitted work noted in the superseded block
                 below is still untouched in the tree.
 NEXT          : confirm scope before starting. Real candidates: (a) the
