@@ -151,19 +151,24 @@ STATUS        : done — user shared a reference tracker's PWA builder
                 behavior (row direction follows text direction when no
                 explicit flex-direction is set) — confirmed in browser
                 (dir="rtl" applied, header/buttons/text visibly mirror).
-LAST COMMIT   : (pending — this phase not yet committed)
-UNCOMMITTED   : this phase's own work — apps/api/migrations/
-                00023_pwa_listing_fields.sql,
-                00024_pwa_listing_fields_v2.sql, apps/internal/pwa/{model,
-                repository,service,handler,pwa_test}.go,
-                apps/web/src/lib/api/pwa.ts,
-                apps/web/src/features/pwa/{pwa-form,pwa-detail-view,
-                new-pwa-view,pwa-preview-card}.tsx,
-                apps/web/src/lib/i18n/locales/{en,ru}/pwa.json. Same
-                pre-existing unrelated uncommitted work noted in the
-                superseded block below (including the untracked
-                app/(app)/pwa/[id]/page.tsx with its own TS error) is
-                still untouched in the tree.
+LAST COMMIT   : feat(pwa): live store-listing preview on the PWA
+                create/edit page — 8efe889
+UNCOMMITTED   : none of this phase's own work. NOTE: pwa-form.tsx/
+                new-pwa-view.tsx/pwa-detail-view.tsx had never been
+                committed to git before this phase touched them (they
+                were part of the pre-existing, unrelated Sheet-to-page
+                conversion sitting uncommitted in the tree since before
+                this session) — the commit above necessarily includes
+                that baseline content alongside this phase's own
+                additions, since git had no prior version of these three
+                files to diff against. pwa-columns.tsx/pwa-list.tsx/
+                pwa-row-actions.tsx (also touched by that same
+                unrelated conversion) were left alone and remain
+                uncommitted, along with the rest of that conversion's
+                other-feature files (domains/landings/networks/offers/
+                pixels/postlanding/traffic-sources) and the untracked
+                app/(app)/pwa/[id]/page.tsx with its own pre-existing TS
+                error — none of that is this phase's work.
 NEXT          : confirm scope before starting. Real candidates: (a)
                 Google Play URL parsing/scraping — deliberately deferred,
                 would need a new scraper (no official public API for
