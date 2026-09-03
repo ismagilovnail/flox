@@ -19,13 +19,16 @@ type Repository struct {
 
 func NewRepository(db *pgxpool.Pool) *Repository { return &Repository{db: db} }
 
-const selectColumns = `id, organization_id, name, short_name, theme_color, background_color, icon_url, start_url, bounce_in_app_webview, status, created_at, updated_at`
+const selectColumns = `id, organization_id, name, short_name, theme_color, background_color, icon_url, start_url, bounce_in_app_webview, developer, description, rating, rating_count, downloads_label, size_mb, screenshots, whats_new, rating_stars_5, rating_stars_4, rating_stars_3, rating_stars_2, rating_stars_1, status, created_at, updated_at`
 
 func scanPwa(row pgx.Row) (Pwa, error) {
 	var p Pwa
 	err := row.Scan(
 		&p.ID, &p.OrganizationID, &p.Name, &p.ShortName, &p.ThemeColor, &p.BackgroundColor,
-		&p.IconURL, &p.StartURL, &p.BounceInAppWebview, &p.Status, &p.CreatedAt, &p.UpdatedAt,
+		&p.IconURL, &p.StartURL, &p.BounceInAppWebview, &p.Developer, &p.Description,
+		&p.Rating, &p.RatingCount, &p.DownloadsLabel, &p.SizeMB, &p.Screenshots, &p.WhatsNew,
+		&p.RatingStars5, &p.RatingStars4, &p.RatingStars3, &p.RatingStars2, &p.RatingStars1,
+		&p.Status, &p.CreatedAt, &p.UpdatedAt,
 	)
 	return p, err
 }
@@ -70,10 +73,12 @@ func (r *Repository) GetByID(ctx context.Context, orgID, id string) (Pwa, error)
 
 func (r *Repository) Create(ctx context.Context, id, orgID string, in CreateInput) (Pwa, error) {
 	row := r.db.QueryRow(ctx, `
-		INSERT INTO pwas (id, organization_id, name, short_name, theme_color, background_color, icon_url, start_url, bounce_in_app_webview)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+		INSERT INTO pwas (id, organization_id, name, short_name, theme_color, background_color, icon_url, start_url, bounce_in_app_webview, developer, description, rating, rating_count, downloads_label, size_mb, screenshots, whats_new, rating_stars_5, rating_stars_4, rating_stars_3, rating_stars_2, rating_stars_1)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22)
 		RETURNING `+selectColumns,
 		id, orgID, in.Name, in.ShortName, in.ThemeColor, in.BackgroundColor, in.IconURL, in.StartURL, in.BounceInAppWebview,
+		in.Developer, in.Description, in.Rating, in.RatingCount, in.DownloadsLabel, in.SizeMB,
+		in.Screenshots, in.WhatsNew, in.RatingStars5, in.RatingStars4, in.RatingStars3, in.RatingStars2, in.RatingStars1,
 	)
 	return scanPwa(row)
 }
@@ -106,6 +111,45 @@ func (r *Repository) Update(ctx context.Context, orgID, id string, in UpdateInpu
 	}
 	if in.BounceInAppWebview != nil {
 		sets = append(sets, "bounce_in_app_webview = "+arg(*in.BounceInAppWebview))
+	}
+	if in.Developer != nil {
+		sets = append(sets, "developer = "+arg(*in.Developer))
+	}
+	if in.Description != nil {
+		sets = append(sets, "description = "+arg(*in.Description))
+	}
+	if in.Rating != nil {
+		sets = append(sets, "rating = "+arg(*in.Rating))
+	}
+	if in.RatingCount != nil {
+		sets = append(sets, "rating_count = "+arg(*in.RatingCount))
+	}
+	if in.DownloadsLabel != nil {
+		sets = append(sets, "downloads_label = "+arg(*in.DownloadsLabel))
+	}
+	if in.SizeMB != nil {
+		sets = append(sets, "size_mb = "+arg(*in.SizeMB))
+	}
+	if in.Screenshots != nil {
+		sets = append(sets, "screenshots = "+arg(*in.Screenshots))
+	}
+	if in.WhatsNew != nil {
+		sets = append(sets, "whats_new = "+arg(*in.WhatsNew))
+	}
+	if in.RatingStars5 != nil {
+		sets = append(sets, "rating_stars_5 = "+arg(*in.RatingStars5))
+	}
+	if in.RatingStars4 != nil {
+		sets = append(sets, "rating_stars_4 = "+arg(*in.RatingStars4))
+	}
+	if in.RatingStars3 != nil {
+		sets = append(sets, "rating_stars_3 = "+arg(*in.RatingStars3))
+	}
+	if in.RatingStars2 != nil {
+		sets = append(sets, "rating_stars_2 = "+arg(*in.RatingStars2))
+	}
+	if in.RatingStars1 != nil {
+		sets = append(sets, "rating_stars_1 = "+arg(*in.RatingStars1))
 	}
 	if in.Status != nil {
 		sets = append(sets, "status = "+arg(*in.Status))

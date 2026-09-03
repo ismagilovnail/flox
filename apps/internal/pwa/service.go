@@ -12,9 +12,14 @@ import (
 )
 
 const (
-	nameMinLen      = 2
-	nameMaxLen      = 80
-	shortNameMaxLen = 20
+	nameMinLen        = 2
+	nameMaxLen        = 80
+	shortNameMaxLen   = 20
+	developerMaxLen   = 100
+	descriptionMaxLen = 4000
+	downloadsLabelMax = 20
+	whatsNewMaxLen    = 2000
+	screenshotsMax    = 12
 )
 
 var hexColor = regexp.MustCompile(`^#[0-9a-fA-F]{6}$`)
@@ -39,8 +44,26 @@ func (s *Service) Create(ctx context.Context, orgID string, in CreateInput) (Pwa
 	in.Name = strings.TrimSpace(in.Name)
 	in.ShortName = strings.TrimSpace(in.ShortName)
 	in.StartURL = strings.TrimSpace(in.StartURL)
+	in.Developer = strings.TrimSpace(in.Developer)
+	in.Description = strings.TrimSpace(in.Description)
+	in.DownloadsLabel = strings.TrimSpace(in.DownloadsLabel)
+	in.WhatsNew = strings.TrimSpace(in.WhatsNew)
+	in.Screenshots = trimAll(in.Screenshots)
+	if in.Screenshots == nil {
+		in.Screenshots = []string{}
+	}
 
-	if fields := validate(in.Name, in.ShortName, in.ThemeColor, in.BackgroundColor, in.IconURL, in.StartURL); len(fields) > 0 {
+	fields := validate(in.Name, in.ShortName, in.ThemeColor, in.BackgroundColor, in.IconURL, in.StartURL)
+	for k, v := range validateListingFields(listingFields{
+		developer: in.Developer, description: in.Description, downloadsLabel: in.DownloadsLabel, whatsNew: in.WhatsNew,
+		screenshots: in.Screenshots,
+		rating:      in.Rating, ratingCount: in.RatingCount, sizeMB: in.SizeMB,
+		ratingStars5: in.RatingStars5, ratingStars4: in.RatingStars4, ratingStars3: in.RatingStars3,
+		ratingStars2: in.RatingStars2, ratingStars1: in.RatingStars1,
+	}) {
+		fields[k] = v
+	}
+	if len(fields) > 0 {
 		return Pwa{}, apierror.Validation("invalid pwa", fields)
 	}
 	return s.repo.Create(ctx, idgen.New(), orgID, in)
@@ -79,6 +102,55 @@ func (s *Service) Update(ctx context.Context, orgID, id string, in UpdateInput) 
 			fields["startUrl"] = "required"
 		}
 	}
+	if in.Developer != nil {
+		trimmed := strings.TrimSpace(*in.Developer)
+		in.Developer = &trimmed
+	}
+	if in.Description != nil {
+		trimmed := strings.TrimSpace(*in.Description)
+		in.Description = &trimmed
+	}
+	if in.DownloadsLabel != nil {
+		trimmed := strings.TrimSpace(*in.DownloadsLabel)
+		in.DownloadsLabel = &trimmed
+	}
+	if in.WhatsNew != nil {
+		trimmed := strings.TrimSpace(*in.WhatsNew)
+		in.WhatsNew = &trimmed
+	}
+	if in.Screenshots != nil {
+		trimmed := trimAll(*in.Screenshots)
+		in.Screenshots = &trimmed
+	}
+	developer := ""
+	if in.Developer != nil {
+		developer = *in.Developer
+	}
+	description := ""
+	if in.Description != nil {
+		description = *in.Description
+	}
+	downloadsLabel := ""
+	if in.DownloadsLabel != nil {
+		downloadsLabel = *in.DownloadsLabel
+	}
+	whatsNew := ""
+	if in.WhatsNew != nil {
+		whatsNew = *in.WhatsNew
+	}
+	var screenshots []string
+	if in.Screenshots != nil {
+		screenshots = *in.Screenshots
+	}
+	for k, v := range validateListingFields(listingFields{
+		developer: developer, description: description, downloadsLabel: downloadsLabel, whatsNew: whatsNew,
+		screenshots: screenshots,
+		rating:      in.Rating, ratingCount: in.RatingCount, sizeMB: in.SizeMB,
+		ratingStars5: in.RatingStars5, ratingStars4: in.RatingStars4, ratingStars3: in.RatingStars3,
+		ratingStars2: in.RatingStars2, ratingStars1: in.RatingStars1,
+	}) {
+		fields[k] = v
+	}
 	if in.Status != nil && !in.Status.Valid() {
 		fields["status"] = "must be one of active, paused, archived"
 	}
@@ -110,6 +182,19 @@ func (s *Service) Duplicate(ctx context.Context, orgID, id string) (Pwa, error) 
 		IconURL:            source.IconURL,
 		StartURL:           source.StartURL,
 		BounceInAppWebview: source.BounceInAppWebview,
+		Developer:          source.Developer,
+		Description:        source.Description,
+		Rating:             source.Rating,
+		RatingCount:        source.RatingCount,
+		DownloadsLabel:     source.DownloadsLabel,
+		SizeMB:             source.SizeMB,
+		Screenshots:        source.Screenshots,
+		WhatsNew:           source.WhatsNew,
+		RatingStars5:       source.RatingStars5,
+		RatingStars4:       source.RatingStars4,
+		RatingStars3:       source.RatingStars3,
+		RatingStars2:       source.RatingStars2,
+		RatingStars1:       source.RatingStars1,
 	})
 	if err != nil {
 		return Pwa{}, err
@@ -179,4 +264,86 @@ func validate(name, shortName, themeColor, backgroundColor, iconURL, startURL st
 func isValidURL(raw string) bool {
 	u, err := url.ParseRequestURI(raw)
 	return err == nil && (u.Scheme == "http" || u.Scheme == "https") && u.Host != ""
+}
+
+// listingFields is validateListingFields' input — a struct rather than a
+// long positional-argument list now that the store-listing preview
+// spans this many optional fields.
+type listingFields struct {
+	developer      string
+	description    string
+	downloadsLabel string
+	whatsNew       string
+	screenshots    []string
+	rating         *float64
+	ratingCount    *int
+	sizeMB         *float64
+	ratingStars5   *float64
+	ratingStars4   *float64
+	ratingStars3   *float64
+	ratingStars2   *float64
+	ratingStars1   *float64
+}
+
+// validateListingFields covers the store-listing preview's own fields —
+// all optional, so an empty/nil value never fails here; only a value
+// that's actually out of range does.
+func validateListingFields(f listingFields) map[string]string {
+	fields := map[string]string{}
+	if len(f.developer) > developerMaxLen {
+		fields["developer"] = fmt.Sprintf("up to %d characters", developerMaxLen)
+	}
+	if len(f.description) > descriptionMaxLen {
+		fields["description"] = fmt.Sprintf("up to %d characters", descriptionMaxLen)
+	}
+	if len(f.downloadsLabel) > downloadsLabelMax {
+		fields["downloadsLabel"] = fmt.Sprintf("up to %d characters", downloadsLabelMax)
+	}
+	if len(f.whatsNew) > whatsNewMaxLen {
+		fields["whatsNew"] = fmt.Sprintf("up to %d characters", whatsNewMaxLen)
+	}
+	if len(f.screenshots) > screenshotsMax {
+		fields["screenshots"] = fmt.Sprintf("up to %d images", screenshotsMax)
+	} else {
+		for _, u := range f.screenshots {
+			if !isValidURL(u) {
+				fields["screenshots"] = "each screenshot must be a valid URL"
+				break
+			}
+		}
+	}
+	if f.rating != nil && (*f.rating < 0 || *f.rating > 5) {
+		fields["rating"] = "must be between 0 and 5"
+	}
+	if f.ratingCount != nil && *f.ratingCount < 0 {
+		fields["ratingCount"] = "must not be negative"
+	}
+	if f.sizeMB != nil && *f.sizeMB < 0 {
+		fields["sizeMb"] = "must not be negative"
+	}
+	for key, v := range map[string]*float64{
+		"ratingStars5": f.ratingStars5, "ratingStars4": f.ratingStars4, "ratingStars3": f.ratingStars3,
+		"ratingStars2": f.ratingStars2, "ratingStars1": f.ratingStars1,
+	} {
+		if v != nil && (*v < 0 || *v > 100) {
+			fields[key] = "must be between 0 and 100"
+		}
+	}
+	return fields
+}
+
+// trimAll trims whitespace from every element and drops empty ones —
+// applied to Screenshots so a stray blank row from the frontend's
+// add/remove list editor never persists as an empty-string URL.
+func trimAll(items []string) []string {
+	if items == nil {
+		return nil
+	}
+	out := make([]string, 0, len(items))
+	for _, s := range items {
+		if t := strings.TrimSpace(s); t != "" {
+			out = append(out, t)
+		}
+	}
+	return out
 }

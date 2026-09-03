@@ -19,6 +19,170 @@ referenced below as §N).
 ## CURRENT STATE — UPDATE THIS EVERY PHASE
 
 ```
+CURRENT PHASE : PWA CREATE PAGE — LIVE STORE-LISTING PREVIEW (user-scoped, post-Phase-34)
+STATUS        : done — user shared a reference tracker's PWA builder
+                screenshot (settings left, a live Google-Play-listing
+                phone mockup right, plus a "parse assets from a Google
+                Play URL" feature) and asked for the same. Scoped with
+                the user first: two candidates existed (visual redesign
+                vs. Google Play scraping — the latter is a genuinely new
+                backend capability, no scraping/external-fetch anything
+                existed anywhere in the repo). User chose the preview
+                first, and to add real form fields behind it rather than
+                showing fabricated stats (CLAUDE.md #6) — Google Play
+                parsing itself is NOT built this phase, deferred pending
+                explicit go-ahead.
+                Backend: migration 00023 adds developer/description/
+                rating/rating_count/downloads_label/size_mb to pwas
+                (rating/rating_count/size_mb nullable — "never entered"
+                stays distinct from a fabricated 0/"—", same reasoning
+                cost/ROI fields already use). apps/internal/pwa's model/
+                repository/service/handler carry the six fields through
+                Create/Update/Duplicate; service.go validates ranges
+                (rating 0-5, non-negative count/size) via a new
+                validateListingFields, all fields optional so blank never
+                fails validation.
+                Frontend: pwa-form.tsx restructured into a
+                lg:grid-cols-[1fr_300px] two-column layout — existing
+                Web-App-Manifest fields plus six new "store listing"
+                inputs on the left (Card, unchanged otherwise), a sticky
+                new features/pwa/pwa-preview-card.tsx (a Google-Play-
+                listing phone mockup — icon/name/developer/rating/
+                downloads/size/install button, deliberately light-themed
+                regardless of host dark mode, matching a screenshot of a
+                different app) on the right, live-updating via the
+                form's existing useWatch. Numeric fields use
+                register(name, { setValueAs }) rather than
+                z.preprocess — the latter made resolver input/output
+                types diverge, which @hookform/resolvers' Resolver<Input,
+                Context, Output> rejected against a single-type
+                useForm<PwaFormValues> (documented in pwa-form.tsx).
+                Round 2, same session: user pasted the reference
+                tracker's actual rendered HTML for the preview (not the
+                loader script itself — declined to embed
+                cdn.adset.pro/pwa-app.js, an uncontrolled third-party
+                script, as a supply-chain risk) and, after seeing the
+                compact card, asked for the rest of the real listing
+                page too: screenshot gallery, "what's new," and the
+                per-star rating breakdown (5★..1★). Scoped again before
+                building: confirmed these three want real backend
+                fields (not fabricated), and that the footer links
+                (Store/Gift cards/redeem/family library/Terms/Privacy/
+                Developers) and bottom nav bar (Игры/Приложения/Книги/
+                Детям) are pure decoration, matching the real Google
+                Play chrome — never wired to anything.
+                Migration 00024 adds screenshots (text[], ordered gallery
+                URLs — same shape postlanding.Events already uses),
+                whats_new (text), and rating_stars_5..1 (numeric(5,2),
+                each independently nullable — a star bucket never
+                entered stays "—", not a fabricated 0%). apps/internal/
+                pwa's model/repository/service/handler/Duplicate carry
+                all eight new fields; validateListingFields refactored
+                to take a struct (listingFields) now that it covers this
+                many optional fields, plus a new trimAll helper so a
+                blank row from the frontend's add/remove screenshot list
+                never persists as an empty-string URL.
+                pwa-form.tsx: screenshots is a useFieldArray (matching
+                offer-form.tsx's `links` pattern) of {url} objects,
+                converted to/from the API's flat string[] at the two
+                call sites (new-pwa-view.tsx, pwa-detail-view.tsx); a
+                5-column rating-breakdown input row; a "what's new"
+                textarea. pwa-preview-card.tsx grew from a compact stat
+                card into the full scrollable listing page (max-h-[70vh]
+                overflow-y-auto, sticky header/nav) — screenshot gallery
+                (hidden entirely when empty, not a placeholder box),
+                About/description, update date, a generic Data Safety
+                paragraph (own short text, not Google's verbatim legal
+                copy — copyright caution), Ratings & reviews with live
+                per-star bars, What's New (hidden when empty), then the
+                decorative footer + bottom nav.
+                Verified: go build/vet/test -count=1 ./... clean
+                (including all listing-field and gallery-field round-
+                trip/range-validation/Duplicate-copies-fields tests
+                against real Postgres — TestScreenshotsWhatsNewAnd
+                RatingBreakdownRoundTrip, TestCreateRejectsOutOfRange
+                GalleryFields, TestDuplicateCopiesGalleryFields);
+                tsc/eslint/vitest clean on apps/web (one pre-existing
+                unrelated TS error in the untracked app/(app)/pwa/[id]/
+                page.tsx — not this phase's file, left alone). Real
+                browser pass both rounds: typed into every field
+                (including adding a screenshot row) and confirmed via JS
+                DOM assertions that every new section actually rendered
+                (screenshot img, what's-new text, About, Data Safety,
+                Reviews, footer Terms link, nav Games label, 5 rating
+                bars) — then a full create → redirect → edit-page-reload
+                round trip confirmed via a direct Postgres query that
+                every field (screenshots array, whats_new,
+                rating_stars_5/1) persisted correctly; the verification
+                PWA row was deleted afterward, not left behind.
+                Round 3, same session: user asked for the preview to be
+                "real phone" width — card widened 280px -> 390px (an
+                iPhone 14/15-class CSS width), border/radius scaled up to
+                match, sidebar column widened 300px -> 440px to fit it
+                without clipping. Confirmed in browser: fits cleanly, no
+                overflow.
+                Round 4, same session: user pasted the reference's raw
+                <head> HTML twice, asking to load cdn.adset.pro/
+                pwa-app.js (a rival tracker's own rendering engine) and
+                Google Translate's element.js (a live third-party
+                widget) so the preview would "look the same." Declined
+                both, explicitly, twice — embedding either is a supply-
+                chain/privacy risk this package doesn't need: the actual
+                rendered HTML the user pasted first was already used to
+                match the visual structure directly in round 2, so the
+                loader script itself added nothing. User then confirmed
+                the actual ask was "same functionality, our own code" —
+                consistent with what was already built. Applied the one
+                legitimate finding from that HTML: "Google Sans" isn't
+                actually served by Google Fonts (it's Google's internal-
+                only typeface) — the reference's own real rendered font
+                is its declared fallback chain (-apple-system,
+                BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif), now
+                set directly on the card via inline style, zero external
+                font requests. Also built, natively, the one real feature
+                from the original screenshot not yet covered: the
+                "Арабский текст" RTL toggle — a Switch in the preview
+                Card's header (local useState, no persistence needed)
+                setting a new `dir` prop through to PwaPreviewCard's root
+                div. No machine translation (that would need the same
+                declined Google Translate widget) — just layout
+                mirroring, which the existing flex-row layout already
+                gets for free from the browser's own dir-aware flexbox
+                behavior (row direction follows text direction when no
+                explicit flex-direction is set) — confirmed in browser
+                (dir="rtl" applied, header/buttons/text visibly mirror).
+LAST COMMIT   : (pending — this phase not yet committed)
+UNCOMMITTED   : this phase's own work — apps/api/migrations/
+                00023_pwa_listing_fields.sql,
+                00024_pwa_listing_fields_v2.sql, apps/internal/pwa/{model,
+                repository,service,handler,pwa_test}.go,
+                apps/web/src/lib/api/pwa.ts,
+                apps/web/src/features/pwa/{pwa-form,pwa-detail-view,
+                new-pwa-view,pwa-preview-card}.tsx,
+                apps/web/src/lib/i18n/locales/{en,ru}/pwa.json. Same
+                pre-existing unrelated uncommitted work noted in the
+                superseded block below (including the untracked
+                app/(app)/pwa/[id]/page.tsx with its own TS error) is
+                still untouched in the tree.
+NEXT          : confirm scope before starting. Real candidates: (a)
+                Google Play URL parsing/scraping — deliberately deferred,
+                would need a new scraper (no official public API for
+                arbitrary app metadata; unofficial HTML scraping of
+                play.google.com is what most trackers do, through
+                apps/internal/urlsafety for SSRF safety per §54), a new
+                endpoint, and frontend wiring for the "Отправить" button
+                the reference screenshot shows; (b) age-rating badge
+                (ARC/12+) — present in the reference HTML the user pasted
+                but never asked about explicitly, not built; (c) the
+                pre-existing list from the superseded block below, still
+                open.
+
+```
+
+<details>
+<summary>Superseded — Geo/ASN provider (kept for history, see above for current state)</summary>
+
+```
 CURRENT PHASE : GEO/ASN PROVIDER — LIVE ON DB-IP LITE (user-scoped, post-Phase-34)
 STATUS        : done — follow-up to the Click Log phase below, which
                 surfaced that classifier.NoopGeoProvider/NoopASNProvider
@@ -92,6 +256,8 @@ NEXT          : confirm scope before starting. Real candidates: (a) the
                 vars over — no code change needed, just a data swap.
 
 ```
+
+</details>
 
 <details>
 <summary>Superseded — Click Log (kept for history, see above for current state)</summary>

@@ -13,6 +13,26 @@ export type Pwa = {
   iconUrl: string;
   startUrl: string;
   bounceInAppWebview: boolean;
+  /** Store-listing preview fields (features/pwa/pwa-preview-card.tsx) —
+   * all optional. rating/ratingCount/sizeMb are undefined together when
+   * never entered, distinct from 0 (CLAUDE.md #6's "never fabricate a
+   * zero" applied to this listing preview, not just cost/ROI). */
+  developer: string;
+  description: string;
+  rating?: number;
+  ratingCount?: number;
+  downloadsLabel: string;
+  sizeMb?: number;
+  /** Ordered gallery image URLs, and the per-star breakdown percentages
+   * — each independently optional, same "undefined stays undefined, not
+   * a fabricated 0" rule as rating/ratingCount/sizeMb above. */
+  screenshots: string[];
+  whatsNew: string;
+  ratingStars5?: number;
+  ratingStars4?: number;
+  ratingStars3?: number;
+  ratingStars2?: number;
+  ratingStars1?: number;
   status: PwaStatus;
   createdAt: string;
   updatedAt: string;
@@ -26,6 +46,19 @@ export type CreatePwaInput = {
   iconUrl: string;
   startUrl: string;
   bounceInAppWebview: boolean;
+  developer: string;
+  description: string;
+  rating?: number;
+  ratingCount?: number;
+  downloadsLabel: string;
+  sizeMb?: number;
+  screenshots: string[];
+  whatsNew: string;
+  ratingStars5?: number;
+  ratingStars4?: number;
+  ratingStars3?: number;
+  ratingStars2?: number;
+  ratingStars1?: number;
 };
 
 export type UpdatePwaInput = Partial<CreatePwaInput> & { status?: PwaStatus };

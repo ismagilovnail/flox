@@ -180,6 +180,236 @@ func TestDuplicateKeepsStatus(t *testing.T) {
 	}
 }
 
+func TestListingFieldsRoundTripAndDefaultToNilNotZero(t *testing.T) {
+	pool := mustPool(t)
+	ctx := context.Background()
+	orgID := seedOrg(t, ctx, pool)
+
+	svc := pwa.NewService(pwa.NewRepository(pool))
+
+	// Never entered: Rating/RatingCount/SizeMB must come back nil, not a
+	// fabricated 0 — the store-listing preview must render "—", not "0
+	// stars"/"0 MB", for a PWA nobody has rated or sized yet.
+	created, err := svc.Create(ctx, orgID, validInput("No Listing Data"))
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	if created.Rating != nil || created.RatingCount != nil || created.SizeMB != nil {
+		t.Fatalf("Create with no listing fields = %+v, want Rating/RatingCount/SizeMB all nil", created)
+	}
+	if created.Developer != "" || created.Description != "" || created.DownloadsLabel != "" {
+		t.Fatalf("Create with no listing fields = %+v, want empty strings, not fabricated placeholders", created)
+	}
+
+	rating := 4.7
+	ratingCount := 100
+	sizeMB := 15.0
+	in := validInput("With Listing Data")
+	in.Developer = "  Acme Corp  "
+	in.Description = "A real description"
+	in.Rating = &rating
+	in.RatingCount = &ratingCount
+	in.DownloadsLabel = "1K+"
+	in.SizeMB = &sizeMB
+
+	withData, err := svc.Create(ctx, orgID, in)
+	if err != nil {
+		t.Fatalf("Create with listing fields: %v", err)
+	}
+	if withData.Developer != "Acme Corp" {
+		t.Fatalf("Developer = %q, want trimmed %q", withData.Developer, "Acme Corp")
+	}
+	if withData.Rating == nil || *withData.Rating != 4.7 {
+		t.Fatalf("Rating = %v, want 4.7", withData.Rating)
+	}
+	if withData.RatingCount == nil || *withData.RatingCount != 100 {
+		t.Fatalf("RatingCount = %v, want 100", withData.RatingCount)
+	}
+	if withData.DownloadsLabel != "1K+" {
+		t.Fatalf("DownloadsLabel = %q, want %q", withData.DownloadsLabel, "1K+")
+	}
+	if withData.SizeMB == nil || *withData.SizeMB != 15.0 {
+		t.Fatalf("SizeMB = %v, want 15.0", withData.SizeMB)
+	}
+
+	// Round-trips through Update too.
+	newRating := 3.2
+	updated, err := svc.Update(ctx, orgID, created.ID, pwa.UpdateInput{Rating: &newRating})
+	if err != nil {
+		t.Fatalf("Update: %v", err)
+	}
+	if updated.Rating == nil || *updated.Rating != 3.2 {
+		t.Fatalf("Rating after Update = %v, want 3.2", updated.Rating)
+	}
+}
+
+func TestCreateRejectsOutOfRangeListingFields(t *testing.T) {
+	pool := mustPool(t)
+	ctx := context.Background()
+	orgID := seedOrg(t, ctx, pool)
+
+	svc := pwa.NewService(pwa.NewRepository(pool))
+
+	tooHigh := 5.5
+	bad := validInput("Bad Rating")
+	bad.Rating = &tooHigh
+	if _, err := svc.Create(ctx, orgID, bad); err == nil {
+		t.Fatal("Create with rating 5.5 succeeded, want a validation error (must be 0-5)")
+	}
+
+	negative := -1
+	bad = validInput("Bad Rating Count")
+	bad.RatingCount = &negative
+	if _, err := svc.Create(ctx, orgID, bad); err == nil {
+		t.Fatal("Create with a negative ratingCount succeeded, want a validation error")
+	}
+
+	negativeSize := -5.0
+	bad = validInput("Bad Size")
+	bad.SizeMB = &negativeSize
+	if _, err := svc.Create(ctx, orgID, bad); err == nil {
+		t.Fatal("Create with a negative sizeMb succeeded, want a validation error")
+	}
+}
+
+func TestDuplicateCopiesListingFields(t *testing.T) {
+	pool := mustPool(t)
+	ctx := context.Background()
+	orgID := seedOrg(t, ctx, pool)
+
+	svc := pwa.NewService(pwa.NewRepository(pool))
+	rating := 4.9
+	in := validInput("Source With Listing")
+	in.Developer = "Acme"
+	in.Rating = &rating
+	created, err := svc.Create(ctx, orgID, in)
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+
+	dup, err := svc.Duplicate(ctx, orgID, created.ID)
+	if err != nil {
+		t.Fatalf("Duplicate: %v", err)
+	}
+	if dup.Developer != "Acme" || dup.Rating == nil || *dup.Rating != 4.9 {
+		t.Fatalf("Duplicate = %+v, want listing fields copied from the source", dup)
+	}
+}
+
+func TestScreenshotsWhatsNewAndRatingBreakdownRoundTrip(t *testing.T) {
+	pool := mustPool(t)
+	ctx := context.Background()
+	orgID := seedOrg(t, ctx, pool)
+
+	svc := pwa.NewService(pwa.NewRepository(pool))
+
+	// Never entered: Screenshots must come back an empty (not nil) slice
+	// and WhatsNew/RatingStars* must come back empty/nil, not fabricated.
+	created, err := svc.Create(ctx, orgID, validInput("No Gallery Data"))
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	if created.Screenshots == nil || len(created.Screenshots) != 0 {
+		t.Fatalf("Screenshots = %#v, want an empty slice", created.Screenshots)
+	}
+	if created.WhatsNew != "" {
+		t.Fatalf("WhatsNew = %q, want empty", created.WhatsNew)
+	}
+	if created.RatingStars5 != nil || created.RatingStars1 != nil {
+		t.Fatalf("RatingStars5/1 = %v/%v, want both nil", created.RatingStars5, created.RatingStars1)
+	}
+
+	s5, s4, s3, s2, s1 := 80.0, 15.0, 3.0, 1.0, 1.0
+	in := validInput("With Gallery Data")
+	in.Screenshots = []string{" https://cdn.example.com/shot1.png ", "https://cdn.example.com/shot2.png"}
+	in.WhatsNew = "  Fixed a crash on launch  "
+	in.RatingStars5, in.RatingStars4, in.RatingStars3, in.RatingStars2, in.RatingStars1 = &s5, &s4, &s3, &s2, &s1
+
+	withData, err := svc.Create(ctx, orgID, in)
+	if err != nil {
+		t.Fatalf("Create with gallery data: %v", err)
+	}
+	if len(withData.Screenshots) != 2 || withData.Screenshots[0] != "https://cdn.example.com/shot1.png" {
+		t.Fatalf("Screenshots = %#v, want trimmed URLs", withData.Screenshots)
+	}
+	if withData.WhatsNew != "Fixed a crash on launch" {
+		t.Fatalf("WhatsNew = %q, want trimmed", withData.WhatsNew)
+	}
+	if withData.RatingStars5 == nil || *withData.RatingStars5 != 80.0 {
+		t.Fatalf("RatingStars5 = %v, want 80.0", withData.RatingStars5)
+	}
+	if withData.RatingStars1 == nil || *withData.RatingStars1 != 1.0 {
+		t.Fatalf("RatingStars1 = %v, want 1.0", withData.RatingStars1)
+	}
+
+	// A blank row from the frontend's add/remove screenshot list editor
+	// must never persist as an empty-string URL.
+	withBlank := validInput("Blank Screenshot Row")
+	withBlank.Screenshots = []string{"https://cdn.example.com/shot1.png", "   ", ""}
+	created2, err := svc.Create(ctx, orgID, withBlank)
+	if err != nil {
+		t.Fatalf("Create with a blank screenshot row: %v", err)
+	}
+	if len(created2.Screenshots) != 1 {
+		t.Fatalf("Screenshots = %#v, want the blank rows dropped", created2.Screenshots)
+	}
+
+	newWhatsNew := "v2: added dark mode"
+	updated, err := svc.Update(ctx, orgID, created.ID, pwa.UpdateInput{WhatsNew: &newWhatsNew})
+	if err != nil {
+		t.Fatalf("Update: %v", err)
+	}
+	if updated.WhatsNew != newWhatsNew {
+		t.Fatalf("WhatsNew after Update = %q, want %q", updated.WhatsNew, newWhatsNew)
+	}
+}
+
+func TestCreateRejectsOutOfRangeGalleryFields(t *testing.T) {
+	pool := mustPool(t)
+	ctx := context.Background()
+	orgID := seedOrg(t, ctx, pool)
+
+	svc := pwa.NewService(pwa.NewRepository(pool))
+
+	bad := validInput("Bad Screenshot URL")
+	bad.Screenshots = []string{"not-a-url"}
+	if _, err := svc.Create(ctx, orgID, bad); err == nil {
+		t.Fatal("Create with an invalid screenshot URL succeeded, want a validation error")
+	}
+
+	tooHigh := 150.0
+	bad = validInput("Bad Rating Star Percentage")
+	bad.RatingStars5 = &tooHigh
+	if _, err := svc.Create(ctx, orgID, bad); err == nil {
+		t.Fatal("Create with ratingStars5=150 succeeded, want a validation error (must be 0-100)")
+	}
+}
+
+func TestDuplicateCopiesGalleryFields(t *testing.T) {
+	pool := mustPool(t)
+	ctx := context.Background()
+	orgID := seedOrg(t, ctx, pool)
+
+	svc := pwa.NewService(pwa.NewRepository(pool))
+	s5 := 90.0
+	in := validInput("Source With Gallery")
+	in.Screenshots = []string{"https://cdn.example.com/shot1.png"}
+	in.WhatsNew = "Initial release"
+	in.RatingStars5 = &s5
+	created, err := svc.Create(ctx, orgID, in)
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+
+	dup, err := svc.Duplicate(ctx, orgID, created.ID)
+	if err != nil {
+		t.Fatalf("Duplicate: %v", err)
+	}
+	if len(dup.Screenshots) != 1 || dup.WhatsNew != "Initial release" || dup.RatingStars5 == nil || *dup.RatingStars5 != 90.0 {
+		t.Fatalf("Duplicate = %+v, want gallery fields copied from the source", dup)
+	}
+}
+
 func TestCrossTenantIsolation(t *testing.T) {
 	pool := mustPool(t)
 	ctx := context.Background()

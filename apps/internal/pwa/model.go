@@ -39,10 +39,34 @@ type Pwa struct {
 	// bounce in-app WebView traffic (FB/IG/TikTok/Telegram) to the
 	// external browser so the install prompt can fire. Not vendor
 	// moderator detection, which §73 forbids.
-	BounceInAppWebview bool      `json:"bounceInAppWebview"`
-	Status             Status    `json:"status"`
-	CreatedAt          time.Time `json:"createdAt"`
-	UpdatedAt          time.Time `json:"updatedAt"`
+	BounceInAppWebview bool   `json:"bounceInAppWebview"`
+	Developer          string `json:"developer"`
+	Description        string `json:"description"`
+	// Rating/RatingCount/SizeMB are nil together when never entered —
+	// distinct from 0, which would render as a fabricated "0 stars"/"0 MB"
+	// in the store-listing preview (CLAUDE.md #6's "never compute/display
+	// against a fabricated zero" applied to this listing-preview data,
+	// not just cost/ROI).
+	Rating         *float64 `json:"rating,omitempty"`
+	RatingCount    *int     `json:"ratingCount,omitempty"`
+	DownloadsLabel string   `json:"downloadsLabel"`
+	SizeMB         *float64 `json:"sizeMb,omitempty"`
+	// Screenshots is an ordered list of image URLs for the listing
+	// gallery — same text[] shape postlanding.Postlanding.Events uses.
+	Screenshots []string `json:"screenshots"`
+	WhatsNew    string   `json:"whatsNew"`
+	// RatingStars5..1 are each independently nullable — a star bucket's
+	// percentage that was never entered stays "—" in the review
+	// breakdown, not a fabricated 0% (same reasoning as Rating/
+	// RatingCount/SizeMB above).
+	RatingStars5 *float64  `json:"ratingStars5,omitempty"`
+	RatingStars4 *float64  `json:"ratingStars4,omitempty"`
+	RatingStars3 *float64  `json:"ratingStars3,omitempty"`
+	RatingStars2 *float64  `json:"ratingStars2,omitempty"`
+	RatingStars1 *float64  `json:"ratingStars1,omitempty"`
+	Status       Status    `json:"status"`
+	CreatedAt    time.Time `json:"createdAt"`
+	UpdatedAt    time.Time `json:"updatedAt"`
 }
 
 type CreateInput struct {
@@ -53,10 +77,30 @@ type CreateInput struct {
 	IconURL            string
 	StartURL           string
 	BounceInAppWebview bool
+	Developer          string
+	Description        string
+	Rating             *float64
+	RatingCount        *int
+	DownloadsLabel     string
+	SizeMB             *float64
+	Screenshots        []string
+	WhatsNew           string
+	RatingStars5       *float64
+	RatingStars4       *float64
+	RatingStars3       *float64
+	RatingStars2       *float64
+	RatingStars1       *float64
 }
 
 // UpdateInput fields are pointers so PATCH can distinguish "not sent"
 // from "sent as zero value" — matching landing.UpdateInput/network.UpdateInput.
+// Rating/RatingCount/SizeMB/RatingStars5..1 nil means "not sent, leave
+// as-is," same as every other field here; there's no way to PATCH one
+// of these back to SQL NULL once set, matching every other optional
+// field in this codebase (none support an explicit-clear PATCH either).
+// Screenshots is *[]string for the same reason postlanding.UpdateInput's
+// Events is — nil means "not sent", an empty non-nil slice means "sent,
+// clear the list".
 type UpdateInput struct {
 	Name               *string
 	ShortName          *string
@@ -65,5 +109,18 @@ type UpdateInput struct {
 	IconURL            *string
 	StartURL           *string
 	BounceInAppWebview *bool
+	Developer          *string
+	Description        *string
+	Rating             *float64
+	RatingCount        *int
+	DownloadsLabel     *string
+	SizeMB             *float64
+	Screenshots        *[]string
+	WhatsNew           *string
+	RatingStars5       *float64
+	RatingStars4       *float64
+	RatingStars3       *float64
+	RatingStars2       *float64
+	RatingStars1       *float64
 	Status             *Status
 }

@@ -5,6 +5,129 @@ per-phase, matching `CLAUDE.md`'s phase protocol. The one exception is
 [Between phases], below: spec amendments and the code changes that follow from
 them land between phases and would otherwise be invisible here.
 
+## [Between phases] — PWA create page: live store-listing preview
+
+User shared a reference tracker's PWA builder screenshot (settings on
+the left, a live Google-Play-listing phone mockup on the right, plus a
+"parse a Google Play URL" assets feature) and asked for the same.
+Scoped it with the user first: two independent pieces of very different
+size — a visual redesign (frontend-only) vs. Google Play scraping (a
+genuinely new backend capability, nothing like it existed anywhere in
+the repo). User chose the preview first, with real form fields behind
+it rather than fabricated stats. Google Play URL parsing itself was
+**not** built — deliberately deferred pending explicit go-ahead.
+
+**Backend** (migrations 00023, 00024): `pwas` gained `developer`,
+`description`, `rating`/`rating_count`/`size_mb` (nullable — "never
+entered" stays a distinct, honest state from a fabricated 0,
+CLAUDE.md #6), `downloads_label`, `screenshots` (ordered `text[]`, same
+shape `postlanding.Events` already uses), `whats_new`, and
+`rating_stars_5`..`rating_stars_1` (each independently nullable
+percentage). `apps/internal/pwa`'s model/repository/service/handler and
+`Duplicate` carry all fields through; `validateListingFields` was
+refactored to take a struct once it grew this many optional fields, and
+a new `trimAll` helper drops blank rows from the frontend's screenshot
+list editor before they'd otherwise persist as empty-string URLs.
+
+**Frontend**: `pwa-form.tsx` is now a two-column
+`lg:grid-cols-[1fr_440px]` layout — the existing Web App Manifest
+fields plus a "store listing" section (developer/downloads/description/
+rating/rating count/size, a 5-column star-breakdown row, a "what's new"
+textarea, and a `useFieldArray` screenshot-URL list editor mirroring
+`offer-form.tsx`'s `links` pattern) on the left, a new sticky
+`features/pwa/pwa-preview-card.tsx` on the right. Numeric optional
+fields use `register(name, { setValueAs })` rather than `z.preprocess`,
+which would make the zod resolver's input/output types diverge —
+`@hookform/resolvers`' `Resolver<Input, Context, Output>` rejects that
+against a single-type `useForm<PwaFormValues>` (documented inline).
+
+The preview card grew, in a second round the same session, from a
+compact stat card into the full scrollable listing page the user's
+follow-up reference (this time real rendered HTML, not the loader
+script — `cdn.adset.pro/pwa-app.js` was declined as an uncontrolled
+third-party script, a supply-chain risk) showed: a screenshot gallery
+(hidden entirely when empty, never a placeholder box), About/
+description, update date, a short generic Data Safety paragraph (own
+wording, not Google's verbatim legal copy), Ratings & reviews with live
+per-star bars, What's New (hidden when empty), then a purely decorative
+footer + bottom nav bar matching Google Play's own chrome (confirmed
+with the user these go nowhere real, by design). In a third round, the
+card was widened to a real phone's CSS width (280px → 390px, iPhone
+14/15-class) per explicit request, with the sidebar column widened to
+match. In a fourth round, the user pasted the reference's raw `<head>`
+HTML twice asking to load `cdn.adset.pro/pwa-app.js` (a rival tracker's
+own rendering engine) and Google Translate's `element.js`; both declined
+as supply-chain/privacy risk — the rendered output those scripts produce
+was already matched directly in round two, so the loaders themselves add
+nothing. The one legitimate finding applied: "Google Sans" isn't
+actually served by Google Fonts (Google's internal-only typeface) — set
+its real fallback chain (`-apple-system, BlinkMacSystemFont, "Segoe
+UI", Roboto, sans-serif`) directly via inline style, no external font
+request. Also built natively, with no machine translation, the
+"Арабский текст" toggle from the original screenshot: a `dir` prop
+threaded through to the card's root element, flipped by a `Switch` in
+the preview panel's header — the existing flex layout mirrors for free
+under `dir="rtl"` via the browser's own direction-aware flexbox.
+
+Verified across all four rounds: `go build/vet/test -count=1 ./...`
+clean, including new round-trip/range-validation/Duplicate-copies-fields
+tests against real Postgres for every new field.
+`tsc`/`eslint`/`vitest` clean on `apps/web` (one pre-existing, unrelated
+TS error in an untracked, not-this-phase `page.tsx` left alone). Real
+browser passes: typed into every field (including adding a screenshot
+row) and confirmed via DOM assertions that every section actually
+rendered; a full create → redirect → edit-page-reload round trip
+confirmed via a direct Postgres query that every field persisted
+correctly — the verification PWA row was deleted afterward, not left
+behind.
+
+## [Between phases] — PWA create page: live store-listing preview
+
+User shared a reference tracker's PWA builder screenshot (settings on
+the left, a live Google-Play-listing phone mockup on the right, plus a
+"parse a Google Play URL" assets feature) and asked for the same.
+Scoped it with the user first, since it was really two independent
+pieces of work of very different size: a visual redesign (frontend-
+only) vs. Google Play scraping (a genuinely new backend capability —
+no scraping/external-fetch anything existed anywhere in the repo). User
+chose the preview first, and asked for real form fields behind it
+rather than a preview showing fabricated stats. Google Play URL parsing
+itself was NOT built this round — deliberately deferred pending
+explicit go-ahead.
+
+Backend: migration `00023_pwa_listing_fields.sql` adds
+`developer`/`description`/`rating`/`rating_count`/`downloads_label`/
+`size_mb` to `pwas` — `rating`/`rating_count`/`size_mb` nullable, so
+"never entered" stays a distinct, honest state from a fabricated 0
+(CLAUDE.md #6, same reasoning cost/ROI fields already use). Threaded
+through `apps/internal/pwa`'s model/repository/service/handler/
+Duplicate; a new `validateListingFields` enforces range checks (rating
+0-5, non-negative count/size) while leaving every field optional.
+
+Frontend: `pwa-form.tsx` restructured into a two-column
+`lg:grid-cols-[1fr_300px]` layout — the existing Web App Manifest
+fields plus six new "store listing" inputs on the left, a new sticky
+`features/pwa/pwa-preview-card.tsx` (a Google-Play-listing phone
+mockup, deliberately light-themed regardless of host dark mode — it's
+simulating a screenshot of a different app) on the right, live-updating
+off the form's existing `useWatch`. Numeric fields use
+`register(name, { setValueAs })` rather than `z.preprocess`, which
+would have made the zod resolver's input/output types diverge —
+`@hookform/resolvers`' `Resolver<Input, Context, Output>` rejects that
+against a single-type `useForm<PwaFormValues>` (documented inline).
+
+Verified: `go build/vet/test -count=1 ./...` clean, including new
+listing-field round-trip/range-validation/Duplicate-copies-fields tests
+against real Postgres. `tsc`/`eslint`/`vitest` clean on `apps/web` (one
+pre-existing, unrelated TS error in an untracked, not-this-phase
+`page.tsx` left alone). Real browser pass: typed into every new field
+and watched the preview update live (rating "4.8★"/"2453 отзыва",
+downloads "50K+", size "32 МБ", icon — all correct, and correctly
+showing placeholders/"—" before anything's typed), then a full
+create → redirect → edit-page-reload round trip confirmed via a direct
+Postgres query that every field persisted; the verification row was
+deleted afterward, not left behind.
+
 ## [Between phases] — Geo/ASN provider switched to DB-IP Lite (no registration)
 
 Follow-up to the Geo/ASN provider entry directly below: the user asked

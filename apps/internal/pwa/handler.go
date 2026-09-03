@@ -54,13 +54,26 @@ func (h *Handler) get(w http.ResponseWriter, r *http.Request) {
 }
 
 type createRequest struct {
-	Name               string `json:"name"`
-	ShortName          string `json:"shortName"`
-	ThemeColor         string `json:"themeColor"`
-	BackgroundColor    string `json:"backgroundColor"`
-	IconURL            string `json:"iconUrl"`
-	StartURL           string `json:"startUrl"`
-	BounceInAppWebview bool   `json:"bounceInAppWebview"`
+	Name               string   `json:"name"`
+	ShortName          string   `json:"shortName"`
+	ThemeColor         string   `json:"themeColor"`
+	BackgroundColor    string   `json:"backgroundColor"`
+	IconURL            string   `json:"iconUrl"`
+	StartURL           string   `json:"startUrl"`
+	BounceInAppWebview bool     `json:"bounceInAppWebview"`
+	Developer          string   `json:"developer"`
+	Description        string   `json:"description"`
+	Rating             *float64 `json:"rating"`
+	RatingCount        *int     `json:"ratingCount"`
+	DownloadsLabel     string   `json:"downloadsLabel"`
+	SizeMB             *float64 `json:"sizeMb"`
+	Screenshots        []string `json:"screenshots"`
+	WhatsNew           string   `json:"whatsNew"`
+	RatingStars5       *float64 `json:"ratingStars5"`
+	RatingStars4       *float64 `json:"ratingStars4"`
+	RatingStars3       *float64 `json:"ratingStars3"`
+	RatingStars2       *float64 `json:"ratingStars2"`
+	RatingStars1       *float64 `json:"ratingStars1"`
 }
 
 func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
@@ -80,6 +93,19 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 		IconURL:            req.IconURL,
 		StartURL:           req.StartURL,
 		BounceInAppWebview: req.BounceInAppWebview,
+		Developer:          req.Developer,
+		Description:        req.Description,
+		Rating:             req.Rating,
+		RatingCount:        req.RatingCount,
+		DownloadsLabel:     req.DownloadsLabel,
+		SizeMB:             req.SizeMB,
+		Screenshots:        req.Screenshots,
+		WhatsNew:           req.WhatsNew,
+		RatingStars5:       req.RatingStars5,
+		RatingStars4:       req.RatingStars4,
+		RatingStars3:       req.RatingStars3,
+		RatingStars2:       req.RatingStars2,
+		RatingStars1:       req.RatingStars1,
 	})
 	if err != nil {
 		apierror.Write(w, h.logger, err)
@@ -89,14 +115,27 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 }
 
 type updateRequest struct {
-	Name               *string `json:"name"`
-	ShortName          *string `json:"shortName"`
-	ThemeColor         *string `json:"themeColor"`
-	BackgroundColor    *string `json:"backgroundColor"`
-	IconURL            *string `json:"iconUrl"`
-	StartURL           *string `json:"startUrl"`
-	BounceInAppWebview *bool   `json:"bounceInAppWebview"`
-	Status             *Status `json:"status"`
+	Name               *string   `json:"name"`
+	ShortName          *string   `json:"shortName"`
+	ThemeColor         *string   `json:"themeColor"`
+	BackgroundColor    *string   `json:"backgroundColor"`
+	IconURL            *string   `json:"iconUrl"`
+	StartURL           *string   `json:"startUrl"`
+	BounceInAppWebview *bool     `json:"bounceInAppWebview"`
+	Developer          *string   `json:"developer"`
+	Description        *string   `json:"description"`
+	Rating             *float64  `json:"rating"`
+	RatingCount        *int      `json:"ratingCount"`
+	DownloadsLabel     *string   `json:"downloadsLabel"`
+	SizeMB             *float64  `json:"sizeMb"`
+	Screenshots        *[]string `json:"screenshots"`
+	WhatsNew           *string   `json:"whatsNew"`
+	RatingStars5       *float64  `json:"ratingStars5"`
+	RatingStars4       *float64  `json:"ratingStars4"`
+	RatingStars3       *float64  `json:"ratingStars3"`
+	RatingStars2       *float64  `json:"ratingStars2"`
+	RatingStars1       *float64  `json:"ratingStars1"`
+	Status             *Status   `json:"status"`
 }
 
 func (h *Handler) update(w http.ResponseWriter, r *http.Request) {
@@ -116,6 +155,19 @@ func (h *Handler) update(w http.ResponseWriter, r *http.Request) {
 		IconURL:            req.IconURL,
 		StartURL:           req.StartURL,
 		BounceInAppWebview: req.BounceInAppWebview,
+		Developer:          req.Developer,
+		Description:        req.Description,
+		Rating:             req.Rating,
+		RatingCount:        req.RatingCount,
+		DownloadsLabel:     req.DownloadsLabel,
+		SizeMB:             req.SizeMB,
+		Screenshots:        req.Screenshots,
+		WhatsNew:           req.WhatsNew,
+		RatingStars5:       req.RatingStars5,
+		RatingStars4:       req.RatingStars4,
+		RatingStars3:       req.RatingStars3,
+		RatingStars2:       req.RatingStars2,
+		RatingStars1:       req.RatingStars1,
 		Status:             req.Status,
 	})
 	if err != nil {
