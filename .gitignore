@@ -33,6 +33,13 @@ apps/api/api
 apps/tracker/tracker
 apps/worker/worker
 
+# --- MaxMind GeoIP databases (docs/geoip.md) ---
+# License-restricted, downloaded per-deployment with the operator's own
+# MaxMind account — never committed. Does NOT cover
+# apps/internal/classifier/maxmind/testdata/*.mmdb, MaxMind's own public
+# CC0/Apache test fixtures, which are real test data and belong in git.
+infra/geoip/*.mmdb
+
 # --- Data stores / local infra ---
 *.db
 *.sqlite

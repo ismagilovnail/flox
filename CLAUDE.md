@@ -19,6 +19,68 @@ referenced below as §N).
 ## CURRENT STATE — UPDATE THIS EVERY PHASE
 
 ```
+CURRENT PHASE : GEO/ASN PROVIDER — MAXMIND GEOLITE2 (user-scoped, post-Phase-34)
+STATUS        : done — follow-up to the Click Log phase below, which
+                surfaced that classifier.NoopGeoProvider/NoopASNProvider
+                were still the only providers wired up (country/city/ASN
+                always empty). Added apps/internal/classifier/maxmind: a
+                real GeoProvider/ASNProvider implementation against local
+                MaxMind GeoLite2 .mmdb files (github.com/oschwald/
+                geoip2-golang, new dependency) — the interfaces
+                themselves needed no changes (CLAUDE.md #11). New config
+                GEOIP_CITY_DB_PATH/GEOIP_ASN_DB_PATH (.env.example,
+                apps/internal/config), wired into apps/tracker/main.go
+                replacing classifier.New(nil, nil, nil) — best-effort at
+                startup exactly like the existing ClickHouse/Redis
+                handling (CLAUDE.md #9): missing/bad path logs a warning
+                and falls back to Noop, never blocks the redirect path.
+                A per-IP lookup miss is likewise not an error — same
+                empty result Noop returns. infra/docker-compose.dev.yml's
+                tracker service bind-mounts infra/geoip/ (gitignored) at
+                /geoip and points both env vars at it.
+                MaxMind's databases need a free account + license key
+                (EULA prohibits redistributing them) — no .mmdb ships in
+                the repo, docs/geoip.md has the signup/download steps;
+                that's the one manual step left, on the user.
+                apps/internal/classifier/maxmind/testdata/ carries
+                MaxMind's own public Apache-2.0 test fixtures instead,
+                used for this session's verification.
+                Verified: go build/vet/test -count=1 ./... clean,
+                including fixture-backed unit tests (known IP ->
+                country/region/city and IP -> ASN, plus the "not in
+                database" no-error case). Real end-to-end pass against
+                the actual dev tracker: bind-mounted the test fixtures,
+                recreated the tracker container, hit a real tracking
+                link via curl with a spoofed X-Forwarded-For through the
+                real redirect path, confirmed the resulting click_events
+                row in ClickHouse carried the real looked-up country/
+                region/city/asn — not just an isolated unit test. Also
+                verified graceful degradation: removed the fixtures,
+                restarted, confirmed a clean warning log and normal
+                startup, lookups falling back to empty. Fixtures removed
+                from infra/geoip/ afterward — no real GeoLite2 data
+                obtained or tested (no MaxMind account available).
+LAST COMMIT   : (pending — this phase not yet committed)
+UNCOMMITTED   : this phase's own work (see STATUS above) — apps/internal/
+                classifier/maxmind/* (incl. testdata/*.mmdb),
+                apps/internal/config/config.go, apps/tracker/main.go,
+                apps/go.mod/go.sum, .env.example,
+                infra/docker-compose.dev.yml, infra/geoip/README.md,
+                .gitignore, docs/geoip.md, docs/click-log.md (one caveat
+                line updated), this CHANGELOG entry. Same pre-existing
+                unrelated uncommitted work noted in the superseded block
+                below is still untouched in the tree.
+NEXT          : confirm scope before starting. Real candidates: (a) the
+                pre-existing list from the superseded block below, still
+                open; (b) once the user has real GeoLite2 data in
+                infra/geoip/, nothing further to build — it's a drop-in.
+
+```
+
+<details>
+<summary>Superseded — Click Log (kept for history, see above for current state)</summary>
+
+```
 CURRENT PHASE : CLICK LOG (user-scoped, post-Phase-34)
 STATUS        : done — user asked whether FLOX captures per-click IP/geo;
                 shown that click_events always has (IP/UserAgent/geo/
@@ -84,6 +146,8 @@ NEXT          : confirm scope before starting. Real candidates: (a) a
                 list from the superseded block below, still open.
 
 ```
+
+</details>
 
 <details>
 <summary>Superseded — Campaign edit page layout (kept for history, see above for current state)</summary>

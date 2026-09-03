@@ -23,6 +23,7 @@ import (
 	"github.com/ismagilovnail/flox/apps/internal/chconn"
 	"github.com/ismagilovnail/flox/apps/internal/chstore"
 	"github.com/ismagilovnail/flox/apps/internal/classifier"
+	"github.com/ismagilovnail/flox/apps/internal/classifier/maxmind"
 	"github.com/ismagilovnail/flox/apps/internal/config"
 	"github.com/ismagilovnail/flox/apps/internal/conversion"
 	"github.com/ismagilovnail/flox/apps/internal/eventbuf"
@@ -83,9 +84,35 @@ func run() error {
 	defer events.Close()
 	metrics.RegisterEventBufStats(events)
 
+	// Geo/ASN are best-effort at startup, same stance as ClickHouse/Redis
+	// below (CLAUDE.md #9): an unset or bad GeoIP path must never block
+	// the redirect path or prevent the tracker from starting — it just
+	// falls back to classifier.New's own Noop defaults, exactly the
+	// pre-existing behavior when nothing is configured.
+	var geoProvider classifier.GeoProvider
+	if cfg.GeoIPCityDBPath != "" {
+		p, err := maxmind.NewGeoProvider(cfg.GeoIPCityDBPath)
+		if err != nil {
+			logger.Warn("geoip city database unavailable, geo classification disabled", "path", cfg.GeoIPCityDBPath, "error", err)
+		} else {
+			defer p.Close()
+			geoProvider = p
+		}
+	}
+	var asnProvider classifier.ASNProvider
+	if cfg.GeoIPASNDBPath != "" {
+		p, err := maxmind.NewASNProvider(cfg.GeoIPASNDBPath)
+		if err != nil {
+			logger.Warn("geoip asn database unavailable, asn classification disabled", "path", cfg.GeoIPASNDBPath, "error", err)
+		} else {
+			defer p.Close()
+			asnProvider = p
+		}
+	}
+
 	handler := &Handler{
 		store:      routingstore.New(db),
-		classifier: classifier.New(nil, nil, nil),
+		classifier: classifier.New(geoProvider, asnProvider, nil),
 		engine:     &routing.Engine{},
 		events:     events,
 		logger:     logger,

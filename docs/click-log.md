@@ -42,10 +42,13 @@ N+1 fetch per campaign, out of scope for a read-only log).
 
 ## What this does NOT change
 
-- **Geo/ASN are still not really populated.** `apps/internal/classifier`'s
-  `NoopGeoProvider`/`NoopASNProvider` are still the dev default — country/
-  city/ASN columns render `—` for real traffic until a real provider (e.g.
-  MaxMind GeoLite2) is wired up. That's separate, scoped work.
+- **Geo/ASN population depends on a manual step.** A real provider now
+  exists (`apps/internal/classifier/maxmind`, `docs/geoip.md`), but it
+  needs a MaxMind `.mmdb` file the operator supplies (license-restricted,
+  can't ship in the repo). Until that file is in place, country/city/ASN
+  columns still render `—` for real traffic — `NoopGeoProvider`/
+  `NoopASNProvider` are still what an unconfigured deployment falls back
+  to.
 - **No retention policy.** `click_events` still has no TTL
   (`001_click_events.sql`'s own doc comment) and IP/UA are stored raw,
   unhashed, unanonymized — this page surfaces that data, it doesn't change

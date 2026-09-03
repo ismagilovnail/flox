@@ -33,6 +33,16 @@ type Config struct {
 	SMTPURL  string
 	MailFrom string
 
+	// --- Geo/ASN (apps/internal/classifier/maxmind) ---
+	// Local MaxMind GeoLite2 .mmdb file paths — both empty (the default,
+	// since no database ships in the repo; MaxMind's EULA requires a free
+	// account + license key to download one) means apps/tracker falls back
+	// to classifier.NoopGeoProvider/NoopASNProvider, same as before this
+	// existed. See docs/geoip.md for how to obtain and mount real
+	// databases.
+	GeoIPCityDBPath string
+	GeoIPASNDBPath  string
+
 	// --- OpenTelemetry ---
 	OTelExporterOTLPEndpoint string
 	OTelServiceName          string
@@ -95,6 +105,9 @@ func load(portVar, portDefault, defaultServiceName string) (Config, error) {
 
 		SMTPURL:  getEnv("SMTP_URL", "smtp://localhost:1025"),
 		MailFrom: getEnv("MAIL_FROM", "FLOX <no-reply@floxlink.io>"),
+
+		GeoIPCityDBPath: getEnv("GEOIP_CITY_DB_PATH", ""),
+		GeoIPASNDBPath:  getEnv("GEOIP_ASN_DB_PATH", ""),
 
 		OTelExporterOTLPEndpoint: getEnv("OTEL_EXPORTER_OTLP_ENDPOINT", ""),
 		OTelServiceName:          getEnv("OTEL_SERVICE_NAME", defaultServiceName),

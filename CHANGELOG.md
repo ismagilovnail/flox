@@ -5,6 +5,50 @@ per-phase, matching `CLAUDE.md`'s phase protocol. The one exception is
 [Between phases], below: spec amendments and the code changes that follow from
 them land between phases and would otherwise be invisible here.
 
+## [Between phases] — real Geo/ASN provider (MaxMind GeoLite2)
+
+Follow-up to the Click Log phase below: that page surfaced that
+`apps/internal/classifier`'s `NoopGeoProvider`/`NoopASNProvider` were
+still the only providers wired up, so country/city/ASN always rendered
+empty. Added `apps/internal/classifier/maxmind`, a real implementation
+of both `GeoProvider`/`ASNProvider` against local MaxMind GeoLite2
+`.mmdb` files (`github.com/oschwald/geoip2-golang`, new dependency) —
+the interfaces themselves needed no changes (CLAUDE.md #11, "providers
+behind interfaces"). New config: `GEOIP_CITY_DB_PATH`/`GEOIP_ASN_DB_PATH`
+(`.env.example`, `apps/internal/config`), wired into
+`apps/tracker/main.go` in place of the old `classifier.New(nil, nil,
+nil)`, best-effort at startup exactly like the existing ClickHouse/Redis
+handling (CLAUDE.md #9 — a missing/bad path logs a warning and falls
+back to Noop, never blocks the redirect path or crashes the tracker). A
+per-IP lookup miss (address not in the database) is likewise not an
+error — same empty result a Noop provider returns, not fabricated data.
+`infra/docker-compose.dev.yml`'s `tracker` service now bind-mounts
+`infra/geoip/` (gitignored) at `/geoip` and points both env vars at it.
+
+MaxMind's GeoLite2 databases require a free account + license key to
+download (EULA prohibits redistributing the files), so no `.mmdb` ships
+in the repo and this can't be fully automated — `docs/geoip.md` has the
+signup/download steps; `apps/internal/classifier/maxmind/testdata/`
+carries MaxMind's own public, Apache-2.0 test fixtures instead, used for
+this session's own verification.
+
+Verified: `go build/vet/test -count=1 ./...` clean, including
+fixture-backed unit tests (known IP → country/region/city and IP → ASN
+lookups, plus the "not in database" no-error case) and a compile-time
+check that both providers satisfy the existing interfaces. Real
+end-to-end pass against the actual dev tracker: bind-mounted the test
+fixtures into `infra/geoip/`, recreated the `tracker` container, hit a
+real tracking link (`curl` with a spoofed `X-Forwarded-For`) through the
+real redirect path, and confirmed the resulting `click_events` row in
+ClickHouse carried the real looked-up `country`/`region`/`city`/`asn` —
+not just a unit test in isolation. Also verified the graceful-degradation
+path: removed the fixtures, restarted the tracker, confirmed a clean
+warning log and normal startup (no crash) with lookups falling back to
+empty. Test fixtures were removed from `infra/geoip/` afterward — no
+real GeoLite2 data was obtained or tested this session (no MaxMind
+account available); that step is on the user, documented in
+`docs/geoip.md`.
+
 ## [Between phases] — Click Log: row-level click_events page
 
 User asked whether FLOX captures per-click IP/geo, and once shown it does
