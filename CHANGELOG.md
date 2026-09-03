@@ -5,6 +5,43 @@ per-phase, matching `CLAUDE.md`'s phase protocol. The one exception is
 [Between phases], below: spec amendments and the code changes that follow from
 them land between phases and would otherwise be invisible here.
 
+## [Between phases] — Geo/ASN provider switched to DB-IP Lite (no registration)
+
+Follow-up to the Geo/ASN provider entry directly below: the user asked
+for MaxMind GeoLite2 specifically, but MaxMind's own signup refused this
+account both over a VPN and on a direct connection (the user is in
+Russia). `apps/internal/classifier/maxmind`'s implementation already
+depends only on `github.com/oschwald/geoip2-golang`, which recognizes
+DB-IP's `.mmdb` format natively alongside MaxMind's (confirmed via the
+library's own `getDBType` switch, which lists `DBIP-City-Lite`/
+`DBIP-ASN-Lite` cases) — so no code changed to switch vendors, only
+`infra/docker-compose.dev.yml`'s default `GEOIP_CITY_DB_PATH`/
+`GEOIP_ASN_DB_PATH`, now pointed at `dbip-city-lite.mmdb`/
+`dbip-asn-lite.mmdb`. DB-IP Lite downloads directly over HTTPS with zero
+account (`https://download.db-ip.com/free/dbip-{city,asn}-lite-<YYYY-MM>.mmdb.gz`),
+CC BY 4.0 licensed (free including commercial use, attribution required
+if the product is ever shown outside the org).
+
+Found and fixed one real gap the switch surfaced: DB-IP's free tier
+leaves subdivision `IsoCode` empty (GeoLite2 always populates it) —
+`GeoProvider.Lookup`'s region logic silently returned `""` for every
+DB-IP result. Extracted into a new `regionOf` helper that falls back to
+the subdivision's English name when `IsoCode` is empty, covered by new
+unit tests (`region_internal_test.go`) since a real `.mmdb` fixture with
+an empty `IsoCode` wasn't available to test against directly.
+
+Real DB-IP Lite databases are now live in `infra/geoip/` (gitignored,
+not committed — same as any vendor's files would be). Verified
+end-to-end against the real dev tracker with this actual live data (not
+a fixture cleaned up afterward): a real click through the redirect path
+with `X-Forwarded-For: 8.8.8.8` produced `country=US, region=California,
+city=Mountain View, asn=AS15169` in the resulting ClickHouse
+`click_events` row, confirmed rendering correctly in the Click Log page
+in a real browser session. `go build/vet/test -count=1 ./...` clean.
+MaxMind GeoLite2 remains documented as an alternative (`docs/geoip.md`)
+if the user ever gets an account — swapping back needs only the two
+files and two env vars, no code change.
+
 ## [Between phases] — real Geo/ASN provider (MaxMind GeoLite2)
 
 Follow-up to the Click Log phase below: that page surfaced that

@@ -19,56 +19,77 @@ referenced below as §N).
 ## CURRENT STATE — UPDATE THIS EVERY PHASE
 
 ```
-CURRENT PHASE : GEO/ASN PROVIDER — MAXMIND GEOLITE2 (user-scoped, post-Phase-34)
+CURRENT PHASE : GEO/ASN PROVIDER — LIVE ON DB-IP LITE (user-scoped, post-Phase-34)
 STATUS        : done — follow-up to the Click Log phase below, which
                 surfaced that classifier.NoopGeoProvider/NoopASNProvider
                 were still the only providers wired up (country/city/ASN
                 always empty). Added apps/internal/classifier/maxmind: a
                 real GeoProvider/ASNProvider implementation against local
-                MaxMind GeoLite2 .mmdb files (github.com/oschwald/
-                geoip2-golang, new dependency) — the interfaces
-                themselves needed no changes (CLAUDE.md #11). New config
-                GEOIP_CITY_DB_PATH/GEOIP_ASN_DB_PATH (.env.example,
-                apps/internal/config), wired into apps/tracker/main.go
-                replacing classifier.New(nil, nil, nil) — best-effort at
-                startup exactly like the existing ClickHouse/Redis
-                handling (CLAUDE.md #9): missing/bad path logs a warning
-                and falls back to Noop, never blocks the redirect path.
-                A per-IP lookup miss is likewise not an error — same
-                empty result Noop returns. infra/docker-compose.dev.yml's
+                .mmdb files (github.com/oschwald/geoip2-golang, new
+                dependency) — the interfaces themselves needed no changes
+                (CLAUDE.md #11). New config GEOIP_CITY_DB_PATH/
+                GEOIP_ASN_DB_PATH (.env.example, apps/internal/config),
+                wired into apps/tracker/main.go replacing classifier.
+                New(nil, nil, nil) — best-effort at startup exactly like
+                the existing ClickHouse/Redis handling (CLAUDE.md #9):
+                missing/bad path logs a warning and falls back to Noop,
+                never blocks the redirect path. A per-IP lookup miss is
+                likewise not an error. infra/docker-compose.dev.yml's
                 tracker service bind-mounts infra/geoip/ (gitignored) at
                 /geoip and points both env vars at it.
-                MaxMind's databases need a free account + license key
-                (EULA prohibits redistributing them) — no .mmdb ships in
-                the repo, docs/geoip.md has the signup/download steps;
-                that's the one manual step left, on the user.
+                First pass tried MaxMind GeoLite2, the usual free option
+                — blocked: MaxMind's signup refused this account both via
+                VPN and direct connection (user is in Russia). Switched
+                the dev stack's default to DB-IP Lite instead: same
+                geoip2-golang library reads its .mmdb format natively (no
+                code changes needed, confirmed via getDBType's own
+                DBIP-City-Lite/DBIP-ASN-Lite recognition), downloadable
+                directly over HTTPS with zero registration, CC BY 4.0
+                (free incl. commercial use, attribution required if ever
+                shown outside the org — see docs/geoip.md). Real DB-IP
+                Lite databases are live in infra/geoip/ right now
+                (dbip-city-lite.mmdb/dbip-asn-lite.mmdb, gitignored,
+                re-download monthly for freshness per docs/geoip.md) —
+                this is not a placeholder, it's the actual configured
+                provider. Found and fixed one real gap the switch
+                surfaced: DB-IP's free tier leaves subdivision IsoCode
+                empty (GeoLite2 always has it) — regionOf now falls back
+                to the English name instead of silently dropping region
+                data that exists, covered by new unit tests.
                 apps/internal/classifier/maxmind/testdata/ carries
-                MaxMind's own public Apache-2.0 test fixtures instead,
-                used for this session's verification.
+                MaxMind's own public Apache-2.0 test fixtures (unrelated
+                to DB-IP, kept for the unit tests below) — committed,
+                small, no license key needed.
+                MaxMind GeoLite2 remains available as an alternative
+                (docs/geoip.md has both paths) if the user later creates
+                an account themselves — not attempted further this
+                session per explicit instruction to leave DB-IP as-is.
                 Verified: go build/vet/test -count=1 ./... clean,
                 including fixture-backed unit tests (known IP ->
-                country/region/city and IP -> ASN, plus the "not in
-                database" no-error case). Real end-to-end pass against
-                the actual dev tracker: bind-mounted the test fixtures,
-                recreated the tracker container, hit a real tracking
-                link via curl with a spoofed X-Forwarded-For through the
-                real redirect path, confirmed the resulting click_events
-                row in ClickHouse carried the real looked-up country/
-                region/city/asn — not just an isolated unit test. Also
-                verified graceful degradation: removed the fixtures,
-                restarted, confirmed a clean warning log and normal
-                startup, lookups falling back to empty. Fixtures removed
-                from infra/geoip/ afterward — no real GeoLite2 data
-                obtained or tested (no MaxMind account available).
-LAST COMMIT   : feat(classifier): real Geo/ASN provider via MaxMind
-                GeoLite2 — de24d58
+                country/region/city and IP -> ASN, the "not in database"
+                no-error case, and regionOf's ISO-code/name-fallback
+                logic). Real end-to-end pass against the actual dev
+                tracker using the real, currently-live DB-IP databases:
+                hit a real tracking link via curl with X-Forwarded-For:
+                8.8.8.8 through the real redirect path, confirmed the
+                resulting click_events row in ClickHouse carried
+                country=US/region=California/city=Mountain View/
+                asn=AS15169, and confirmed the same row renders correctly
+                in the Click Log page in a real browser session. Also
+                separately verified graceful degradation with MaxMind's
+                test fixtures: removed them, restarted, confirmed a clean
+                warning log and normal startup, lookups falling back to
+                empty.
+LAST COMMIT   : feat(classifier): switch default Geo/ASN source to DB-IP
+                Lite, no registration required — fc39384
 UNCOMMITTED   : none of this phase's own work. Same pre-existing
                 unrelated uncommitted work noted in the superseded block
                 below is still untouched in the tree.
 NEXT          : confirm scope before starting. Real candidates: (a) the
                 pre-existing list from the superseded block below, still
-                open; (b) once the user has real GeoLite2 data in
-                infra/geoip/, nothing further to build — it's a drop-in.
+                open; (b) if the user ever gets a MaxMind account, switch
+                infra/geoip/'s two files and docker-compose's two env
+                vars over — no code change needed, just a data swap.
 
 ```
 
