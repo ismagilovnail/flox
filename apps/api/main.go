@@ -23,6 +23,7 @@ import (
 	"github.com/ismagilovnail/flox/apps/internal/campaign"
 	"github.com/ismagilovnail/flox/apps/internal/chconn"
 	"github.com/ismagilovnail/flox/apps/internal/chstore"
+	"github.com/ismagilovnail/flox/apps/internal/clicklogs"
 	"github.com/ismagilovnail/flox/apps/internal/config"
 	"github.com/ismagilovnail/flox/apps/internal/conversion"
 	"github.com/ismagilovnail/flox/apps/internal/conversions"
@@ -340,6 +341,12 @@ func run() error {
 		srv.Mux().Route("/conversions", func(r chi.Router) {
 			r.Use(tenantMiddleware)
 			conversionsHandler.Register(r)
+		})
+
+		clickLogsHandler := clicklogs.NewHandler(clicklogs.NewService(events), logger)
+		srv.Mux().Route("/click-log", func(r chi.Router) {
+			r.Use(tenantMiddleware)
+			clickLogsHandler.Register(r)
 		})
 
 		// Incoming Postback Replay needs the exact dependency graph

@@ -1,0 +1,53 @@
+{
+  "view": {
+    "title": "Click Log",
+    "description": "Every SOURCE_CLICK and SOURCE_FILTER event over the last 7 days, one row per visit — IP, geo, device, and everything else the tracker captured. No retention policy exists yet, so rows are kept indefinitely (see docs/click-log.md).",
+    "loading": "Loading click log…",
+    "loadError": "Couldn't load the click log",
+    "searchPlaceholder": "Search click log…",
+    "emptyTitle": "No clicks yet",
+    "emptyDescription": "Clicks will show up here once traffic starts hitting a tracking link."
+  },
+  "columns": {
+    "time": "Time",
+    "type": "Type",
+    "campaign": "Campaign",
+    "clickId": "Click ID",
+    "country": "Country",
+    "city": "City",
+    "device": "Device",
+    "os": "OS",
+    "browser": "Browser",
+    "ip": "IP",
+    "region": "Region",
+    "platform": "Platform",
+    "osVersion": "OS Version",
+    "browserVersion": "Browser Version",
+    "language": "Language",
+    "bot": "Bot",
+    "proxy": "Proxy",
+    "asn": "ASN",
+    "connectionType": "Connection",
+    "userAgent": "User Agent",
+    "referrer": "Referrer",
+    "utmSource": "UTM Source",
+    "utmMedium": "UTM Medium",
+    "utmCampaign": "UTM Campaign",
+    "utmContent": "UTM Content",
+    "utmTerm": "UTM Term",
+    "sub": "Sub{{n}}",
+    "externalClickId": "External Click ID",
+    "fbClickId": "FB Click ID",
+    "ttClickId": "TT Click ID",
+    "destination": "Destination",
+    "streamSetId": "Stream Set ID",
+    "flowId": "Flow ID",
+    "sticky": "Sticky",
+    "filterReason": "Filter Reason"
+  },
+  "type": {
+    "SOURCE_CLICK": "Click",
+    "SOURCE_FILTER": "Filtered"
+  },
+  "yes": "Yes"
+}

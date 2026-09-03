@@ -100,6 +100,7 @@ function DataTable<TData extends Record<string, unknown>>({
   enableRowSelection = false,
   getRowId,
   bulkActions,
+  initialColumnVisibility,
 }: {
   columns: ColumnDef<typeof dataTableFeatures, TData>[]
   data: TData[]
@@ -116,6 +117,8 @@ function DataTable<TData extends Record<string, unknown>>({
   getRowId?: (row: TData) => string
   /** Rendered in a toolbar that appears only while rows are selected. */
   bulkActions?: (ctx: { selectedRows: TData[]; clearSelection: () => void }) => React.ReactNode
+  /** Columns hidden on first render (still toggleable via the Columns menu) — for a table with more columns than fit comfortably at once. Omitted means every column starts visible, as before. */
+  initialColumnVisibility?: Record<string, boolean>
 }) {
   const { t } = useTranslation("common")
   const [sorting, setSorting] = React.useState<
@@ -124,7 +127,7 @@ function DataTable<TData extends Record<string, unknown>>({
   const [globalFilter, setGlobalFilter] = React.useState("")
   const [columnVisibility, setColumnVisibility] = React.useState<
     Record<string, boolean>
-  >({})
+  >(initialColumnVisibility ?? {})
   const [pagination, setPagination] = React.useState({
     pageIndex: 0,
     pageSize,

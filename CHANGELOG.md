@@ -5,6 +5,45 @@ per-phase, matching `CLAUDE.md`'s phase protocol. The one exception is
 [Between phases], below: spec amendments and the code changes that follow from
 them land between phases and would otherwise be invisible here.
 
+## [Between phases] — Click Log: row-level click_events page
+
+User asked whether FLOX captures per-click IP/geo, and once shown it does
+(`click_events` has always stored it — `IP`/`UserAgent`/geo/device fields
+on `apps/internal/event.Event`), asked to see it in the UI. There was no
+such screen: `apps/internal/analytics` and the report builder only ever
+expose aggregates, and no page did row-level reads of `click_events`.
+
+Added a new read-only "Click Log" page — one row per `SOURCE_CLICK`/
+`SOURCE_FILTER` visit, org-wide, newest first, paginated, mirroring
+`apps/internal/postbacklogs`' read side (same 90-day range cap, same
+50/200 default/max page size). New backend: `chstore.EventStore.
+ListClickLog`/`CountClickLog` (`apps/internal/chstore/click_log.go`), a
+new `apps/internal/clicklogs` package (model/service/handler), mounted at
+`GET /click-log`. No writes/replay — a click row isn't a retriable action
+the way a postback attempt is. New frontend: `features/clicklogs/*`, a
+`/click-log` page under "Traffic" in the nav (right after Campaigns).
+Every `click_events` column is reachable via the table's Columns menu;
+only a practical subset (time/type/campaign/click id/country/city/
+device/OS/browser/IP) is visible by default — `DataTable` gained a
+generic `initialColumnVisibility` prop for this. Campaign ids resolve to
+names via the existing `useCampaigns()` list; stream-set/flow ids are
+left as raw ids (no org-wide stream-set listing exists, and resolving
+those would mean an N+1 fetch per campaign).
+
+Deliberately unchanged, and called out on the page itself and in
+`docs/click-log.md`: geo/ASN are still `NoopGeoProvider`/
+`NoopASNProvider` (render as `—` for real traffic), and `click_events`
+still has no retention policy — IP/UA are stored raw and indefinitely.
+Both are real, separately-scoped decisions, not silently fixed here.
+
+Verified: `go build/vet/test -count=1 ./...` clean, including a real-
+ClickHouse integration test (list/count, pagination, newest-first, the
+IP/geo/device/subs round-trip, cross-org isolation). `tsc --noEmit`/
+`eslint` clean on `apps/web`. Real browser pass against the actual
+reporting user's own account: real rows render (real internal IPs,
+resolved campaign names), Columns menu toggles every hidden field
+correctly, no console errors.
+
 ## [Between phases] — campaign edit page: two-column layout matching a reference tracker UI
 
 User shared a screenshot of another tracker's campaign edit page (compact

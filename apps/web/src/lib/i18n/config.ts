@@ -44,6 +44,7 @@ import enStreamSets from "@/lib/i18n/locales/en/streamSets.json";
 import enRoutingSimulator from "@/lib/i18n/locales/en/routingSimulator.json";
 import enConversions from "@/lib/i18n/locales/en/conversions.json";
 import enPostbacks from "@/lib/i18n/locales/en/postbacks.json";
+import enClickLog from "@/lib/i18n/locales/en/clickLog.json";
 import enPixels from "@/lib/i18n/locales/en/pixels.json";
 import enAuth from "@/lib/i18n/locales/en/auth.json";
 import enAnalytics from "@/lib/i18n/locales/en/analytics.json";
@@ -63,6 +64,7 @@ import ruStreamSets from "@/lib/i18n/locales/ru/streamSets.json";
 import ruRoutingSimulator from "@/lib/i18n/locales/ru/routingSimulator.json";
 import ruConversions from "@/lib/i18n/locales/ru/conversions.json";
 import ruPostbacks from "@/lib/i18n/locales/ru/postbacks.json";
+import ruClickLog from "@/lib/i18n/locales/ru/clickLog.json";
 import ruPixels from "@/lib/i18n/locales/ru/pixels.json";
 import ruAuth from "@/lib/i18n/locales/ru/auth.json";
 import ruAnalytics from "@/lib/i18n/locales/ru/analytics.json";
@@ -91,6 +93,7 @@ export const NAMESPACES = [
   "routingSimulator",
   "conversions",
   "postbacks",
+  "clickLog",
   "pixels",
   "auth",
   "analytics",
@@ -113,6 +116,7 @@ const resources = {
     routingSimulator: enRoutingSimulator,
     conversions: enConversions,
     postbacks: enPostbacks,
+    clickLog: enClickLog,
     pixels: enPixels,
     auth: enAuth,
     analytics: enAnalytics,
@@ -133,6 +137,7 @@ const resources = {
     routingSimulator: ruRoutingSimulator,
     conversions: ruConversions,
     postbacks: ruPostbacks,
+    clickLog: ruClickLog,
     pixels: ruPixels,
     auth: ruAuth,
     analytics: ruAnalytics,

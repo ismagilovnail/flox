@@ -1,0 +1,53 @@
+{
+  "view": {
+    "title": "Журнал кликов",
+    "description": "Все события SOURCE_CLICK и SOURCE_FILTER за последние 7 дней, по одной строке на визит — IP, гео, устройство и всё остальное, что зафиксировал трекер. Политики хранения пока нет, строки хранятся бессрочно (см. docs/click-log.md).",
+    "loading": "Загрузка журнала кликов…",
+    "loadError": "Не удалось загрузить журнал кликов",
+    "searchPlaceholder": "Поиск по журналу кликов…",
+    "emptyTitle": "Пока нет кликов",
+    "emptyDescription": "Клики появятся здесь, как только начнётся трафик по трекинг-ссылке."
+  },
+  "columns": {
+    "time": "Время",
+    "type": "Тип",
+    "campaign": "Кампания",
+    "clickId": "Click ID",
+    "country": "Страна",
+    "city": "Город",
+    "device": "Устройство",
+    "os": "ОС",
+    "browser": "Браузер",
+    "ip": "IP",
+    "region": "Регион",
+    "platform": "Платформа",
+    "osVersion": "Версия ОС",
+    "browserVersion": "Версия браузера",
+    "language": "Язык",
+    "bot": "Бот",
+    "proxy": "Прокси",
+    "asn": "ASN",
+    "connectionType": "Соединение",
+    "userAgent": "User Agent",
+    "referrer": "Реферер",
+    "utmSource": "UTM Source",
+    "utmMedium": "UTM Medium",
+    "utmCampaign": "UTM Campaign",
+    "utmContent": "UTM Content",
+    "utmTerm": "UTM Term",
+    "sub": "Sub{{n}}",
+    "externalClickId": "External Click ID",
+    "fbClickId": "FB Click ID",
+    "ttClickId": "TT Click ID",
+    "destination": "Назначение",
+    "streamSetId": "Stream Set ID",
+    "flowId": "Flow ID",
+    "sticky": "Sticky",
+    "filterReason": "Причина фильтрации"
+  },
+  "type": {
+    "SOURCE_CLICK": "Клик",
+    "SOURCE_FILTER": "Отфильтровано"
+  },
+  "yes": "Да"
+}

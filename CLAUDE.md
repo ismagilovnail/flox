@@ -19,6 +19,72 @@ referenced below as §N).
 ## CURRENT STATE — UPDATE THIS EVERY PHASE
 
 ```
+CURRENT PHASE : CLICK LOG (user-scoped, post-Phase-34)
+STATUS        : done — user asked whether FLOX captures per-click IP/geo;
+                shown that click_events always has (IP/UserAgent/geo/
+                device on apps/internal/event.Event), they asked to see
+                it in the UI. No such screen existed — analytics/the
+                report builder only ever expose aggregates, never
+                row-level click_events reads. Added a read-only Click Log
+                page: one row per SOURCE_CLICK/SOURCE_FILTER visit,
+                org-wide, newest first, paginated — mirrors
+                apps/internal/postbacklogs' read side (same 90-day range
+                cap, same 50/200 default/max page size). New backend:
+                chstore.EventStore.ListClickLog/CountClickLog
+                (chstore/click_log.go), new apps/internal/clicklogs
+                package (model/service/handler), mounted at GET
+                /click-log. No writes/replay — a click row isn't
+                retriable like a postback attempt. New frontend:
+                features/clicklogs/* (click-log-view.tsx, click-log-
+                columns.tsx), /click-log page under "Traffic" in the nav
+                (after Campaigns). Every click_events column is
+                reachable via the table's Columns menu; only a practical
+                default subset (time/type/campaign/click id/country/
+                city/device/OS/browser/IP) is visible on first load —
+                DataTable gained a generic initialColumnVisibility prop
+                for this (apps/web/src/components/ui/data-table.tsx).
+                Campaign ids resolve to names via the existing
+                useCampaigns() list; stream-set/flow ids stay raw (no
+                org-wide stream-set listing exists, and resolving those
+                would mean an N+1 fetch per campaign).
+                Deliberately unchanged, called out on the page and in
+                docs/click-log.md: geo/ASN are still NoopGeoProvider/
+                NoopASNProvider (render "—" for real traffic — a real
+                provider is separately-scoped work); click_events still
+                has no retention policy, IP/UA stored raw and
+                indefinitely (a real compliance decision for the user to
+                make explicitly, not invented here).
+                Verified: go build/vet/test -count=1 ./... clean,
+                including a real-ClickHouse integration test
+                (chstore/click_log_test.go — list/count, pagination,
+                newest-first, IP/geo/device/subs round-trip, cross-org
+                isolation per CLAUDE.md #5). tsc --noEmit/eslint clean.
+                Real browser pass against the actual reporting user's
+                own account: real rows render (real internal IPs,
+                resolved campaign names), Columns menu correctly toggles
+                every hidden field, no console errors.
+LAST COMMIT   : (pending — this phase not yet committed)
+UNCOMMITTED   : this phase's own work (see STATUS above) — backend
+                (chstore/click_log.go + _test.go, apps/internal/
+                clicklogs/*, apps/api/main.go route wiring), frontend
+                (lib/api/click-logs.ts, hooks/use-click-logs.ts,
+                features/clicklogs/*, app/(app)/click-log/page.tsx,
+                lib/nav.ts, i18n clickLog.json en+ru + config.ts
+                registration, data-table.tsx's initialColumnVisibility
+                prop), docs/click-log.md, this CHANGELOG entry.
+NEXT          : confirm scope before starting. Real candidates: (a) a
+                real Geo/ASN provider (e.g. MaxMind GeoLite2) behind the
+                existing classifier.GeoProvider/ASNProvider interfaces —
+                no go.mod dependency, config plumbing, or docker-compose
+                .mmdb volume exists yet for this; (b) the pre-existing
+                list from the superseded block below, still open.
+
+```
+
+<details>
+<summary>Superseded — Campaign edit page layout (kept for history, see above for current state)</summary>
+
+```
 CURRENT PHASE : CAMPAIGN EDIT PAGE LAYOUT (user-scoped, post-Phase-34)
 STATUS        : done — user shared a reference tracker's campaign edit
                 screenshot (compact settings + tracking-link block left,
@@ -63,6 +129,8 @@ NEXT          : confirm scope before starting — same real candidates as
                 conversion events so per-set stats could be real.
 
 ```
+
+</details>
 
 <details>
 <summary>Superseded — Domains + Tracking Links (kept for history, see above for current state)</summary>

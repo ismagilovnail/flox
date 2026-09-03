@@ -10,6 +10,7 @@ import {
   ImagesIcon,
   LayoutDashboardIcon,
   LinkIcon,
+  ListIcon,
   MegaphoneIcon,
   NetworkIcon,
   RadioIcon,
@@ -60,6 +61,7 @@ export const NAV_GROUPS: NavGroup[] = [
     label: "groups.traffic",
     items: [
       { label: "items.campaigns", href: "/campaigns", icon: MegaphoneIcon },
+      { label: "items.clickLog", href: "/click-log", icon: ListIcon },
       { label: "items.trafficSources", href: "/traffic-sources", icon: RadioIcon },
       { label: "items.offers", href: "/offers", icon: TagIcon },
       { label: "items.networks", href: "/networks", icon: NetworkIcon },
