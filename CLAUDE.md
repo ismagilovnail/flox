@@ -63,15 +63,19 @@ STATUS        : done — user asked whether FLOX captures per-click IP/geo;
                 own account: real rows render (real internal IPs,
                 resolved campaign names), Columns menu correctly toggles
                 every hidden field, no console errors.
-LAST COMMIT   : (pending — this phase not yet committed)
-UNCOMMITTED   : this phase's own work (see STATUS above) — backend
-                (chstore/click_log.go + _test.go, apps/internal/
-                clicklogs/*, apps/api/main.go route wiring), frontend
-                (lib/api/click-logs.ts, hooks/use-click-logs.ts,
-                features/clicklogs/*, app/(app)/click-log/page.tsx,
-                lib/nav.ts, i18n clickLog.json en+ru + config.ts
-                registration, data-table.tsx's initialColumnVisibility
-                prop), docs/click-log.md, this CHANGELOG entry.
+LAST COMMIT   : feat(analytics): read-only Click Log page (IP/geo/device
+                per visit) — 36003de
+UNCOMMITTED   : none of this phase's own work. NOTE: the working tree
+                also carries a large amount of pre-existing, unrelated
+                uncommitted work this phase deliberately left untouched
+                and did not commit — a Sheet-to-full-page conversion
+                across several features (domains/landings/networks/
+                offers/pixels/postlanding/pwa/traffic-sources: *-form-
+                sheet.tsx deleted, new *-form.tsx/*-detail-view.tsx/
+                new-*-view.tsx added) plus stream-set filter-picker
+                changes and a new relative-time.tsx component. Not this
+                session's work to explain or commit — flag to the user
+                before touching any of those files.
 NEXT          : confirm scope before starting. Real candidates: (a) a
                 real Geo/ASN provider (e.g. MaxMind GeoLite2) behind the
                 existing classifier.GeoProvider/ASNProvider interfaces —
