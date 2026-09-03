@@ -187,16 +187,17 @@ services:
       CLICKHOUSE_USER: flox
       CLICKHOUSE_PASSWORD: ""
       REDIS_URL: redis://redis:6379/0
-      # No .mmdb ships in the repo — MaxMind's EULA requires a free
-      # account + license key to download one (docs/geoip.md). These
-      # paths point at infra/geoip/ (bind-mounted below, gitignored);
-      # until the two files actually exist there, opening them fails at
-      # tracker startup and it falls back to its Noop geo/ASN providers
-      # (a warning log, not a crash — same behavior as before this
-      # existed). Drop GeoLite2-City.mmdb/GeoLite2-ASN.mmdb in and
-      # restart the tracker service to enable real lookups.
-      GEOIP_CITY_DB_PATH: /geoip/GeoLite2-City.mmdb
-      GEOIP_ASN_DB_PATH: /geoip/GeoLite2-ASN.mmdb
+      # No .mmdb ships in the repo (docs/geoip.md). These paths point at
+      # infra/geoip/ (bind-mounted below, gitignored); until the files
+      # actually exist there, opening them fails at tracker startup and
+      # it falls back to its Noop geo/ASN providers (a warning log, not a
+      # crash — same behavior as before this existed). Default filenames
+      # are DB-IP Lite's (CC BY 4.0, no registration required) —
+      # apps/internal/classifier/maxmind reads either DB-IP or MaxMind
+      # GeoLite2 databases unmodified; rename these two if using MaxMind
+      # instead. Restart the tracker service after adding the files.
+      GEOIP_CITY_DB_PATH: /geoip/dbip-city-lite.mmdb
+      GEOIP_ASN_DB_PATH: /geoip/dbip-asn-lite.mmdb
     volumes:
       - ../apps:/src
       - tracker_go_mod_cache:/go/pkg/mod

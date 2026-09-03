@@ -57,15 +57,33 @@ func (p *GeoProvider) Lookup(_ context.Context, ip net.IP) (classifier.GeoResult
 	if err != nil {
 		return classifier.GeoResult{}, fmt.Errorf("maxmind: city lookup: %w", err)
 	}
-	var region string
-	if len(record.Subdivisions) > 0 {
-		region = record.Subdivisions[0].IsoCode
-	}
 	return classifier.GeoResult{
 		Country: record.Country.IsoCode,
-		Region:  region,
+		Region:  regionOf(record.Subdivisions),
 		City:    record.City.Names["en"],
 	}, nil
+}
+
+// regionOf takes geoip2.City's Subdivisions and reads the top-level one
+// (index 0 — e.g. "England" for a London IP, not the more specific
+// county nested after it), preferring its ISO code when the database has
+// one (GeoLite2 always does) and falling back to its English name
+// otherwise. DB-IP Lite — a no-registration-required alternative source,
+// see docs/geoip.md — leaves IsoCode empty on its free tier; the name
+// fallback keeps region data that exists instead of silently dropping it.
+func regionOf(subdivisions []struct {
+	Names     map[string]string `maxminddb:"names"`
+	IsoCode   string            `maxminddb:"iso_code"`
+	GeoNameID uint              `maxminddb:"geoname_id"`
+}) string {
+	if len(subdivisions) == 0 {
+		return ""
+	}
+	top := subdivisions[0]
+	if top.IsoCode != "" {
+		return top.IsoCode
+	}
+	return top.Names["en"]
 }
 
 // ASNProvider reads the autonomous system number from a GeoLite2-ASN (or
