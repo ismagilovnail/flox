@@ -7,6 +7,7 @@ import { LoadingState } from "@/components/ui/loading-state";
 import { ErrorState } from "@/components/ui/error-state";
 import { usePwa, useUpdatePwa } from "@/hooks/use-pwas";
 import { PwaForm, type PwaFormValues } from "@/features/pwa/pwa-form";
+import { PwaRowActions } from "@/features/pwa/pwa-row-actions";
 import type { Pwa } from "@/lib/api/pwa";
 
 function toFormValues(pwa: Pwa): PwaFormValues {
@@ -72,6 +73,7 @@ export function PwaDetailView({ id }: { id: string }) {
       defaultValues={toFormValues(pwa)}
       submitLabel={t("form.submitEdit")}
       onSubmit={handleSubmit}
+      headerActions={<PwaRowActions pwa={pwa} variant="inline" />}
     />
   );
 }

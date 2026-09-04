@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, type CSSProperties } from "react";
 import {
   ArrowRightIcon,
   BookOpenIcon,
@@ -34,6 +34,27 @@ const REF_VERIFIED_BADGE_BLUE = "#4285f4";
 const REF_BORDER = "#dadce0";
 
 const STAR_ROWS = [5, 4, 3, 2, 1] as const;
+
+/** Perceived-brightness check (ITU-R BT.601 weights) — used only to flip
+ * the mockup's own light/dark theme against the operator's chosen
+ * `background_color`, not to pick a single text color the way an
+ * earlier, now-removed widget once did. */
+function isDarkColor(hex?: string): boolean {
+  if (!hex || !/^#[0-9a-fA-F]{6}$/.test(hex)) return false;
+  const r = parseInt(hex.slice(1, 3), 16);
+  const g = parseInt(hex.slice(3, 5), 16);
+  const b = parseInt(hex.slice(5, 7), 16);
+  return (r * 299 + g * 587 + b * 114) / 1000 < 128;
+}
+
+/** `accent` at 10% opacity, for the active-nav-pill highlight — can't be
+ * a static Tailwind class since `accent` is a runtime value. */
+function withAlpha(hex: string, alpha: number): string {
+  const r = parseInt(hex.slice(1, 3), 16);
+  const g = parseInt(hex.slice(3, 5), 16);
+  const b = parseInt(hex.slice(5, 7), 16);
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
 
 /** The real multicolor Google Play triangle mark from the reference markup — an inline vector, not a fetched asset. */
 function GooglePlayGlyph() {
@@ -89,7 +110,7 @@ function VerifiedBadge() {
 function SizeGlyph() {
   return (
     <svg
-      className="size-[18px] text-slate-900"
+      className="size-[18px] text-[var(--pv-text)]"
       viewBox="0 0 24 24"
       fill="none"
       xmlns="http://www.w3.org/2000/svg"
@@ -118,18 +139,18 @@ function SizeGlyph() {
   );
 }
 
-/** One star of the review-summary row, filled left-to-right by `fill` (0–1) the way the reference clips its own star SVG. */
-function PartialStar({ fill }: { fill: number }) {
+/** One star of the review-summary row, filled left-to-right by `fill` (0–1) the way the reference clips its own star SVG. `accent` — see PwaPreviewCard's own doc — replaces the reference's fixed green here too. */
+function PartialStar({ fill, accent }: { fill: number; accent: string }) {
   return (
     <span className="relative inline-flex size-4">
-      <StarIcon className="size-4 fill-slate-200 text-slate-200" />
+      <StarIcon className="size-4 fill-[var(--pv-star-empty)] text-[var(--pv-star-empty)]" />
       <span
         className="absolute inset-y-0 left-0 overflow-hidden"
         style={{ width: `${Math.round(fill * 100)}%` }}
       >
         <StarIcon
           className="size-4"
-          style={{ fill: REF_PRIMARY, color: REF_PRIMARY }}
+          style={{ fill: accent, color: accent }}
         />
       </span>
     </span>
@@ -201,17 +222,17 @@ function ScreenshotsCarousel({ screenshots, t }: { screenshots: string[]; t: TFu
   );
 }
 
-function StarBar({ n, pct }: { n: number; pct?: number }) {
+function StarBar({ n, pct, accent }: { n: number; pct?: number; accent: string }) {
   const hasValue = typeof pct === "number" && !Number.isNaN(pct);
   return (
-    <div className="flex items-center gap-2 text-xs text-slate-600">
+    <div className="flex items-center gap-2 text-xs text-[var(--pv-text-muted)]">
       <span className="w-2 text-right">{n}</span>
-      <div className="h-2.5 flex-1 overflow-hidden rounded-full bg-slate-100">
+      <div className="h-2.5 flex-1 overflow-hidden rounded-full bg-[var(--pv-subtle-bg)]">
         <div
           className="h-full rounded-full"
           style={{
             width: `${hasValue ? Math.min(100, Math.max(0, pct)) : 0}%`,
-            backgroundColor: REF_PRIMARY,
+            backgroundColor: accent,
           }}
         />
       </div>
@@ -221,17 +242,22 @@ function StarBar({ n, pct }: { n: number; pct?: number }) {
 }
 
 /**
- * A live Google-Play-listing mockup — deliberately light/white regardless
- * of host theme (it's simulating a screenshot of a different app, the
- * same reason a browser-preview mockup would render a light webpage even
- * inside a dark host UI). Every data field renders exactly what the
- * operator entered in PwaForm; nothing here is a fabricated number
- * (CLAUDE.md #6) — rating/reviews/downloads/size/breakdown all fall back
- * to "—" or an omitted section when unset, never a fake placeholder
- * value, and an unset icon renders no icon at all rather than an
- * invented letter avatar (the reference behaves the same way). Footer
- * links and the bottom nav bar are pure decoration (match the real
- * Google Play chrome, go nowhere) — not backed by any field.
+ * A live Google-Play-listing mockup. Its own light/dark theme is
+ * independent of the host app's theme (it's simulating a screenshot of a
+ * different app, the same reason a browser-preview mockup would render a
+ * light webpage even inside a dark host UI) — instead it follows
+ * `backgroundColor` (manifest `background_color`, pwa-form.tsx's "Тема"
+ * dropdown), same deliberate-convenience reasoning as `accentColor`
+ * below: a real Google Play listing is always light, never driven by an
+ * app's own declared background — this is FLOX's own preview affordance,
+ * not a claim about real store behavior. Every data field renders
+ * exactly what the operator entered in PwaForm; nothing here is a
+ * fabricated number (CLAUDE.md #6) — rating/reviews/downloads/size/
+ * breakdown all fall back to "—" or an omitted section when unset, never
+ * a fake placeholder value, and an unset icon renders no icon at all
+ * rather than an invented letter avatar (the reference behaves the same
+ * way). Footer links and the bottom nav bar are pure decoration (match
+ * the real Google Play chrome, go nowhere) — not backed by any field.
  */
 export function PwaPreviewCard({
   t,
@@ -243,6 +269,8 @@ export function PwaPreviewCard({
   ratingCount,
   downloadsLabel,
   sizeMb,
+  accentColor,
+  backgroundColor,
   screenshots,
   whatsNew,
   ratingStars5,
@@ -269,6 +297,28 @@ export function PwaPreviewCard({
   ratingCount?: number;
   downloadsLabel?: string;
   sizeMb?: number;
+  /** The PWA's own manifest `theme_color` (pwa-form.tsx's "Цветовая
+   * схема" dropdown) — used as this preview's own accent (install
+   * button, verified badge, rating star/bars, active-nav highlight),
+   * replacing what was the reference's own fixed brand green
+   * everywhere. Real Google Play never does this (a listing always uses
+   * Google's own branding, not an app's declared color) — this is a
+   * deliberate FLOX-specific convenience so an operator can preview
+   * their own brand accent, not a claim about how the real store
+   * renders. Falls back to the reference's own green when unset/
+   * invalid, so an empty new PWA still looks like the reference did
+   * before this existed. */
+  accentColor?: string;
+  /** The PWA's own manifest `background_color` (pwa-form.tsx's "Тема"
+   * dropdown) — flips this whole mockup between a light and a dark
+   * theme (background/text/border/hover colors throughout, incl. the
+   * "About this app" sheet) based on the color's own perceived
+   * brightness. Same deliberate-convenience reasoning as `accentColor`:
+   * a real Google Play listing is always light regardless of an app's
+   * declared background, so this is FLOX's own preview affordance, not
+   * a claim about how the real store renders. Falls back to light when
+   * unset/invalid. */
+  backgroundColor?: string;
   screenshots?: string[];
   whatsNew?: string;
   ratingStars5?: number;
@@ -298,6 +348,17 @@ export function PwaPreviewCard({
   dir?: "ltr" | "rtl";
   className?: string;
 }) {
+  const accent = /^#[0-9a-fA-F]{6}$/.test(accentColor ?? "") ? accentColor! : REF_PRIMARY;
+  const dark = isDarkColor(backgroundColor);
+  const themeVars = {
+    "--pv-bg": dark ? "#18181b" : "#ffffff",
+    "--pv-text": dark ? "#f4f4f5" : "#0f172a",
+    "--pv-text-muted": dark ? "#a1a1aa" : "#475569",
+    "--pv-text-subtle": dark ? "#d4d4d8" : "#334155",
+    "--pv-border": dark ? "#3f3f46" : REF_BORDER,
+    "--pv-subtle-bg": dark ? "#27272a" : "#f1f5f9",
+    "--pv-star-empty": dark ? "#52525b" : "#e2e8f0",
+  } as CSSProperties;
   const hasRating = typeof rating === "number" && !Number.isNaN(rating);
   const ratingText = hasRating
     ? new Intl.NumberFormat(undefined, {
@@ -383,29 +444,34 @@ export function PwaPreviewCard({
     <div
       dir={dir}
       className={cn(
-        "relative mx-auto flex w-[390px] max-w-full flex-col overflow-hidden rounded-[2.5rem] border-[12px] border-neutral-900 bg-white text-slate-900 shadow-xl dark:border-neutral-800",
+        "relative mx-auto flex w-[390px] max-w-full flex-col overflow-hidden rounded-[2.5rem] border-[12px] border-neutral-900 bg-[var(--pv-bg)] text-[var(--pv-text)] shadow-xl dark:border-neutral-800",
         className,
       )}
       // Matches the reference listing's own font stack minus "Google
       // Sans" itself — that name isn't actually served by Google Fonts
       // (it's Google's internal-only typeface), so their real rendered
       // font is this exact system-font fallback chain already. Using it
-      // directly needs no external font request at all.
+      // directly needs no external font request at all. The --pv-*
+      // custom properties (see `themeVars` above) drive every light/dark
+      // color below; they cascade to every descendant, including the
+      // "About this app" sheet, so no nested element needs its own
+      // dark-mode branching.
       style={{
         fontFamily:
           '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+        ...themeVars,
       }}
     >
       <div className="flex max-h-[70vh] flex-col overflow-y-auto">
         <div
-          className="sticky top-0 z-10 flex items-center justify-between border-b bg-white px-4 py-3"
-          style={{ borderColor: REF_BORDER }}
+          className="sticky top-0 z-10 flex items-center justify-between border-b bg-[var(--pv-bg)] px-4 py-3"
+          style={{ borderColor: "var(--pv-border)" }}
         >
-          <div className="flex items-center gap-2 text-lg font-medium text-slate-900">
+          <div className="flex items-center gap-2 text-lg font-medium text-[var(--pv-text)]">
             <GooglePlayGlyph />
             Google Play
           </div>
-          <div className="flex items-center gap-4 text-slate-900">
+          <div className="flex items-center gap-4 text-[var(--pv-text)]">
             <SearchIcon className="size-6" />
             <HelpCircleIcon className="size-6" />
           </div>
@@ -425,17 +491,17 @@ export function PwaPreviewCard({
               </div>
             )}
             <div className="flex min-w-0 flex-col gap-0.5">
-              <p className="text-[22px] font-semibold leading-tight text-slate-900">
+              <p className="text-[22px] font-semibold leading-tight text-[var(--pv-text)]">
                 {displayName}
               </p>
               <p
                 className="flex items-center gap-1.5 text-base font-medium"
-                style={{ color: REF_PRIMARY }}
+                style={{ color: accent }}
               >
                 {displayDeveloper}
                 <VerifiedBadge />
               </p>
-              <p className="text-xs text-slate-600">
+              <p className="text-xs text-[var(--pv-text-muted)]">
                 {monetizationNotes.length > 0
                   ? monetizationNotes.join(" · ")
                   : t("preview.adFree", { ns: "pwa" })}
@@ -445,31 +511,31 @@ export function PwaPreviewCard({
 
           <div className="flex items-center justify-around text-center">
             <div className="flex flex-col items-center gap-1">
-              <span className="flex items-center gap-1 text-base font-semibold text-slate-900">
+              <span className="flex items-center gap-1 text-base font-semibold text-[var(--pv-text)]">
                 {ratingText}
                 <StarIcon
                   className="size-3.5"
-                  style={{ fill: REF_PRIMARY, color: REF_PRIMARY }}
+                  style={{ fill: accent, color: accent }}
                 />
               </span>
-              <span className="flex items-center gap-1 text-xs text-slate-600">
+              <span className="flex items-center gap-1 text-xs text-[var(--pv-text-muted)]">
                 {reviewCountText}
                 <InfoIcon className="size-3 shrink-0" />
               </span>
             </div>
-            <div className="h-6 w-px" style={{ backgroundColor: REF_BORDER }} />
+            <div className="h-6 w-px" style={{ backgroundColor: "var(--pv-border)" }} />
             <div className="flex flex-col items-center gap-1">
-              <span className="text-base font-semibold text-slate-900">
+              <span className="text-base font-semibold text-[var(--pv-text)]">
                 {downloadsLabel?.trim() || "—"}
               </span>
-              <span className="text-xs text-slate-600">
+              <span className="text-xs text-[var(--pv-text-muted)]">
                 {t("preview.downloadsLabel", { ns: "pwa" })}
               </span>
             </div>
-            <div className="h-6 w-px" style={{ backgroundColor: REF_BORDER }} />
+            <div className="h-6 w-px" style={{ backgroundColor: "var(--pv-border)" }} />
             <div className="flex flex-col items-center gap-1">
               <SizeGlyph />
-              <span className="text-xs text-slate-900">
+              <span className="text-xs text-[var(--pv-text)]">
                 {typeof sizeMb === "number" && !Number.isNaN(sizeMb)
                   ? t("preview.sizeMb", { ns: "pwa", size: sizeMb })
                   : "—"}
@@ -481,14 +547,14 @@ export function PwaPreviewCard({
             type="button"
             disabled
             className="h-9 w-full rounded-lg text-sm font-bold text-white disabled:opacity-100"
-            style={{ backgroundColor: REF_PRIMARY }}
+            style={{ backgroundColor: accent }}
           >
             {t("preview.install", { ns: "pwa" })}
           </button>
 
           <div
             className="flex items-start justify-between gap-4 text-[13px] font-medium"
-            style={{ color: REF_PRIMARY }}
+            style={{ color: accent }}
           >
             <span className="flex items-center gap-2">
               <Share2Icon className="size-5 shrink-0" />{" "}
@@ -500,7 +566,7 @@ export function PwaPreviewCard({
             </span>
           </div>
 
-          <div className="flex items-center gap-2 text-xs text-slate-600">
+          <div className="flex items-center gap-2 text-xs text-[var(--pv-text-muted)]">
             <SmartphoneIcon className="size-[18px] shrink-0" />
             {t("preview.availableOnDevices", { ns: "pwa" })}
           </div>
@@ -511,19 +577,19 @@ export function PwaPreviewCard({
         {!!description?.trim() && (
           <div className="flex flex-col gap-3 px-4 pb-5">
             <div className="flex items-center justify-between">
-              <p className="text-lg font-bold text-slate-900">
+              <p className="text-lg font-bold text-[var(--pv-text)]">
                 {t("preview.aboutTitle", { ns: "pwa" })}
               </p>
               <button
                 type="button"
                 onClick={() => setAboutOpen(true)}
                 aria-label={t("preview.aboutOpenAria", { ns: "pwa" })}
-                className="rounded p-1 text-slate-900 hover:bg-slate-100"
+                className="rounded p-1 text-[var(--pv-text)] hover:bg-[var(--pv-subtle-bg)]"
               >
                 <ArrowRightIcon className="size-5" />
               </button>
             </div>
-            <p className="line-clamp-5 whitespace-pre-line text-sm leading-relaxed text-slate-900">
+            <p className="line-clamp-5 whitespace-pre-line text-sm leading-relaxed text-[var(--pv-text)]">
               {description}
             </p>
           </div>
@@ -531,46 +597,46 @@ export function PwaPreviewCard({
 
         {!!updatedDateText && (
           <div className="flex flex-col gap-1 px-4 pb-5">
-            <p className="text-sm font-bold text-slate-700">
+            <p className="text-sm font-bold text-[var(--pv-text-subtle)]">
               {t("preview.updatedTitle", { ns: "pwa" })}
             </p>
-            <p className="text-sm text-slate-900">{updatedDateText}</p>
+            <p className="text-sm text-[var(--pv-text)]">{updatedDateText}</p>
           </div>
         )}
 
         <div
           className="flex flex-col gap-3 border-t px-4 py-5"
-          style={{ borderColor: REF_BORDER }}
+          style={{ borderColor: "var(--pv-border)" }}
         >
           <div className="flex items-center justify-between">
-            <p className="text-lg font-bold text-slate-900">
+            <p className="text-lg font-bold text-[var(--pv-text)]">
               {t("preview.dataSafetyTitle", { ns: "pwa" })}
             </p>
             <span
               aria-hidden
-              className="text-xl font-light leading-none text-slate-900"
+              className="text-xl font-light leading-none text-[var(--pv-text)]"
             >
               ›
             </span>
           </div>
-          <p className="text-sm leading-relaxed text-slate-700">
+          <p className="text-sm leading-relaxed text-[var(--pv-text-subtle)]">
             {t("preview.dataSafetyText", { ns: "pwa" })}
           </p>
         </div>
 
         <div
           className="flex flex-col gap-1 border-t px-4 py-5"
-          style={{ borderColor: REF_BORDER }}
+          style={{ borderColor: "var(--pv-border)" }}
         >
-          <p className="text-lg font-semibold text-slate-900">
+          <p className="text-lg font-semibold text-[var(--pv-text)]">
             {t("preview.reviewsTitle", { ns: "pwa" })}
           </p>
-          <p className="mb-3 text-[13px] text-slate-700">
+          <p className="mb-3 text-[13px] text-[var(--pv-text-subtle)]">
             {t("preview.reviewsVerified", { ns: "pwa" })}
           </p>
           <div className="flex items-center gap-5">
             <div className="flex min-w-[100px] flex-col items-center gap-1">
-              <span className="text-[56px] font-normal leading-none text-slate-900">
+              <span className="text-[56px] font-normal leading-none text-[var(--pv-text)]">
                 {ratingText}
               </span>
               <span className="flex items-center">
@@ -584,15 +650,16 @@ export function PwaPreviewCard({
                           ? Math.min(1, Math.max(0, rating! - (index - 1)))
                           : 0
                       }
+                      accent={accent}
                     />
                   );
                 })}
               </span>
-              <span className="text-xs text-slate-600">{reviewCountText}</span>
+              <span className="text-xs text-[var(--pv-text-muted)]">{reviewCountText}</span>
             </div>
             <div className="flex flex-1 flex-col gap-1">
               {STAR_ROWS.map((n) => (
-                <StarBar key={n} n={n} pct={starPct[n]} />
+                <StarBar key={n} n={n} pct={starPct[n]} accent={accent} />
               ))}
             </div>
           </div>
@@ -601,20 +668,20 @@ export function PwaPreviewCard({
         {!!whatsNew?.trim() && (
           <div
             className="flex flex-col gap-3 border-t px-4 py-5"
-            style={{ borderColor: REF_BORDER }}
+            style={{ borderColor: "var(--pv-border)" }}
           >
-            <p className="text-lg font-bold text-slate-900">
+            <p className="text-lg font-bold text-[var(--pv-text)]">
               {t("preview.whatsNewTitle", { ns: "pwa" })}
             </p>
-            <p className="whitespace-pre-line text-sm leading-relaxed text-slate-900">
+            <p className="whitespace-pre-line text-sm leading-relaxed text-[var(--pv-text)]">
               {whatsNew}
             </p>
           </div>
         )}
 
         <div
-          className="flex flex-col gap-3 border-t px-5 py-5 text-sm text-slate-900"
-          style={{ borderColor: REF_BORDER }}
+          className="flex flex-col gap-3 border-t px-5 py-5 text-sm text-[var(--pv-text)]"
+          style={{ borderColor: "var(--pv-border)" }}
         >
           <span>{t("preview.footer.store", { ns: "pwa" })}</span>
           <span>{t("preview.footer.giftCards", { ns: "pwa" })}</span>
@@ -627,8 +694,8 @@ export function PwaPreviewCard({
           <span>{t("preview.footer.familyLibrary", { ns: "pwa" })}</span>
         </div>
         <div
-          className="flex flex-wrap gap-4 border-t px-5 py-3 text-[10px] text-slate-900"
-          style={{ borderColor: REF_BORDER }}
+          className="flex flex-wrap gap-4 border-t px-5 py-3 text-[10px] text-[var(--pv-text)]"
+          style={{ borderColor: "var(--pv-border)" }}
         >
           <span>{t("preview.footer.terms", { ns: "pwa" })}</span>
           <span>{t("preview.footer.privacy", { ns: "pwa" })}</span>
@@ -636,8 +703,8 @@ export function PwaPreviewCard({
         </div>
 
         <div
-          className="sticky bottom-0 z-30 mt-auto flex items-center justify-around border-t bg-white px-2 py-2"
-          style={{ borderColor: REF_BORDER }}
+          className="sticky bottom-0 z-30 mt-auto flex items-center justify-around border-t bg-[var(--pv-bg)] px-2 py-2"
+          style={{ borderColor: "var(--pv-border)" }}
         >
           {[
             {
@@ -663,11 +730,12 @@ export function PwaPreviewCard({
           ].map(({ Icon, label, active }) => (
             <div
               key={label}
-              className={cn(
-                "flex min-w-[70px] flex-col items-center gap-1 rounded-lg px-2 py-1 text-slate-600",
-                active && "bg-[#00A173]/10",
-              )}
-              style={active ? { color: REF_PRIMARY } : undefined}
+              className="flex min-w-[70px] flex-col items-center gap-1 rounded-lg px-2 py-1 text-[var(--pv-text-muted)]"
+              style={
+                active
+                  ? { color: accent, backgroundColor: withAlpha(accent, 0.1) }
+                  : undefined
+              }
             >
               <Icon className="size-6" />
               <span className="text-[10px]">{label}</span>
@@ -682,11 +750,11 @@ export function PwaPreviewCard({
             role="dialog"
             aria-modal="false"
             aria-label={t("preview.aboutTitle", { ns: "pwa" })}
-            className="flex max-h-[80%] w-full flex-col overflow-hidden rounded-2xl bg-white shadow-xl"
+            className="flex max-h-[80%] w-full flex-col overflow-hidden rounded-2xl bg-[var(--pv-bg)] shadow-xl"
           >
             <div
               className="flex items-center justify-between gap-3 border-b px-4 py-3"
-              style={{ borderColor: REF_BORDER }}
+              style={{ borderColor: "var(--pv-border)" }}
             >
               <div className="flex min-w-0 items-center gap-3">
                 {!!iconUrl && (
@@ -701,10 +769,10 @@ export function PwaPreviewCard({
                   </div>
                 )}
                 <div className="flex min-w-0 flex-col">
-                  <p className="truncate text-base font-bold text-slate-900">
+                  <p className="truncate text-base font-bold text-[var(--pv-text)]">
                     {displayName}
                   </p>
-                  <p className="text-xs text-slate-600">
+                  <p className="text-xs text-[var(--pv-text-muted)]">
                     {t("preview.aboutTitle", { ns: "pwa" })}
                   </p>
                 </div>
@@ -713,14 +781,14 @@ export function PwaPreviewCard({
                 type="button"
                 onClick={() => setAboutOpen(false)}
                 aria-label={t("preview.closeAria", { ns: "pwa" })}
-                className="rounded-full p-1.5 text-slate-600 hover:bg-slate-100"
+                className="rounded-full p-1.5 text-[var(--pv-text-muted)] hover:bg-[var(--pv-subtle-bg)]"
               >
                 <XIcon className="size-4" />
               </button>
             </div>
 
             <div className="flex flex-col gap-5 overflow-y-auto px-4 py-4">
-              <p className="whitespace-pre-line text-sm leading-relaxed text-slate-900">
+              <p className="whitespace-pre-line text-sm leading-relaxed text-[var(--pv-text)]">
                 {description}
               </p>
 
@@ -728,21 +796,21 @@ export function PwaPreviewCard({
                 <>
                   <div
                     className="border-t"
-                    style={{ borderColor: REF_BORDER }}
+                    style={{ borderColor: "var(--pv-border)" }}
                   />
                   <div className="flex flex-col gap-4">
-                    <p className="text-lg font-bold text-slate-900">
+                    <p className="text-lg font-bold text-[var(--pv-text)]">
                       {t("preview.detailsTitle", { ns: "pwa" })}
                     </p>
                     <div className="grid grid-cols-2 gap-x-4 gap-y-4">
                       {detailRows.map((row) => (
                         <div key={row.label} className="flex flex-col gap-1">
-                          <p className="text-sm font-bold text-slate-900">
+                          <p className="text-sm font-bold text-[var(--pv-text)]">
                             {row.label}
                           </p>
-                          <p className="text-sm text-slate-600">{row.value}</p>
+                          <p className="text-sm text-[var(--pv-text-muted)]">{row.value}</p>
                           {row.notes?.map((note) => (
-                            <p key={note} className="text-sm text-slate-600">
+                            <p key={note} className="text-sm text-[var(--pv-text-muted)]">
                               {note}
                             </p>
                           ))}

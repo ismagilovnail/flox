@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { Controller, useFieldArray, useForm, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { ImagesIcon, XIcon } from "lucide-react";
@@ -25,6 +25,7 @@ import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import {
   Card,
+  CardAction,
   CardContent,
   CardDescription,
   CardHeader,
@@ -46,6 +47,32 @@ import { cn } from "@/lib/utils";
  * against a single-type useForm<PwaFormValues>). */
 function numberOrUndefined(v: string): number | undefined {
   return v === "" ? undefined : Number(v);
+}
+
+/** Two independent dropdowns, matching a reference tracker's own
+ * landing-page "Цветовая схема" (accent color) + "Тема" (light/dark)
+ * pair exactly, rather than one combined picker — replacing the raw
+ * theme_color/background_color pickers outright (the user explicitly
+ * asked to drop the raw palette UI once the dropdowns covered the same
+ * ground, the same "pick-only, no manual escape hatch" call already
+ * made for the icon field above). A PWA whose stored color doesn't
+ * match either preset list (legacy data, or set through some other
+ * client) simply shows no dropdown selection until the operator picks
+ * one — its real value is untouched until then. */
+const PWA_ACCENT_COLORS = [
+  { value: "green", color: "#16a34a" },
+  { value: "blue", color: "#2563eb" },
+  { value: "blueModern", color: "#0ea5e9" },
+  { value: "purple", color: "#7c3aed" },
+] as const;
+
+const PWA_BACKGROUND_THEMES = [
+  { value: "light", color: "#ffffff" },
+  { value: "dark", color: "#0a0a0a" },
+] as const;
+
+function matchPreset<T extends { value: string; color: string }>(presets: readonly T[], hex?: string): string {
+  return presets.find((p) => p.color.toLowerCase() === (hex ?? "").toLowerCase())?.value ?? "";
 }
 
 /** Factory, not a module-level const — see source-form.tsx's
@@ -145,7 +172,6 @@ export function buildPwaFormSchema(t: TFunction) {
 
 export type PwaFormValues = z.infer<ReturnType<typeof buildPwaFormSchema>>;
 
-const STATUS_OPTIONS: PwaStatus[] = ["active", "paused", "archived"];
 const STAR_FIELDS = [
   { n: 5, name: "ratingStars5" as const },
   { n: 4, name: "ratingStars4" as const },
@@ -167,11 +193,20 @@ export function PwaForm({
   defaultValues,
   submitLabel,
   onSubmit,
+  headerActions,
 }: {
   title: string;
   defaultValues: Partial<PwaFormValues>;
   submitLabel: string;
   onSubmit: (values: PwaFormValues) => void;
+  /** Rendered in the settings card's own header (top-right, via
+   * CardAction) — the edit page's Pause/Resume/Duplicate/Archive
+   * buttons (PwaRowActions variant="inline"), status changes moved out
+   * of the form itself since they're not part of "save changes" (same
+   * status-field-removed-in-favor-of-header-buttons call already made
+   * for campaigns). Omitted on the new-PWA page — there's no existing
+   * record yet to act on. */
+  headerActions?: ReactNode;
 }) {
   const { t } = useTranslation(["pwa", "common"]);
   const form = useForm<PwaFormValues>({
@@ -180,7 +215,7 @@ export function PwaForm({
       name: "",
       shortName: "",
       themeColor: "#16a34a",
-      backgroundColor: "#0a0a0a",
+      backgroundColor: "#ffffff",
       iconUrl: "",
       startUrl: "/install",
       bounceInAppWebview: true,
@@ -213,6 +248,18 @@ export function PwaForm({
   const [previewDir, setPreviewDir] = useState<"ltr" | "rtl">("ltr");
   const [pickingIcon, setPickingIcon] = useState(false);
   const [pickingScreenshot, setPickingScreenshot] = useState(false);
+  const accentScheme = matchPreset(PWA_ACCENT_COLORS, manifest.themeColor);
+  const backgroundTheme = matchPreset(PWA_BACKGROUND_THEMES, manifest.backgroundColor);
+
+  function handleAccentChange(value: string) {
+    const preset = PWA_ACCENT_COLORS.find((p) => p.value === value);
+    if (preset) form.setValue("themeColor", preset.color, { shouldValidate: true, shouldDirty: true });
+  }
+
+  function handleBackgroundThemeChange(value: string) {
+    const preset = PWA_BACKGROUND_THEMES.find((p) => p.value === value);
+    if (preset) form.setValue("backgroundColor", preset.color, { shouldValidate: true, shouldDirty: true });
+  }
 
   return (
     <form
@@ -226,6 +273,7 @@ export function PwaForm({
             <CardDescription>
               {t("form.description", { ns: "pwa" })}
             </CardDescription>
+            {headerActions && <CardAction>{headerActions}</CardAction>}
           </CardHeader>
           <CardContent className="flex flex-col gap-4">
             <div className="grid gap-4 sm:grid-cols-2">
@@ -263,68 +311,41 @@ export function PwaForm({
 
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="grid gap-1.5">
-                <Label htmlFor="pwa-theme">
-                  {t("form.themeColorLabel", { ns: "pwa" })}
+                <Label htmlFor="pwa-accent">
+                  {t("form.colorSchemeLabel", { ns: "pwa" })}
                 </Label>
-                <div className="flex items-center gap-2">
-                  <input
-                    type="color"
-                    value={
-                      /^#[0-9a-fA-F]{6}$/.test(manifest.themeColor ?? "")
-                        ? manifest.themeColor
-                        : "#16a34a"
-                    }
-                    onChange={(e) =>
-                      form.setValue("themeColor", e.target.value)
-                    }
-                    className="size-8 shrink-0 rounded-md border border-input bg-transparent"
-                    aria-label={t("form.themeColorPickerAria", { ns: "pwa" })}
-                  />
-                  <Input
-                    id="pwa-theme"
-                    {...register("themeColor")}
-                    className="font-mono text-xs"
-                    aria-invalid={!!errors.themeColor}
-                  />
-                </div>
-                {errors.themeColor && (
-                  <p className="text-xs text-danger">
-                    {errors.themeColor.message}
-                  </p>
-                )}
+                <Select value={accentScheme} onValueChange={handleAccentChange}>
+                  <SelectTrigger id="pwa-accent" className="w-full">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {PWA_ACCENT_COLORS.map((p) => (
+                      <SelectItem key={p.value} value={p.value}>
+                        <span className="size-3 rounded-full border border-black/10" style={{ background: p.color }} />
+                        {t(`form.colorScheme.${p.value}`, { ns: "pwa" })}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
+
               <div className="grid gap-1.5">
-                <Label htmlFor="pwa-bg">
-                  {t("form.backgroundColorLabel", { ns: "pwa" })}
+                <Label htmlFor="pwa-theme-mode">
+                  {t("form.backgroundThemeLabel", { ns: "pwa" })}
                 </Label>
-                <div className="flex items-center gap-2">
-                  <input
-                    type="color"
-                    value={
-                      /^#[0-9a-fA-F]{6}$/.test(manifest.backgroundColor ?? "")
-                        ? manifest.backgroundColor
-                        : "#0a0a0a"
-                    }
-                    onChange={(e) =>
-                      form.setValue("backgroundColor", e.target.value)
-                    }
-                    className="size-8 shrink-0 rounded-md border border-input bg-transparent"
-                    aria-label={t("form.backgroundColorPickerAria", {
-                      ns: "pwa",
-                    })}
-                  />
-                  <Input
-                    id="pwa-bg"
-                    {...register("backgroundColor")}
-                    className="font-mono text-xs"
-                    aria-invalid={!!errors.backgroundColor}
-                  />
-                </div>
-                {errors.backgroundColor && (
-                  <p className="text-xs text-danger">
-                    {errors.backgroundColor.message}
-                  </p>
-                )}
+                <Select value={backgroundTheme} onValueChange={handleBackgroundThemeChange}>
+                  <SelectTrigger id="pwa-theme-mode" className="w-full">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {PWA_BACKGROUND_THEMES.map((p) => (
+                      <SelectItem key={p.value} value={p.value}>
+                        <span className="size-3 rounded-full border border-black/10" style={{ background: p.color }} />
+                        {t(`form.backgroundTheme.${p.value}`, { ns: "pwa" })}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
             </div>
 
@@ -386,21 +407,16 @@ export function PwaForm({
               />
             </div>
 
-            <div className="grid gap-1.5">
-              <Label htmlFor="pwa-start">
-                {t("form.startUrlLabel", { ns: "pwa" })}
-              </Label>
-              <Input
-                id="pwa-start"
-                placeholder={t("form.startUrlPlaceholder", { ns: "pwa" })}
-                className="font-mono text-xs"
-                {...register("startUrl")}
-                aria-invalid={!!errors.startUrl}
-              />
-              {errors.startUrl && (
-                <p className="text-xs text-danger">{errors.startUrl.message}</p>
-              )}
-            </div>
+            {/* start_url isn't operator-editable: this PWA is attached to a
+                campaign and into flows, which is what actually resolves
+                where an install/open lands — a manually-typed manifest
+                path here would just be a second, disconnected source of
+                truth. Still a real, required Web App Manifest field
+                (kept in the schema/preview/backend), so it stays
+                registered — a fixed default for new PWAs, an existing
+                record's own saved value on edit — just with no input for
+                the operator to change it through. */}
+            <input type="hidden" {...register("startUrl")} />
 
             <div className="flex items-center justify-between rounded-md border border-border p-2.5">
               <div>
@@ -420,30 +436,6 @@ export function PwaForm({
                     onCheckedChange={field.onChange}
                     aria-label={t("form.bounceAria", { ns: "pwa" })}
                   />
-                )}
-              />
-            </div>
-
-            <div className="grid gap-1.5 sm:w-1/3">
-              <Label htmlFor="pwa-status">
-                {t("form.statusLabel", { ns: "pwa" })}
-              </Label>
-              <Controller
-                control={control}
-                name="status"
-                render={({ field }) => (
-                  <Select value={field.value} onValueChange={field.onChange}>
-                    <SelectTrigger id="pwa-status" className="w-full">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {STATUS_OPTIONS.map((s) => (
-                        <SelectItem key={s} value={s}>
-                          {t(`status.${s}`, { ns: "common" })}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
                 )}
               />
             </div>
@@ -883,6 +875,8 @@ export function PwaForm({
               name={manifest.name}
               developer={manifest.developer}
               iconUrl={manifest.iconUrl}
+              accentColor={manifest.themeColor}
+              backgroundColor={manifest.backgroundColor}
               description={manifest.description}
               rating={manifest.rating}
               ratingCount={manifest.ratingCount}

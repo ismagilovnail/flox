@@ -407,6 +407,366 @@ STATUS        : done — user pointed at a reference tracker's real
                 moved the container's transform from translateX(0) to
                 translateX(-118px), confirmed both via getComputedStyle
                 and visually. No console errors.
+                Round 8, same phase: user pointed at the raw theme/
+                background color-picker pair plus a reference tracker's
+                landing-page "Цветовая схема" (Auto/Green/Blue/Blue-
+                modern/Purple) + separate "Тема" (light/dark/auto)
+                dropdowns, asking for dropdowns here too, wired up for
+                real. PWA only has two raw fields (theme_color/
+                background_color), not a whole design system, so the
+                two reference dropdowns became one: a new
+                PWA_COLOR_SCHEMES list of six named (theme, background)
+                pairs (Зелёная/Синяя/Синяя современная/Фиолетовая/
+                Тёмная/Светлая), each a SelectItem with two swatch dots,
+                replacing the raw picker section. Picking a scheme sets
+                both fields via form.setValue. A seventh "Своя" (Custom)
+                option isn't a preset — it reveals the original raw
+                picker pair unchanged, so any exact hex stays reachable.
+                The dropdown's selected value is derived
+                (matchColorScheme(theme, background) against the six
+                presets, falling back to "custom"), not independent
+                state — a saved PWA with non-preset colors correctly
+                opens on "Custom" with its real colors intact. One
+                forceCustomColors boolean handles the edge derived state
+                can't: picking "Custom" when current colors already
+                exactly match a preset (e.g. fresh defaults) — without
+                it the dropdown would immediately snap back since
+                nothing about the values would have changed. Verified:
+                tsc/eslint clean; real browser pass against a live PWA
+                — all six presets render with correct swatch colors,
+                selecting "Фиолетовая" changed the real manifest JSON
+                preview's theme_color to #7c3aed (not a cosmetic label),
+                selecting "Своя" afterward correctly revealed the
+                original raw pickers. No console errors.
+                Round 8 fix, same phase: user clarified they wanted the
+                reference's own two SEPARATE dropdowns, not one combined
+                picker — "Цветовая схема" (accent) driving theme_color
+                alone, a second "Тема" (light/dark) driving
+                background_color alone. Split PWA_COLOR_SCHEMES into
+                PWA_ACCENT_COLORS (Зелёная/Синяя/Синяя современная/
+                Фиолетовая, matching the reference exactly) and
+                PWA_BACKGROUND_THEMES (Светлая/Тёмная — the reference's
+                own third "Авто" option deliberately left out, since a
+                required manifest color field has no real "auto" value
+                to map it to). Each dropdown now has its own independent
+                "Custom" fallback and its own matchPreset-derived value
+                + forceCustom* boolean (same pattern as round 8's first
+                pass, duplicated per field instead of shared). Verified:
+                tsc/eslint clean; real browser pass confirmed selecting
+                "Светлая" changed background_color to #ffffff while
+                theme_color stayed untouched at #16a34a — the two are
+                genuinely independent now. No console errors.
+                Round 9, same phase: user reported picking a color
+                scheme/theme did nothing visible in "Живое превью." Not
+                a bug — PwaPreviewCard (the Google Play listing mockup)
+                never accepted themeColor/backgroundColor as props at
+                all, because the real Play Store listing genuinely never
+                uses an app's own colors (always its own green
+                branding), so wiring them in there would've been
+                inaccurate. Real gap: nothing in the form showed these
+                two fields' actual spec-defined effect at all. Added
+                PwaLaunchPreview (pwa-preview-card.tsx), rendered above
+                the listing mockup: a simulated status bar tinted with
+                theme_color + a splash-screen block tinted with
+                background_color (icon centered, name below) — exactly
+                what the Web App Manifest spec uses these two fields
+                for (OS chrome tint, pre-paint launch background), not a
+                fabricated field. Readable text color picked via a small
+                isLightColor perceived-brightness check against whatever
+                background_color is set. Caption states plainly neither
+                field affects the listing preview below it. Verified:
+                tsc/eslint clean; real browser pass confirmed the launch
+                preview's status bar visibly turned blue immediately
+                after selecting "Синяя" — the concrete live feedback
+                that was missing. No console errors.
+                Round 10, same phase: user rejected round 9 outright —
+                "Убери ее я ни это имел ввиду чтобы ты сделал" (remove
+                it, that's not what I meant). PwaLaunchPreview was a
+                plausible reading of "ничего не меняется" but not the
+                actual ask: the user's real complaint was that changing
+                a color scheme has no visible effect on the Google Play
+                listing mockup itself, not that a second, separate
+                status-bar/splash widget was missing. Removed
+                PwaLaunchPreview and every trace of it — component,
+                isLightColor/HEX_RE helpers, its i18n keys
+                (preview.statusBarLabel/launchPreviewAppNameFallback/
+                launchPreviewCaption, en+ru), its usage in pwa-form.tsx
+                — confirmed clean via grep.
+                Round 11, same phase: "Мне надо чтобы при выборе
+                допустим цветовой схемы Синяя чтобы все зеленые цвета
+                сменились на синию и так далее" — the actual fix round
+                9 was reaching for: make the listing mockup's own
+                accent color follow the selected scheme. This does
+                contradict round 9's own reasoning (a real Google Play
+                listing always renders Google's fixed green, never an
+                app's declared color) — resolved by treating it
+                explicitly as a deliberate FLOX-specific preview
+                convenience, not a claim about real Play Store
+                behavior, and saying so in a doc comment on the new
+                prop rather than silently reversing the earlier call.
+                pwa-preview-card.tsx: PwaPreviewCard gained an optional
+                `accentColor` prop (fed `manifest.themeColor` from
+                pwa-form.tsx); every hardcoded `REF_PRIMARY` (#00A173,
+                the reference's fixed brand green) render-site use —
+                install button, developer name + verified-style accent,
+                rating star, per-star chart bars, Share/Wishlist icons,
+                active-nav-pill — now reads a computed `accent` that
+                validates `accentColor` against a hex pattern and falls
+                back to REF_PRIMARY when unset/invalid, so a PWA with no
+                theme_color set (or an invalid one) renders exactly as
+                before. PartialStar/StarBar (the rating-breakdown
+                helpers) gained their own `accent` prop threaded down
+                from the same value.
+                Verified: tsc --noEmit/eslint clean on both files;
+                vitest run clean (21/21); real browser pass against a
+                live PWA — filled in real rating/rating-count/star-
+                breakdown values (previously placeholder-only), selected
+                "Синяя современная" and confirmed via zoomed screenshot
+                that the install button, developer name, rating star,
+                and all five per-star bars turned blue; switched to
+                "Фиолетовая" and confirmed the same elements turned
+                purple without a reload — genuinely reactive, not a
+                one-time coincidence; reloaded the page and confirmed
+                the PWA's real saved state (green, unaffected — none of
+                the test edits were submitted) came back with no console
+                errors on load.
+                Round 12, same phase: "тоже самое сделай с темой при
+                выборе темная тема фон должен смениться на темную и
+                наоборот" — same treatment for the second ("Тема")
+                dropdown: selecting Тёмная/Светлая should flip the
+                mockup's own background, not just the two fields it
+                writes. Same tension as round 11 (a real Google Play
+                listing is always light, never driven by an app's
+                declared background) — resolved the same way: an
+                explicit, documented FLOX-specific preview convenience,
+                not a claim about real store behavior.
+                pwa-preview-card.tsx: PwaPreviewCard gained an optional
+                `backgroundColor` prop (fed `manifest.backgroundColor`).
+                A new `isDarkColor` perceived-brightness check (ITU-R
+                BT.601 weights) decides light vs. dark from the color's
+                own value, not just an exact match against the two
+                dropdown presets — so a custom dark hex Picked via
+                "Своя" also flips the mockup correctly, not only the two
+                named presets. Every color that used to be a hardcoded
+                Tailwind slate/white class (card background, all body/
+                muted/subtle text, borders, the rating-bar track, the
+                empty-star fill, hover backgrounds) now reads one of
+                seven `--pv-*` CSS custom properties set once on the
+                card's own root element and consumed via Tailwind
+                arbitrary-value classes (`text-[var(--pv-text)]` etc.)
+                — chosen over threading a `dark` boolean prop through
+                every sub-component (PartialStar, StarBar, the About
+                sheet) since CSS custom properties already cascade to
+                every descendant for free, including the About sheet
+                overlay, with no extra prop plumbing.
+                Found and fixed one real bug from round 11 along the
+                way, not just this round's own gap: the active-nav-pill
+                highlight's translucent background was still the
+                literal hardcoded class `bg-[#00A173]/10` — round 11's
+                own accent work only ever set the pill's *text* color
+                dynamically (`style={{color: accent}}`), never touched
+                this background class, so the highlight tint stayed the
+                old fixed green under every other scheme the whole time
+                since round 11 shipped. Fixed with a new `withAlpha`
+                helper (hex -> `rgba(...)` at a given opacity) so the
+                tint now reads the live `accent` value like everything
+                else round 11 touched.
+                Verified: tsc --noEmit/eslint clean on both files;
+                vitest run clean (21/21, unrelated). Real browser pass
+                against the same live PWA: selected "Тёмная" and
+                confirmed via screenshot the entire mockup — header bar,
+                icon/name block, stat row, screenshot gallery surrounds,
+                About section, Data safety, Reviews, What's new, footer,
+                and bottom nav — switched to a dark background with
+                light text, while the install button/accent elements
+                correctly stayed on their own independent accent color;
+                opened the "About this app" sheet and confirmed it also
+                rendered dark (the CSS-variable cascade reaching the
+                overlay with no extra wiring); switched back to
+                "Светлая" and confirmed a full, exact revert; zoomed on
+                the bottom nav's active "Игры" pill and confirmed its
+                background tint now matches the current accent color
+                rather than the old fixed green. Reloaded the page
+                afterward and confirmed the PWA's real saved state
+                (light, untouched — no test edits were submitted) came
+                back correctly, with no console errors on load.
+                Round 13, same phase: user pointed at a screenshot of
+                the two dropdowns both showing "Своя" with their raw
+                color-swatch + hex-input rows underneath and said
+                "Убери эти палитры они теперь не нужны" (remove these
+                palettes, they're not needed anymore). Removed the raw
+                picker escape hatch entirely rather than just hiding it
+                — same "pick-only, no manual entry path" call already
+                made for the icon field back in round 4, now applied to
+                these two fields too, per the user's own explicit
+                instruction (this reverses round 5's original "never
+                remove the ability to set an arbitrary color" reasoning
+                for these two fields specifically — that was this
+                feature's own earlier design assumption, not a user
+                directive, and the user has now directed otherwise).
+                Removed: the `custom`/"Своя" SelectItem from both
+                dropdowns, both `<input type="color">` + hex `Input`
+                blocks and their error displays, `forceCustomAccent`/
+                `forceCustomTheme` state, and the "custom" branch in
+                both change handlers. `matchPreset` simplified to
+                return `""` (no dropdown selection shown) instead of
+                `"custom"` when a stored color doesn't match either
+                preset list — the field's real value is untouched
+                either way; only the dropdown itself renders blank
+                until the operator picks one of the fixed presets.
+                Removed now-unused i18n keys (en+ru):
+                colorScheme.custom, backgroundTheme.custom,
+                themeColorLabel, themeColorPickerAria,
+                backgroundColorLabel, backgroundColorPickerAria (the
+                latter four were already unused before this round, a
+                leftover from the round-8 dropdown refactor, confirmed
+                via repo-wide grep before deleting).
+                Same message, second ask: "по умолчанию оставь
+                цветовая схема зеленая и тема светлая" — the form's own
+                `defaultValues` (new-PWA path) already defaulted
+                `themeColor` to green (`#16a34a`, matching the accent
+                preset), but `backgroundColor` defaulted to
+                `#0a0a0a` (dark). Changed to `#ffffff` so a brand-new
+                PWA opens on Зелёная/Светлая, matching the ask exactly;
+                edit mode is unaffected (real record values always
+                override these via the form's own `...defaultValues`
+                spread).
+                Verified: tsc --noEmit/eslint clean; vitest run clean
+                (21/21, unrelated); JSON.parse confirmed both locale
+                files stayed valid after the key removals. Real browser
+                pass: opened the same live PWA (whose stored colors,
+                #27914e/#c39797, match neither preset list) and
+                confirmed both dropdowns now render with no visible
+                selection and no palette rows beneath them, opening the
+                accent dropdown shows exactly the four presets with no
+                "Своя" entry, and the PWA's own actual color values were
+                left untouched (the live preview's install button still
+                showed the original green, not silently reset). Opened
+                a fresh /pwa/new and confirmed via zoomed screenshot
+                that Цветовая схема shows "Зелёная" and Тема shows
+                "Светлая" by default, with the listing mockup itself
+                rendering light/green from first load. No console
+                errors either page.
+                Round 14, same phase: user asked what "URL запуска"
+                (start_url) does, then said to remove it for the
+                operator entirely — "это PWA привязывается к кампании
+                и в потоки" (this PWA gets attached to a campaign and
+                into flows), i.e. real routing after install/open is
+                resolved through campaign/stream-set/flow attachment,
+                not a manually-typed manifest path with no connection
+                to that routing. Confirmed via grep that start_url was
+                never actually consumed by apps/tracker or any manifest-
+                serving endpoint — it's stored and shown in the client-
+                side manifest-JSON preview only, so removing the
+                operator input changes nothing about real request
+                handling. Kept `startUrl` in the Zod schema/manifest
+                preview/backend (still a real, valid Web App Manifest
+                field) but removed its `<Label>`/`<Input>`/error-display
+                JSX, replacing it with `<input type="hidden"
+                {...register("startUrl")} />` — kept registered rather
+                than dropped outright so RHF's submission still includes
+                it without relying on defaultValues-without-registration
+                semantics. New-PWA path keeps its existing `"/install"`
+                default (now permanently fixed, no longer operator-
+                editable); edit mode is unaffected — a record's real
+                saved value passes straight through untouched via the
+                form's own `...defaultValues` spread, same mechanism
+                round 13's palette removal relied on. Removed the two
+                now-unused i18n keys (`startUrlLabel`/
+                `startUrlPlaceholder`, en+ru); `validation.
+                startUrlRequired` stays (still referenced by the schema
+                itself, now practically unreachable via the UI but kept
+                as a data-integrity safety net, not dead code by any
+                narrower definition).
+                Verified: tsc --noEmit/eslint clean; vitest run clean
+                (21/21, unrelated); JSON.parse confirmed both locale
+                files stayed valid. Real browser pass: confirmed "URL
+                запуска" no longer appears anywhere in either the
+                create or edit form; created a real new PWA end-to-end
+                (icon via the gallery picker + crop, name/short name
+                filled in, submitted) and confirmed via a direct
+                authenticated fetch against the real API
+                (GET /pwas/{id}) that the persisted record's startUrl
+                came back exactly "/install" despite no visible input
+                ever setting it — the hidden-field wiring genuinely
+                works, not just compiles. No console errors on either
+                page. Test PWA archived afterward, not left active.
+                Round 15, same phase: user asked to remove the "Статус"
+                dropdown from the form and move its buttons into the
+                card instead. Exact precedent already shipped for
+                Campaigns: campaign-form.tsx has carried no visible
+                status field at all since its own equivalent round (only
+                `status` in schema/defaultValues, submitted transparently
+                on every save), with CampaignRowActions rendered
+                separately as Pause/Duplicate/Archive buttons in the
+                page header next to the Save button, via an
+                `variant="icons" | "inline"` split (icon buttons for the
+                table row, labeled buttons for the detail-page header).
+                Mirrored exactly: removed pwa-form.tsx's Статус
+                Label/Controller/Select block (status stays in schema/
+                defaultValues only, same as startUrl before it — no
+                hidden input needed here since campaign-form.tsx's own
+                status field proves RHF submits unregistered-but-
+                defaultValues-seeded fields correctly); removed the now-
+                unused STATUS_OPTIONS const and statusLabel i18n key
+                (en+ru, confirmed unused elsewhere by grep — the other
+                "form.statusLabel" hits across the repo all belong to
+                other features' own i18n namespaces). pwa-row-actions.tsx
+                gained the same `variant` prop/split as
+                CampaignRowActions (icons unchanged; new inline branch:
+                labeled Pause-or-Resume/Duplicate/Archive buttons, Edit
+                dropped since you're already on the edit page); Duplicate
+                now navigates to the new PWA's own edit page on success
+                (previously stayed put) — matching CampaignRowActions'
+                own duplicate behavior exactly, not a new UX decision.
+                PwaForm gained an optional `headerActions?: ReactNode`
+                prop rendered via a new `<CardAction>` in its own
+                CardHeader (omitted on the new-PWA page — no existing
+                record to act on yet); pwa-detail-view.tsx passes
+                `<PwaRowActions pwa={pwa} variant="inline" />`.
+                Real bug caught live, not in review: the first browser
+                pass showed the header's Pause button doing nothing
+                visible, then a second click fired what looked like a
+                full form-submit toast ("PWA обновлено") instead of the
+                pause toast. Root cause: unlike CampaignRowActions
+                (rendered as a page-header sibling, entirely outside
+                CampaignForm's own `<form>`), PwaRowActions here renders
+                *inside* PwaForm's CardHeader, which sits inside the
+                form element — and shadcn's Button/IconButton pass
+                `type` straight through to a native `<button>` with no
+                default, so every action button without an explicit
+                `type="button"` fell back to the HTML default of
+                `type="submit"` and triggered the surrounding form's
+                submit handler on click. Fixed by adding `type="button"`
+                to all eight buttons in pwa-row-actions.tsx (both
+                variants, plus the archive-confirm dialog's own two
+                buttons, which are Radix-portalled outside the form DOM-
+                wise and so weren't actually broken — added anyway,
+                defensively, since correctness here shouldn't depend on
+                portal semantics). Confirmed via the browser tool's own
+                network-request log that the fix genuinely rewired
+                click -> POST /pwas/{id}/pause instead of a form submit,
+                not just that the toast text looked right.
+                Verified: tsc --noEmit/eslint clean; vitest run clean
+                (21/21, unrelated); JSON.parse confirmed both locale
+                files stayed valid. Real browser pass against a real
+                duplicated test PWA: clicked Pause (network log showed
+                POST .../pause 200, a direct GET confirmed status
+                "paused", button flipped to "Возобновить" with no form-
+                submit side effect), clicked Resume (GET confirmed back
+                to "active"), clicked Archive -> confirmed in the real
+                dialog -> confirmed (GET confirmed "archived"); separately
+                confirmed Duplicate's own click earlier had correctly
+                created a real new PWA and navigated to its edit page.
+                Confirmed the list page's own "icons" variant is
+                unaffected (edit/pause/duplicate/archive icons still
+                render correctly for an active row, edit/duplicate only
+                for archived rows). Confirmed the new-PWA page shows
+                neither a Статус field nor any header buttons (nothing to
+                act on yet). No console errors on any of the three pages
+                touched. Both test PWAs (the round-14 startUrl test and
+                this round's duplicate) left archived, not deleted or
+                re-activated.
 LAST COMMIT   : fix — fd64b45 (this phase's own work is UNCOMMITTED,
                 see below)
 UNCOMMITTED   : this entire phase's work — migration 00027; apps/
@@ -426,13 +786,32 @@ UNCOMMITTED   : this entire phase's work — migration 00027; apps/
                 use-content-gallery.ts; pwa-form.tsx's gallery-picker +
                 screenshot-upload-grid wiring + icon-remove button;
                 pwa-preview-card.tsx's screenshot-row rework (incl.
-                round 7's Embla rebuild); new-pwa-view.tsx/new-landing-
-                view.tsx/new-postlanding-view.tsx template-handoff
+                round 7's Embla rebuild), round 11's dynamic
+                `accentColor` prop/`accent` computation replacing every
+                hardcoded REF_PRIMARY use, plus PartialStar/StarBar's
+                own new `accent` prop, and round 12's `backgroundColor`
+                prop/`isDarkColor`/`withAlpha` helpers/`--pv-*` CSS
+                custom properties replacing every hardcoded slate/white
+                class plus the active-nav-pill tint fix; pwa-form.tsx's
+                `<PwaPreviewCard>` invocation now also passes
+                `backgroundColor={manifest.backgroundColor}`; round
+                13's removal of the raw color-picker/hex-input fallback
+                and its `custom` dropdown options/i18n keys, plus the
+                new-PWA `backgroundColor` default (`#0a0a0a` ->
+                `#ffffff`); round 14's start_url field removal (now a
+                hidden registered input, its Label/Input/error JSX and
+                two i18n keys gone); round 15's Статус-field removal +
+                CardAction headerActions slot + pwa-row-actions.tsx's
+                new icons/inline variant split + its type="button" fix
+                (8 buttons) + Duplicate-now-navigates behavior; new-pwa-view.tsx/new-landing-view.tsx/
+                new-postlanding-view.tsx template-handoff
                 removal; titleFromGallery i18n key removal (en+ru
-                landings/postlanding/pwa); apps/web's package.json/
-                package-lock.json (react-image-crop, replacing round 3's
-                now-removed react-easy-crop; embla-carousel-react, new
-                in round 7) — not yet committed, waiting on the user.
+                landings/postlanding/pwa); round 10's full removal of
+                PwaLaunchPreview + its helpers/i18n keys; apps/web's
+                package.json/package-lock.json (react-image-crop,
+                replacing round 3's now-removed react-easy-crop;
+                embla-carousel-react, new in round 7) — not yet
+                committed, waiting on the user.
                 NOTE: same as every
                 prior phase this session, the migrate container bakes
                 migrations into its image — `docker compose build
