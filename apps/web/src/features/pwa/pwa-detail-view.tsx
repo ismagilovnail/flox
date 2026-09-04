@@ -32,6 +32,13 @@ function toFormValues(pwa: Pwa): PwaFormValues {
     ratingStars3: pwa.ratingStars3,
     ratingStars2: pwa.ratingStars2,
     ratingStars1: pwa.ratingStars1,
+    version: pwa.version,
+    ageRating: pwa.ageRating,
+    category: pwa.category,
+    interactiveElements: pwa.interactiveElements,
+    containsAds: pwa.containsAds,
+    inAppPurchases: pwa.inAppPurchases,
+    updatedDate: pwa.updatedDate ?? "",
   };
 }
 
@@ -53,7 +60,7 @@ export function PwaDetailView({ id }: { id: string }) {
   const pwa = pwaQuery.data;
 
   function handleSubmit(values: PwaFormValues) {
-    updatePwa.mutate({ ...values, screenshots: values.screenshots.map((s) => s.url) }, {
+    updatePwa.mutate({ ...values, screenshots: values.screenshots.map((s) => s.url), updatedDate: values.updatedDate || undefined }, {
       onSuccess: () => toast(t("toast.updated"), { description: values.name }),
       onError: (err) => toast.error(t("toast.updateError"), { description: err.message }),
     });

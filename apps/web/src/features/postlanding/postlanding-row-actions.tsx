@@ -1,19 +1,14 @@
 "use client";
 
 import * as React from "react";
+import Link from "next/link";
 import { toast } from "sonner";
-import { CopyIcon, MoreHorizontalIcon, PauseIcon, PencilIcon, PlayIcon, Trash2Icon } from "lucide-react";
+import { CopyIcon, PauseIcon, PencilIcon, PlayIcon, Trash2Icon } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 import { IconButton } from "@/components/ui/icon-button";
 import { Button } from "@/components/ui/button";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import {
   Dialog,
   DialogContent,
@@ -25,7 +20,7 @@ import {
 import { useActivatePostlanding, useArchivePostlanding, useDuplicatePostlanding, usePausePostlanding } from "@/hooks/use-postlandings";
 import type { Postlanding } from "@/lib/api/postlanding";
 
-export function PostlandingRowActions({ postlanding, onEdit }: { postlanding: Postlanding; onEdit: () => void }) {
+export function PostlandingRowActions({ postlanding }: { postlanding: Postlanding }) {
   const { t } = useTranslation(["postlanding", "common"]);
   const pause = usePausePostlanding();
   const activate = useActivatePostlanding();
@@ -64,42 +59,53 @@ export function PostlandingRowActions({ postlanding, onEdit }: { postlanding: Po
 
   return (
     <>
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <IconButton aria-label={t("rowActions.actionsAria", { name: postlanding.name })} variant="ghost" size="icon-sm">
-            <MoreHorizontalIcon className="size-4" />
-          </IconButton>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="end">
-          <DropdownMenuItem onSelect={onEdit}>
-            <PencilIcon className="size-4" /> {t("rowActions.edit")}
-          </DropdownMenuItem>
-          {postlanding.status !== "archived" && (
-            <DropdownMenuItem onSelect={togglePause}>
-              {postlanding.status === "active" ? (
-                <>
-                  <PauseIcon className="size-4" /> {t("rowActions.pause")}
-                </>
-              ) : (
-                <>
-                  <PlayIcon className="size-4" /> {t("rowActions.resume")}
-                </>
-              )}
-            </DropdownMenuItem>
-          )}
-          <DropdownMenuItem onSelect={handleDuplicate}>
-            <CopyIcon className="size-4" /> {t("rowActions.duplicate")}
-          </DropdownMenuItem>
-          {postlanding.status !== "archived" && (
-            <>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem variant="destructive" onSelect={() => setConfirmArchive(true)}>
-                <Trash2Icon className="size-4" /> {t("rowActions.archive")}
-              </DropdownMenuItem>
-            </>
-          )}
-        </DropdownMenuContent>
-      </DropdownMenu>
+      <div className="flex items-center justify-end gap-1">
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <IconButton aria-label={t("rowActions.edit")} size="icon-sm" asChild>
+              <Link href={`/postlanding/${postlanding.id}`}>
+                <PencilIcon className="size-3.5" />
+              </Link>
+            </IconButton>
+          </TooltipTrigger>
+          <TooltipContent>{t("rowActions.edit")}</TooltipContent>
+        </Tooltip>
+
+        {postlanding.status !== "archived" && (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <IconButton
+                aria-label={postlanding.status === "active" ? t("rowActions.pause") : t("rowActions.resume")}
+                size="icon-sm"
+                onClick={togglePause}
+              >
+                {postlanding.status === "active" ? <PauseIcon className="size-3.5" /> : <PlayIcon className="size-3.5" />}
+              </IconButton>
+            </TooltipTrigger>
+            <TooltipContent>{postlanding.status === "active" ? t("rowActions.pause") : t("rowActions.resume")}</TooltipContent>
+          </Tooltip>
+        )}
+
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <IconButton aria-label={t("rowActions.duplicate")} size="icon-sm" onClick={handleDuplicate}>
+              <CopyIcon className="size-3.5" />
+            </IconButton>
+          </TooltipTrigger>
+          <TooltipContent>{t("rowActions.duplicate")}</TooltipContent>
+        </Tooltip>
+
+        {postlanding.status !== "archived" && (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <IconButton aria-label={t("rowActions.archive")} size="icon-sm" onClick={() => setConfirmArchive(true)}>
+                <Trash2Icon className="size-3.5" />
+              </IconButton>
+            </TooltipTrigger>
+            <TooltipContent>{t("rowActions.archive")}</TooltipContent>
+          </Tooltip>
+        )}
+      </div>
 
       <Dialog open={confirmArchive} onOpenChange={setConfirmArchive}>
         <DialogContent>

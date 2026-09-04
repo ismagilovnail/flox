@@ -1,14 +1,14 @@
 "use client";
 
+import * as React from "react";
 import { Controller, useFieldArray, useForm, useWatch, type Resolver } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { PlusIcon } from "lucide-react";
+import { FilterIcon, PlusIcon } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import { MultiSelect } from "@/components/ui/multi-select";
 import { genId } from "@/lib/id";
@@ -19,7 +19,8 @@ import type { Landing } from "@/lib/api/landings";
 import type { Pwa } from "@/lib/api/pwa";
 import type { Postlanding } from "@/lib/api/postlanding";
 import type { Pixel } from "@/lib/api/pixels";
-import { FilterGroupBuilder } from "@/features/stream-sets/filter-group-builder";
+import { FilterPickerDialog } from "@/features/stream-sets/filter-picker-dialog";
+import { FilterTreeSummary } from "@/features/stream-sets/filter-tree-summary";
 import { FlowEditor } from "@/features/stream-sets/flow-editor";
 import { buildStreamSetFormSchema, type StreamSetFormValues } from "@/features/stream-sets/stream-set-schema";
 
@@ -43,6 +44,7 @@ export function StreamSetEditor({
   pixels,
   submitLabel,
   onSubmit,
+  disabled = false,
 }: {
   defaultValues: StreamSetFormValues;
   networks: Network[];
@@ -53,8 +55,14 @@ export function StreamSetEditor({
   pixels: Pixel[];
   submitLabel: string;
   onSubmit: (values: StreamSetFormValues) => void;
+  /** Archived campaigns don't route traffic — a native <fieldset disabled>
+   * locks every nested control (inputs, selects, the filter/flow buttons)
+   * in one shot instead of threading a disabled prop through FlowEditor's
+   * whole subtree. */
+  disabled?: boolean;
 }) {
   const { t } = useTranslation("streamSets");
+  const [filterPickerOpen, setFilterPickerOpen] = React.useState(false);
   const form = useForm<StreamSetFormValues>({
     // rootFilter is a self-referential union (FilterCondition | FilterGroupNode); RHF's
     // Path<T> can't fully resolve that recursion, which makes zodResolver's inferred
@@ -76,56 +84,42 @@ export function StreamSetEditor({
 
   const flows = useWatch({ control, name: "flows" });
   const fallbackUrl = useWatch({ control, name: "fallbackUrl" });
+  const rootFilter = useWatch({ control, name: "rootFilter" }) as FilterGroupNode;
   const weightSum = flows.reduce((sum, f) => sum + (f.weight || 0), 0);
 
   return (
     <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-6 border-t border-border px-4 py-4">
-      <div className="grid gap-4 sm:grid-cols-2">
-        <div className="grid gap-1.5">
-          <Label htmlFor="ss-name">{t("form.nameLabel")}</Label>
-          <Input id="ss-name" {...register("name")} aria-invalid={!!errors.name} />
-          {errors.name && <p className="text-xs text-danger">{errors.name.message}</p>}
-        </div>
-        <div className="grid gap-1.5">
-          <Label htmlFor="ss-status">{t("form.statusLabel")}</Label>
-          <Controller
-            control={control}
-            name="status"
-            render={({ field }) => (
-              <Select value={field.value} onValueChange={field.onChange}>
-                <SelectTrigger id="ss-status" className="w-full">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="active">{t("status.active", { ns: "common" })}</SelectItem>
-                  <SelectItem value="paused">{t("status.paused", { ns: "common" })}</SelectItem>
-                </SelectContent>
-              </Select>
-            )}
-          />
-        </div>
+      <fieldset disabled={disabled} className="contents">
+      {disabled && (
+        <p className="rounded-md bg-muted px-3 py-2 text-xs text-muted-foreground">{t("form.archivedNotice")}</p>
+      )}
+      <div className="grid gap-1.5 sm:max-w-md">
+        <Label htmlFor="ss-name">{t("form.nameLabel")}</Label>
+        <Input id="ss-name" {...register("name")} aria-invalid={!!errors.name} />
+        {errors.name && <p className="text-xs text-danger">{errors.name.message}</p>}
       </div>
 
       <Separator />
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         <div className="flex flex-col gap-3">
-          <div>
-            <h3 className="text-sm font-medium">{t("form.filtersTitle")}</h3>
-            <p className="text-xs text-muted-foreground">{t("form.filtersDescription")}</p>
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <h3 className="text-sm font-medium">{t("form.filtersTitle")}</h3>
+              <p className="text-xs text-muted-foreground">{t("form.filtersDescription")}</p>
+            </div>
+            <Button type="button" variant="outline" size="sm" onClick={() => setFilterPickerOpen(true)}>
+              <FilterIcon className="size-3.5" /> {t("form.addFilterButton")}
+            </Button>
           </div>
-          <Controller
-            control={control}
-            name="rootFilter"
-            render={({ field }) => (
-              <FilterGroupBuilder
-                root={field.value as FilterGroupNode}
-                group={field.value as FilterGroupNode}
-                onRootChange={field.onChange}
-              />
-            )}
-          />
+          <FilterTreeSummary root={rootFilter} />
           {errors.rootFilter && <p className="text-xs text-danger">{t("form.filtersError")}</p>}
+          <FilterPickerDialog
+            open={filterPickerOpen}
+            onOpenChange={setFilterPickerOpen}
+            root={rootFilter}
+            onApply={(next) => setValue("rootFilter", next, { shouldDirty: true, shouldValidate: true })}
+          />
         </div>
 
         <div className="flex flex-col gap-3">
@@ -238,10 +232,11 @@ export function StreamSetEditor({
       </div>
 
       <div className="flex justify-end">
-        <Button type="submit" disabled={isSubmitting}>
+        <Button type="submit" disabled={disabled || isSubmitting}>
           {submitLabel}
         </Button>
       </div>
+      </fieldset>
     </form>
   );
 }

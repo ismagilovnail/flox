@@ -30,7 +30,8 @@ function buildConnectSchema(t: TFunction) {
 
 type ConnectFormValues = z.infer<ReturnType<typeof buildConnectSchema>>;
 
-/** Shown inside SourceFormSheet, in edit mode only, whenever the live
+/** Shown inside SourceForm (the traffic source edit page), in edit mode
+ * only, whenever the live
  * (not-yet-saved) costIntegration value is facebook_ads/tiktok_ads —
  * connecting/disconnecting is its own action against its own endpoint
  * (/traffic-sources/{id}/connection), independent of the surrounding
@@ -153,7 +154,7 @@ export function AdAccountConnectionSection({
         </div>
       ) : (
         // A <form> here (rather than this <div>) would nest inside
-        // SourceFormSheet's own outer <form> — HTML forbids nesting
+        // SourceForm's own outer <form> — HTML forbids nesting
         // forms, and Chrome's actual behavior for it isn't "the inner
         // form is ignored": the inner submit button's default GET
         // request fires against the outer form instead, sending every

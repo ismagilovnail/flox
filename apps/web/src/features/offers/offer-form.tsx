@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { Controller, useFieldArray, useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { PlusIcon, XIcon } from "lucide-react";
@@ -14,23 +15,16 @@ import { Label } from "@/components/ui/label";
 import { MultiSelect } from "@/components/ui/multi-select";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
-import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetFooter,
-  SheetHeader,
-  SheetTitle,
-} from "@/components/ui/sheet";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { MacroPicker } from "@/components/shared/macro-picker";
 import { genId } from "@/lib/id";
 import { COUNTRIES, CURRENCIES } from "@/lib/countries";
 import type { OfferStatus } from "@/lib/api/offers";
 import type { Network } from "@/lib/api/networks";
 
-/** Factory, not a module-level const — see source-form-sheet.tsx's
- * buildSourceFormSchema for why (Zod messages are user-facing text and
- * need the live translator). */
+/** Factory, not a module-level const — Zod's validation messages are
+ * user-facing text and need the live translator, which only exists inside
+ * a component. */
 export function buildOfferFormSchema(t: TFunction) {
   const linkSchema = z.object({
     id: z.string(),
@@ -57,21 +51,22 @@ export type OfferFormValues = z.infer<ReturnType<typeof buildOfferFormSchema>>;
 const STATUS_OPTIONS: OfferStatus[] = ["active", "paused", "archived"];
 const COUNTRY_OPTIONS = COUNTRIES.map((c) => ({ value: c.code, label: `${c.code} — ${c.name}` }));
 
-export function OfferFormSheet({
-  open,
-  onOpenChange,
+/** The offer create/edit form — its own page (features/offers/{new-offer-
+ * view,offer-detail-view}.tsx) instead of a slide-out Sheet, matching the
+ * traffic-source and campaign create/edit pages' layout. Same fields/
+ * validation/mutation shape the Sheet version had; only the container
+ * changed. */
+export function OfferForm({
+  title,
   defaultValues,
   networks,
-  title,
   submitLabel,
   showStatus = false,
   onSubmit,
 }: {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
+  title: string;
   defaultValues: Partial<OfferFormValues>;
   networks: Network[];
-  title: string;
   submitLabel: string;
   showStatus?: boolean;
   onSubmit: (values: OfferFormValues) => void;
@@ -80,10 +75,10 @@ export function OfferFormSheet({
   // form (including useFieldArray's internal array state) on every render
   // where the object identity changes, which — combined with
   // useFieldArray + MultiSelect here — produced a real "Maximum update
-  // depth exceeded" render loop during manual verification. The parent
-  // (offer-list.tsx) remounts this component via `key={target?.id ??
-  // "new"}` when switching targets, so defaultValues (read once on mount)
-  // is sufficient — same pattern the original mock-backed version used.
+  // depth exceeded" render loop during manual verification. Each of this
+  // form's two callers (new-offer-view.tsx, offer-detail-view.tsx) only
+  // ever mounts it once real data is available, so defaultValues (read
+  // once on mount) is sufficient.
   const { t } = useTranslation(["offers", "common"]);
   const form = useForm<OfferFormValues>({
     resolver: zodResolver(buildOfferFormSchema(t)),
@@ -112,14 +107,13 @@ export function OfferFormSheet({
   const linkArray = useFieldArray({ control, name: "links" });
 
   return (
-    <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent className="w-full gap-0 overflow-y-auto sm:max-w-xl" side="right">
-        <SheetHeader>
-          <SheetTitle>{title}</SheetTitle>
-          <SheetDescription>{t("form.description", { ns: "offers" })}</SheetDescription>
-        </SheetHeader>
-
-        <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-4 px-4 pb-4">
+    <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-4">
+      <Card>
+        <CardHeader>
+          <CardTitle>{title}</CardTitle>
+          <CardDescription>{t("form.description", { ns: "offers" })}</CardDescription>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-4">
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="grid gap-1.5">
               <Label htmlFor="off-name">{t("form.nameLabel", { ns: "offers" })}</Label>
@@ -223,7 +217,7 @@ export function OfferFormSheet({
           </div>
 
           {showStatus && (
-            <div className="grid gap-1.5">
+            <div className="grid gap-1.5 sm:w-1/3">
               <Label htmlFor="off-status">{t("form.statusLabel", { ns: "offers" })}</Label>
               <Controller
                 control={control}
@@ -310,17 +304,17 @@ export function OfferFormSheet({
               <PlusIcon className="size-3.5" /> {t("form.addLinkButton", { ns: "offers" })}
             </Button>
           </div>
+        </CardContent>
+      </Card>
 
-          <SheetFooter className="mt-0 flex-row justify-end gap-2 p-0">
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
-              {t("actions.cancel", { ns: "common" })}
-            </Button>
-            <Button type="submit" disabled={isSubmitting}>
-              {submitLabel}
-            </Button>
-          </SheetFooter>
-        </form>
-      </SheetContent>
-    </Sheet>
+      <div className="flex justify-end gap-2">
+        <Button type="button" variant="outline" asChild>
+          <Link href="/offers">{t("actions.cancel", { ns: "common" })}</Link>
+        </Button>
+        <Button type="submit" disabled={isSubmitting}>
+          {submitLabel}
+        </Button>
+      </div>
+    </form>
   );
 }

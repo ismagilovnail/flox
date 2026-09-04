@@ -3,6 +3,7 @@ package pwa_test
 import (
 	"context"
 	"os"
+	"strings"
 	"testing"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -407,6 +408,185 @@ func TestDuplicateCopiesGalleryFields(t *testing.T) {
 	}
 	if len(dup.Screenshots) != 1 || dup.WhatsNew != "Initial release" || dup.RatingStars5 == nil || *dup.RatingStars5 != 90.0 {
 		t.Fatalf("Duplicate = %+v, want gallery fields copied from the source", dup)
+	}
+}
+
+// Detail-sheet fields (migration 00025): version/age rating/category/
+// interactive elements back the listing's "detailed information" table.
+// Unlike rating/size they're plain strings, so "" is the never-entered
+// state the UI hides a row for — this asserts the default really is ""
+// and that a round trip preserves what was entered.
+func TestDetailFieldsRoundTripAndDefaultToEmpty(t *testing.T) {
+	pool := mustPool(t)
+	ctx := context.Background()
+	orgID := seedOrg(t, ctx, pool)
+
+	svc := pwa.NewService(pwa.NewRepository(pool))
+
+	bare, err := svc.Create(ctx, orgID, validInput("No Detail Fields"))
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	if bare.Version != "" || bare.AgeRating != "" || bare.Category != "" || bare.InteractiveElements != "" {
+		t.Fatalf("unset detail fields = %+v, want empty strings", bare)
+	}
+
+	in := validInput("With Detail Fields")
+	in.Version = " 1.0.0 " // leading/trailing space must be trimmed
+	in.AgeRating = "12+"
+	in.Category = "Casino"
+	in.InteractiveElements = "In-game purchases"
+	created, err := svc.Create(ctx, orgID, in)
+	if err != nil {
+		t.Fatalf("Create with detail fields: %v", err)
+	}
+	if created.Version != "1.0.0" {
+		t.Fatalf("Version = %q, want %q (trimmed)", created.Version, "1.0.0")
+	}
+
+	got, err := svc.Get(ctx, orgID, created.ID)
+	if err != nil {
+		t.Fatalf("Get: %v", err)
+	}
+	if got.AgeRating != "12+" || got.Category != "Casino" || got.InteractiveElements != "In-game purchases" {
+		t.Fatalf("Get = %+v, want the detail fields as created", got)
+	}
+
+	category := "Arcade"
+	updated, err := svc.Update(ctx, orgID, created.ID, pwa.UpdateInput{Category: &category})
+	if err != nil {
+		t.Fatalf("Update: %v", err)
+	}
+	if updated.Category != "Arcade" || updated.Version != "1.0.0" {
+		t.Fatalf("Update = %+v, want category changed and the other detail fields untouched", updated)
+	}
+}
+
+func TestCreateRejectsOverlongDetailFields(t *testing.T) {
+	pool := mustPool(t)
+	ctx := context.Background()
+	orgID := seedOrg(t, ctx, pool)
+
+	svc := pwa.NewService(pwa.NewRepository(pool))
+
+	bad := validInput("Overlong Category")
+	bad.Category = strings.Repeat("x", 61)
+	if _, err := svc.Create(ctx, orgID, bad); err == nil {
+		t.Fatal("Create with a 61-character category succeeded, want a validation error")
+	}
+}
+
+func TestDuplicateCopiesDetailFields(t *testing.T) {
+	pool := mustPool(t)
+	ctx := context.Background()
+	orgID := seedOrg(t, ctx, pool)
+
+	svc := pwa.NewService(pwa.NewRepository(pool))
+	in := validInput("Source With Detail Fields")
+	in.Version = "2.1.0"
+	in.AgeRating = "18+"
+	in.Category = "Casino"
+	in.InteractiveElements = "Interactive elements"
+	created, err := svc.Create(ctx, orgID, in)
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+
+	dup, err := svc.Duplicate(ctx, orgID, created.ID)
+	if err != nil {
+		t.Fatalf("Duplicate: %v", err)
+	}
+	if dup.Version != "2.1.0" || dup.AgeRating != "18+" || dup.Category != "Casino" || dup.InteractiveElements != "Interactive elements" {
+		t.Fatalf("Duplicate = %+v, want detail fields copied from the source", dup)
+	}
+}
+
+// contains_ads / in_app_purchases / updated_date (migration 00026):
+// the first two replaced a hardcoded "no ads or paid content" claim in
+// the preview, the third replaced today's date being printed as if it
+// were the listing's own. updated_date crosses the API as YYYY-MM-DD.
+func TestAdsPurchasesAndUpdatedDateRoundTrip(t *testing.T) {
+	pool := mustPool(t)
+	ctx := context.Background()
+	orgID := seedOrg(t, ctx, pool)
+
+	svc := pwa.NewService(pwa.NewRepository(pool))
+
+	bare, err := svc.Create(ctx, orgID, validInput("No Flags"))
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	if bare.ContainsAds || bare.InAppPurchases {
+		t.Fatalf("unset flags = %+v, want both false", bare)
+	}
+	if bare.UpdatedDate != nil {
+		t.Fatalf("UpdatedDate = %v, want nil when never entered", *bare.UpdatedDate)
+	}
+
+	date := "2026-08-21"
+	in := validInput("With Flags")
+	in.ContainsAds = true
+	in.InAppPurchases = true
+	in.UpdatedDate = &date
+	created, err := svc.Create(ctx, orgID, in)
+	if err != nil {
+		t.Fatalf("Create with flags: %v", err)
+	}
+	if !created.ContainsAds || !created.InAppPurchases {
+		t.Fatalf("flags = %+v, want both true", created)
+	}
+	if created.UpdatedDate == nil || *created.UpdatedDate != date {
+		t.Fatalf("UpdatedDate = %v, want %q", created.UpdatedDate, date)
+	}
+
+	got, err := svc.Get(ctx, orgID, created.ID)
+	if err != nil {
+		t.Fatalf("Get: %v", err)
+	}
+	if got.UpdatedDate == nil || *got.UpdatedDate != date {
+		t.Fatalf("Get UpdatedDate = %v, want %q", got.UpdatedDate, date)
+	}
+
+	dup, err := svc.Duplicate(ctx, orgID, created.ID)
+	if err != nil {
+		t.Fatalf("Duplicate: %v", err)
+	}
+	if !dup.ContainsAds || !dup.InAppPurchases || dup.UpdatedDate == nil || *dup.UpdatedDate != date {
+		t.Fatalf("Duplicate = %+v, want the flags and date copied", dup)
+	}
+}
+
+// A cleared date input sends "", which must land as SQL NULL rather
+// than failing the ::date cast.
+func TestBlankUpdatedDateBecomesNull(t *testing.T) {
+	pool := mustPool(t)
+	ctx := context.Background()
+	orgID := seedOrg(t, ctx, pool)
+
+	svc := pwa.NewService(pwa.NewRepository(pool))
+	blank := ""
+	in := validInput("Blank Date")
+	in.UpdatedDate = &blank
+	created, err := svc.Create(ctx, orgID, in)
+	if err != nil {
+		t.Fatalf("Create with a blank updatedDate: %v", err)
+	}
+	if created.UpdatedDate != nil {
+		t.Fatalf("UpdatedDate = %v, want nil for a blank input", *created.UpdatedDate)
+	}
+}
+
+func TestCreateRejectsMalformedUpdatedDate(t *testing.T) {
+	pool := mustPool(t)
+	ctx := context.Background()
+	orgID := seedOrg(t, ctx, pool)
+
+	svc := pwa.NewService(pwa.NewRepository(pool))
+	bad := validInput("Bad Date")
+	notADate := "21.08.2026"
+	bad.UpdatedDate = &notADate
+	if _, err := svc.Create(ctx, orgID, bad); err == nil {
+		t.Fatal("Create with updatedDate=21.08.2026 succeeded, want a validation error")
 	}
 }
 

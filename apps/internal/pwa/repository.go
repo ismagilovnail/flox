@@ -19,7 +19,7 @@ type Repository struct {
 
 func NewRepository(db *pgxpool.Pool) *Repository { return &Repository{db: db} }
 
-const selectColumns = `id, organization_id, name, short_name, theme_color, background_color, icon_url, start_url, bounce_in_app_webview, developer, description, rating, rating_count, downloads_label, size_mb, screenshots, whats_new, rating_stars_5, rating_stars_4, rating_stars_3, rating_stars_2, rating_stars_1, status, created_at, updated_at`
+const selectColumns = `id, organization_id, name, short_name, theme_color, background_color, icon_url, start_url, bounce_in_app_webview, developer, description, rating, rating_count, downloads_label, size_mb, screenshots, whats_new, rating_stars_5, rating_stars_4, rating_stars_3, rating_stars_2, rating_stars_1, version, age_rating, category, interactive_elements, contains_ads, in_app_purchases, to_char(updated_date, 'YYYY-MM-DD'), status, created_at, updated_at`
 
 func scanPwa(row pgx.Row) (Pwa, error) {
 	var p Pwa
@@ -28,6 +28,8 @@ func scanPwa(row pgx.Row) (Pwa, error) {
 		&p.IconURL, &p.StartURL, &p.BounceInAppWebview, &p.Developer, &p.Description,
 		&p.Rating, &p.RatingCount, &p.DownloadsLabel, &p.SizeMB, &p.Screenshots, &p.WhatsNew,
 		&p.RatingStars5, &p.RatingStars4, &p.RatingStars3, &p.RatingStars2, &p.RatingStars1,
+		&p.Version, &p.AgeRating, &p.Category, &p.InteractiveElements,
+		&p.ContainsAds, &p.InAppPurchases, &p.UpdatedDate,
 		&p.Status, &p.CreatedAt, &p.UpdatedAt,
 	)
 	return p, err
@@ -73,12 +75,14 @@ func (r *Repository) GetByID(ctx context.Context, orgID, id string) (Pwa, error)
 
 func (r *Repository) Create(ctx context.Context, id, orgID string, in CreateInput) (Pwa, error) {
 	row := r.db.QueryRow(ctx, `
-		INSERT INTO pwas (id, organization_id, name, short_name, theme_color, background_color, icon_url, start_url, bounce_in_app_webview, developer, description, rating, rating_count, downloads_label, size_mb, screenshots, whats_new, rating_stars_5, rating_stars_4, rating_stars_3, rating_stars_2, rating_stars_1)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22)
+		INSERT INTO pwas (id, organization_id, name, short_name, theme_color, background_color, icon_url, start_url, bounce_in_app_webview, developer, description, rating, rating_count, downloads_label, size_mb, screenshots, whats_new, rating_stars_5, rating_stars_4, rating_stars_3, rating_stars_2, rating_stars_1, version, age_rating, category, interactive_elements, contains_ads, in_app_purchases, updated_date)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29::date)
 		RETURNING `+selectColumns,
 		id, orgID, in.Name, in.ShortName, in.ThemeColor, in.BackgroundColor, in.IconURL, in.StartURL, in.BounceInAppWebview,
 		in.Developer, in.Description, in.Rating, in.RatingCount, in.DownloadsLabel, in.SizeMB,
 		in.Screenshots, in.WhatsNew, in.RatingStars5, in.RatingStars4, in.RatingStars3, in.RatingStars2, in.RatingStars1,
+		in.Version, in.AgeRating, in.Category, in.InteractiveElements,
+		in.ContainsAds, in.InAppPurchases, in.UpdatedDate,
 	)
 	return scanPwa(row)
 }
@@ -150,6 +154,27 @@ func (r *Repository) Update(ctx context.Context, orgID, id string, in UpdateInpu
 	}
 	if in.RatingStars1 != nil {
 		sets = append(sets, "rating_stars_1 = "+arg(*in.RatingStars1))
+	}
+	if in.Version != nil {
+		sets = append(sets, "version = "+arg(*in.Version))
+	}
+	if in.AgeRating != nil {
+		sets = append(sets, "age_rating = "+arg(*in.AgeRating))
+	}
+	if in.Category != nil {
+		sets = append(sets, "category = "+arg(*in.Category))
+	}
+	if in.InteractiveElements != nil {
+		sets = append(sets, "interactive_elements = "+arg(*in.InteractiveElements))
+	}
+	if in.ContainsAds != nil {
+		sets = append(sets, "contains_ads = "+arg(*in.ContainsAds))
+	}
+	if in.InAppPurchases != nil {
+		sets = append(sets, "in_app_purchases = "+arg(*in.InAppPurchases))
+	}
+	if in.UpdatedDate != nil {
+		sets = append(sets, "updated_date = "+arg(*in.UpdatedDate)+"::date")
 	}
 	if in.Status != nil {
 		sets = append(sets, "status = "+arg(*in.Status))

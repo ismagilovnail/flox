@@ -1,10 +1,11 @@
 import type { ColumnDef } from "@tanstack/react-table";
-import { formatDistanceToNow } from "date-fns";
+import Link from "next/link";
 import type { TFunction } from "i18next";
 
 import { dataTableFeatures } from "@/components/ui/data-table";
 import { Badge } from "@/components/ui/badge";
-import { Caption, Mono } from "@/components/ui/typography";
+import { Mono } from "@/components/ui/typography";
+import { RelativeTime } from "@/components/ui/relative-time";
 import { PIXEL_PROVIDER_I18N_KEY, type Pixel, type PixelStatus } from "@/lib/api/pixels";
 import { PixelRowActions } from "@/features/pixels/pixel-row-actions";
 
@@ -14,19 +15,15 @@ const STATUS_VARIANT: Record<PixelStatus, "success" | "warning" | "secondary"> =
   archived: "secondary",
 };
 
-export function pixelColumns(t: TFunction, onEdit: (pixel: Pixel) => void): ColumnDef<typeof dataTableFeatures, Pixel>[] {
+export function pixelColumns(t: TFunction): ColumnDef<typeof dataTableFeatures, Pixel>[] {
   return [
     {
       accessorKey: "name",
       header: t("columns.name", { ns: "pixels" }),
       cell: ({ row }) => (
-        <button
-          type="button"
-          onClick={() => onEdit(row.original)}
-          className="font-medium text-foreground hover:underline"
-        >
+        <Link href={`/pixels/${row.original.id}`} className="font-medium text-foreground hover:underline">
           {row.original.name}
-        </button>
+        </Link>
       ),
     },
     {
@@ -67,9 +64,7 @@ export function pixelColumns(t: TFunction, onEdit: (pixel: Pixel) => void): Colu
     {
       accessorKey: "updatedAt",
       header: t("columns.updated", { ns: "pixels" }),
-      cell: ({ getValue }) => (
-        <Caption>{formatDistanceToNow(new Date(getValue() as string), { addSuffix: true })}</Caption>
-      ),
+      cell: ({ getValue }) => <RelativeTime date={getValue() as string} />,
     },
     {
       id: "actions",
@@ -78,7 +73,7 @@ export function pixelColumns(t: TFunction, onEdit: (pixel: Pixel) => void): Colu
       enableHiding: false,
       cell: ({ row }) => (
         <div className="flex justify-end">
-          <PixelRowActions pixel={row.original} onEdit={() => onEdit(row.original)} />
+          <PixelRowActions pixel={row.original} />
         </div>
       ),
     },

@@ -23,6 +23,13 @@ export function NewPwaView() {
         description: values.description ?? "",
         downloadsLabel: values.downloadsLabel ?? "",
         whatsNew: values.whatsNew ?? "",
+        version: values.version ?? "",
+        ageRating: values.ageRating ?? "",
+        category: values.category ?? "",
+        interactiveElements: values.interactiveElements ?? "",
+        containsAds: values.containsAds,
+        inAppPurchases: values.inAppPurchases,
+        updatedDate: values.updatedDate || undefined,
         screenshots: values.screenshots.map((s) => s.url),
       },
       {

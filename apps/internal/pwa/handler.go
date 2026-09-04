@@ -54,26 +54,33 @@ func (h *Handler) get(w http.ResponseWriter, r *http.Request) {
 }
 
 type createRequest struct {
-	Name               string   `json:"name"`
-	ShortName          string   `json:"shortName"`
-	ThemeColor         string   `json:"themeColor"`
-	BackgroundColor    string   `json:"backgroundColor"`
-	IconURL            string   `json:"iconUrl"`
-	StartURL           string   `json:"startUrl"`
-	BounceInAppWebview bool     `json:"bounceInAppWebview"`
-	Developer          string   `json:"developer"`
-	Description        string   `json:"description"`
-	Rating             *float64 `json:"rating"`
-	RatingCount        *int     `json:"ratingCount"`
-	DownloadsLabel     string   `json:"downloadsLabel"`
-	SizeMB             *float64 `json:"sizeMb"`
-	Screenshots        []string `json:"screenshots"`
-	WhatsNew           string   `json:"whatsNew"`
-	RatingStars5       *float64 `json:"ratingStars5"`
-	RatingStars4       *float64 `json:"ratingStars4"`
-	RatingStars3       *float64 `json:"ratingStars3"`
-	RatingStars2       *float64 `json:"ratingStars2"`
-	RatingStars1       *float64 `json:"ratingStars1"`
+	Name                string   `json:"name"`
+	ShortName           string   `json:"shortName"`
+	ThemeColor          string   `json:"themeColor"`
+	BackgroundColor     string   `json:"backgroundColor"`
+	IconURL             string   `json:"iconUrl"`
+	StartURL            string   `json:"startUrl"`
+	BounceInAppWebview  bool     `json:"bounceInAppWebview"`
+	Developer           string   `json:"developer"`
+	Description         string   `json:"description"`
+	Rating              *float64 `json:"rating"`
+	RatingCount         *int     `json:"ratingCount"`
+	DownloadsLabel      string   `json:"downloadsLabel"`
+	SizeMB              *float64 `json:"sizeMb"`
+	Screenshots         []string `json:"screenshots"`
+	WhatsNew            string   `json:"whatsNew"`
+	RatingStars5        *float64 `json:"ratingStars5"`
+	RatingStars4        *float64 `json:"ratingStars4"`
+	RatingStars3        *float64 `json:"ratingStars3"`
+	RatingStars2        *float64 `json:"ratingStars2"`
+	RatingStars1        *float64 `json:"ratingStars1"`
+	Version             string   `json:"version"`
+	AgeRating           string   `json:"ageRating"`
+	Category            string   `json:"category"`
+	InteractiveElements string   `json:"interactiveElements"`
+	ContainsAds         bool     `json:"containsAds"`
+	InAppPurchases      bool     `json:"inAppPurchases"`
+	UpdatedDate         *string  `json:"updatedDate"`
 }
 
 func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
@@ -86,26 +93,33 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 	}
 
 	p, err := h.svc.Create(r.Context(), orgID, CreateInput{
-		Name:               req.Name,
-		ShortName:          req.ShortName,
-		ThemeColor:         req.ThemeColor,
-		BackgroundColor:    req.BackgroundColor,
-		IconURL:            req.IconURL,
-		StartURL:           req.StartURL,
-		BounceInAppWebview: req.BounceInAppWebview,
-		Developer:          req.Developer,
-		Description:        req.Description,
-		Rating:             req.Rating,
-		RatingCount:        req.RatingCount,
-		DownloadsLabel:     req.DownloadsLabel,
-		SizeMB:             req.SizeMB,
-		Screenshots:        req.Screenshots,
-		WhatsNew:           req.WhatsNew,
-		RatingStars5:       req.RatingStars5,
-		RatingStars4:       req.RatingStars4,
-		RatingStars3:       req.RatingStars3,
-		RatingStars2:       req.RatingStars2,
-		RatingStars1:       req.RatingStars1,
+		Name:                req.Name,
+		ShortName:           req.ShortName,
+		ThemeColor:          req.ThemeColor,
+		BackgroundColor:     req.BackgroundColor,
+		IconURL:             req.IconURL,
+		StartURL:            req.StartURL,
+		BounceInAppWebview:  req.BounceInAppWebview,
+		Developer:           req.Developer,
+		Description:         req.Description,
+		Rating:              req.Rating,
+		RatingCount:         req.RatingCount,
+		DownloadsLabel:      req.DownloadsLabel,
+		SizeMB:              req.SizeMB,
+		Screenshots:         req.Screenshots,
+		WhatsNew:            req.WhatsNew,
+		RatingStars5:        req.RatingStars5,
+		RatingStars4:        req.RatingStars4,
+		RatingStars3:        req.RatingStars3,
+		RatingStars2:        req.RatingStars2,
+		RatingStars1:        req.RatingStars1,
+		Version:             req.Version,
+		AgeRating:           req.AgeRating,
+		Category:            req.Category,
+		InteractiveElements: req.InteractiveElements,
+		ContainsAds:         req.ContainsAds,
+		InAppPurchases:      req.InAppPurchases,
+		UpdatedDate:         req.UpdatedDate,
 	})
 	if err != nil {
 		apierror.Write(w, h.logger, err)
@@ -115,27 +129,34 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 }
 
 type updateRequest struct {
-	Name               *string   `json:"name"`
-	ShortName          *string   `json:"shortName"`
-	ThemeColor         *string   `json:"themeColor"`
-	BackgroundColor    *string   `json:"backgroundColor"`
-	IconURL            *string   `json:"iconUrl"`
-	StartURL           *string   `json:"startUrl"`
-	BounceInAppWebview *bool     `json:"bounceInAppWebview"`
-	Developer          *string   `json:"developer"`
-	Description        *string   `json:"description"`
-	Rating             *float64  `json:"rating"`
-	RatingCount        *int      `json:"ratingCount"`
-	DownloadsLabel     *string   `json:"downloadsLabel"`
-	SizeMB             *float64  `json:"sizeMb"`
-	Screenshots        *[]string `json:"screenshots"`
-	WhatsNew           *string   `json:"whatsNew"`
-	RatingStars5       *float64  `json:"ratingStars5"`
-	RatingStars4       *float64  `json:"ratingStars4"`
-	RatingStars3       *float64  `json:"ratingStars3"`
-	RatingStars2       *float64  `json:"ratingStars2"`
-	RatingStars1       *float64  `json:"ratingStars1"`
-	Status             *Status   `json:"status"`
+	Name                *string   `json:"name"`
+	ShortName           *string   `json:"shortName"`
+	ThemeColor          *string   `json:"themeColor"`
+	BackgroundColor     *string   `json:"backgroundColor"`
+	IconURL             *string   `json:"iconUrl"`
+	StartURL            *string   `json:"startUrl"`
+	BounceInAppWebview  *bool     `json:"bounceInAppWebview"`
+	Developer           *string   `json:"developer"`
+	Description         *string   `json:"description"`
+	Rating              *float64  `json:"rating"`
+	RatingCount         *int      `json:"ratingCount"`
+	DownloadsLabel      *string   `json:"downloadsLabel"`
+	SizeMB              *float64  `json:"sizeMb"`
+	Screenshots         *[]string `json:"screenshots"`
+	WhatsNew            *string   `json:"whatsNew"`
+	RatingStars5        *float64  `json:"ratingStars5"`
+	RatingStars4        *float64  `json:"ratingStars4"`
+	RatingStars3        *float64  `json:"ratingStars3"`
+	RatingStars2        *float64  `json:"ratingStars2"`
+	RatingStars1        *float64  `json:"ratingStars1"`
+	Version             *string   `json:"version"`
+	AgeRating           *string   `json:"ageRating"`
+	Category            *string   `json:"category"`
+	InteractiveElements *string   `json:"interactiveElements"`
+	ContainsAds         *bool     `json:"containsAds"`
+	InAppPurchases      *bool     `json:"inAppPurchases"`
+	UpdatedDate         *string   `json:"updatedDate"`
+	Status              *Status   `json:"status"`
 }
 
 func (h *Handler) update(w http.ResponseWriter, r *http.Request) {
@@ -148,27 +169,34 @@ func (h *Handler) update(w http.ResponseWriter, r *http.Request) {
 	}
 
 	p, err := h.svc.Update(r.Context(), orgID, chi.URLParam(r, "id"), UpdateInput{
-		Name:               req.Name,
-		ShortName:          req.ShortName,
-		ThemeColor:         req.ThemeColor,
-		BackgroundColor:    req.BackgroundColor,
-		IconURL:            req.IconURL,
-		StartURL:           req.StartURL,
-		BounceInAppWebview: req.BounceInAppWebview,
-		Developer:          req.Developer,
-		Description:        req.Description,
-		Rating:             req.Rating,
-		RatingCount:        req.RatingCount,
-		DownloadsLabel:     req.DownloadsLabel,
-		SizeMB:             req.SizeMB,
-		Screenshots:        req.Screenshots,
-		WhatsNew:           req.WhatsNew,
-		RatingStars5:       req.RatingStars5,
-		RatingStars4:       req.RatingStars4,
-		RatingStars3:       req.RatingStars3,
-		RatingStars2:       req.RatingStars2,
-		RatingStars1:       req.RatingStars1,
-		Status:             req.Status,
+		Name:                req.Name,
+		ShortName:           req.ShortName,
+		ThemeColor:          req.ThemeColor,
+		BackgroundColor:     req.BackgroundColor,
+		IconURL:             req.IconURL,
+		StartURL:            req.StartURL,
+		BounceInAppWebview:  req.BounceInAppWebview,
+		Developer:           req.Developer,
+		Description:         req.Description,
+		Rating:              req.Rating,
+		RatingCount:         req.RatingCount,
+		DownloadsLabel:      req.DownloadsLabel,
+		SizeMB:              req.SizeMB,
+		Screenshots:         req.Screenshots,
+		WhatsNew:            req.WhatsNew,
+		RatingStars5:        req.RatingStars5,
+		RatingStars4:        req.RatingStars4,
+		RatingStars3:        req.RatingStars3,
+		RatingStars2:        req.RatingStars2,
+		RatingStars1:        req.RatingStars1,
+		Version:             req.Version,
+		AgeRating:           req.AgeRating,
+		Category:            req.Category,
+		InteractiveElements: req.InteractiveElements,
+		ContainsAds:         req.ContainsAds,
+		InAppPurchases:      req.InAppPurchases,
+		UpdatedDate:         req.UpdatedDate,
+		Status:              req.Status,
 	})
 	if err != nil {
 		apierror.Write(w, h.logger, err)

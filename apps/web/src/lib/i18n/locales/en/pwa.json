@@ -85,8 +85,23 @@
       "ratingStarsRange": "Must be between 0 and 100",
       "whatsNewMax": "Up to 2000 characters",
       "screenshotUrlInvalid": "Enter a valid image URL",
-      "screenshotsMax": "Up to 12 screenshots"
-    }
+      "screenshotsMax": "Up to 12 screenshots",
+      "detailLabelMax": "Up to 60 characters",
+      "updatedDateInvalid": "Enter a date like 2026-08-21"
+    },
+    "detailsSectionLabel": "Detailed information",
+    "detailsSectionHint": "Optional — shown in the preview's \"About this app\" sheet. A blank field leaves its row out entirely.",
+    "versionLabel": "Current version",
+    "versionPlaceholder": "1.0.0",
+    "ageRatingLabel": "Age rating",
+    "ageRatingPlaceholder": "12+",
+    "categoryLabel": "Category",
+    "categoryPlaceholder": "Casino",
+    "interactiveElementsLabel": "Interactive elements",
+    "interactiveElementsPlaceholder": "In-game purchases",
+    "updatedDateLabel": "Updated on",
+    "containsAdsLabel": "Contains ads",
+    "inAppPurchasesLabel": "In-app purchases"
   },
   "preview": {
     "title": "Live preview",
@@ -98,6 +113,7 @@
     "reviewsCount_one": "{{count}} review",
     "reviewsCount_other": "{{count}} reviews",
     "noData": "No rating yet",
+    "downloadsLabel": "Downloads",
     "sizeMb": "{{size}} MB",
     "install": "Install",
     "share": "Share",
@@ -109,22 +125,38 @@
     "dataSafetyTitle": "Data safety",
     "dataSafetyText": "Safety starts with understanding how developers collect and share your data. Data privacy and security practices may vary based on your use, region, and age. The developer provided this information and may update it over time.",
     "reviewsTitle": "Ratings and reviews",
+    "reviewsVerified": "Ratings and reviews are verified",
     "whatsNewTitle": "What's new",
     "footer": {
       "store": "Store",
-      "giftCards": "Redeem",
-      "redeemCode": "Gift cards",
+      "giftCards": "Gift cards",
+      "redeemCode": "Redeem code",
       "familyLibrary": "Family library",
+      "kidsFamilyTitle": "Kids & family",
+      "parentGuide": "Parent guide",
       "terms": "Terms of Service",
       "privacy": "Privacy",
-      "developers": "About the developer"
+      "developers": "Developers"
     },
     "nav": {
       "games": "Games",
       "apps": "Apps",
       "books": "Books",
       "kids": "Kids"
-    }
+    },
+    "aboutOpenAria": "Open the full description",
+    "closeAria": "Close",
+    "detailsTitle": "Detailed information",
+    "detailUpdated": "Updated",
+    "detailSize": "Size",
+    "detailDownloads": "Downloads",
+    "detailVersion": "Current version",
+    "detailAge": "Age",
+    "detailDeveloper": "Developer",
+    "detailCategory": "Category",
+    "detailInteractive": "Interactive elements",
+    "containsAds": "Contains ads",
+    "inAppPurchases": "In-app purchases"
   },
   "rowActions": {
     "actionsAria": "Actions for {{name}}",

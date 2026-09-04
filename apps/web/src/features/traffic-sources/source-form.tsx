@@ -1,23 +1,18 @@
 "use client";
 
+import Link from "next/link";
 import { Controller, useForm, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { useTranslation } from "react-i18next";
 import type { TFunction } from "i18next";
 
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetFooter,
-  SheetHeader,
-  SheetTitle,
-} from "@/components/ui/sheet";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { MacroPicker } from "@/components/shared/macro-picker";
 import { AdAccountConnectionSection } from "@/features/traffic-sources/ad-account-connection-section";
 import {
@@ -49,20 +44,21 @@ export type SourceFormValues = z.infer<ReturnType<typeof buildSourceFormSchema>>
 
 const STATUS_OPTIONS: SourceStatus[] = ["active", "paused", "archived"];
 
-export function SourceFormSheet({
-  open,
-  onOpenChange,
-  defaultValues,
+/** The traffic source create/edit form — its own page (features/traffic-
+ * sources/{new-source-view,source-detail-view}.tsx) instead of a slide-out
+ * Sheet, at the user's request to match the campaign create/edit pages'
+ * layout. Same fields/validation/mutation shape the Sheet version had;
+ * only the container changed. */
+export function SourceForm({
   title,
+  defaultValues,
   submitLabel,
   showStatus = false,
   sourceId,
   onSubmit,
 }: {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  defaultValues: Partial<SourceFormValues>;
   title: string;
+  defaultValues: Partial<SourceFormValues>;
   submitLabel: string;
   showStatus?: boolean;
   /** Set only when editing a real, already-saved source — gates the
@@ -96,14 +92,13 @@ export function SourceFormSheet({
   const liveCostIntegration = useWatch({ control, name: "costIntegration" });
 
   return (
-    <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent className="w-full gap-0 overflow-y-auto sm:max-w-lg" side="right">
-        <SheetHeader>
-          <SheetTitle>{title}</SheetTitle>
-          <SheetDescription>{t("form.description", { ns: "trafficSources" })}</SheetDescription>
-        </SheetHeader>
-
-        <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-4 px-4 pb-4">
+    <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-4">
+      <Card>
+        <CardHeader>
+          <CardTitle>{title}</CardTitle>
+          <CardDescription>{t("form.description", { ns: "trafficSources" })}</CardDescription>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-4">
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="grid gap-1.5">
               <Label htmlFor="src-name">{t("form.nameLabel", { ns: "trafficSources" })}</Label>
@@ -205,20 +200,36 @@ export function SourceFormSheet({
             )}
           </div>
 
-          {sourceId && (liveCostIntegration === "facebook_ads" || liveCostIntegration === "tiktok_ads") && (
-            <AdAccountConnectionSection trafficSourceId={sourceId} provider={liveCostIntegration} />
-          )}
+          {(liveCostIntegration === "facebook_ads" || liveCostIntegration === "tiktok_ads") &&
+            (sourceId ? (
+              <AdAccountConnectionSection trafficSourceId={sourceId} provider={liveCostIntegration} />
+            ) : (
+              <div className="flex flex-col gap-2 rounded-lg border border-border p-3">
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-medium">{t("connection.title", { ns: "trafficSources" })}</span>
+                  <Badge variant="outline">
+                    {t(`costIntegration.${liveCostIntegration === "facebook_ads" ? "facebookAds" : "tiktokAds"}`, {
+                      ns: "trafficSources",
+                    })}
+                  </Badge>
+                </div>
+                <p className="text-xs text-muted-foreground">{t("connection.description", { ns: "trafficSources" })}</p>
+                <p className="rounded-md bg-muted px-3 py-2 text-xs text-muted-foreground">
+                  {t("connection.savedRequiredNotice", { ns: "trafficSources" })}
+                </p>
+              </div>
+            ))}
+        </CardContent>
+      </Card>
 
-          <SheetFooter className="mt-0 flex-row justify-end gap-2 p-0">
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
-              {t("actions.cancel", { ns: "common" })}
-            </Button>
-            <Button type="submit" disabled={isSubmitting}>
-              {submitLabel}
-            </Button>
-          </SheetFooter>
-        </form>
-      </SheetContent>
-    </Sheet>
+      <div className="flex justify-end gap-2">
+        <Button type="button" variant="outline" asChild>
+          <Link href="/traffic-sources">{t("actions.cancel", { ns: "common" })}</Link>
+        </Button>
+        <Button type="submit" disabled={isSubmitting}>
+          {submitLabel}
+        </Button>
+      </div>
+    </form>
   );
 }

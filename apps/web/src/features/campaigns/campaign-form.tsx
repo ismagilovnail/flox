@@ -36,18 +36,25 @@ export function buildCampaignFormSchema(t: TFunction) {
 
 export type CampaignFormValues = z.infer<ReturnType<typeof buildCampaignFormSchema>>;
 
-const STATUS_OPTIONS: CampaignStatus[] = ["draft", "active", "paused", "archived"];
-
 export function CampaignForm({
   defaultValues,
-  showStatus = false,
   submitLabel,
   onSubmit,
+  formId,
+  disabled = false,
 }: {
   defaultValues: Partial<CampaignFormValues>;
-  showStatus?: boolean;
   submitLabel?: string;
   onSubmit: (values: CampaignFormValues) => void;
+  /** When set, the form renders no submit button of its own — the caller
+   * places a `<Button type="submit" form={formId}>` wherever it wants
+   * (e.g. a page header) instead of below the card. */
+  formId?: string;
+  /** Archived campaigns are a terminal state (§ Duplicate's own doc
+   * comment: reviving one is "a new starting point," not editing the old
+   * one back to life) — every field locks read-only rather than letting
+   * an edit look saved while it can't matter. */
+  disabled?: boolean;
 }) {
   const { t } = useTranslation(["campaigns", "common"]);
   const sourcesQuery = useTrafficSources();
@@ -74,13 +81,18 @@ export function CampaignForm({
   } = form;
 
   return (
-    <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-4">
+    <form id={formId} onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-4">
       <Card>
         <CardHeader>
           <CardTitle>{t("form.detailsTitle", { ns: "campaigns" })}</CardTitle>
           <CardDescription>{t("form.detailsDescription", { ns: "campaigns" })}</CardDescription>
         </CardHeader>
         <CardContent className="grid max-w-lg gap-4">
+          {disabled && (
+            <p className="rounded-md bg-muted px-3 py-2 text-xs text-muted-foreground">
+              {t("form.archivedNotice", { ns: "campaigns" })}
+            </p>
+          )}
           <div className="grid gap-1.5">
             <Label htmlFor="name">{t("form.nameLabel", { ns: "campaigns" })}</Label>
             <Input
@@ -88,6 +100,7 @@ export function CampaignForm({
               placeholder={t("form.namePlaceholder", { ns: "campaigns" })}
               {...register("name")}
               aria-invalid={!!errors.name}
+              disabled={disabled}
             />
             {errors.name && <p className="text-xs text-danger">{errors.name.message}</p>}
           </div>
@@ -107,7 +120,7 @@ export function CampaignForm({
                 control={control}
                 name="trafficSourceId"
                 render={({ field }) => (
-                  <Select value={field.value} onValueChange={field.onChange}>
+                  <Select value={field.value} onValueChange={field.onChange} disabled={disabled}>
                     <SelectTrigger id="trafficSourceId" className="w-full">
                       <SelectValue />
                     </SelectTrigger>
@@ -132,6 +145,7 @@ export function CampaignForm({
               placeholder={t("form.fallbackUrlPlaceholder", { ns: "campaigns" })}
               {...register("fallbackUrl")}
               aria-invalid={!!errors.fallbackUrl}
+              disabled={disabled}
             />
             {errors.fallbackUrl && <p className="text-xs text-danger">{errors.fallbackUrl.message}</p>}
             <p className="text-xs text-muted-foreground">{t("form.fallbackUrlHint", { ns: "campaigns" })}</p>
@@ -144,6 +158,7 @@ export function CampaignForm({
               placeholder={t("form.externalCampaignIdPlaceholder", { ns: "campaigns" })}
               {...register("externalCampaignId")}
               aria-invalid={!!errors.externalCampaignId}
+              disabled={disabled}
             />
             {errors.externalCampaignId && (
               <p className="text-xs text-danger">{errors.externalCampaignId.message}</p>
@@ -151,42 +166,25 @@ export function CampaignForm({
             <p className="text-xs text-muted-foreground">{t("form.externalCampaignIdHint", { ns: "campaigns" })}</p>
           </div>
 
-          {showStatus && (
-            <div className="grid gap-1.5">
-              <Label htmlFor="status">{t("form.statusLabel", { ns: "campaigns" })}</Label>
-              <Controller
-                control={control}
-                name="status"
-                render={({ field }) => (
-                  <Select value={field.value} onValueChange={field.onChange}>
-                    <SelectTrigger id="status" className="w-full">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {STATUS_OPTIONS.map((s) => (
-                        <SelectItem key={s} value={s}>
-                          {t(`status.${s}`, { ns: "common" })}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                )}
-              />
-            </div>
-          )}
-
           <div className="grid gap-1.5">
             <Label htmlFor="notes">{t("form.notesLabel", { ns: "campaigns" })}</Label>
-            <Textarea id="notes" placeholder={t("form.notesPlaceholder", { ns: "campaigns" })} {...register("notes")} />
+            <Textarea
+              id="notes"
+              placeholder={t("form.notesPlaceholder", { ns: "campaigns" })}
+              {...register("notes")}
+              disabled={disabled}
+            />
           </div>
         </CardContent>
       </Card>
 
-      <div className="flex justify-end">
-        <Button type="submit" disabled={isSubmitting || sources.length === 0}>
-          {submitLabel ?? t("form.submitDefault", { ns: "campaigns" })}
-        </Button>
-      </div>
+      {!formId && (
+        <div className="flex justify-end">
+          <Button type="submit" disabled={disabled || isSubmitting || sources.length === 0}>
+            {submitLabel ?? t("form.submitDefault", { ns: "campaigns" })}
+          </Button>
+        </div>
+      )}
     </form>
   );
 }

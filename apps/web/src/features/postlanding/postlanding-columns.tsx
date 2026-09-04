@@ -1,10 +1,11 @@
 import type { ColumnDef } from "@tanstack/react-table";
-import { formatDistanceToNow } from "date-fns";
+import Link from "next/link";
 import type { TFunction } from "i18next";
 
 import { dataTableFeatures } from "@/components/ui/data-table";
 import { Badge } from "@/components/ui/badge";
-import { Caption, Mono } from "@/components/ui/typography";
+import { Mono } from "@/components/ui/typography";
+import { RelativeTime } from "@/components/ui/relative-time";
 import type { Postlanding, PostlandingStatus } from "@/lib/api/postlanding";
 import { PostlandingRowActions } from "@/features/postlanding/postlanding-row-actions";
 
@@ -14,22 +15,15 @@ const STATUS_VARIANT: Record<PostlandingStatus, "success" | "warning" | "seconda
   archived: "secondary",
 };
 
-export function postlandingColumns(
-  t: TFunction,
-  onEdit: (postlanding: Postlanding) => void,
-): ColumnDef<typeof dataTableFeatures, Postlanding>[] {
+export function postlandingColumns(t: TFunction): ColumnDef<typeof dataTableFeatures, Postlanding>[] {
   return [
     {
       accessorKey: "name",
       header: t("columns.name", { ns: "postlanding" }),
       cell: ({ row }) => (
-        <button
-          type="button"
-          onClick={() => onEdit(row.original)}
-          className="font-medium text-foreground hover:underline"
-        >
+        <Link href={`/postlanding/${row.original.id}`} className="font-medium text-foreground hover:underline">
           {row.original.name}
-        </button>
+        </Link>
       ),
     },
     {
@@ -65,9 +59,7 @@ export function postlandingColumns(
     {
       accessorKey: "updatedAt",
       header: t("columns.updated", { ns: "postlanding" }),
-      cell: ({ getValue }) => (
-        <Caption>{formatDistanceToNow(new Date(getValue() as string), { addSuffix: true })}</Caption>
-      ),
+      cell: ({ getValue }) => <RelativeTime date={getValue() as string} />,
     },
     {
       id: "actions",
@@ -76,7 +68,7 @@ export function postlandingColumns(
       enableHiding: false,
       cell: ({ row }) => (
         <div className="flex justify-end">
-          <PostlandingRowActions postlanding={row.original} onEdit={() => onEdit(row.original)} />
+          <PostlandingRowActions postlanding={row.original} />
         </div>
       ),
     },

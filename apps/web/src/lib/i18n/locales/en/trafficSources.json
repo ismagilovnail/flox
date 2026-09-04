@@ -57,6 +57,7 @@
   "connection": {
     "title": "Connected ad account",
     "description": "Stores an access token for the spend sync below. \"Sync now\" pulls the last 30 days of daily campaign spend and writes it to each matching campaign's Cost tab (matched by External campaign ID) — there's no scheduler yet, so it only runs when you click it.",
+    "savedRequiredNotice": "Save the source first — the ad account ID and access token fields appear right after.",
     "loading": "Checking connection…",
     "tokenPreview": "•••• {{last4}}",
     "adAccountIdLabel": "Ad account ID",

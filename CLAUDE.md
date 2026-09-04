@@ -151,9 +151,167 @@ STATUS        : done — user shared a reference tracker's PWA builder
                 behavior (row direction follows text direction when no
                 explicit flex-direction is set) — confirmed in browser
                 (dir="rtl" applied, header/buttons/text visibly mirror).
+                Round 5, same session: user pasted the reference's HTML
+                a third time asking to load cdn.adset.pro/pwa-app.js so
+                "styles/colors match too." Declined the script again,
+                same reasoning as round 4 — instead extracted the exact
+                color tokens from the pasted CSS directly. The
+                reference's :root custom properties turned out to be
+                literally Tailwind's own slate scale (text-primary
+                #0f172a=slate-900, text-muted #475569=slate-600,
+                bg-tertiary #f1f5f9=slate-100, etc.) — pwa-preview-
+                card.tsx's neutral-* utilities swapped to slate-*
+                throughout. The one non-stock color, --color-primary
+                #00A173 green (not the emerald-600 the card used
+                before), is now a REF_PRIMARY constant applied via
+                inline style on the install button, developer name +
+                verified badge, rating star, per-star chart bars,
+                Share/Wishlist icons, and a new active-nav-pill
+                highlight (the reference highlights "Игры"/Games).
+                REF_VERIFIED_BADGE_BLUE (#4285f4, Google's real badge
+                blue) replaces lucide's BadgeCheckIcon with the
+                reference's own verified-badge SVG path; lucide's
+                generic PlayIcon replaced with the real four-color
+                Google Play triangle, inlined as SVG paths copied from
+                the pasted markup (a static vector, not a fetched
+                asset). Install button corrected from a full pill to
+                the reference's actual border-radius:8px at its real
+                36px height. Rating number now renders through
+                Intl.NumberFormat instead of a hardcoded .toFixed(1),
+                so it shows "4,7" (comma) under a Russian locale like
+                the reference. Verified: tsc/eslint clean; real browser
+                pass filled every store-listing field and confirmed via
+                screenshot/zoom that header glyph, developer badge,
+                install button, rating star, chart bars, active-nav
+                highlight, and comma-formatted rating all render
+                correctly; no console errors on a fresh page load.
+                Round 6, same session: user sent three screenshots of
+                the reference's own rendered listing (their product —
+                English "New PWA"/"Developer" placeholders with Russian
+                chrome) and asked to match it as closely as possible.
+                Deltas found and fixed: typography was uniformly too
+                small (reference's CSS is 22px title/16px developer/
+                16px stat values/18px section headings/14px body vs the
+                16/14/10/14/12 the card used; reviews score now its
+                real 56px); the stat row was structurally wrong (the
+                reference shows the downloads VALUE over the word
+                "Скачиваний", and only the size stat leads with an
+                icon — the card had a download icon over the value and
+                no downloads label at all), now restructured with the
+                reference's own framed-arrow size glyph replacing
+                lucide's disk-drive icon and the ⓘ after the review
+                count; an unset icon now renders nothing at all rather
+                than an invented letter avatar (matches the reference
+                AND CLAUDE.md #6); the reviews block gained the
+                "Оценки и отзывы проверены" subtitle plus the
+                five-star row under the score, fractionally filled the
+                way the reference clips its own star SVG, with bars at
+                their real 10px and the trailing percent column now
+                only rendering "—" when a bucket is unset; data safety
+                gained the "›" affordance; the footer gained the
+                "Детям и семье" group. Two real i18n bugs fixed on the
+                way: footer giftCards/redeemCode held each other's
+                values in both locales (wrong render order), and
+                developers said "О разработчике" where Play says
+                "Разработчики". NOT built, deliberately: the
+                reference's four itemized data-safety rows (shared/
+                collected data types, encryption, deletion) are
+                per-app factual claims with no backing field in `pwas`
+                — replicating them would ship exactly the fabricated
+                content this feature has refused from the start. New
+                i18n keys (en+ru): preview.downloadsLabel,
+                preview.reviewsVerified, preview.footer.
+                kidsFamilyTitle, preview.footer.parentGuide.
+                Verified: tsc/eslint clean; real browser pass seeded a
+                PWA through the real API with every listing field
+                populated, opened its edit page, and confirmed by
+                zoomed screenshot that header/stat row/install button/
+                gallery/reviews/footer all render as the reference
+                screenshots show, no console errors — the seeded row
+                was deleted afterward, not left behind.
+                Round 7, same session: user sent two more reference
+                screenshots — the screenshot slider, and the sheet that
+                opens from the arrow next to "О приложении" (icon/name
+                header, full description, a "Подробная информация"
+                table: обновлено/размер/скачивания/текущая версия/
+                возраст/разработчик/категория/интерактивные элементы).
+                Four of those eight rows had no column behind them, so
+                they became REAL fields rather than hardcoded text
+                (same call the user made when this feature started).
+                Migration 00025 adds version/age_rating/category/
+                interactive_elements to pwas — free text, not enums
+                (the reference shows operator-chosen strings like
+                "1.0.0"/"12+"/"Casino"; a fixed vocabulary would fight
+                whatever the real listing says), with "" meaning never
+                entered exactly like developer/downloads_label/
+                whats_new, so there's no explicit-blank state to keep
+                the way the nullable numeric columns need. Carried
+                through model/repository/service/handler/Duplicate;
+                validateListingFields caps all four at 60 chars.
+                pwa-form.tsx gained a "Подробная информация" section
+                with the four inputs; pwa-preview-card.tsx's About
+                heading gained the reference's arrow, opening a
+                light-themed sheet INSIDE the phone frame (dimmed
+                backdrop, bottom nav still visible above it via z-30,
+                as the reference renders it) with icon/name header,
+                close button, untruncated description and the 2-column
+                detail table. A row whose field is blank is dropped
+                entirely rather than padded with "—" (unlike the stat
+                row, where a dash reads against the numbers beside it).
+                Verified: go build/vet/test -count=1 ./... clean
+                against real Postgres including 3 new tests (detail
+                fields round-trip + default to empty, over-long
+                rejected, Duplicate copies them); tsc/eslint/vitest
+                clean; real browser pass seeded a PWA with every field
+                populated and confirmed all eight rows render in the
+                reference's order/pairing with the gallery slides at
+                204px, then a second PWA with those fields blank showed
+                only the "Обновлено" row and no gallery — both seeded
+                rows deleted afterward, no console errors. NOTE: one
+                full `go test ./...` run right after an unrelated
+                Docker daemon restart reported a FAIL that did not
+                reproduce on two clean re-runs (exit 0).
+                Round 8, same session: user pointed back at the About
+                sheet — "есть еще данные". Two of them turned out to be
+                places the preview was asserting things on its own: the
+                card printed a HARDCODED "Без рекламы и платного
+                контента" for every PWA, and the "Дата обновления"
+                block printed new Date(), i.e. claimed every PWA was
+                updated today, forever. Migration 00026 adds
+                contains_ads/in_app_purchases (booleans, as Play's own
+                listing treats them) and updated_date (nullable date).
+                The date crosses the API as a plain YYYY-MM-DD string
+                (a listing shows a date, not a timestamp), read back
+                via to_char and validated with time.Parse in the
+                service so a malformed value is a 422, not a Postgres
+                error; a blank string from a cleared date input
+                normalizes to NULL via blankDateToNil rather than
+                failing the ::date cast. Frontend: two Switches + a
+                date input in the form's details section; the
+                developer line now renders "Есть реклама · Покупки в
+                приложении" from the flags and only falls back to the
+                ad-free line when both are genuinely off; the sheet's
+                developer cell lists them under the name exactly as the
+                reference does; the update date renders the operator's
+                own value through Intl and the whole block disappears
+                when unset. Verified: go build/vet/test -count=1 ./...
+                clean incl. 3 new tests (round-trip + Duplicate, blank
+                date → NULL, malformed date rejected); tsc/eslint/
+                vitest clean; browser pass confirmed both the populated
+                and the empty case, no console errors, seeded rows
+                deleted.
 LAST COMMIT   : feat(pwa): live store-listing preview on the PWA
                 create/edit page — 8efe889
-UNCOMMITTED   : none of this phase's own work. NOTE: pwa-form.tsx/
+UNCOMMITTED   : rounds 5-8's own work (pwa-preview-card.tsx color-token
+                + structural match + About detail sheet, migrations
+                00025/00026 and apps/internal/pwa's seven new listing
+                fields with tests, pwa-form/new-pwa-view/
+                pwa-detail-view and lib/api/pwa.ts wiring, en/ru
+                pwa.json keys, CHANGELOG entries) — not yet committed,
+                waiting on the user. NOTE: the migrate container bakes
+                migrations into its image, so a new one needs
+                `docker compose build migrate` before it will apply.
+                NOTE: pwa-form.tsx/
                 new-pwa-view.tsx/pwa-detail-view.tsx had never been
                 committed to git before this phase touched them (they
                 were part of the pre-existing, unrelated Sheet-to-page

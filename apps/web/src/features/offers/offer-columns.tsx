@@ -1,10 +1,11 @@
 import type { ColumnDef } from "@tanstack/react-table";
-import { formatDistanceToNow } from "date-fns";
+import Link from "next/link";
 import type { TFunction } from "i18next";
 
 import { dataTableFeatures } from "@/components/ui/data-table";
 import { Badge } from "@/components/ui/badge";
-import { Caption, Mono } from "@/components/ui/typography";
+import { Mono } from "@/components/ui/typography";
+import { RelativeTime } from "@/components/ui/relative-time";
 import type { Offer, OfferStatus } from "@/lib/api/offers";
 import { OfferRowActions } from "@/features/offers/offer-row-actions";
 import { TagBadgeList } from "@/features/tags/tag-badge-list";
@@ -17,7 +18,6 @@ const STATUS_VARIANT: Record<OfferStatus, "success" | "warning" | "secondary"> =
 
 export function offerColumns(
   t: TFunction,
-  onEdit: (offer: Offer) => void,
   networkNameById: Record<string, string>,
 ): ColumnDef<typeof dataTableFeatures, Offer>[] {
   return [
@@ -25,13 +25,9 @@ export function offerColumns(
       accessorKey: "name",
       header: t("columns.name", { ns: "offers" }),
       cell: ({ row }) => (
-        <button
-          type="button"
-          onClick={() => onEdit(row.original)}
-          className="font-medium text-foreground hover:underline"
-        >
+        <Link href={`/offers/${row.original.id}`} className="font-medium text-foreground hover:underline">
           {row.original.name}
-        </button>
+        </Link>
       ),
     },
     {
@@ -91,9 +87,7 @@ export function offerColumns(
     {
       accessorKey: "updatedAt",
       header: t("columns.updated", { ns: "offers" }),
-      cell: ({ getValue }) => (
-        <Caption>{formatDistanceToNow(new Date(getValue() as string), { addSuffix: true })}</Caption>
-      ),
+      cell: ({ getValue }) => <RelativeTime date={getValue() as string} />,
     },
     {
       id: "actions",
@@ -102,7 +96,7 @@ export function offerColumns(
       enableHiding: false,
       cell: ({ row }) => (
         <div className="flex justify-end">
-          <OfferRowActions offer={row.original} onEdit={() => onEdit(row.original)} />
+          <OfferRowActions offer={row.original} />
         </div>
       ),
     },

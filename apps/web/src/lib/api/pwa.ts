@@ -33,6 +33,20 @@ export type Pwa = {
   ratingStars3?: number;
   ratingStars2?: number;
   ratingStars1?: number;
+  /** Detail-sheet fields (the listing's "detailed information" table).
+   * Free text; "" means never entered and the UI hides that row. */
+  version: string;
+  ageRating: string;
+  category: string;
+  interactiveElements: string;
+  /** Replaces what used to be a hardcoded "no ads or paid content"
+   * claim in the preview. */
+  containsAds: boolean;
+  inAppPurchases: boolean;
+  /** The listing's own "updated on" date as YYYY-MM-DD; undefined when
+   * never entered (the preview then hides the row instead of printing
+   * today's date, which is what it used to do). */
+  updatedDate?: string;
   status: PwaStatus;
   createdAt: string;
   updatedAt: string;
@@ -59,6 +73,13 @@ export type CreatePwaInput = {
   ratingStars3?: number;
   ratingStars2?: number;
   ratingStars1?: number;
+  version: string;
+  ageRating: string;
+  category: string;
+  interactiveElements: string;
+  containsAds: boolean;
+  inAppPurchases: boolean;
+  updatedDate?: string;
 };
 
 export type UpdatePwaInput = Partial<CreatePwaInput> & { status?: PwaStatus };

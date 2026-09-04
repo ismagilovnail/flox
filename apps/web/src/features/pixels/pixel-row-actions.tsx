@@ -1,19 +1,14 @@
 "use client";
 
 import * as React from "react";
+import Link from "next/link";
 import { toast } from "sonner";
-import { CopyIcon, MoreHorizontalIcon, PauseIcon, PencilIcon, PlayIcon, Trash2Icon } from "lucide-react";
+import { CopyIcon, PauseIcon, PencilIcon, PlayIcon, Trash2Icon } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 import { IconButton } from "@/components/ui/icon-button";
 import { Button } from "@/components/ui/button";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import {
   Dialog,
   DialogContent,
@@ -25,7 +20,7 @@ import {
 import { useActivatePixel, useArchivePixel, useDuplicatePixel, usePausePixel } from "@/hooks/use-pixels";
 import type { Pixel } from "@/lib/api/pixels";
 
-export function PixelRowActions({ pixel, onEdit }: { pixel: Pixel; onEdit: () => void }) {
+export function PixelRowActions({ pixel }: { pixel: Pixel }) {
   const { t } = useTranslation(["pixels", "common"]);
   const pause = usePausePixel();
   const activate = useActivatePixel();
@@ -63,42 +58,53 @@ export function PixelRowActions({ pixel, onEdit }: { pixel: Pixel; onEdit: () =>
 
   return (
     <>
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <IconButton aria-label={t("rowActions.actionsAria", { name: pixel.name })} variant="ghost" size="icon-sm">
-            <MoreHorizontalIcon className="size-4" />
-          </IconButton>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="end">
-          <DropdownMenuItem onSelect={onEdit}>
-            <PencilIcon className="size-4" /> {t("rowActions.edit")}
-          </DropdownMenuItem>
-          {pixel.status !== "archived" && (
-            <DropdownMenuItem onSelect={togglePause}>
-              {pixel.status === "active" ? (
-                <>
-                  <PauseIcon className="size-4" /> {t("rowActions.pause")}
-                </>
-              ) : (
-                <>
-                  <PlayIcon className="size-4" /> {t("rowActions.resume")}
-                </>
-              )}
-            </DropdownMenuItem>
-          )}
-          <DropdownMenuItem onSelect={handleDuplicate}>
-            <CopyIcon className="size-4" /> {t("rowActions.duplicate")}
-          </DropdownMenuItem>
-          {pixel.status !== "archived" && (
-            <>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem variant="destructive" onSelect={() => setConfirmArchive(true)}>
-                <Trash2Icon className="size-4" /> {t("rowActions.archive")}
-              </DropdownMenuItem>
-            </>
-          )}
-        </DropdownMenuContent>
-      </DropdownMenu>
+      <div className="flex items-center justify-end gap-1">
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <IconButton aria-label={t("rowActions.edit")} size="icon-sm" asChild>
+              <Link href={`/pixels/${pixel.id}`}>
+                <PencilIcon className="size-3.5" />
+              </Link>
+            </IconButton>
+          </TooltipTrigger>
+          <TooltipContent>{t("rowActions.edit")}</TooltipContent>
+        </Tooltip>
+
+        {pixel.status !== "archived" && (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <IconButton
+                aria-label={pixel.status === "active" ? t("rowActions.pause") : t("rowActions.resume")}
+                size="icon-sm"
+                onClick={togglePause}
+              >
+                {pixel.status === "active" ? <PauseIcon className="size-3.5" /> : <PlayIcon className="size-3.5" />}
+              </IconButton>
+            </TooltipTrigger>
+            <TooltipContent>{pixel.status === "active" ? t("rowActions.pause") : t("rowActions.resume")}</TooltipContent>
+          </Tooltip>
+        )}
+
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <IconButton aria-label={t("rowActions.duplicate")} size="icon-sm" onClick={handleDuplicate}>
+              <CopyIcon className="size-3.5" />
+            </IconButton>
+          </TooltipTrigger>
+          <TooltipContent>{t("rowActions.duplicate")}</TooltipContent>
+        </Tooltip>
+
+        {pixel.status !== "archived" && (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <IconButton aria-label={t("rowActions.archive")} size="icon-sm" onClick={() => setConfirmArchive(true)}>
+                <Trash2Icon className="size-3.5" />
+              </IconButton>
+            </TooltipTrigger>
+            <TooltipContent>{t("rowActions.archive")}</TooltipContent>
+          </Tooltip>
+        )}
+      </div>
 
       <Dialog open={confirmArchive} onOpenChange={setConfirmArchive}>
         <DialogContent>

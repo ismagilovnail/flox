@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { Controller, useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -10,19 +11,12 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetFooter,
-  SheetHeader,
-  SheetTitle,
-} from "@/components/ui/sheet";
 import { Switch } from "@/components/ui/switch";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { MacroPicker } from "@/components/shared/macro-picker";
 import type { NetworkStatus } from "@/lib/api/networks";
 
-/** Factory, not a module-level const — see source-form-sheet.tsx's
+/** Factory, not a module-level const — see source-form.tsx's
  * buildSourceFormSchema for why (Zod messages are user-facing text and
  * need the live translator). */
 export function buildNetworkFormSchema(t: TFunction) {
@@ -38,19 +32,22 @@ export type NetworkFormValues = z.infer<ReturnType<typeof buildNetworkFormSchema
 
 const STATUS_OPTIONS: NetworkStatus[] = ["active", "paused", "archived"];
 
-export function NetworkFormSheet({
-  open,
-  onOpenChange,
-  defaultValues,
+/** The network create/edit form — its own page (features/networks/{new-
+ * network-view,network-detail-view}.tsx) instead of a slide-out Sheet,
+ * matching the traffic-source/offer/campaign create/edit pages' layout.
+ * Same fields/validation/mutation shape the Sheet version had; only the
+ * container changed. The post-create postback-secret reveal step lives in
+ * new-network-view.tsx, not here — this component only ever collects
+ * field values and hands them to onSubmit. */
+export function NetworkForm({
   title,
+  defaultValues,
   submitLabel,
   showStatus = false,
   onSubmit,
 }: {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  defaultValues: Partial<NetworkFormValues>;
   title: string;
+  defaultValues: Partial<NetworkFormValues>;
   submitLabel: string;
   showStatus?: boolean;
   onSubmit: (values: NetworkFormValues) => void;
@@ -58,7 +55,7 @@ export function NetworkFormSheet({
   const { t } = useTranslation(["networks", "common"]);
   const form = useForm<NetworkFormValues>({
     resolver: zodResolver(buildNetworkFormSchema(t)),
-    values: { name: "", postbackUrl: "", acceptDuplicates: false, status: "active", ...defaultValues },
+    defaultValues: { name: "", postbackUrl: "", acceptDuplicates: false, status: "active", ...defaultValues },
   });
 
   const {
@@ -71,14 +68,13 @@ export function NetworkFormSheet({
   } = form;
 
   return (
-    <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent className="w-full gap-0 overflow-y-auto sm:max-w-lg" side="right">
-        <SheetHeader>
-          <SheetTitle>{title}</SheetTitle>
-          <SheetDescription>{t("form.description", { ns: "networks" })}</SheetDescription>
-        </SheetHeader>
-
-        <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-4 px-4 pb-4">
+    <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-4">
+      <Card>
+        <CardHeader>
+          <CardTitle>{title}</CardTitle>
+          <CardDescription>{t("form.description", { ns: "networks" })}</CardDescription>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-4">
           <div className="grid gap-1.5">
             <Label htmlFor="net-name">{t("form.nameLabel", { ns: "networks" })}</Label>
             <Input
@@ -125,7 +121,7 @@ export function NetworkFormSheet({
           </div>
 
           {showStatus && (
-            <div className="grid gap-1.5">
+            <div className="grid gap-1.5 sm:w-1/3">
               <Label htmlFor="net-status">{t("form.statusLabel", { ns: "networks" })}</Label>
               <Controller
                 control={control}
@@ -147,17 +143,17 @@ export function NetworkFormSheet({
               />
             </div>
           )}
+        </CardContent>
+      </Card>
 
-          <SheetFooter className="mt-0 flex-row justify-end gap-2 p-0">
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
-              {t("actions.cancel", { ns: "common" })}
-            </Button>
-            <Button type="submit" disabled={isSubmitting}>
-              {submitLabel}
-            </Button>
-          </SheetFooter>
-        </form>
-      </SheetContent>
-    </Sheet>
+      <div className="flex justify-end gap-2">
+        <Button type="button" variant="outline" asChild>
+          <Link href="/networks">{t("actions.cancel", { ns: "common" })}</Link>
+        </Button>
+        <Button type="submit" disabled={isSubmitting}>
+          {submitLabel}
+        </Button>
+      </div>
+    </form>
   );
 }

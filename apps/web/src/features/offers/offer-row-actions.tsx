@@ -3,18 +3,12 @@
 import * as React from "react";
 import Link from "next/link";
 import { toast } from "sonner";
-import { BarChart3Icon, CopyIcon, MoreHorizontalIcon, PauseIcon, PencilIcon, PlayIcon, Trash2Icon } from "lucide-react";
+import { BarChart3Icon, CopyIcon, PauseIcon, PencilIcon, PlayIcon, Trash2Icon } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 import { IconButton } from "@/components/ui/icon-button";
 import { Button } from "@/components/ui/button";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import {
   Dialog,
   DialogContent,
@@ -27,7 +21,7 @@ import { useActivateOffer, useArchiveOffer, useDuplicateOffer, usePauseOffer } f
 import { viewStatisticsHref } from "@/features/analytics/view-statistics-link";
 import type { Offer } from "@/lib/api/offers";
 
-export function OfferRowActions({ offer, onEdit }: { offer: Offer; onEdit: () => void }) {
+export function OfferRowActions({ offer }: { offer: Offer }) {
   const { t } = useTranslation(["offers", "common"]);
   const pause = usePauseOffer();
   const activate = useActivateOffer();
@@ -65,47 +59,64 @@ export function OfferRowActions({ offer, onEdit }: { offer: Offer; onEdit: () =>
 
   return (
     <>
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <IconButton aria-label={t("rowActions.actionsAria", { name: offer.name })} variant="ghost" size="icon-sm">
-            <MoreHorizontalIcon className="size-4" />
-          </IconButton>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="end">
-          <DropdownMenuItem onSelect={onEdit}>
-            <PencilIcon className="size-4" /> {t("rowActions.edit")}
-          </DropdownMenuItem>
-          <DropdownMenuItem asChild>
-            <Link href={viewStatisticsHref("offer", offer.name)}>
-              <BarChart3Icon className="size-4" /> {t("rowActions.viewStatistics")}
-            </Link>
-          </DropdownMenuItem>
-          {offer.status !== "archived" && (
-            <DropdownMenuItem onSelect={togglePause}>
-              {offer.status === "active" ? (
-                <>
-                  <PauseIcon className="size-4" /> {t("rowActions.pause")}
-                </>
-              ) : (
-                <>
-                  <PlayIcon className="size-4" /> {t("rowActions.resume")}
-                </>
-              )}
-            </DropdownMenuItem>
-          )}
-          <DropdownMenuItem onSelect={handleDuplicate}>
-            <CopyIcon className="size-4" /> {t("rowActions.duplicate")}
-          </DropdownMenuItem>
-          {offer.status !== "archived" && (
-            <>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem variant="destructive" onSelect={() => setConfirmArchive(true)}>
-                <Trash2Icon className="size-4" /> {t("rowActions.archive")}
-              </DropdownMenuItem>
-            </>
-          )}
-        </DropdownMenuContent>
-      </DropdownMenu>
+      <div className="flex items-center justify-end gap-1">
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <IconButton aria-label={t("rowActions.edit")} size="icon-sm" asChild>
+              <Link href={`/offers/${offer.id}`}>
+                <PencilIcon className="size-3.5" />
+              </Link>
+            </IconButton>
+          </TooltipTrigger>
+          <TooltipContent>{t("rowActions.edit")}</TooltipContent>
+        </Tooltip>
+
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <IconButton aria-label={t("rowActions.viewStatistics")} size="icon-sm" asChild>
+              <Link href={viewStatisticsHref("offer", offer.name)}>
+                <BarChart3Icon className="size-3.5" />
+              </Link>
+            </IconButton>
+          </TooltipTrigger>
+          <TooltipContent>{t("rowActions.viewStatistics")}</TooltipContent>
+        </Tooltip>
+
+        {offer.status !== "archived" && (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <IconButton
+                aria-label={offer.status === "active" ? t("rowActions.pause") : t("rowActions.resume")}
+                size="icon-sm"
+                onClick={togglePause}
+              >
+                {offer.status === "active" ? <PauseIcon className="size-3.5" /> : <PlayIcon className="size-3.5" />}
+              </IconButton>
+            </TooltipTrigger>
+            <TooltipContent>{offer.status === "active" ? t("rowActions.pause") : t("rowActions.resume")}</TooltipContent>
+          </Tooltip>
+        )}
+
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <IconButton aria-label={t("rowActions.duplicate")} size="icon-sm" onClick={handleDuplicate}>
+              <CopyIcon className="size-3.5" />
+            </IconButton>
+          </TooltipTrigger>
+          <TooltipContent>{t("rowActions.duplicate")}</TooltipContent>
+        </Tooltip>
+
+        {offer.status !== "archived" && (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <IconButton aria-label={t("rowActions.archive")} size="icon-sm" onClick={() => setConfirmArchive(true)}>
+                <Trash2Icon className="size-3.5" />
+              </IconButton>
+            </TooltipTrigger>
+            <TooltipContent>{t("rowActions.archive")}</TooltipContent>
+          </Tooltip>
+        )}
+      </div>
 
       <Dialog open={confirmArchive} onOpenChange={setConfirmArchive}>
         <DialogContent>

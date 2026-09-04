@@ -15,9 +15,9 @@ import { useContentGalleryStore } from "@/stores/content-gallery";
 import { useTeamStore } from "@/stores/team";
 
 const BUILDER_ROUTE: Record<Exclude<GalleryItem["category"], "creative_asset">, string> = {
-  landing_template: "/landings",
-  pwa_template: "/pwa",
-  postlanding_template: "/postlanding",
+  landing_template: "/landings/new",
+  pwa_template: "/pwa/new",
+  postlanding_template: "/postlanding/new",
 };
 
 export function GalleryPreviewDialog({

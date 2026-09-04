@@ -35,22 +35,26 @@ export type FilterField =
   | "sub10"
   | "external_click_id";
 
+/** Categories and order follow the filter reference documentation
+ * (adset.pro's "Справочник фильтров кампаний трекера") so the field
+ * picker modal reads the same way an operator coming from that doc would
+ * expect. Only fields this app's routing engine actually evaluates are
+ * listed — the doc also documents parameter/x_requested_with/ipv4/ipv6/
+ * user_agent, which have no backend classifier support here yet, so
+ * they're left out rather than shown as filters that would silently do
+ * nothing (see docs/frontend-integration.md). */
 export const FIELD_GROUPS: { label: string; fields: FilterField[] }[] = [
-  { label: "Geo", fields: ["country", "region", "city"] },
+  { label: "Parameters", fields: ["referrer"] },
+  { label: "Geo", fields: ["country", "region", "city", "proxy", "bot", "asn", "connection_type"] },
   {
     label: "Device",
-    fields: ["device", "platform", "os", "os_version", "browser", "browser_version", "language"],
-  },
-  { label: "Fraud", fields: ["bot", "proxy", "asn", "connection_type"] },
-  {
-    label: "Traffic",
-    fields: ["referrer", "utm_source", "utm_medium", "utm_campaign", "utm_content", "utm_term"],
+    fields: ["browser", "browser_version", "os", "os_version", "platform", "device", "language"],
   },
   {
-    label: "Custom",
+    label: "Tracking",
     fields: [
+      "utm_source", "utm_medium", "utm_campaign", "utm_content", "utm_term", "external_click_id",
       "sub1", "sub2", "sub3", "sub4", "sub5", "sub6", "sub7", "sub8", "sub9", "sub10",
-      "external_click_id",
     ],
   },
 ];
@@ -63,11 +67,10 @@ export const FIELD_GROUPS: { label: string; fields: FilterField[] }[] = [
  * attribute keys, not prose, the same call this codebase already made for
  * enum codes elsewhere. */
 export const FIELD_GROUP_I18N_KEY: Record<string, string> = {
+  Parameters: "filters.groups.parameters",
   Geo: "filters.groups.geo",
   Device: "filters.groups.device",
-  Fraud: "filters.groups.fraud",
-  Traffic: "filters.groups.traffic",
-  Custom: "filters.groups.custom",
+  Tracking: "filters.groups.tracking",
 };
 
 export const FILTER_FIELDS: FilterField[] = FIELD_GROUPS.flatMap((g) => g.fields);
@@ -209,6 +212,17 @@ export function addConditionToGroup(root: FilterGroupNode, groupId: string): Fil
   );
 }
 
+/** Same shape as addConditionToGroup, but for the field picker: the
+ * operator/value stay at newCondition()'s defaults, only the field is
+ * pre-set to what the operator clicked in the catalog. */
+export function addFieldConditionToGroup(root: FilterGroupNode, groupId: string, field: FilterField): FilterGroupNode {
+  const condition = { ...newCondition(), field };
+  if (root.id === groupId) return mapChildren(root, (children) => [...children, condition]);
+  return mapChildren(root, (children) =>
+    children.map((child) => (child.type === "group" ? addFieldConditionToGroup(child, groupId, field) : child)),
+  );
+}
+
 export function addGroupToGroup(root: FilterGroupNode, groupId: string): FilterGroupNode {
   const newGroup = emptyGroup(root.id === groupId ? (root.joiner === "AND" ? "OR" : "AND") : "AND");
   if (root.id === groupId) return mapChildren(root, (children) => [...children, newGroup]);
@@ -240,6 +254,20 @@ export function cloneWithNewIds(node: FilterNode): FilterNode {
 export function countConditions(node: FilterNode): number {
   if (node.type === "condition") return 1;
   return node.children.reduce((sum, child) => sum + countConditions(child), 0);
+}
+
+/** Total individual values entered across the tree — a comma-separated
+ * IN/NOT_IN condition with 3 tokens counts as 3, BETWEEN counts its
+ * filled bound(s), and value-less operators (EXISTS/NOT_EXISTS) count 0. */
+export function countFilterValues(node: FilterNode): number {
+  if (node.type === "condition") {
+    if (OPERATORS_WITHOUT_VALUE.includes(node.operator)) return 0;
+    if (node.operator === "BETWEEN") return (node.value ? 1 : 0) + (node.valueTo ? 1 : 0);
+    return node.value
+      ? node.value.split(",").map((v) => v.trim()).filter(Boolean).length
+      : 0;
+  }
+  return node.children.reduce((sum, child) => sum + countFilterValues(child), 0);
 }
 
 const OPERATOR_LABEL: Record<FilterOperator, string> = {

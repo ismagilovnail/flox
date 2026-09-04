@@ -1,4 +1,5 @@
 import type { ColumnDef } from "@tanstack/react-table";
+import Link from "next/link";
 import { formatDistanceToNow } from "date-fns";
 
 import { dataTableFeatures } from "@/components/ui/data-table";
@@ -21,19 +22,15 @@ const SSL_VARIANT: Record<SslStatus, "success" | "warning" | "danger" | "outline
   none: "outline",
 };
 
-export function domainColumns(onEdit: (domain: Domain) => void): ColumnDef<typeof dataTableFeatures, Domain>[] {
+export function domainColumns(): ColumnDef<typeof dataTableFeatures, Domain>[] {
   return [
     {
       accessorKey: "domain",
       header: "Domain",
       cell: ({ row }) => (
-        <button
-          type="button"
-          onClick={() => onEdit(row.original)}
-          className="font-mono text-sm text-foreground hover:underline"
-        >
+        <Link href={`/domains/${row.original.id}`} className="font-mono text-sm text-foreground hover:underline">
           {row.original.domain}
-        </button>
+        </Link>
       ),
     },
     {
@@ -87,7 +84,7 @@ export function domainColumns(onEdit: (domain: Domain) => void): ColumnDef<typeo
       enableHiding: false,
       cell: ({ row }) => (
         <div className="flex justify-end">
-          <DomainRowActions domain={row.original} onEdit={() => onEdit(row.original)} />
+          <DomainRowActions domain={row.original} />
         </div>
       ),
     },

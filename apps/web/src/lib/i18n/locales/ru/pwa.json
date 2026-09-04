@@ -85,8 +85,23 @@
       "ratingStarsRange": "Должно быть от 0 до 100",
       "whatsNewMax": "До 2000 символов",
       "screenshotUrlInvalid": "Введите корректный URL изображения",
-      "screenshotsMax": "До 12 скриншотов"
-    }
+      "screenshotsMax": "До 12 скриншотов",
+      "detailLabelMax": "До 60 символов",
+      "updatedDateInvalid": "Введите дату в формате 2026-08-21"
+    },
+    "detailsSectionLabel": "Подробная информация",
+    "detailsSectionHint": "Необязательно — показывается в окне «О приложении» в превью. Пустое поле полностью убирает свою строку.",
+    "versionLabel": "Текущая версия",
+    "versionPlaceholder": "1.0.0",
+    "ageRatingLabel": "Возраст",
+    "ageRatingPlaceholder": "12+",
+    "categoryLabel": "Категория",
+    "categoryPlaceholder": "Casino",
+    "interactiveElementsLabel": "Интерактивные элементы",
+    "interactiveElementsPlaceholder": "Покупки в приложении",
+    "updatedDateLabel": "Дата обновления",
+    "containsAdsLabel": "Есть реклама",
+    "inAppPurchasesLabel": "Покупки в приложении"
   },
   "preview": {
     "title": "Живое превью",
@@ -100,6 +115,7 @@
     "reviewsCount_many": "{{count}} отзывов",
     "reviewsCount_other": "{{count}} отзыва",
     "noData": "Пока нет оценок",
+    "downloadsLabel": "Скачиваний",
     "sizeMb": "{{size}} МБ",
     "install": "Установить",
     "share": "Поделиться",
@@ -111,22 +127,38 @@
     "dataSafetyTitle": "Безопасность данных",
     "dataSafetyText": "Безопасность начинается с понимания того, как разработчики собирают и передают ваши данные. Меры обеспечения конфиденциальности и безопасности данных могут зависеть от того, как вы используете приложение, а также от вашего региона и возраста. Эта информация предоставлена разработчиком и может меняться.",
     "reviewsTitle": "Оценки и отзывы",
+    "reviewsVerified": "Оценки и отзывы проверены",
     "whatsNewTitle": "Что нового",
     "footer": {
       "store": "Магазин",
-      "giftCards": "Использовать код",
-      "redeemCode": "Подарочные карты",
+      "giftCards": "Подарочные карты",
+      "redeemCode": "Использовать код",
       "familyLibrary": "Семейная библиотека",
+      "kidsFamilyTitle": "Детям и семье",
+      "parentGuide": "Руководство для родителей",
       "terms": "Условия использования",
       "privacy": "Конфиденциальность",
-      "developers": "О разработчике"
+      "developers": "Разработчики"
     },
     "nav": {
       "games": "Игры",
       "apps": "Приложения",
       "books": "Книги",
       "kids": "Детям"
-    }
+    },
+    "aboutOpenAria": "Открыть полное описание",
+    "closeAria": "Закрыть",
+    "detailsTitle": "Подробная информация",
+    "detailUpdated": "Обновлено",
+    "detailSize": "Размер",
+    "detailDownloads": "Скачивания",
+    "detailVersion": "Текущая версия",
+    "detailAge": "Возраст",
+    "detailDeveloper": "Разработчик",
+    "detailCategory": "Категория",
+    "detailInteractive": "Интерактивные элементы",
+    "containsAds": "Есть реклама",
+    "inAppPurchases": "Покупки в приложении"
   },
   "rowActions": {
     "actionsAria": "Действия для {{name}}",

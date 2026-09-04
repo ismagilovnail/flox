@@ -6,6 +6,7 @@ import (
 	"net/url"
 	"regexp"
 	"strings"
+	"time"
 
 	"github.com/ismagilovnail/flox/apps/internal/apierror"
 	"github.com/ismagilovnail/flox/apps/internal/idgen"
@@ -20,6 +21,9 @@ const (
 	downloadsLabelMax = 20
 	whatsNewMaxLen    = 2000
 	screenshotsMax    = 12
+	// Detail-sheet labels ("1.0.0", "12+", "Casino", "Interactive
+	// elements") — short free text, so a single shared cap is enough.
+	detailLabelMaxLen = 60
 )
 
 var hexColor = regexp.MustCompile(`^#[0-9a-fA-F]{6}$`)
@@ -40,6 +44,16 @@ func (s *Service) Get(ctx context.Context, orgID, id string) (Pwa, error) {
 	return s.repo.GetByID(ctx, orgID, id)
 }
 
+// blankDateToNil turns an empty updatedDate ("" — what a cleared date
+// input sends) into nil, so it lands as SQL NULL rather than failing
+// the ”::date cast.
+func blankDateToNil(d *string) *string {
+	if d != nil && strings.TrimSpace(*d) == "" {
+		return nil
+	}
+	return d
+}
+
 func (s *Service) Create(ctx context.Context, orgID string, in CreateInput) (Pwa, error) {
 	in.Name = strings.TrimSpace(in.Name)
 	in.ShortName = strings.TrimSpace(in.ShortName)
@@ -48,6 +62,11 @@ func (s *Service) Create(ctx context.Context, orgID string, in CreateInput) (Pwa
 	in.Description = strings.TrimSpace(in.Description)
 	in.DownloadsLabel = strings.TrimSpace(in.DownloadsLabel)
 	in.WhatsNew = strings.TrimSpace(in.WhatsNew)
+	in.Version = strings.TrimSpace(in.Version)
+	in.AgeRating = strings.TrimSpace(in.AgeRating)
+	in.Category = strings.TrimSpace(in.Category)
+	in.InteractiveElements = strings.TrimSpace(in.InteractiveElements)
+	in.UpdatedDate = blankDateToNil(in.UpdatedDate)
 	in.Screenshots = trimAll(in.Screenshots)
 	if in.Screenshots == nil {
 		in.Screenshots = []string{}
@@ -60,6 +79,8 @@ func (s *Service) Create(ctx context.Context, orgID string, in CreateInput) (Pwa
 		rating:      in.Rating, ratingCount: in.RatingCount, sizeMB: in.SizeMB,
 		ratingStars5: in.RatingStars5, ratingStars4: in.RatingStars4, ratingStars3: in.RatingStars3,
 		ratingStars2: in.RatingStars2, ratingStars1: in.RatingStars1,
+		version: in.Version, ageRating: in.AgeRating, category: in.Category, interactiveElements: in.InteractiveElements,
+		updatedDate: in.UpdatedDate,
 	}) {
 		fields[k] = v
 	}
@@ -122,6 +143,13 @@ func (s *Service) Update(ctx context.Context, orgID, id string, in UpdateInput) 
 		trimmed := trimAll(*in.Screenshots)
 		in.Screenshots = &trimmed
 	}
+	for _, f := range []**string{&in.Version, &in.AgeRating, &in.Category, &in.InteractiveElements} {
+		if *f != nil {
+			trimmed := strings.TrimSpace(**f)
+			*f = &trimmed
+		}
+	}
+	in.UpdatedDate = blankDateToNil(in.UpdatedDate)
 	developer := ""
 	if in.Developer != nil {
 		developer = *in.Developer
@@ -142,12 +170,20 @@ func (s *Service) Update(ctx context.Context, orgID, id string, in UpdateInput) 
 	if in.Screenshots != nil {
 		screenshots = *in.Screenshots
 	}
+	deref := func(p *string) string {
+		if p == nil {
+			return ""
+		}
+		return *p
+	}
 	for k, v := range validateListingFields(listingFields{
 		developer: developer, description: description, downloadsLabel: downloadsLabel, whatsNew: whatsNew,
 		screenshots: screenshots,
 		rating:      in.Rating, ratingCount: in.RatingCount, sizeMB: in.SizeMB,
 		ratingStars5: in.RatingStars5, ratingStars4: in.RatingStars4, ratingStars3: in.RatingStars3,
 		ratingStars2: in.RatingStars2, ratingStars1: in.RatingStars1,
+		version: deref(in.Version), ageRating: deref(in.AgeRating), category: deref(in.Category),
+		interactiveElements: deref(in.InteractiveElements), updatedDate: in.UpdatedDate,
 	}) {
 		fields[k] = v
 	}
@@ -175,26 +211,33 @@ func (s *Service) Duplicate(ctx context.Context, orgID, id string) (Pwa, error) 
 	}
 
 	created, err := s.repo.Create(ctx, idgen.New(), orgID, CreateInput{
-		Name:               source.Name + " (Copy)",
-		ShortName:          source.ShortName,
-		ThemeColor:         source.ThemeColor,
-		BackgroundColor:    source.BackgroundColor,
-		IconURL:            source.IconURL,
-		StartURL:           source.StartURL,
-		BounceInAppWebview: source.BounceInAppWebview,
-		Developer:          source.Developer,
-		Description:        source.Description,
-		Rating:             source.Rating,
-		RatingCount:        source.RatingCount,
-		DownloadsLabel:     source.DownloadsLabel,
-		SizeMB:             source.SizeMB,
-		Screenshots:        source.Screenshots,
-		WhatsNew:           source.WhatsNew,
-		RatingStars5:       source.RatingStars5,
-		RatingStars4:       source.RatingStars4,
-		RatingStars3:       source.RatingStars3,
-		RatingStars2:       source.RatingStars2,
-		RatingStars1:       source.RatingStars1,
+		Name:                source.Name + " (Copy)",
+		ShortName:           source.ShortName,
+		ThemeColor:          source.ThemeColor,
+		BackgroundColor:     source.BackgroundColor,
+		IconURL:             source.IconURL,
+		StartURL:            source.StartURL,
+		BounceInAppWebview:  source.BounceInAppWebview,
+		Developer:           source.Developer,
+		Description:         source.Description,
+		Rating:              source.Rating,
+		RatingCount:         source.RatingCount,
+		DownloadsLabel:      source.DownloadsLabel,
+		SizeMB:              source.SizeMB,
+		Screenshots:         source.Screenshots,
+		WhatsNew:            source.WhatsNew,
+		RatingStars5:        source.RatingStars5,
+		RatingStars4:        source.RatingStars4,
+		RatingStars3:        source.RatingStars3,
+		RatingStars2:        source.RatingStars2,
+		RatingStars1:        source.RatingStars1,
+		Version:             source.Version,
+		AgeRating:           source.AgeRating,
+		Category:            source.Category,
+		InteractiveElements: source.InteractiveElements,
+		ContainsAds:         source.ContainsAds,
+		InAppPurchases:      source.InAppPurchases,
+		UpdatedDate:         source.UpdatedDate,
 	})
 	if err != nil {
 		return Pwa{}, err
@@ -283,6 +326,12 @@ type listingFields struct {
 	ratingStars3   *float64
 	ratingStars2   *float64
 	ratingStars1   *float64
+	// Detail-sheet labels, all optional free text (see model.go).
+	version             string
+	ageRating           string
+	category            string
+	interactiveElements string
+	updatedDate         *string
 }
 
 // validateListingFields covers the store-listing preview's own fields —
@@ -327,6 +376,22 @@ func validateListingFields(f listingFields) map[string]string {
 	} {
 		if v != nil && (*v < 0 || *v > 100) {
 			fields[key] = "must be between 0 and 100"
+		}
+	}
+	for key, v := range map[string]string{
+		"version": f.version, "ageRating": f.ageRating, "category": f.category,
+		"interactiveElements": f.interactiveElements,
+	} {
+		if len(v) > detailLabelMaxLen {
+			fields[key] = fmt.Sprintf("up to %d characters", detailLabelMaxLen)
+		}
+	}
+	// updatedDate crosses the API as a plain YYYY-MM-DD string (the
+	// listing shows a date, not a timestamp) — reject anything the
+	// date column would choke on, rather than letting Postgres raise it.
+	if f.updatedDate != nil && *f.updatedDate != "" {
+		if _, err := time.Parse("2006-01-02", *f.updatedDate); err != nil {
+			fields["updatedDate"] = "must be a date like 2026-08-21"
 		}
 	}
 	return fields

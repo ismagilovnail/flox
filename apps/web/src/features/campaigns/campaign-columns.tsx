@@ -1,11 +1,10 @@
 import type { ColumnDef } from "@tanstack/react-table";
 import Link from "next/link";
-import { formatDistanceToNow } from "date-fns";
 import type { TFunction } from "i18next";
 
 import { dataTableFeatures } from "@/components/ui/data-table";
 import { Badge } from "@/components/ui/badge";
-import { Caption } from "@/components/ui/typography";
+import { RelativeTime } from "@/components/ui/relative-time";
 import type { Campaign, CampaignStatus } from "@/lib/api/campaigns";
 import { CampaignRowActions } from "@/features/campaigns/campaign-row-actions";
 import { TagBadgeList } from "@/features/tags/tag-badge-list";
@@ -60,9 +59,7 @@ export function campaignColumns(
     {
       accessorKey: "updatedAt",
       header: t("columns.updated", { ns: "campaigns" }),
-      cell: ({ getValue }) => (
-        <Caption>{formatDistanceToNow(new Date(getValue() as string), { addSuffix: true })}</Caption>
-      ),
+      cell: ({ getValue }) => <RelativeTime date={getValue() as string} />,
     },
     {
       id: "actions",

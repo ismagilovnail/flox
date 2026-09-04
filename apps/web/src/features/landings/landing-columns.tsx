@@ -1,10 +1,11 @@
 import type { ColumnDef } from "@tanstack/react-table";
-import { formatDistanceToNow } from "date-fns";
+import Link from "next/link";
 import type { TFunction } from "i18next";
 
 import { dataTableFeatures } from "@/components/ui/data-table";
 import { Badge } from "@/components/ui/badge";
-import { Caption, Mono } from "@/components/ui/typography";
+import { Mono } from "@/components/ui/typography";
+import { RelativeTime } from "@/components/ui/relative-time";
 import type { Landing, LandingStatus } from "@/lib/api/landings";
 import { LandingRowActions } from "@/features/landings/landing-row-actions";
 import { TagBadgeList } from "@/features/tags/tag-badge-list";
@@ -15,19 +16,15 @@ const STATUS_VARIANT: Record<LandingStatus, "success" | "warning" | "secondary">
   archived: "secondary",
 };
 
-export function landingColumns(t: TFunction, onEdit: (landing: Landing) => void): ColumnDef<typeof dataTableFeatures, Landing>[] {
+export function landingColumns(t: TFunction): ColumnDef<typeof dataTableFeatures, Landing>[] {
   return [
     {
       accessorKey: "name",
       header: t("columns.name", { ns: "landings" }),
       cell: ({ row }) => (
-        <button
-          type="button"
-          onClick={() => onEdit(row.original)}
-          className="font-medium text-foreground hover:underline"
-        >
+        <Link href={`/landings/${row.original.id}`} className="font-medium text-foreground hover:underline">
           {row.original.name}
-        </button>
+        </Link>
       ),
     },
     {
@@ -60,9 +57,7 @@ export function landingColumns(t: TFunction, onEdit: (landing: Landing) => void)
     {
       accessorKey: "updatedAt",
       header: t("columns.updated", { ns: "landings" }),
-      cell: ({ getValue }) => (
-        <Caption>{formatDistanceToNow(new Date(getValue() as string), { addSuffix: true })}</Caption>
-      ),
+      cell: ({ getValue }) => <RelativeTime date={getValue() as string} />,
     },
     {
       id: "actions",
@@ -71,7 +66,7 @@ export function landingColumns(t: TFunction, onEdit: (landing: Landing) => void)
       enableHiding: false,
       cell: ({ row }) => (
         <div className="flex justify-end">
-          <LandingRowActions landing={row.original} onEdit={() => onEdit(row.original)} />
+          <LandingRowActions landing={row.original} />
         </div>
       ),
     },

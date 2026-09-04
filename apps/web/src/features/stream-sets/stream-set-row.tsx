@@ -9,8 +9,6 @@ import { useTranslation } from "react-i18next";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { FilterChip } from "@/components/ui/filter-chip";
-import { FilterGroup } from "@/components/ui/filter-group";
 import { IconButton } from "@/components/ui/icon-button";
 import { Switch } from "@/components/ui/switch";
 import { Tag } from "@/components/ui/tag";
@@ -23,7 +21,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { FILTER_OPERATOR_I18N_KEY, countConditions, describeFilterTree, type FilterOperator } from "@/lib/filters";
 import { hydrateRootFilter, type ApiFlow, type StreamSet } from "@/lib/api/stream-sets";
 import type { Network } from "@/lib/api/networks";
 import type { Offer } from "@/lib/api/offers";
@@ -31,6 +28,7 @@ import type { Landing } from "@/lib/api/landings";
 import type { Pwa } from "@/lib/api/pwa";
 import type { Postlanding } from "@/lib/api/postlanding";
 import type { Pixel } from "@/lib/api/pixels";
+import { FilterTreeSummary } from "@/features/stream-sets/filter-tree-summary";
 import { StreamSetEditor, type StreamSetFormValues } from "@/features/stream-sets/stream-set-editor";
 
 function toFormValues(streamSet: StreamSet): StreamSetFormValues {
@@ -53,6 +51,7 @@ export function StreamSetRow({
   postlandings,
   pixels,
   defaultExpanded = false,
+  disabled = false,
   onSubmit,
   onDuplicate,
   onDelete,
@@ -66,6 +65,10 @@ export function StreamSetRow({
   postlandings: Postlanding[];
   pixels: Pixel[];
   defaultExpanded?: boolean;
+  /** Archived campaigns don't route traffic — the row stays expandable
+   * for viewing, but reordering, toggling, duplicating, deleting, and
+   * editing lock instead of looking saved while they can't matter. */
+  disabled?: boolean;
   onSubmit: (values: StreamSetFormValues) => void;
   onDuplicate: () => void;
   onDelete: () => void;
@@ -105,9 +108,10 @@ export function StreamSetRow({
         <button
           type="button"
           aria-label={t("row.reorderAria", { name: streamSet.name })}
-          className="mt-0.5 cursor-grab touch-none text-muted-foreground hover:text-foreground active:cursor-grabbing"
-          {...attributes}
-          {...listeners}
+          disabled={disabled}
+          className="mt-0.5 cursor-grab touch-none text-muted-foreground hover:text-foreground active:cursor-grabbing disabled:cursor-not-allowed disabled:opacity-40"
+          {...(disabled ? {} : attributes)}
+          {...(disabled ? {} : listeners)}
         >
           <GripVerticalIcon className="size-4" />
         </button>
@@ -129,11 +133,12 @@ export function StreamSetRow({
                 size="sm"
                 checked={streamSet.status === "active"}
                 onCheckedChange={onToggleStatus}
+                disabled={disabled}
                 aria-label={streamSet.status === "active" ? t("row.disableAria") : t("row.enableAria")}
               />
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <IconButton aria-label={t("row.duplicate")} size="icon-sm" onClick={onDuplicate}>
+                  <IconButton aria-label={t("row.duplicate")} size="icon-sm" disabled={disabled} onClick={onDuplicate}>
                     <CopyIcon className="size-3.5" />
                   </IconButton>
                 </TooltipTrigger>
@@ -141,7 +146,7 @@ export function StreamSetRow({
               </Tooltip>
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <IconButton aria-label={t("row.delete")} size="icon-sm" onClick={() => setConfirmDelete(true)}>
+                  <IconButton aria-label={t("row.delete")} size="icon-sm" disabled={disabled} onClick={() => setConfirmDelete(true)}>
                     <Trash2Icon className="size-3.5" />
                   </IconButton>
                 </TooltipTrigger>
@@ -157,34 +162,7 @@ export function StreamSetRow({
             </div>
           </div>
 
-          {hydratedRoot.children.length > 0 ? (
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <div className="w-fit">
-                  <FilterGroup joiner={hydratedRoot.joiner}>
-                    {hydratedRoot.children.map((child) =>
-                      child.type === "condition" ? (
-                        <FilterChip
-                          key={child.id}
-                          field={child.field}
-                          operator={t(FILTER_OPERATOR_I18N_KEY[child.operator as FilterOperator])}
-                          value={child.operator === "BETWEEN" ? `${child.value}–${child.valueTo}` : child.value || "—"}
-                        />
-                      ) : (
-                        <Badge key={child.id} variant="outline">
-                          {child.joiner === "AND" ? t("filterGroupBuilder.matchAll") : t("filterGroupBuilder.matchAny")} (
-                          {countConditions(child)})
-                        </Badge>
-                      ),
-                    )}
-                  </FilterGroup>
-                </div>
-              </TooltipTrigger>
-              <TooltipContent>{describeFilterTree(hydratedRoot)}</TooltipContent>
-            </Tooltip>
-          ) : (
-            <p className="text-xs text-muted-foreground">{t("row.noFilters")}</p>
-          )}
+          <FilterTreeSummary root={hydratedRoot} />
 
           <div className="flex flex-wrap items-center gap-1.5">
             {streamSet.flows.map((f) => (
@@ -211,6 +189,7 @@ export function StreamSetRow({
           pixels={pixels}
           submitLabel={t("form.submitEdit")}
           onSubmit={handleSubmit}
+          disabled={disabled}
         />
       )}
 

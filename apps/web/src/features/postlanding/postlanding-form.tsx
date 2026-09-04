@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { Controller, useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -11,17 +12,10 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { MultiSelect } from "@/components/ui/multi-select";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetFooter,
-  SheetHeader,
-  SheetTitle,
-} from "@/components/ui/sheet";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { POSTLANDING_EVENT_TYPES, type PostlandingEventType, type PostlandingStatus } from "@/lib/api/postlanding";
 
-/** Factory, not a module-level const — see source-form-sheet.tsx's
+/** Factory, not a module-level const — see source-form.tsx's
  * buildSourceFormSchema for why (Zod messages are user-facing text and
  * need the live translator). */
 export function buildPostlandingFormSchema(t: TFunction) {
@@ -41,18 +35,19 @@ const STATUS_OPTIONS: PostlandingStatus[] = ["active", "paused", "archived"];
 // in the (already-real) Event Mappings panel.
 const EVENT_OPTIONS = POSTLANDING_EVENT_TYPES.map((e) => ({ value: e, label: e }));
 
-export function PostlandingFormSheet({
-  open,
-  onOpenChange,
-  defaultValues,
+/** The postlanding create/edit form — its own page (features/postlanding/
+ * {new-postlanding-view,postlanding-detail-view}.tsx) instead of a
+ * slide-out Sheet, matching the traffic-source/offer/campaign create/edit
+ * pages' layout. Same fields/validation/mutation shape the Sheet version
+ * had; only the container changed. */
+export function PostlandingForm({
   title,
+  defaultValues,
   submitLabel,
   onSubmit,
 }: {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  defaultValues: Partial<PostlandingFormValues>;
   title: string;
+  defaultValues: Partial<PostlandingFormValues>;
   submitLabel: string;
   onSubmit: (values: PostlandingFormValues) => void;
 }) {
@@ -70,14 +65,13 @@ export function PostlandingFormSheet({
   } = form;
 
   return (
-    <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent className="w-full gap-0 overflow-y-auto sm:max-w-lg" side="right">
-        <SheetHeader>
-          <SheetTitle>{title}</SheetTitle>
-          <SheetDescription>{t("form.description", { ns: "postlanding" })}</SheetDescription>
-        </SheetHeader>
-
-        <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-4 px-4 pb-4">
+    <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-4">
+      <Card>
+        <CardHeader>
+          <CardTitle>{title}</CardTitle>
+          <CardDescription>{t("form.description", { ns: "postlanding" })}</CardDescription>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-4">
           <div className="grid gap-1.5">
             <Label htmlFor="psl-name">{t("form.nameLabel", { ns: "postlanding" })}</Label>
             <Input
@@ -120,7 +114,7 @@ export function PostlandingFormSheet({
             <p className="text-xs text-muted-foreground">{t("form.eventsHint", { ns: "postlanding" })}</p>
           </div>
 
-          <div className="grid gap-1.5">
+          <div className="grid gap-1.5 sm:w-1/3">
             <Label htmlFor="psl-status">{t("form.statusLabel", { ns: "postlanding" })}</Label>
             <Controller
               control={control}
@@ -141,17 +135,17 @@ export function PostlandingFormSheet({
               )}
             />
           </div>
+        </CardContent>
+      </Card>
 
-          <SheetFooter className="mt-0 flex-row justify-end gap-2 p-0">
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
-              {t("actions.cancel", { ns: "common" })}
-            </Button>
-            <Button type="submit" disabled={isSubmitting}>
-              {submitLabel}
-            </Button>
-          </SheetFooter>
-        </form>
-      </SheetContent>
-    </Sheet>
+      <div className="flex justify-end gap-2">
+        <Button type="button" variant="outline" asChild>
+          <Link href="/postlanding">{t("actions.cancel", { ns: "common" })}</Link>
+        </Button>
+        <Button type="submit" disabled={isSubmitting}>
+          {submitLabel}
+        </Button>
+      </div>
+    </form>
   );
 }

@@ -59,37 +59,62 @@ type Pwa struct {
 	// percentage that was never entered stays "—" in the review
 	// breakdown, not a fabricated 0% (same reasoning as Rating/
 	// RatingCount/SizeMB above).
-	RatingStars5 *float64  `json:"ratingStars5,omitempty"`
-	RatingStars4 *float64  `json:"ratingStars4,omitempty"`
-	RatingStars3 *float64  `json:"ratingStars3,omitempty"`
-	RatingStars2 *float64  `json:"ratingStars2,omitempty"`
-	RatingStars1 *float64  `json:"ratingStars1,omitempty"`
-	Status       Status    `json:"status"`
-	CreatedAt    time.Time `json:"createdAt"`
-	UpdatedAt    time.Time `json:"updatedAt"`
+	RatingStars5 *float64 `json:"ratingStars5,omitempty"`
+	RatingStars4 *float64 `json:"ratingStars4,omitempty"`
+	RatingStars3 *float64 `json:"ratingStars3,omitempty"`
+	RatingStars2 *float64 `json:"ratingStars2,omitempty"`
+	RatingStars1 *float64 `json:"ratingStars1,omitempty"`
+	// Version/AgeRating/Category/InteractiveElements back the listing's
+	// "detailed information" sheet. Free text, not enums — the reference
+	// shows whatever the operator's real listing says ("1.0.0", "12+",
+	// "Casino"). Empty means "never entered": the UI hides that row
+	// rather than printing a fabricated value.
+	Version             string `json:"version"`
+	AgeRating           string `json:"ageRating"`
+	Category            string `json:"category"`
+	InteractiveElements string `json:"interactiveElements"`
+	// ContainsAds/InAppPurchases replace what used to be a hardcoded
+	// "no ads or paid content" line in the preview — an assertion the
+	// app made about every PWA with nothing behind it.
+	ContainsAds    bool `json:"containsAds"`
+	InAppPurchases bool `json:"inAppPurchases"`
+	// UpdatedDate is the listing's own "updated on" date, as YYYY-MM-DD.
+	// nil means never entered: the preview hides the row rather than
+	// falling back to today, which is what it used to print.
+	UpdatedDate *string   `json:"updatedDate,omitempty"`
+	Status      Status    `json:"status"`
+	CreatedAt   time.Time `json:"createdAt"`
+	UpdatedAt   time.Time `json:"updatedAt"`
 }
 
 type CreateInput struct {
-	Name               string
-	ShortName          string
-	ThemeColor         string
-	BackgroundColor    string
-	IconURL            string
-	StartURL           string
-	BounceInAppWebview bool
-	Developer          string
-	Description        string
-	Rating             *float64
-	RatingCount        *int
-	DownloadsLabel     string
-	SizeMB             *float64
-	Screenshots        []string
-	WhatsNew           string
-	RatingStars5       *float64
-	RatingStars4       *float64
-	RatingStars3       *float64
-	RatingStars2       *float64
-	RatingStars1       *float64
+	Name                string
+	ShortName           string
+	ThemeColor          string
+	BackgroundColor     string
+	IconURL             string
+	StartURL            string
+	BounceInAppWebview  bool
+	Developer           string
+	Description         string
+	Rating              *float64
+	RatingCount         *int
+	DownloadsLabel      string
+	SizeMB              *float64
+	Screenshots         []string
+	WhatsNew            string
+	RatingStars5        *float64
+	RatingStars4        *float64
+	RatingStars3        *float64
+	RatingStars2        *float64
+	RatingStars1        *float64
+	Version             string
+	AgeRating           string
+	Category            string
+	InteractiveElements string
+	ContainsAds         bool
+	InAppPurchases      bool
+	UpdatedDate         *string
 }
 
 // UpdateInput fields are pointers so PATCH can distinguish "not sent"
@@ -102,25 +127,32 @@ type CreateInput struct {
 // Events is — nil means "not sent", an empty non-nil slice means "sent,
 // clear the list".
 type UpdateInput struct {
-	Name               *string
-	ShortName          *string
-	ThemeColor         *string
-	BackgroundColor    *string
-	IconURL            *string
-	StartURL           *string
-	BounceInAppWebview *bool
-	Developer          *string
-	Description        *string
-	Rating             *float64
-	RatingCount        *int
-	DownloadsLabel     *string
-	SizeMB             *float64
-	Screenshots        *[]string
-	WhatsNew           *string
-	RatingStars5       *float64
-	RatingStars4       *float64
-	RatingStars3       *float64
-	RatingStars2       *float64
-	RatingStars1       *float64
-	Status             *Status
+	Name                *string
+	ShortName           *string
+	ThemeColor          *string
+	BackgroundColor     *string
+	IconURL             *string
+	StartURL            *string
+	BounceInAppWebview  *bool
+	Developer           *string
+	Description         *string
+	Rating              *float64
+	RatingCount         *int
+	DownloadsLabel      *string
+	SizeMB              *float64
+	Screenshots         *[]string
+	WhatsNew            *string
+	RatingStars5        *float64
+	RatingStars4        *float64
+	RatingStars3        *float64
+	RatingStars2        *float64
+	RatingStars1        *float64
+	Version             *string
+	AgeRating           *string
+	Category            *string
+	InteractiveElements *string
+	ContainsAds         *bool
+	InAppPurchases      *bool
+	UpdatedDate         *string
+	Status              *Status
 }

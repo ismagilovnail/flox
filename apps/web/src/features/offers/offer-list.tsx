@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { toast } from "sonner";
+import Link from "next/link";
 import { PlusIcon, TagIcon } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
@@ -9,29 +9,13 @@ import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
 import { LoadingState } from "@/components/ui/loading-state";
 import { ErrorState } from "@/components/ui/error-state";
-import { useCreateOffer, useOffers, useUpdateOffer } from "@/hooks/use-offers";
+import { useOffers } from "@/hooks/use-offers";
 import { useNetworks } from "@/hooks/use-networks";
 import { useTagsStore } from "@/stores/tags";
 import { offerColumns } from "@/features/offers/offer-columns";
-import { OfferFormSheet, type OfferFormValues } from "@/features/offers/offer-form-sheet";
 import { TagFilterControl } from "@/features/tags/tag-filter-control";
 import { BulkTagDialog } from "@/features/tags/bulk-tag-dialog";
 import { filterByTags } from "@/features/tags/filter-by-tags";
-import type { Offer } from "@/lib/api/offers";
-import type { Network } from "@/lib/api/networks";
-
-function toFormValues(offer: Offer): OfferFormValues {
-  return {
-    networkId: offer.networkId,
-    name: offer.name,
-    countries: offer.countries,
-    payout: offer.payout,
-    currency: offer.currency,
-    cap: offer.cap === null ? "" : String(offer.cap),
-    status: offer.status,
-    links: offer.links,
-  };
-}
 
 export function OfferList() {
   const { t } = useTranslation(["offers", "common"]);
@@ -39,7 +23,6 @@ export function OfferList() {
   const networksQuery = useNetworks();
   const assignments = useTagsStore((s) => s.assignments);
 
-  const [target, setTarget] = React.useState<Offer | null | undefined>(undefined);
   const [tagFilter, setTagFilter] = React.useState<string[]>([]);
   const [bulkTarget, setBulkTarget] = React.useState<{ ids: string[]; clear: () => void } | null>(null);
 
@@ -52,18 +35,24 @@ export function OfferList() {
     () => filterByTags("offer", offersQuery.data?.offers ?? [], tagFilter, assignments),
     [offersQuery.data, tagFilter, assignments],
   );
-  const columns = React.useMemo(
-    () => offerColumns(t, (offer) => setTarget(offer), networkNameById),
-    [t, networkNameById],
-  );
+  const columns = React.useMemo(() => offerColumns(t, networkNameById), [t, networkNameById]);
 
   const header = (
     <div className="flex items-center justify-between">
       <h1 className="text-2xl font-semibold tracking-tight">{t("list.title", { ns: "offers" })}</h1>
-      <Button onClick={() => setTarget(null)} disabled={networks.length === 0}>
-        <PlusIcon className="size-4" />
-        {t("list.newButton", { ns: "offers" })}
-      </Button>
+      {networks.length === 0 ? (
+        <Button disabled>
+          <PlusIcon className="size-4" />
+          {t("list.newButton", { ns: "offers" })}
+        </Button>
+      ) : (
+        <Button asChild>
+          <Link href="/offers/new">
+            <PlusIcon className="size-4" />
+            {t("list.newButton", { ns: "offers" })}
+          </Link>
+        </Button>
+      )}
     </div>
   );
 
@@ -130,10 +119,6 @@ export function OfferList() {
         )}
       />
 
-      {target !== undefined && (
-        <OfferFormDialog key={target?.id ?? "new"} target={target} networks={networks} onClose={() => setTarget(undefined)} />
-      )}
-
       {bulkTarget && (
         <BulkTagDialog
           entityType="offer"
@@ -147,78 +132,5 @@ export function OfferList() {
         />
       )}
     </div>
-  );
-}
-
-function OfferFormDialog({
-  target,
-  networks,
-  onClose,
-}: {
-  target: Offer | null;
-  networks: Network[];
-  onClose: () => void;
-}) {
-  const { t } = useTranslation("offers");
-  const createOffer = useCreateOffer();
-  const updateOffer = useUpdateOffer(target?.id ?? "");
-
-  function handleSubmit(values: OfferFormValues) {
-    const cap = values.cap.trim() === "" ? null : Number(values.cap);
-    const links = values.links.map((l) => ({ label: l.label, url: l.url }));
-
-    if (target) {
-      updateOffer.mutate(
-        {
-          networkId: values.networkId,
-          name: values.name,
-          countries: values.countries,
-          payout: values.payout,
-          currency: values.currency,
-          cap,
-          status: values.status,
-          links,
-        },
-        {
-          onSuccess: () => {
-            toast(t("toast.updated"), { description: values.name });
-            onClose();
-          },
-          onError: (err) => toast.error(t("toast.updateError"), { description: err.message }),
-        },
-      );
-    } else {
-      createOffer.mutate(
-        {
-          networkId: values.networkId,
-          name: values.name,
-          countries: values.countries,
-          payout: values.payout,
-          currency: values.currency,
-          cap,
-          links,
-        },
-        {
-          onSuccess: () => {
-            toast(t("toast.created"), { description: values.name });
-            onClose();
-          },
-          onError: (err) => toast.error(t("toast.createError"), { description: err.message }),
-        },
-      );
-    }
-  }
-
-  return (
-    <OfferFormSheet
-      open
-      onOpenChange={(open) => !open && onClose()}
-      title={target ? t("form.titleEdit", { name: target.name }) : t("form.titleNew")}
-      submitLabel={target ? t("form.submitEdit") : t("form.submitCreate")}
-      showStatus={!!target}
-      defaultValues={target ? toFormValues(target) : {}}
-      networks={networks}
-      onSubmit={handleSubmit}
-    />
   );
 }

@@ -31,21 +31,6 @@
     "archiveConfirmDescription": "Archived campaigns stop routing traffic and are hidden from the active list.",
     "saveChanges": "Save changes"
   },
-  "overview": {
-    "loading": "Loading analytics…",
-    "clickLoadError": "Couldn't load click analytics",
-    "revenueLoadError": "Couldn't load revenue analytics",
-    "spendLoadError": "Couldn't load spend",
-    "revenue": "Revenue",
-    "clicks": "Clicks",
-    "conversions": "Conversions",
-    "cvr": "CVR",
-    "spend": "Spend",
-    "profit": "Profit",
-    "roi": "ROI",
-    "cpa": "CPA",
-    "revenueChartTitle": "Revenue (last 30 days)"
-  },
   "form": {
     "detailsTitle": "Campaign details",
     "detailsDescription": "Name, source, and where traffic lands if no rule matches.",
@@ -61,9 +46,9 @@
     "externalCampaignIdLabel": "External campaign ID",
     "externalCampaignIdPlaceholder": "e.g. 120211234567890123",
     "externalCampaignIdHint": "The ad platform's own campaign ID — set this to match this campaign against synced Facebook/TikTok spend.",
-    "statusLabel": "Status",
     "notesLabel": "Notes",
     "notesPlaceholder": "Internal notes...",
+    "archivedNotice": "This campaign is archived — changes aren't available. Duplicate it to keep working with these settings.",
     "submitDefault": "Save",
     "validation": {
       "nameMin": "Name must be at least 2 characters",
@@ -80,6 +65,8 @@
     "slugLabel": "Slug",
     "slugPlaceholder": "summer-promo",
     "slugHelp": "Lowercase letters, numbers, and hyphens only.",
+    "regenerateSlugAria": "Regenerate slug from campaign name",
+    "archivedNotice": "This campaign is archived and doesn't route traffic — creating or changing links isn't available.",
     "submitButton": "Create link",
     "noDomainsTitle": "No tracking domains yet",
     "noDomainsDescription": "Park a domain before creating a tracking link for this campaign.",
@@ -109,7 +96,10 @@
   },
   "newCampaign": {
     "title": "New Campaign",
-    "submitButton": "Create campaign"
+    "submitButton": "Create campaign",
+    "lockedTitle": "Save the campaign first",
+    "trackingLinksLockedDescription": "Fill in and save the campaign details on the left — you'll be able to create tracking links here once it exists.",
+    "streamSetsLockedDescription": "Fill in and save the campaign details on the left — you'll be able to add stream sets here once it exists."
   },
   "rowActions": {
     "actionsAria": "Actions for {{name}}",
@@ -120,7 +110,7 @@
     "duplicate": "Duplicate",
     "archive": "Archive",
     "archiveConfirmTitle": "Archive \"{{name}}\"?",
-    "archiveConfirmDescription": "Archived campaigns stop routing traffic and are hidden from the active list. This can be reversed later from campaign settings."
+    "archiveConfirmDescription": "Archived campaigns stop routing traffic, are hidden from the active list, and can no longer be edited. Duplicate the campaign to keep working with these settings."
   },
   "toast": {
     "updated": "Campaign updated",

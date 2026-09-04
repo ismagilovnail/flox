@@ -1,18 +1,13 @@
 "use client";
 
 import * as React from "react";
+import Link from "next/link";
 import { toast } from "sonner";
-import { MoreHorizontalIcon, PencilIcon, Trash2Icon } from "lucide-react";
+import { PencilIcon, Trash2Icon } from "lucide-react";
 
 import { IconButton } from "@/components/ui/icon-button";
 import { Button } from "@/components/ui/button";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import {
   Dialog,
   DialogContent,
@@ -24,7 +19,7 @@ import {
 import { useDeleteDomain } from "@/hooks/use-domains";
 import type { Domain } from "@/lib/api/domains";
 
-export function DomainRowActions({ domain, onEdit }: { domain: Domain; onEdit: () => void }) {
+export function DomainRowActions({ domain }: { domain: Domain }) {
   const deleteDomain = useDeleteDomain();
   const [confirmRemove, setConfirmRemove] = React.useState(false);
 
@@ -43,22 +38,27 @@ export function DomainRowActions({ domain, onEdit }: { domain: Domain; onEdit: (
 
   return (
     <>
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <IconButton aria-label={`Actions for ${domain.domain}`} variant="ghost" size="icon-sm">
-            <MoreHorizontalIcon className="size-4" />
-          </IconButton>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="end">
-          <DropdownMenuItem onSelect={onEdit}>
-            <PencilIcon className="size-4" /> Edit
-          </DropdownMenuItem>
-          <DropdownMenuSeparator />
-          <DropdownMenuItem variant="destructive" onSelect={() => setConfirmRemove(true)}>
-            <Trash2Icon className="size-4" /> Remove
-          </DropdownMenuItem>
-        </DropdownMenuContent>
-      </DropdownMenu>
+      <div className="flex items-center justify-end gap-1">
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <IconButton aria-label="Edit" size="icon-sm" asChild>
+              <Link href={`/domains/${domain.id}`}>
+                <PencilIcon className="size-3.5" />
+              </Link>
+            </IconButton>
+          </TooltipTrigger>
+          <TooltipContent>Edit</TooltipContent>
+        </Tooltip>
+
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <IconButton aria-label="Remove" size="icon-sm" onClick={() => setConfirmRemove(true)}>
+              <Trash2Icon className="size-3.5" />
+            </IconButton>
+          </TooltipTrigger>
+          <TooltipContent>Remove</TooltipContent>
+        </Tooltip>
+      </div>
 
       <Dialog open={confirmRemove} onOpenChange={setConfirmRemove}>
         <DialogContent>

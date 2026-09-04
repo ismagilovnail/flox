@@ -1,6 +1,5 @@
 import type { ColumnDef } from "@tanstack/react-table";
 import { ArrowDownToLineIcon, ArrowUpFromLineIcon, RotateCcwIcon } from "lucide-react";
-import { formatDistanceToNow } from "date-fns";
 import { toast } from "sonner";
 import { useTranslation } from "react-i18next";
 import type { TFunction } from "i18next";
@@ -9,6 +8,7 @@ import { dataTableFeatures } from "@/components/ui/data-table";
 import { Badge } from "@/components/ui/badge";
 import { IconButton } from "@/components/ui/icon-button";
 import { Caption, Mono } from "@/components/ui/typography";
+import { RelativeTime } from "@/components/ui/relative-time";
 import { CPA_STATUS_I18N_KEY } from "@/lib/api/conversions";
 import { useReplayIncomingPostback, useReplayOutgoingPostback } from "@/hooks/use-postback-logs";
 import type { PostbackLog, PostbackResult } from "@/lib/api/postback-logs";
@@ -154,7 +154,7 @@ export function postbackLogColumns(
     {
       accessorKey: "eventAt",
       header: t("columns.time", { ns: "postbacks" }),
-      cell: ({ getValue }) => <Caption>{formatDistanceToNow(new Date(getValue() as string), { addSuffix: true })}</Caption>,
+      cell: ({ getValue }) => <RelativeTime date={getValue() as string} />,
     },
     {
       id: "actions",

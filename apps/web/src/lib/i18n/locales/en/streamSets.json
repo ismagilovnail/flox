@@ -1,11 +1,10 @@
 {
   "filters": {
     "groups": {
+      "parameters": "Parameters",
       "geo": "Geo",
-      "device": "Device",
-      "fraud": "Fraud",
-      "traffic": "Traffic",
-      "custom": "Custom"
+      "device": "Device & browser",
+      "tracking": "Tracking parameters"
     },
     "operators": {
       "is": "is",
@@ -44,6 +43,22 @@
     "countryPlaceholder": "US, GB",
     "valuePlaceholder": "value",
     "removeConditionAria": "Remove condition"
+  },
+  "filterPicker": {
+    "title": "Configure set filters",
+    "description": "Find a field on the left and add it as a filter condition — the right panel shows the conditions already picked.",
+    "searchPlaceholder": "Find a field to filter...",
+    "noFieldsFound": "No fields found",
+    "activeFiltersTitle": "Active filters",
+    "emptyTitle": "No filters set",
+    "emptyDescription": "Pick a field on the left — the filter appears here instantly.",
+    "summary": "Filters: {{count}} · values: {{values}}",
+    "apply": "Apply"
+  },
+  "filterReference": {
+    "trigger": "Help",
+    "title": "Filter reference",
+    "subtitle": "Which fields you can filter on, which operators are available, and how to combine them."
   },
   "filterGroupBuilder": {
     "matchAll": "Match all",
@@ -97,10 +112,11 @@
   "form": {
     "description": "Stream sets are evaluated top-to-bottom by priority — the first one whose filters match wins.",
     "nameLabel": "Name",
-    "statusLabel": "Status",
     "filtersTitle": "Filters",
     "filtersDescription": "An empty top-level group matches all traffic. Nest groups to mix AND/OR — e.g. country IS US AND device IN [mobile, tablet] AND (OS IS Android OR OS IS iOS).",
     "filtersError": "Fix the highlighted filter condition(s) above before saving.",
+    "addFilterButton": "Add filter",
+    "archivedNotice": "This campaign is archived — changes aren't available.",
     "flowsTitle": "Flows",
     "flowsDescription": "Each flow routes to an Offer or a Redirect URL. Weight is a raw number — the engine normalizes it to a percentage across active flows.",
     "addFlow": "Add flow",

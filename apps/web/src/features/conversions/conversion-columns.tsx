@@ -1,11 +1,11 @@
 import type { ColumnDef } from "@tanstack/react-table";
 import Link from "next/link";
-import { formatDistanceToNow } from "date-fns";
 import type { TFunction } from "i18next";
 
 import { dataTableFeatures } from "@/components/ui/data-table";
 import { Badge } from "@/components/ui/badge";
-import { Caption, Mono } from "@/components/ui/typography";
+import { Mono } from "@/components/ui/typography";
+import { RelativeTime } from "@/components/ui/relative-time";
 import { CPA_STATUS_I18N_KEY, type Conversion, type CpaStatus } from "@/lib/api/conversions";
 
 const STATUS_VARIANT: Record<CpaStatus, "warning" | "success" | "danger" | "secondary"> = {
@@ -63,7 +63,7 @@ export function conversionColumns(
     {
       accessorKey: "eventAt",
       header: t("columns.eventTime", { ns: "conversions" }),
-      cell: ({ getValue }) => <Caption>{formatDistanceToNow(new Date(getValue() as string), { addSuffix: true })}</Caption>,
+      cell: ({ getValue }) => <RelativeTime date={getValue() as string} />,
     },
   ];
 }

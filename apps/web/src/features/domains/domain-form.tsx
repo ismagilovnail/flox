@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { Controller, useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -9,14 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { MultiSelect } from "@/components/ui/multi-select";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetFooter,
-  SheetHeader,
-  SheetTitle,
-} from "@/components/ui/sheet";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   DNS_PROVIDER_LABELS,
   REGISTRAR_LABELS,
@@ -45,18 +39,21 @@ export const domainFormSchema = z.object({
 
 export type DomainFormValues = z.infer<typeof domainFormSchema>;
 
-export function DomainFormSheet({
-  open,
-  onOpenChange,
-  defaultValues,
+/** The domain create/edit form — its own page (features/domains/{new-
+ * domain-view,domain-detail-view}.tsx) instead of a slide-out Sheet,
+ * matching the Offers/Traffic-Sources/Campaigns create/edit pages'
+ * layout. Same fields/validation/mutation shape the Sheet version had;
+ * only the container changed. Domains' own UI stays plain English (no
+ * domains.json exists — a known, separately-scoped gap, see CLAUDE.md),
+ * unlike every other converted feature in this batch. */
+export function DomainForm({
   title,
+  defaultValues,
   submitLabel,
   onSubmit,
 }: {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  defaultValues: Partial<DomainFormValues>;
   title: string;
+  defaultValues: Partial<DomainFormValues>;
   submitLabel: string;
   onSubmit: (values: DomainFormValues) => void;
 }) {
@@ -80,17 +77,16 @@ export function DomainFormSheet({
   } = form;
 
   return (
-    <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent className="w-full gap-0 overflow-y-auto sm:max-w-lg" side="right">
-        <SheetHeader>
-          <SheetTitle>{title}</SheetTitle>
-          <SheetDescription>
+    <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-4">
+      <Card>
+        <CardHeader>
+          <CardTitle>{title}</CardTitle>
+          <CardDescription>
             Own-domain parking (§30). SSL issuance and ownership verification are separate actions once the
             domain exists.
-          </SheetDescription>
-        </SheetHeader>
-
-        <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-4 px-4 pb-4">
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-4">
           <div className="grid gap-1.5">
             <Label htmlFor="dom-domain">Domain</Label>
             <Input
@@ -167,7 +163,7 @@ export function DomainFormSheet({
             </div>
           </div>
 
-          <div className="grid gap-1.5">
+          <div className="grid gap-1.5 sm:w-1/2">
             <Label htmlFor="dom-status">Status</Label>
             <Controller
               control={control}
@@ -188,17 +184,17 @@ export function DomainFormSheet({
               )}
             />
           </div>
+        </CardContent>
+      </Card>
 
-          <SheetFooter className="mt-0 flex-row justify-end gap-2 p-0">
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
-              Cancel
-            </Button>
-            <Button type="submit" disabled={isSubmitting}>
-              {submitLabel}
-            </Button>
-          </SheetFooter>
-        </form>
-      </SheetContent>
-    </Sheet>
+      <div className="flex justify-end gap-2">
+        <Button type="button" variant="outline" asChild>
+          <Link href="/domains">Cancel</Link>
+        </Button>
+        <Button type="submit" disabled={isSubmitting}>
+          {submitLabel}
+        </Button>
+      </div>
+    </form>
   );
 }

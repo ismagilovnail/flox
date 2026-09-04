@@ -94,7 +94,15 @@ function toCreateInput(values: StreamSetFormValues): CreateStreamSetInput {
   };
 }
 
-export function StreamSetList({ campaignId }: { campaignId: string }) {
+export function StreamSetList({
+  campaignId,
+  disabled = false,
+}: {
+  campaignId: string;
+  /** Archived campaigns don't route traffic — routing config edits are
+   * locked instead of letting them look saved while they can't matter. */
+  disabled?: boolean;
+}) {
   const { t } = useTranslation("streamSets");
   const streamSetsQuery = useStreamSets(campaignId);
   const networksQuery = useNetworks();
@@ -166,7 +174,7 @@ export function StreamSetList({ campaignId }: { campaignId: string }) {
         <Button
           size="sm"
           onClick={handleAddStreamSet}
-          disabled={networks.length === 0 || offers.length === 0 || createStreamSet.isPending}
+          disabled={disabled || networks.length === 0 || offers.length === 0 || createStreamSet.isPending}
         >
           <PlusIcon className="size-4" /> {t("list.newButton")}
         </Button>
@@ -275,6 +283,7 @@ export function StreamSetList({ campaignId }: { campaignId: string }) {
                         postlandings={postlandings}
                         pixels={pixels}
                         campaignId={campaignId}
+                        disabled={disabled}
                       />
                     ))}
                   </div>
@@ -302,6 +311,7 @@ function StreamSetRowContainer({
   postlandings,
   pixels,
   campaignId,
+  disabled,
 }: {
   streamSet: StreamSet;
   networks: Network[];
@@ -311,6 +321,7 @@ function StreamSetRowContainer({
   postlandings: Postlanding[];
   pixels: Pixel[];
   campaignId: string;
+  disabled: boolean;
 }) {
   const { t } = useTranslation("streamSets");
   const update = useUpdateStreamSet(campaignId, streamSet.id);
@@ -326,6 +337,7 @@ function StreamSetRowContainer({
       pwas={pwas}
       postlandings={postlandings}
       pixels={pixels}
+      disabled={disabled}
       onSubmit={(values) =>
         update.mutate(
           { ...toCreateInput(values), status: values.status },

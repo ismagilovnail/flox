@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { Controller, useForm, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -11,21 +12,14 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetFooter,
-  SheetHeader,
-  SheetTitle,
-} from "@/components/ui/sheet";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Mono } from "@/components/ui/typography";
 import { slugify } from "@/lib/utils";
 import type { LandingStatus, LandingType } from "@/lib/api/landings";
 
-/** Factory, not a module-level const — see source-form-sheet.tsx's
- * buildSourceFormSchema for why (Zod messages are user-facing text and
- * need the live translator). */
+/** Factory, not a module-level const — Zod's validation messages are
+ * user-facing text and need the live translator, which only exists inside
+ * a component. */
 export function buildLandingFormSchema(t: TFunction) {
   return z
     .object({
@@ -50,18 +44,19 @@ export type LandingFormValues = z.infer<ReturnType<typeof buildLandingFormSchema
 
 const STATUS_OPTIONS: LandingStatus[] = ["active", "paused", "archived"];
 
-export function LandingFormSheet({
-  open,
-  onOpenChange,
-  defaultValues,
+/** The landing create/edit form — its own page (features/landings/{new-
+ * landing-view,landing-detail-view}.tsx) instead of a slide-out Sheet,
+ * matching the traffic-source/offer/campaign create/edit pages' layout.
+ * Same fields/validation/mutation shape the Sheet version had; only the
+ * container changed. */
+export function LandingForm({
   title,
+  defaultValues,
   submitLabel,
   onSubmit,
 }: {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  defaultValues: Partial<LandingFormValues>;
   title: string;
+  defaultValues: Partial<LandingFormValues>;
   submitLabel: string;
   onSubmit: (values: LandingFormValues) => void;
 }) {
@@ -82,14 +77,13 @@ export function LandingFormSheet({
   const name = useWatch({ control, name: "name" });
 
   return (
-    <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent className="w-full gap-0 overflow-y-auto sm:max-w-lg" side="right">
-        <SheetHeader>
-          <SheetTitle>{title}</SheetTitle>
-          <SheetDescription>{t("form.description", { ns: "landings" })}</SheetDescription>
-        </SheetHeader>
-
-        <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-4 px-4 pb-4">
+    <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-4">
+      <Card>
+        <CardHeader>
+          <CardTitle>{title}</CardTitle>
+          <CardDescription>{t("form.description", { ns: "landings" })}</CardDescription>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-4">
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="grid gap-1.5">
               <Label htmlFor="lnd-name">{t("form.nameLabel", { ns: "landings" })}</Label>
@@ -156,7 +150,7 @@ export function LandingFormSheet({
             </>
           )}
 
-          <div className="grid gap-1.5">
+          <div className="grid gap-1.5 sm:w-1/3">
             <Label htmlFor="lnd-status">{t("form.statusLabel", { ns: "landings" })}</Label>
             <Controller
               control={control}
@@ -177,17 +171,17 @@ export function LandingFormSheet({
               )}
             />
           </div>
+        </CardContent>
+      </Card>
 
-          <SheetFooter className="mt-0 flex-row justify-end gap-2 p-0">
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
-              {t("actions.cancel", { ns: "common" })}
-            </Button>
-            <Button type="submit" disabled={isSubmitting}>
-              {submitLabel}
-            </Button>
-          </SheetFooter>
-        </form>
-      </SheetContent>
-    </Sheet>
+      <div className="flex justify-end gap-2">
+        <Button type="button" variant="outline" asChild>
+          <Link href="/landings">{t("actions.cancel", { ns: "common" })}</Link>
+        </Button>
+        <Button type="submit" disabled={isSubmitting}>
+          {submitLabel}
+        </Button>
+      </div>
+    </form>
   );
 }

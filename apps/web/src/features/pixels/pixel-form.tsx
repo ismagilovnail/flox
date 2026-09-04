@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { Controller, useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -11,14 +12,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { MultiSelect } from "@/components/ui/multi-select";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetFooter,
-  SheetHeader,
-  SheetTitle,
-} from "@/components/ui/sheet";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   PIXEL_EVENT_TYPES,
   PIXEL_PROVIDERS,
@@ -28,9 +22,9 @@ import {
   type PixelStatus,
 } from "@/lib/api/pixels";
 
-/** Factory, not a module-level const — see source-form-sheet.tsx's
- * buildSourceFormSchema for why (Zod messages are user-facing text and
- * need the live translator). */
+/** Factory, not a module-level const — Zod's validation messages are
+ * user-facing text and need the live translator, which only exists inside
+ * a component. */
 export function buildPixelFormSchema(t: TFunction) {
   return z.object({
     name: z.string().min(2, t("form.validation.nameMin", { ns: "pixels" })).max(100),
@@ -49,18 +43,19 @@ const STATUS_OPTIONS: PixelStatus[] = ["active", "paused", "archived"];
 // panel and Postlanding's form.
 const EVENT_OPTIONS = PIXEL_EVENT_TYPES.map((e) => ({ value: e, label: e }));
 
-export function PixelFormSheet({
-  open,
-  onOpenChange,
-  defaultValues,
+/** The pixel create/edit form — its own page (features/pixels/{new-pixel-
+ * view,pixel-detail-view}.tsx) instead of a slide-out Sheet, matching the
+ * offers/traffic-source/campaign create/edit pages' layout. Same fields/
+ * validation/mutation shape the Sheet version had; only the container
+ * changed. */
+export function PixelForm({
   title,
+  defaultValues,
   submitLabel,
   onSubmit,
 }: {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  defaultValues: Partial<PixelFormValues>;
   title: string;
+  defaultValues: Partial<PixelFormValues>;
   submitLabel: string;
   onSubmit: (values: PixelFormValues) => void;
 }) {
@@ -78,14 +73,13 @@ export function PixelFormSheet({
   } = form;
 
   return (
-    <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent className="w-full gap-0 overflow-y-auto sm:max-w-lg" side="right">
-        <SheetHeader>
-          <SheetTitle>{title}</SheetTitle>
-          <SheetDescription>{t("form.description", { ns: "pixels" })}</SheetDescription>
-        </SheetHeader>
-
-        <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-4 px-4 pb-4">
+    <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-4">
+      <Card>
+        <CardHeader>
+          <CardTitle>{title}</CardTitle>
+          <CardDescription>{t("form.description", { ns: "pixels" })}</CardDescription>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-4">
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="grid gap-1.5">
               <Label htmlFor="pxl-name">{t("form.nameLabel", { ns: "pixels" })}</Label>
@@ -151,7 +145,7 @@ export function PixelFormSheet({
             {errors.events && <p className="text-xs text-danger">{errors.events.message}</p>}
           </div>
 
-          <div className="grid gap-1.5">
+          <div className="grid gap-1.5 sm:w-1/3">
             <Label htmlFor="pxl-status">{t("form.statusLabel", { ns: "pixels" })}</Label>
             <Controller
               control={control}
@@ -172,17 +166,17 @@ export function PixelFormSheet({
               )}
             />
           </div>
+        </CardContent>
+      </Card>
 
-          <SheetFooter className="mt-0 flex-row justify-end gap-2 p-0">
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
-              {t("actions.cancel", { ns: "common" })}
-            </Button>
-            <Button type="submit" disabled={isSubmitting}>
-              {submitLabel}
-            </Button>
-          </SheetFooter>
-        </form>
-      </SheetContent>
-    </Sheet>
+      <div className="flex justify-end gap-2">
+        <Button type="button" variant="outline" asChild>
+          <Link href="/pixels">{t("actions.cancel", { ns: "common" })}</Link>
+        </Button>
+        <Button type="submit" disabled={isSubmitting}>
+          {submitLabel}
+        </Button>
+      </div>
+    </form>
   );
 }

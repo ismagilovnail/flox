@@ -52,6 +52,10 @@ export function listDomains(): Promise<{ domains: Domain[] }> {
   return apiFetch("/domains");
 }
 
+export function getDomain(id: string): Promise<Domain> {
+  return apiFetch(`/domains/${id}`);
+}
+
 export function createDomain(input: CreateDomainInput): Promise<Domain> {
   return apiFetch("/domains", { method: "POST", body: input });
 }

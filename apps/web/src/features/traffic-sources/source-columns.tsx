@@ -1,10 +1,11 @@
 import type { ColumnDef } from "@tanstack/react-table";
-import { formatDistanceToNow } from "date-fns";
+import Link from "next/link";
 import type { TFunction } from "i18next";
 
 import { dataTableFeatures } from "@/components/ui/data-table";
 import { Badge } from "@/components/ui/badge";
-import { Caption, Mono } from "@/components/ui/typography";
+import { Mono } from "@/components/ui/typography";
+import { RelativeTime } from "@/components/ui/relative-time";
 import { COST_INTEGRATION_I18N_KEY, SOURCE_TYPE_I18N_KEY, type SourceStatus, type SourceType, type TrafficSource } from "@/lib/api/traffic-sources";
 import { SourceRowActions } from "@/features/traffic-sources/source-row-actions";
 import { TagBadgeList } from "@/features/tags/tag-badge-list";
@@ -15,22 +16,15 @@ const STATUS_VARIANT: Record<SourceStatus, "success" | "warning" | "secondary"> 
   archived: "secondary",
 };
 
-export function sourceColumns(
-  t: TFunction,
-  onEdit: (source: TrafficSource) => void,
-): ColumnDef<typeof dataTableFeatures, TrafficSource>[] {
+export function sourceColumns(t: TFunction): ColumnDef<typeof dataTableFeatures, TrafficSource>[] {
   return [
     {
       accessorKey: "name",
       header: t("columns.name", { ns: "trafficSources" }),
       cell: ({ row }) => (
-        <button
-          type="button"
-          onClick={() => onEdit(row.original)}
-          className="font-medium text-foreground hover:underline"
-        >
+        <Link href={`/traffic-sources/${row.original.id}`} className="font-medium text-foreground hover:underline">
           {row.original.name}
-        </button>
+        </Link>
       ),
     },
     {
@@ -76,9 +70,7 @@ export function sourceColumns(
     {
       accessorKey: "updatedAt",
       header: t("columns.updated", { ns: "trafficSources" }),
-      cell: ({ getValue }) => (
-        <Caption>{formatDistanceToNow(new Date(getValue() as string), { addSuffix: true })}</Caption>
-      ),
+      cell: ({ getValue }) => <RelativeTime date={getValue() as string} />,
     },
     {
       id: "actions",
@@ -87,7 +79,7 @@ export function sourceColumns(
       enableHiding: false,
       cell: ({ row }) => (
         <div className="flex justify-end">
-          <SourceRowActions source={row.original} onEdit={() => onEdit(row.original)} />
+          <SourceRowActions source={row.original} />
         </div>
       ),
     },
