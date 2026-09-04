@@ -19,6 +19,161 @@ referenced below as §N).
 ## CURRENT STATE — UPDATE THIS EVERY PHASE
 
 ```
+CURRENT PHASE : CONTENT GALLERY — REAL MEDIA LIBRARY, IMAGES ONLY (user-scoped, post-Phase-34)
+STATUS        : done — user pointed at a reference tracker's real
+                Content Gallery page (adset.pro/guide_ru/galereya-
+                kontenta) and asked for the same. FLOX's own
+                /content-gallery was a frontend-only mock of something
+                else entirely (a "template gallery" of pre-built
+                landing/PWA/postlanding starter content — see the
+                deleted lib/mock/content-gallery.ts's own former doc
+                comment); no object storage was wired up anywhere in
+                the repo (config.S3Config existed since Phase 16,
+                unused). Scoped with the user first — two questions:
+                (a) replace the mock outright vs. add a separate new
+                page, user chose replace; (b) scope of the first pass
+                given video needs real transcoding infra, user chose
+                images only, video explicitly deferred.
+                Backend: migration 00027 adds content_gallery_folders
+                (flat, no nesting — matches the reference) and
+                content_gallery_files (folder_id ON DELETE SET NULL —
+                deleting a folder moves files to root, never deletes
+                them; status active/archived — soft-delete/restore,
+                no hard delete — both rules matching the reference
+                exactly). New apps/internal/storage (minio-go client;
+                the dev/test docker-compose stacks' own minio
+                containers already existed, nothing in Go code had
+                ever connected to them) and apps/internal/
+                contentgallery (handler/service/repository — multipart
+                upload sniffed via http.DetectContentType, the
+                client's own Content-Type header is never trusted).
+                Bulk move/archive/restore capped at 50 ids, folder
+                names at 50 chars, upload at 20MB — all three matching
+                the reference's own stated limits.
+                One real design correction mid-build: file URLs were
+                first generated as presigned, hour-expiring S3 URLs —
+                right for browsing the gallery itself, wrong the
+                moment a picked file is saved as e.g. a PWA's iconUrl,
+                which has to keep resolving for as long as that PWA
+                stays installed. Switched to a public-read bucket
+                policy (storage.Client.PublicURL, no signing, no
+                expiry) — Content Gallery files are meant to end up
+                embedded in things end users' browsers fetch
+                unauthenticated anyway, same as the old mock's own
+                cdn.floxlink.io URLs implied. Tenant scoping stays
+                entirely in Postgres (content_gallery_files.
+                organization_id), not the storage layer.
+                A dev/test-only wrinkle the fix surfaced: apps/api/
+                apps/worker reach minio at the in-network
+                http://minio:9000, a browser can only reach the host-
+                published http://localhost:9000 (:9002 in the test
+                stack). New S3_PUBLIC_ENDPOINT config (defaults to
+                S3_ENDPOINT) fixes this, set explicitly in both
+                docker-compose files — a no-op in a real deployment
+                where the S3-compatible endpoint is equally reachable
+                from both sides.
+                Frontend: features/content-gallery/* rebuilt around a
+                shared GalleryBrowser (folder panel, upload cell,
+                selection + bulk actions, Active/Inactive toggle, an
+                "uploaded by" filter gated to Owner/Admin, pagination
+                past 50 files) used by both the full /content-gallery
+                page and a new reusable GalleryFilePickerDialog — first
+                wired into pwa-form.tsx's icon field (a "browse
+                gallery" button beside the existing URL input, which
+                stays, for pasting an externally-hosted URL). lib/mock/
+                content-gallery.ts + stores/content-gallery.ts deleted
+                outright, along with the old template "Use this" hand-
+                off (?gallery=<id> query param) in new-pwa-view.tsx/
+                new-landing-view.tsx/new-postlanding-view.tsx — that
+                concept doesn't exist in the replacement feature.
+                NOT built, deliberately: video upload/transcoding; the
+                reference's crop tool and dimension-compatibility
+                indicators (green/yellow/red) — no PWA field states a
+                required icon dimension to check against, and inventing
+                one would be a fabricated affordance (CLAUDE.md #6's own
+                reasoning, applied to a UI signal rather than a number).
+                Verified: go build/vet/test -count=1 ./... clean,
+                including 7 new integration tests against real Postgres
+                + the real dev minio container (folder create/rename/
+                delete-moves-files-to-root, upload/list/filter/
+                paginate/archive/restore/move, upload validation —
+                video rejected, oversize rejected, sniffed-content-
+                mismatch rejected, bulk-op 50-id cap, cross-org
+                isolation). Real end-to-end curl pass against the live
+                containerized dev stack: signed up a real org, uploaded
+                a real PNG, confirmed the returned public URL — fetched
+                with zero cookies/auth, a fresh curl process — serves
+                the exact same bytes back. tsc/eslint/vitest clean.
+                Real browser pass (Claude-in-Chrome) against the actual
+                reporting user's own live account: created a folder,
+                uploaded a real file, selected it, archived it via the
+                bulk bar, confirmed it moved to the Inactive tab,
+                deleted the test folder (confirmed via its own dialog
+                copy that files move to Unfiled rather than being
+                deleted) — no console errors. Test artifacts cleaned up
+                (the folder deleted, the one tiny test upload left
+                archived); the account's own pre-existing real gallery
+                content (uploaded independently by the user mid-
+                session, confirming the feature was already in real
+                use) was left untouched.
+                Round 2, same phase: user asked for permanent deletion
+                from the Inactive list too (the first pass deliberately
+                stopped at archive/restore, matching the reference).
+                Added Service.DeleteFiles/Repository.DeleteFiles, gated
+                to already-archived files by the SQL WHERE clause
+                itself (not just a service-layer check) — no code path
+                can hard-delete an active file directly. New POST
+                /content-gallery/files/delete; best-effort storage
+                cleanup after the DB rows are gone. Frontend: a "Delete
+                permanently" action in the bulk bar and each file's own
+                menu, visible only on Inactive, behind its own confirm
+                dialog (distinct copy from the folder-delete confirm —
+                this one explicitly says it can't be undone). New
+                integration test (an active-file id alongside an
+                archived one is silently skipped, not deleted).
+                Exercised for real, live, by the actual reporting user
+                testing the feature in their own browser session while
+                this was being built — confirmed via the API access
+                log, not just this phase's own verification.
+LAST COMMIT   : fix — fd64b45 (this phase's own work is UNCOMMITTED,
+                see below)
+UNCOMMITTED   : this entire phase's work — migration 00027; apps/
+                internal/storage (new); apps/internal/contentgallery
+                (new, incl. tests, incl. DeleteFiles); apps/api/main.go
+                wiring; apierror.Unavailable; config.go's S3Config.
+                PublicEndpoint; .env.example/docker-compose.dev.yml/
+                docker-compose.test.yml S3_PUBLIC_ENDPOINT; apps/go.mod/
+                go.sum (minio-go); the full features/content-gallery/*
+                rewrite (incl. round 2's permanent-delete UI) +
+                lib/api/content-gallery.ts + hooks/use-content-
+                gallery.ts; pwa-form.tsx's gallery-picker wiring;
+                new-pwa-view.tsx/new-landing-view.tsx/new-postlanding-
+                view.tsx template-handoff removal; titleFromGallery
+                i18n key removal (en+ru landings/postlanding/pwa) — not
+                yet committed, waiting on the user. NOTE: same as every
+                prior phase this session, the migrate container bakes
+                migrations into its image — `docker compose build
+                migrate` before 00027 will apply inside a rebuilt stack
+                (already applied directly via host `go tool goose`
+                against the live dev Postgres, so the running dev stack
+                has it regardless).
+NEXT          : confirm scope before starting. Real candidates: (a)
+                video upload + transcoding (needs an ffmpeg/worker
+                pipeline — real new infra, not a small add-on); (b) the
+                reference's crop tool + dimension-compatibility
+                indicators, if a real "required dimensions" concept
+                ever gets added to a field that uses the picker; (c)
+                wire the file-picker dialog into more image fields
+                (PWA screenshots gallery is the obvious next one — it's
+                already a useFieldArray of URLs); (d) the pre-existing
+                list from the superseded block below, still open.
+
+```
+
+<details>
+<summary>Superseded — PWA create page preview (kept for history, see above for current state)</summary>
+
+```
 CURRENT PHASE : PWA CREATE PAGE — LIVE STORE-LISTING PREVIEW (user-scoped, post-Phase-34)
 STATUS        : done — user shared a reference tracker's PWA builder
                 screenshot (settings left, a live Google-Play-listing

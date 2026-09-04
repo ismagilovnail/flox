@@ -25,6 +25,7 @@ import (
 	"github.com/ismagilovnail/flox/apps/internal/chstore"
 	"github.com/ismagilovnail/flox/apps/internal/clicklogs"
 	"github.com/ismagilovnail/flox/apps/internal/config"
+	"github.com/ismagilovnail/flox/apps/internal/contentgallery"
 	"github.com/ismagilovnail/flox/apps/internal/conversion"
 	"github.com/ismagilovnail/flox/apps/internal/conversions"
 	"github.com/ismagilovnail/flox/apps/internal/cost"
@@ -52,6 +53,7 @@ import (
 	"github.com/ismagilovnail/flox/apps/internal/routing"
 	"github.com/ismagilovnail/flox/apps/internal/routingsimulate"
 	"github.com/ismagilovnail/flox/apps/internal/routingstore"
+	"github.com/ismagilovnail/flox/apps/internal/storage"
 	"github.com/ismagilovnail/flox/apps/internal/streamset"
 	"github.com/ismagilovnail/flox/apps/internal/telemetry"
 	"github.com/ismagilovnail/flox/apps/internal/tenant"
@@ -141,6 +143,20 @@ func run() error {
 		logger.Warn("REDIS_URL not set, rate limiting and conversion progression checks degrade")
 	}
 	limiter := ratelimit.New(rdb, logger)
+
+	// Object storage (apps/internal/contentgallery's only consumer so
+	// far) — best-effort at startup, same "a down optional dependency
+	// degrades its own route group, not the whole API" stance as
+	// ClickHouse/Redis above: /content-gallery upload/list return
+	// apierror.Unavailable until minio recovers, nothing else is
+	// affected.
+	storageClient, storageErr := storage.NewClient(cfg.S3)
+	if storageErr != nil {
+		logger.Warn("object storage not configured, Content Gallery will be unavailable", "error", storageErr)
+		storageClient = nil
+	} else if ensureErr := storageClient.EnsureBucket(ctx, cfg.S3.Region); ensureErr != nil {
+		logger.Warn("object storage unreachable at startup, Content Gallery will be unavailable until it recovers", "error", ensureErr)
+	}
 
 	srv := httpserver.New(logger, cfg.OTelServiceName, db, ch, cfg.AppURL, limiter)
 
@@ -252,6 +268,12 @@ func run() error {
 	srv.Mux().Route("/pwas", func(r chi.Router) {
 		r.Use(tenantMiddleware)
 		pwaHandler.Register(r)
+	})
+
+	contentGalleryHandler := contentgallery.NewHandler(contentgallery.NewService(contentgallery.NewRepository(db), storageClient), logger)
+	srv.Mux().Route("/content-gallery", func(r chi.Router) {
+		r.Use(tenantMiddleware)
+		contentGalleryHandler.Register(r)
 	})
 
 	postlandingHandler := postlanding.NewHandler(postlanding.NewService(postlanding.NewRepository(db)), logger)

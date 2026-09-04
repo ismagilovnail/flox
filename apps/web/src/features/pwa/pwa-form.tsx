@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useState } from "react";
 import { Controller, useFieldArray, useForm, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { PlusIcon, XIcon } from "lucide-react";
+import { ImagesIcon, PlusIcon, XIcon } from "lucide-react";
 import { z } from "zod";
 import { useTranslation } from "react-i18next";
 import type { TFunction } from "i18next";
@@ -33,6 +33,7 @@ import {
 import { Mono } from "@/components/ui/typography";
 import type { PwaStatus } from "@/lib/api/pwa";
 import { PwaPreviewCard } from "@/features/pwa/pwa-preview-card";
+import { GalleryFilePickerDialog } from "@/features/content-gallery/gallery-file-picker-dialog";
 
 /** register(name, { setValueAs: numberOrUndefined }) turns an empty
  * input into `undefined` (not NaN) before zod ever sees it — the schema
@@ -210,6 +211,7 @@ export function PwaForm({
   const screenshotArray = useFieldArray({ control, name: "screenshots" });
   const manifest = useWatch({ control });
   const [previewDir, setPreviewDir] = useState<"ltr" | "rtl">("ltr");
+  const [pickingIcon, setPickingIcon] = useState(false);
 
   return (
     <form
@@ -329,16 +331,34 @@ export function PwaForm({
               <Label htmlFor="pwa-icon">
                 {t("form.iconUrlLabel", { ns: "pwa" })}
               </Label>
-              <Input
-                id="pwa-icon"
-                placeholder={t("form.iconUrlPlaceholder", { ns: "pwa" })}
-                className="font-mono text-xs"
-                {...register("iconUrl")}
-                aria-invalid={!!errors.iconUrl}
-              />
+              <div className="flex gap-1.5">
+                <Input
+                  id="pwa-icon"
+                  placeholder={t("form.iconUrlPlaceholder", { ns: "pwa" })}
+                  className="font-mono text-xs"
+                  {...register("iconUrl")}
+                  aria-invalid={!!errors.iconUrl}
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="icon"
+                  onClick={() => setPickingIcon(true)}
+                  aria-label={t("form.iconUrlBrowseAria", { ns: "pwa" })}
+                >
+                  <ImagesIcon className="size-4" />
+                </Button>
+              </div>
               {errors.iconUrl && (
                 <p className="text-xs text-danger">{errors.iconUrl.message}</p>
               )}
+              <GalleryFilePickerDialog
+                open={pickingIcon}
+                onOpenChange={setPickingIcon}
+                onPick={(file) =>
+                  form.setValue("iconUrl", file.url, { shouldValidate: true, shouldDirty: true })
+                }
+              />
             </div>
 
             <div className="grid gap-1.5">

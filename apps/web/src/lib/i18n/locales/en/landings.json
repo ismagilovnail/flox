@@ -24,7 +24,6 @@
   "form": {
     "titleNew": "New Landing",
     "titleEdit": "Edit {{name}}",
-    "titleFromGallery": "New Landing — from {{title}}",
     "description": "Internal landings are hosted on our CDN with content you edit here; external landings point at a URL you already control (§28).",
     "nameLabel": "Name",
     "namePlaceholder": "Quiz Lander",

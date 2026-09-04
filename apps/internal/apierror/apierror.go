@@ -47,6 +47,15 @@ func Forbidden(message string) *Error {
 	return &Error{Status: http.StatusForbidden, Code: "forbidden", Message: message}
 }
 
+// Unavailable means a required-but-optional external dependency (object
+// storage, etc.) is down — matching ClickHouse/Redis's existing "connect
+// best-effort at startup, degrade the routes that actually need it"
+// stance (apps/api/main.go). First use: apps/internal/contentgallery when
+// apps/internal/storage failed to initialize.
+func Unavailable(message string) *Error {
+	return &Error{Status: http.StatusServiceUnavailable, Code: "unavailable", Message: message}
+}
+
 // TooManyRequests means apps/internal/ratelimit's own Redis-backed
 // counter rejected the request (§54/Phase 30) — never returned for any
 // other reason.

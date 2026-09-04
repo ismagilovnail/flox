@@ -18,7 +18,6 @@
   "form": {
     "titleNew": "New Postlanding",
     "titleEdit": "Edit {{name}}",
-    "titleFromGallery": "New Postlanding — from {{title}}",
     "description": "Postlandings show after the offer/PWA step and drive engagement events (§28).",
     "nameLabel": "Name",
     "namePlaceholder": "Thank You / Upsell",

@@ -5,6 +5,112 @@ per-phase, matching `CLAUDE.md`'s phase protocol. The one exception is
 [Between phases], below: spec amendments and the code changes that follow from
 them land between phases and would otherwise be invisible here.
 
+## [Between phases] — Content Gallery: real media library (images), replacing the template-gallery mock
+
+The user pointed at a reference tracker's real Content Gallery page
+(adset.pro/guide_ru/galereya-kontenta) and asked for the same. FLOX's
+own `/content-gallery` was a frontend-only mock of something else
+entirely — a "template gallery" of pre-built landing/PWA/postlanding
+starter content with no object storage anywhere in the repo. Scoped
+with the user first: replace it outright with a real media library
+(images only this phase; video needs an ffmpeg/worker transcoding
+pipeline this repo doesn't have, deliberately deferred).
+
+**Backend**: migration 00027 adds `content_gallery_folders` (flat, no
+nesting — matching the reference) and `content_gallery_files`
+(`folder_id` `ON DELETE SET NULL` — deleting a folder moves its files
+to the root, never deletes them, matching the reference's own rule;
+`status` active/archived — files soft-delete/restore, no hard delete,
+also matching the reference). New `apps/internal/storage` package
+(minio-go — the dev/test stacks' own minio containers already existed
+in docker-compose but nothing in Go code had ever connected to them)
+and `apps/internal/contentgallery` (handler/service/repository,
+multipart upload sniffed via `http.DetectContentType`, never trusting
+the client's Content-Type header). Bulk move/archive/restore capped at
+50 ids, folder names at 50 characters — both matching the reference's
+own stated limits.
+
+One real design correction mid-build: file URLs were first generated
+as presigned, hour-expiring S3 URLs — correct for browsing the gallery
+itself, but wrong the moment a picked file is saved as e.g. a PWA's
+`iconUrl`, which has to keep resolving for as long as that PWA stays
+installed. Switched to a public-read bucket policy
+(`storage.Client.PublicURL`, no signing, no expiry) instead — Content
+Gallery files are meant to end up embedded in things end users'
+browsers fetch unauthenticated anyway, the same way the old mock's own
+`cdn.floxlink.io` URLs implied. Tenant scoping stays entirely in
+Postgres (`content_gallery_files.organization_id`), not the storage
+layer — the public policy only affects "can a URL you already have be
+fetched," never "can you list/browse another org's files."
+
+A dev/test-only wrinkle the public-URL fix surfaced: `apps/api`/
+`apps/worker` reach minio at the in-network `http://minio:9000`, but a
+browser can only reach the host-published `http://localhost:9000`
+(`:9002` in the test stack). New `S3_PUBLIC_ENDPOINT` config
+(`config.S3Config.PublicEndpoint`, defaults to `S3_ENDPOINT`) fixes
+this — set explicitly in both docker-compose files, unnecessary in a
+real deployment where the S3-compatible endpoint is equally reachable
+from both sides.
+
+**Frontend**: `features/content-gallery/*` rebuilt around a shared
+`GalleryBrowser` (folder panel, upload cell, selection + bulk actions,
+Active/Inactive toggle, an "uploaded by" filter gated to Owner/Admin,
+pagination past 50 files) used both by the full `/content-gallery`
+page and a new reusable `GalleryFilePickerDialog` — first wired into
+`pwa-form.tsx`'s icon field (a "browse gallery" button beside the
+existing URL input, which stays for pasting an externally-hosted URL).
+`lib/mock/content-gallery.ts` and `stores/content-gallery.ts` deleted
+outright, along with the old template "Use this" hand-off
+(`?gallery=<id>` query param) in `new-pwa-view.tsx`/
+`new-landing-view.tsx`/`new-postlanding-view.tsx` — that concept
+doesn't exist in the replacement feature.
+
+NOT built, deliberately (first pass): video upload/transcoding; the
+reference's crop tool and dimension-compatibility indicators (green/
+yellow/red) — no PWA field states a required icon dimension to check
+against, and inventing one would be exactly the kind of fabricated
+affordance CLAUDE.md's own rules rule out.
+
+Verified: `go build/vet/test -count=1 ./...` clean, including 7 new
+integration tests against real Postgres + the real dev minio container
+(folder create/rename/delete-moves-files-to-root, upload/list/filter/
+paginate/archive/restore/move, upload validation — video rejected,
+oversize rejected, sniffed-content-mismatch rejected, bulk-op 50-id
+cap, cross-org isolation). Real end-to-end curl pass against the live
+containerized dev stack: signed up a real org, uploaded a real PNG,
+and confirmed the returned public URL — fetched with zero cookies/
+auth, fresh curl process — serves the exact same bytes back. `tsc`/
+`eslint`/`vitest` clean. Real browser pass (Claude-in-Chrome) against
+the actual reporting user's own live account: created a folder,
+dragged/uploaded a real file, selected it, archived it via the bulk
+bar, confirmed it moved to the Inactive tab, deleted the test folder
+(confirmed via its own dialog copy that files move to Unfiled rather
+than being deleted) — no console errors. Test artifacts (a folder, one
+tiny test upload left archived) cleaned up; the account's own
+pre-existing real gallery content was left untouched.
+
+**Round 2, same phase**: the user asked for permanent deletion from
+the Inactive list too — the first pass had deliberately built archive/
+restore only, matching the reference's own documented behavior, but
+never a true hard-delete. Added `Service.DeleteFiles` /
+`Repository.DeleteFiles`, gated to already-archived files by the SQL
+`WHERE` clause itself (`... AND status = 'archived'`), not just a
+service-layer check — there is no code path that can hard-delete an
+active file directly, only ever from Inactive. New `POST
+/content-gallery/files/delete`; best-effort object-storage cleanup
+after the DB rows are gone (an orphaned object costs storage, not
+correctness). Frontend: a "Delete permanently" action in both the bulk
+action bar and each file's own menu, visible only on the Inactive tab,
+behind its own confirm dialog ("This can't be undone" — distinct
+copy from the folder-delete confirm, which explicitly can be undone).
+Verified: 1 new integration test (an id for an active file passed
+alongside an archived one is silently skipped, not deleted) plus the
+existing suite, all against real Postgres; `tsc`/`eslint` clean.
+Exercised for real, live, by the actual reporting user testing the
+feature in their own browser session while this was being built — the
+API access log shows their own `POST /content-gallery/files/delete`
+succeeding independently of this phase's own verification.
+
 ## [Between phases] — PWA preview: ads/purchases flags and a real update date
 
 Eighth round. The user pointed at the reference's "About this app"

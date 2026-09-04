@@ -25,7 +25,6 @@
   "form": {
     "titleNew": "Новое PWA",
     "titleEdit": "Изменить {{name}}",
-    "titleFromGallery": "Новое PWA — из «{{title}}»",
     "description": "Эти поля — настоящий Web App Manifest (§28): превью ниже показывает, что установится на устройство.",
     "nameLabel": "Название",
     "namePlaceholder": "Sweeps PWA",
@@ -37,6 +36,7 @@
     "backgroundColorPickerAria": "Выбрать цвет фона",
     "iconUrlLabel": "URL иконки",
     "iconUrlPlaceholder": "https://cdn.floxlink.io/pwa/sweeps/icon-512.png",
+    "iconUrlBrowseAria": "Выбрать из галереи контента",
     "startUrlLabel": "URL запуска",
     "startUrlPlaceholder": "/install/sweeps",
     "bounceLabel": "Обход трафика из in-app WebView",

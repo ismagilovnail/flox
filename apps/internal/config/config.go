@@ -67,6 +67,16 @@ type S3Config struct {
 	Bucket          string
 	AccessKeyID     string
 	SecretAccessKey string
+	// PublicEndpoint is what a presigned URL is signed against — the
+	// endpoint a *browser* can reach, which is not always Endpoint (the
+	// one this Go process itself talks to). In the dev/test docker
+	// compose stacks, apps/api/apps/worker reach minio at the in-network
+	// name http://minio:9000, but a browser on the host can only reach
+	// http://localhost:9000 — infra/docker-compose.*.yml sets
+	// S3_PUBLIC_ENDPOINT explicitly for exactly this split. Defaults to
+	// Endpoint, which is correct for a real deployment where the S3-
+	// compatible endpoint is equally reachable from both sides.
+	PublicEndpoint string
 }
 
 // Load builds the control-plane API's configuration (apps/api).
@@ -126,6 +136,7 @@ func load(portVar, portDefault, defaultServiceName string) (Config, error) {
 			Bucket:          getEnv("S3_BUCKET", ""),
 			AccessKeyID:     getEnv("S3_ACCESS_KEY_ID", ""),
 			SecretAccessKey: getEnv("S3_SECRET_ACCESS_KEY", ""),
+			PublicEndpoint:  getEnv("S3_PUBLIC_ENDPOINT", getEnv("S3_ENDPOINT", "")),
 		},
 	}, nil
 }

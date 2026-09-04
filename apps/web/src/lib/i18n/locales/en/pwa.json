@@ -25,7 +25,6 @@
   "form": {
     "titleNew": "New PWA",
     "titleEdit": "Edit {{name}}",
-    "titleFromGallery": "New PWA — from {{title}}",
     "description": "These fields are the real Web App Manifest (§28) — the preview below is what installs on the device.",
     "nameLabel": "Name",
     "namePlaceholder": "Sweeps PWA",
@@ -37,6 +36,7 @@
     "backgroundColorPickerAria": "Pick background color",
     "iconUrlLabel": "Icon URL",
     "iconUrlPlaceholder": "https://cdn.floxlink.io/pwa/sweeps/icon-512.png",
+    "iconUrlBrowseAria": "Choose from Content Gallery",
     "startUrlLabel": "Start URL",
     "startUrlPlaceholder": "/install/sweeps",
     "bounceLabel": "Bounce in-app WebView traffic",

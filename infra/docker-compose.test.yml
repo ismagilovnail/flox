@@ -127,6 +127,8 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      minio:
+        condition: service_healthy
     environment:
       DATABASE_URL: postgres://flox:flox@postgres:5432/flox?sslmode=disable
       CLICKHOUSE_URL: http://clickhouse:8123
@@ -134,6 +136,17 @@ services:
       CLICKHOUSE_USER: flox
       CLICKHOUSE_PASSWORD: ""
       REDIS_URL: redis://redis:6379/0
+      S3_ENDPOINT: http://minio:9000
+      # Test compose publishes minio on 9002, offset from dev's 9000 (see
+      # this file's own header comment) — a browser hitting a presigned
+      # Content Gallery URL needs that host-published port, not the
+      # in-network "minio" name (config.S3Config.PublicEndpoint's doc
+      # comment has the full reasoning).
+      S3_PUBLIC_ENDPOINT: http://localhost:9002
+      S3_REGION: us-east-1
+      S3_BUCKET: flox
+      S3_ACCESS_KEY_ID: flox-minio-admin
+      S3_SECRET_ACCESS_KEY: flox-minio-secret
       # A real browser's Origin header is whatever host:port it navigated
       # to (localhost:3000, since web's port is published to the host
       # below) — apps/internal/tenant.RequireSameOrigin (§54/Phase 30

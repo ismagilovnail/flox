@@ -1,18 +1,15 @@
 "use client";
 
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { useTranslation } from "react-i18next";
 
 import { useCreatePostlanding } from "@/hooks/use-postlandings";
-import { useContentGalleryStore } from "@/stores/content-gallery";
 import { PostlandingForm, type PostlandingFormValues } from "@/features/postlanding/postlanding-form";
 
 export function NewPostlandingView() {
   const { t } = useTranslation("postlanding");
   const router = useRouter();
-  const searchParams = useSearchParams();
-  const galleryItem = useContentGalleryStore((s) => s.items.find((i) => i.id === searchParams.get("gallery")));
   const createPostlanding = useCreatePostlanding();
 
   function handleSubmit(values: PostlandingFormValues) {
@@ -30,10 +27,8 @@ export function NewPostlandingView() {
 
   return (
     <PostlandingForm
-      title={galleryItem ? t("form.titleFromGallery", { title: galleryItem.title }) : t("form.titleNew")}
-      defaultValues={
-        galleryItem?.postlandingPayload ? { name: galleryItem.title, ...galleryItem.postlandingPayload } : {}
-      }
+      title={t("form.titleNew")}
+      defaultValues={{}}
       submitLabel={t("form.submitCreate")}
       onSubmit={handleSubmit}
     />

@@ -43,7 +43,11 @@ export class ApiError extends Error {
 
 type RequestOptions = {
   method?: "GET" | "POST" | "PATCH" | "DELETE";
-  body?: unknown;
+  // A FormData body (Content Gallery file uploads) is sent as-is, with no
+  // Content-Type header set — the browser fills in
+  // "multipart/form-data; boundary=..." itself, which it can only do
+  // correctly if this client doesn't set the header first.
+  body?: unknown | FormData;
   searchParams?: Record<string, string | undefined>;
 };
 
@@ -55,13 +59,15 @@ export async function apiFetch<T>(path: string, options: RequestOptions = {}): P
     }
   }
 
+  const isFormData = options.body instanceof FormData;
+
   const res = await fetch(url, {
     method: options.method ?? "GET",
     credentials: "include",
     headers: {
-      ...(options.body !== undefined ? { "Content-Type": "application/json" } : {}),
+      ...(options.body !== undefined && !isFormData ? { "Content-Type": "application/json" } : {}),
     },
-    body: options.body !== undefined ? JSON.stringify(options.body) : undefined,
+    body: options.body === undefined ? undefined : isFormData ? (options.body as FormData) : JSON.stringify(options.body),
   });
 
   if (res.status === 204) return undefined as T;
