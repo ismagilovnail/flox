@@ -767,51 +767,19 @@ STATUS        : done — user pointed at a reference tracker's real
                 touched. Both test PWAs (the round-14 startUrl test and
                 this round's duplicate) left archived, not deleted or
                 re-activated.
-LAST COMMIT   : fix — fd64b45 (this phase's own work is UNCOMMITTED,
-                see below)
-UNCOMMITTED   : this entire phase's work — migration 00027; apps/
-                internal/storage (new, incl. round 5's CORS-call
-                removal); apps/internal/contentgallery (new, incl.
-                tests, incl. DeleteFiles); apps/internal/pwa/service.go
-                (round 6's screenshotsMax cap removal); apps/api/main.go
-                wiring; apierror.Unavailable; config.go's S3Config.
-                PublicEndpoint; .env.example/docker-compose.dev.yml/
-                docker-compose.test.yml S3_PUBLIC_ENDPOINT; apps/go.mod/
-                go.sum (minio-go); the full features/content-gallery/*
-                rewrite (incl. round 2's permanent-delete UI, round 3's
-                first crop-dialog pass, round 4's icon-field-as-picker-
-                thumbnail redesign, round 5's crop-at-attach-time +
-                react-image-crop rework, and round 6's GalleryUploadCell
-                className prop) + lib/api/content-gallery.ts + hooks/
-                use-content-gallery.ts; pwa-form.tsx's gallery-picker +
-                screenshot-upload-grid wiring + icon-remove button;
-                pwa-preview-card.tsx's screenshot-row rework (incl.
-                round 7's Embla rebuild), round 11's dynamic
-                `accentColor` prop/`accent` computation replacing every
-                hardcoded REF_PRIMARY use, plus PartialStar/StarBar's
-                own new `accent` prop, and round 12's `backgroundColor`
-                prop/`isDarkColor`/`withAlpha` helpers/`--pv-*` CSS
-                custom properties replacing every hardcoded slate/white
-                class plus the active-nav-pill tint fix; pwa-form.tsx's
-                `<PwaPreviewCard>` invocation now also passes
-                `backgroundColor={manifest.backgroundColor}`; round
-                13's removal of the raw color-picker/hex-input fallback
-                and its `custom` dropdown options/i18n keys, plus the
-                new-PWA `backgroundColor` default (`#0a0a0a` ->
-                `#ffffff`); round 14's start_url field removal (now a
-                hidden registered input, its Label/Input/error JSX and
-                two i18n keys gone); round 15's Статус-field removal +
-                CardAction headerActions slot + pwa-row-actions.tsx's
-                new icons/inline variant split + its type="button" fix
-                (8 buttons) + Duplicate-now-navigates behavior; new-pwa-view.tsx/new-landing-view.tsx/
-                new-postlanding-view.tsx template-handoff
-                removal; titleFromGallery i18n key removal (en+ru
-                landings/postlanding/pwa); round 10's full removal of
-                PwaLaunchPreview + its helpers/i18n keys; apps/web's
-                package.json/package-lock.json (react-image-crop,
-                replacing round 3's now-removed react-easy-crop;
-                embla-carousel-react, new in round 7) — not yet
-                committed, waiting on the user.
+LAST COMMIT   : fix(pwa): listing preview follows accent/theme, drop
+                status field for header actions — 826d621, preceded by
+                two same-session commits also covering this phase's
+                earlier rounds: 8655b3e "fix" (rounds 3-9: crop-at-
+                attach-time rework, react-image-crop, Embla screenshot
+                carousel, PwaLaunchPreview's original add) and 23b16fc
+                "fix" (round 1-2: the Content Gallery backend +
+                frontend rewrite itself — migration 00027, apps/
+                internal/storage, apps/internal/contentgallery, the
+                full features/content-gallery/* rewrite, permanent-
+                delete UI). Between them these three commits cover
+                every round documented above.
+UNCOMMITTED   : none — the working tree is clean as of 826d621.
                 NOTE: same as every
                 prior phase this session, the migrate container bakes
                 migrations into its image — `docker compose build
