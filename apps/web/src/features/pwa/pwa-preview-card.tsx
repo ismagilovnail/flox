@@ -17,6 +17,7 @@ import {
   XIcon,
 } from "lucide-react";
 import type { TFunction } from "i18next";
+import useEmblaCarousel from "embla-carousel-react";
 
 import { cn } from "@/lib/utils";
 
@@ -132,6 +133,71 @@ function PartialStar({ fill }: { fill: number }) {
         />
       </span>
     </span>
+  );
+}
+
+/**
+ * The reference's own screenshot gallery is built on Embla Carousel (its
+ * rendered markup — pasted by the user — is literally `.embla`/
+ * `.embla__viewport`/`.embla__container`/`.embla__slide` with a
+ * `transform: translate3d(...)` driving the slide, not a native
+ * `overflow-x: scroll`). Built on the same real, open-source library
+ * (`embla-carousel-react`, MIT, widely used — also what shadcn/ui's own
+ * carousel component wraps) rather than reimplementing drag/momentum/
+ * snap by hand — matches the reference's actual technique, not just its
+ * look. `dragFree: true` lets the drag travel any distance instead of
+ * hard-snapping to one slide at a time, matching how the reference's own
+ * mixed-width (portrait + landscape) screenshots actually feel to drag.
+ */
+function ScreenshotsCarousel({ screenshots, t }: { screenshots: string[]; t: TFunction }) {
+  const [emblaRef] = useEmblaCarousel({ dragFree: true, containScroll: "trimSnaps" });
+  return (
+    // The px-4 pb-5 inset lives on this plain outer div, not the Embla
+    // viewport below — border-box sizing means padding on the *same*
+    // element as an explicit height eats into it ("h-[204px] pb-5"
+    // together rendered images at 184px, not 204 — caught live, not in
+    // review). Keeping the viewport unpadded keeps its own h-[204px]
+    // exact; the outer div needs no squish-guard itself since it has no
+    // overflow of its own (default `visible`), so its automatic minimum
+    // size stays content-based, which already includes the protected
+    // child below.
+    <div className="px-4 pb-5">
+      <div
+        ref={emblaRef}
+        className="h-[204px] shrink-0 overflow-hidden"
+        // h-[204px] shrink-0 are load-bearing, not decorative: this sits
+        // inside pwa-preview-card's flex-col card (capped at max-h-[70vh],
+        // overflow-y-auto), and any flex item with non-visible overflow
+        // on any axis (Embla sets overflow-hidden on its own viewport
+        // element) has its *automatic minimum size* collapse to 0 per the
+        // CSS flexbox/overflow spec — without an explicit height, a card
+        // whose total content exceeds 70vh would let the flex layout
+        // crush this row toward zero instead of leaving it to the outer
+        // scrollbar, exactly the "screenshots render squished" bug a real
+        // user hit once already here.
+      >
+        <div className="flex h-full gap-3">
+          {screenshots.map((src, i) => (
+            <div key={`${src}-${i}`} className="h-full shrink-0">
+              {/* eslint-disable-next-line @next/next/no-img-element -- external, operator-supplied screenshot URL */}
+              <img
+                src={src}
+                alt={t("preview.screenshotAlt", { ns: "pwa", n: i + 1 })}
+                loading="lazy"
+                // h-full w-auto (not a fixed aspect-ratio box): matches
+                // the real Google Play gallery's own technique — verified
+                // live against play.google.com, whose screenshot cards
+                // share one fixed height while each image's width follows
+                // its own natural aspect ratio (177px-wide portraits next
+                // to 494px-wide landscape shots, all exactly 296px tall).
+                className="h-full w-auto rounded-xl object-cover"
+                onError={(e) => (e.currentTarget.style.display = "none")}
+              />
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -440,20 +506,7 @@ export function PwaPreviewCard({
           </div>
         </div>
 
-        {!!screenshots?.length && (
-          <div className="flex gap-3 overflow-x-auto px-4 pb-5">
-            {screenshots.map((src, i) => (
-              // eslint-disable-next-line @next/next/no-img-element -- external, operator-supplied screenshot URL
-              <img
-                key={`${src}-${i}`}
-                src={src}
-                alt={t("preview.screenshotAlt", { ns: "pwa", n: i + 1 })}
-                className="h-[204px] w-auto shrink-0 rounded-xl object-contain"
-                onError={(e) => (e.currentTarget.style.display = "none")}
-              />
-            ))}
-          </div>
-        )}
+        {!!screenshots?.length && <ScreenshotsCarousel screenshots={screenshots} t={t} />}
 
         {!!description?.trim() && (
           <div className="flex flex-col gap-3 px-4 pb-5">

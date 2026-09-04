@@ -19,7 +19,7 @@ referenced below as §N).
 ## CURRENT STATE — UPDATE THIS EVERY PHASE
 
 ```
-CURRENT PHASE : CONTENT GALLERY — REAL MEDIA LIBRARY, IMAGES ONLY (user-scoped, post-Phase-34)
+CURRENT PHASE : CONTENT GALLERY — REAL MEDIA LIBRARY, IMAGES ONLY, + PWA PICKER/CROP WIRING (user-scoped, post-Phase-34)
 STATUS        : done — user pointed at a reference tracker's real
                 Content Gallery page (adset.pro/guide_ru/galereya-
                 kontenta) and asked for the same. FLOX's own
@@ -135,38 +135,329 @@ STATUS        : done — user pointed at a reference tracker's real
                 testing the feature in their own browser session while
                 this was being built — confirmed via the API access
                 log, not just this phase's own verification.
+                Round 3, same phase: user asked for the PWA icon and
+                screenshots fields to go through the Content Gallery
+                (upload or pick an existing file) with crop support —
+                both were open items on this phase's own NEXT list.
+                New image-crop-dialog.tsx (react-easy-crop, new
+                dependency): every image GalleryUploadCell accepts
+                (jpeg/png/webp — GIF skips the dialog, canvas can't
+                crop an animation without flattening it) opens a crop
+                step first — reposition/zoom, three aspect presets
+                (1:1/4:3/9:16), "Skip crop" uploads the original as-is.
+                No fixed target dimension is enforced anywhere (no
+                field declares one; inventing one would be fabricated).
+                Two real bugs found and fixed via an actual browser
+                session, not review: (1) the upload cell was gated to
+                mode==="manage", so GalleryFilePickerDialog — used
+                everywhere a form field picks an image — could only
+                ever select an existing file, never upload a new one,
+                directly contradicting this package's own doc-comment
+                promise ("upload directly within file selection
+                dialogs"); fixed by keying the upload cell (and empty
+                state) off status==="active" regardless of mode, and
+                hiding the Active/Inactive tabs + "uploaded by" filter
+                in pick mode (both meaningless there — dead controls
+                otherwise). (2) the crop dialog's first version created
+                the blob URL in a useState lazy initializer and revoked
+                it in a separate cleanup-only effect — looks like a
+                correct create/destroy pairing but isn't: React 19 dev
+                Strict Mode double-invokes every effect (mount ->
+                cleanup -> mount again) specifically to catch this, and
+                the cleanup-only effect's first simulated pass revoked
+                the URL the initializer had already committed to state
+                — the "recreate" half never happened, since a useState
+                initializer only runs once. Symptom: the Cropper showed
+                a dead blob (naturalWidth/Height stuck at 0, blank gray
+                box) — caught live, not in review. Fixed by computing
+                the URL via useMemo and revoking it explicitly from the
+                two real exit paths (apply, skip) instead of an
+                automatic effect cleanup; abandoning the dialog via
+                Escape/backdrop/X leaks one blob URL (accepted —
+                garbage-collected on tab close, this dialog isn't a hot
+                path).
+                pwa-form.tsx: the screenshots useFieldArray gained an
+                inline "browse gallery" button per row (replace that
+                row's URL) plus a new "Add from gallery" button (append
+                from a picked file); the manual "Add screenshot" blank-
+                row button stays for pasting external URLs. New i18n
+                keys form.browseScreenshotAria/
+                addScreenshotFromGalleryButton (en+ru).
+                Verified in a real, live browser session against the
+                actual reporting user's own account: opened the icon
+                picker, uploaded a real image, cropped it at 4:3,
+                confirmed the crop actually applied visually (not just
+                that a request succeeded), selected it back into the
+                icon field, and confirmed both the live preview panel's
+                app icon and the raw manifest JSON preview showed the
+                real public URL. Repeated for screenshots via "Add from
+                gallery" — the live preview's screenshot slider picked
+                it up. No console errors on a fresh page load. Test
+                upload archived afterward; the account's own real
+                gallery content left untouched. tsc/eslint/vitest clean
+                across the whole apps/web tree.
+                Round 4, same phase: user pointed at the icon field
+                specifically and asked to drop the raw URL text box
+                entirely — a pick-only surface. pwa-form.tsx's icon
+                field is now one 96px square button: empty shows an
+                upload glyph + "Choose image", set shows the real
+                thumbnail with a "Change" overlay on hover; either
+                state opens the same GalleryFilePickerDialog. The
+                manual Input + its browse-icon button are gone — no way
+                to paste an arbitrary external URL into this field
+                anymore, the user's explicit ask, not an oversight.
+                register("iconUrl") is gone too; the field is written
+                only via form.setValue from the picker, which RHF
+                tracks the same way without a bound DOM input (the
+                resolver validates the full internal values tree, not
+                just registered fields). iconUrlLabel shortened to
+                "Icon"/"Иконка" (no URL shown anymore); new
+                iconUrlChoose/iconUrlChange; removed the now-unused
+                iconUrlPlaceholder/iconUrlBrowseAria; iconUrlInvalid's
+                message changed from "enter a valid URL" to "choose an
+                icon" (the old wording assumed a user could still type
+                a malformed one). Verified: tsc/eslint/vitest clean;
+                real browser pass against the same live account —
+                selected an existing gallery file via the new
+                thumbnail button, confirmed it renders as a real
+                thumbnail (not a placeholder) and the live preview
+                panel's app icon updated to match, no console errors.
+                Round 5, same phase: two corrections from the user
+                watching the reference tracker's real UI side by side
+                with this build. (1) Crop belongs at attach-time, not
+                upload-time — the reference uploads to the gallery as-
+                is, crop only happens when a picked/uploaded file is
+                actually attached to a field with a required shape.
+                Reworked: gallery-upload-cell.tsx uploads straight
+                through again everywhere (no crop step, matches every
+                caller incl. the main gallery page); gallery-browser.tsx
+                gained requiredAspect (pick mode only) — confirming a
+                selection opens ImageCropDialog locked to that ratio
+                before onPick, skip uploads the original untouched. A
+                freshly uploaded file becomes the pick immediately (new
+                onUploaded callback on GalleryUploadCell) since it isn't
+                in the list query yet to select from. Applying a crop
+                uploads the cropped result as its own new file — the
+                source is never mutated. pwa-form.tsx's icon field
+                passes requiredAspect={1} (square, the real Web App
+                Manifest convention); screenshots pass none — Play Store
+                screenshots genuinely vary in aspect, forcing one would
+                be fabricated. Cropping an existing (not freshly
+                uploaded) gallery file draws its remote URL onto canvas,
+                needing CORS or the canvas is tainted — tried minio-go's
+                SetBucketCors first, self-hosted MinIO doesn't implement
+                it (confirmed live: NotImplemented); turned out
+                unnecessary, MinIO already serves CORS off its own
+                server-level api.cors_allow_origin admin config
+                (defaults to "*", confirmed via a raw curl with an
+                Origin header). Removed the bucket-CORS call from
+                storage.Client.EnsureBucket entirely rather than keep
+                one the server rejects to duplicate a default it already
+                applies — documented there that real S3 in production
+                would need CORS set through its own console/CLI if this
+                behavior is wanted there.
+                (2) The crop interaction itself was backwards — built
+                first on react-easy-crop (pan/zoom the image behind a
+                fixed frame). The user pointed at the reference's actual
+                crop screenshot: the image stays static, the user drags/
+                resizes a selection rectangle over it. Swapped libraries
+                entirely: react-easy-crop out, react-image-crop in
+                (ReactCrop + its own cropToCanvas helper, handles
+                natural-vs-displayed scaling and devicePixelRatio so
+                this package doesn't have to). image-crop-dialog.tsx
+                rewritten around it — static <img> inside <ReactCrop
+                aspect={...}>, centered 90% initial selection, "Required
+                aspect ratio: 1.00" caption matching the reference's own
+                wording, zoom slider and aspect-preset buttons gone
+                (one fixed ratio now, not a chooser).
+                Also, follow-up ask: a small × button on the icon
+                thumbnail (visible only once set) clears iconUrl — a
+                sibling button positioned over the picker button, not
+                nested inside it (native button can't nest button).
+                Verified: go build/vet/test -count=1 ./... clean (no
+                behavior change to contentgallery/storage beyond the
+                removed CORS call). tsc/eslint/vitest clean. Real
+                browser pass against the same live account: opened the
+                icon picker, selected an existing non-square gallery
+                file, confirmed the dialog shows it static with a
+                centered draggable/resizable square selection, dragged a
+                corner handle to resize, clicked Apply, and confirmed
+                via a fresh Image() probe the resulting file is a
+                genuine 376×376 square with a brand-new object key —
+                not the source file's own dimensions or key, and the
+                source itself untouched in the gallery. No console
+                errors. Test-derivative file archived afterward.
+                Round 6, same phase: two more asks — replace the
+                screenshots field's URL-list UI with a real upload area
+                (the user described the reference's own copy: "Upload
+                screenshots (1080×1920px recommended) / Supports: PNG,
+                JPEG, WebP / No limit on quantity"), and make the live
+                preview's screenshot row actually look and swipe like
+                the real listing it models.
+                pwa-form.tsx: URL Input rows replaced with an
+                aspect-[9/16] thumbnail grid (hover × to remove) plus a
+                GalleryUploadCell tile for direct upload — no picker
+                dialog needed for the common case — with "Choose from
+                gallery" kept for picking an existing file.
+                GalleryUploadCell gained an optional className prop
+                (merged via cn/tailwind-merge over its default
+                aspect-square) so this portrait grid and the square
+                Content Gallery grid share the one component. Video
+                formats (MP4/WebM/MOV) the reference lists are
+                deliberately left out of the shown copy — Content
+                Gallery doesn't support video uploads yet, a separately-
+                scoped real gap, and claiming support that doesn't exist
+                would be a fabricated capability; copy only promises
+                PNG/JPEG/WebP, which actually work. The count cap is
+                gone both sides, matching "no limit on quantity" —
+                removed apps/internal/pwa/service.go's screenshotsMax
+                check and the matching frontend zod .max(12, ...); no
+                test asserted the removed cap, per-item URL validation
+                kept. pwa-preview-card.tsx's screenshot row: was
+                object-contain + w-auto (card width varied per image's
+                own aspect ratio, loose/inconsistent); now aspect-[9/16]
+                + object-cover for a uniform card regardless of source
+                shape, snap-x snap-mandatory + snap-start so it settles
+                one card at a time, scrollbar hidden to match Google
+                Play's own chrome. The swipe itself needed no new code
+                — overflow-x-auto was already there, which is what makes
+                a horizontal strip finger-scrollable on any touchscreen;
+                the actual fix was the visual mismatch, not missing
+                interactivity. Verified: go build/vet/test -count=1
+                ./... clean (internal/pwa's own suite incl.); tsc/
+                eslint/vitest clean. Real browser pass against the
+                actual reporting user's own live PWA record (already
+                carrying 3 real screenshots from their own earlier
+                testing): confirmed via the DOM all three loaded with
+                real non-zero natural dimensions, overflow-x:auto and
+                scroll-snap-type:x mandatory were both active, content
+                genuinely overflows, and setting scrollLeft
+                programmatically actually moved the scroll position —
+                the same mechanism a real finger swipe drives. Uploaded
+                a new screenshot through the dropzone tile separately
+                and confirmed it appended as a real thumbnail and
+                appeared in the live preview immediately. No console
+                errors.
+                Round 6 fix, same phase: user reported the screenshot
+                row rendering squished ("криво"). Root cause: the
+                screenshot row is a flex item inside pwa-preview-card's
+                flex-col card (capped at max-h-[70vh], overflow-y-auto);
+                setting overflow-x-auto on it (needed for swipe) makes
+                its own automatic min-height resolve to 0 per the CSS
+                flexbox/overflow spec (non-visible overflow on any axis
+                collapses the automatic minimum), so once a PWA's card
+                content exceeded 70vh the flex algorithm was free to
+                crush this row toward zero instead of leaving it to the
+                outer scroll container. Fixed with an explicit
+                h-[204px] shrink-0 on the row itself. Follow-up in the
+                same exchange: user asked to look up the real Google
+                Play screenshot height and use it exactly, with no
+                vertical scroll in the row. True native-app measurement
+                wasn't reachable (no viewport emulation in this
+                sandboxed browser), but live-inspecting play.google.com
+                revealed the real technique: one fixed height, each
+                image's width following its own natural aspect ratio —
+                not a uniform cropped box. That's not what the squish
+                fix had shipped alongside it: aspect-[9/16] +
+                object-cover (forcing a uniform box) had been added
+                while chasing the squish bug, an unrequested change.
+                git diff against the pre-session baseline showed the
+                original code was already h-[204px] w-auto ...
+                object-contain (natural width, no forced box) — a
+                value from an earlier, already reference-validated
+                phase. Reverted to that shape; the existing 204px
+                already matches Google Play's own real technique once
+                the erroneous forced box was undone. Added explicit
+                overflow-y-hidden on the row (previously only implicit)
+                per the user's explicit "no vertical scroll" ask.
+                Verified: tsc/eslint clean; real browser pass against
+                the same live record — three real screenshots (one
+                landscape, two portrait) now render at three different
+                widths sharing one 204px height, no cropping/
+                distortion, overflow-y:hidden confirmed active, no
+                console errors.
+                Round 7, same phase: user pasted the reference's own
+                rendered screenshot-gallery HTML —
+                .embla/.embla__viewport/.embla__container/.embla__slide
+                sliding via transform: translate3d(...) — the exact DOM
+                shape of Embla Carousel (MIT, real open-source, also
+                what shadcn/ui's own carousel wraps), not native
+                overflow-x scroll. Added embla-carousel-react and
+                rebuilt the row as its own ScreenshotsCarousel component
+                (useEmblaCarousel({dragFree: true, containScroll:
+                "trimSnaps"})) — matches the reference's actual
+                technique, not just its look; dragFree matches how the
+                reference's own mixed-width screenshots feel to drag
+                (travels however far dragged, no hard snap-per-slide).
+                Restructuring surfaced a real sizing bug: the prior
+                round's h-[204px] alongside pb-5 on the same element
+                rendered images at 184px, not 204 (border-box padding
+                eating into the explicit height) — fixed by moving
+                px-4/pb-5 onto a plain unpadded outer wrapper, keeping
+                the Embla-ref'd viewport (the element that actually
+                needs the squish-guard) unpadded. Added loading="lazy"
+                per img, matching the reference's own markup. Verified:
+                tsc/eslint clean; real browser pass against the same
+                live record confirmed all three screenshots measure
+                exactly 204px (not 184), viewport clips with
+                overflow:hidden, and a real synthetic mouse drag (a raw
+                JS-dispatched PointerEvent didn't register with Embla's
+                own gesture recognition in an earlier attempt — real
+                synthetic mouse input via the browser tool did) actually
+                moved the container's transform from translateX(0) to
+                translateX(-118px), confirmed both via getComputedStyle
+                and visually. No console errors.
 LAST COMMIT   : fix — fd64b45 (this phase's own work is UNCOMMITTED,
                 see below)
 UNCOMMITTED   : this entire phase's work — migration 00027; apps/
-                internal/storage (new); apps/internal/contentgallery
-                (new, incl. tests, incl. DeleteFiles); apps/api/main.go
+                internal/storage (new, incl. round 5's CORS-call
+                removal); apps/internal/contentgallery (new, incl.
+                tests, incl. DeleteFiles); apps/internal/pwa/service.go
+                (round 6's screenshotsMax cap removal); apps/api/main.go
                 wiring; apierror.Unavailable; config.go's S3Config.
                 PublicEndpoint; .env.example/docker-compose.dev.yml/
                 docker-compose.test.yml S3_PUBLIC_ENDPOINT; apps/go.mod/
                 go.sum (minio-go); the full features/content-gallery/*
-                rewrite (incl. round 2's permanent-delete UI) +
-                lib/api/content-gallery.ts + hooks/use-content-
-                gallery.ts; pwa-form.tsx's gallery-picker wiring;
-                new-pwa-view.tsx/new-landing-view.tsx/new-postlanding-
-                view.tsx template-handoff removal; titleFromGallery
-                i18n key removal (en+ru landings/postlanding/pwa) — not
-                yet committed, waiting on the user. NOTE: same as every
+                rewrite (incl. round 2's permanent-delete UI, round 3's
+                first crop-dialog pass, round 4's icon-field-as-picker-
+                thumbnail redesign, round 5's crop-at-attach-time +
+                react-image-crop rework, and round 6's GalleryUploadCell
+                className prop) + lib/api/content-gallery.ts + hooks/
+                use-content-gallery.ts; pwa-form.tsx's gallery-picker +
+                screenshot-upload-grid wiring + icon-remove button;
+                pwa-preview-card.tsx's screenshot-row rework (incl.
+                round 7's Embla rebuild); new-pwa-view.tsx/new-landing-
+                view.tsx/new-postlanding-view.tsx template-handoff
+                removal; titleFromGallery i18n key removal (en+ru
+                landings/postlanding/pwa); apps/web's package.json/
+                package-lock.json (react-image-crop, replacing round 3's
+                now-removed react-easy-crop; embla-carousel-react, new
+                in round 7) — not yet committed, waiting on the user.
+                NOTE: same as every
                 prior phase this session, the migrate container bakes
                 migrations into its image — `docker compose build
                 migrate` before 00027 will apply inside a rebuilt stack
                 (already applied directly via host `go tool goose`
                 against the live dev Postgres, so the running dev stack
-                has it regardless).
+                has it regardless). NOTE: apps/web's containerized dev
+                service has its own node_modules Docker volume, separate
+                from the host's — react-image-crop was installed on the
+                host AND via `docker exec infra-web-1 npm install` so
+                the container actually resolves it; a stack rebuilt from
+                docker-compose.dev.yml fresh (`docker compose build
+                web`) will pick it up from package.json normally.
 NEXT          : confirm scope before starting. Real candidates: (a)
                 video upload + transcoding (needs an ffmpeg/worker
                 pipeline — real new infra, not a small add-on); (b) the
-                reference's crop tool + dimension-compatibility
-                indicators, if a real "required dimensions" concept
-                ever gets added to a field that uses the picker; (c)
-                wire the file-picker dialog into more image fields
-                (PWA screenshots gallery is the obvious next one — it's
-                already a useFieldArray of URLs); (d) the pre-existing
-                list from the superseded block below, still open.
+                reference's dimension-compatibility indicators (green/
+                yellow/red match icons) — still not built, would need a
+                real "required dimensions" concept on a field, which
+                none currently declares beyond the icon's own fixed 1:1;
+                (c) wire the file-picker/crop combo into any other image
+                field that gets added later (icon + screenshots are the
+                only two image URL fields PWA has today, both now
+                wired); (d) the pre-existing list from the superseded
+                block below, still open.
 
 ```
 

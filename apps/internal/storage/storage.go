@@ -90,6 +90,24 @@ func publicReadPolicy(bucket string) string {
 // a warning and carries on if this fails, the same "a down dependency
 // degrades its own route group, not the whole API" stance ClickHouse/
 // Redis already use there).
+//
+// No bucket-CORS call here, deliberately: apps/web's cropper (image-crop-
+// dialog.tsx) draws an *existing* Content Gallery file onto a <canvas> —
+// e.g. attaching an already-uploaded image as a PWA icon — which needs
+// CORS response headers or the canvas is "tainted" (every read back off
+// it, toBlob included, throws SecurityError). The S3-compatible bucket-
+// CORS API this package would otherwise call here (minio-go's
+// SetBucketCors) turned out unimplemented on self-hosted MinIO — it
+// returns NotImplemented — because MinIO instead serves CORS off its own
+// server-level `api.cors_allow_origin` admin config, which already
+// defaults to "*" (confirmed live: a GET with an Origin header comes back
+// with a matching Access-Control-Allow-Origin with zero extra setup).
+// Calling an API the server rejects just to duplicate a default it
+// already applies isn't worth carrying. A real S3-compatible provider in
+// production needs CORS configured on the bucket through its own
+// console/CLI/infra-as-code if this behavior is wanted there — a
+// reasonable one-time operational step, not something this process
+// should silently mutate on every boot.
 func (c *Client) EnsureBucket(ctx context.Context, region string) error {
 	exists, err := c.mc.BucketExists(ctx, c.bucket)
 	if err != nil {

@@ -13,10 +13,15 @@ export function GalleryFilePickerDialog({
   open,
   onOpenChange,
   onPick,
+  requiredAspect,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onPick: (file: GalleryFile) => void;
+  /** Passed straight through to GalleryBrowser — see its own doc. Omit
+   * for a field with no fixed shape (e.g. PWA screenshots, which the
+   * reference itself allows in varying aspect ratios). */
+  requiredAspect?: number;
 }) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -27,6 +32,7 @@ export function GalleryFilePickerDialog({
         </DialogHeader>
         <GalleryBrowser
           mode="pick"
+          requiredAspect={requiredAspect}
           onPick={(file) => {
             onPick(file);
             onOpenChange(false);

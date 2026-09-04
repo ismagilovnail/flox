@@ -20,7 +20,9 @@ const (
 	descriptionMaxLen = 4000
 	downloadsLabelMax = 20
 	whatsNewMaxLen    = 2000
-	screenshotsMax    = 12
+	// No cap on screenshot count — the reference's own upload widget
+	// advertises "No limit on quantity" and screenshots is a plain
+	// text[] column, nothing here needs one.
 	// Detail-sheet labels ("1.0.0", "12+", "Casino", "Interactive
 	// elements") — short free text, so a single shared cap is enough.
 	detailLabelMaxLen = 60
@@ -351,14 +353,10 @@ func validateListingFields(f listingFields) map[string]string {
 	if len(f.whatsNew) > whatsNewMaxLen {
 		fields["whatsNew"] = fmt.Sprintf("up to %d characters", whatsNewMaxLen)
 	}
-	if len(f.screenshots) > screenshotsMax {
-		fields["screenshots"] = fmt.Sprintf("up to %d images", screenshotsMax)
-	} else {
-		for _, u := range f.screenshots {
-			if !isValidURL(u) {
-				fields["screenshots"] = "each screenshot must be a valid URL"
-				break
-			}
+	for _, u := range f.screenshots {
+		if !isValidURL(u) {
+			fields["screenshots"] = "each screenshot must be a valid URL"
+			break
 		}
 	}
 	if f.rating != nil && (*f.rating < 0 || *f.rating > 5) {

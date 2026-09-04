@@ -26,11 +26,13 @@ import {
   useGalleryFolders,
   useMoveGalleryFiles,
   useRestoreGalleryFiles,
+  useUploadGalleryFile,
 } from "@/hooks/use-content-gallery";
 import { useTeamMembers } from "@/hooks/use-team";
 import { GalleryFileCard } from "@/features/content-gallery/gallery-file-card";
 import { GalleryFolderPanel, GALLERY_ROOT } from "@/features/content-gallery/gallery-folder-panel";
 import { GalleryUploadCell } from "@/features/content-gallery/gallery-upload-cell";
+import { CROPPABLE_MIME_TYPES, ImageCropDialog } from "@/features/content-gallery/image-crop-dialog";
 import type { GalleryFile, GalleryFileStatus, GalleryFolder } from "@/lib/api/content-gallery";
 
 const PAGE_SIZE = 50;
@@ -41,11 +43,17 @@ const PAGE_SIZE = 50;
 export function GalleryBrowser({
   mode,
   onPick,
+  requiredAspect,
 }: {
   mode: "manage" | "pick";
   /** Called with the chosen file when mode === "pick" and the caller
    * confirms a selection. */
   onPick?: (file: GalleryFile) => void;
+  /** When set (mode === "pick" only), confirming a selection opens
+   * ImageCropDialog locked to this aspect before onPick fires — the
+   * reference's own "attach an icon" flow: pick/upload as-is, crop once
+   * you actually attach it to a field that needs a specific ratio. */
+  requiredAspect?: number;
 }) {
   const { data: me } = useMe();
   const { data: members } = useTeamMembers();
@@ -57,6 +65,14 @@ export function GalleryBrowser({
   const [uploadedBy, setUploadedByRaw] = React.useState<string | undefined>(undefined);
   const [page, setPage] = React.useState(0);
   const [selected, setSelected] = React.useState<Set<string>>(new Set());
+  // Pick mode's actual chosen file object, kept alongside `selected`
+  // (which only tracks ids, for card highlighting) — needed so a file
+  // just uploaded via GalleryUploadCell can become "picked" immediately,
+  // before the list query has even refetched to include it.
+  const [pickedFile, setPickedFile] = React.useState<GalleryFile | null>(null);
+  // Non-null while the crop-before-attach dialog is open (requiredAspect
+  // only) — the file the "Use this image" confirm is currently cropping.
+  const [cropTarget, setCropTarget] = React.useState<GalleryFile | null>(null);
   // Non-null while the permanent-delete confirm dialog is open — the ids
   // it would delete. Shared by the bulk bar and each card's own menu
   // (single-file: an array of one).
@@ -94,15 +110,65 @@ export function GalleryBrowser({
   const archiveFiles = useArchiveGalleryFiles();
   const restoreFiles = useRestoreGalleryFiles();
   const deleteFiles = useDeleteGalleryFiles();
+  const uploadFile = useUploadGalleryFile();
 
   function toggleSelect(id: string) {
+    if (mode === "pick") {
+      setSelected((prev) => {
+        if (prev.has(id)) {
+          setPickedFile(null);
+          return new Set();
+        }
+        setPickedFile(files.find((f) => f.id === id) ?? null);
+        return new Set([id]);
+      });
+      return;
+    }
     setSelected((prev) => {
-      if (mode === "pick") return prev.has(id) ? new Set() : new Set([id]);
       const next = new Set(prev);
       if (next.has(id)) next.delete(id);
       else next.add(id);
       return next;
     });
+  }
+
+  // A file just uploaded through the picker's own upload cell becomes
+  // the pick immediately — it isn't in `files` yet (the list query
+  // hasn't refetched), so this is the only place that reference exists.
+  function handleUploaded(file: GalleryFile) {
+    setSelected(new Set([file.id]));
+    setPickedFile(file);
+  }
+
+  function confirmPick() {
+    if (!pickedFile) return;
+    if (requiredAspect && CROPPABLE_MIME_TYPES.has(pickedFile.mimeType)) {
+      setCropTarget(pickedFile);
+    } else {
+      onPick?.(pickedFile);
+    }
+  }
+
+  function skipCrop() {
+    const file = cropTarget;
+    setCropTarget(null);
+    if (file) onPick?.(file);
+  }
+
+  function applyCrop(cropped: File) {
+    uploadFile.mutate(
+      { file: cropped },
+      {
+        onSuccess: (newFile) => {
+          setCropTarget(null);
+          onPick?.(newFile);
+        },
+        onError: (err) => {
+          toast.error("Couldn't save the cropped image", { description: err.message });
+          setCropTarget(null);
+        },
+      },
+    );
   }
 
   function runBulk(action: (ids: string[]) => Promise<unknown>, verb: string) {
@@ -131,34 +197,34 @@ export function GalleryBrowser({
     });
   }
 
-  const selectedFile = mode === "pick" && selected.size === 1 ? files.find((f) => selected.has(f.id)) : undefined;
-
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <Tabs value={status} onValueChange={(v) => setStatus(v as GalleryFileStatus)}>
-          <TabsList>
-            <TabsTrigger value="active">Active</TabsTrigger>
-            <TabsTrigger value="archived">Inactive</TabsTrigger>
-          </TabsList>
-        </Tabs>
+      {mode === "manage" && (
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <Tabs value={status} onValueChange={(v) => setStatus(v as GalleryFileStatus)}>
+            <TabsList>
+              <TabsTrigger value="active">Active</TabsTrigger>
+              <TabsTrigger value="archived">Inactive</TabsTrigger>
+            </TabsList>
+          </Tabs>
 
-        {canManage && (
-          <Select value={uploadedBy ?? "all"} onValueChange={(v) => setUploadedBy(v === "all" ? undefined : v)}>
-            <SelectTrigger className="w-48">
-              <SelectValue placeholder="Uploaded by" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">Everyone</SelectItem>
-              {members?.map((m) => (
-                <SelectItem key={m.userId} value={m.userId}>
-                  {m.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        )}
-      </div>
+          {canManage && (
+            <Select value={uploadedBy ?? "all"} onValueChange={(v) => setUploadedBy(v === "all" ? undefined : v)}>
+              <SelectTrigger className="w-48">
+                <SelectValue placeholder="Uploaded by" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Everyone</SelectItem>
+                {members?.map((m) => (
+                  <SelectItem key={m.userId} value={m.userId}>
+                    {m.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
+        </div>
+      )}
 
       <div className="flex gap-4">
         <GalleryFolderPanel selected={folder} onSelect={setFolder} />
@@ -184,8 +250,13 @@ export function GalleryBrowser({
           ) : (
             <>
               <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
-                {mode === "manage" && status === "active" && <GalleryUploadCell folderId={folderId === "root" ? undefined : folderId} />}
-                {files.length === 0 && !(mode === "manage" && status === "active") && (
+                {(mode === "pick" || status === "active") && (
+                  <GalleryUploadCell
+                    folderId={folderId === "root" ? undefined : folderId}
+                    onUploaded={mode === "pick" ? handleUploaded : undefined}
+                  />
+                )}
+                {files.length === 0 && !(mode === "pick" || status === "active") && (
                   <div className="col-span-full">
                     <EmptyState icon={ImageOffIcon} title="No files here" description="Upload an image or pick a different folder." />
                   </div>
@@ -234,10 +305,23 @@ export function GalleryBrowser({
 
       {mode === "pick" && (
         <div className="flex justify-end border-t border-border pt-3">
-          <Button disabled={!selectedFile} onClick={() => selectedFile && onPick?.(selectedFile)}>
+          <Button disabled={!pickedFile} onClick={confirmPick}>
             Use this image
           </Button>
         </div>
+      )}
+
+      {requiredAspect && (
+        <ImageCropDialog
+          imageUrl={cropTarget?.url ?? null}
+          filename={cropTarget?.originalFilename ?? "image"}
+          mimeType={cropTarget?.mimeType ?? "image/png"}
+          aspect={requiredAspect}
+          open={cropTarget !== null}
+          onOpenChange={(open) => !open && skipCrop()}
+          onConfirm={applyCrop}
+          onSkip={skipCrop}
+        />
       )}
 
       <Dialog open={confirmDeleteIds !== null} onOpenChange={(open) => !open && setConfirmDeleteIds(null)}>

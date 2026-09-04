@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useState } from "react";
 import { Controller, useFieldArray, useForm, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { ImagesIcon, PlusIcon, XIcon } from "lucide-react";
+import { ImagesIcon, XIcon } from "lucide-react";
 import { z } from "zod";
 import { useTranslation } from "react-i18next";
 import type { TFunction } from "i18next";
@@ -34,6 +34,8 @@ import { Mono } from "@/components/ui/typography";
 import type { PwaStatus } from "@/lib/api/pwa";
 import { PwaPreviewCard } from "@/features/pwa/pwa-preview-card";
 import { GalleryFilePickerDialog } from "@/features/content-gallery/gallery-file-picker-dialog";
+import { GalleryUploadCell } from "@/features/content-gallery/gallery-upload-cell";
+import { cn } from "@/lib/utils";
 
 /** register(name, { setValueAs: numberOrUndefined }) turns an empty
  * input into `undefined` (not NaN) before zod ever sees it — the schema
@@ -110,13 +112,11 @@ export function buildPwaFormSchema(t: TFunction) {
       .number()
       .min(0, t("form.validation.sizeMbRange", { ns: "pwa" }))
       .optional(),
-    screenshots: z
-      .array(
-        z.object({
-          url: z.url(t("form.validation.screenshotUrlInvalid", { ns: "pwa" })),
-        }),
-      )
-      .max(12, t("form.validation.screenshotsMax", { ns: "pwa" })),
+    screenshots: z.array(
+      z.object({
+        url: z.url(t("form.validation.screenshotUrlInvalid", { ns: "pwa" })),
+      }),
+    ),
     whatsNew: z
       .string()
       .max(2000, t("form.validation.whatsNewMax", { ns: "pwa" }))
@@ -212,6 +212,7 @@ export function PwaForm({
   const manifest = useWatch({ control });
   const [previewDir, setPreviewDir] = useState<"ltr" | "rtl">("ltr");
   const [pickingIcon, setPickingIcon] = useState(false);
+  const [pickingScreenshot, setPickingScreenshot] = useState(false);
 
   return (
     <form
@@ -328,26 +329,49 @@ export function PwaForm({
             </div>
 
             <div className="grid gap-1.5">
-              <Label htmlFor="pwa-icon">
+              <Label id="pwa-icon-label">
                 {t("form.iconUrlLabel", { ns: "pwa" })}
               </Label>
-              <div className="flex gap-1.5">
-                <Input
-                  id="pwa-icon"
-                  placeholder={t("form.iconUrlPlaceholder", { ns: "pwa" })}
-                  className="font-mono text-xs"
-                  {...register("iconUrl")}
-                  aria-invalid={!!errors.iconUrl}
-                />
-                <Button
+              <div className="relative w-fit">
+                <button
                   type="button"
-                  variant="outline"
-                  size="icon"
+                  aria-labelledby="pwa-icon-label"
                   onClick={() => setPickingIcon(true)}
-                  aria-label={t("form.iconUrlBrowseAria", { ns: "pwa" })}
+                  className={cn(
+                    "group relative flex size-24 items-center justify-center overflow-hidden rounded-lg border-2 border-dashed text-muted-foreground transition-colors",
+                    errors.iconUrl ? "border-danger" : "border-border hover:border-muted-foreground/50 hover:text-foreground",
+                  )}
                 >
-                  <ImagesIcon className="size-4" />
-                </Button>
+                  {manifest.iconUrl ? (
+                    <>
+                      {/* eslint-disable-next-line @next/next/no-img-element -- a Content Gallery public object-storage URL (or any externally-hosted one), not a Next-optimizable static asset */}
+                      <img src={manifest.iconUrl} alt="" className="size-full object-cover" />
+                      <div className="absolute inset-0 flex items-center justify-center bg-black/50 opacity-0 transition-opacity group-hover:opacity-100">
+                        <span className="text-xs font-medium text-white">{t("form.iconUrlChange", { ns: "pwa" })}</span>
+                      </div>
+                    </>
+                  ) : (
+                    <span className="flex flex-col items-center gap-1 px-2 text-center">
+                      <ImagesIcon className="size-5" />
+                      <span className="text-[11px] font-medium">{t("form.iconUrlChoose", { ns: "pwa" })}</span>
+                    </span>
+                  )}
+                </button>
+                {manifest.iconUrl && (
+                  <IconButton
+                    type="button"
+                    size="icon-xs"
+                    variant="secondary"
+                    className="absolute -top-1.5 -right-1.5 rounded-full shadow"
+                    aria-label={t("form.iconUrlRemoveAria", { ns: "pwa" })}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      form.setValue("iconUrl", "", { shouldValidate: true, shouldDirty: true });
+                    }}
+                  >
+                    <XIcon className="size-3" />
+                  </IconButton>
+                )}
               </div>
               {errors.iconUrl && (
                 <p className="text-xs text-danger">{errors.iconUrl.message}</p>
@@ -355,6 +379,7 @@ export function PwaForm({
               <GalleryFilePickerDialog
                 open={pickingIcon}
                 onOpenChange={setPickingIcon}
+                requiredAspect={1}
                 onPick={(file) =>
                   form.setValue("iconUrl", file.url, { shouldValidate: true, shouldDirty: true })
                 }
@@ -736,46 +761,53 @@ export function PwaForm({
               <div>
                 <Label>{t("form.screenshotsLabel", { ns: "pwa" })}</Label>
                 <p className="text-xs text-muted-foreground">
-                  {t("form.screenshotsHint", { ns: "pwa" })}
+                  {t("form.screenshotsUploadHint", { ns: "pwa" })}
+                </p>
+                <p className="text-[11px] text-muted-foreground">
+                  {t("form.screenshotsFormatsHint", { ns: "pwa" })}
                 </p>
               </div>
-              <div className="flex flex-col gap-2">
+
+              <div className="grid grid-cols-3 gap-2 sm:grid-cols-4 md:grid-cols-6">
                 {screenshotArray.fields.map((field, index) => (
-                  <div key={field.id} className="flex items-center gap-2">
-                    <Input
-                      {...register(`screenshots.${index}.url`)}
-                      placeholder={t("form.screenshotUrlPlaceholder", {
-                        ns: "pwa",
-                      })}
-                      className="font-mono text-xs"
-                      aria-invalid={!!errors.screenshots?.[index]?.url}
-                    />
+                  <div key={field.id} className="group relative aspect-[9/16] overflow-hidden rounded-lg border border-border bg-muted/30">
+                    {manifest.screenshots?.[index]?.url ? (
+                      /* eslint-disable-next-line @next/next/no-img-element -- a Content Gallery public object-storage URL (or any externally-hosted one), not a Next-optimizable static asset */
+                      <img src={manifest.screenshots[index]?.url} alt="" className="size-full object-cover" />
+                    ) : (
+                      <div className="flex size-full items-center justify-center text-muted-foreground">
+                        <ImagesIcon className="size-5" />
+                      </div>
+                    )}
                     <IconButton
                       aria-label={t("form.removeScreenshotAria", { ns: "pwa" })}
-                      size="icon-sm"
+                      size="icon-xs"
+                      variant="secondary"
+                      className="absolute top-1 right-1 rounded-full opacity-0 shadow transition-opacity group-hover:opacity-100"
                       onClick={() => screenshotArray.remove(index)}
                     >
-                      <XIcon className="size-3.5" />
+                      <XIcon className="size-3" />
                     </IconButton>
                   </div>
                 ))}
+                <GalleryUploadCell className="aspect-[9/16]" onUploaded={(file) => screenshotArray.append({ url: file.url })} />
               </div>
+
               {errors.screenshots?.message && (
                 <p className="text-xs text-danger">
                   {errors.screenshots.message}
                 </p>
               )}
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className="self-start"
-                disabled={screenshotArray.fields.length >= 12}
-                onClick={() => screenshotArray.append({ url: "" })}
-              >
-                <PlusIcon className="size-3.5" />{" "}
-                {t("form.addScreenshotButton", { ns: "pwa" })}
+
+              <Button type="button" variant="outline" size="sm" className="self-start" onClick={() => setPickingScreenshot(true)}>
+                <ImagesIcon className="size-3.5" /> {t("form.addScreenshotFromGalleryButton", { ns: "pwa" })}
               </Button>
+
+              <GalleryFilePickerDialog
+                open={pickingScreenshot}
+                onOpenChange={setPickingScreenshot}
+                onPick={(file) => screenshotArray.append({ url: file.url })}
+              />
             </div>
 
             <Separator />
