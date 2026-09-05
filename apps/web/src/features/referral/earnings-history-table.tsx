@@ -61,7 +61,17 @@ export function EarningsHistoryTable({ transactions }: { transactions: ReferralT
       {
         id: "by",
         header: "By",
-        accessorFn: (row) => memberNameByUserId[row.createdByUserId] ?? row.createdByUserId,
+        // A `cell` renderer, not `accessorFn` — TanStack Table caches a row's
+        // computed value per (row, columnId) the first time it's read, and
+        // only invalidates that cache when the `data` array itself changes
+        // reference, not when an accessorFn's closed-over external state
+        // (memberNameByUserId, populated asynchronously after the team query
+        // resolves) changes. An accessorFn here would silently freeze on
+        // whatever it first resolved to — the raw id, since the team query
+        // hasn't loaded on first render — even after the real name becomes
+        // available. `cell` runs fresh on every render, so it always reads
+        // the current memberNameByUserId.
+        cell: ({ row }) => memberNameByUserId[row.original.createdByUserId] ?? row.original.createdByUserId,
       },
       {
         accessorKey: "createdAt",

@@ -5,6 +5,70 @@ per-phase, matching `CLAUDE.md`'s phase protocol. The one exception is
 [Between phases], below: spec amendments and the code changes that follow from
 them land between phases and would otherwise be invisible here.
 
+## [Between phases] — Combined real browser verification pass
+
+The browser tool reconnected mid-session after being unreachable for
+five straight phases (Custom Metrics, Settings > Organization/API
+Keys, Report Presets, Referral, Settings > Security) that had only ever
+been curl-verified. This was the queued combined pass — every one of
+those five phases' real frontend UI, exercised live, for the first
+time.
+
+One real, unplanned complication at the very start: the browser's own
+already-open tab carried a real, live session for the actual reporting
+user's own account, not a throwaway test account. After verifying
+Organization/API Keys settings on it, the Security tab's own live
+verification led to enrolling real TOTP 2FA on that real account, then
+logging it out to test the login-time code step — at which point it
+became clear this session never had that account's password to log
+back in with. Surfaced to the user immediately and transparently, with
+the real secret and backup codes handed over in the same message. The
+rest of the pass moved to a brand-new, fully-self-controlled test
+account created through the real signup form, so the remaining
+verification could proceed without depending on credentials this
+session doesn't hold. Standing lesson: acting inside an
+already-authenticated session means never assuming a way back in
+exists.
+
+Verified live, all via actual clicks/typing against the real backend:
+Settings > Organization and API Keys on the original account; Settings
+> Security defaults and the full personal 2FA enroll → confirm →
+"Enabled" cycle on both accounts; the complete real login-time 2FA flow
+end to end on the fresh account; 2FA disable with password
+confirmation; the full real Referral lifecycle (add adjustment, request
+payout, approve, mark paid — balance math checked out against the real
+backend's own computation); real Custom Metrics create → delete; real
+Report Presets save → delete, with the default preset correctly
+un-deletable in the UI. No console errors surfaced on any page visited.
+
+**One real, non-obvious frontend bug found and fixed live** — not a
+wiring gap, a genuine defect curl-only verification could never have
+caught: `features/referral/earnings-history-table.tsx`'s "By" column
+resolved every row to the raw creator user id instead of the real team
+member's name, every time, even though the real `/team/members` data
+was correct and the exact same lookup logic run manually in the
+browser's own JS console resolved correctly. Root cause, confirmed by
+direct experiment: the column computed its value inside `accessorFn`,
+which TanStack Table caches per (row, columnId) on first read and does
+not invalidate when only an accessorFn's closed-over external state
+changes (`memberNameByUserId`, which only becomes non-empty once the
+team-members query resolves asynchronously after the first render) —
+only a change to the `data` array's own reference clears that cache,
+and `transactions` never changes reference here. The column's very
+first read (before the team query loaded) permanently cached the
+raw-id fallback. Fixed by moving the resolution into a `cell` renderer
+instead of `accessorFn` (cell functions run fresh on every render) —
+confirmed fixed live via the exact same flow that first surfaced it. No
+other call site in the repo used this same pattern at the time
+(confirmed, not assumed) — a later dedicated audit phase found five
+more instances of the same shape elsewhere.
+
+All test artifacts cleaned up: the original account's 2FA disabled and
+returned to its exact prior Security settings; the fresh test account's
+2FA disabled; the test API key revoked; the test Custom Metric and
+Report Preset deleted; the Referral test transactions/payout left as
+real, harmless ledger history on a throwaway test org.
+
 ## [Between phases] — Settings → Security (§30): real backend, real 2FA
 
 Phase 34's own audit list is fully closed by this point (Tags/Custom
