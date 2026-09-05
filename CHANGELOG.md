@@ -5,6 +5,20 @@ per-phase, matching `CLAUDE.md`'s phase protocol. The one exception is
 [Between phases], below: spec amendments and the code changes that follow from
 them land between phases and would otherwise be invisible here.
 
+## [Between phases] — PWA live preview: install ring surrounds a circle-cropped icon
+
+Follow-up correction: the previous pass drew the ring at `inset-0`
+straight over the unchanged rounded-square icon, so it cut through the
+artwork and left the square's corners poking outside it. The real Play
+Store (per the user's own screenshot) circle-crops the icon *and*
+insets it, leaving the ring as a clean halo with a visible gap.
+
+`pwa-preview-card.tsx`'s icon wrapper is now conditional —
+`inset-0`/`rounded-2xl` at rest, `inset-[9px]`/`rounded-full` while
+installing — so the 72px ring surrounds a 54px circular icon. Verified
+live against the reference frame; the icon returns to its rounded
+square with the developer name/badge once the cycle completes.
+
 ## [Between phases] — PWA live preview: install ring moves to the icon, matching real Android
 
 Follow-up to the simulated install flow below: the user pasted a real

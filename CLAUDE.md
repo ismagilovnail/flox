@@ -107,17 +107,32 @@ STATUS        : done — user asked that pwa-preview-card.tsx's "Install"
                 confirmed full text via the DOM) — then confirmed the
                 full cycle still completes to "Открыть" and resets on
                 click, exactly as round 1 verified. No console errors.
-LAST COMMIT   : feat(pwa): clickable Install button with simulated
-                Google-Play-style preloader — 56f725f (round 1 only;
-                round 2's icon-ring rework above is this phase's own
+                Round 3, same phase: user compared their own reference
+                screenshot against round 2's live result and flagged the
+                remaining difference — round 2 drew the ring at inset-0
+                straight over the unchanged rounded-SQUARE icon, so it
+                cut through the artwork and left the square's corners
+                poking outside it. The real Play Store (and the user's
+                screenshot) instead circle-crops the icon AND insets it,
+                so the ring surrounds it cleanly with a visible gap.
+                Fixed: the icon's own wrapper is now conditional —
+                inset-0/rounded-2xl at rest, inset-[9px]/rounded-full
+                while installing — leaving the 72px ring a clean halo
+                around a 54px circular icon. Verified live: the mid-
+                animation zoom now matches the reference frame closely
+                (circular inset icon, gray track with a green arc, the
+                "Пожалуйста, подождите…" line, no install button), and
+                the icon correctly returns to its rounded-square shape
+                with the developer name/badge once the cycle completes.
+                No console errors; tsc/eslint/vitest clean.
+LAST COMMIT   : fix(pwa): install ring wraps the icon, not the button,
+                matching real Android — 0d3efea (rounds 1-2; round 3's
+                circle-crop/inset correction above is this phase's own
                 work still uncommitted, see below)
-UNCOMMITTED   : round 2's own changes — apps/web/src/features/pwa/
-                pwa-preview-card.tsx (InstallProgressRing generalized +
-                moved to wrap the icon; button conditionally rendered
-                instead of disabled; the "Please wait…" developer-line
-                swap); apps/web/src/lib/i18n/locales/{en,ru}/pwa.json
-                (preview.pleaseWait) — not yet committed, waiting on the
-                user.
+UNCOMMITTED   : round 3's own change — apps/web/src/features/pwa/
+                pwa-preview-card.tsx (the icon wrapper's conditional
+                circle-crop + inset while installing) — not yet
+                committed, waiting on the user.
 NEXT          : confirm scope before starting. Real candidates: (a)
                 retrofitting facebook_ads/tiktok_ads' own access_token
                 to real encryption now that four real AES-256-GCM

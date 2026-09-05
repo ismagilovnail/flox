@@ -562,7 +562,20 @@ export function PwaPreviewCard({
           <div className="flex items-start gap-4">
             {!!iconUrl && (
               <div className="relative size-[72px] shrink-0">
-                <div className="size-full overflow-hidden rounded-2xl">
+                {/* While installing, the icon is circle-cropped AND inset so
+                    the ring surrounds it with a clean gap, rather than being
+                    drawn over a rounded square (which would cut through the
+                    artwork and leave the corners poking outside the ring).
+                    That's how the real Play Store renders it — confirmed
+                    against the user's own screenshot of a live install. */}
+                <div
+                  className={cn(
+                    "absolute overflow-hidden",
+                    installStatus === "installing"
+                      ? "inset-[9px] rounded-full"
+                      : "inset-0 rounded-2xl",
+                  )}
+                >
                   {/* eslint-disable-next-line @next/next/no-img-element -- external, unknown-dimension icon URL; next/image would need a remotePatterns entry per operator-supplied host */}
                   <img
                     src={iconUrl}
