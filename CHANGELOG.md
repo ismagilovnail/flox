@@ -5,6 +5,92 @@ per-phase, matching `CLAUDE.md`'s phase protocol. The one exception is
 [Between phases], below: spec amendments and the code changes that follow from
 them land between phases and would otherwise be invisible here.
 
+## [Between phases] — Custom Metrics (§30.5, §50): real backend
+
+Next off Phase 34's own audit list of frontend-mock features (Settings,
+Custom Metrics, Report Presets, Referral remained; Tags just finished
+this session). Needed far less new work than expected: the frontend
+already carried a genuinely complete, real formula engine
+(`lib/formula-engine.ts` — a real tokenizer/recursive-descent
+parser/evaluator, not an `eval()`/`Function()` shortcut) and a full
+builder UI (`features/custom-metrics/*`) built against a zustand mock
+store, and `features/analytics/report-table.tsx` already evaluated a
+published custom metric's formula live against real `/analytics/report`
+row data from an earlier phase — the "does it actually compute"
+requirement was already real and shipped.
+
+**Backend.** Migration 00029 adds `custom_metrics` (id/org/name/
+group_name/formula/format/status draft-published/active/targets
+text[]/created_by_user_id) plus `custom_metric.read`/`custom_metric.
+write` permission keys. New `apps/internal/custommetrics` (model/
+repository/service/handler/registry/formula):
+
+- `formula.go` is a faithful Go port of the TS engine's tokenizer,
+  recursive-descent parser, and validator (same grammar, same functions
+  DIV/EMPTYIF/IF/ROUND/ABS/MIN/MAX) — parse-and-validate only, since
+  computation stays client-side.
+- `registry.go` mirrors the frontend's `METRIC_CATALOG` and
+  `SURFACE_AVAILABLE_METRIC_IDS` exactly, with a doc comment flagging
+  the two copies must stay in sync — the same tradeoff already accepted
+  for the report dimension whitelist between `registry.ts` and
+  `chstore.ReportDimension`.
+- RBAC maps §30.5's stale v2-era role names (Owner/Tech/Lead/Buyer) onto
+  the real six roles using the exact tiering the mock UI already
+  implied: Owner/Admin manage any metric; Manager creates and manages
+  only metrics it created; Buyer/Analyst/Viewer see published+active
+  metrics only. Enforced two ways — coarse read/write via
+  `auth.Service.RequirePermission`, plus a new `Repository.
+  CallerRoleKey`/`Service.callerTier`/`canManage` pair for the row-level
+  "own metric only" restriction the coarse system can't express.
+- List/Get filter server-side by the same tiers, not just client-side.
+- A draft is force-cleared of its Show-in targets on every
+  publish→draft transition, and a formula's requested targets are
+  silently narrowed to whichever surfaces can actually compute it — both
+  rules the mock only ever enforced in the frontend.
+
+**Frontend.** New `lib/custom-metrics.ts` + `lib/custom-metrics-
+registry.ts` hold the real domain vocabulary moved out of `lib/mock/`.
+New `lib/api/custom-metrics.ts` + `hooks/use-custom-metrics.ts`
+(TanStack Query) replace `stores/custom-metrics.ts` and `lib/mock/
+custom-metrics.ts`'s fake data (both deleted). All six
+`features/custom-metrics/*` files plus `features/analytics/
+{analytics-view,report-table}.tsx` refactored onto the new hooks.
+`custom-metrics-list.tsx` now reads the real session directly via the
+already-real `useMe()` rather than the mock "current member" hook.
+
+Real bug caught by the integration tests, not by inspection: a Go `nil`
+slice for `targets` on a fresh draft encoded as SQL `NULL`, not `{}`,
+and the column's `NOT NULL` constraint rejected every draft-status
+`Create` outright — `DEFAULT '{}'` only applies when a column is
+omitted from an `INSERT`, not when `NULL` is passed explicitly. Fixed
+at both call sites that build a deliberately-empty targets list, and
+defensively in `Repository.Create` itself.
+
+Verified: `go build/vet/test -count=1 ./...` clean, including 11 new
+integration tests against real Postgres (CRUD, 8 invalid-formula cases
+incl. LTV-forbidden/mixed-data-source/wrong-arity, publish-time target
+filtering, unpublish clears targets, delete blocked-then-allowed across
+a real publish/unpublish transition, ownership tiering, cross-org
+isolation). `tsc`/`eslint`/`vitest` clean.
+
+Real, live, end-to-end verification over curl (not a browser pass — the
+Claude-in-Chrome extension was disconnected for the whole session):
+signed up a real test org, verified a real signup email via the live
+mailhog container, invited and accepted a real second Buyer-role
+membership, then round-tripped the real HTTP API as both roles —
+created and published a real metric as Owner, confirmed real 422s for
+an LTV-referencing formula and a mixed-data-source formula, confirmed
+unpublishing actually cleared targets, confirmed delete is blocked
+while published/exposed and succeeds once cleared, confirmed the
+Buyer's real `GET` saw nothing until Owner published something, and
+confirmed the Buyer's real `POST` got a real 403 with the correct
+permission-key message. Test data cleaned up afterward; the throwaway
+test org/users were left, matching precedent (no delete-org endpoint
+exists). This proves the real backend end-to-end; it did not prove the
+Settings > Custom Metrics tab renders/behaves correctly in a live
+browser — that check happened in the later combined browser
+verification pass.
+
 ## [Between phases] — Tags (§30.6): real cross-entity backend
 
 Continuing down Phase 34's own audit list of frontend-mock features

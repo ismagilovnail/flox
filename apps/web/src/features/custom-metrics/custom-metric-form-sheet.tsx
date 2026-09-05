@@ -26,8 +26,8 @@ import {
   SHOW_IN_TARGETS,
   surfaceCanCompute,
   type ShowInTarget,
-} from "@/lib/mock/custom-metrics-registry";
-import type { CustomMetricStatus } from "@/lib/mock/custom-metrics";
+} from "@/lib/custom-metrics-registry";
+import type { CustomMetricStatus } from "@/lib/custom-metrics";
 import { evaluateFormula, validateFormula } from "@/lib/formula-engine";
 import { MetricCatalogPanel } from "@/features/custom-metrics/metric-catalog-panel";
 import { FormulaInput, type FormulaInputHandle } from "@/features/custom-metrics/formula-input";

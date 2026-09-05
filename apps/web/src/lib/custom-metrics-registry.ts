@@ -9,6 +9,11 @@
  * formula built from them until those phases land. LTV is catalog-only AND
  * `insertable: false` — §30.5 explicitly forbids LTV in custom formulas, not
  * just "not implemented yet".
+ *
+ * Real domain vocabulary (mirrored server-side by apps/internal/
+ * custommetrics/registry.go, which validates every formula against the
+ * same catalog before it's ever saved) — not mock data, so it doesn't
+ * live under lib/mock/.
  */
 
 import { METRICS, type MetricFormat, type MetricKey } from "@/features/analytics/registry";

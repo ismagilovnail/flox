@@ -30,6 +30,7 @@ import (
 	"github.com/ismagilovnail/flox/apps/internal/conversions"
 	"github.com/ismagilovnail/flox/apps/internal/cost"
 	"github.com/ismagilovnail/flox/apps/internal/costsync"
+	"github.com/ismagilovnail/flox/apps/internal/custommetrics"
 	"github.com/ismagilovnail/flox/apps/internal/domain"
 	"github.com/ismagilovnail/flox/apps/internal/eventbuf"
 	"github.com/ismagilovnail/flox/apps/internal/eventmapping"
@@ -281,6 +282,16 @@ func run() error {
 	srv.Mux().Route("/tags", func(r chi.Router) {
 		r.Use(tenantMiddleware)
 		tagsHandler.Register(r)
+	})
+
+	customMetricsHandler := custommetrics.NewHandler(
+		custommetrics.NewService(custommetrics.NewRepository(db)),
+		authSvc.RequirePermission("custom_metric.write", logger),
+		logger,
+	)
+	srv.Mux().Route("/custom-metrics", func(r chi.Router) {
+		r.Use(tenantMiddleware)
+		customMetricsHandler.Register(r)
 	})
 
 	postlandingHandler := postlanding.NewHandler(postlanding.NewService(postlanding.NewRepository(db)), logger)

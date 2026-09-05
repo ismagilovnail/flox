@@ -16,7 +16,7 @@ import { FunnelChart } from "@/features/analytics/funnel-chart";
 import type { FilterCondition } from "@/features/analytics/aggregate";
 import { METRICS, metricLabel, formatMetric, type DimensionKey } from "@/features/analytics/registry";
 import { useReport, useTimeseries, useFunnelReport } from "@/hooks/use-analytics-report";
-import { useCustomMetricsStore } from "@/stores/custom-metrics";
+import { EMPTY_CUSTOM_METRICS, useCustomMetrics } from "@/hooks/use-custom-metrics";
 
 /** Dimensions "View statistics" (§27.5) is allowed to deep-link a filter for —
  * an allowlist so an arbitrary/malformed URL query can't inject a bogus filter. */
@@ -34,7 +34,7 @@ function previousRange(range: ReportControlsState["dateRange"]) {
 export function AnalyticsView() {
   const { t } = useTranslation("analytics");
   const searchParams = useSearchParams();
-  const allCustomMetrics = useCustomMetricsStore((s) => s.metrics);
+  const allCustomMetrics = useCustomMetrics().data?.metrics ?? EMPTY_CUSTOM_METRICS;
   const reportBuilderMetrics = React.useMemo(
     () => allCustomMetrics.filter((m) => m.status === "published" && m.active && m.targets.includes("report_builder")),
     [allCustomMetrics],

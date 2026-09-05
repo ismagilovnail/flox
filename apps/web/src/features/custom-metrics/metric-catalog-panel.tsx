@@ -5,7 +5,7 @@ import * as React from "react";
 import { Input } from "@/components/ui/input";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
-import { METRIC_CATALOG, METRIC_CATEGORIES } from "@/lib/mock/custom-metrics-registry";
+import { METRIC_CATALOG, METRIC_CATEGORIES } from "@/lib/custom-metrics-registry";
 
 /** The searchable left panel (§30.5): click a metric to insert its token at
  * the formula input's cursor. LTV entries are shown but disabled — clicking

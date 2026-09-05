@@ -4,8 +4,8 @@ import { formatDistanceToNow } from "date-fns";
 import { dataTableFeatures } from "@/components/ui/data-table";
 import { Badge } from "@/components/ui/badge";
 import { Caption, Mono } from "@/components/ui/typography";
-import { SHOW_IN_TARGETS } from "@/lib/mock/custom-metrics-registry";
-import type { CustomMetric, CustomMetricStatus } from "@/lib/mock/custom-metrics";
+import { SHOW_IN_TARGETS } from "@/lib/custom-metrics-registry";
+import type { CustomMetric, CustomMetricStatus } from "@/lib/custom-metrics";
 import { CustomMetricRowActions } from "@/features/custom-metrics/custom-metric-row-actions";
 
 const STATUS_VARIANT: Record<CustomMetricStatus, "success" | "outline"> = {

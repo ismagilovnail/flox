@@ -6,7 +6,7 @@ import { Mono } from "@/components/ui/typography";
 import { METRICS, dimensionLabel, metricLabel, formatMetric, type DimensionKey, type MetricKey } from "@/features/analytics/registry";
 import type { ReportRow } from "@/features/analytics/aggregate";
 import { evaluateFormula } from "@/lib/formula-engine";
-import type { CustomMetric } from "@/lib/mock/custom-metrics";
+import type { CustomMetric } from "@/lib/custom-metrics";
 
 export function ReportTable({
   rows,

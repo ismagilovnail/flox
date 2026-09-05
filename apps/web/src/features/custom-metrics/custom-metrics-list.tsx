@@ -7,16 +7,14 @@ import { PlusIcon } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
-import { useCustomMetricsStore } from "@/stores/custom-metrics";
-import { METRIC_CATALOG, surfaceCanCompute } from "@/lib/mock/custom-metrics-registry";
-import { validateFormula } from "@/lib/formula-engine";
-import { useCurrentMember } from "@/hooks/use-current-member";
+import { useMe } from "@/hooks/use-auth";
+import { EMPTY_CUSTOM_METRICS, useCreateCustomMetric, useCustomMetrics, useUpdateCustomMetric } from "@/hooks/use-custom-metrics";
 import { customMetricColumns } from "@/features/custom-metrics/custom-metric-columns";
 import {
   CustomMetricFormSheet,
   type CustomMetricFormValues,
 } from "@/features/custom-metrics/custom-metric-form-sheet";
-import type { CustomMetric } from "@/lib/mock/custom-metrics";
+import type { CustomMetric } from "@/lib/custom-metrics";
 
 function toFormValues(metric: CustomMetric): CustomMetricFormValues {
   return {
@@ -30,21 +28,32 @@ function toFormValues(metric: CustomMetric): CustomMetricFormValues {
 }
 
 export function CustomMetricsList() {
-  const metrics = useCustomMetricsStore((s) => s.metrics);
-  const addMetric = useCustomMetricsStore((s) => s.addMetric);
-  const updateMetric = useCustomMetricsStore((s) => s.updateMetric);
-  const { member: currentMember, memberId: CURRENT_USER_MEMBER_ID, isOwnerOrAdmin: canManageAny } = useCurrentMember();
+  const metrics = useCustomMetrics().data?.metrics ?? EMPTY_CUSTOM_METRICS;
+  const createMetric = useCreateCustomMetric();
+  const updateMetric = useUpdateCustomMetric();
+  const me = useMe();
 
   const [target, setTarget] = React.useState<CustomMetric | null | undefined>(undefined);
 
-  const role = currentMember?.role;
+  const role = me.data?.role;
+  const userId = me.data?.user.id;
+  // Owner/Admin manage any metric; Manager creates and manages only its
+  // own; Buyer/Analyst/Viewer never see this button at all — same tiers
+  // apps/internal/custommetrics.Service actually enforces server-side,
+  // mirrored here only to shape the UI (§52: "frontend permissions are
+  // only UX").
+  const canManageAny = role === "Owner" || role === "Admin";
   const canCreate = canManageAny || role === "Manager";
   const canManage = React.useCallback(
-    (metric: CustomMetric) => canManageAny || (role === "Manager" && metric.createdByMemberId === CURRENT_USER_MEMBER_ID),
-    [canManageAny, role, CURRENT_USER_MEMBER_ID],
+    (metric: CustomMetric) => canManageAny || (role === "Manager" && metric.createdByUserId === userId),
+    [canManageAny, role, userId],
   );
 
-  const visibleMetrics = canCreate ? metrics : metrics.filter((m) => m.status === "published" && m.active);
+  // The server already scopes List() to this exact tier (full list for
+  // Owner/Admin/Manager, published+active only otherwise) — no client-
+  // side re-filter needed, unlike the old mock store which had no
+  // backend to enforce this.
+  const visibleMetrics = metrics;
 
   const existingGroups = React.useMemo(
     () => [...new Set(metrics.map((m) => m.group))].sort((a, b) => a.localeCompare(b)),
@@ -52,18 +61,19 @@ export function CustomMetricsList() {
   );
 
   function handleSubmit(values: CustomMetricFormValues) {
-    const validation = validateFormula(values.formula, METRIC_CATALOG);
-    const targets = validation.valid
-      ? values.targets.filter((t) => surfaceCanCompute(t, validation.usedMetricIds ?? []))
-      : [];
-    const input = { ...values, targets };
-
     if (target) {
-      updateMetric(target.id, input);
-      toast("Metric updated", { description: values.name });
+      updateMetric.mutate(
+        { id: target.id, input: values },
+        {
+          onSuccess: () => toast("Metric updated", { description: values.name }),
+          onError: (err) => toast.error("Couldn't update metric", { description: err.message }),
+        },
+      );
     } else {
-      addMetric(input, CURRENT_USER_MEMBER_ID);
-      toast("Metric created", { description: values.name });
+      createMetric.mutate(values, {
+        onSuccess: () => toast("Metric created", { description: values.name }),
+        onError: (err) => toast.error("Couldn't create metric", { description: err.message }),
+      });
     }
     setTarget(undefined);
   }

@@ -21,59 +21,71 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { useCustomMetricsStore } from "@/stores/custom-metrics";
-import type { CustomMetric } from "@/lib/mock/custom-metrics";
+import { ApiError } from "@/lib/api/client";
+import {
+  useDeleteCustomMetric,
+  useDuplicateCustomMetric,
+  useSetCustomMetricActive,
+  useUpdateCustomMetric,
+} from "@/hooks/use-custom-metrics";
+import type { CustomMetric } from "@/lib/custom-metrics";
 
 export function CustomMetricRowActions({ metric, onEdit }: { metric: CustomMetric; onEdit: () => void }) {
-  const updateMetric = useCustomMetricsStore((s) => s.updateMetric);
-  const setActive = useCustomMetricsStore((s) => s.setActive);
-  const deleteMetric = useCustomMetricsStore((s) => s.deleteMetric);
-  const addMetric = useCustomMetricsStore((s) => s.addMetric);
+  const updateMetric = useUpdateCustomMetric();
+  const setActive = useSetCustomMetricActive();
+  const deleteMetric = useDeleteCustomMetric();
+  const duplicateMetric = useDuplicateCustomMetric();
   const [confirmDelete, setConfirmDelete] = React.useState(false);
 
   function togglePublish() {
     const next = metric.status === "published" ? "draft" : "published";
-    updateMetric(metric.id, {
-      name: metric.name,
-      group: metric.group,
-      formula: metric.formula,
-      format: metric.format,
-      targets: next === "draft" ? [] : metric.targets,
-      status: next,
-    });
-    toast(next === "published" ? "Metric published" : "Unpublished — back to draft", { description: metric.name });
+    // Targets are cleared server-side on a publish -> draft transition
+    // (apps/internal/custommetrics.Service.Update's own rule) — no need
+    // to compute that here.
+    updateMetric.mutate(
+      { id: metric.id, input: { status: next } },
+      {
+        onSuccess: () =>
+          toast(next === "published" ? "Metric published" : "Unpublished — back to draft", { description: metric.name }),
+        onError: (err) => toast.error("Couldn't update metric", { description: err.message }),
+      },
+    );
   }
 
   function toggleActive() {
-    setActive(metric.id, !metric.active);
-    toast(metric.active ? "Metric deactivated" : "Metric activated", { description: metric.name });
+    setActive.mutate(
+      { id: metric.id, active: !metric.active },
+      {
+        onSuccess: () => toast(metric.active ? "Metric deactivated" : "Metric activated", { description: metric.name }),
+        onError: (err) => toast.error("Couldn't update metric", { description: err.message }),
+      },
+    );
   }
 
   function duplicate() {
-    addMetric(
-      {
-        name: `${metric.name} (Copy)`,
-        group: metric.group,
-        formula: metric.formula,
-        format: metric.format,
-        targets: [],
-        status: "draft",
-      },
-      metric.createdByMemberId,
-    );
-    toast("Metric duplicated", { description: `${metric.name} (Copy)` });
+    duplicateMetric.mutate(metric.id, {
+      onSuccess: (created) => toast("Metric duplicated", { description: created.name }),
+      onError: (err) => toast.error("Couldn't duplicate metric", { description: err.message }),
+    });
   }
 
   function handleDelete() {
-    const deleted = deleteMetric(metric.id);
-    setConfirmDelete(false);
-    if (deleted) {
-      toast("Metric deleted", { description: metric.name });
-    } else {
-      toast("Can't delete — metric is in use", {
-        description: "Unpublish and remove it from every surface first, or leave it archived (inactive).",
-      });
-    }
+    deleteMetric.mutate(metric.id, {
+      onSuccess: () => {
+        setConfirmDelete(false);
+        toast("Metric deleted", { description: metric.name });
+      },
+      onError: (err) => {
+        setConfirmDelete(false);
+        if (err instanceof ApiError && err.status === 409) {
+          toast.error("Can't delete — metric is in use", {
+            description: "Unpublish and remove it from every surface first, or leave it archived (inactive).",
+          });
+          return;
+        }
+        toast.error("Couldn't delete metric", { description: err.message });
+      },
+    });
   }
 
   return (
