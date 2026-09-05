@@ -1,9 +1,11 @@
 import { apiFetch } from "@/lib/api/client";
 
-/** Mirrors apps/internal/domain's real shape. Registrar connection, DNS
- * record management, and automatic SSL issuance are NOT implemented
- * server-side (see that package's own doc comment) — status/ssl/registrar/
- * dnsProvider are plain operator-set fields, not automated. */
+/** Mirrors apps/internal/domain's real shape. Registrar connection (via
+ * Namecheap) and DNS zone/SSL status + record management (via
+ * Cloudflare) are real for those two providers, using the org's own
+ * connected Settings > Integrations credentials — verify()/renew()/
+ * syncDns() below. GoDaddy/Route53/cloudflare_registrar/unmanaged have
+ * no real adapter and stay plain operator-set fields. */
 export type DomainStatus = "active" | "pending" | "error" | "expired";
 export type SslStatus = "issued" | "pending" | "none" | "error";
 export type DomainPurpose = "tracking" | "pwa" | "fallback";
@@ -66,4 +68,26 @@ export function updateDomain(id: string, input: UpdateDomainInput): Promise<Doma
 
 export function deleteDomain(id: string): Promise<void> {
   return apiFetch(`/domains/${id}`, { method: "DELETE" });
+}
+
+/** Read-only: a real Namecheap check for registrar=namecheap, a real
+ * Cloudflare check for dnsProvider=cloudflare. Neither charges anything
+ * nor changes any DNS record. */
+export function verifyDomain(id: string): Promise<Domain> {
+  return apiFetch(`/domains/${id}/verify`, { method: "POST" });
+}
+
+/** A real, billable action against the org's connected Namecheap
+ * account — registrar must be namecheap. Never a dry run: a success
+ * response means Namecheap actually charged and extended the
+ * registration. */
+export function renewDomain(id: string, years: number): Promise<Domain> {
+  return apiFetch(`/domains/${id}/renew`, { method: "POST", body: { years } });
+}
+
+/** Creates or updates a real, proxied CNAME record at Cloudflare
+ * pointing this domain at FLOX's own tracker — dnsProvider must be
+ * cloudflare. Mutates the org's actual live DNS. */
+export function syncDomainDNS(id: string): Promise<Domain> {
+  return apiFetch(`/domains/${id}/sync-dns`, { method: "POST" });
 }

@@ -2,21 +2,82 @@ package domain_test
 
 import (
 	"context"
+	"errors"
 	"os"
 	"testing"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/ismagilovnail/flox/apps/internal/apierror"
 	"github.com/ismagilovnail/flox/apps/internal/domain"
 	"github.com/ismagilovnail/flox/apps/internal/idgen"
+	"github.com/ismagilovnail/flox/apps/internal/integrations"
 )
+
+// fakeCredentialSource/fakeRegistrar/fakeDNS let tests control Verify/
+// Renew/SyncDNS's real-provider outcomes without a real Namecheap/
+// Cloudflare account — this project has none to exercise the real
+// adapters against.
+type fakeCredentialSource struct {
+	creds map[integrations.Provider]map[string]string
+}
+
+func (f *fakeCredentialSource) CredentialsFor(_ context.Context, _ string, provider integrations.Provider) (map[string]string, bool, error) {
+	c, ok := f.creds[provider]
+	return c, ok, nil
+}
+
+type fakeRegistrar struct {
+	info       domain.RegistrarInfo
+	err        error
+	renewCalls int
+}
+
+func (f *fakeRegistrar) DomainInfo(context.Context, map[string]string, string) (domain.RegistrarInfo, error) {
+	return f.info, f.err
+}
+
+func (f *fakeRegistrar) Renew(context.Context, map[string]string, string, int) (domain.RegistrarInfo, error) {
+	f.renewCalls++
+	return f.info, f.err
+}
+
+type fakeDNS struct {
+	status      domain.DNSZoneStatus
+	err         error
+	ensureCalls int
+	lastTarget  string
+}
+
+func (f *fakeDNS) ZoneStatus(context.Context, map[string]string, string) (domain.DNSZoneStatus, error) {
+	return f.status, f.err
+}
+
+func (f *fakeDNS) EnsureRecord(_ context.Context, _ map[string]string, _, target string) error {
+	f.ensureCalls++
+	f.lastTarget = target
+	return f.err
+}
+
+func newTestService(pool *pgxpool.Pool, creds *fakeCredentialSource, registrar *fakeRegistrar, dns *fakeDNS, trackerDNSTarget string) *domain.Service {
+	if creds == nil {
+		creds = &fakeCredentialSource{creds: map[integrations.Provider]map[string]string{}}
+	}
+	if registrar == nil {
+		registrar = &fakeRegistrar{}
+	}
+	if dns == nil {
+		dns = &fakeDNS{}
+	}
+	return domain.NewService(domain.NewRepository(pool), creds, registrar, dns, trackerDNSTarget)
+}
 
 func TestCreateGetUpdateDelete(t *testing.T) {
 	pool := mustPool(t)
 	ctx := context.Background()
 	orgID := seedOrg(t, ctx, pool)
-	svc := domain.NewService(domain.NewRepository(pool))
+	svc := newTestService(pool, nil, nil, nil, "")
 
 	created, err := svc.Create(ctx, orgID, domain.CreateInput{
 		Domain:      "Track.Example.com",
@@ -70,7 +131,7 @@ func TestCreateRejectsDuplicateDomainAcrossOrgs(t *testing.T) {
 	ctx := context.Background()
 	orgA := seedOrg(t, ctx, pool)
 	orgB := seedOrg(t, ctx, pool)
-	svc := domain.NewService(domain.NewRepository(pool))
+	svc := newTestService(pool, nil, nil, nil, "")
 
 	if _, err := svc.Create(ctx, orgA, domain.CreateInput{Domain: "shared.example.com", Purpose: []string{"tracking"}}); err != nil {
 		t.Fatalf("first Create: %v", err)
@@ -86,7 +147,7 @@ func TestCreateRejectsInvalidDomainAndEmptyPurpose(t *testing.T) {
 	pool := mustPool(t)
 	ctx := context.Background()
 	orgID := seedOrg(t, ctx, pool)
-	svc := domain.NewService(domain.NewRepository(pool))
+	svc := newTestService(pool, nil, nil, nil, "")
 
 	if _, err := svc.Create(ctx, orgID, domain.CreateInput{Domain: "not a domain", Purpose: []string{"tracking"}}); err == nil {
 		t.Fatal("expected an error for an invalid domain string")
@@ -101,7 +162,7 @@ func TestListReturnsOrgsOwnDomainsOnly(t *testing.T) {
 	ctx := context.Background()
 	orgA := seedOrg(t, ctx, pool)
 	orgB := seedOrg(t, ctx, pool)
-	svc := domain.NewService(domain.NewRepository(pool))
+	svc := newTestService(pool, nil, nil, nil, "")
 
 	if _, err := svc.Create(ctx, orgA, domain.CreateInput{Domain: "a.example.com", Purpose: []string{"tracking"}}); err != nil {
 		t.Fatalf("Create: %v", err)
@@ -116,6 +177,252 @@ func TestListReturnsOrgsOwnDomainsOnly(t *testing.T) {
 	}
 	if len(domains) != 1 || domains[0].Domain != "a.example.com" {
 		t.Fatalf("domains = %+v, want only org A's own", domains)
+	}
+}
+
+func TestVerifyNamecheapAndCloudflare(t *testing.T) {
+	pool := mustPool(t)
+	ctx := context.Background()
+	orgID := seedOrg(t, ctx, pool)
+
+	creds := &fakeCredentialSource{creds: map[integrations.Provider]map[string]string{
+		integrations.ProviderNamecheap:  {"apiUser": "u"},
+		integrations.ProviderCloudflare: {"apiToken": "t"},
+	}}
+	expiresAt := time.Date(2027, 1, 1, 0, 0, 0, 0, time.UTC)
+	registrar := &fakeRegistrar{info: domain.RegistrarInfo{ExpiresAt: expiresAt}}
+	dns := &fakeDNS{status: domain.DNSZoneStatus{Active: true, SSLIssued: true}}
+	svc := newTestService(pool, creds, registrar, dns, "")
+
+	d, err := svc.Create(ctx, orgID, domain.CreateInput{
+		Domain: "verify.example.com", Purpose: []string{"tracking"},
+		Registrar: domain.RegistrarNamecheap, DNSProvider: domain.DNSProviderCloudflare,
+	})
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+
+	verified, err := svc.Verify(ctx, orgID, d.ID)
+	if err != nil {
+		t.Fatalf("Verify: %v", err)
+	}
+	if verified.ExpiresAt == nil || !verified.ExpiresAt.Equal(expiresAt) {
+		t.Fatalf("ExpiresAt = %v, want %v (from the real Namecheap check)", verified.ExpiresAt, expiresAt)
+	}
+	if verified.SSL != domain.SSLIssued {
+		t.Fatalf("SSL = %q, want issued (from the real Cloudflare check)", verified.SSL)
+	}
+	if verified.VerifiedAt == nil {
+		t.Fatal("VerifiedAt is nil, want it stamped by Verify")
+	}
+}
+
+func TestVerifyRequiresConnectedIntegration(t *testing.T) {
+	pool := mustPool(t)
+	ctx := context.Background()
+	orgID := seedOrg(t, ctx, pool)
+	svc := newTestService(pool, nil, nil, nil, "") // no credentials connected
+
+	d, err := svc.Create(ctx, orgID, domain.CreateInput{
+		Domain: "noconn.example.com", Purpose: []string{"tracking"}, Registrar: domain.RegistrarNamecheap,
+	})
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	if _, err := svc.Verify(ctx, orgID, d.ID); err == nil {
+		t.Fatal("Verify with no connected Namecheap integration succeeded, want a validation error")
+	}
+}
+
+// TestVerifyRunsWhicheverHalfIsConnected is a regression test for a real
+// bug found via live curl verification, not by inspection: the original
+// implementation short-circuited on the FIRST applicable-but-
+// unconnected provider, so a domain with registrar=namecheap
+// (disconnected) and dnsProvider=cloudflare (connected) never even
+// attempted the real Cloudflare check.
+func TestVerifyRunsWhicheverHalfIsConnected(t *testing.T) {
+	pool := mustPool(t)
+	ctx := context.Background()
+	orgID := seedOrg(t, ctx, pool)
+
+	// Only Cloudflare is connected — Namecheap is not.
+	creds := &fakeCredentialSource{creds: map[integrations.Provider]map[string]string{
+		integrations.ProviderCloudflare: {"apiToken": "t"},
+	}}
+	dns := &fakeDNS{status: domain.DNSZoneStatus{Active: true, SSLIssued: true}}
+	svc := newTestService(pool, creds, nil, dns, "")
+
+	d, err := svc.Create(ctx, orgID, domain.CreateInput{
+		Domain: "partial.example.com", Purpose: []string{"tracking"},
+		Registrar: domain.RegistrarNamecheap, DNSProvider: domain.DNSProviderCloudflare,
+	})
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+
+	verified, err := svc.Verify(ctx, orgID, d.ID)
+	if err != nil {
+		t.Fatalf("Verify: %v, want it to succeed via the connected Cloudflare half despite Namecheap being disconnected", err)
+	}
+	if verified.SSL != domain.SSLIssued {
+		t.Fatalf("SSL = %q, want issued (the Cloudflare half should have run)", verified.SSL)
+	}
+	if verified.ExpiresAt != nil {
+		t.Fatalf("ExpiresAt = %v, want nil (the Namecheap half was correctly skipped, not attempted)", verified.ExpiresAt)
+	}
+}
+
+func TestVerifyRejectsUnsupportedProviders(t *testing.T) {
+	pool := mustPool(t)
+	ctx := context.Background()
+	orgID := seedOrg(t, ctx, pool)
+	svc := newTestService(pool, nil, nil, nil, "")
+
+	d, err := svc.Create(ctx, orgID, domain.CreateInput{
+		Domain: "unmanaged.example.com", Purpose: []string{"tracking"},
+		Registrar: domain.RegistrarGoDaddy, DNSProvider: domain.DNSProviderRoute53,
+	})
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	if _, err := svc.Verify(ctx, orgID, d.ID); err == nil {
+		t.Fatal("Verify on a GoDaddy/Route53 domain (no real adapter for either) succeeded, want a validation error")
+	}
+}
+
+func TestRenewRequiresNamecheapRegistrar(t *testing.T) {
+	pool := mustPool(t)
+	ctx := context.Background()
+	orgID := seedOrg(t, ctx, pool)
+	registrar := &fakeRegistrar{}
+	svc := newTestService(pool, &fakeCredentialSource{creds: map[integrations.Provider]map[string]string{
+		integrations.ProviderNamecheap: {"apiUser": "u"},
+	}}, registrar, nil, "")
+
+	d, err := svc.Create(ctx, orgID, domain.CreateInput{
+		Domain: "godaddy.example.com", Purpose: []string{"tracking"}, Registrar: domain.RegistrarGoDaddy,
+	})
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	if _, err := svc.Renew(ctx, orgID, d.ID, 1); err == nil {
+		t.Fatal("Renew on a GoDaddy domain succeeded, want a validation error")
+	}
+	if registrar.renewCalls != 0 {
+		t.Fatal("the real (fake) Renew adapter was called despite the registrar mismatch — a real account would have been billed")
+	}
+}
+
+func TestRenewValidatesYearsAndCallsTheRealAdapterExactlyOnce(t *testing.T) {
+	pool := mustPool(t)
+	ctx := context.Background()
+	orgID := seedOrg(t, ctx, pool)
+	newExpiry := time.Date(2028, 1, 1, 0, 0, 0, 0, time.UTC)
+	registrar := &fakeRegistrar{info: domain.RegistrarInfo{ExpiresAt: newExpiry}}
+	svc := newTestService(pool, &fakeCredentialSource{creds: map[integrations.Provider]map[string]string{
+		integrations.ProviderNamecheap: {"apiUser": "u"},
+	}}, registrar, nil, "")
+
+	d, err := svc.Create(ctx, orgID, domain.CreateInput{
+		Domain: "renew.example.com", Purpose: []string{"tracking"}, Registrar: domain.RegistrarNamecheap,
+	})
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+
+	if _, err := svc.Renew(ctx, orgID, d.ID, 0); err == nil {
+		t.Fatal("Renew with 0 years succeeded, want a validation error")
+	}
+	if registrar.renewCalls != 0 {
+		t.Fatal("the real (fake) Renew adapter was called for an invalid years value — a real account would have been billed")
+	}
+
+	renewed, err := svc.Renew(ctx, orgID, d.ID, 1)
+	if err != nil {
+		t.Fatalf("Renew: %v", err)
+	}
+	if registrar.renewCalls != 1 {
+		t.Fatalf("Renew adapter called %d times, want exactly 1", registrar.renewCalls)
+	}
+	if renewed.ExpiresAt == nil || !renewed.ExpiresAt.Equal(newExpiry) {
+		t.Fatalf("ExpiresAt after renew = %v, want %v", renewed.ExpiresAt, newExpiry)
+	}
+}
+
+func TestRenewPropagatesARealRegistrarFailureWithoutCorruptingState(t *testing.T) {
+	pool := mustPool(t)
+	ctx := context.Background()
+	orgID := seedOrg(t, ctx, pool)
+	registrar := &fakeRegistrar{err: errors.New("insufficient account balance")}
+	svc := newTestService(pool, &fakeCredentialSource{creds: map[integrations.Provider]map[string]string{
+		integrations.ProviderNamecheap: {"apiUser": "u"},
+	}}, registrar, nil, "")
+
+	d, err := svc.Create(ctx, orgID, domain.CreateInput{
+		Domain: "failedrenew.example.com", Purpose: []string{"tracking"}, Registrar: domain.RegistrarNamecheap,
+	})
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	if _, err := svc.Renew(ctx, orgID, d.ID, 1); err == nil {
+		t.Fatal("Renew succeeded despite the real adapter reporting failure")
+	}
+
+	got, err := svc.Get(ctx, orgID, d.ID)
+	if err != nil {
+		t.Fatalf("Get: %v", err)
+	}
+	if got.ExpiresAt != nil {
+		t.Fatalf("ExpiresAt = %v after a failed renewal, want nil (nothing was actually renewed)", got.ExpiresAt)
+	}
+}
+
+func TestSyncDNSRequiresTrackerTargetConfigured(t *testing.T) {
+	pool := mustPool(t)
+	ctx := context.Background()
+	orgID := seedOrg(t, ctx, pool)
+	dns := &fakeDNS{}
+	svc := newTestService(pool, &fakeCredentialSource{creds: map[integrations.Provider]map[string]string{
+		integrations.ProviderCloudflare: {"apiToken": "t"},
+	}}, nil, dns, "") // trackerDNSTarget deliberately empty
+
+	d, err := svc.Create(ctx, orgID, domain.CreateInput{
+		Domain: "nodns.example.com", Purpose: []string{"tracking"}, DNSProvider: domain.DNSProviderCloudflare,
+	})
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	if _, err := svc.SyncDNS(ctx, orgID, d.ID); err == nil {
+		t.Fatal("SyncDNS with no TRACKER_DNS_TARGET configured succeeded, want a validation error")
+	}
+	if dns.ensureCalls != 0 {
+		t.Fatal("the real (fake) DNS adapter was called despite no configured target — a real customer's DNS would have been mutated with a fabricated value")
+	}
+}
+
+func TestSyncDNSCallsTheRealAdapterWithTheConfiguredTarget(t *testing.T) {
+	pool := mustPool(t)
+	ctx := context.Background()
+	orgID := seedOrg(t, ctx, pool)
+	dns := &fakeDNS{}
+	svc := newTestService(pool, &fakeCredentialSource{creds: map[integrations.Provider]map[string]string{
+		integrations.ProviderCloudflare: {"apiToken": "t"},
+	}}, nil, dns, "tracker.floxlink.io")
+
+	d, err := svc.Create(ctx, orgID, domain.CreateInput{
+		Domain: "dns.example.com", Purpose: []string{"tracking"}, DNSProvider: domain.DNSProviderCloudflare,
+	})
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	if _, err := svc.SyncDNS(ctx, orgID, d.ID); err != nil {
+		t.Fatalf("SyncDNS: %v", err)
+	}
+	if dns.ensureCalls != 1 {
+		t.Fatalf("EnsureRecord called %d times, want exactly 1", dns.ensureCalls)
+	}
+	if dns.lastTarget != "tracker.floxlink.io" {
+		t.Fatalf("EnsureRecord target = %q, want the configured tracker.floxlink.io", dns.lastTarget)
 	}
 }
 

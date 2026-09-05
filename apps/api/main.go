@@ -34,6 +34,8 @@ import (
 	"github.com/ismagilovnail/flox/apps/internal/costsync"
 	"github.com/ismagilovnail/flox/apps/internal/custommetrics"
 	"github.com/ismagilovnail/flox/apps/internal/domain"
+	domaincloudflare "github.com/ismagilovnail/flox/apps/internal/domain/cloudflare"
+	domainnamecheap "github.com/ismagilovnail/flox/apps/internal/domain/namecheap"
 	"github.com/ismagilovnail/flox/apps/internal/eventbuf"
 	"github.com/ismagilovnail/flox/apps/internal/eventmapping"
 	"github.com/ismagilovnail/flox/apps/internal/eventqueue"
@@ -283,12 +285,6 @@ func run() error {
 		trafficSourceHandler.Register(r)
 	})
 
-	domainHandler := domain.NewHandler(domain.NewService(domain.NewRepository(db)), logger)
-	srv.Mux().Route("/domains", func(r chi.Router) {
-		r.Use(tenantMiddleware)
-		domainHandler.Register(r)
-	})
-
 	trackingLinkHandler := trackinglink.NewHandler(trackinglink.NewService(trackinglink.NewRepository(db)), logger)
 	srv.Mux().Route("/campaigns/{campaignId}/tracking-links", func(r chi.Router) {
 		r.Use(tenantMiddleware)
@@ -298,14 +294,30 @@ func run() error {
 	adAccountRepo := adaccount.NewRepository(db, adAccountKey)
 	adAccountHandler := adaccount.NewHandler(adaccount.NewService(adAccountRepo), logger)
 
+	integrationsSvc := integrationsengine.NewService(integrationsengine.NewRepository(db), integrationKey, adAccountRepo)
 	integrationsHandler := integrationsengine.NewHandler(
-		integrationsengine.NewService(integrationsengine.NewRepository(db), integrationKey, adAccountRepo),
+		integrationsSvc,
 		authSvc.RequirePermission("settings.write", logger),
 		logger,
 	)
 	srv.Mux().Route("/integrations", func(r chi.Router) {
 		r.Use(tenantMiddleware)
 		integrationsHandler.Register(r)
+	})
+
+	// Registrar/DNS automation (§30): domain.Service reads real
+	// Namecheap/Cloudflare credentials through integrationsSvc rather
+	// than a second copy of them — GoDaddy/Route53/cloudflare_registrar/
+	// unmanaged have no real adapter and stay plain operator-declared,
+	// same as before this phase.
+	domainHandler := domain.NewHandler(
+		domain.NewService(domain.NewRepository(db), integrationsSvc, domainnamecheap.New(), domaincloudflare.New(), cfg.TrackerDNSTarget),
+		authSvc.RequirePermission("settings.write", logger),
+		logger,
+	)
+	srv.Mux().Route("/domains", func(r chi.Router) {
+		r.Use(tenantMiddleware)
+		domainHandler.Register(r)
 	})
 
 	networkHandler := network.NewHandler(network.NewService(network.NewRepository(db)), logger)

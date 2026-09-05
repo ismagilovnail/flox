@@ -164,6 +164,12 @@ services:
       # Also set on the worker service below — apps/worker's own ad-spend
       # sync needs the same key to decrypt Google Ads credentials.
       ADACCOUNT_ENCRYPTION_KEY: "KatbgYl+Kd4KPI5T0hKfwZRYsij/t7g7fVomXdjhW/c="
+      # Dev placeholder — no domain in this stack has real DNS delegated
+      # to a real Cloudflare account, so this never actually resolves
+      # anywhere; it only exercises the real request shape (see
+      # docs/domains-tracking-links.md's own registrar/DNS automation
+      # section for what a real deployment should set here instead).
+      TRACKER_DNS_TARGET: "tracker.floxlink.io"
       # The browser's own Origin (localhost:3000, web's host-published
       # port) — apps/internal/tenant.RequireSameOrigin (§54 CSRF) compares
       # against this literally, so it must never be the in-network "web"

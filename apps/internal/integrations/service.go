@@ -47,6 +47,30 @@ func NewService(repo *Repository, key []byte, adPlatforms AdPlatformSource) *Ser
 	}
 }
 
+// CredentialsFor decrypts and returns one org's stored credential fields
+// for a trusted, Go-only caller — apps/internal/domain's real registrar/
+// DNS automation, which needs the same Namecheap/Cloudflare credentials
+// this package's own HTTP handler never exposes as plaintext to anyone.
+// found is false (not an error) when nothing is connected for this
+// provider yet, mirroring adaccount.Repository.TrafficSourceCostIntegration's
+// own "not found is a normal case for a caller to branch on" shape.
+// Never HTTP-reachable: no handler in this package calls it.
+func (s *Service) CredentialsFor(ctx context.Context, orgID string, provider Provider) (fields map[string]string, found bool, err error) {
+	encrypted, found, err := s.repo.PayloadByProvider(ctx, orgID, provider)
+	if err != nil || !found {
+		return nil, found, err
+	}
+	payload, err := decrypt(s.key, encrypted)
+	if err != nil {
+		return nil, false, err
+	}
+	fields, err = decodePayload(payload)
+	if err != nil {
+		return nil, false, err
+	}
+	return fields, true, nil
+}
+
 // SetAdapter overrides the adapter used for one provider — test-only
 // (this project has no live Namecheap/Cloudflare account to exercise the
 // real adapters against), letting integrations_test substitute a fake

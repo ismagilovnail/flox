@@ -5,6 +5,101 @@ per-phase, matching `CLAUDE.md`'s phase protocol. The one exception is
 [Between phases], below: spec amendments and the code changes that follow from
 them land between phases and would otherwise be invisible here.
 
+## [Between phases] — Registrar/DNS automation for Domains (§30)
+
+User picked this off the Google Ads phase's own NEXT list: wire the real
+Namecheap/Cloudflare credentials Settings > Integrations now stores to
+Domains' own `registrar`/`dnsProvider` fields, which had stayed plain
+operator-declared enums since the original Domains + Tracking Links
+phase. Scoped with a multiSelect question distinguishing three
+genuinely separable pieces by risk (read-only status sync vs. a real
+billable renewal vs. a real live-DNS-mutating record sync) — the user
+picked all three.
+
+**Backend.** `domain.Service` gained a `CredentialSource` interface
+reading real credentials through a new, trusted, Go-only
+`integrations.Service.CredentialsFor` method (decrypts and returns the
+stored fields, never HTTP-exposed — mirrors `adaccount.Repository.
+CredentialsByTrafficSourceID`'s own "internal callers only" precedent).
+New `apps/internal/domain/namecheap` (real `domains.getInfo`/`domains.
+renew` XML calls) and `apps/internal/domain/cloudflare` (real zone
+lookup/SSL-verification/DNS-record calls) subpackages, structurally
+verified only against fake `httptest.Server`s — the same pattern every
+other provider adapter in this codebase already uses, since no live
+Namecheap/Cloudflare account exists here. No new migration: Domain's
+existing `Status`/`SSL`/`ExpiresAt`/`VerifiedAt` columns (previously
+permanently null/operator-set) are now written for real, only through a
+new `Repository.ApplyAutomationResult` path the client-facing
+`UpdateInput` still can't reach.
+
+Three new endpoints: `POST /domains/{id}/verify` (read-only — checks
+whichever of registrar=namecheap / dnsProvider=cloudflare a domain
+actually names); `POST /domains/{id}/renew` (registrar=namecheap only,
+a genuine billable action, gated behind `settings.write` plus an
+explicit frontend confirm dialog stating it charges the account and
+cannot be undone); `POST /domains/{id}/sync-dns` (dnsProvider=cloudflare
+only, creates/updates a real proxied CNAME pointing at a new
+`TRACKER_DNS_TARGET` config value — deliberately no default, refuses
+with a clear error while unset rather than pointing a real customer's
+domain at a fabricated address — also gated behind `settings.write`
+plus its own confirm dialog).
+
+**A real bug found via live curl verification, not caught by the
+original test suite** (which only ever exercised "both providers
+connected" and "neither connected"): the first `Verify` implementation
+checked registrar then dnsProvider, returning immediately on the first
+applicable-but-disconnected provider — so a domain with Namecheap
+disconnected but Cloudflare connected never even attempted the real,
+connected Cloudflare check. Fixed by tracking "not connected" as a soft
+per-provider skip rather than an immediate return, only surfacing that
+error if literally nothing ran; a new regression test
+(`TestVerifyRunsWhicheverHalfIsConnected`) covers the exact shape that
+broke, and the fix was re-verified live afterward.
+
+Drive-by cleanup while touching the adjacent `.env.example` section:
+`DOMAIN_REGISTRAR_API_KEY`/`DNS_PROVIDER_API_KEY`/`FACEBOOK_ADS_APP_ID`/
+`FACEBOOK_ADS_APP_SECRET`/`TIKTOK_ADS_APP_ID`/`TIKTOK_ADS_APP_SECRET`
+were all stale, confirmed-unused placeholders from the original
+spec-planning stage — removed and replaced with the one genuinely new
+global var, `TRACKER_DNS_TARGET`, plus explanatory comments about why
+the rest are per-org database rows now, not global env vars.
+
+**Frontend.** New `features/domains/domain-automation-card.tsx`
+(Status/SSL/Expires/Last-verified badges plus Verify/Renew/Sync-DNS
+buttons, the latter two disabled unless their own provider matches, each
+behind its own confirm dialog) wired into the domain edit page. `lib/
+api/domains.ts` gained `verify`/`renew`/`syncDomainDNS`; `hooks/use-
+domains.ts` gained matching mutations.
+
+Verified: `go build/vet/test -count=1 ./...` clean, including new
+`domain` package tests (both providers connected, only one connected —
+the regression case, neither connected, an unsupported-provider domain,
+`Renew`'s registrar/years validation and its "a failed renewal changes
+nothing" guarantee, `SyncDNS`'s "refuses without a configured target"
+guarantee) and two new adapter-level suites (Namecheap's real XML shapes
+for `getInfo`/`renew` incl. API-error propagation; Cloudflare's real
+JSON shapes for zone lookup/SSL verification/DNS record create/update/
+no-op) plus a new `integrations` test for `CredentialsFor`. `tsc`/
+`eslint`/`vitest` clean.
+
+Real, live, end-to-end verification against the actual running dev API.
+With nothing connected, `verify`/`renew`/`sync-dns` all returned clean,
+correctly-worded validation errors. To exercise the connected path
+without a real Namecheap/Cloudflare account, a test `org_integrations`
+row was inserted directly (AES-256-GCM encrypted with the real dev
+`INTEGRATION_ENCRYPTION_KEY`, the same cipher `apps/internal/
+integrations` itself produces) — confirmed `GET /integrations`
+correctly reported it connected, then `sync-dns` made a **real live
+HTTP call to `api.cloudflare.com`** and got back Cloudflare's own real
+`"Invalid access token"` error (this exact sequence is what surfaced the
+Verify short-circuit bug above). Real browser pass: created a real
+domain with registrar=Namecheap/dnsProvider=Cloudflare, confirmed the
+real automation card renders with live status fields, clicked Verify (a
+real 422 network call confirmed via the network log, no console
+errors), opened both the Renew and Sync DNS confirm dialogs and
+confirmed their real warning copy word-for-word, confirmed Sync DNS's
+real network call. All test fixtures deleted afterward via SQL.
+
 ## [Between phases] — Google Ads cost integration (§74/§27-COST)
 
 User picked this off the Settings > Integrations phase's own NEXT list:

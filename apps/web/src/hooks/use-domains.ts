@@ -7,7 +7,10 @@ import {
   deleteDomain,
   getDomain,
   listDomains,
+  renewDomain,
+  syncDomainDNS,
   updateDomain,
+  verifyDomain,
   type CreateDomainInput,
   type UpdateDomainInput,
 } from "@/lib/api/domains";
@@ -47,5 +50,34 @@ export function useDeleteDomain() {
   return useMutation({
     mutationFn: (id: string) => deleteDomain(id),
     onSuccess: () => qc.invalidateQueries({ queryKey: domainsKey }),
+  });
+}
+
+function invalidateAfter(qc: ReturnType<typeof useQueryClient>, id: string) {
+  qc.invalidateQueries({ queryKey: domainsKey });
+  qc.invalidateQueries({ queryKey: domainKey(id) });
+}
+
+export function useVerifyDomain() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => verifyDomain(id),
+    onSuccess: (_data, id) => invalidateAfter(qc, id),
+  });
+}
+
+export function useRenewDomain() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, years }: { id: string; years: number }) => renewDomain(id, years),
+    onSuccess: (_data, { id }) => invalidateAfter(qc, id),
+  });
+}
+
+export function useSyncDomainDNS() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => syncDomainDNS(id),
+    onSuccess: (_data, id) => invalidateAfter(qc, id),
   });
 }

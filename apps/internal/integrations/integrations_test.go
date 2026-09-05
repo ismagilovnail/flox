@@ -195,6 +195,37 @@ func TestConnectRejectsUnknownProvider(t *testing.T) {
 	}
 }
 
+func TestCredentialsForTrustedCaller(t *testing.T) {
+	pool := mustPool(t)
+	ctx := context.Background()
+	orgID := seedOrg(t, ctx, pool)
+
+	svc := integrations.NewService(integrations.NewRepository(pool), testKey, &fakeAdPlatforms{})
+	svc.SetAdapter(integrations.ProviderCloudflare, &fakeVerifier{})
+
+	if _, found, err := svc.CredentialsFor(ctx, orgID, integrations.ProviderCloudflare); err != nil || found {
+		t.Fatalf("CredentialsFor before Connect: found=%v err=%v, want found=false", found, err)
+	}
+
+	if _, err := svc.Connect(ctx, orgID, integrations.ConnectInput{
+		Provider: integrations.ProviderCloudflare,
+		Fields:   map[string]string{"apiToken": "real-token-value"},
+	}); err != nil {
+		t.Fatalf("Connect: %v", err)
+	}
+
+	fields, found, err := svc.CredentialsFor(ctx, orgID, integrations.ProviderCloudflare)
+	if err != nil {
+		t.Fatalf("CredentialsFor: %v", err)
+	}
+	if !found {
+		t.Fatal("CredentialsFor after Connect returned found=false")
+	}
+	if fields["apiToken"] != "real-token-value" {
+		t.Fatalf("CredentialsFor fields = %+v, want the exact connected plaintext", fields)
+	}
+}
+
 func TestSummaryIncludesRealAdPlatformAggregate(t *testing.T) {
 	pool := mustPool(t)
 	ctx := context.Background()

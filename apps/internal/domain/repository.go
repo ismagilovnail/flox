@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
@@ -144,6 +145,59 @@ func (r *Repository) Update(ctx context.Context, orgID, id string, in UpdateInpu
 		if errors.As(err, &pgErr) && pgErr.Code == "23505" {
 			return Domain{}, apierror.Conflict("this domain is already parked")
 		}
+	}
+	return d, err
+}
+
+// AutomationResult is what a real Verify/Renew/SyncDNS call found or
+// changed — a separate, narrower shape from UpdateInput specifically
+// because UpdateInput's own doc comment says these fields must never be
+// reachable from a client PATCH; this is the one path that's allowed to
+// set them, and it's only ever called from Service.Verify/Renew/
+// SyncDNS after a real registrar/DNS API call actually confirmed the
+// value.
+type AutomationResult struct {
+	Status     *Status
+	SSL        *SSL
+	ExpiresAt  *time.Time
+	VerifiedAt *time.Time
+}
+
+// ApplyAutomationResult persists the outcome of a real registrar/DNS
+// check or action — see AutomationResult's own doc comment for why this
+// is separate from Update.
+func (r *Repository) ApplyAutomationResult(ctx context.Context, orgID, id string, res AutomationResult) (Domain, error) {
+	sets := []string{}
+	args := []any{}
+	arg := func(v any) string {
+		args = append(args, v)
+		return fmt.Sprintf("$%d", len(args))
+	}
+
+	if res.Status != nil {
+		sets = append(sets, "status = "+arg(*res.Status))
+	}
+	if res.SSL != nil {
+		sets = append(sets, "ssl = "+arg(*res.SSL))
+	}
+	if res.ExpiresAt != nil {
+		sets = append(sets, "expires_at = "+arg(*res.ExpiresAt))
+	}
+	if res.VerifiedAt != nil {
+		sets = append(sets, "verified_at = "+arg(*res.VerifiedAt))
+	}
+	if len(sets) == 0 {
+		return r.GetByID(ctx, orgID, id)
+	}
+
+	query := fmt.Sprintf(
+		`UPDATE domains SET %s WHERE id = %s AND organization_id = %s RETURNING %s`,
+		strings.Join(sets, ", "), arg(id), arg(orgID), selectColumns,
+	)
+	row := r.db.QueryRow(ctx, query, args...)
+	d, err := scanDomain(row)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return Domain{}, apierror.NotFound("domain not found")
 	}
 	return d, err
 }

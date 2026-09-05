@@ -51,6 +51,17 @@ type Config struct {
 	// or compromising one key should never force rotating the other.
 	IntegrationEncryptionKey string
 
+	// TrackerDNSTarget is the real, publicly-reachable hostname or IP this
+	// deployment's apps/tracker is served from — used only by apps/
+	// internal/domain's DNS-record automation (§30) when creating/
+	// updating a domain's DNS record to point at FLOX. Deliberately no
+	// default: this environment has nothing publicly deployed, so a
+	// plausible-looking fake value would silently point a real customer's
+	// domain at nothing. domain.Service.SyncDNS returns a clear
+	// validation error if this is empty rather than proceeding with a
+	// fabricated target.
+	TrackerDNSTarget string
+
 	// AdAccountEncryptionKey is the same shape again (32 raw bytes,
 	// base64-encoded, AES-256-GCM) but its own deliberately separate
 	// key — used by apps/internal/adaccount to encrypt Google Ads'
@@ -147,6 +158,7 @@ func load(portVar, portDefault, defaultServiceName string) (Config, error) {
 		TOTPEncryptionKey:        getEnv("TOTP_ENCRYPTION_KEY", ""),
 		IntegrationEncryptionKey: getEnv("INTEGRATION_ENCRYPTION_KEY", ""),
 		AdAccountEncryptionKey:   getEnv("ADACCOUNT_ENCRYPTION_KEY", ""),
+		TrackerDNSTarget:         getEnv("TRACKER_DNS_TARGET", ""),
 
 		GeoIPCityDBPath: getEnv("GEOIP_CITY_DB_PATH", ""),
 		GeoIPASNDBPath:  getEnv("GEOIP_ASN_DB_PATH", ""),

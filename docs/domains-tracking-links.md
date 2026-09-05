@@ -71,8 +71,11 @@ the smaller fix — see this entry's own "Fixed" section below):
 - The Domains page itself stays English-only (pre-existing, unrelated to
   this fix — matches `docs/frontend-i18n.md`'s already-documented
   migration backlog).
-- No real DNS/SSL/registrar automation, as above — status fields are
-  operator-declared, not verified.
+- ~~No real DNS/SSL/registrar automation~~ — real for Namecheap
+  (registrar) and Cloudflare (DNS), added later; see this doc's own
+  "Registrar/DNS automation" section below. GoDaddy/Route53/
+  cloudflare_registrar/unmanaged still have no adapter and stay
+  operator-declared, unverified fields.
 
 ## Verified
 
@@ -88,3 +91,101 @@ containerized tracker that it correctly 302-redirects to the campaign's
 configured offer destination — the full, real click path, not just a
 mocked-looking success screen. `tsc --noEmit`/`eslint` clean on
 `apps/web`.
+
+## Registrar/DNS automation (§30) — a later, separately-scoped phase
+
+Picked off this doc's own "known gaps" list, after Settings >
+Integrations (`docs/settings-integrations.md`) gave the org a real place
+to connect Namecheap/Cloudflare credentials. Scoped with the user to all
+three genuinely separable pieces at once: a read-only status sync, a
+real (billable) renewal action, and a real (DNS-mutating) record-sync
+action.
+
+**Verify** (`POST /domains/{id}/verify`) checks whichever of
+registrar=namecheap / dnsProvider=cloudflare a domain actually names,
+against the org's own connected Settings > Integrations credential
+(read through a new `domain.CredentialSource` interface —
+`integrations.Service.CredentialsFor`, a trusted, Go-only method never
+exposed over HTTP). Namecheap's real `domains.getInfo` command gives the
+real expiry date; Cloudflare's real zone status + `/ssl/verification`
+endpoint gives real activation/certificate state. The two checks are
+genuinely independent — a domain can have one provider connected and the
+other not, and Verify runs whichever half it can rather than failing the
+whole call over the other half not being set up yet.
+
+**A real bug this independence itself caught, not by inspection:** the
+first implementation checked Namecheap, then Cloudflare, returning
+immediately on the FIRST applicable-but-disconnected provider — so a
+domain with registrar=namecheap (disconnected) and dnsProvider=cloudflare
+(connected) never even attempted the real Cloudflare call. Found via
+live curl verification (a domain in that exact shape returned a
+Namecheap "connect first" error instead of running the real, connected
+Cloudflare check), not caught by the original test suite, which only
+ever exercised "both connected" and "neither connected." Fixed by
+tracking "not connected" as a soft skip per provider rather than an
+immediate return, only surfaced as the final error if literally nothing
+ran; a regression test
+(`TestVerifyRunsWhicheverHalfIsConnected`) covers the exact shape that
+broke.
+
+**Renew** (`POST /domains/{id}/renew`, registrar=namecheap only) calls
+the real `namecheap.domains.renew` command — a genuine, billable action
+against the org's connected account, gated behind `settings.write`
+(Owner/Admin) and a frontend confirm dialog that says outright it will
+charge the account and cannot be undone. A failed call (bad credentials,
+insufficient balance, etc.) leaves the domain's stored `expiresAt`
+untouched — nothing is recorded as renewed unless Namecheap actually
+confirmed it.
+
+**Sync DNS record** (`POST /domains/{id}/sync-dns`, dnsProvider=cloudflare
+only) creates or updates a real, proxied CNAME record at Cloudflare
+pointing the domain at `TRACKER_DNS_TARGET` — a new config value
+(deliberately no default; refuses with a clear error while unset rather
+than pointing a real customer's domain at a fabricated address). Also
+gated behind `settings.write` and its own confirm dialog, which warns
+that any existing traffic on the domain will move to FLOX. `EnsureRecord`
+is a real upsert: it reads the existing record first and no-ops if it
+already points at the right target, so repeat syncs don't generate
+needless Cloudflare API writes.
+
+Both `apps/internal/domain/namecheap` and `apps/internal/domain/
+cloudflare` are new subpackages, structurally verified only (this
+project has no live Namecheap/Cloudflare account) — the same "real HTTP
+client, fake `httptest.Server` in tests" pattern `adaccount`'s own
+adapters already established. Cloudflare's zone lookup derives the real
+apex domain from a tracking subdomain via a naive last-two-labels
+heuristic, documented as not handling multi-part public suffixes (e.g.
+`.co.uk`) correctly — accepted for now since nothing here runs against a
+real zone.
+
+Verified: `go build/vet/test -count=1 ./...` clean, including new
+`domain` package tests (both providers connected, only one connected —
+the regression case above, neither connected, an unsupported-provider
+domain like GoDaddy+Route53, Renew's registrar/years validation and its
+"a failed renewal changes nothing" guarantee, SyncDNS's "refuses without
+a configured target" guarantee) and two new adapter-level test suites
+(Namecheap's real XML success/error shapes for both `getInfo` and
+`renew`; Cloudflare's real JSON shapes for zone lookup, SSL verification,
+and DNS record create/update/no-op). `tsc`/`eslint`/`vitest` clean.
+
+Real, live, end-to-end verification against the actual running dev API —
+including the regression above, found this way, not invented as a
+hypothetical. With no integration connected, `verify`/`renew`/`sync-dns`
+all returned clean, correctly-worded validation errors. To exercise the
+connected path without a real Namecheap/Cloudflare account, a test
+`org_integrations` row was inserted directly (AES-256-GCM encrypted with
+the real dev `INTEGRATION_ENCRYPTION_KEY`, the same cipher
+`apps/internal/integrations` itself produces) — confirmed `GET
+/integrations` correctly reported it as connected, then `sync-dns` made
+a **real live HTTP call to `api.cloudflare.com`** and got back
+Cloudflare's own real `"Invalid access token"` error. After the fix
+above, re-running the exact partial-connection shape (Namecheap
+disconnected, Cloudflare connected) correctly ran the real Cloudflare
+call instead of stopping on the Namecheap half. Real browser pass
+(Claude-in-Chrome): created a real domain with registrar=Namecheap/
+dnsProvider=Cloudflare, confirmed the real "Registrar & DNS automation"
+card renders with live status/SSL/expiry/last-verified fields, clicked
+Verify (a real 422 network call, confirmed via the network log) with no
+console errors, opened both the Renew and Sync DNS confirm dialogs and
+confirmed their real warning copy, and confirmed Sync DNS's real
+network call. Test domain and org_integrations row deleted afterward.

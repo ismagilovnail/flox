@@ -6,6 +6,7 @@ import { LoadingState } from "@/components/ui/loading-state";
 import { ErrorState } from "@/components/ui/error-state";
 import { useDomain, useUpdateDomain } from "@/hooks/use-domains";
 import { DomainForm, type DomainFormValues } from "@/features/domains/domain-form";
+import { DomainAutomationCard } from "@/features/domains/domain-automation-card";
 
 export function DomainDetailView({ id }: { id: string }) {
   const domainQuery = useDomain(id);
@@ -34,11 +35,14 @@ export function DomainDetailView({ id }: { id: string }) {
   }
 
   return (
-    <DomainForm
-      title={`Edit ${domain.domain}`}
-      defaultValues={domain}
-      submitLabel="Save changes"
-      onSubmit={handleSubmit}
-    />
+    <div className="flex flex-col gap-4">
+      <DomainForm
+        title={`Edit ${domain.domain}`}
+        defaultValues={domain}
+        submitLabel="Save changes"
+        onSubmit={handleSubmit}
+      />
+      <DomainAutomationCard domain={domain} />
+    </div>
   );
 }

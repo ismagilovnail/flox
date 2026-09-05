@@ -8,18 +8,71 @@
 // of only a seed script (loadtestseed) or a test being able to.
 //
 // Registrar connection, DNS record management, and automatic SSL issuance
-// (§30's full "real module, not a text field" vision) are NOT implemented
-// here — no registrar/DNS-provider adapter exists anywhere in this repo
-// yet, unlike e.g. apps/internal/adaccount/facebookads's structurally-real-
-// but-uncredentialed pattern. Status/SSL are plain operator-set fields, the
-// same honest "you tell the system what's true" shape campaign.Status
-// already has, not a fake "Verify"/"Issue SSL" button pretending to check
-// anything. ExpiresAt/VerifiedAt stay server-computed (nil until a real
-// registrar/CA integration exists to set them) rather than accepting
-// client input for facts nothing here actually verifies.
+// (§30's full "real module, not a text field" vision) are real for the
+// two providers with a real credential to use: Namecheap (registrar) and
+// Cloudflare (DNS) — both connected at the org level via apps/internal/
+// integrations' Settings > Integrations credentials, decrypted here
+// through the CredentialSource interface (never a second copy of them).
+// GoDaddy/Route53/cloudflare_registrar/unmanaged have no adapter and stay
+// plain operator-declared, same as every registrar/provider did before
+// this phase. Status/SSL/ExpiresAt/VerifiedAt are still never accepted as
+// client input on Create/Update (see UpdateInput's own doc comment) — the
+// only way they change now is a real Verify/Renew/SyncDNS call actually
+// checking or acting on the real registrar/DNS provider, via
+// Repository.ApplyAutomationResult, a path Create/Update's own UpdateInput
+// deliberately can't reach.
 package domain
 
-import "time"
+import (
+	"context"
+	"time"
+
+	"github.com/ismagilovnail/flox/apps/internal/integrations"
+)
+
+// CredentialSource is the read side of apps/internal/integrations this
+// package depends on for real Namecheap/Cloudflare credentials — a
+// narrow interface (not the concrete *integrations.Service) so this
+// package's own tests can substitute a fake without needing a real
+// Postgres connection or encryption key for that half of Verify/Renew/
+// SyncDNS.
+type CredentialSource interface {
+	CredentialsFor(ctx context.Context, orgID string, provider integrations.Provider) (fields map[string]string, found bool, err error)
+}
+
+// RegistrarProvider is what a real registrar adapter (this package's own
+// namecheap subpackage) implements — one shape so Service.Verify/Renew
+// never needs to special-case a specific registrar beyond picking which
+// adapter to call.
+type RegistrarProvider interface {
+	// DomainInfo returns the domain's real current expiry date.
+	DomainInfo(ctx context.Context, creds map[string]string, domainName string) (RegistrarInfo, error)
+	// Renew is a real, billable action against the registrar account —
+	// callers must treat a nil error as money having actually been
+	// charged, not a dry run.
+	Renew(ctx context.Context, creds map[string]string, domainName string, years int) (RegistrarInfo, error)
+}
+
+type RegistrarInfo struct {
+	ExpiresAt time.Time
+}
+
+// DNSProviderAdapter is what a real DNS adapter (this package's own
+// cloudflare subpackage) implements.
+type DNSProviderAdapter interface {
+	// ZoneStatus reports whether the domain's DNS zone is active at this
+	// provider and whether a real TLS certificate is currently issued
+	// for it.
+	ZoneStatus(ctx context.Context, creds map[string]string, domainName string) (DNSZoneStatus, error)
+	// EnsureRecord creates or updates a CNAME record pointing domainName
+	// at target — a real, live-DNS-mutating action.
+	EnsureRecord(ctx context.Context, creds map[string]string, domainName, target string) error
+}
+
+type DNSZoneStatus struct {
+	Active    bool
+	SSLIssued bool
+}
 
 type Status string
 

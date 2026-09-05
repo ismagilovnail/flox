@@ -8,14 +8,14 @@ import { Caption } from "@/components/ui/typography";
 import type { Domain, DomainStatus, SslStatus } from "@/lib/api/domains";
 import { DomainRowActions } from "@/features/domains/domain-row-actions";
 
-const STATUS_VARIANT: Record<DomainStatus, "success" | "warning" | "danger" | "secondary"> = {
+export const STATUS_VARIANT: Record<DomainStatus, "success" | "warning" | "danger" | "secondary"> = {
   active: "success",
   pending: "warning",
   error: "danger",
   expired: "secondary",
 };
 
-const SSL_VARIANT: Record<SslStatus, "success" | "warning" | "danger" | "outline"> = {
+export const SSL_VARIANT: Record<SslStatus, "success" | "warning" | "danger" | "outline"> = {
   issued: "success",
   pending: "warning",
   error: "danger",
