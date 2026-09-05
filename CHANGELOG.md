@@ -5,6 +5,18 @@ per-phase, matching `CLAUDE.md`'s phase protocol. The one exception is
 [Between phases], below: spec amendments and the code changes that follow from
 them land between phases and would otherwise be invisible here.
 
+## [Between phases] — PWA live preview: the header eases down on install
+
+Last difference from the original the user spotted: the avatar and the
+app name themselves shift slightly down when the install starts, where
+this build kept the header pinned in place. The header row now
+transitions `pt-0` → `pt-3` (padding, not margin, so it can't collapse
+against the parent flex gap) over the same 500ms as the rest of the
+install transition.
+
+Verified live with a before/after pair framed on the identical region,
+the same way the user's own reference frames were.
+
 ## [Between phases] — PWA live preview: the install transition is animated
 
 The user posted two reference frames of the same region — before the

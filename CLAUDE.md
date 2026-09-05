@@ -168,15 +168,29 @@ STATUS        : done — user asked that pwa-preview-card.tsx's "Install"
                 those five — the user's own 479x935 reference screenshot
                 and one ambiguous 474x473 file were deliberately left
                 active and untouched.
-LAST COMMIT   : fix(pwa): install ring surrounds a circle-cropped icon,
-                matching the reference — 8cf0a3f (rounds 1-3; round 4's
-                animation work above is this phase's own work still
+                Round 5, same phase: user noted one last difference from
+                the original — the avatar and the app name themselves
+                shift slightly DOWN when the install starts, where this
+                build kept the whole header pinned in place. Added a
+                transitioned pt-0 -> pt-3 on the header row (padding, not
+                margin, so it can't collapse against the parent flex
+                gap), easing over the same 500ms as the rest. Verified
+                live with a before/after pair framed on the identical
+                region, the same way the user's own two reference frames
+                were: the icon and title visibly sit lower in the second
+                frame, the stats row follows them down, and the share row
+                still rises into the collapsed button's space. This
+                round's verification deliberately used the crop dialog's
+                "Skip crop" path so it uploaded nothing — confirmed via
+                SQL that zero new Content Gallery rows were created.
+LAST COMMIT   : fix(pwa): animate the install transition instead of
+                swapping instantly — 6085c43 (rounds 1-4; round 5's
+                header shift above is this phase's own work still
                 uncommitted, see below)
-UNCOMMITTED   : round 4's own changes — apps/web/src/features/pwa/
-                pwa-preview-card.tsx (transitioned icon inset/radius,
-                grid-rows button collapse, ring fade-in, the dropped
-                third line, the dark/semibold "Please wait…", the 6px
-                inset ratio) — not yet committed, waiting on the user.
+UNCOMMITTED   : round 5's own change — apps/web/src/features/pwa/
+                pwa-preview-card.tsx (the header row's transitioned
+                pt-0 -> pt-3 while installing) — not yet committed,
+                waiting on the user.
 NEXT          : confirm scope before starting. Real candidates: (a)
                 retrofitting facebook_ads/tiktok_ads' own access_token
                 to real encryption now that four real AES-256-GCM

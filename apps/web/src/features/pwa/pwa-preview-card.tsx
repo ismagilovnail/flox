@@ -563,7 +563,16 @@ export function PwaPreviewCard({
         </div>
 
         <div className="flex flex-col gap-4 px-5 py-5">
-          <div className="flex items-start gap-4">
+          {/* The whole header (icon + name) eases slightly downward while
+              installing, as the reference does — the block visibly settles
+              rather than staying pinned where it was. Padding, not margin,
+              so the transition can't collapse against the parent's gap. */}
+          <div
+            className={cn(
+              "flex items-start gap-4 transition-[padding-top] duration-500 ease-out",
+              installStatus === "installing" ? "pt-3" : "pt-0",
+            )}
+          >
             {!!iconUrl && (
               <div className="relative size-[72px] shrink-0">
                 {/* While installing, the icon is circle-cropped AND inset so
