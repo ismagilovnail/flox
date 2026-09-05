@@ -10,7 +10,7 @@ import { DataTable } from "@/components/ui/data-table";
 import { LoadingState } from "@/components/ui/loading-state";
 import { ErrorState } from "@/components/ui/error-state";
 import { useLandings } from "@/hooks/use-landings";
-import { useTagsStore } from "@/stores/tags";
+import { EMPTY_TAG_ASSIGNMENTS, useTagAssignments } from "@/hooks/use-tags";
 import { landingColumns } from "@/features/landings/landing-columns";
 import { TagFilterControl } from "@/features/tags/tag-filter-control";
 import { BulkTagDialog } from "@/features/tags/bulk-tag-dialog";
@@ -19,7 +19,7 @@ import { filterByTags } from "@/features/tags/filter-by-tags";
 export function LandingList() {
   const { t } = useTranslation(["landings", "common"]);
   const landingsQuery = useLandings();
-  const assignments = useTagsStore((s) => s.assignments);
+  const assignments = useTagAssignments("landing").data?.assignments ?? EMPTY_TAG_ASSIGNMENTS;
 
   const [tagFilter, setTagFilter] = React.useState<string[]>([]);
   const [bulkTarget, setBulkTarget] = React.useState<{ ids: string[]; clear: () => void } | null>(null);

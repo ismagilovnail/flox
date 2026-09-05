@@ -55,6 +55,7 @@ import (
 	"github.com/ismagilovnail/flox/apps/internal/routingstore"
 	"github.com/ismagilovnail/flox/apps/internal/storage"
 	"github.com/ismagilovnail/flox/apps/internal/streamset"
+	"github.com/ismagilovnail/flox/apps/internal/tags"
 	"github.com/ismagilovnail/flox/apps/internal/telemetry"
 	"github.com/ismagilovnail/flox/apps/internal/tenant"
 	"github.com/ismagilovnail/flox/apps/internal/trackinglink"
@@ -274,6 +275,12 @@ func run() error {
 	srv.Mux().Route("/content-gallery", func(r chi.Router) {
 		r.Use(tenantMiddleware)
 		contentGalleryHandler.Register(r)
+	})
+
+	tagsHandler := tags.NewHandler(tags.NewService(tags.NewRepository(db)), logger)
+	srv.Mux().Route("/tags", func(r chi.Router) {
+		r.Use(tenantMiddleware)
+		tagsHandler.Register(r)
 	})
 
 	postlandingHandler := postlanding.NewHandler(postlanding.NewService(postlanding.NewRepository(db)), logger)

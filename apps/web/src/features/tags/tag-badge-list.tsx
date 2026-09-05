@@ -3,7 +3,7 @@
 import * as React from "react";
 import { PlusIcon } from "lucide-react";
 
-import { tagColorHex, type TaggableEntityType } from "@/lib/mock/tags";
+import { tagColorHex, type TaggableEntityType } from "@/lib/tags";
 import { useEntityTags } from "@/features/tags/use-entity-tags";
 import { TagPickerPopover } from "@/features/tags/tag-picker-popover";
 

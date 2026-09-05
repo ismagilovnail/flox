@@ -6,8 +6,8 @@ import { CheckIcon, ChevronDownIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
-import { tagColorHex } from "@/lib/mock/tags";
-import { useTagsStore } from "@/stores/tags";
+import { tagColorHex } from "@/lib/tags";
+import { EMPTY_TAGS, useTags } from "@/hooks/use-tags";
 
 /** The one tag-filter implementation, reused across every taggable list
  * (§30.6). OR semantics — filtering itself happens in filter-by-tags.ts,
@@ -19,7 +19,7 @@ export function TagFilterControl({
   selected: string[];
   onChange: (tagIds: string[]) => void;
 }) {
-  const tags = useTagsStore((s) => s.tags);
+  const tags = useTags().data?.tags ?? EMPTY_TAGS;
   const [open, setOpen] = React.useState(false);
 
   function toggle(tagId: string) {

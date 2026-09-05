@@ -1,5 +1,4 @@
-import type { TagAssignment } from "@/lib/mock/tag-assignments";
-import type { TaggableEntityType } from "@/lib/mock/tags";
+import type { TagAssignment, TaggableEntityType } from "@/lib/tags";
 
 /** §30.6: multi-tag filter uses OR semantics — item shown if it has AT LEAST
  * ONE selected tag. Empty selection means no filtering. The one filter

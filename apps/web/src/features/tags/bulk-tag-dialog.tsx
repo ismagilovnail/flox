@@ -14,8 +14,15 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
-import { randomTagColor, tagColorHex, type TaggableEntityType } from "@/lib/mock/tags";
-import { useTagsStore } from "@/stores/tags";
+import { randomTagColor, tagColorHex, type TaggableEntityType } from "@/lib/tags";
+import {
+  EMPTY_TAG_ASSIGNMENTS,
+  EMPTY_TAGS,
+  useBulkEditTags,
+  useCreateTag,
+  useTagAssignments,
+  useTags,
+} from "@/hooks/use-tags";
 
 /** §30.6 bulk semantics: pre-check only tags present on EVERY selected entity
  * (the intersection). Newly checked tags get added to every selected entity;
@@ -35,25 +42,26 @@ export function BulkTagDialog({
   onOpenChange: (open: boolean) => void;
   onApplied: () => void;
 }) {
-  const tags = useTagsStore((s) => s.tags);
-  const assignments = useTagsStore((s) => s.assignments);
-  const bulkEditTags = useTagsStore((s) => s.bulkEditTags);
-  const createTag = useTagsStore((s) => s.createTag);
+  const tags = useTags().data?.tags ?? EMPTY_TAGS;
+  const assignments = useTagAssignments(entityType).data?.assignments ?? EMPTY_TAG_ASSIGNMENTS;
+  const bulkEditMutation = useBulkEditTags();
+  const createTagMutation = useCreateTag();
 
   const [query, setQuery] = React.useState("");
 
   // The parent only renders this component while the dialog is open (conditional
   // `{bulkTarget && <BulkTagDialog .../>}`), so it fully unmounts on close and
   // remounts fresh on reopen — a lazy initializer is enough to seed `checked`
-  // once per open, no effect/resync needed.
+  // once per open, no effect/resync needed. `assignments` is already warm by
+  // then: the same list page's own TagBadgeList cells render first and mount
+  // the identical useTagAssignments(entityType) query.
   const commonTagIds = React.useMemo(() => {
     if (entityIds.length === 0) return new Set<string>();
     const perEntity = entityIds.map(
-      (id) =>
-        new Set(assignments.filter((a) => a.entityType === entityType && a.entityId === id).map((a) => a.tagId)),
+      (id) => new Set(assignments.filter((a) => a.entityId === id).map((a) => a.tagId)),
     );
     return perEntity.reduce((acc, set) => new Set([...acc].filter((id) => set.has(id))));
-  }, [assignments, entityType, entityIds]);
+  }, [assignments, entityIds]);
 
   const [checked, setChecked] = React.useState<Set<string>>(() => new Set(commonTagIds));
 
@@ -70,17 +78,17 @@ export function BulkTagDialog({
   const filtered = tags.filter((t) => t.name.toLowerCase().includes(trimmed.toLowerCase()));
   const exactMatch = tags.some((t) => t.name.toLowerCase() === trimmed.toLowerCase());
 
-  function quickCreate() {
+  async function quickCreate() {
     if (!trimmed) return;
-    const id = createTag(trimmed, randomTagColor());
-    setChecked((prev) => new Set(prev).add(id));
+    const created = await createTagMutation.mutateAsync({ name: trimmed, color: randomTagColor() });
+    setChecked((prev) => new Set(prev).add(created.id));
     setQuery("");
   }
 
   function apply() {
     const toAdd = [...checked].filter((id) => !commonTagIds.has(id));
     const toRemove = [...commonTagIds].filter((id) => !checked.has(id));
-    bulkEditTags(entityType, entityIds, toAdd, toRemove);
+    bulkEditMutation.mutate({ entityType, entityIds, toAdd, toRemove });
     onApplied();
     onOpenChange(false);
   }

@@ -11,7 +11,7 @@ import { LoadingState } from "@/components/ui/loading-state";
 import { ErrorState } from "@/components/ui/error-state";
 import { useCampaigns } from "@/hooks/use-campaigns";
 import { useTrafficSources } from "@/hooks/use-traffic-sources";
-import { useTagsStore } from "@/stores/tags";
+import { EMPTY_TAG_ASSIGNMENTS, useTagAssignments } from "@/hooks/use-tags";
 import { campaignColumns } from "@/features/campaigns/campaign-columns";
 import { TagFilterControl } from "@/features/tags/tag-filter-control";
 import { BulkTagDialog } from "@/features/tags/bulk-tag-dialog";
@@ -21,7 +21,7 @@ export function CampaignList() {
   const { t } = useTranslation(["campaigns", "common"]);
   const campaignsQuery = useCampaigns();
   const sourcesQuery = useTrafficSources();
-  const assignments = useTagsStore((s) => s.assignments);
+  const assignments = useTagAssignments("campaign").data?.assignments ?? EMPTY_TAG_ASSIGNMENTS;
 
   const [tagFilter, setTagFilter] = React.useState<string[]>([]);
   const [bulkTarget, setBulkTarget] = React.useState<{ ids: string[]; clear: () => void } | null>(null);

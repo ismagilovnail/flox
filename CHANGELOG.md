@@ -5,6 +5,107 @@ per-phase, matching `CLAUDE.md`'s phase protocol. The one exception is
 [Between phases], below: spec amendments and the code changes that follow from
 them land between phases and would otherwise be invisible here.
 
+## [Between phases] — Tags (§30.6): real cross-entity backend
+
+Continuing down Phase 34's own audit list of frontend-mock features
+with no real backend (Domains was resolved in its own earlier phase,
+Content Gallery just finished this session — Settings, Tags, Custom
+Metrics, Report Presets, and Referral remained). User picked Tags to
+go first.
+
+Confirmed via grep before starting: no `tags`/`taggables` table, no
+`apps/internal/tags` package — the color-label system spanning
+Campaigns, CPA Networks, Offers, Flows, Traffic Sources, PWA apps, and
+Landing Pages (§30.6) ran entirely against a zustand mock store
+(`stores/tags.ts`) seeded from `lib/mock/{tags,tag-assignments}.ts`,
+already wired into all seven taggable entity lists.
+
+**Backend.** Migration 00028 adds `tags` (id/org/name/color) +
+`taggables` (id/org/tag_id ON DELETE CASCADE/entity_type CHECK/
+entity_id, unique per tag+entity) — the generic-table-plus-polymorphic-
+join shape the spec itself names. `entity_id` is deliberately not a
+foreign key (it's polymorphic across seven different tables) —
+referential integrity is enforced in the service layer instead, the
+same pattern the Domains/Tracking-Links phase already established for
+`domain_id`/`campaign_id`. New `apps/internal/tags` (model/repository/
+service/handler): tag CRUD; `GET /tags/assignments?entityType=X`
+(hydrates a whole list page's badge/filter state in one call, the same
+shape the old mock store held in memory); `POST /tags/assignments/set`
+(replace one entity's full tag set — named `/set` rather than a `PUT`,
+since the shared frontend API client's method union doesn't include
+`PUT`); `POST /tags/assignments/bulk` (§30.6's exact bulk semantics —
+`toAdd` applied to every entity, no-op where already present; `toRemove`
+removed from every entity, no-op where absent; untouched tags left
+exactly as they were per entity, not globally).
+
+Two ownership checks the service layer now enforces that the mock
+never could: the `entity_id` must belong to a real, same-org row of
+that entity type (checked via a small internal entity-type → table-name
+map plus an `EXISTS` query — the interpolated table name is always an
+internal constant, never user input, so there's no injection risk); and
+every referenced `tag_id` must be a real tag owned by the caller's own
+org — without this, nothing would stop a request naming another org's
+tag_id. No data would actually leak (a foreign tag_id never resolves
+against the caller's own tag list), but that org's later deletion of
+its own tag would cascade-delete this org's assignment row too, a real
+cross-org side effect caught by reasoning through the schema rather
+than by observing it happen.
+
+**Frontend.** New `lib/tags.ts` holds the real domain vocabulary
+(`TaggableEntityType`, `TAG_COLORS`, `Tag`, `TagAssignment`,
+`tagColorHex`, `randomTagColor`) moved out of `lib/mock/tags.ts` — it's
+permanent vocabulary, not disposable mock data, so it no longer belongs
+under `mock/`. New `lib/api/tags.ts` + `hooks/use-tags.ts` (TanStack
+Query: `useTags`/`useTagAssignments`/`useCreateTag`/`useUpdateTag`/
+`useDeleteTag`/`useSetEntityTags`/`useBulkEditTags`) replace
+`stores/tags.ts` (deleted outright), along with `lib/mock/tags.ts`'s
+fake `TAGS` array and `lib/mock/tag-assignments.ts` (deleted — seed
+data, not vocabulary). All six `features/tags/*` components were
+refactored to consume the new hooks instead of the store, keeping
+identical external props/behavior, so the seven integration points
+across the app needed only an import-path-plus-one-line-hook swap each,
+not a rewrite.
+
+Also added two stable exported empty-array constants
+(`EMPTY_TAGS`/`EMPTY_TAG_ASSIGNMENTS` in `hooks/use-tags.ts`) replacing
+every `?? []` fallback on a query result — a fresh `[]` literal there
+gets a new identity on every render while the query is still loading,
+which silently breaks any `useMemo` built from it (exactly the
+snapshot-stability trap `use-entity-tags.ts`'s own pre-existing doc
+comment already warned about from its zustand days). Caught by eslint's
+`exhaustive-deps` warning across seven files, not by inspection.
+
+Verified: `go build/vet/test -count=1 ./...` clean repo-wide, including
+8 new integration tests against real Postgres (tag CRUD, cross-org
+isolation on update/delete, `SetEntityTags` rejects a nonexistent
+entity and rejects another org's `tag_id`, correctly replaces the full
+tag set on repeated calls, `BulkEdit`'s exact §30.6 semantics verified
+across two entities in one call, tag deletion cascades every
+assignment). `tsc`/`eslint` (zero warnings, not just zero errors)/
+`vitest` clean.
+
+Real browser pass against the actual reporting user's own live account,
+using the network-request log and direct authenticated fetches as
+ground truth rather than screenshots alone: quick-created a real tag
+from the PWA list's picker (one early attempt looked like a silent
+failure — root-caused via the network log to a stale/mismatched entry
+in the browser tool's own log, not a real server error; the actual
+server access log showed every request succeeding), assigned it to a
+PWA and confirmed the real badge rendered; used the tag filter to
+narrow a list to exactly the tagged row; bulk-assigned the same tag
+across three PWAs via multi-select and confirmed all three real
+`taggables` rows via a direct `GET`; navigated to Campaigns and
+confirmed the identical tag (same `tag_id`) was pickable there too,
+assigned it to a real campaign, and confirmed the cross-entity
+assignment persisted correctly scoped by `entity_type`; renamed and
+recolored the tag via a direct `PATCH` and confirmed the change
+propagated on both list pages; deleted the tag via the UI and confirmed
+via `GET` that every assignment row across both entity types was
+cascade-removed, with every list page's badge reverting cleanly to "Add
+tags." Stray tags created by earlier misclicks during testing were
+deleted via the UI itself before the final check — no test artifacts
+left behind, no console errors on any page touched.
+
 ## [Between phases] — PWA form: status dropdown replaced by card-header buttons
 
 User asked to remove the "Статус" dropdown from the PWA form and move

@@ -8,8 +8,8 @@ import { IconButton } from "@/components/ui/icon-button";
 import { Input } from "@/components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
-import { TAG_COLORS, randomTagColor, tagColorHex, type Tag, type TagColorId, type TaggableEntityType } from "@/lib/mock/tags";
-import { useTagsStore } from "@/stores/tags";
+import { TAG_COLORS, randomTagColor, tagColorHex, type Tag, type TagColorId, type TaggableEntityType } from "@/lib/tags";
+import { EMPTY_TAGS, useCreateTag, useDeleteTag, useSetEntityTags, useTags, useUpdateTag } from "@/hooks/use-tags";
 import { useEntityTags } from "@/features/tags/use-entity-tags";
 
 function TagEditRow({
@@ -81,11 +81,11 @@ export function TagPickerPopover({
   const [query, setQuery] = React.useState("");
   const [editingId, setEditingId] = React.useState<string | null>(null);
 
-  const allTags = useTagsStore((s) => s.tags);
-  const setEntityTags = useTagsStore((s) => s.setEntityTags);
-  const createTag = useTagsStore((s) => s.createTag);
-  const updateTag = useTagsStore((s) => s.updateTag);
-  const deleteTag = useTagsStore((s) => s.deleteTag);
+  const allTags = useTags().data?.tags ?? EMPTY_TAGS;
+  const setEntityTagsMutation = useSetEntityTags();
+  const createTagMutation = useCreateTag();
+  const updateTagMutation = useUpdateTag();
+  const deleteTagMutation = useDeleteTag();
 
   const assignedTags = useEntityTags(entityType, entityId);
   const assignedIds = React.useMemo(() => new Set(assignedTags.map((t) => t.id)), [assignedTags]);
@@ -98,13 +98,13 @@ export function TagPickerPopover({
     const next = assignedIds.has(tagId)
       ? assignedTags.filter((t) => t.id !== tagId).map((t) => t.id)
       : [...assignedTags.map((t) => t.id), tagId];
-    setEntityTags(entityType, entityId, next);
+    setEntityTagsMutation.mutate({ entityType, entityId, tagIds: next });
   }
 
-  function quickCreate() {
+  async function quickCreate() {
     if (!trimmed) return;
-    const id = createTag(trimmed, randomTagColor());
-    setEntityTags(entityType, entityId, [...assignedTags.map((t) => t.id), id]);
+    const created = await createTagMutation.mutateAsync({ name: trimmed, color: randomTagColor() });
+    setEntityTagsMutation.mutate({ entityType, entityId, tagIds: [...assignedTags.map((t) => t.id), created.id] });
     setQuery("");
   }
 
@@ -134,11 +134,11 @@ export function TagPickerPopover({
                 key={tag.id}
                 tag={tag}
                 onSave={(input) => {
-                  updateTag(tag.id, input);
+                  updateTagMutation.mutate({ id: tag.id, ...input });
                   setEditingId(null);
                 }}
                 onDelete={() => {
-                  deleteTag(tag.id);
+                  deleteTagMutation.mutate(tag.id);
                   setEditingId(null);
                 }}
                 onCancel={() => setEditingId(null)}

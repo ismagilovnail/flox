@@ -2,21 +2,23 @@
 
 import * as React from "react";
 
-import { useTagsStore } from "@/stores/tags";
-import type { Tag, TaggableEntityType } from "@/lib/mock/tags";
+import { EMPTY_TAGS, EMPTY_TAG_ASSIGNMENTS, useTagAssignments, useTags } from "@/hooks/use-tags";
+import type { Tag, TaggableEntityType } from "@/lib/tags";
 
-/** Selects the raw, stable `tags`/`assignments` arrays and filters in a
- * `useMemo` — never call a store method that itself returns a freshly
- * `.filter()`'d array as the selector; that breaks useSyncExternalStore's
- * snapshot-stability check and infinite-loops the render (see Phase 13). */
+/** Derives the tags on one entity from the two org-wide queries
+ * (`useTags`, `useTagAssignments`) via a `useMemo` — never derive from a
+ * query result that itself returns a freshly `.filter()`'d array as a
+ * selector; that's the same snapshot-stability trap the old zustand
+ * version of this hook was written to avoid (see Phase 13). The
+ * `EMPTY_TAGS`/`EMPTY_TAG_ASSIGNMENTS` fallbacks below are referentially
+ * stable across renders — a plain `?? []` here would reintroduce that
+ * exact trap while either query is still loading. */
 export function useEntityTags(entityType: TaggableEntityType, entityId: string): Tag[] {
-  const tags = useTagsStore((s) => s.tags);
-  const assignments = useTagsStore((s) => s.assignments);
+  const tags = useTags().data?.tags ?? EMPTY_TAGS;
+  const assignments = useTagAssignments(entityType).data?.assignments ?? EMPTY_TAG_ASSIGNMENTS;
 
   return React.useMemo(() => {
-    const tagIds = new Set(
-      assignments.filter((a) => a.entityType === entityType && a.entityId === entityId).map((a) => a.tagId),
-    );
+    const tagIds = new Set(assignments.filter((a) => a.entityId === entityId).map((a) => a.tagId));
     return tags.filter((t) => tagIds.has(t.id));
-  }, [tags, assignments, entityType, entityId]);
+  }, [tags, assignments, entityId]);
 }

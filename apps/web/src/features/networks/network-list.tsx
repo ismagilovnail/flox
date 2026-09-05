@@ -21,7 +21,7 @@ import {
 import { IconButton } from "@/components/ui/icon-button";
 import { Mono } from "@/components/ui/typography";
 import { useNetworks } from "@/hooks/use-networks";
-import { useTagsStore } from "@/stores/tags";
+import { EMPTY_TAG_ASSIGNMENTS, useTagAssignments } from "@/hooks/use-tags";
 import { networkColumns } from "@/features/networks/network-columns";
 import { TagFilterControl } from "@/features/tags/tag-filter-control";
 import { BulkTagDialog } from "@/features/tags/bulk-tag-dialog";
@@ -30,7 +30,7 @@ import { filterByTags } from "@/features/tags/filter-by-tags";
 export function NetworkList() {
   const { t } = useTranslation(["networks", "common"]);
   const networksQuery = useNetworks();
-  const assignments = useTagsStore((s) => s.assignments);
+  const assignments = useTagAssignments("network").data?.assignments ?? EMPTY_TAG_ASSIGNMENTS;
 
   const [tagFilter, setTagFilter] = React.useState<string[]>([]);
   const [bulkTarget, setBulkTarget] = React.useState<{ ids: string[]; clear: () => void } | null>(null);
