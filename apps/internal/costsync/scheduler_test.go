@@ -46,7 +46,7 @@ func TestSchedulerRunOnceSyncsEveryConnection(t *testing.T) {
 	sourceB := seedTrafficSource(t, ctx, pool, orgB, "tiktok_ads")
 	campaignB := seedCampaign(t, ctx, pool, orgB, sourceB, "tt_camp_b")
 
-	adAccountRepo := adaccount.NewRepository(pool)
+	adAccountRepo := adaccount.NewRepository(pool, testKey)
 	if _, err := adaccount.NewService(adAccountRepo).Connect(ctx, orgA, sourceA, adaccount.ConnectInput{
 		AdAccountID: "act_a", AccessToken: "token-a-1234567890",
 	}); err != nil {
@@ -114,7 +114,7 @@ func TestSchedulerRunOnceContinuesPastAFailingConnection(t *testing.T) {
 	sourceGood := seedTrafficSource(t, ctx, pool, orgGood, "facebook_ads")
 	campaignGood := seedCampaign(t, ctx, pool, orgGood, sourceGood, "fb_camp_good")
 
-	adAccountRepo := adaccount.NewRepository(pool)
+	adAccountRepo := adaccount.NewRepository(pool, testKey)
 	if _, err := adaccount.NewService(adAccountRepo).Connect(ctx, orgGood, sourceGood, adaccount.ConnectInput{
 		AdAccountID: "act_good", AccessToken: "token-good-1234567890",
 	}); err != nil {
@@ -159,7 +159,7 @@ func TestSchedulerRunOnceContinuesPastAFailingConnection(t *testing.T) {
 
 func TestSchedulerRunLoopStopsOnContextCancel(t *testing.T) {
 	lister := &fakeConnectionLister{}
-	svc := costsync.NewService(adaccount.NewRepository(nil), campaign.NewRepository(nil), cost.NewService(cost.NewRepository(nil), nil), costsync.Providers{})
+	svc := costsync.NewService(adaccount.NewRepository(nil, testKey), campaign.NewRepository(nil), cost.NewService(cost.NewRepository(nil), nil), costsync.Providers{})
 	scheduler := costsync.NewScheduler(svc, lister, discardLogger())
 
 	ctx, cancel := context.WithCancel(context.Background())

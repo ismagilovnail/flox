@@ -19,6 +19,7 @@ import (
 var sourceByCostIntegration = map[string]cost.Source{
 	"facebook_ads": cost.SourceFacebookAds,
 	"tiktok_ads":   cost.SourceTikTokAds,
+	"google_ads":   cost.SourceGoogleAds,
 }
 
 func (p Providers) forCostIntegration(costIntegration string) (adaccount.CostProvider, bool) {
@@ -27,6 +28,8 @@ func (p Providers) forCostIntegration(costIntegration string) (adaccount.CostPro
 		return p.FacebookAds, p.FacebookAds != nil
 	case "tiktok_ads":
 		return p.TikTokAds, p.TikTokAds != nil
+	case "google_ads":
+		return p.GoogleAds, p.GoogleAds != nil
 	default:
 		return nil, false
 	}

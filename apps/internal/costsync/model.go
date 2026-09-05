@@ -18,6 +18,7 @@ import "github.com/ismagilovnail/flox/apps/internal/adaccount"
 type Providers struct {
 	FacebookAds adaccount.CostProvider
 	TikTokAds   adaccount.CostProvider
+	GoogleAds   adaccount.CostProvider
 }
 
 // Result summarizes one sync run for the "Sync now" response — a count,

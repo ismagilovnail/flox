@@ -1,21 +1,26 @@
 // Package adaccount implements ad-network account connections (§74/
 // §27-COST): credential storage (Phase A) plus the CostProvider
-// interface + real Facebook Ads/TikTok Ads adapters (Phase B) that pull
-// spend through those credentials. handler → service → repository, one
-// connection per traffic source (matching trafficsource.CostIntegration's
-// own singular design).
+// interface + real Facebook Ads/TikTok Ads/Google Ads adapters (Phase
+// B/C) that pull spend through those credentials. handler → service →
+// repository, one connection per traffic source (matching
+// trafficsource.CostIntegration's own singular design).
 //
-// Connecting an account is a manual "paste your access token + ad
-// account id" form, not an OAuth consent flow: a real OAuth flow needs a
-// registered app with a public callback URL, and neither exists in this
-// environment (confirmed via AskUserQuestion before Phase A started).
-// The adapters in this package's facebookads/tiktokads subpackages are
-// real HTTP clients against each platform's actual API shape, but this
-// project has no live Meta/TikTok app credentials to exercise them
-// against — they're verified structurally, against a fake HTTP
-// transport in tests, never against the real Graph/Marketing API
-// (confirmed via AskUserQuestion before Phase B started). See
-// docs/ad-account-connections.md.
+// Connecting an account is a manual "paste your credentials" form, not
+// an OAuth consent flow: a real OAuth flow needs a registered app with a
+// public callback URL, and none exists in this environment (confirmed
+// via AskUserQuestion before Phase A started, and again before Google
+// Ads was added). Facebook/TikTok Ads need only a long-lived access
+// token; Google Ads' own API has no equivalent (its access tokens expire
+// in ~1 hour) — an operator instead pastes a refresh token minted once
+// via Google's own OAuth playground, alongside the developer token and
+// OAuth client id/secret their own Google Ads/Cloud accounts already
+// have. The adapters in this package's facebookads/tiktokads/googleads
+// subpackages are real HTTP clients against each platform's actual API
+// shape, but this project has no live Meta/TikTok/Google app credentials
+// to exercise them against — they're verified structurally, against a
+// fake HTTP transport in tests, never against the real Graph/Marketing/
+// Ads API (confirmed via AskUserQuestion before Phase B started, same
+// for Google Ads). See docs/ad-account-connections.md.
 package adaccount
 
 import (
@@ -42,22 +47,35 @@ type Connection struct {
 }
 
 // ConnectInput both creates a new connection and replaces an existing
-// one (re-connecting overwrites the stored token/account id in place) —
-// same upsert-by-natural-key precedent as cost.UpsertInput.
+// one (re-connecting overwrites the stored credentials in place) — same
+// upsert-by-natural-key precedent as cost.UpsertInput. AdAccountID is
+// the ad platform's own account id (a Facebook/TikTok ad account id, or
+// a Google Ads customer id); AccessToken is facebook_ads/tiktok_ads
+// only; DeveloperToken/ClientID/ClientSecret/RefreshToken are google_ads
+// only — Service.Connect validates the right subset is present for
+// whichever cost_integration the traffic source actually has.
 type ConnectInput struct {
-	AdAccountID string
-	AccessToken string
+	AdAccountID    string
+	AccessToken    string
+	DeveloperToken string
+	ClientID       string
+	ClientSecret   string
+	RefreshToken   string
 }
 
 // Credentials is the subset of a Connection an actual API call to an ad
 // platform needs — deliberately a separate type from Connection, not a
-// reuse of it: Connection is the API-response shape (AccessToken
+// reuse of it: Connection is the API-response shape (every secret field
 // permanently absent, see above); Credentials is only ever constructed
 // internally, from a repository read a future sync job calls directly,
 // never serialized to JSON.
 type Credentials struct {
-	AdAccountID string
-	AccessToken string
+	AdAccountID    string
+	AccessToken    string
+	DeveloperToken string
+	ClientID       string
+	ClientSecret   string
+	RefreshToken   string
 }
 
 // CostProvider is the §74 extensibility interface the real Facebook Ads/

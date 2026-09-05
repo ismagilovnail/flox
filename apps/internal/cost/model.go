@@ -14,21 +14,23 @@ package cost
 import "time"
 
 // Source identifies where an Entry's amount came from — cost_entries'
-// own CHECK constraint (migration 00009) has always allowed
-// facebook_ads/tiktok_ads alongside manual, but nothing in this package
-// wrote or read anything but "manual" until the ad-spend sync (§74,
-// Phase B) started calling Service.UpsertFromSync.
+// own CHECK constraint (migration 00009, widened by 00034 for
+// google_ads) has always allowed facebook_ads/tiktok_ads alongside
+// manual, but nothing in this package wrote or read anything but
+// "manual" until the ad-spend sync (§74, Phase B/C) started calling
+// Service.UpsertFromSync.
 type Source string
 
 const (
 	SourceManual      Source = "manual"
 	SourceFacebookAds Source = "facebook_ads"
 	SourceTikTokAds   Source = "tiktok_ads"
+	SourceGoogleAds   Source = "google_ads"
 )
 
 func (s Source) Valid() bool {
 	switch s {
-	case SourceManual, SourceFacebookAds, SourceTikTokAds:
+	case SourceManual, SourceFacebookAds, SourceTikTokAds, SourceGoogleAds:
 		return true
 	default:
 		return false

@@ -14,9 +14,20 @@ export type AdAccountConnection = {
   updatedAt: string;
 };
 
+/** accessToken is facebook_ads/tiktok_ads only; developerToken/clientId/
+ * clientSecret/refreshToken are google_ads only — apps/internal/
+ * adaccount.Service.Connect validates the right subset is present for
+ * whichever cost_integration the traffic source actually has. Google
+ * Ads has no long-lived access token to accept instead (its own tokens
+ * expire in ~1 hour): the sync mints a short-lived one from
+ * refreshToken on every run. */
 export type ConnectAdAccountInput = {
   adAccountId: string;
-  accessToken: string;
+  accessToken?: string;
+  developerToken?: string;
+  clientId?: string;
+  clientSecret?: string;
+  refreshToken?: string;
 };
 
 export function getAdAccountConnection(trafficSourceId: string): Promise<AdAccountConnection> {

@@ -46,8 +46,12 @@ func (h *Handler) get(w http.ResponseWriter, r *http.Request) {
 }
 
 type connectRequest struct {
-	AdAccountID string `json:"adAccountId"`
-	AccessToken string `json:"accessToken"`
+	AdAccountID    string `json:"adAccountId"`
+	AccessToken    string `json:"accessToken"`
+	DeveloperToken string `json:"developerToken"`
+	ClientID       string `json:"clientId"`
+	ClientSecret   string `json:"clientSecret"`
+	RefreshToken   string `json:"refreshToken"`
 }
 
 func (h *Handler) connect(w http.ResponseWriter, r *http.Request) {
@@ -60,8 +64,12 @@ func (h *Handler) connect(w http.ResponseWriter, r *http.Request) {
 	}
 
 	c, err := h.svc.Connect(r.Context(), orgID, trafficSourceID(r), ConnectInput{
-		AdAccountID: req.AdAccountID,
-		AccessToken: req.AccessToken,
+		AdAccountID:    req.AdAccountID,
+		AccessToken:    req.AccessToken,
+		DeveloperToken: req.DeveloperToken,
+		ClientID:       req.ClientID,
+		ClientSecret:   req.ClientSecret,
+		RefreshToken:   req.RefreshToken,
 	})
 	if err != nil {
 		apierror.Write(w, h.logger, err)

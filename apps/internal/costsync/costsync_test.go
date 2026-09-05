@@ -16,6 +16,16 @@ import (
 	"github.com/ismagilovnail/flox/apps/internal/idgen"
 )
 
+var testKey = mustTestKey()
+
+func mustTestKey() []byte {
+	key, err := adaccount.ParseKey("MDEyMzQ1Njc4OTAxMjM0NTY3ODkwMTIzNDU2Nzg5MDE=")
+	if err != nil {
+		panic(err)
+	}
+	return key
+}
+
 // fakeProvider stands in for a real facebookads/tiktokads.Adapter — this
 // package's own tests exercise the real HTTP adapters against a fake
 // server; costsync's tests exercise everything AROUND the adapter
@@ -39,7 +49,7 @@ func TestSyncWritesMatchedCampaignsAndSkipsUnmatched(t *testing.T) {
 	sourceID := seedTrafficSource(t, ctx, pool, orgID, "facebook_ads")
 	campaignID := seedCampaign(t, ctx, pool, orgID, sourceID, "fb_camp_1")
 
-	adAccountRepo := adaccount.NewRepository(pool)
+	adAccountRepo := adaccount.NewRepository(pool, testKey)
 	if _, err := adaccount.NewService(adAccountRepo).Connect(ctx, orgID, sourceID, adaccount.ConnectInput{
 		AdAccountID: "act_123", AccessToken: "test-token-1234567890",
 	}); err != nil {
@@ -97,7 +107,7 @@ func TestSyncWritesToEveryCampaignSharingAnExternalID(t *testing.T) {
 	campaignA := seedCampaign(t, ctx, pool, orgID, sourceID, "shared_id")
 	campaignB := seedCampaign(t, ctx, pool, orgID, sourceID, "shared_id")
 
-	adAccountRepo := adaccount.NewRepository(pool)
+	adAccountRepo := adaccount.NewRepository(pool, testKey)
 	if _, err := adaccount.NewService(adAccountRepo).Connect(ctx, orgID, sourceID, adaccount.ConnectInput{
 		AdAccountID: "adv_1", AccessToken: "tiktok-token-1234567890",
 	}); err != nil {
@@ -137,7 +147,7 @@ func TestSyncErrorsWhenNotConnected(t *testing.T) {
 	orgID := seedOrg(t, ctx, pool)
 	sourceID := seedTrafficSource(t, ctx, pool, orgID, "facebook_ads")
 
-	adAccountRepo := adaccount.NewRepository(pool)
+	adAccountRepo := adaccount.NewRepository(pool, testKey)
 	svc := costsync.NewService(adAccountRepo, campaign.NewRepository(pool), cost.NewService(cost.NewRepository(pool), conversion.NewPostgresFX(pool)), costsync.Providers{
 		FacebookAds: &fakeProvider{},
 	})
@@ -153,7 +163,7 @@ func TestSyncErrorsWhenCostIntegrationHasNoProvider(t *testing.T) {
 	orgID := seedOrg(t, ctx, pool)
 	sourceID := seedTrafficSource(t, ctx, pool, orgID, "none")
 
-	adAccountRepo := adaccount.NewRepository(pool)
+	adAccountRepo := adaccount.NewRepository(pool, testKey)
 	svc := costsync.NewService(adAccountRepo, campaign.NewRepository(pool), cost.NewService(cost.NewRepository(pool), conversion.NewPostgresFX(pool)), costsync.Providers{
 		FacebookAds: &fakeProvider{}, TikTokAds: &fakeProvider{},
 	})

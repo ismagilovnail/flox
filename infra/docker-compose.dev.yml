@@ -159,6 +159,11 @@ services:
       # Dev-only value, matches .env.example's own dev default exactly —
       # never reuse this in staging/production (see .env.example's comment).
       INTEGRATION_ENCRYPTION_KEY: "wLE0wIEHBNnfVfq8d62JDEAltM4frTgYmPi8XAv1QpY="
+      # Dev-only value, matches .env.example's own dev default exactly —
+      # never reuse this in staging/production (see .env.example's comment).
+      # Also set on the worker service below — apps/worker's own ad-spend
+      # sync needs the same key to decrypt Google Ads credentials.
+      ADACCOUNT_ENCRYPTION_KEY: "KatbgYl+Kd4KPI5T0hKfwZRYsij/t7g7fVomXdjhW/c="
       # The browser's own Origin (localhost:3000, web's host-published
       # port) — apps/internal/tenant.RequireSameOrigin (§54 CSRF) compares
       # against this literally, so it must never be the in-network "web"
@@ -249,6 +254,10 @@ services:
       S3_BUCKET: flox
       S3_ACCESS_KEY_ID: flox-minio-admin
       S3_SECRET_ACCESS_KEY: flox-minio-secret
+      # Same dev-only value as the api service's own — the ad-spend sync
+      # (§74/§27-COST) needs it to decrypt Google Ads credentials
+      # apps/api encrypted at Connect time.
+      ADACCOUNT_ENCRYPTION_KEY: "KatbgYl+Kd4KPI5T0hKfwZRYsij/t7g7fVomXdjhW/c="
     volumes:
       - ../apps:/src
       - worker_go_mod_cache:/go/pkg/mod

@@ -27,12 +27,12 @@ func (s Status) Valid() bool {
 }
 
 // CostIntegration mirrors the frontend's CostIntegration type
-// (lib/mock/traffic-sources.ts) and the traffic_sources.cost_integration
-// CHECK constraint (00002) exactly. It records *intent* — which cost data
-// origin this source is meant to use — independent of internal/cost's
-// actual per-day amounts (a source with CostIntegrationManual still needs
-// entries logged through the campaign Cost tab; this field doesn't create
-// them).
+// (lib/api/traffic-sources.ts) and the traffic_sources.cost_integration
+// CHECK constraint (00002, widened by 00034 for google_ads) exactly. It
+// records *intent* — which cost data origin this source is meant to use
+// — independent of internal/cost's actual per-day amounts (a source
+// with CostIntegrationManual still needs entries logged through the
+// campaign Cost tab; this field doesn't create them).
 type CostIntegration string
 
 const (
@@ -40,11 +40,12 @@ const (
 	CostIntegrationManual      CostIntegration = "manual"
 	CostIntegrationFacebookAds CostIntegration = "facebook_ads"
 	CostIntegrationTikTokAds   CostIntegration = "tiktok_ads"
+	CostIntegrationGoogleAds   CostIntegration = "google_ads"
 )
 
 func (c CostIntegration) Valid() bool {
 	switch c {
-	case CostIntegrationNone, CostIntegrationManual, CostIntegrationFacebookAds, CostIntegrationTikTokAds:
+	case CostIntegrationNone, CostIntegrationManual, CostIntegrationFacebookAds, CostIntegrationTikTokAds, CostIntegrationGoogleAds:
 		return true
 	default:
 		return false

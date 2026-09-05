@@ -153,6 +153,15 @@ services:
       # CSRF) compares against this literally, so it must match that, not
       # the container-internal "web" service name.
       APP_URL: http://localhost:3000
+      # These three were missing here even after the Security/
+      # Integrations/Google-Ads phases each added their own required key
+      # to apps/api's own startup (config.Load fails loudly without one) —
+      # this compose file's own api service would never have booted at
+      # all. Same dev-only values as docker-compose.dev.yml's own,
+      # documented there — never reuse in production.
+      TOTP_ENCRYPTION_KEY: "IXkldrBTvgfDhIxzUBn3MrRAJq7Gh7z8mQ5UhBC4DRo="
+      INTEGRATION_ENCRYPTION_KEY: "wLE0wIEHBNnfVfq8d62JDEAltM4frTgYmPi8XAv1QpY="
+      ADACCOUNT_ENCRYPTION_KEY: "KatbgYl+Kd4KPI5T0hKfwZRYsij/t7g7fVomXdjhW/c="
     ports:
       - "8080:8080"
 
@@ -194,6 +203,7 @@ services:
       CLICKHOUSE_DATABASE: flox
       CLICKHOUSE_USER: flox
       CLICKHOUSE_PASSWORD: ""
+      ADACCOUNT_ENCRYPTION_KEY: "KatbgYl+Kd4KPI5T0hKfwZRYsij/t7g7fVomXdjhW/c="
     ports:
       - "8082:8082"
 

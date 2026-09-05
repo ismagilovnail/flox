@@ -45,6 +45,7 @@ import (
 
 	"github.com/ismagilovnail/flox/apps/internal/adaccount"
 	"github.com/ismagilovnail/flox/apps/internal/adaccount/facebookads"
+	"github.com/ismagilovnail/flox/apps/internal/adaccount/googleads"
 	"github.com/ismagilovnail/flox/apps/internal/adaccount/tiktokads"
 	"github.com/ismagilovnail/flox/apps/internal/campaign"
 	"github.com/ismagilovnail/flox/apps/internal/chconn"
@@ -151,10 +152,19 @@ func run() error {
 	}
 	chEvents := chstore.NewEventStore(ch)
 
-	adAccountRepo := adaccount.NewRepository(db)
+	// Same "fail loudly at boot" bar as apps/api's own required-secret
+	// parses — a misconfigured/missing key must never silently run the
+	// Google Ads sync with a well-known key.
+	adAccountKey, err := adaccount.ParseKey(cfg.AdAccountEncryptionKey)
+	if err != nil {
+		logger.Error("ad account encryption key configuration failed", "error", err)
+		return err
+	}
+	adAccountRepo := adaccount.NewRepository(db, adAccountKey)
 	costSyncSvc := costsync.NewService(adAccountRepo, campaign.NewRepository(db), cost.NewService(cost.NewRepository(db), conversion.NewPostgresFX(db)), costsync.Providers{
 		FacebookAds: facebookads.New(),
 		TikTokAds:   tiktokads.New(),
+		GoogleAds:   googleads.New(),
 	})
 	costSyncScheduler := costsync.NewScheduler(costSyncSvc, adAccountRepo, logger)
 

@@ -24,7 +24,12 @@ import {
   type SourceType,
 } from "@/lib/api/traffic-sources";
 
-const COST_INTEGRATIONS: CostIntegration[] = ["none", "manual", "facebook_ads", "tiktok_ads"];
+const COST_INTEGRATIONS: CostIntegration[] = ["none", "manual", "facebook_ads", "tiktok_ads", "google_ads"];
+
+type AdAccountCostIntegration = "facebook_ads" | "tiktok_ads" | "google_ads";
+function isAdAccountCostIntegration(value: CostIntegration): value is AdAccountCostIntegration {
+  return value === "facebook_ads" || value === "tiktok_ads" || value === "google_ads";
+}
 
 /** A factory, not a module-level const: Zod's validation messages are
  * user-facing text and need the live translator, which only exists inside
@@ -200,18 +205,14 @@ export function SourceForm({
             )}
           </div>
 
-          {(liveCostIntegration === "facebook_ads" || liveCostIntegration === "tiktok_ads") &&
+          {isAdAccountCostIntegration(liveCostIntegration) &&
             (sourceId ? (
               <AdAccountConnectionSection trafficSourceId={sourceId} provider={liveCostIntegration} />
             ) : (
               <div className="flex flex-col gap-2 rounded-lg border border-border p-3">
                 <div className="flex items-center gap-2">
                   <span className="text-sm font-medium">{t("connection.title", { ns: "trafficSources" })}</span>
-                  <Badge variant="outline">
-                    {t(`costIntegration.${liveCostIntegration === "facebook_ads" ? "facebookAds" : "tiktokAds"}`, {
-                      ns: "trafficSources",
-                    })}
-                  </Badge>
+                  <Badge variant="outline">{t(COST_INTEGRATION_I18N_KEY[liveCostIntegration], { ns: "trafficSources" })}</Badge>
                 </div>
                 <p className="text-xs text-muted-foreground">{t("connection.description", { ns: "trafficSources" })}</p>
                 <p className="rounded-md bg-muted px-3 py-2 text-xs text-muted-foreground">

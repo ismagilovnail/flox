@@ -12,23 +12,49 @@ import (
 )
 
 type Repository struct {
-	db *pgxpool.Pool
+	db  *pgxpool.Pool
+	key []byte
 }
 
-func NewRepository(db *pgxpool.Pool) *Repository { return &Repository{db: db} }
+// key encrypts/decrypts Google Ads' own developer_token/client_secret/
+// refresh_token columns (see crypto.go) — facebook_ads/tiktok_ads
+// connections never touch it, since access_token stays plain text
+// (migration 00018 predates this encryption infrastructure).
+func NewRepository(db *pgxpool.Pool, key []byte) *Repository { return &Repository{db: db, key: key} }
 
-// selectColumns never includes access_token — every public read goes
-// through this, so there is no query path in this package that could
-// accidentally leak the raw token into a JSON response. tokenPreview is
-// computed in SQL (last 4 characters) rather than in Go, for the same
-// reason: it's one less place a future edit could reintroduce the full
-// column into a Go struct that then gets marshaled.
-const selectColumns = `id, organization_id, traffic_source_id, ad_account_id, right(access_token, 4), created_at, updated_at`
+// selectColumns never includes the plaintext of access_token or any of
+// Google Ads' own secret columns — every public read goes through this,
+// so there is no query path in this package that could accidentally
+// leak a raw credential into a JSON response. For facebook_ads/
+// tiktok_ads rows, tokenPreview is computed in SQL (the last 4
+// characters of access_token) — one less place a future edit could
+// reintroduce the full plain-text column into a Go struct that then
+// gets marshaled. Google Ads rows have no plain-text secret for SQL to
+// slice: refresh_token is fetched here still encrypted and decrypted in
+// Go (scanConnection, via the repository's own key) purely to compute
+// its own last-4 preview, never returned as-is.
+const selectColumns = `id, organization_id, traffic_source_id, ad_account_id, right(access_token, 4), refresh_token, created_at, updated_at`
 
-func scanConnection(row pgx.Row) (Connection, error) {
+func (r *Repository) scanConnection(row pgx.Row) (Connection, error) {
 	var c Connection
-	err := row.Scan(&c.ID, &c.OrganizationID, &c.TrafficSourceID, &c.AdAccountID, &c.TokenPreview, &c.CreatedAt, &c.UpdatedAt)
-	return c, err
+	var accessTokenPreview *string
+	var encryptedRefreshToken *string
+	if err := row.Scan(&c.ID, &c.OrganizationID, &c.TrafficSourceID, &c.AdAccountID, &accessTokenPreview, &encryptedRefreshToken, &c.CreatedAt, &c.UpdatedAt); err != nil {
+		return Connection{}, err
+	}
+	if accessTokenPreview != nil {
+		c.TokenPreview = *accessTokenPreview
+	} else if encryptedRefreshToken != nil {
+		refreshToken, err := decrypt(r.key, *encryptedRefreshToken)
+		if err != nil {
+			return Connection{}, err
+		}
+		if len(refreshToken) > 4 {
+			refreshToken = refreshToken[len(refreshToken)-4:]
+		}
+		c.TokenPreview = refreshToken
+	}
+	return c, nil
 }
 
 func (r *Repository) GetByTrafficSourceID(ctx context.Context, orgID, trafficSourceID string) (Connection, error) {
@@ -38,28 +64,59 @@ func (r *Repository) GetByTrafficSourceID(ctx context.Context, orgID, trafficSou
 		WHERE traffic_source_id = $1 AND organization_id = $2`,
 		trafficSourceID, orgID,
 	)
-	c, err := scanConnection(row)
+	c, err := r.scanConnection(row)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return Connection{}, apierror.NotFound("no ad account connected for this traffic source")
 	}
 	return c, err
 }
 
-// Connect upserts by traffic_source_id — re-connecting (a fresh token,
-// or the same one re-pasted) replaces the row in place, same "re-
-// submitting updates it, it doesn't stack" precedent as cost_entries'
-// own dedup-key-as-identity design (00009).
+// Connect upserts by traffic_source_id — re-connecting (a fresh
+// credential, or the same one re-pasted) replaces the row in place, same
+// "re-submitting updates it, it doesn't stack" precedent as
+// cost_entries' own dedup-key-as-identity design (00009). Whichever of
+// AccessToken/DeveloperToken+ClientID+ClientSecret+RefreshToken is empty
+// (Service.Connect has already validated the right subset is non-empty
+// for this connection's actual platform) is stored as SQL NULL, not an
+// empty string — a facebook_ads/tiktok_ads row has real NULLs in the
+// three Google Ads columns, and vice versa.
 func (r *Repository) Connect(ctx context.Context, id, orgID, trafficSourceID string, in ConnectInput) (Connection, error) {
+	var accessToken *string
+	if in.AccessToken != "" {
+		accessToken = &in.AccessToken
+	}
+	developerToken, err := encryptOptional(r.key, in.DeveloperToken)
+	if err != nil {
+		return Connection{}, err
+	}
+	clientSecret, err := encryptOptional(r.key, in.ClientSecret)
+	if err != nil {
+		return Connection{}, err
+	}
+	refreshToken, err := encryptOptional(r.key, in.RefreshToken)
+	if err != nil {
+		return Connection{}, err
+	}
+	var clientID *string
+	if in.ClientID != "" {
+		clientID = &in.ClientID
+	}
+
 	row := r.db.QueryRow(ctx, `
-		INSERT INTO ad_account_connections (id, organization_id, traffic_source_id, ad_account_id, access_token)
-		VALUES ($1, $2, $3, $4, $5)
+		INSERT INTO ad_account_connections
+			(id, organization_id, traffic_source_id, ad_account_id, access_token, developer_token, client_id, client_secret, refresh_token)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
 		ON CONFLICT (traffic_source_id) DO UPDATE SET
 			ad_account_id = EXCLUDED.ad_account_id,
-			access_token = EXCLUDED.access_token
+			access_token = EXCLUDED.access_token,
+			developer_token = EXCLUDED.developer_token,
+			client_id = EXCLUDED.client_id,
+			client_secret = EXCLUDED.client_secret,
+			refresh_token = EXCLUDED.refresh_token
 		RETURNING `+selectColumns,
-		id, orgID, trafficSourceID, in.AdAccountID, in.AccessToken,
+		id, orgID, trafficSourceID, in.AdAccountID, accessToken, developerToken, clientID, clientSecret, refreshToken,
 	)
-	return scanConnection(row)
+	return r.scanConnection(row)
 }
 
 func (r *Repository) Disconnect(ctx context.Context, orgID, trafficSourceID string) error {
@@ -82,14 +139,34 @@ func (r *Repository) Disconnect(ctx context.Context, orgID, trafficSourceID stri
 // *Repository directly (never just the public Service) can reach this.
 func (r *Repository) CredentialsByTrafficSourceID(ctx context.Context, orgID, trafficSourceID string) (Credentials, error) {
 	var c Credentials
+	var accessToken, clientID, developerToken, clientSecret, refreshToken *string
 	err := r.db.QueryRow(ctx,
-		`SELECT ad_account_id, access_token FROM ad_account_connections WHERE traffic_source_id = $1 AND organization_id = $2`,
+		`SELECT ad_account_id, access_token, client_id, developer_token, client_secret, refresh_token
+		 FROM ad_account_connections WHERE traffic_source_id = $1 AND organization_id = $2`,
 		trafficSourceID, orgID,
-	).Scan(&c.AdAccountID, &c.AccessToken)
+	).Scan(&c.AdAccountID, &accessToken, &clientID, &developerToken, &clientSecret, &refreshToken)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return Credentials{}, apierror.NotFound("no ad account connected for this traffic source")
 	}
-	return c, err
+	if err != nil {
+		return Credentials{}, err
+	}
+	if accessToken != nil {
+		c.AccessToken = *accessToken
+	}
+	if clientID != nil {
+		c.ClientID = *clientID
+	}
+	if c.DeveloperToken, err = decryptOptional(r.key, developerToken); err != nil {
+		return Credentials{}, err
+	}
+	if c.ClientSecret, err = decryptOptional(r.key, clientSecret); err != nil {
+		return Credentials{}, err
+	}
+	if c.RefreshToken, err = decryptOptional(r.key, refreshToken); err != nil {
+		return Credentials{}, err
+	}
+	return c, nil
 }
 
 // ListAllConnections returns every connected ad account across every org —
@@ -127,16 +204,19 @@ type PlatformCount struct {
 // AdPlatformSummary powers Settings > Integrations' read-only ad-platform
 // cards (apps/internal/integrations) — a real aggregate over this
 // package's own data, not a second store of connection state. Grouped by
-// traffic_sources.cost_integration rather than joined against a fixed
-// provider list, so a future third platform (e.g. Google Ads) needs no
-// change here — it appears automatically the day some traffic source
-// sets its cost_integration to that value.
+// traffic_sources.cost_integration (not joined against a separate
+// provider table), so once a platform is in the WHERE clause below it
+// needs no further change here — any traffic source that sets its
+// cost_integration to that value is picked up automatically. The WHERE
+// clause itself still needs a platform added by name when a new one
+// launches (google_ads was added here in the same phase that built its
+// own real CostProvider adapter).
 func (r *Repository) AdPlatformSummary(ctx context.Context, orgID string) ([]PlatformCount, error) {
 	rows, err := r.db.Query(ctx, `
 		SELECT ts.cost_integration, count(aac.id), count(ts.id)
 		FROM traffic_sources ts
 		LEFT JOIN ad_account_connections aac ON aac.traffic_source_id = ts.id
-		WHERE ts.organization_id = $1 AND ts.cost_integration IN ('facebook_ads', 'tiktok_ads')
+		WHERE ts.organization_id = $1 AND ts.cost_integration IN ('facebook_ads', 'tiktok_ads', 'google_ads')
 		GROUP BY ts.cost_integration
 		ORDER BY ts.cost_integration`,
 		orgID,

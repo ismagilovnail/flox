@@ -463,3 +463,167 @@ manual pass got, logged with the connection's `organization_id`/
 loop correctly treats a failed sync as "attempted," not a crash, and
 keeps running. Test fixtures (org, cascade-deleted traffic source +
 connection) were deleted afterward.
+
+# Phase D: Google Ads, the third real `CostProvider`
+
+Picked off this doc's own "candidate" list (user-scoped, well after
+Phase C) as its own separately-scoped phase — Google Ads had been
+deliberately deferred out of the Settings > Integrations phase
+(`docs/settings-integrations.md`), which only ever gave it a read-only
+aggregate card, precisely because it belongs here instead: a third
+per-traffic-source cost integration, matching Facebook/TikTok Ads
+exactly (`trafficsource.CostIntegration`'s own singular design).
+
+## Why Google Ads needed real schema changes, not just a third adapter
+
+Facebook/TikTok Ads both accept a single long-lived access token pasted
+directly. Google Ads' own API has no equivalent — its access tokens
+expire in about an hour. An operator instead pastes a **refresh token**
+(minted once via Google's own OAuth 2.0 Playground, using their own
+Google Ads developer token and a Google Cloud OAuth client they already
+have — no registered public callback exists in this environment, same
+constraint Phase A's own manual-token-paste decision already documents)
+alongside that developer token and OAuth client id/secret. Every real
+sync call first exchanges the refresh token for a short-lived access
+token via the real OAuth 2.0 refresh-token grant, then calls the Ads API
+with it — nothing about that exchange is persisted, since the refresh
+token itself doesn't expire under normal use.
+
+Migration 00034 widens two enums (`traffic_sources.cost_integration` and
+`cost_entries.source`, both to add `'google_ads'`) and adds four nullable
+columns to `ad_account_connections`: `developer_token`, `client_id`,
+`client_secret`, `refresh_token` (`access_token` itself becomes nullable
+— a google_ads row never sets it). `adaccount.ConnectInput`/
+`Connection`/`Credentials` all grew the same four fields;
+`Service.Connect` branches on the traffic source's own `cost_integration`
+to require the right subset (`accessToken` for facebook_ads/tiktok_ads,
+the other four for google_ads) — the exact same "read cost_integration,
+require its own real shape" pattern Phase A's `Connect` already used for
+the two-provider case, now extended to three.
+
+## Real encryption, not a repeat of `access_token`'s own plain-text gap
+
+`access_token` (Phase A) is plain text — no encryption infrastructure
+existed anywhere in this codebase at the time (that migration's own doc
+comment says so explicitly). It still does, unchanged; retrofitting it
+is separate hardening work, not this phase's job. But `apps/internal/
+totp` and `apps/internal/integrations` have since built real AES-256-GCM
+encryption twice over, each with its own dedicated key — so this phase's
+three new secret fields (`developer_token`, `client_secret`,
+`refresh_token`) get the same real treatment via a new `apps/internal/
+adaccount/crypto.go` and its own `ADACCOUNT_ENCRYPTION_KEY`, deliberately
+separate from `TOTP_ENCRYPTION_KEY`/`INTEGRATION_ENCRYPTION_KEY` (a
+compromise or rotation of one should never force rotating the others).
+`client_id` stays plain text — it's a public OAuth identifier, not a
+secret, the same convention OAuth 2.0 itself draws between a client's id
+and its secret. Needed by both `apps/api` (Connect/the manual sync
+endpoint) and `apps/worker` (the scheduled sync) — both parse the key at
+startup with the same "fail loudly, never run with a missing or
+well-known key" bar every other required secret in this codebase holds
+itself to.
+
+`TokenPreview` (the masked "•••• last4" the UI shows) can no longer be
+computed purely in SQL the way Phase A's `right(access_token, 4)` did —
+`refresh_token` is ciphertext in the database, and slicing ciphertext
+would show four meaningless bytes, not four meaningful characters.
+`Repository.scanConnection` became a method (needs the repository's own
+key) that decrypts `refresh_token` in Go purely to compute its own
+preview when `access_token` is absent, never returning the decrypted
+value itself.
+
+## `apps/internal/adaccount/googleads`: the real adapter
+
+Structurally the same shape as `facebookads`/`tiktokads` (`Adapter`
+struct with exported, test-overridable base-URL fields + `HTTPClient`,
+a `New()` constructor, `var _ adaccount.CostProvider = (*Adapter)(nil)`)
+but with two real HTTP hosts instead of one: `oauth2.googleapis.com`
+(the token refresh) and `googleads.googleapis.com` (the actual Ads API,
+REST `v17`, one GAQL `googleAds:search` query per page). Unlike
+`tiktokads`' own two-call shape (a separate advertiser-info call for
+currency), Google Ads' GAQL lets `customer.currency_code` be selected
+directly alongside `campaign`/`segments`/`metrics` fields in the same
+query — one call per page, not two. `metrics.cost_micros` is Google
+Ads' own money encoding (1,000,000 micros = 1 unit of the account's
+currency), divided down in Go before becoming a
+`DailyCampaignSpendRecord.Amount`, same "raw platform value in, no
+pre-conversion" contract every adapter here already follows (currency
+normalization to USD still only ever happens once, at the
+`cost_entries` write, via `fx_rates`).
+
+Two real gaps this phase's own code fixed along the way, found by
+tracing the request path rather than assumed clean: `trafficsource.
+CostIntegration.Valid()` (a completely separate whitelist from the
+`traffic_sources.cost_integration` CHECK constraint, in a different
+package) still only listed the original two providers — creating a
+`google_ads` traffic source 422'd with "must be one of none, manual,
+facebook_ads, tiktok_ads" even after the migration and the `adaccount`
+package's own changes landed, caught live via curl, not by inspection.
+`costsync.Providers`/`sourceByCostIntegration` also needed their own
+third case each (`GoogleAds adaccount.CostProvider` field,
+`"google_ads": cost.SourceGoogleAds`) — `costsync.Service.Sync` would
+otherwise have silently found no provider for a google_ads source's
+sync request.
+
+## Verified
+
+Backend: `gofmt`/`go build ./...`/`go vet ./...`/`go test ./...` all
+green repo-wide, including new tests in `adaccount` (`google_ads is
+allowed` alongside the existing tiktok_ads case, a dedicated test that
+google_ads rejects a bare `accessToken` and a request missing just
+`refreshToken`, and `TestGoogleAdsCredentialsRoundTripEncryption` —
+connects real plaintext, reads the *raw* `refresh_token` column
+directly via SQL and asserts it does **not** equal the plaintext,
+`CredentialsByTrafficSourceID` decrypts it back to the exact original,
+and `TokenPreview` shows the real last-4 of the refresh token) and a new
+`googleads` package test suite (a real two-server harness — one fake
+`oauth2.googleapis.com`, one fake `googleads.googleapis.com` — covering
+the happy path incl. `costMicros` division and customer-id dash-
+stripping, `nextPageToken` pagination, a failing token refresh, a real
+Google Ads API error shape, and a malformed `costMicros` value), plus
+`trafficsource.TestCostIntegrationValid` (a plain unit test, no database
+needed) for the whitelist bug above.
+
+Real, live, end-to-end verification against the actual running
+containerized dev stack (`docker compose -f docker-compose.dev.yml up
+api worker` after adding `ADACCOUNT_ENCRYPTION_KEY` to both services,
+plus the same key added to the long-neglected `docker-compose.test.yml`
+— which turned out to be missing `TOTP_ENCRYPTION_KEY`/
+`INTEGRATION_ENCRYPTION_KEY` too, a pre-existing gap from those two
+phases that would have crash-looped that compose file's own `api`
+service on its very first boot attempt, fixed as part of this phase
+since it was already touching this exact concern): created a real
+`google_ads` traffic source, confirmed a validation-error round-trip
+(missing Google Ads fields), connected real (if fake) credentials and
+confirmed the response's `tokenPreview` matched the refresh token's
+real last four characters, confirmed the raw `refresh_token`/
+`client_secret`/`developer_token` columns in Postgres are genuinely
+encrypted (not the plaintext) while `client_id` is genuinely plain, and
+triggered "Sync now" — which made a **real live HTTP call to
+`oauth2.googleapis.com`** and got back Google's own real error,
+`"invalid_client: The OAuth client was not found."`, logged server-side
+and surfaced as a normal (if generic) 500 to the caller, no panic, no
+partial state. Real browser pass (Claude-in-Chrome) against the same
+disposable test account used for the Integrations phase: the cost-
+integration dropdown lists "Google Ads" as a fourth option, selecting it
+before saving shows the correct badge/hint text (including a corrected,
+no-longer-stale claim about there being no scheduled sync — Phase C's
+own scheduler has existed since before this phase started, the copy
+just never caught up), saving reveals the real five-field Google Ads
+form (customer ID/developer token/OAuth client id/OAuth client
+secret/refresh token, not the two-field Facebook/TikTok shape),
+connecting renders the connected state with the real masked preview,
+and "Sync now" fires the same real (failing, since the pasted
+credentials are fake) request confirmed above with no console errors or
+crash. Disconnect correctly returns the source to its pre-connection
+state. All test fixtures (the traffic source, the test org used for the
+curl pass) deleted afterward.
+
+## NEXT
+
+- A real, live Google Ads developer account + OAuth client would let
+  this adapter be verified against the genuine Ads API end to end, the
+  same gap Facebook/TikTok Ads still have.
+- Retrofitting `access_token` (facebook_ads/tiktok_ads) to real
+  encryption, now that this phase and the two before it have all built
+  real AES-256-GCM infrastructure — a deliberate non-goal here, called
+  out explicitly rather than silently left inconsistent.

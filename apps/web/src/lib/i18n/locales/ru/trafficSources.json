@@ -22,7 +22,8 @@
     "none": "Не подключено",
     "manual": "Ручной ввод",
     "facebookAds": "Facebook Ads",
-    "tiktokAds": "TikTok Ads"
+    "tiktokAds": "TikTok Ads",
+    "googleAds": "Google Ads"
   },
   "sourceType": {
     "facebook": "Facebook",
@@ -45,7 +46,7 @@
     "trackingTemplateLabel": "Шаблон трекинга",
     "trackingTemplatePlaceholder": "https://track.floxlink.io/click?clickid={click_id}&sub1={sub1}",
     "costIntegrationLabel": "Интеграция расходов",
-    "costIntegrationHint": "Записи вручную ведутся по каждой кампании на вкладке «Расходы». Для Facebook/TikTok ниже можно подключить сохранённый токен доступа, а затем кнопкой «Синхронизировать» подтянуть расходы для кампаний с совпадающим ID кампании во внешней системе — планового автоматического запуска пока нет, только по кнопке.",
+    "costIntegrationHint": "Записи вручную ведутся по каждой кампании на вкладке «Расходы». Для Facebook/TikTok/Google Ads ниже можно подключить учётные данные, после чего плановая синхронизация автоматически подтягивает расходы каждые несколько часов для кампаний с совпадающим ID кампании во внешней системе — «Синхронизировать» запускает её немедленно.",
     "statusLabel": "Статус",
     "submitCreate": "Создать источник",
     "submitEdit": "Сохранить изменения",
@@ -56,7 +57,7 @@
   },
   "connection": {
     "title": "Подключённый рекламный аккаунт",
-    "description": "Сохраняет токен доступа для синхронизации расходов ниже. «Синхронизировать» подтягивает расходы по кампаниям за последние 30 дней и записывает их на вкладку «Расходы» каждой совпавшей кампании (по ID кампании во внешней системе) — планировщика пока нет, запуск только по кнопке.",
+    "description": "Сохраняет учётные данные для синхронизации расходов ниже. Плановая синхронизация запускается автоматически каждые несколько часов; «Синхронизировать» запускает её немедленно за последние 30 дней и записывает совпадения на вкладку «Расходы» кампании (по ID кампании во внешней системе).",
     "savedRequiredNotice": "Сначала сохраните источник — поля для ID рекламного аккаунта и токена доступа появятся сразу после этого.",
     "loading": "Проверка подключения…",
     "tokenPreview": "•••• {{last4}}",
@@ -64,13 +65,24 @@
     "adAccountIdPlaceholder": "act_1234567890",
     "accessTokenLabel": "Токен доступа",
     "accessTokenPlaceholder": "Вставьте долгосрочный токен доступа",
+    "customerIdLabel": "ID клиента",
+    "customerIdPlaceholder": "123-456-7890",
+    "developerTokenLabel": "Токен разработчика",
+    "clientIdLabel": "OAuth client ID",
+    "clientSecretLabel": "OAuth client secret",
+    "refreshTokenLabel": "Refresh-токен",
+    "googleAdsHint": "Получите refresh-токен один раз через Google OAuth 2.0 Playground, используя собственный токен разработчика Google Ads и OAuth-клиент — у FLOX нет зарегистрированного публичного callback для собственного OAuth-подтверждения.",
     "connect": "Подключить",
     "disconnect": "Отключить",
     "syncNow": "Синхронизировать",
     "syncing": "Синхронизация…",
     "validation": {
       "adAccountIdRequired": "ID рекламного аккаунта обязателен",
-      "accessTokenRequired": "Токен доступа обязателен"
+      "accessTokenRequired": "Токен доступа обязателен",
+      "developerTokenRequired": "Токен разработчика обязателен",
+      "clientIdRequired": "OAuth client ID обязателен",
+      "clientSecretRequired": "OAuth client secret обязателен",
+      "refreshTokenRequired": "Refresh-токен обязателен"
     },
     "toast": {
       "connected": "Рекламный аккаунт подключён",

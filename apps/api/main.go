@@ -16,6 +16,7 @@ import (
 
 	"github.com/ismagilovnail/flox/apps/internal/adaccount"
 	"github.com/ismagilovnail/flox/apps/internal/adaccount/facebookads"
+	"github.com/ismagilovnail/flox/apps/internal/adaccount/googleads"
 	"github.com/ismagilovnail/flox/apps/internal/adaccount/tiktokads"
 	"github.com/ismagilovnail/flox/apps/internal/analytics"
 	"github.com/ismagilovnail/flox/apps/internal/apikey"
@@ -216,6 +217,15 @@ func run() error {
 		return err
 	}
 
+	// Same bar again — Google Ads' developer token/client secret/refresh
+	// token (apps/internal/adaccount) must never run with a missing or
+	// well-known key.
+	adAccountKey, err := adaccount.ParseKey(cfg.AdAccountEncryptionKey)
+	if err != nil {
+		logger.Error("ad account encryption key configuration failed", "error", err)
+		return err
+	}
+
 	// §54/Phase 30: RequireSameOrigin runs OUTSIDE (before) session
 	// resolution — rejecting a forged cross-origin mutation is cheaper
 	// and safer than first looking up whose session it claims to be.
@@ -285,7 +295,7 @@ func run() error {
 		trackingLinkHandler.Register(r)
 	})
 
-	adAccountRepo := adaccount.NewRepository(db)
+	adAccountRepo := adaccount.NewRepository(db, adAccountKey)
 	adAccountHandler := adaccount.NewHandler(adaccount.NewService(adAccountRepo), logger)
 
 	integrationsHandler := integrationsengine.NewHandler(
@@ -413,6 +423,7 @@ func run() error {
 	costSyncHandler := costsync.NewHandler(costsync.NewService(adAccountRepo, campaignRepo, costSvc, costsync.Providers{
 		FacebookAds: facebookads.New(),
 		TikTokAds:   tiktokads.New(),
+		GoogleAds:   googleads.New(),
 	}), logger)
 	srv.Mux().Route("/traffic-sources/{id}/connection", func(r chi.Router) {
 		r.Use(tenantMiddleware)

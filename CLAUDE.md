@@ -19,6 +19,175 @@ referenced below as §N).
 ## CURRENT STATE — UPDATE THIS EVERY PHASE
 
 ```
+CURRENT PHASE : GOOGLE ADS COST INTEGRATION (§74/§27-COST, user-scoped, post-Phase-34)
+STATUS        : done — user picked this off the Settings-Integrations
+                phase's own NEXT list: Google Ads as a third real
+                adaccount.CostProvider, matching Facebook/TikTok Ads
+                exactly (per-traffic-source, not org-level — that phase
+                deliberately deferred it out of Settings > Integrations
+                for exactly this reason).
+                Research before writing code: confirmed Google Ads' own
+                API has no long-lived-access-token equivalent to
+                Facebook/TikTok's (tokens expire in ~1hr) — an operator
+                instead pastes a refresh token minted once via Google's
+                OAuth 2.0 Playground using their own developer token +
+                OAuth client, same "no registered public callback in
+                this environment" constraint the original adaccount
+                package doc already documents. Confirmed exact existing
+                shapes (adaccount.Connection/ConnectInput/Credentials,
+                cost_integration/cost.Source enums, costsync.Providers)
+                before extending any of them.
+                Migration 00034: widens traffic_sources.cost_integration
+                and cost_entries.source CHECK constraints to add
+                'google_ads'; adds four nullable columns to
+                ad_account_connections (developer_token/client_id/
+                client_secret/refresh_token) and drops access_token's
+                NOT NULL (a google_ads row never sets it). New apps/
+                internal/adaccount/crypto.go (AES-256-GCM, own dedicated
+                ADACCOUNT_ENCRYPTION_KEY, same "fail loudly at boot"
+                bar as totp/integrations' own keys) encrypts developer_
+                token/client_secret/refresh_token — a real improvement
+                over access_token's own pre-existing plain-text storage
+                (that column predates any encryption infra in this
+                codebase and is deliberately left as-is; retrofitting it
+                is separate hardening work, called out explicitly in
+                docs/ad-account-connections.md's own NEXT section rather
+                than silently left inconsistent). client_id stays plain
+                text (a public OAuth identifier, not a secret).
+                Repository.scanConnection became a method (needs the
+                key) since TokenPreview can no longer be sliced in pure
+                SQL once refresh_token is ciphertext — it decrypts in Go
+                purely to compute the last-4 preview, never returns the
+                plaintext.
+                New apps/internal/adaccount/googleads (real adapter,
+                same Adapter/New()/CostProvider shape as facebookads/
+                tiktokads): two real HTTP hosts (oauth2.googleapis.com
+                for the token refresh, googleads.googleapis.com for a
+                GAQL googleAds:search query per page) — customer.
+                currency_code is queried alongside campaign/segments/
+                metrics in one call (GAQL allows it directly, unlike
+                tiktokads' own separate advertiser-info call);
+                metrics.cost_micros divided by 1,000,000 into the same
+                DailyCampaignSpendRecord.Amount shape every adapter
+                produces. Verified structurally only (no live Google
+                Ads developer account in this environment), against a
+                real two-fake-server test harness.
+                Two real bugs found and fixed while tracing the request
+                path, not assumed clean: (1) trafficsource.
+                CostIntegration.Valid() — a completely separate
+                whitelist from the DB CHECK constraint, in a different
+                package — still only listed the original two providers;
+                creating a google_ads traffic source 422'd even after
+                the migration landed, caught live via curl. (2)
+                costsync.Providers/sourceByCostIntegration needed their
+                own third case each; without it, Sync would have found
+                no provider for a google_ads source's sync request.
+                Frontend: lib/api/traffic-sources.ts's CostIntegration
+                type + i18n map gained google_ads; source-form.tsx's
+                cost-integration select gained the option; ad-account-
+                connection-section.tsx generalized from a fixed 2-field
+                Facebook/TikTok form to a schema-driven one (superRefine
+                enforcing the right required subset per provider) that
+                renders 5 fields (customer ID/developer token/OAuth
+                client id/OAuth client secret/refresh token) for
+                google_ads instead. Fixed two stale i18n strings while
+                touching this exact copy: the cost-integration hint
+                still named only Facebook/TikTok and claimed "no
+                scheduled sync yet, only on-demand" — Phase C's real
+                scheduler has existed since before this phase started,
+                the copy just never caught up.
+                Verified: go build/vet/test -count=1 ./... clean,
+                including new adaccount tests (google_ads allowed
+                alongside tiktok_ads, rejects a bare accessToken and a
+                request missing just refreshToken, and a dedicated
+                encryption round-trip test reading the RAW refresh_token
+                column via SQL to confirm it's genuinely not the
+                plaintext) and a new googleads package suite (real
+                two-fake-server harness: happy path incl. cost_micros
+                division and customer-id dash-stripping, pagination, a
+                failing token refresh, a real Google Ads API error
+                shape, malformed cost_micros) plus a plain unit test for
+                the CostIntegration.Valid() bug (no DB needed).
+                tsc/eslint/vitest clean.
+                Real, live, end-to-end verification against the actual
+                running containerized dev stack (api + worker rebuilt
+                with the new ADACCOUNT_ENCRYPTION_KEY on both). Also
+                fixed, since already touching this exact concern:
+                docker-compose.test.yml's api/worker services were
+                missing TOTP_ENCRYPTION_KEY/INTEGRATION_ENCRYPTION_KEY
+                entirely (a pre-existing gap from those two phases that
+                would have crash-looped that compose file's own api
+                service on first boot, never caught since verification
+                always used docker-compose.dev.yml) — added all three
+                keys there. Confirmed real validation errors for
+                mismatched-provider and missing-field connect attempts;
+                connected real (fake-valued) Google Ads credentials and
+                confirmed the response's tokenPreview matched the real
+                last four characters of the refresh token; confirmed
+                via direct SQL that refresh_token/client_secret/
+                developer_token are genuinely encrypted at rest while
+                client_id is genuinely plain; triggered "Sync now" and
+                confirmed a REAL LIVE HTTP call reached
+                oauth2.googleapis.com and got back Google's own real
+                "invalid_client: The OAuth client was not found." error,
+                surfaced as a normal 500 with no panic. Real browser
+                pass (Claude-in-Chrome) against the same disposable test
+                account used for the Integrations phase: the dropdown
+                lists Google Ads as a fourth option, selecting it shows
+                the corrected hint/badge copy, saving reveals the real
+                5-field form (not the 2-field FB/TikTok shape),
+                connecting shows the real masked preview, "Sync now"
+                fires the same real failing request with no console
+                errors or crash, disconnect returns cleanly to the
+                pre-connection state. All test fixtures deleted
+                afterward (the traffic source via SQL, the curl test
+                org via SQL).
+LAST COMMIT   : (this phase's own work is UNCOMMITTED, see below)
+UNCOMMITTED   : this entire phase's work — migration 00034; apps/
+                internal/adaccount's crypto.go (new), model.go/
+                service.go/repository.go/handler.go changes, new tests
+                in adaccount_test.go; apps/internal/adaccount/googleads
+                (new package + test file); apps/internal/cost/model.go
+                (SourceGoogleAds); apps/internal/costsync/model.go +
+                service.go (GoogleAds provider slot); apps/internal/
+                trafficsource/model.go + service.go (CostIntegrationGoogleAds
+                + fixed error messages) + a new unit test; apps/internal/
+                config/config.go (AdAccountEncryptionKey); apps/api/
+                main.go + apps/worker/main.go (wiring, key parsing);
+                apps/internal/costsync/{scheduler_test.go,costsync_test.go}
+                (updated NewRepository call sites + testKey); .env/
+                .env.example/infra/docker-compose.dev.yml
+                (ADACCOUNT_ENCRYPTION_KEY on api+worker) +
+                infra/docker-compose.test.yml (all three encryption
+                keys added, fixing the pre-existing gap); lib/api/
+                traffic-sources.ts, features/traffic-sources/
+                {source-form.tsx,ad-account-connection-section.tsx},
+                lib/api/ad-account-connections.ts; trafficSources.json
+                i18n (en+ru, new fields + two corrected stale strings);
+                docs/ad-account-connections.md (new Phase D section) —
+                not yet committed, waiting on the user.
+NEXT          : confirm scope before starting. Real candidates: (a)
+                real registrar/DNS automation for Domains using the
+                Namecheap/Cloudflare credentials Settings > Integrations
+                now stores — still not wired to anything; (b)
+                retrofitting facebook_ads/tiktok_ads' own access_token
+                to real encryption now that three real AES-256-GCM
+                implementations exist in this codebase (totp/
+                integrations/adaccount) — a deliberate non-goal of this
+                phase, called out in docs/ad-account-connections.md; (c)
+                SMS/email-based 2FA as an alternative delivery channel —
+                not built, deliberately; (d) the offer-columns.tsx
+                co-mounted-rename edge case, if a rename-without-
+                navigation flow is ever added to that page; (e) the
+                pre-existing list from the superseded block below, still
+                open.
+
+```
+
+<details>
+<summary>Superseded — Settings Integrations real backend (kept for history, see above for current state)</summary>
+
+```
 CURRENT PHASE : SETTINGS — INTEGRATIONS, REAL BACKEND (§30, user-scoped, post-Phase-34)
 STATUS        : done — user picked "Integrations settings panel" off the
                 accessorFn-audit phase's own NEXT list: Settings' last
@@ -208,6 +377,8 @@ NEXT          : confirm scope before starting. Real candidates: (a)
                 still open.
 
 ```
+
+</details>
 
 <details>
 <summary>Superseded — Repo-wide accessorFn stale-cache audit (kept for history, see above for current state)</summary>

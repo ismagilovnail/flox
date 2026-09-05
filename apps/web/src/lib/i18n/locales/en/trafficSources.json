@@ -22,7 +22,8 @@
     "none": "Not connected",
     "manual": "Manual entry",
     "facebookAds": "Facebook Ads",
-    "tiktokAds": "TikTok Ads"
+    "tiktokAds": "TikTok Ads",
+    "googleAds": "Google Ads"
   },
   "sourceType": {
     "facebook": "Facebook",
@@ -45,7 +46,7 @@
     "trackingTemplateLabel": "Tracking template",
     "trackingTemplatePlaceholder": "https://track.floxlink.io/click?clickid={click_id}&sub1={sub1}",
     "costIntegrationLabel": "Cost integration",
-    "costIntegrationHint": "Manual entries are logged per campaign on its Cost tab. Facebook/TikTok connect a stored access token below, then use \"Sync now\" to pull spend for campaigns whose External campaign ID matches — there's no scheduled/automatic sync yet, only on-demand.",
+    "costIntegrationHint": "Manual entries are logged per campaign on its Cost tab. Facebook/TikTok/Google Ads connect credentials below, then a scheduled sync pulls spend automatically every few hours for campaigns whose External campaign ID matches — \"Sync now\" runs it immediately.",
     "statusLabel": "Status",
     "submitCreate": "Create source",
     "submitEdit": "Save changes",
@@ -56,7 +57,7 @@
   },
   "connection": {
     "title": "Connected ad account",
-    "description": "Stores an access token for the spend sync below. \"Sync now\" pulls the last 30 days of daily campaign spend and writes it to each matching campaign's Cost tab (matched by External campaign ID) — there's no scheduler yet, so it only runs when you click it.",
+    "description": "Stores the credentials the spend sync below uses. A scheduled sync runs automatically every few hours; \"Sync now\" runs it immediately for the last 30 days and writes matches to each campaign's Cost tab (matched by External campaign ID).",
     "savedRequiredNotice": "Save the source first — the ad account ID and access token fields appear right after.",
     "loading": "Checking connection…",
     "tokenPreview": "•••• {{last4}}",
@@ -64,13 +65,24 @@
     "adAccountIdPlaceholder": "act_1234567890",
     "accessTokenLabel": "Access token",
     "accessTokenPlaceholder": "Paste the long-lived access token",
+    "customerIdLabel": "Customer ID",
+    "customerIdPlaceholder": "123-456-7890",
+    "developerTokenLabel": "Developer token",
+    "clientIdLabel": "OAuth client ID",
+    "clientSecretLabel": "OAuth client secret",
+    "refreshTokenLabel": "Refresh token",
+    "googleAdsHint": "Mint the refresh token once via Google's OAuth 2.0 Playground using your own Google Ads developer token and OAuth client — FLOX has no registered public callback to run its own OAuth consent flow.",
     "connect": "Connect",
     "disconnect": "Disconnect",
     "syncNow": "Sync now",
     "syncing": "Syncing…",
     "validation": {
       "adAccountIdRequired": "Ad account ID is required",
-      "accessTokenRequired": "Access token is required"
+      "accessTokenRequired": "Access token is required",
+      "developerTokenRequired": "Developer token is required",
+      "clientIdRequired": "OAuth client ID is required",
+      "clientSecretRequired": "OAuth client secret is required",
+      "refreshTokenRequired": "Refresh token is required"
     },
     "toast": {
       "connected": "Ad account connected",

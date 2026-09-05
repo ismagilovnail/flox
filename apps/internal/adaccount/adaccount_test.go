@@ -11,13 +11,23 @@ import (
 	"github.com/ismagilovnail/flox/apps/internal/idgen"
 )
 
+var testKey = mustTestKey()
+
+func mustTestKey() []byte {
+	key, err := adaccount.ParseKey("MDEyMzQ1Njc4OTAxMjM0NTY3ODkwMTIzNDU2Nzg5MDE=")
+	if err != nil {
+		panic(err)
+	}
+	return key
+}
+
 func TestConnectGetDisconnect(t *testing.T) {
 	pool := mustPool(t)
 	ctx := context.Background()
 	orgID := seedOrg(t, ctx, pool)
 	sourceID := seedTrafficSource(t, ctx, pool, orgID, "facebook_ads")
 
-	svc := adaccount.NewService(adaccount.NewRepository(pool))
+	svc := adaccount.NewService(adaccount.NewRepository(pool, testKey))
 
 	if _, err := svc.Get(ctx, orgID, sourceID); err == nil {
 		t.Fatal("Get before Connect succeeded, want not-found")
@@ -75,7 +85,7 @@ func TestConnectRejectsSourceWithoutAdCostIntegration(t *testing.T) {
 	ctx := context.Background()
 	orgID := seedOrg(t, ctx, pool)
 
-	svc := adaccount.NewService(adaccount.NewRepository(pool))
+	svc := adaccount.NewService(adaccount.NewRepository(pool, testKey))
 
 	t.Run("none", func(t *testing.T) {
 		sourceID := seedTrafficSource(t, ctx, pool, orgID, "none")
@@ -97,6 +107,86 @@ func TestConnectRejectsSourceWithoutAdCostIntegration(t *testing.T) {
 			t.Fatalf("Connect on a source with cost_integration=tiktok_ads failed: %v", err)
 		}
 	})
+
+	t.Run("google_ads is allowed", func(t *testing.T) {
+		sourceID := seedTrafficSource(t, ctx, pool, orgID, "google_ads")
+		_, err := svc.Connect(ctx, orgID, sourceID, adaccount.ConnectInput{
+			AdAccountID: "123-456-7890", DeveloperToken: "dev-token", ClientID: "client-id",
+			ClientSecret: "client-secret", RefreshToken: "refresh-token",
+		})
+		if err != nil {
+			t.Fatalf("Connect on a source with cost_integration=google_ads failed: %v", err)
+		}
+	})
+}
+
+func TestConnectGoogleAdsRequiresGoogleAdsFields(t *testing.T) {
+	pool := mustPool(t)
+	ctx := context.Background()
+	orgID := seedOrg(t, ctx, pool)
+	sourceID := seedTrafficSource(t, ctx, pool, orgID, "google_ads")
+
+	svc := adaccount.NewService(adaccount.NewRepository(pool, testKey))
+
+	// A plain accessToken (the facebook_ads/tiktok_ads shape) is not
+	// enough for google_ads — it has no long-lived access token to
+	// accept, only the means to mint short-lived ones via a refresh
+	// token.
+	if _, err := svc.Connect(ctx, orgID, sourceID, adaccount.ConnectInput{AdAccountID: "123", AccessToken: "sometoken1234567890"}); err == nil {
+		t.Fatal("Connect on a google_ads source with only accessToken succeeded, want a validation error")
+	}
+	if _, err := svc.Connect(ctx, orgID, sourceID, adaccount.ConnectInput{
+		AdAccountID: "123", DeveloperToken: "dev", ClientID: "id", ClientSecret: "secret", // missing refreshToken
+	}); err == nil {
+		t.Fatal("Connect on a google_ads source with a missing refreshToken succeeded, want a validation error")
+	}
+}
+
+// TestGoogleAdsCredentialsRoundTripEncryption confirms developer_token/
+// client_secret/refresh_token really are encrypted at rest — not just
+// that Connect/CredentialsByTrafficSourceID happen to agree — by reading
+// the raw column value directly and asserting it isn't the plaintext.
+func TestGoogleAdsCredentialsRoundTripEncryption(t *testing.T) {
+	pool := mustPool(t)
+	ctx := context.Background()
+	orgID := seedOrg(t, ctx, pool)
+	sourceID := seedTrafficSource(t, ctx, pool, orgID, "google_ads")
+
+	repo := adaccount.NewRepository(pool, testKey)
+	if _, err := repo.Connect(ctx, idgen.New(), orgID, sourceID, adaccount.ConnectInput{
+		AdAccountID: "123-456-7890", DeveloperToken: "real-dev-token", ClientID: "real-client-id",
+		ClientSecret: "real-client-secret", RefreshToken: "real-refresh-token",
+	}); err != nil {
+		t.Fatalf("Connect: %v", err)
+	}
+
+	var rawRefreshToken string
+	if err := pool.QueryRow(ctx, `SELECT refresh_token FROM ad_account_connections WHERE traffic_source_id = $1`, sourceID).Scan(&rawRefreshToken); err != nil {
+		t.Fatalf("reading raw refresh_token column: %v", err)
+	}
+	if rawRefreshToken == "real-refresh-token" {
+		t.Fatal("refresh_token is stored in plain text, want it AES-256-GCM encrypted")
+	}
+
+	creds, err := repo.CredentialsByTrafficSourceID(ctx, orgID, sourceID)
+	if err != nil {
+		t.Fatalf("CredentialsByTrafficSourceID: %v", err)
+	}
+	if creds.AdAccountID != "123-456-7890" || creds.DeveloperToken != "real-dev-token" ||
+		creds.ClientID != "real-client-id" || creds.ClientSecret != "real-client-secret" || creds.RefreshToken != "real-refresh-token" {
+		t.Fatalf("CredentialsByTrafficSourceID = %+v, want the exact plaintext round-tripped back", creds)
+	}
+	if creds.AccessToken != "" {
+		t.Fatalf("AccessToken = %q, want empty for a google_ads connection", creds.AccessToken)
+	}
+
+	conn, err := repo.GetByTrafficSourceID(ctx, orgID, sourceID)
+	if err != nil {
+		t.Fatalf("GetByTrafficSourceID: %v", err)
+	}
+	if conn.TokenPreview != "oken" {
+		t.Fatalf("TokenPreview = %q, want the last 4 characters of the refresh token (oken)", conn.TokenPreview)
+	}
 }
 
 func TestConnectRejectsInvalidShapes(t *testing.T) {
@@ -105,7 +195,7 @@ func TestConnectRejectsInvalidShapes(t *testing.T) {
 	orgID := seedOrg(t, ctx, pool)
 	sourceID := seedTrafficSource(t, ctx, pool, orgID, "facebook_ads")
 
-	svc := adaccount.NewService(adaccount.NewRepository(pool))
+	svc := adaccount.NewService(adaccount.NewRepository(pool, testKey))
 
 	if _, err := svc.Connect(ctx, orgID, sourceID, adaccount.ConnectInput{AdAccountID: "", AccessToken: "sometoken1234567890"}); err == nil {
 		t.Fatal("Connect with an empty adAccountId succeeded, want a validation error")
@@ -122,7 +212,7 @@ func TestCrossTenantIsolation(t *testing.T) {
 	orgB := seedOrg(t, ctx, pool)
 	sourceA := seedTrafficSource(t, ctx, pool, orgA, "facebook_ads")
 
-	svc := adaccount.NewService(adaccount.NewRepository(pool))
+	svc := adaccount.NewService(adaccount.NewRepository(pool, testKey))
 	if _, err := svc.Connect(ctx, orgA, sourceA, adaccount.ConnectInput{AdAccountID: "act_1", AccessToken: "sometoken1234567890"}); err != nil {
 		t.Fatalf("connecting for org A: %v", err)
 	}
@@ -153,7 +243,7 @@ func TestListAllConnections(t *testing.T) {
 	sourceB := seedTrafficSource(t, ctx, pool, orgB, "tiktok_ads")
 	sourceUnconnected := seedTrafficSource(t, ctx, pool, orgA, "facebook_ads")
 
-	repo := adaccount.NewRepository(pool)
+	repo := adaccount.NewRepository(pool, testKey)
 	if _, err := repo.Connect(ctx, idgen.New(), orgA, sourceA, adaccount.ConnectInput{AdAccountID: "act_a", AccessToken: "token-a-1234567890"}); err != nil {
 		t.Fatalf("connecting org A: %v", err)
 	}

@@ -51,6 +51,16 @@ type Config struct {
 	// or compromising one key should never force rotating the other.
 	IntegrationEncryptionKey string
 
+	// AdAccountEncryptionKey is the same shape again (32 raw bytes,
+	// base64-encoded, AES-256-GCM) but its own deliberately separate
+	// key — used by apps/internal/adaccount to encrypt Google Ads'
+	// developer token/client secret/refresh token at rest. Needed by
+	// both apps/api (Connect/Verify) and apps/worker (the ad-spend sync
+	// reads these credentials back to call the real Ads API).
+	// Facebook/TikTok Ads' own access_token predates this and stays
+	// plain text (migration 00018) — this key never touches it.
+	AdAccountEncryptionKey string
+
 	// --- Geo/ASN (apps/internal/classifier/maxmind) ---
 	// Local MaxMind GeoLite2 .mmdb file paths — both empty (the default,
 	// since no database ships in the repo; MaxMind's EULA requires a free
@@ -136,6 +146,7 @@ func load(portVar, portDefault, defaultServiceName string) (Config, error) {
 
 		TOTPEncryptionKey:        getEnv("TOTP_ENCRYPTION_KEY", ""),
 		IntegrationEncryptionKey: getEnv("INTEGRATION_ENCRYPTION_KEY", ""),
+		AdAccountEncryptionKey:   getEnv("ADACCOUNT_ENCRYPTION_KEY", ""),
 
 		GeoIPCityDBPath: getEnv("GEOIP_CITY_DB_PATH", ""),
 		GeoIPASNDBPath:  getEnv("GEOIP_ASN_DB_PATH", ""),

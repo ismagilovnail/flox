@@ -11,6 +11,21 @@ import (
 	"github.com/ismagilovnail/flox/apps/internal/trafficsource"
 )
 
+func TestCostIntegrationValid(t *testing.T) {
+	for _, valid := range []trafficsource.CostIntegration{
+		trafficsource.CostIntegrationNone, trafficsource.CostIntegrationManual,
+		trafficsource.CostIntegrationFacebookAds, trafficsource.CostIntegrationTikTokAds,
+		trafficsource.CostIntegrationGoogleAds,
+	} {
+		if !valid.Valid() {
+			t.Errorf("%q.Valid() = false, want true", valid)
+		}
+	}
+	if trafficsource.CostIntegration("bing_ads").Valid() {
+		t.Error(`"bing_ads".Valid() = true, want false`)
+	}
+}
+
 func TestListReturnsOrgsOwnSourcesOrderedByName(t *testing.T) {
 	pool := mustPool(t)
 	ctx := context.Background()

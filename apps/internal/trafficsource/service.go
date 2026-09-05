@@ -64,7 +64,7 @@ func (s *Service) Update(ctx context.Context, orgID, id string, in UpdateInput) 
 		fields["trackingTemplate"] = "must be a valid absolute URL"
 	}
 	if in.CostIntegration != nil && !in.CostIntegration.Valid() {
-		fields["costIntegration"] = "must be one of none, manual, facebook_ads, tiktok_ads"
+		fields["costIntegration"] = "must be one of none, manual, facebook_ads, tiktok_ads, google_ads"
 	}
 	if in.Status != nil && !in.Status.Valid() {
 		fields["status"] = "must be one of active, paused, archived"
@@ -155,7 +155,7 @@ func validateCreate(in CreateInput) map[string]string {
 		fields["trackingTemplate"] = "must be a valid absolute URL"
 	}
 	if !in.CostIntegration.Valid() {
-		fields["costIntegration"] = "must be one of none, manual, facebook_ads, tiktok_ads"
+		fields["costIntegration"] = "must be one of none, manual, facebook_ads, tiktok_ads, google_ads"
 	}
 	return fields
 }

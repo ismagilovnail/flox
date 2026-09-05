@@ -40,7 +40,7 @@ export const SOURCE_TYPE_I18N_KEY: Record<SourceType, string> = {
  * Records intent only — actual per-day amounts live in
  * apps/internal/cost's cost_entries, entered through a campaign's Cost
  * tab regardless of what a source's integration is set to. */
-export type CostIntegration = "none" | "manual" | "facebook_ads" | "tiktok_ads";
+export type CostIntegration = "none" | "manual" | "facebook_ads" | "tiktok_ads" | "google_ads";
 
 /** i18n keys under trafficSources.json's "costIntegration" — see
  * SOURCE_TYPE_I18N_KEY's comment; the stored value is always the map key. */
@@ -49,6 +49,7 @@ export const COST_INTEGRATION_I18N_KEY: Record<CostIntegration, string> = {
   manual: "costIntegration.manual",
   facebook_ads: "costIntegration.facebookAds",
   tiktok_ads: "costIntegration.tiktokAds",
+  google_ads: "costIntegration.googleAds",
 };
 
 export type SourceStatus = "active" | "paused" | "archived";
