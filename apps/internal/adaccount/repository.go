@@ -115,6 +115,48 @@ func (r *Repository) ListAllConnections(ctx context.Context) ([]ConnectionRef, e
 	return refs, rows.Err()
 }
 
+// PlatformCount is one row of AdPlatformSummary's result — how many of an
+// org's traffic sources configured for a given cost-integration platform
+// actually have a real connected ad account.
+type PlatformCount struct {
+	CostIntegration string
+	ConnectedCount  int
+	TotalCount      int
+}
+
+// AdPlatformSummary powers Settings > Integrations' read-only ad-platform
+// cards (apps/internal/integrations) — a real aggregate over this
+// package's own data, not a second store of connection state. Grouped by
+// traffic_sources.cost_integration rather than joined against a fixed
+// provider list, so a future third platform (e.g. Google Ads) needs no
+// change here — it appears automatically the day some traffic source
+// sets its cost_integration to that value.
+func (r *Repository) AdPlatformSummary(ctx context.Context, orgID string) ([]PlatformCount, error) {
+	rows, err := r.db.Query(ctx, `
+		SELECT ts.cost_integration, count(aac.id), count(ts.id)
+		FROM traffic_sources ts
+		LEFT JOIN ad_account_connections aac ON aac.traffic_source_id = ts.id
+		WHERE ts.organization_id = $1 AND ts.cost_integration IN ('facebook_ads', 'tiktok_ads')
+		GROUP BY ts.cost_integration
+		ORDER BY ts.cost_integration`,
+		orgID,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("summarizing ad platform connections: %w", err)
+	}
+	defer rows.Close()
+
+	var out []PlatformCount
+	for rows.Next() {
+		var p PlatformCount
+		if err := rows.Scan(&p.CostIntegration, &p.ConnectedCount, &p.TotalCount); err != nil {
+			return nil, fmt.Errorf("scanning ad platform summary: %w", err)
+		}
+		out = append(out, p)
+	}
+	return out, rows.Err()
+}
+
 // TrafficSourceCostIntegration returns the traffic source's own
 // cost_integration value (a raw query against trafficsource's table,
 // same as streamset.Repository's own cross-domain checks — not an

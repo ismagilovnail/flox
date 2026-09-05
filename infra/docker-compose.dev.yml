@@ -156,6 +156,9 @@ services:
       # Dev-only value, matches .env.example's own dev default exactly —
       # never reuse this in staging/production (see .env.example's comment).
       TOTP_ENCRYPTION_KEY: "IXkldrBTvgfDhIxzUBn3MrRAJq7Gh7z8mQ5UhBC4DRo="
+      # Dev-only value, matches .env.example's own dev default exactly —
+      # never reuse this in staging/production (see .env.example's comment).
+      INTEGRATION_ENCRYPTION_KEY: "wLE0wIEHBNnfVfq8d62JDEAltM4frTgYmPi8XAv1QpY="
       # The browser's own Origin (localhost:3000, web's host-published
       # port) — apps/internal/tenant.RequireSameOrigin (§54 CSRF) compares
       # against this literally, so it must never be the in-network "web"

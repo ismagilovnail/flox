@@ -42,6 +42,15 @@ type Config struct {
 	// run 2FA with a well-known key.
 	TOTPEncryptionKey string
 
+	// IntegrationEncryptionKey is the same shape as TOTPEncryptionKey
+	// (32 raw bytes, base64-encoded, AES-256-GCM) but a deliberately
+	// separate key — used by apps/internal/integrations to encrypt
+	// Settings > Integrations credentials (Namecheap/Cloudflare/Slack) at
+	// rest. A real API credential must be decryptable to make a real
+	// verify call with it, same reasoning as the TOTP secret; rotating
+	// or compromising one key should never force rotating the other.
+	IntegrationEncryptionKey string
+
 	// --- Geo/ASN (apps/internal/classifier/maxmind) ---
 	// Local MaxMind GeoLite2 .mmdb file paths — both empty (the default,
 	// since no database ships in the repo; MaxMind's EULA requires a free
@@ -125,7 +134,8 @@ func load(portVar, portDefault, defaultServiceName string) (Config, error) {
 		SMTPURL:  getEnv("SMTP_URL", "smtp://localhost:1025"),
 		MailFrom: getEnv("MAIL_FROM", "FLOX <no-reply@floxlink.io>"),
 
-		TOTPEncryptionKey: getEnv("TOTP_ENCRYPTION_KEY", ""),
+		TOTPEncryptionKey:        getEnv("TOTP_ENCRYPTION_KEY", ""),
+		IntegrationEncryptionKey: getEnv("INTEGRATION_ENCRYPTION_KEY", ""),
 
 		GeoIPCityDBPath: getEnv("GEOIP_CITY_DB_PATH", ""),
 		GeoIPASNDBPath:  getEnv("GEOIP_ASN_DB_PATH", ""),

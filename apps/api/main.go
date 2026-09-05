@@ -37,6 +37,7 @@ import (
 	"github.com/ismagilovnail/flox/apps/internal/eventmapping"
 	"github.com/ismagilovnail/flox/apps/internal/eventqueue"
 	"github.com/ismagilovnail/flox/apps/internal/httpserver"
+	integrationsengine "github.com/ismagilovnail/flox/apps/internal/integrations"
 	"github.com/ismagilovnail/flox/apps/internal/landing"
 	"github.com/ismagilovnail/flox/apps/internal/logging"
 	"github.com/ismagilovnail/flox/apps/internal/ltv"
@@ -206,6 +207,15 @@ func run() error {
 	}
 	authSvc.SetTOTPKey(totpKey)
 
+	// Same "fail loudly at boot" bar as TOTP's own key, above — a
+	// misconfigured/missing key must never silently run Settings >
+	// Integrations credential storage with a well-known key.
+	integrationKey, err := integrationsengine.ParseKey(cfg.IntegrationEncryptionKey)
+	if err != nil {
+		logger.Error("integration encryption key configuration failed", "error", err)
+		return err
+	}
+
 	// §54/Phase 30: RequireSameOrigin runs OUTSIDE (before) session
 	// resolution — rejecting a forged cross-origin mutation is cheaper
 	// and safer than first looking up whose session it claims to be.
@@ -277,6 +287,16 @@ func run() error {
 
 	adAccountRepo := adaccount.NewRepository(db)
 	adAccountHandler := adaccount.NewHandler(adaccount.NewService(adAccountRepo), logger)
+
+	integrationsHandler := integrationsengine.NewHandler(
+		integrationsengine.NewService(integrationsengine.NewRepository(db), integrationKey, adAccountRepo),
+		authSvc.RequirePermission("settings.write", logger),
+		logger,
+	)
+	srv.Mux().Route("/integrations", func(r chi.Router) {
+		r.Use(tenantMiddleware)
+		integrationsHandler.Register(r)
+	})
 
 	networkHandler := network.NewHandler(network.NewService(network.NewRepository(db)), logger)
 	srv.Mux().Route("/networks", func(r chi.Router) {

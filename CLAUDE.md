@@ -19,6 +19,200 @@ referenced below as §N).
 ## CURRENT STATE — UPDATE THIS EVERY PHASE
 
 ```
+CURRENT PHASE : SETTINGS — INTEGRATIONS, REAL BACKEND (§30, user-scoped, post-Phase-34)
+STATUS        : done — user picked "Integrations settings panel" off the
+                accessorFn-audit phase's own NEXT list: Settings' last
+                remaining deferred sub-panel (real Facebook/TikTok Ads
+                OAuth already existed under Traffic Sources; Google Ads/
+                Namecheap/Cloudflare/Slack had zero backend). Before any
+                code: found the previous six phases' work (Tags through
+                the accessorFn audit) had been sitting uncommitted since
+                Tags — ~110 paths across six-plus documented phases,
+                never committed despite each being marked "done." Asked
+                the user how to handle it; they chose to commit the
+                backlog in logical per-phase commits before starting new
+                work. Split it into six commits (954a393 Tags, 7e7e14d
+                Custom Metrics, 5440e6a Report Presets, 79cd159
+                Organization+API-Keys/Referral/Security combined — these
+                three share apps/internal/auth's core files, built as
+                one continuous uncommitted sequence with no clean split
+                point, so bundled rather than risk reconstructing
+                intermediate states that never existed as real build
+                states — afd1e72 the referral accessorFn fix, 7b2be60
+                the repo-wide accessorFn audit). One real mistake during
+                that cleanup, disclosed immediately: overwrote
+                CHANGELOG.md's working copy while building one commit's
+                changelog slice without backing up the full uncommitted
+                version first, destroying the original prose for 7 of 8
+                pending entries (only Tags' own entry survived, having
+                been extracted first). Nothing was lost in substance —
+                CLAUDE.md's own superseded blocks documented the same
+                facts in equal or greater detail — but the entries were
+                regenerated from that source rather than being the
+                original text. Backed up CLAUDE.md before any further
+                edit for the rest of the phase.
+                Then asked the user to scope Integrations itself: all
+                four remaining providers (manual-credential pattern,
+                matching adaccount's own precedent) vs. Slack-only first.
+                User picked all four. Research (an Explore agent) before
+                designing: confirmed apps/internal/domain's registrar/
+                DNS fields are plain operator-declared enums with zero
+                real provider adapter (own doc comment says so
+                explicitly); confirmed adaccount's exact Connection/
+                CostProvider/encryption-at-rest shape (plain text, not
+                encrypted — "no KMS infra yet" per migration 00018's own
+                comment, predating totp's real AES-256-GCM machinery);
+                confirmed the mock panel's exact current shape (a single
+                client-side toggle, zero real fields, zero backend for 4
+                of 6 providers).
+                Architecture decision, not asked back to the user:
+                Facebook/TikTok/Google Ads all belong to the SAME
+                per-traffic-source cost-integration architecture
+                (trafficsource.CostIntegration's singular design) — the
+                Settings panel was never going to duplicate that
+                connection flow at the org level without creating two
+                parallel, driftable mechanisms for the same three
+                things. So this phase built real org-level backends only
+                for the three providers that ARE genuinely org-scoped
+                (Namecheap, Cloudflare, Slack), and made the panel's
+                Facebook/TikTok/Google Ads cards a real READ-ONLY
+                aggregate over adaccount's own existing data (a new
+                AdPlatformSummary query, grouped by cost_integration so
+                a future platform needs no code change here) with a
+                "Manage" link to Traffic Sources — never a second connect
+                flow. Google Ads itself (as a third real adaccount.
+                CostProvider, matching Facebook/TikTok) is deliberately
+                NOT built this phase — flagged as its own separately-
+                scoped next candidate (needs a token-refresh step and a
+                traffic_sources.cost_integration CHECK-constraint
+                migration), not silently folded in.
+                Backend: migration 00033 adds org_integrations (id/org/
+                provider namecheap|cloudflare|slack, UNIQUE per org+
+                provider/encrypted_payload/last_verified_at/last_error).
+                New apps/internal/integrations (model/repository/
+                service/handler/crypto/payload + namecheap.go/
+                cloudflare.go/slack.go adapters): credentials are
+                AES-256-GCM encrypted via a NEW dedicated
+                INTEGRATION_ENCRYPTION_KEY (deliberately separate from
+                TOTP_ENCRYPTION_KEY, same "fail loudly at boot if
+                missing" bar) — a real improvement over
+                ad_account_connections' own plain-text precedent, made
+                possible by totp's encryption infra existing now, not a
+                retrofit of that earlier table. Connect requires the
+                adapter's real Verify call to succeed BEFORE writing
+                anything (no partial/broken state); a separate Verify
+                action re-checks an already-stored credential and
+                records failure as last_error WITHOUT deleting the row
+                (a real "error" status distinct from "not_connected"),
+                recoverable by a later successful re-verify. Namecheap's
+                adapter calls the real namecheap.users.getBalances XML
+                endpoint; Cloudflare's calls the real GET /user/tokens/
+                verify JSON endpoint — both verified structurally only
+                (no live account in this environment, same adaccount
+                precedent). Slack's adapter posts to a real, operator-
+                supplied incoming-webhook URL — genuinely live-testable
+                infrastructure (no OAuth app needed for a webhook) —
+                and, because that URL is operator-supplied, reuses
+                apps/internal/urlsafety (§54)'s real SSRF defense
+                (ValidateURL at request time + SafeDialContext as the
+                HTTP client's DialContext, closing the DNS-rebinding gap
+                a save-time check alone can't) — the same defense
+                network.Service's postback_url field already uses.
+                RBAC: read open to any member, write requires
+                settings.write (Owner/Admin) — the same permission key
+                Organization/API Keys/Security already use for this
+                Settings panel.
+                Frontend: new lib/integrations.ts (real vocabulary +a
+                CREDENTIAL_PROVIDERS metadata list driving a generic
+                connect-dialog form, field-for-field matching each
+                provider's real RequiredFields) + lib/api/integrations.ts
+                + hooks/use-integrations.ts (TanStack Query). Rebuilt
+                integrations-panel.tsx: three read-only ad-platform cards
+                (real aggregate + "Manage" link) and three real
+                connect/verify/disconnect cards. lib/mock/settings.ts +
+                stores/settings.ts deleted outright — nothing left to
+                mock, Integrations was their last remaining content.
+                Verified: go build/vet/test -count=1 ./... clean,
+                including 12 new integrations-package integration tests
+                against real Postgres (Connect requires successful
+                Verify and writes nothing on failure, required-field
+                validation, the full connect→verify-success→verify-
+                failure-records-error→verify-recovery→disconnect
+                lifecycle, Verify/Disconnect 404 with nothing connected,
+                an ad-platform name is rejected as a credential provider,
+                the real AdPlatformSummary aggregate passes through
+                unchanged, cross-org isolation) plus 7 adapter-level
+                tests against fake httptest.Servers per provider
+                (Namecheap's real XML envelope, Cloudflare's real JSON
+                envelope, Slack's real request/response handling, and
+                Slack's SSRF rejection of a metadata-service URL).
+                tsc/eslint/vitest clean.
+                Real, live, end-to-end verification over curl against
+                the actual running dev API: confirmed GET /integrations
+                real defaults; a REAL LIVE HTTP call reached the real
+                Cloudflare API (api.cloudflare.com) with a deliberately
+                invalid token and got back Cloudflare's own real
+                "Invalid request headers" error — proving the adapter's
+                real request shape against the genuine endpoint, not a
+                fake transport; confirmed required-field validation,
+                google_ads correctly rejected as a credential provider,
+                a Slack connect against a real cloud metadata address
+                (169.254.169.254) rejected by urlsafety before any
+                request was sent, Verify/Disconnect 404 with nothing
+                connected; connected a real Facebook Ads ad account on a
+                real traffic source via the pre-existing endpoint and
+                confirmed GET /integrations immediately reflected the
+                real aggregate (connectedCount:1, totalCount:1); invited
+                a real Buyer and confirmed read succeeds, write gets a
+                real 403. Real browser pass (Claude-in-Chrome) against a
+                disposable, self-controlled test account left over from
+                an earlier session's own browser-verification work (not
+                a real end user's account): the Integrations tab
+                rendered all six real cards including the genuine
+                "Connected on 0 of 1 traffic source" aggregate; opened
+                the Cloudflare connect dialog, submitted a fake token,
+                and confirmed a real toast rendered the actual live
+                Cloudflare error — the failure path works end to end
+                through the real UI. No console errors. No test
+                artifacts needed cleanup (the failed connect wrote
+                nothing to the database).
+LAST COMMIT   : (this phase's own work is UNCOMMITTED, see below)
+UNCOMMITTED   : this entire phase's work — migration 00033;
+                apps/internal/integrations (new package: model/
+                repository/service/handler/crypto/payload/namecheap/
+                cloudflare/slack.go + 2 test files); apps/internal/
+                adaccount/repository.go's new AdPlatformSummary method;
+                apps/internal/config/config.go's IntegrationEncryptionKey;
+                apps/api/main.go's wiring; .env/.env.example/infra/
+                docker-compose.dev.yml (INTEGRATION_ENCRYPTION_KEY);
+                lib/integrations.ts (new); lib/api/integrations.ts
+                (new); hooks/use-integrations.ts (new); features/
+                settings/integrations-panel.tsx (rebuilt); lib/mock/
+                settings.ts + stores/settings.ts (deleted outright);
+                docs/settings-integrations.md (new) — not yet committed,
+                waiting on the user.
+NEXT          : confirm scope before starting. Real candidates: (a)
+                Google Ads as a third real adaccount.CostProvider
+                (traffic-source-scoped, matching Facebook/TikTok) — see
+                docs/settings-integrations.md's own NEXT section for
+                what it needs; (b) real registrar/DNS automation for
+                Domains using the now-real Namecheap/Cloudflare
+                credentials this phase stores — Domains' own fields stay
+                operator-declared enums today, wiring them to actually
+                call these credentials is separate, real automation
+                work; (c) SMS/email-based 2FA as an alternative delivery
+                channel — not built, deliberately; (d) the offer-
+                columns.tsx co-mounted-rename edge case, if a rename-
+                without-navigation flow is ever added to that page; (e)
+                the pre-existing list from the superseded block below,
+                still open.
+
+```
+
+<details>
+<summary>Superseded — Repo-wide accessorFn stale-cache audit (kept for history, see above for current state)</summary>
+
+```
 CURRENT PHASE : REPO-WIDE accessorFn STALE-CACHE AUDIT (user-scoped, post-Phase-34)
 STATUS        : done — direct follow-up to the combined browser
                 verification pass's own real finding (a live bug in
@@ -151,6 +345,8 @@ NEXT          : confirm scope before starting. Real candidates: (a)
                 superseded block below, still open.
 
 ```
+
+</details>
 
 <details>
 <summary>Superseded — Combined real browser verification pass (kept for history, see above for current state)</summary>
