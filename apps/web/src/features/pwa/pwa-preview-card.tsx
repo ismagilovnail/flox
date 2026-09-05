@@ -244,9 +244,12 @@ function StarBar({ n, pct, accent }: { n: number; pct?: number; accent: string }
 const INSTALL_DURATION_MS = 1800;
 
 /**
- * The reference's own downloading-ring affordance — a circular progress
- * indicator that fills once, replacing the Install button's label while a
- * (simulated) install runs. No real install happens anywhere in this
+ * The real Android/Play Store install affordance is a ring drawn around
+ * the APP ICON, not inside the Install button (confirmed against a real
+ * Play Store screenshot the user provided: while installing, the button
+ * disappears entirely, a circular progress ring wraps the icon, and the
+ * developer line is replaced with "Please wait…" — reproduced exactly
+ * below, not guessed at). No real install happens anywhere in this
  * preview card (there is no app to install — this mockup only ever
  * renders form values); this is a deliberate FLOX-specific UI convenience
  * so an operator can see the same interaction Google Play's own listing
@@ -259,7 +262,19 @@ const INSTALL_DURATION_MS = 1800;
  * transition on the same element (e.g. a theme/accent color change mid-
  * animation).
  */
-function InstallProgressRing({ accent, onDone }: { accent: string; onDone: () => void }) {
+function InstallProgressRing({
+  accent,
+  onDone,
+  size = 20,
+  strokeWidth = 2,
+  className,
+}: {
+  accent: string;
+  onDone: () => void;
+  size?: number;
+  strokeWidth?: number;
+  className?: string;
+}) {
   const [filled, setFilled] = useState(false);
   useEffect(() => {
     const raf = requestAnimationFrame(() => setFilled(true));
@@ -268,25 +283,32 @@ function InstallProgressRing({ accent, onDone }: { accent: string; onDone: () =>
       cancelAnimationFrame(raf);
       clearTimeout(timeout);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- runs exactly once per mount (the button remounts this via `key` on state change), re-running on a later `onDone` identity change would restart the animation
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- runs exactly once per mount (the icon overlay remounts this via `key` on state change), re-running on a later `onDone` identity change would restart the animation
   }, []);
-  const radius = 9;
+  const center = size / 2;
+  const radius = center - strokeWidth / 2;
   const circumference = 2 * Math.PI * radius;
   return (
-    <svg className="size-5 shrink-0" viewBox="0 0 24 24" aria-hidden="true">
-      <circle cx="12" cy="12" r={radius} fill="none" stroke="var(--pv-border)" strokeWidth="2" />
+    <svg
+      className={cn("shrink-0", className)}
+      width={size}
+      height={size}
+      viewBox={`0 0 ${size} ${size}`}
+      aria-hidden="true"
+    >
+      <circle cx={center} cy={center} r={radius} fill="none" stroke="var(--pv-border)" strokeWidth={strokeWidth} />
       <circle
-        cx="12"
-        cy="12"
+        cx={center}
+        cy={center}
         r={radius}
         fill="none"
         stroke={accent}
-        strokeWidth="2"
+        strokeWidth={strokeWidth}
         strokeLinecap="round"
         strokeDasharray={circumference}
         strokeDashoffset={filled ? 0 : circumference}
         style={{ transition: `stroke-dashoffset ${INSTALL_DURATION_MS}ms linear` }}
-        transform="rotate(-90 12 12)"
+        transform={`rotate(-90 ${center} ${center})`}
       />
     </svg>
   );
@@ -447,10 +469,13 @@ export function PwaPreviewCard({
     inAppPurchases ? t("preview.inAppPurchases", { ns: "pwa" }) : "",
   ].filter(Boolean);
   const [aboutOpen, setAboutOpen] = useState(false);
-  // "idle" -> "installing" (ring animates for INSTALL_DURATION_MS) ->
-  // "installed" ("Open" label). Clicking "Open" resets back to "idle"
-  // rather than doing nothing, so the simulation can be replayed while
-  // designing a listing instead of only ever running once per page load.
+  // "idle" -> "installing" (button hides; the icon gets a progress ring
+  // and the developer line reads "Please wait…", for INSTALL_DURATION_MS
+  // — matches the real Play Store's own install affordance, not a
+  // guess) -> "installed" ("Open" label). Clicking "Open" resets back to
+  // "idle" rather than doing nothing, so the simulation can be replayed
+  // while designing a listing instead of only ever running once per page
+  // load.
   const [installStatus, setInstallStatus] = useState<"idle" | "installing" | "installed">("idle");
 
   // The sheet's "detailed information" table, in the reference's own
@@ -536,26 +561,43 @@ export function PwaPreviewCard({
         <div className="flex flex-col gap-4 px-5 py-5">
           <div className="flex items-start gap-4">
             {!!iconUrl && (
-              <div className="size-[72px] shrink-0 overflow-hidden rounded-2xl">
-                {/* eslint-disable-next-line @next/next/no-img-element -- external, unknown-dimension icon URL; next/image would need a remotePatterns entry per operator-supplied host */}
-                <img
-                  src={iconUrl}
-                  alt=""
-                  className="size-full object-cover"
-                  onError={(e) => (e.currentTarget.style.display = "none")}
-                />
+              <div className="relative size-[72px] shrink-0">
+                <div className="size-full overflow-hidden rounded-2xl">
+                  {/* eslint-disable-next-line @next/next/no-img-element -- external, unknown-dimension icon URL; next/image would need a remotePatterns entry per operator-supplied host */}
+                  <img
+                    src={iconUrl}
+                    alt=""
+                    className="size-full object-cover"
+                    onError={(e) => (e.currentTarget.style.display = "none")}
+                  />
+                </div>
+                {installStatus === "installing" && (
+                  <InstallProgressRing
+                    key={installStatus}
+                    accent={accent}
+                    size={72}
+                    strokeWidth={3}
+                    className="absolute inset-0"
+                    onDone={() => setInstallStatus("installed")}
+                  />
+                )}
               </div>
             )}
             <div className="flex min-w-0 flex-col gap-0.5">
               <p className="text-[22px] font-semibold leading-tight text-[var(--pv-text)]">
                 {displayName}
               </p>
-              <p
-                className="flex items-center gap-1.5 text-base font-medium"
-                style={{ color: accent }}
-              >
-                {displayDeveloper}
-                <VerifiedBadge />
+              <p className="flex items-center gap-1.5 text-base font-medium">
+                {installStatus === "installing" ? (
+                  <span className="text-[var(--pv-text-muted)]">
+                    {t("preview.pleaseWait", { ns: "pwa" })}
+                  </span>
+                ) : (
+                  <span className="flex items-center gap-1.5" style={{ color: accent }}>
+                    {displayDeveloper}
+                    <VerifiedBadge />
+                  </span>
+                )}
               </p>
               <p className="text-xs text-[var(--pv-text-muted)]">
                 {monetizationNotes.length > 0
@@ -599,37 +641,20 @@ export function PwaPreviewCard({
             </div>
           </div>
 
-          <button
-            type="button"
-            disabled={installStatus === "installing"}
-            onClick={() => {
-              if (installStatus === "idle") setInstallStatus("installing");
-              else if (installStatus === "installed") setInstallStatus("idle");
-            }}
-            className={cn(
-              "flex h-9 w-full items-center justify-center rounded-lg text-sm font-bold transition-colors",
-              installStatus === "installing"
-                ? "cursor-wait bg-transparent"
-                : "text-white",
-            )}
-            style={
-              installStatus === "installing"
-                ? { border: `1px solid ${accent}` }
-                : { backgroundColor: accent }
-            }
-          >
-            {installStatus === "installing" ? (
-              <InstallProgressRing
-                key={installStatus}
-                accent={accent}
-                onDone={() => setInstallStatus("installed")}
-              />
-            ) : installStatus === "installed" ? (
-              t("preview.open", { ns: "pwa" })
-            ) : (
-              t("preview.install", { ns: "pwa" })
-            )}
-          </button>
+          {installStatus !== "installing" && (
+            <button
+              type="button"
+              onClick={() =>
+                setInstallStatus(installStatus === "idle" ? "installing" : "idle")
+              }
+              className="h-9 w-full rounded-lg text-sm font-bold text-white"
+              style={{ backgroundColor: accent }}
+            >
+              {installStatus === "installed"
+                ? t("preview.open", { ns: "pwa" })
+                : t("preview.install", { ns: "pwa" })}
+            </button>
+          )}
 
           <div
             className="flex items-start justify-between gap-4 text-[13px] font-medium"

@@ -5,6 +5,28 @@ per-phase, matching `CLAUDE.md`'s phase protocol. The one exception is
 [Between phases], below: spec amendments and the code changes that follow from
 them land between phases and would otherwise be invisible here.
 
+## [Between phases] — PWA live preview: install ring moves to the icon, matching real Android
+
+Follow-up to the simulated install flow below: the user pasted a real
+Play Store screenshot of an in-progress install and pointed out the
+real behavior differs from the first pass — the Install button
+disappears entirely (not disabled-in-place), a circular progress ring
+wraps the app icon itself, and the developer line reads "Please wait…"
+instead of the developer name/verified badge.
+
+Rebuilt `pwa-preview-card.tsx` to match: `InstallProgressRing` is now
+generalized (`size`/`strokeWidth`/`className`) and moved from inside
+the button onto a new wrapper around the 72px icon; the button is
+conditionally rendered (absent while `installStatus === "installing"`)
+rather than merely disabled; the developer line swaps to a new muted
+"Please wait…" string during that same window. New i18n key
+`preview.pleaseWait` (en+ru).
+
+Verified: tsc/eslint/vitest clean; a real browser pass confirmed the
+button vanishes, the ring wraps the icon, and the developer line reads
+"Пожалуйста, под…" during the simulated install, with no console
+errors.
+
 ## [Between phases] — PWA live preview: simulated install flow
 
 `features/pwa/pwa-preview-card.tsx`'s "Install" button — in the live

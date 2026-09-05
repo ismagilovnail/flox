@@ -76,12 +76,48 @@ STATUS        : done — user asked that pwa-preview-card.tsx's "Install"
                 animation completes, and confirmed clicking "Открыть"
                 resets it back to "Установить" (Install) for a repeat
                 run. No console errors during any of it.
-LAST COMMIT   : (this phase's own work is UNCOMMITTED, see below)
-UNCOMMITTED   : this entire phase's work — apps/web/src/features/pwa/
-                pwa-preview-card.tsx (InstallProgressRing + installStatus
-                state + the Install button rewrite); apps/web/src/lib/
-                i18n/locales/{en,ru}/pwa.json (preview.open) — not yet
-                committed, waiting on the user.
+                Round 2, same phase: user pasted a real Play Store
+                screenshot (an in-progress "Subway Surfers" install) and
+                asked to match it exactly. It showed the real Android/
+                Play behavior is different from round 1's guess: the
+                Install button disappears ENTIRELY while installing (not
+                disabled-in-place), a circular progress ring wraps the
+                APP ICON itself, and the developer line is replaced with
+                "Пожалуйста, подождите…" ("Please wait…") — not a ring
+                inside the button at all. Rebuilt to match: Install
+                ProgressRing generalized (size/strokeWidth/className
+                props, still the same double-rAF stroke-dashoffset
+                technique) and moved from the button onto a new relative
+                wrapper around the 72px icon (size=72, strokeWidth=3,
+                absolutely positioned over it); the button itself is now
+                conditionally rendered (`installStatus !== "installing"`)
+                instead of merely disabled, so it's genuinely absent
+                during the simulated install, matching the reference;
+                the developer-name/verified-badge line swaps for a new
+                muted "Please wait…" string during that same window. New
+                i18n key preview.pleaseWait (en+ru).
+                Verified: tsc --noEmit/eslint (zero warnings)/vitest
+                (21/21, unrelated) clean. Real browser pass (Claude-in-
+                Chrome): picked a real Content Gallery image as the icon
+                (exercising the existing crop-at-attach-time flow), then
+                clicked Install and confirmed via a zoomed screenshot
+                that the button vanishes, a real circular ring appears
+                wrapped tightly around the icon, and the developer line
+                reads "Пожалуйста, под…" (truncated by the zoom crop,
+                confirmed full text via the DOM) — then confirmed the
+                full cycle still completes to "Открыть" and resets on
+                click, exactly as round 1 verified. No console errors.
+LAST COMMIT   : feat(pwa): clickable Install button with simulated
+                Google-Play-style preloader — 56f725f (round 1 only;
+                round 2's icon-ring rework above is this phase's own
+                work still uncommitted, see below)
+UNCOMMITTED   : round 2's own changes — apps/web/src/features/pwa/
+                pwa-preview-card.tsx (InstallProgressRing generalized +
+                moved to wrap the icon; button conditionally rendered
+                instead of disabled; the "Please wait…" developer-line
+                swap); apps/web/src/lib/i18n/locales/{en,ru}/pwa.json
+                (preview.pleaseWait) — not yet committed, waiting on the
+                user.
 NEXT          : confirm scope before starting. Real candidates: (a)
                 retrofitting facebook_ads/tiktok_ads' own access_token
                 to real encryption now that four real AES-256-GCM
