@@ -10,6 +10,7 @@
     "saveTooltip": "Saves the current columns, metrics, grouping, period, and timezone.",
     "updateAria": "Update {{name}} with the current view",
     "deleteAria": "Delete {{name}}",
+    "retryAria": "Retry loading presets",
     "dialog": {
       "updateTitle": "Update preset",
       "createTitle": "Save current view as a preset",

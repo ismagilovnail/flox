@@ -1,10 +1,15 @@
 /**
  * Report Presets (§27.5) — a saved, reusable {columns, metrics, grouping,
- * period, timezone}. `period` is stored relative ("last N days") wherever
- * possible rather than a frozen from/to pair, so applying a preset next
- * month still means "the last 30 days," not a stale historical window —
- * only a custom range that doesn't match a known relative window falls
- * back to fixed dates.
+ * period, timezone}. Real backend: apps/internal/reportpresets. `period` is
+ * stored relative ("last N days") wherever possible rather than a frozen
+ * from/to pair, so applying a preset next month still means "the last 30
+ * days," not a stale historical window — only a custom range that doesn't
+ * match a known relative window falls back to fixed dates.
+ *
+ * Moved out of lib/mock/ — this is real, permanent vocabulary (the type
+ * shape and the period<->date-range conversions are used against real API
+ * responses now), not disposable mock data. Same move already made for
+ * lib/tags.ts, lib/custom-metrics.ts, lib/organization.ts.
  */
 
 import type { DimensionKey, MetricKey } from "@/features/analytics/registry";
@@ -56,41 +61,27 @@ export function dateRangeToPeriod(range: { from?: Date; to?: Date } | undefined,
 
 export type ReportPreset = {
   id: string;
+  organizationId?: string;
   name: string;
   dimensions: DimensionKey[];
   metrics: MetricKey[];
   groupBy: DimensionKey;
   period: ReportPeriod;
   timezone: string;
-  /** System default — visible to everyone, can't be renamed or deleted. */
+  /** System default — visible to everyone, can't be renamed or deleted.
+   * Real backend lazily seeds this on an org's first GET /report-presets —
+   * see apps/internal/reportpresets/repository.go's EnsureDefault. */
   isDefault: boolean;
+  createdByUserId?: string | null;
   createdAt: string;
   updatedAt: string;
 };
 
-export const REPORT_PRESETS: ReportPreset[] = [
-  {
-    id: "preset_default_overview",
-    name: "Campaign Overview (default)",
-    dimensions: ["campaign"],
-    metrics: ["clicks", "conversions", "revenue", "cvr"],
-    groupBy: "campaign",
-    period: { type: "relative", days: 30 },
-    timezone: "UTC",
-    isDefault: true,
-    createdAt: "2026-01-20T00:00:00Z",
-    updatedAt: "2026-01-20T00:00:00Z",
-  },
-  {
-    id: "preset_source_performance",
-    name: "Source Performance — 7d",
-    dimensions: ["source", "country"],
-    metrics: ["clicks", "revenue", "roi", "cpa"],
-    groupBy: "source",
-    period: { type: "relative", days: 7 },
-    timezone: "UTC",
-    isDefault: false,
-    createdAt: "2026-05-10T00:00:00Z",
-    updatedAt: "2026-05-10T00:00:00Z",
-  },
-];
+export type ReportPresetInput = {
+  name: string;
+  dimensions: DimensionKey[];
+  metrics: MetricKey[];
+  groupBy: DimensionKey;
+  period: ReportPeriod;
+  timezone: string;
+};

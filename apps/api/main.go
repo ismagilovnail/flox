@@ -51,6 +51,7 @@ import (
 	"github.com/ismagilovnail/flox/apps/internal/pwa"
 	"github.com/ismagilovnail/flox/apps/internal/ratelimit"
 	"github.com/ismagilovnail/flox/apps/internal/rediscache"
+	"github.com/ismagilovnail/flox/apps/internal/reportpresets"
 	"github.com/ismagilovnail/flox/apps/internal/routing"
 	"github.com/ismagilovnail/flox/apps/internal/routingsimulate"
 	"github.com/ismagilovnail/flox/apps/internal/routingstore"
@@ -292,6 +293,16 @@ func run() error {
 	srv.Mux().Route("/custom-metrics", func(r chi.Router) {
 		r.Use(tenantMiddleware)
 		customMetricsHandler.Register(r)
+	})
+
+	reportPresetsHandler := reportpresets.NewHandler(
+		reportpresets.NewService(reportpresets.NewRepository(db)),
+		authSvc.RequirePermission("report_preset.write", logger),
+		logger,
+	)
+	srv.Mux().Route("/report-presets", func(r chi.Router) {
+		r.Use(tenantMiddleware)
+		reportPresetsHandler.Register(r)
 	})
 
 	postlandingHandler := postlanding.NewHandler(postlanding.NewService(postlanding.NewRepository(db)), logger)

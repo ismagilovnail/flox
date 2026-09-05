@@ -5,6 +5,85 @@ per-phase, matching `CLAUDE.md`'s phase protocol. The one exception is
 [Between phases], below: spec amendments and the code changes that follow from
 them land between phases and would otherwise be invisible here.
 
+## [Between phases] — Report Presets (§27.5, Phase 14.7): real backend
+
+Continuing down Phase 34's audit list (Tags and Custom Metrics done
+this session; Settings and Referral remained). §27.5/Phase 14.7 also
+bundles a "View statistics" directory drill-in, confirmed already real
+and frontend-only (a navigation + pre-filter into the report builder,
+no backend involved) for 3 of the spec's 4 named entities — Flows has
+no standalone list view to hang the action off, a structural gap, not a
+bug. This phase scoped to Report Presets itself.
+
+The frontend already carried the preset shape and every interaction
+(`features/analytics/report-preset-bar.tsx`: apply/save/rename/delete)
+against a zustand mock store. No backend existed anywhere.
+
+**Backend.** Migration 00030 adds `report_presets` (id/org/name/
+dimensions text[]/metrics text[]/group_by/period fields (flat columns,
+matching the frontend's own tagged union)/timezone/is_default/
+created_by_user_id) plus `report_preset.read`/`report_preset.write`
+permission keys. New `apps/internal/reportpresets`:
+
+- Presets are genuinely team-scoped — unlike Custom Metrics there's no
+  owner-based "manage only what I created" restriction; anyone holding
+  `report_preset.write` can edit or delete any non-default preset.
+- Dimension validation reuses the real `chstore.ValidDimension`
+  whitelist directly — a genuine shared source of truth, not a mirrored
+  copy. Metric validation has no Go-side equivalent to import, so
+  `reportpresets.validMetrics` mirrors the frontend's `MetricKey` union,
+  same tradeoff `custommetrics/registry.go` already accepted.
+- `is_default`: a system default preset can't be renamed or deleted,
+  enforced both in the service layer and defensively in the repository's
+  own `WHERE is_default = false` clause. `Repository.EnsureDefault`
+  lazily seeds an org's default preset the first time `List` runs for an
+  org with none yet, race-safe via `ON CONFLICT DO NOTHING` against a
+  partial unique index (`report_presets_one_default_per_org`).
+- Timezone validated via Go's real IANA tzdata, same precedent
+  Organization settings established.
+
+**Backend bug caught mid-build, not by review:** the migration's own
+`CHECK` bound (copied from the frontend mock's 14-day dropdown) rejected
+the same migration's `DEFAULT 43200`-equivalent default period — the
+migration failed outright against live Postgres on first apply. Fixed
+by widening the check to the real ceiling, not the frontend's curated
+range — the same "backend validates broadly, frontend curates a
+shortlist" precedent Organization settings' timezone/currency already
+established. The transactional migration rolled back cleanly on the
+first failed attempt.
+
+**Frontend.** New `lib/report-presets.ts` holds the real vocabulary
+(`ReportPeriod`/`ReportPreset`/`ReportPresetInput`, `RELATIVE_PERIODS`,
+period↔date-range conversions) moved out of `lib/mock/`. New `lib/api/
+report-presets.ts` + `hooks/use-report-presets.ts` (TanStack Query)
+replace `stores/report-presets.ts` and the mock's fake array (both
+deleted). `report-preset-bar.tsx` refactored onto the new hooks with
+real loading (skeleton chips) and error (inline retry) states the mock
+version never needed.
+
+Verified: `go build/vet/test -count=1 ./...` clean, including 6 new
+integration tests against real Postgres (lazy default-seeding is
+exactly-once, create/update/delete round-trip, the default preset
+rejects rename and delete, 10 invalid-input cases incl. an unbacked
+dimension, custom period round-trips, cross-org isolation). `tsc`/
+`eslint`/`vitest` clean.
+
+Real, live, end-to-end verification over curl again this round — the
+extension stayed disconnected. Signed up two separate test orgs:
+confirmed a real `GET` seeds exactly one default and a repeat `GET`
+doesn't duplicate it; created a non-default preset with a non-UTC
+timezone and multi-dimension grouping; confirmed real 422s for an
+unbacked dimension and an invalid timezone; renamed the preset and
+confirmed persistence; confirmed real 409s renaming/deleting the
+default; deleted the non-default preset and confirmed it's gone while
+the default remains; invited a real Buyer-role member, confirmed their
+`GET` succeeds and `POST` gets a real 403; confirmed Org B's `GET`
+returns its own independently-seeded default, not Org A's, and a direct
+cross-org `GET` 404s. This proves the real backend end-to-end; it did
+not prove the preset bar itself renders/behaves correctly in a live
+browser — that check happened in the later combined browser
+verification pass.
+
 ## [Between phases] — Custom Metrics (§30.5, §50): real backend
 
 Next off Phase 34's own audit list of frontend-mock features (Settings,

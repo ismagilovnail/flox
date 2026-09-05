@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { toast } from "sonner";
-import { PencilIcon, PlusIcon, StarIcon, XIcon } from "lucide-react";
+import { PencilIcon, PlusIcon, RefreshCwIcon, StarIcon, XIcon } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 import { Button } from "@/components/ui/button";
@@ -17,13 +17,20 @@ import {
 import { IconButton } from "@/components/ui/icon-button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { useReportPresetsStore } from "@/stores/report-presets";
-import { dateRangeToPeriod, periodToDateRange, type ReportPreset } from "@/lib/mock/report-presets";
+import {
+  EMPTY_REPORT_PRESETS,
+  useCreateReportPreset,
+  useDeleteReportPreset,
+  useReportPresets,
+  useUpdateReportPreset,
+} from "@/hooks/use-report-presets";
+import { dateRangeToPeriod, periodToDateRange, type ReportPreset } from "@/lib/report-presets";
 import type { ReportControlsState } from "@/features/analytics/report-controls";
 
 /** Fixed "now" — matches the constant used throughout analytics-view.tsx so
- * applying a relative period is deterministic in this mock environment. */
+ * applying a relative period is deterministic against a fixture-seeded org. */
 const TODAY = new Date("2026-08-11T00:00:00Z");
 
 export function ReportPresetBar({
@@ -34,10 +41,11 @@ export function ReportPresetBar({
   onApply: (patch: Partial<ReportControlsState>) => void;
 }) {
   const { t } = useTranslation("analytics");
-  const presets = useReportPresetsStore((s) => s.presets);
-  const createPreset = useReportPresetsStore((s) => s.createPreset);
-  const updatePreset = useReportPresetsStore((s) => s.updatePreset);
-  const deletePreset = useReportPresetsStore((s) => s.deletePreset);
+  const presetsQuery = useReportPresets();
+  const presets = presetsQuery.data?.presets ?? EMPTY_REPORT_PRESETS;
+  const createPreset = useCreateReportPreset();
+  const updatePreset = useUpdateReportPreset();
+  const deletePreset = useDeleteReportPreset();
 
   const [dialogTarget, setDialogTarget] = React.useState<ReportPreset | null | undefined>(undefined);
   const [name, setName] = React.useState("");
@@ -70,19 +78,54 @@ export function ReportPresetBar({
       period: dateRangeToPeriod(state.dateRange, TODAY),
     };
     if (dialogTarget) {
-      updatePreset(dialogTarget.id, input);
-      toast(t("presets.toast.updated"), { description: trimmed });
+      updatePreset.mutate(
+        { id: dialogTarget.id, input },
+        {
+          onSuccess: () => toast(t("presets.toast.updated"), { description: trimmed }),
+          onError: (err) => toast.error(t("presets.toast.updated"), { description: err.message }),
+        },
+      );
     } else {
-      createPreset(input);
-      toast(t("presets.toast.saved"), { description: trimmed });
+      createPreset.mutate(input, {
+        onSuccess: () => toast(t("presets.toast.saved"), { description: trimmed }),
+        onError: (err) => toast.error(t("presets.toast.saved"), { description: err.message }),
+      });
     }
     setDialogTarget(undefined);
   }
 
   function handleDelete(preset: ReportPreset) {
-    if (deletePreset(preset.id)) {
-      toast(t("presets.toast.deleted"), { description: preset.name });
-    }
+    deletePreset.mutate(preset.id, {
+      onSuccess: () => toast(t("presets.toast.deleted"), { description: preset.name }),
+      onError: (err) => toast.error(t("presets.toast.deleted"), { description: err.message }),
+    });
+  }
+
+  if (presetsQuery.isPending) {
+    return (
+      <div className="flex items-center gap-1.5">
+        <span className="text-xs text-muted-foreground">{t("presets.label")}</span>
+        <Skeleton className="h-6 w-32 rounded-md" />
+        <Skeleton className="h-6 w-24 rounded-md" />
+      </div>
+    );
+  }
+
+  if (presetsQuery.isError) {
+    return (
+      <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+        <span>{t("presets.label")}</span>
+        <span>{presetsQuery.error.message}</span>
+        <IconButton
+          aria-label={t("presets.retryAria")}
+          size="icon-sm"
+          variant="ghost"
+          onClick={() => presetsQuery.refetch()}
+        >
+          <RefreshCwIcon className="size-3" />
+        </IconButton>
+      </div>
+    );
   }
 
   return (
