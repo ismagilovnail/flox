@@ -15,18 +15,16 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { useReferralStore } from "@/stores/referral";
+import { useAddTransaction } from "@/hooks/use-referral";
 
 export function AddAdjustmentDialog({
   open,
   onOpenChange,
-  currentMemberId,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  currentMemberId: string;
 }) {
-  const addAdjustment = useReferralStore((s) => s.addAdjustment);
+  const addTransaction = useAddTransaction();
   const [amount, setAmount] = React.useState("");
   const [description, setDescription] = React.useState("");
 
@@ -35,10 +33,16 @@ export function AddAdjustmentDialog({
 
   function submit() {
     if (!isValid) return;
-    if (addAdjustment(parsed, description, currentMemberId)) {
-      toast("Adjustment recorded", { description });
-      onOpenChange(false);
-    }
+    addTransaction.mutate(
+      { type: "adjustment", amount: parsed, description },
+      {
+        onSuccess: () => {
+          toast("Adjustment recorded", { description });
+          onOpenChange(false);
+        },
+        onError: (err) => toast.error("Couldn't record adjustment", { description: err.message }),
+      },
+    );
   }
 
   return (
@@ -68,7 +72,7 @@ export function AddAdjustmentDialog({
           <Button variant="outline" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>
-          <Button onClick={submit} disabled={!isValid}>
+          <Button onClick={submit} disabled={!isValid || addTransaction.isPending}>
             Add adjustment
           </Button>
         </DialogFooter>

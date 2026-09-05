@@ -49,6 +49,57 @@ type Organization struct {
 	Name string
 }
 
+// OrganizationSettings is the fuller shape the Settings > Organization
+// panel reads/writes (§30) — kept separate from Organization (the
+// minimal {id, name} embedded in every auth response) rather than
+// widening that shared shape for one feature's needs. Timezone/
+// Currency already exist as real organizations columns (migration
+// 00001) — this is the first real reader/writer of them.
+type OrganizationSettings struct {
+	ID       string
+	Name     string
+	Timezone string
+	Currency string
+}
+
+type UpdateOrganizationSettingsInput struct {
+	Name     *string
+	Timezone *string
+	Currency *string
+}
+
+// SecuritySettings is the Settings > Security panel's own real backing —
+// §30, undesigned anywhere in FLOX-master-prompt-v3.md (confirmed by
+// grep before this was built); the mock UI's shape
+// (lib/mock/settings.ts's SecuritySettings) is the only existing design,
+// mirrored here field-for-field. Lives on the same `organizations` row
+// as OrganizationSettings (migration 00032 adds the three columns) —
+// kept as its own type/handler because it's a different UI panel with
+// different validation and a real lockout risk IPAllowlist introduces,
+// not because the underlying table differs.
+type SecuritySettings struct {
+	SessionTimeoutMinutes int
+	IPAllowlist           []string
+	TwoFactorRequired     bool
+}
+
+type UpdateSecuritySettingsInput struct {
+	SessionTimeoutMinutes *int
+	IPAllowlist           []string
+	TwoFactorRequired     *bool
+}
+
+// TOTPEnrollment is what EnrollTOTP hands back — shown to the user
+// exactly once. QRCodeDataURI is a ready-to-render `data:image/png;
+// base64,...` string (apps/internal/totp renders the PNG server-side —
+// the secret never needs to leave this process to reach a third-party
+// QR-rendering service).
+type TOTPEnrollment struct {
+	Secret        string
+	QRCodeDataURI string
+	BackupCodes   []string
+}
+
 // Membership is one user's standing within one org — the join row
 // memberships/roles/users produce, denormalized for the team list/activity
 // UI Phase 28B wires this to.
@@ -63,11 +114,15 @@ type Membership struct {
 	LastActiveAt *time.Time
 }
 
+// ReferralCode is optional and best-effort — an invalid/unknown code never
+// blocks or fails a real account signup (see Service.Signup and the
+// ReferralRecorder interface below).
 type SignupInput struct {
 	OrganizationName string
 	Name             string
 	Email            string
 	Password         string
+	ReferralCode     string
 }
 
 // SignupResult is what Signup returns — deliberately NOT Result: no
@@ -86,11 +141,14 @@ type SignupResult struct {
 // user who holds an active membership in more than one org (rare —
 // nothing in apps/web exposes multi-org membership yet, but memberships
 // are many-to-many by schema, so login must handle it rather than pick
-// arbitrarily).
+// arbitrarily). ClientIP feeds the org's own IP allowlist check (§30
+// Security) — extracted by the handler via ratelimit.ClientIP, the same
+// real extractor already used for rate limiting, not a second one.
 type LoginInput struct {
 	Email          string
 	Password       string
 	OrganizationID string
+	ClientIP       string
 }
 
 type InviteInput struct {
@@ -112,6 +170,7 @@ type AcceptInviteInput struct {
 	Token    string
 	Name     string
 	Password string
+	ClientIP string
 }
 
 // InvitePreview is what apps/web's future accept-invite page (Phase 28B)
@@ -136,6 +195,29 @@ type Result struct {
 	User         User
 	Organization Organization
 	RoleKey      string
+}
+
+// LoginOutcome is what every account-entry path that can grant a session
+// (Login, VerifyEmail's auto-login, AcceptInvite) actually resolves to
+// once §30 Security is in play — a real session is only one of three
+// possibilities now:
+//   - Session set: no second factor needed, exactly the old behavior.
+//   - RequiresTOTP: this user already has TOTP enabled — PendingToken
+//     must be exchanged at POST /auth/login/totp along with a live code
+//     or a backup code.
+//   - RequiresTOTPEnrollment: the org's own two_factor_required policy
+//     is on and this user hasn't set up TOTP yet — PendingToken must be
+//     used with POST /auth/2fa/enroll then /auth/2fa/confirm before a
+//     session is granted.
+//
+// PendingToken rows live in `pending_totp_logins`, a table completely
+// separate from `sessions` — see migration 00032's own doc comment for
+// why that separation is load-bearing, not incidental.
+type LoginOutcome struct {
+	Session                *Result
+	PendingToken           string
+	RequiresTOTP           bool
+	RequiresTOTPEnrollment bool
 }
 
 // ActivityEntry is one audit_logs row (migration 00010) — populated by

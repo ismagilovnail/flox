@@ -15,20 +15,18 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { formatUsd } from "@/lib/format";
-import { useReferralStore } from "@/stores/referral";
+import { useRequestPayout } from "@/hooks/use-referral";
 
 export function RequestPayoutDialog({
   open,
   onOpenChange,
   availableBalance,
-  currentMemberId,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   availableBalance: number;
-  currentMemberId: string;
 }) {
-  const requestPayout = useReferralStore((s) => s.requestPayout);
+  const requestPayout = useRequestPayout();
   // The parent only renders this component while the dialog is open, so it
   // fully unmounts on close and remounts fresh on reopen — a lazy initializer
   // is enough (no effect needed to resync `amount` when `open` changes).
@@ -39,13 +37,13 @@ export function RequestPayoutDialog({
 
   function submit() {
     if (!isValid) return;
-    const id = requestPayout(parsed, currentMemberId);
-    if (id) {
-      toast("Payout requested", { description: formatUsd(parsed, 2) });
-      onOpenChange(false);
-    } else {
-      toast("Couldn't request payout", { description: "Amount must be within your available balance." });
-    }
+    requestPayout.mutate(parsed, {
+      onSuccess: () => {
+        toast("Payout requested", { description: formatUsd(parsed, 2) });
+        onOpenChange(false);
+      },
+      onError: (err) => toast.error("Couldn't request payout", { description: err.message }),
+    });
   }
 
   return (
@@ -76,7 +74,7 @@ export function RequestPayoutDialog({
           <Button variant="outline" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>
-          <Button onClick={submit} disabled={!isValid}>
+          <Button onClick={submit} disabled={!isValid || requestPayout.isPending}>
             Request payout
           </Button>
         </DialogFooter>

@@ -24,8 +24,10 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Caption, Mono } from "@/components/ui/typography";
-import { useSettingsStore } from "@/stores/settings";
-import { API_KEY_SCOPES, type ApiKeyScope } from "@/lib/mock/settings";
+import { LoadingState } from "@/components/ui/loading-state";
+import { ErrorState } from "@/components/ui/error-state";
+import { useApiKeys, useCreateApiKey, useRevokeApiKey } from "@/hooks/use-api-keys";
+import { API_KEY_SCOPES, type ApiKeyScope } from "@/lib/api-keys";
 
 const createKeySchema = z.object({
   name: z.string().min(2, "Name must be at least 2 characters").max(60),
@@ -41,9 +43,10 @@ const SCOPE_VARIANT: Record<ApiKeyScope, "outline" | "secondary" | "warning"> = 
 };
 
 export function ApiKeysPanel() {
-  const apiKeys = useSettingsStore((s) => s.apiKeys);
-  const createApiKey = useSettingsStore((s) => s.createApiKey);
-  const revokeApiKey = useSettingsStore((s) => s.revokeApiKey);
+  const apiKeysQuery = useApiKeys();
+  const createApiKeyMutation = useCreateApiKey();
+  const revokeApiKeyMutation = useRevokeApiKey();
+  const apiKeys = apiKeysQuery.data?.apiKeys ?? [];
 
   const [creating, setCreating] = React.useState(false);
   const [revealedKey, setRevealedKey] = React.useState<string | null>(null);
@@ -55,10 +58,14 @@ export function ApiKeysPanel() {
   });
 
   function handleCreate(values: CreateKeyValues) {
-    const { fullKey } = createApiKey(values.name, values.scope);
-    setCreating(false);
-    form.reset();
-    setRevealedKey(fullKey);
+    createApiKeyMutation.mutate(values, {
+      onSuccess: ({ fullKey }) => {
+        setCreating(false);
+        form.reset();
+        setRevealedKey(fullKey);
+      },
+      onError: (err) => toast.error("Couldn't create API key", { description: err.message }),
+    });
   }
 
   function copyKey() {
@@ -69,8 +76,10 @@ export function ApiKeysPanel() {
 
   function handleRevoke() {
     if (!revokeTarget) return;
-    revokeApiKey(revokeTarget.id);
-    toast("API key revoked", { description: revokeTarget.name });
+    revokeApiKeyMutation.mutate(revokeTarget.id, {
+      onSuccess: () => toast("API key revoked", { description: revokeTarget.name }),
+      onError: (err) => toast.error("Couldn't revoke API key", { description: err.message }),
+    });
     setRevokeTarget(null);
   }
 
@@ -86,7 +95,23 @@ export function ApiKeysPanel() {
         </CardAction>
       </CardHeader>
       <CardContent className="flex flex-col divide-y divide-border p-0">
-        {apiKeys.length === 0 && <p className="px-4 py-6 text-sm text-muted-foreground">No API keys yet.</p>}
+        {apiKeysQuery.isPending && (
+          <div className="px-4 py-6">
+            <LoadingState label="Loading API keys…" />
+          </div>
+        )}
+        {apiKeysQuery.isError && (
+          <div className="px-4 py-6">
+            <ErrorState
+              title="Couldn't load API keys"
+              description={apiKeysQuery.error.message}
+              onRetry={() => apiKeysQuery.refetch()}
+            />
+          </div>
+        )}
+        {apiKeysQuery.isSuccess && apiKeys.length === 0 && (
+          <p className="px-4 py-6 text-sm text-muted-foreground">No API keys yet.</p>
+        )}
         {apiKeys.map((key) => (
           <div key={key.id} className="flex items-center gap-3 px-4 py-3">
             <div className="flex min-w-0 flex-1 flex-col gap-0.5">

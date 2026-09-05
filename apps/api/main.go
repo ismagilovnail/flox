@@ -18,6 +18,7 @@ import (
 	"github.com/ismagilovnail/flox/apps/internal/adaccount/facebookads"
 	"github.com/ismagilovnail/flox/apps/internal/adaccount/tiktokads"
 	"github.com/ismagilovnail/flox/apps/internal/analytics"
+	"github.com/ismagilovnail/flox/apps/internal/apikey"
 	"github.com/ismagilovnail/flox/apps/internal/attribution"
 	"github.com/ismagilovnail/flox/apps/internal/auth"
 	"github.com/ismagilovnail/flox/apps/internal/campaign"
@@ -51,6 +52,7 @@ import (
 	"github.com/ismagilovnail/flox/apps/internal/pwa"
 	"github.com/ismagilovnail/flox/apps/internal/ratelimit"
 	"github.com/ismagilovnail/flox/apps/internal/rediscache"
+	"github.com/ismagilovnail/flox/apps/internal/referral"
 	"github.com/ismagilovnail/flox/apps/internal/reportpresets"
 	"github.com/ismagilovnail/flox/apps/internal/routing"
 	"github.com/ismagilovnail/flox/apps/internal/routingsimulate"
@@ -60,6 +62,7 @@ import (
 	"github.com/ismagilovnail/flox/apps/internal/tags"
 	"github.com/ismagilovnail/flox/apps/internal/telemetry"
 	"github.com/ismagilovnail/flox/apps/internal/tenant"
+	totpengine "github.com/ismagilovnail/flox/apps/internal/totp"
 	"github.com/ismagilovnail/flox/apps/internal/trackinglink"
 	"github.com/ismagilovnail/flox/apps/internal/trafficsource"
 )
@@ -186,6 +189,22 @@ func run() error {
 	authSvc := auth.NewService(authRepo, cfg.AppURL, mail)
 	authHandler := auth.NewHandler(authSvc, logger, cfg.Env != "development")
 	teamHandler := auth.NewTeamHandler(authSvc, logger)
+	organizationHandler := auth.NewOrganizationHandler(authSvc, logger)
+	securityHandler := auth.NewSecurityHandler(authSvc, logger)
+	totpHandler := auth.NewTOTPHandler(authSvc, logger, cfg.Env != "development")
+
+	referralSvc := referral.NewService(referral.NewRepository(db))
+	authSvc.SetReferralRecorder(referralSvc)
+
+	// A misconfigured/missing TOTP key must fail startup loudly, not run
+	// real 2FA against a well-known or empty key — same "fail loudly at
+	// boot" bar as every other required-secret parse in this file.
+	totpKey, err := totpengine.ParseKey(cfg.TOTPEncryptionKey)
+	if err != nil {
+		logger.Error("TOTP encryption key configuration failed", "error", err)
+		return err
+	}
+	authSvc.SetTOTPKey(totpKey)
 
 	// §54/Phase 30: RequireSameOrigin runs OUTSIDE (before) session
 	// resolution — rejecting a forged cross-origin mutation is cheaper
@@ -219,11 +238,15 @@ func run() error {
 		r.Use(csrfCheck)
 		r.Use(authLimit)
 		authHandler.RegisterPublic(r)
+		totpHandler.RegisterPublic(r)
 	})
 	srv.Mux().Group(func(r chi.Router) {
 		r.Use(tenantMiddleware)
 		authHandler.RegisterAuthenticated(r)
 		teamHandler.Register(r)
+		organizationHandler.Register(r)
+		securityHandler.Register(r)
+		totpHandler.RegisterAuthenticated(r)
 	})
 
 	campaignRepo := campaign.NewRepository(db)
@@ -295,6 +318,16 @@ func run() error {
 		customMetricsHandler.Register(r)
 	})
 
+	apiKeyHandler := apikey.NewHandler(
+		apikey.NewService(apikey.NewRepository(db)),
+		authSvc.RequirePermission("settings.write", logger),
+		logger,
+	)
+	srv.Mux().Route("/api-keys", func(r chi.Router) {
+		r.Use(tenantMiddleware)
+		apiKeyHandler.Register(r)
+	})
+
 	reportPresetsHandler := reportpresets.NewHandler(
 		reportpresets.NewService(reportpresets.NewRepository(db)),
 		authSvc.RequirePermission("report_preset.write", logger),
@@ -303,6 +336,16 @@ func run() error {
 	srv.Mux().Route("/report-presets", func(r chi.Router) {
 		r.Use(tenantMiddleware)
 		reportPresetsHandler.Register(r)
+	})
+
+	referralHandler := referral.NewHandler(
+		referralSvc,
+		authSvc.RequirePermission("referral.write", logger),
+		logger,
+	)
+	srv.Mux().Route("/referral", func(r chi.Router) {
+		r.Use(tenantMiddleware)
+		referralHandler.Register(r)
 	})
 
 	postlandingHandler := postlanding.NewHandler(postlanding.NewService(postlanding.NewRepository(db)), logger)

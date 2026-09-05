@@ -7,6 +7,7 @@ import { z } from "zod";
 import { useTranslation } from "react-i18next";
 import type { TFunction } from "i18next";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { MailIcon } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -31,6 +32,15 @@ type SignupFormValues = z.infer<ReturnType<typeof buildSignupSchema>>;
 export function SignupForm() {
   const { t } = useTranslation("auth");
   const signup = useSignup();
+  // §30.7: a referral link is https://flox.io/r/<code>-shaped, but the
+  // actual signup landing page here is this app's own /signup — a real
+  // referral link points here with the code as a plain ?ref= query param
+  // instead. Read once, silently, at mount (same pattern analytics-view.tsx
+  // already uses for its own dim/val/tab params) — no visible field, no
+  // validation client-side; an invalid/unknown code is a silent no-op on
+  // the real backend, never something worth surfacing as a form error.
+  const searchParams = useSearchParams();
+  const referralCode = searchParams.get("ref") ?? undefined;
   // Signup no longer logs in — see useSignup's own doc comment. Once it
   // succeeds, this swaps the form out for a "check your email" panel
   // (below) instead of redirecting into the app; email is only used
@@ -43,9 +53,10 @@ export function SignupForm() {
   });
 
   function onSubmit(values: SignupFormValues) {
-    signup.mutate(values, {
-      onSuccess: (res) => setVerifyEmailAddress(res.user.email),
-    });
+    signup.mutate(
+      { ...values, referralCode },
+      { onSuccess: (res) => setVerifyEmailAddress(res.user.email) },
+    );
   }
 
   const error = signup.error instanceof ApiError ? signup.error : null;

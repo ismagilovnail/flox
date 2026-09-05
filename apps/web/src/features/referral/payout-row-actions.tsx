@@ -16,38 +16,43 @@ import {
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { useReferralStore } from "@/stores/referral";
-import type { PayoutRequest } from "@/lib/mock/referral";
+import { useApprovePayout, useMarkPayoutPaid, useRejectPayout } from "@/hooks/use-referral";
+import type { PayoutRequest } from "@/lib/referral";
 
-export function PayoutRowActions({
-  payout,
-  currentMemberId,
-}: {
-  payout: PayoutRequest;
-  currentMemberId: string;
-}) {
-  const approvePayout = useReferralStore((s) => s.approvePayout);
-  const rejectPayout = useReferralStore((s) => s.rejectPayout);
-  const markPayoutPaid = useReferralStore((s) => s.markPayoutPaid);
+export function PayoutRowActions({ payout }: { payout: PayoutRequest }) {
+  const approvePayout = useApprovePayout();
+  const rejectPayout = useRejectPayout();
+  const markPayoutPaid = useMarkPayoutPaid();
 
   const [rejecting, setRejecting] = React.useState(false);
   const [note, setNote] = React.useState("");
 
   function approve() {
-    approvePayout(payout.id, currentMemberId);
-    toast("Payout approved");
+    approvePayout.mutate(payout.id, {
+      onSuccess: () => toast("Payout approved"),
+      onError: (err) => toast.error("Couldn't approve payout", { description: err.message }),
+    });
   }
 
   function markPaid() {
-    markPayoutPaid(payout.id, currentMemberId);
-    toast("Payout marked as paid");
+    markPayoutPaid.mutate(payout.id, {
+      onSuccess: () => toast("Payout marked as paid"),
+      onError: (err) => toast.error("Couldn't mark payout as paid", { description: err.message }),
+    });
   }
 
   function submitReject() {
-    rejectPayout(payout.id, currentMemberId, note.trim());
-    setRejecting(false);
-    setNote("");
-    toast("Payout rejected");
+    rejectPayout.mutate(
+      { id: payout.id, note: note.trim() },
+      {
+        onSuccess: () => {
+          setRejecting(false);
+          setNote("");
+          toast("Payout rejected");
+        },
+        onError: (err) => toast.error("Couldn't reject payout", { description: err.message }),
+      },
+    );
   }
 
   if (payout.status === "pending") {
@@ -76,7 +81,7 @@ export function PayoutRowActions({
               <Button variant="outline" onClick={() => setRejecting(false)}>
                 Cancel
               </Button>
-              <Button variant="destructive" onClick={submitReject}>
+              <Button variant="destructive" onClick={submitReject} disabled={!note.trim()}>
                 Reject
               </Button>
             </DialogFooter>

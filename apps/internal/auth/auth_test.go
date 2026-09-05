@@ -6,15 +6,19 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"reflect"
 	"testing"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	stdtotp "github.com/pquerna/otp/totp"
 
 	"github.com/ismagilovnail/flox/apps/internal/apierror"
 	"github.com/ismagilovnail/flox/apps/internal/auth"
 	"github.com/ismagilovnail/flox/apps/internal/idgen"
 	"github.com/ismagilovnail/flox/apps/internal/logging"
 	"github.com/ismagilovnail/flox/apps/internal/tenant"
+	"github.com/ismagilovnail/flox/apps/internal/totp"
 )
 
 func mustPool(t *testing.T) *pgxpool.Pool {
@@ -49,8 +53,19 @@ func (m *testMailer) Send(_ context.Context, to, _, body string) error {
 
 var sharedTestMailer = &testMailer{}
 
+// testTOTPKey is a fixed, throwaway 32-byte key — fine for tests, never
+// reused as a real deployment's TOTP_ENCRYPTION_KEY (see .env.example's
+// own warning against exactly that).
+const testTOTPKey = "IXkldrBTvgfDhIxzUBn3MrRAJq7Gh7z8mQ5UhBC4DRo="
+
 func newService(pool *pgxpool.Pool) *auth.Service {
-	return auth.NewService(auth.NewRepository(pool), "http://localhost:3000", sharedTestMailer)
+	svc := auth.NewService(auth.NewRepository(pool), "http://localhost:3000", sharedTestMailer)
+	key, err := totp.ParseKey(testTOTPKey)
+	if err != nil {
+		panic(err)
+	}
+	svc.SetTOTPKey(key)
+	return svc
 }
 
 // signupOrg is the one way this package's tests create an org — no
@@ -88,7 +103,7 @@ func signupOrg(t *testing.T, ctx context.Context, pool *pgxpool.Pool, svc *auth.
 	if sharedTestMailer.lastTo != ownerEmail {
 		t.Fatalf("verification email was sent to %q, want %q", sharedTestMailer.lastTo, ownerEmail)
 	}
-	verifyRes, err := svc.VerifyEmail(ctx, tokenFromBody(t, sharedTestMailer.lastBody))
+	verifyRes, err := svc.VerifyEmail(ctx, tokenFromBody(t, sharedTestMailer.lastBody), "")
 	if err != nil {
 		t.Fatalf("verify-email: %v", err)
 	}
@@ -230,7 +245,7 @@ func TestVerifyEmailLogsInAndConsumesTheToken(t *testing.T) {
 	})
 	token := tokenFromBody(t, sharedTestMailer.lastBody)
 
-	verifyRes, err := svc.VerifyEmail(ctx, token)
+	verifyRes, err := svc.VerifyEmail(ctx, token, "")
 	if err != nil {
 		t.Fatalf("VerifyEmail: %v", err)
 	}
@@ -244,7 +259,7 @@ func TestVerifyEmailLogsInAndConsumesTheToken(t *testing.T) {
 	}
 
 	// The token cannot be replayed.
-	if _, err := svc.VerifyEmail(ctx, token); err == nil {
+	if _, err := svc.VerifyEmail(ctx, token, ""); err == nil {
 		t.Fatal("VerifyEmail succeeded twice with the same token, want an error the second time")
 	}
 }
@@ -254,7 +269,7 @@ func TestVerifyEmailRejectsInvalidToken(t *testing.T) {
 	svc := newService(pool)
 	ctx := context.Background()
 
-	if _, err := svc.VerifyEmail(ctx, "not-a-real-token"); err == nil {
+	if _, err := svc.VerifyEmail(ctx, "not-a-real-token", ""); err == nil {
 		t.Fatal("VerifyEmail accepted a token that was never issued")
 	}
 }
@@ -281,10 +296,10 @@ func TestResendVerificationIssuesAFreshTokenAndInvalidatesTheOld(t *testing.T) {
 	}
 	newToken := tokenFromBody(t, sharedTestMailer.lastBody)
 
-	if _, err := svc.VerifyEmail(ctx, oldToken); err == nil {
+	if _, err := svc.VerifyEmail(ctx, oldToken, ""); err == nil {
 		t.Fatal("the pre-resend token still verifies, want it invalidated")
 	}
-	if _, err := svc.VerifyEmail(ctx, newToken); err != nil {
+	if _, err := svc.VerifyEmail(ctx, newToken, ""); err != nil {
 		t.Fatalf("VerifyEmail with the freshly-resent token: %v", err)
 	}
 }
@@ -314,12 +329,12 @@ func TestLoginSucceedsAndFailsCorrectly(t *testing.T) {
 	signupOrg(t, ctx, pool, svc, "Login Org", email)
 
 	t.Run("correct password", func(t *testing.T) {
-		res, err := svc.Login(ctx, auth.LoginInput{Email: email, Password: "correct-horse-battery-staple"})
+		outcome, err := svc.Login(ctx, auth.LoginInput{Email: email, Password: "correct-horse-battery-staple"})
 		if err != nil {
 			t.Fatalf("Login: %v", err)
 		}
-		if res.RoleKey != "Owner" {
-			t.Fatalf("RoleKey = %q, want Owner", res.RoleKey)
+		if outcome.Session == nil || outcome.Session.RoleKey != "Owner" {
+			t.Fatalf("Login session = %+v, want a session with role Owner", outcome.Session)
 		}
 	})
 
@@ -336,12 +351,12 @@ func TestLoginSucceedsAndFailsCorrectly(t *testing.T) {
 	})
 
 	t.Run("case-insensitive email", func(t *testing.T) {
-		res, err := svc.Login(ctx, auth.LoginInput{Email: "  " + upper(email) + "  ", Password: "correct-horse-battery-staple"})
+		outcome, err := svc.Login(ctx, auth.LoginInput{Email: "  " + upper(email) + "  ", Password: "correct-horse-battery-staple"})
 		if err != nil {
 			t.Fatalf("Login with a differently-cased, whitespace-padded email: %v", err)
 		}
-		if res.User.Email != email {
-			t.Fatalf("User.Email = %q, want %q", res.User.Email, email)
+		if outcome.Session == nil || outcome.Session.User.Email != email {
+			t.Fatalf("Login session = %+v, want User.Email %q", outcome.Session, email)
 		}
 	})
 }
@@ -442,13 +457,14 @@ func TestInviteAcceptAndPermissions(t *testing.T) {
 		t.Fatalf("invited member not found or wrong status: %+v", members)
 	}
 
-	res, err := svc.AcceptInvite(ctx, auth.AcceptInviteInput{Token: token, Name: "Invited Analyst", Password: "another-long-password"})
+	outcome, err := svc.AcceptInvite(ctx, auth.AcceptInviteInput{Token: token, Name: "Invited Analyst", Password: "another-long-password"})
 	if err != nil {
 		t.Fatalf("AcceptInvite: %v", err)
 	}
-	if res.RoleKey != "Analyst" || res.Organization.ID != owner.Organization.ID {
-		t.Fatalf("AcceptInvite result = %+v, want role Analyst in org %s", res, owner.Organization.ID)
+	if outcome.Session == nil || outcome.Session.RoleKey != "Analyst" || outcome.Session.Organization.ID != owner.Organization.ID {
+		t.Fatalf("AcceptInvite result = %+v, want role Analyst in org %s", outcome.Session, owner.Organization.ID)
 	}
+	res := *outcome.Session
 
 	// The invited user can now log in with the password they just set.
 	if _, err := svc.Login(ctx, auth.LoginInput{Email: invitedEmail, Password: "another-long-password"}); err != nil {
@@ -546,10 +562,14 @@ func TestUpdateMembershipRoleAndSuspend(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Invite: %v", err)
 	}
-	accepted, err := svc.AcceptInvite(ctx, auth.AcceptInviteInput{Token: tokenFromURL(t, inviteURL), Name: "Carol", Password: "carols-long-password"})
+	acceptedOutcome, err := svc.AcceptInvite(ctx, auth.AcceptInviteInput{Token: tokenFromURL(t, inviteURL), Name: "Carol", Password: "carols-long-password"})
 	if err != nil {
 		t.Fatalf("AcceptInvite: %v", err)
 	}
+	if acceptedOutcome.Session == nil {
+		t.Fatal("AcceptInvite returned no session")
+	}
+	accepted := *acceptedOutcome.Session
 
 	members, err := svc.ListMembers(ctx, owner.Organization.ID)
 	if err != nil {
@@ -603,10 +623,14 @@ func TestUpdateMembershipRejectsAssigningOwnerRole(t *testing.T) {
 	owner := signupOrg(t, ctx, pool, svc, "Owner Role Org", uniqueEmail(t, pool))
 
 	inviteURL, _ := svc.Invite(ctx, owner.Organization.ID, owner.User.ID, auth.InviteInput{Name: "Dave", Email: uniqueEmail(t, pool), RoleKey: "Viewer"})
-	accepted, err := svc.AcceptInvite(ctx, auth.AcceptInviteInput{Token: tokenFromURL(t, inviteURL), Name: "Dave", Password: "daves-long-password"})
+	acceptedOutcome, err := svc.AcceptInvite(ctx, auth.AcceptInviteInput{Token: tokenFromURL(t, inviteURL), Name: "Dave", Password: "daves-long-password"})
 	if err != nil {
 		t.Fatalf("AcceptInvite: %v", err)
 	}
+	if acceptedOutcome.Session == nil {
+		t.Fatal("AcceptInvite returned no session")
+	}
+	accepted := *acceptedOutcome.Session
 	members, _ := svc.ListMembers(ctx, owner.Organization.ID)
 	var membershipID string
 	for _, m := range members {
@@ -652,10 +676,14 @@ func TestRemoveMemberRevokesAccess(t *testing.T) {
 	owner := signupOrg(t, ctx, pool, svc, "Remove Org", uniqueEmail(t, pool))
 
 	inviteURL, _ := svc.Invite(ctx, owner.Organization.ID, owner.User.ID, auth.InviteInput{Name: "Eve", Email: uniqueEmail(t, pool), RoleKey: "Viewer"})
-	accepted, err := svc.AcceptInvite(ctx, auth.AcceptInviteInput{Token: tokenFromURL(t, inviteURL), Name: "Eve", Password: "eves-long-password"})
+	acceptedOutcome, err := svc.AcceptInvite(ctx, auth.AcceptInviteInput{Token: tokenFromURL(t, inviteURL), Name: "Eve", Password: "eves-long-password"})
 	if err != nil {
 		t.Fatalf("AcceptInvite: %v", err)
 	}
+	if acceptedOutcome.Session == nil {
+		t.Fatal("AcceptInvite returned no session")
+	}
+	accepted := *acceptedOutcome.Session
 	members, _ := svc.ListMembers(ctx, owner.Organization.ID)
 	var membershipID string
 	for _, m := range members {
@@ -701,12 +729,12 @@ func TestLoginRequiresOrganizationIDWhenMultipleActiveMemberships(t *testing.T) 
 		t.Fatal("Login with no organizationId succeeded despite two active memberships, want a validation error")
 	}
 
-	res, err := svc.Login(ctx, auth.LoginInput{Email: email, Password: "correct-horse-battery-staple", OrganizationID: orgA.Organization.ID})
+	outcome, err := svc.Login(ctx, auth.LoginInput{Email: email, Password: "correct-horse-battery-staple", OrganizationID: orgA.Organization.ID})
 	if err != nil {
 		t.Fatalf("Login with an explicit organizationId: %v", err)
 	}
-	if res.Organization.ID != orgA.Organization.ID {
-		t.Fatalf("logged into org %s, want %s", res.Organization.ID, orgA.Organization.ID)
+	if outcome.Session == nil || outcome.Session.Organization.ID != orgA.Organization.ID {
+		t.Fatalf("Login session = %+v, want org %s", outcome.Session, orgA.Organization.ID)
 	}
 }
 
@@ -776,10 +804,14 @@ func TestRequirePermissionMiddleware(t *testing.T) {
 	owner := signupOrg(t, ctx, pool, svc, "Middleware Org", uniqueEmail(t, pool))
 
 	inviteURL, _ := svc.Invite(ctx, owner.Organization.ID, owner.User.ID, auth.InviteInput{Name: "Viewer Person", Email: uniqueEmail(t, pool), RoleKey: "Viewer"})
-	viewer, err := svc.AcceptInvite(ctx, auth.AcceptInviteInput{Token: tokenFromURL(t, inviteURL), Name: "Viewer Person", Password: "viewers-long-password"})
+	viewerOutcome, err := svc.AcceptInvite(ctx, auth.AcceptInviteInput{Token: tokenFromURL(t, inviteURL), Name: "Viewer Person", Password: "viewers-long-password"})
 	if err != nil {
 		t.Fatalf("AcceptInvite: %v", err)
 	}
+	if viewerOutcome.Session == nil {
+		t.Fatal("AcceptInvite returned no session")
+	}
+	viewer := *viewerOutcome.Session
 
 	logger := logging.New("error")
 	requireWrite := svc.RequirePermission("team.write", logger)
@@ -850,4 +882,396 @@ func indexOf(s, substr string) int {
 		}
 	}
 	return -1
+}
+
+func TestGetOrganizationSettingsReturnsRealDefaults(t *testing.T) {
+	pool := mustPool(t)
+	svc := newService(pool)
+	ctx := context.Background()
+
+	owner := signupOrg(t, ctx, pool, svc, "Org Settings Defaults", uniqueEmail(t, pool))
+
+	got, err := svc.GetOrganizationSettings(ctx, owner.Organization.ID)
+	if err != nil {
+		t.Fatalf("GetOrganizationSettings: %v", err)
+	}
+	if got.Name != "Org Settings Defaults" {
+		t.Fatalf("Name = %q, want %q", got.Name, "Org Settings Defaults")
+	}
+	// migration 00001's own column defaults — real, not fabricated.
+	if got.Timezone != "UTC" || got.Currency != "USD" {
+		t.Fatalf("defaults = %+v, want UTC/USD", got)
+	}
+}
+
+func TestUpdateOrganizationSettingsPersists(t *testing.T) {
+	pool := mustPool(t)
+	svc := newService(pool)
+	ctx := context.Background()
+
+	owner := signupOrg(t, ctx, pool, svc, "Org Settings Update", uniqueEmail(t, pool))
+
+	name := "Renamed Org"
+	tz := "Europe/Berlin"
+	currency := "eur" // lowercase in, uppercase out
+	updated, err := svc.UpdateOrganizationSettings(ctx, owner.Organization.ID, owner.User.ID, auth.UpdateOrganizationSettingsInput{
+		Name: &name, Timezone: &tz, Currency: &currency,
+	})
+	if err != nil {
+		t.Fatalf("UpdateOrganizationSettings: %v", err)
+	}
+	if updated.Name != name || updated.Timezone != tz || updated.Currency != "EUR" {
+		t.Fatalf("updated = %+v, want Renamed Org/Europe/Berlin/EUR", updated)
+	}
+
+	got, err := svc.GetOrganizationSettings(ctx, owner.Organization.ID)
+	if err != nil {
+		t.Fatalf("GetOrganizationSettings after update: %v", err)
+	}
+	if got != updated {
+		t.Fatalf("Get after Update = %+v, want %+v (real persistence, not just the returned value)", got, updated)
+	}
+
+	activity, err := svc.ListActivity(ctx, owner.Organization.ID)
+	if err != nil {
+		t.Fatalf("ListActivity: %v", err)
+	}
+	if len(activity) == 0 || activity[0].Action != "settings.updated" {
+		t.Fatalf("activity = %+v, want a leading settings.updated entry", activity)
+	}
+}
+
+func TestUpdateOrganizationSettingsValidatesInput(t *testing.T) {
+	pool := mustPool(t)
+	svc := newService(pool)
+	ctx := context.Background()
+
+	owner := signupOrg(t, ctx, pool, svc, "Org Settings Validation", uniqueEmail(t, pool))
+
+	badTZ := "Not/A_Real_Zone"
+	if _, err := svc.UpdateOrganizationSettings(ctx, owner.Organization.ID, owner.User.ID, auth.UpdateOrganizationSettingsInput{Timezone: &badTZ}); err == nil {
+		t.Error("invalid timezone accepted")
+	}
+
+	badCurrency := "US"
+	if _, err := svc.UpdateOrganizationSettings(ctx, owner.Organization.ID, owner.User.ID, auth.UpdateOrganizationSettingsInput{Currency: &badCurrency}); err == nil {
+		t.Error("invalid currency accepted")
+	}
+
+	shortName := "A"
+	if _, err := svc.UpdateOrganizationSettings(ctx, owner.Organization.ID, owner.User.ID, auth.UpdateOrganizationSettingsInput{Name: &shortName}); err == nil {
+		t.Error("too-short name accepted")
+	}
+}
+
+func TestGetSecuritySettingsReturnsRealDefaults(t *testing.T) {
+	pool := mustPool(t)
+	svc := newService(pool)
+	ctx := context.Background()
+
+	owner := signupOrg(t, ctx, pool, svc, "Security Defaults Org", uniqueEmail(t, pool))
+
+	got, err := svc.GetSecuritySettings(ctx, owner.Organization.ID)
+	if err != nil {
+		t.Fatalf("GetSecuritySettings: %v", err)
+	}
+	// migration 00032's own column defaults — real, not fabricated;
+	// 43200 (30 days) preserves the pre-existing hardcoded sessionTTL.
+	if got.SessionTimeoutMinutes != 43200 || len(got.IPAllowlist) != 0 || got.TwoFactorRequired {
+		t.Fatalf("defaults = %+v, want 43200/empty/false", got)
+	}
+}
+
+func TestUpdateSecuritySettingsPersistsAndValidates(t *testing.T) {
+	pool := mustPool(t)
+	svc := newService(pool)
+	ctx := context.Background()
+
+	owner := signupOrg(t, ctx, pool, svc, "Security Update Org", uniqueEmail(t, pool))
+
+	timeout := 60
+	required := true
+	updated, err := svc.UpdateSecuritySettings(ctx, owner.Organization.ID, owner.User.ID, "203.0.113.5", auth.UpdateSecuritySettingsInput{
+		SessionTimeoutMinutes: &timeout,
+		IPAllowlist:           []string{"203.0.113.0/24"},
+		TwoFactorRequired:     &required,
+	})
+	if err != nil {
+		t.Fatalf("UpdateSecuritySettings: %v", err)
+	}
+	if updated.SessionTimeoutMinutes != 60 || len(updated.IPAllowlist) != 1 || !updated.TwoFactorRequired {
+		t.Fatalf("updated = %+v, want 60/[203.0.113.0/24]/true", updated)
+	}
+
+	got, err := svc.GetSecuritySettings(ctx, owner.Organization.ID)
+	if err != nil {
+		t.Fatalf("GetSecuritySettings after update: %v", err)
+	}
+	if !reflect.DeepEqual(got, updated) {
+		t.Fatalf("Get after Update = %+v, want %+v (real persistence)", got, updated)
+	}
+
+	// Out-of-range timeout.
+	bad := 5
+	if _, err := svc.UpdateSecuritySettings(ctx, owner.Organization.ID, owner.User.ID, "203.0.113.5", auth.UpdateSecuritySettingsInput{SessionTimeoutMinutes: &bad}); err == nil {
+		t.Error("out-of-range session timeout accepted")
+	}
+
+	// Garbage IP/CIDR.
+	if _, err := svc.UpdateSecuritySettings(ctx, owner.Organization.ID, owner.User.ID, "203.0.113.5", auth.UpdateSecuritySettingsInput{IPAllowlist: []string{"999.999.999.999"}}); err == nil {
+		t.Error("invalid IP accepted")
+	}
+
+	// The real lockout safeguard: a new list that excludes the acting
+	// request's own current IP is rejected.
+	if _, err := svc.UpdateSecuritySettings(ctx, owner.Organization.ID, owner.User.ID, "198.51.100.9", auth.UpdateSecuritySettingsInput{IPAllowlist: []string{"203.0.113.0/24"}}); err == nil {
+		t.Error("a list excluding the acting IP was accepted, want rejected (self-lockout guard)")
+	}
+}
+
+func TestLoginRespectsIPAllowlist(t *testing.T) {
+	pool := mustPool(t)
+	svc := newService(pool)
+	ctx := context.Background()
+	email := uniqueEmail(t, pool)
+	owner := signupOrg(t, ctx, pool, svc, "IP Allowlist Org", email)
+
+	if _, err := svc.UpdateSecuritySettings(ctx, owner.Organization.ID, owner.User.ID, "203.0.113.5", auth.UpdateSecuritySettingsInput{
+		IPAllowlist: []string{"203.0.113.0/24"},
+	}); err != nil {
+		t.Fatalf("UpdateSecuritySettings: %v", err)
+	}
+
+	if _, err := svc.Login(ctx, auth.LoginInput{Email: email, Password: "correct-horse-battery-staple", ClientIP: "198.51.100.9"}); err == nil {
+		t.Fatal("Login from a disallowed IP succeeded, want rejected")
+	} else {
+		var apiErr *apierror.Error
+		if !errors.As(err, &apiErr) || apiErr.Code != "ip_not_allowed" {
+			t.Fatalf("Login error = %v, want code ip_not_allowed", err)
+		}
+	}
+
+	outcome, err := svc.Login(ctx, auth.LoginInput{Email: email, Password: "correct-horse-battery-staple", ClientIP: "203.0.113.5"})
+	if err != nil {
+		t.Fatalf("Login from an allowed IP: %v", err)
+	}
+	if outcome.Session == nil {
+		t.Fatal("Login from an allowed IP produced no session")
+	}
+}
+
+func TestSelfServeTOTPEnrollmentAndLogin(t *testing.T) {
+	pool := mustPool(t)
+	svc := newService(pool)
+	ctx := context.Background()
+	email := uniqueEmail(t, pool)
+	owner := signupOrg(t, ctx, pool, svc, "Self-Serve TOTP Org", email)
+
+	if enabled, err := svc.TOTPStatus(ctx, owner.User.ID); err != nil || enabled {
+		t.Fatalf("TOTPStatus before enrollment = (%v, %v), want (false, nil)", enabled, err)
+	}
+
+	enrollment, err := svc.EnrollTOTP(ctx, owner.User.ID, email)
+	if err != nil {
+		t.Fatalf("EnrollTOTP: %v", err)
+	}
+	if enrollment.Secret == "" || enrollment.QRCodeDataURI == "" || len(enrollment.BackupCodes) != 10 {
+		t.Fatalf("Enrollment = %+v, want all fields populated", enrollment)
+	}
+
+	if err := svc.ConfirmTOTP(ctx, owner.User.ID, "000000"); err == nil {
+		t.Fatal("ConfirmTOTP accepted an arbitrary wrong code")
+	}
+
+	code, err := stdtotp.GenerateCode(enrollment.Secret, time.Now())
+	if err != nil {
+		t.Fatalf("GenerateCode: %v", err)
+	}
+	if err := svc.ConfirmTOTP(ctx, owner.User.ID, code); err != nil {
+		t.Fatalf("ConfirmTOTP with a real code: %v", err)
+	}
+
+	if enabled, err := svc.TOTPStatus(ctx, owner.User.ID); err != nil || !enabled {
+		t.Fatalf("TOTPStatus after confirmation = (%v, %v), want (true, nil)", enabled, err)
+	}
+
+	// Login now requires the second factor instead of granting a session.
+	outcome, err := svc.Login(ctx, auth.LoginInput{Email: email, Password: "correct-horse-battery-staple"})
+	if err != nil {
+		t.Fatalf("Login: %v", err)
+	}
+	if outcome.Session != nil || !outcome.RequiresTOTP || outcome.RequiresTOTPEnrollment || outcome.PendingToken == "" {
+		t.Fatalf("Login outcome = %+v, want RequiresTOTP with a pending token and no session", outcome)
+	}
+
+	// A wrong code doesn't consume the pending login.
+	if _, err := svc.VerifyPendingLogin(ctx, outcome.PendingToken, "000000"); err == nil {
+		t.Fatal("VerifyPendingLogin accepted an arbitrary wrong code")
+	}
+
+	loginCode, err := stdtotp.GenerateCode(enrollment.Secret, time.Now())
+	if err != nil {
+		t.Fatalf("GenerateCode: %v", err)
+	}
+	res, err := svc.VerifyPendingLogin(ctx, outcome.PendingToken, loginCode)
+	if err != nil {
+		t.Fatalf("VerifyPendingLogin with a real code: %v", err)
+	}
+	if res.RoleKey != "Owner" {
+		t.Fatalf("RoleKey = %q, want Owner", res.RoleKey)
+	}
+
+	// The pending token is single-use.
+	if _, err := svc.VerifyPendingLogin(ctx, outcome.PendingToken, loginCode); err == nil {
+		t.Fatal("VerifyPendingLogin succeeded twice with the same pending token")
+	}
+}
+
+func TestBackupCodeConsumesOnce(t *testing.T) {
+	pool := mustPool(t)
+	svc := newService(pool)
+	ctx := context.Background()
+	email := uniqueEmail(t, pool)
+	owner := signupOrg(t, ctx, pool, svc, "Backup Code Org", email)
+
+	enrollment, err := svc.EnrollTOTP(ctx, owner.User.ID, email)
+	if err != nil {
+		t.Fatalf("EnrollTOTP: %v", err)
+	}
+	code, err := stdtotp.GenerateCode(enrollment.Secret, time.Now())
+	if err != nil {
+		t.Fatalf("GenerateCode: %v", err)
+	}
+	if err := svc.ConfirmTOTP(ctx, owner.User.ID, code); err != nil {
+		t.Fatalf("ConfirmTOTP: %v", err)
+	}
+
+	outcome, err := svc.Login(ctx, auth.LoginInput{Email: email, Password: "correct-horse-battery-staple"})
+	if err != nil {
+		t.Fatalf("Login: %v", err)
+	}
+	backupCode := enrollment.BackupCodes[0]
+
+	if _, err := svc.VerifyPendingLogin(ctx, outcome.PendingToken, backupCode); err != nil {
+		t.Fatalf("VerifyPendingLogin with a real backup code: %v", err)
+	}
+
+	// A second pending login, then the SAME backup code must be rejected.
+	outcome2, err := svc.Login(ctx, auth.LoginInput{Email: email, Password: "correct-horse-battery-staple"})
+	if err != nil {
+		t.Fatalf("second Login: %v", err)
+	}
+	if _, err := svc.VerifyPendingLogin(ctx, outcome2.PendingToken, backupCode); err == nil {
+		t.Fatal("an already-used backup code was accepted a second time")
+	}
+}
+
+func TestOrgRequiredTOTPForcesEnrollmentOnLogin(t *testing.T) {
+	pool := mustPool(t)
+	svc := newService(pool)
+	ctx := context.Background()
+	ownerEmail := uniqueEmail(t, pool)
+	owner := signupOrg(t, ctx, pool, svc, "Forced Enrollment Org", ownerEmail)
+
+	invitedEmail := uniqueEmail(t, pool)
+	inviteURL, err := svc.Invite(ctx, owner.Organization.ID, owner.User.ID, auth.InviteInput{Name: "Needs 2FA", Email: invitedEmail, RoleKey: "Analyst"})
+	if err != nil {
+		t.Fatalf("Invite: %v", err)
+	}
+	acceptOutcome, err := svc.AcceptInvite(ctx, auth.AcceptInviteInput{Token: tokenFromURL(t, inviteURL), Name: "Needs 2FA", Password: "needs-2fa-password"})
+	if err != nil {
+		t.Fatalf("AcceptInvite: %v", err)
+	}
+	if acceptOutcome.Session == nil {
+		t.Fatal("AcceptInvite (before org requires 2FA) returned no session")
+	}
+
+	required := true
+	if _, err := svc.UpdateSecuritySettings(ctx, owner.Organization.ID, owner.User.ID, "203.0.113.5", auth.UpdateSecuritySettingsInput{TwoFactorRequired: &required}); err != nil {
+		t.Fatalf("UpdateSecuritySettings: %v", err)
+	}
+
+	outcome, err := svc.Login(ctx, auth.LoginInput{Email: invitedEmail, Password: "needs-2fa-password"})
+	if err != nil {
+		t.Fatalf("Login: %v", err)
+	}
+	if outcome.Session != nil || !outcome.RequiresTOTPEnrollment || outcome.RequiresTOTP || outcome.PendingToken == "" {
+		t.Fatalf("Login outcome = %+v, want RequiresTOTPEnrollment with a pending token", outcome)
+	}
+
+	enrollment, err := svc.EnrollTOTP(ctx, acceptOutcome.Session.User.ID, invitedEmail)
+	if err != nil {
+		t.Fatalf("EnrollTOTP: %v", err)
+	}
+	code, err := stdtotp.GenerateCode(enrollment.Secret, time.Now())
+	if err != nil {
+		t.Fatalf("GenerateCode: %v", err)
+	}
+
+	// CompleteEnrollmentLogin both confirms AND completes the login in
+	// one step — no separate "now please log in again" round trip.
+	res, err := svc.CompleteEnrollmentLogin(ctx, outcome.PendingToken, code)
+	if err != nil {
+		t.Fatalf("CompleteEnrollmentLogin: %v", err)
+	}
+	if res.User.Email != invitedEmail {
+		t.Fatalf("User.Email = %q, want %q", res.User.Email, invitedEmail)
+	}
+
+	if enabled, err := svc.TOTPStatus(ctx, acceptOutcome.Session.User.ID); err != nil || !enabled {
+		t.Fatalf("TOTPStatus after forced enrollment = (%v, %v), want (true, nil)", enabled, err)
+	}
+
+	// A second login now goes through the ordinary "already enrolled"
+	// RequiresTOTP path, not enrollment again.
+	outcome2, err := svc.Login(ctx, auth.LoginInput{Email: invitedEmail, Password: "needs-2fa-password"})
+	if err != nil {
+		t.Fatalf("second Login: %v", err)
+	}
+	if !outcome2.RequiresTOTP || outcome2.RequiresTOTPEnrollment {
+		t.Fatalf("second Login outcome = %+v, want plain RequiresTOTP", outcome2)
+	}
+}
+
+func TestDisableTOTPRequiresPasswordAndRespectsOrgPolicy(t *testing.T) {
+	pool := mustPool(t)
+	svc := newService(pool)
+	ctx := context.Background()
+	email := uniqueEmail(t, pool)
+	owner := signupOrg(t, ctx, pool, svc, "Disable TOTP Org", email)
+
+	enrollment, err := svc.EnrollTOTP(ctx, owner.User.ID, email)
+	if err != nil {
+		t.Fatalf("EnrollTOTP: %v", err)
+	}
+	code, err := stdtotp.GenerateCode(enrollment.Secret, time.Now())
+	if err != nil {
+		t.Fatalf("GenerateCode: %v", err)
+	}
+	if err := svc.ConfirmTOTP(ctx, owner.User.ID, code); err != nil {
+		t.Fatalf("ConfirmTOTP: %v", err)
+	}
+
+	if err := svc.DisableTOTP(ctx, owner.User.ID, owner.Organization.ID, "wrong-password"); err == nil {
+		t.Fatal("DisableTOTP accepted the wrong password")
+	}
+
+	required := true
+	if _, err := svc.UpdateSecuritySettings(ctx, owner.Organization.ID, owner.User.ID, "203.0.113.5", auth.UpdateSecuritySettingsInput{TwoFactorRequired: &required}); err != nil {
+		t.Fatalf("UpdateSecuritySettings: %v", err)
+	}
+	if err := svc.DisableTOTP(ctx, owner.User.ID, owner.Organization.ID, "correct-horse-battery-staple"); err == nil {
+		t.Fatal("DisableTOTP succeeded while the org requires 2FA, want rejected")
+	}
+
+	notRequired := false
+	if _, err := svc.UpdateSecuritySettings(ctx, owner.Organization.ID, owner.User.ID, "203.0.113.5", auth.UpdateSecuritySettingsInput{TwoFactorRequired: &notRequired}); err != nil {
+		t.Fatalf("UpdateSecuritySettings: %v", err)
+	}
+	if err := svc.DisableTOTP(ctx, owner.User.ID, owner.Organization.ID, "correct-horse-battery-staple"); err != nil {
+		t.Fatalf("DisableTOTP with the correct password: %v", err)
+	}
+	if enabled, err := svc.TOTPStatus(ctx, owner.User.ID); err != nil || enabled {
+		t.Fatalf("TOTPStatus after disable = (%v, %v), want (false, nil)", enabled, err)
+	}
 }

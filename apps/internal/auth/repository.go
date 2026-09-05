@@ -12,6 +12,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/ismagilovnail/flox/apps/internal/apierror"
+	"github.com/ismagilovnail/flox/apps/internal/idgen"
 )
 
 type Repository struct {
@@ -80,6 +81,19 @@ type userAuthRow struct {
 // render as the same generic "invalid email or password").
 func (r *Repository) findUserByEmail(ctx context.Context, email string) (row userAuthRow, found bool, err error) {
 	err = r.db.QueryRow(ctx, `SELECT id, name, email, password_hash, email_verified_at FROM users WHERE lower(email) = lower($1)`, email).
+		Scan(&row.ID, &row.Name, &row.Email, &row.PasswordHash, &row.EmailVerifiedAt)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return userAuthRow{}, false, nil
+	}
+	return row, err == nil, err
+}
+
+// findUserByID mirrors findUserByEmail's own shape (same userAuthRow,
+// same "not found is not an error" convention) — used by DisableTOTP to
+// re-verify a password for an already-authenticated user identified by
+// their real users.id, not an email a request might not carry.
+func (r *Repository) findUserByID(ctx context.Context, id string) (row userAuthRow, found bool, err error) {
+	err = r.db.QueryRow(ctx, `SELECT id, name, email, password_hash, email_verified_at FROM users WHERE id = $1`, id).
 		Scan(&row.ID, &row.Name, &row.Email, &row.PasswordHash, &row.EmailVerifiedAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return userAuthRow{}, false, nil
@@ -585,4 +599,245 @@ func (r *Repository) ListActivity(ctx context.Context, orgID string, limit int) 
 		out = append(out, e)
 	}
 	return out, rows.Err()
+}
+
+func (r *Repository) GetOrganizationSettings(ctx context.Context, orgID string) (OrganizationSettings, error) {
+	var o OrganizationSettings
+	err := r.db.QueryRow(ctx, `SELECT id, name, timezone, currency FROM organizations WHERE id = $1`, orgID).
+		Scan(&o.ID, &o.Name, &o.Timezone, &o.Currency)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return OrganizationSettings{}, apierror.NotFound("organization not found")
+	}
+	return o, err
+}
+
+func (r *Repository) UpdateOrganizationSettings(ctx context.Context, orgID string, in UpdateOrganizationSettingsInput) (OrganizationSettings, error) {
+	sets := []string{}
+	args := []any{}
+	arg := func(v any) string {
+		args = append(args, v)
+		return fmt.Sprintf("$%d", len(args))
+	}
+	if in.Name != nil {
+		sets = append(sets, "name = "+arg(*in.Name))
+	}
+	if in.Timezone != nil {
+		sets = append(sets, "timezone = "+arg(*in.Timezone))
+	}
+	if in.Currency != nil {
+		sets = append(sets, "currency = "+arg(*in.Currency))
+	}
+	if len(sets) == 0 {
+		return r.GetOrganizationSettings(ctx, orgID)
+	}
+
+	query := fmt.Sprintf(
+		`UPDATE organizations SET %s WHERE id = %s RETURNING id, name, timezone, currency`,
+		strings.Join(sets, ", "), arg(orgID),
+	)
+	var o OrganizationSettings
+	err := r.db.QueryRow(ctx, query, args...).Scan(&o.ID, &o.Name, &o.Timezone, &o.Currency)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return OrganizationSettings{}, apierror.NotFound("organization not found")
+	}
+	return o, err
+}
+
+func (r *Repository) GetSecuritySettings(ctx context.Context, orgID string) (SecuritySettings, error) {
+	var sec SecuritySettings
+	err := r.db.QueryRow(ctx, `
+		SELECT session_timeout_minutes, ip_allowlist, two_factor_required
+		FROM organizations WHERE id = $1`, orgID,
+	).Scan(&sec.SessionTimeoutMinutes, &sec.IPAllowlist, &sec.TwoFactorRequired)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return SecuritySettings{}, apierror.NotFound("organization not found")
+	}
+	return sec, err
+}
+
+func (r *Repository) UpdateSecuritySettings(ctx context.Context, orgID string, in UpdateSecuritySettingsInput) (SecuritySettings, error) {
+	sets := []string{}
+	args := []any{}
+	arg := func(v any) string {
+		args = append(args, v)
+		return fmt.Sprintf("$%d", len(args))
+	}
+	if in.SessionTimeoutMinutes != nil {
+		sets = append(sets, "session_timeout_minutes = "+arg(*in.SessionTimeoutMinutes))
+	}
+	if in.IPAllowlist != nil {
+		sets = append(sets, "ip_allowlist = "+arg(in.IPAllowlist))
+	}
+	if in.TwoFactorRequired != nil {
+		sets = append(sets, "two_factor_required = "+arg(*in.TwoFactorRequired))
+	}
+	if len(sets) == 0 {
+		return r.GetSecuritySettings(ctx, orgID)
+	}
+
+	query := fmt.Sprintf(
+		`UPDATE organizations SET %s WHERE id = %s RETURNING session_timeout_minutes, ip_allowlist, two_factor_required`,
+		strings.Join(sets, ", "), arg(orgID),
+	)
+	var sec SecuritySettings
+	err := r.db.QueryRow(ctx, query, args...).Scan(&sec.SessionTimeoutMinutes, &sec.IPAllowlist, &sec.TwoFactorRequired)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return SecuritySettings{}, apierror.NotFound("organization not found")
+	}
+	return sec, err
+}
+
+// LoginSecurityContext is completeLogin's one read: the org's own §30
+// Security policy plus whether this specific user has a confirmed TOTP
+// secret — bundled into a single round trip since every account-entry
+// path needs all of it together.
+func (r *Repository) LoginSecurityContext(ctx context.Context, userID, orgID string) (SecuritySettings, bool, error) {
+	var sec SecuritySettings
+	var userHasTOTP bool
+	err := r.db.QueryRow(ctx, `
+		SELECT o.session_timeout_minutes, o.ip_allowlist, o.two_factor_required, (u.totp_enabled_at IS NOT NULL)
+		FROM organizations o, users u
+		WHERE o.id = $1 AND u.id = $2`, orgID, userID,
+	).Scan(&sec.SessionTimeoutMinutes, &sec.IPAllowlist, &sec.TwoFactorRequired, &userHasTOTP)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return SecuritySettings{}, false, apierror.Unauthorized("session expired or invalid")
+	}
+	return sec, userHasTOTP, err
+}
+
+func (r *Repository) CreatePendingTOTPLogin(ctx context.Context, id, userID, orgID, tokenHash string, requiresEnrollment bool, expiresAt time.Time) error {
+	_, err := r.db.Exec(ctx, `
+		INSERT INTO pending_totp_logins (id, user_id, organization_id, token_hash, requires_enrollment, expires_at)
+		VALUES ($1, $2, $3, $4, $5, $6)`,
+		id, userID, orgID, tokenHash, requiresEnrollment, expiresAt,
+	)
+	if err != nil {
+		return fmt.Errorf("auth: creating pending totp login: %w", err)
+	}
+	return nil
+}
+
+type pendingTOTPLoginRow struct {
+	ID                 string
+	UserID             string
+	OrganizationID     string
+	RequiresEnrollment bool
+}
+
+func (r *Repository) FindPendingTOTPLogin(ctx context.Context, tokenHash string) (pendingTOTPLoginRow, error) {
+	var row pendingTOTPLoginRow
+	err := r.db.QueryRow(ctx, `
+		SELECT id, user_id, organization_id, requires_enrollment FROM pending_totp_logins
+		WHERE token_hash = $1 AND expires_at > now()`, tokenHash,
+	).Scan(&row.ID, &row.UserID, &row.OrganizationID, &row.RequiresEnrollment)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return pendingTOTPLoginRow{}, apierror.Unauthorized("sign-in has expired, please start over")
+	}
+	return row, err
+}
+
+func (r *Repository) DeletePendingTOTPLogin(ctx context.Context, id string) error {
+	_, err := r.db.Exec(ctx, `DELETE FROM pending_totp_logins WHERE id = $1`, id)
+	if err != nil {
+		return fmt.Errorf("auth: deleting pending totp login: %w", err)
+	}
+	return nil
+}
+
+// GetUserTOTPSecret returns the user's current secret (encrypted at
+// rest, decrypted by the caller — apps/internal/totp.DecryptSecret) and
+// whether it's confirmed. secret is "" when the user has never started
+// enrollment; a non-empty secret with enabled=false means an
+// in-progress, unconfirmed enrollment (Service.ConfirmTOTP's target).
+func (r *Repository) GetUserTOTPSecret(ctx context.Context, userID string) (secret string, enabled bool, err error) {
+	var s *string
+	var enabledAt *time.Time
+	err = r.db.QueryRow(ctx, `SELECT totp_secret, totp_enabled_at FROM users WHERE id = $1`, userID).Scan(&s, &enabledAt)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return "", false, apierror.NotFound("user not found")
+	}
+	if s != nil {
+		secret = *s
+	}
+	return secret, enabledAt != nil, err
+}
+
+// SetPendingUserTOTPSecret stores a freshly generated (encrypted) secret
+// and clears totp_enabled_at — a retried/regenerated enrollment always
+// starts over from "unconfirmed," it never silently re-confirms an old
+// secret.
+func (r *Repository) SetPendingUserTOTPSecret(ctx context.Context, userID, encryptedSecret string) error {
+	_, err := r.db.Exec(ctx, `UPDATE users SET totp_secret = $2, totp_enabled_at = NULL WHERE id = $1`, userID, encryptedSecret)
+	if err != nil {
+		return fmt.Errorf("auth: storing pending totp secret: %w", err)
+	}
+	return nil
+}
+
+func (r *Repository) ConfirmUserTOTP(ctx context.Context, userID string) error {
+	_, err := r.db.Exec(ctx, `UPDATE users SET totp_enabled_at = now() WHERE id = $1`, userID)
+	if err != nil {
+		return fmt.Errorf("auth: confirming totp: %w", err)
+	}
+	return nil
+}
+
+// DisableUserTOTP clears the secret and every backup code together — a
+// half-disabled state (secret gone, stale backup codes left behind, or
+// vice versa) would be a real security bug, so both happen in one tx.
+func (r *Repository) DisableUserTOTP(ctx context.Context, userID string) error {
+	tx, err := r.db.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("auth: beginning disable-totp tx: %w", err)
+	}
+	defer tx.Rollback(ctx)
+
+	if _, err := tx.Exec(ctx, `UPDATE users SET totp_secret = NULL, totp_enabled_at = NULL WHERE id = $1`, userID); err != nil {
+		return fmt.Errorf("auth: clearing totp secret: %w", err)
+	}
+	if _, err := tx.Exec(ctx, `DELETE FROM user_totp_backup_codes WHERE user_id = $1`, userID); err != nil {
+		return fmt.Errorf("auth: clearing backup codes: %w", err)
+	}
+	return tx.Commit(ctx)
+}
+
+// ReplaceBackupCodes deletes every existing backup code for userID and
+// inserts hashedCodes as the new set, in one tx — regenerating
+// enrollment must invalidate every old code, never leave a mix of old
+// and new codes both valid.
+func (r *Repository) ReplaceBackupCodes(ctx context.Context, userID string, hashedCodes []string) error {
+	tx, err := r.db.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("auth: beginning replace-backup-codes tx: %w", err)
+	}
+	defer tx.Rollback(ctx)
+
+	if _, err := tx.Exec(ctx, `DELETE FROM user_totp_backup_codes WHERE user_id = $1`, userID); err != nil {
+		return fmt.Errorf("auth: clearing old backup codes: %w", err)
+	}
+	for _, hash := range hashedCodes {
+		if _, err := tx.Exec(ctx,
+			`INSERT INTO user_totp_backup_codes (id, user_id, code_hash) VALUES ($1, $2, $3)`,
+			idgen.New(), userID, hash,
+		); err != nil {
+			return fmt.Errorf("auth: inserting backup code: %w", err)
+		}
+	}
+	return tx.Commit(ctx)
+}
+
+// ConsumeBackupCode atomically claims one unused backup code — the
+// WHERE...used_at IS NULL clause is the real one-time-use guarantee (two
+// concurrent attempts with the same code can never both succeed), not
+// just a check-then-act in Go.
+func (r *Repository) ConsumeBackupCode(ctx context.Context, userID, codeHash string) (bool, error) {
+	tag, err := r.db.Exec(ctx, `
+		UPDATE user_totp_backup_codes SET used_at = now()
+		WHERE user_id = $1 AND code_hash = $2 AND used_at IS NULL`,
+		userID, codeHash,
+	)
+	if err != nil {
+		return false, fmt.Errorf("auth: consuming backup code: %w", err)
+	}
+	return tag.RowsAffected() > 0, nil
 }

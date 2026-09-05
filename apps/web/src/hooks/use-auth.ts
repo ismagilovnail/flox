@@ -4,12 +4,17 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 
 import {
   acceptInvite,
+  confirmTOTP,
+  disableTOTP,
+  enrollTOTP,
   getMe,
   login,
+  loginTOTP,
   logout,
   previewInvite,
   resendVerification,
   signup,
+  totpStatus,
   verifyEmail,
   type AcceptInviteInput,
   type LoginInput,
@@ -80,11 +85,17 @@ export function useResendVerification() {
   });
 }
 
+// Invalidates "who am I" only when a real session was actually granted —
+// a §30 Security pending-2FA outcome (outcome.user absent) means no
+// session cookie was set at all, so there's nothing new for /auth/me to
+// resolve to yet.
 export function useLogin() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (input: LoginInput) => login(input),
-    onSuccess: () => qc.invalidateQueries({ queryKey: meKey }),
+    onSuccess: (outcome) => {
+      if (outcome.user) qc.invalidateQueries({ queryKey: meKey });
+    },
   });
 }
 
@@ -114,6 +125,55 @@ export function useAcceptInvite() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (input: AcceptInviteInput) => acceptInvite(input),
+    onSuccess: (outcome) => {
+      if (outcome.user) qc.invalidateQueries({ queryKey: meKey });
+    },
+  });
+}
+
+// --- §30 Security: real per-user TOTP two-factor authentication ---
+
+const totpStatusKey = ["auth", "2fa", "status"] as const;
+
+export function useTOTPStatus() {
+  return useQuery({ queryKey: totpStatusKey, queryFn: totpStatus });
+}
+
+// pendingToken absent = self-serve opt-in by an already-signed-in user
+// (identified by session cookie); present = forced enrollment mid-login,
+// before any session exists.
+export function useEnrollTOTP() {
+  return useMutation({
+    mutationFn: (pendingToken?: string) => enrollTOTP(pendingToken),
+  });
+}
+
+// See lib/api/auth.ts's ConfirmTOTPResponse doc comment — the two real
+// outcomes (a completed login vs. a plain enable-confirmation) both
+// invalidate whatever they actually changed.
+export function useConfirmTOTP() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { code: string; pendingToken?: string }) => confirmTOTP(input),
+    onSuccess: (result) => {
+      if ("user" in result) qc.invalidateQueries({ queryKey: meKey });
+      else qc.invalidateQueries({ queryKey: totpStatusKey });
+    },
+  });
+}
+
+export function useLoginTOTP() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ pendingToken, code }: { pendingToken: string; code: string }) => loginTOTP(pendingToken, code),
     onSuccess: () => qc.invalidateQueries({ queryKey: meKey }),
+  });
+}
+
+export function useDisableTOTP() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (password: string) => disableTOTP(password),
+    onSuccess: () => qc.invalidateQueries({ queryKey: totpStatusKey }),
   });
 }

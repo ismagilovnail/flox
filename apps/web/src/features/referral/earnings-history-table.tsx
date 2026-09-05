@@ -8,9 +8,8 @@ import { DataTable, dataTableFeatures } from "@/components/ui/data-table";
 import { Badge } from "@/components/ui/badge";
 import { Caption, Mono } from "@/components/ui/typography";
 import { formatUsd } from "@/lib/format";
-import { useReferralStore } from "@/stores/referral";
-import { useTeamStore } from "@/stores/team";
-import type { ReferralTransaction, ReferralTransactionType } from "@/lib/mock/referral";
+import { useTeamMembers } from "@/hooks/use-team";
+import type { ReferralTransaction, ReferralTransactionType } from "@/lib/referral";
 
 const TYPE_VARIANT: Record<ReferralTransactionType, "success" | "outline" | "warning"> = {
   accrual: "success",
@@ -24,11 +23,16 @@ const TYPE_LABEL: Record<ReferralTransactionType, string> = {
   payout_paid: "Payout paid",
 };
 
-export function EarningsHistoryTable() {
-  const transactions = useReferralStore((s) => s.transactions);
-  const members = useTeamStore((s) => s.members);
-
-  const memberNameById = React.useMemo(() => Object.fromEntries(members.map((m) => [m.id, m.name])), [members]);
+export function EarningsHistoryTable({ transactions }: { transactions: ReferralTransaction[] }) {
+  // Real team roster (§28) — a transaction's createdByUserId is a real
+  // users.id, resolved to a display name the same way the real team page
+  // itself does. A creator who has since left the team falls back to the
+  // raw id rather than hiding the row.
+  const membersQuery = useTeamMembers();
+  const memberNameByUserId = React.useMemo(
+    () => Object.fromEntries((membersQuery.data ?? []).map((m) => [m.userId, m.name])),
+    [membersQuery.data],
+  );
 
   const columns: ColumnDef<typeof dataTableFeatures, ReferralTransaction>[] = React.useMemo(
     () => [
@@ -57,7 +61,7 @@ export function EarningsHistoryTable() {
       {
         id: "by",
         header: "By",
-        accessorFn: (row) => memberNameById[row.createdByMemberId] ?? row.createdByMemberId,
+        accessorFn: (row) => memberNameByUserId[row.createdByUserId] ?? row.createdByUserId,
       },
       {
         accessorKey: "createdAt",
@@ -67,7 +71,7 @@ export function EarningsHistoryTable() {
         ),
       },
     ],
-    [memberNameById],
+    [memberNameByUserId],
   );
 
   return (

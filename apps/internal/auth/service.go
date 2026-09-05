@@ -2,8 +2,10 @@ package auth
 
 import (
 	"context"
+	"encoding/base64"
 	"fmt"
 	"log/slog"
+	"net"
 	"net/http"
 	"regexp"
 	"strings"
@@ -12,15 +14,18 @@ import (
 	"github.com/ismagilovnail/flox/apps/internal/apierror"
 	"github.com/ismagilovnail/flox/apps/internal/idgen"
 	"github.com/ismagilovnail/flox/apps/internal/tenant"
+	totpengine "github.com/ismagilovnail/flox/apps/internal/totp"
 )
 
 const (
 	minPasswordLength = 8
-	// sessionTTL: no "remember me" toggle exists in the (not-yet-built,
-	// Phase 28B) login UI, so one flat lifetime — 30 days, a common
-	// default for a first-party session cookie — rather than a shorter
-	// expiry that would silently log an operator out mid-workday.
-	sessionTTL = 30 * 24 * time.Hour
+	// pendingTOTPLoginTTL: how long a "password verified, second factor
+	// still outstanding" bridge row (pending_totp_logins, migration
+	// 00032) stays valid. Short and deliberately not configurable — this
+	// is someone actively mid-login, not a long-lived credential; 5
+	// minutes covers "grab your phone and read the code off it" with
+	// margin, without leaving a half-authenticated token usable for long.
+	pendingTOTPLoginTTL = 5 * time.Minute
 	// inviteTTL: long enough that an invite sent on a Friday is still
 	// good the following Monday.
 	inviteTTL = 7 * 24 * time.Hour
@@ -54,16 +59,39 @@ type Mailer interface {
 	Send(ctx context.Context, to, subject, body string) error
 }
 
+// ReferralRecorder attributes a new organization's signup to whichever
+// org's referral code it used, if any — implemented by
+// apps/internal/referral.Service and wired in from main.go via
+// SetReferralRecorder, not a constructor parameter, so auth never imports
+// referral directly and every existing NewService call site (including
+// every test) stays unchanged. A nil referrals field is a valid, silent
+// no-op — referral bookkeeping is never a prerequisite for signup.
+type ReferralRecorder interface {
+	RecordSignup(ctx context.Context, code, referredOrgID, name, email string) error
+}
+
 type Service struct {
-	repo   *Repository
-	appURL string
-	mailer Mailer
+	repo      *Repository
+	appURL    string
+	mailer    Mailer
+	referrals ReferralRecorder
+	// totpKey is set via SetTOTPKey, not a NewService parameter — same
+	// late-bound-optional-dependency pattern as referrals above, kept
+	// consistent even though a missing key is a real misconfiguration
+	// (every 2FA method checks for nil and fails loudly) rather than a
+	// graceful no-op, so every existing NewService call site (including
+	// every test not exercising 2FA) stays unchanged.
+	totpKey []byte
 }
 
 // appURL is apps/web's own origin (config.AppURL) — an invite link, and
 // now the email-verification link Signup sends, both point there.
 func NewService(repo *Repository, appURL string, mailer Mailer) *Service {
 	return &Service{repo: repo, appURL: appURL, mailer: mailer}
+}
+
+func (s *Service) SetReferralRecorder(r ReferralRecorder) {
+	s.referrals = r
 }
 
 // dummyPasswordHash exists purely so Login always pays bcrypt's comparison
@@ -127,6 +155,16 @@ func (s *Service) Signup(ctx context.Context, in SignupInput) (SignupResult, err
 		return SignupResult{}, err
 	}
 
+	if s.referrals != nil && in.ReferralCode != "" {
+		// Best-effort, deliberately ignored on error: the account above
+		// is already real and fully created regardless of whether
+		// referral attribution succeeds. An invalid/unknown code is
+		// already a silent no-op inside RecordSignup itself; only a
+		// genuine infra failure would reach here, and even then this
+		// signup must not fail over a secondary bookkeeping system.
+		_ = s.referrals.RecordSignup(ctx, in.ReferralCode, orgID, in.Name, in.Email)
+	}
+
 	if err := s.sendVerificationEmail(ctx, in.Email, token); err != nil {
 		// The account row already exists (unverified) even though this
 		// request reports failure — a down/misconfigured relay is an ops
@@ -153,19 +191,19 @@ func (s *Service) sendVerificationEmail(ctx context.Context, to, token string) e
 	return s.mailer.Send(ctx, to, subject, body)
 }
 
-func (s *Service) Login(ctx context.Context, in LoginInput) (Result, error) {
+func (s *Service) Login(ctx context.Context, in LoginInput) (LoginOutcome, error) {
 	email := strings.TrimSpace(strings.ToLower(in.Email))
 
 	row, found, err := s.repo.findUserByEmail(ctx, email)
 	if err != nil {
-		return Result{}, err
+		return LoginOutcome{}, err
 	}
 	hashToCheck := dummyPasswordHash
 	if found {
 		hashToCheck = row.PasswordHash
 	}
 	if !checkPassword(hashToCheck, in.Password) || !found {
-		return Result{}, apierror.Unauthorized("invalid email or password")
+		return LoginOutcome{}, apierror.Unauthorized("invalid email or password")
 	}
 	// Checked only after the password is confirmed correct — revealing
 	// "unverified" to someone who doesn't already know the password would
@@ -175,7 +213,7 @@ func (s *Service) Login(ctx context.Context, in LoginInput) (Result, error) {
 	// login form renders a distinct "resend the verification email" CTA
 	// for this one, not the generic wrong-password message.
 	if row.EmailVerifiedAt == nil {
-		return Result{}, &apierror.Error{
+		return LoginOutcome{}, &apierror.Error{
 			Status:  http.StatusForbidden,
 			Code:    "email_not_verified",
 			Message: "confirm your email before signing in — check your inbox for the verification link",
@@ -184,10 +222,10 @@ func (s *Service) Login(ctx context.Context, in LoginInput) (Result, error) {
 
 	memberships, err := s.repo.activeMembershipsByUser(ctx, row.ID)
 	if err != nil {
-		return Result{}, err
+		return LoginOutcome{}, err
 	}
 	if len(memberships) == 0 {
-		return Result{}, apierror.Unauthorized("no active organization membership")
+		return LoginOutcome{}, apierror.Unauthorized("no active organization membership")
 	}
 
 	var chosen activeMembershipRow
@@ -201,23 +239,28 @@ func (s *Service) Login(ctx context.Context, in LoginInput) (Result, error) {
 			}
 		}
 		if !match {
-			return Result{}, apierror.Unauthorized("not a member of that organization")
+			return LoginOutcome{}, apierror.Unauthorized("not a member of that organization")
 		}
 	case len(memberships) == 1:
 		chosen = memberships[0]
 	default:
-		return Result{}, apierror.Validation("multiple organizations available, specify organizationId", map[string]string{"organizationId": "required"})
+		return LoginOutcome{}, apierror.Validation("multiple organizations available, specify organizationId", map[string]string{"organizationId": "required"})
 	}
 
-	return s.createSession(ctx, row.ID, chosen.OrganizationID, row.Name, row.Email, chosen.RoleKey, chosen.OrganizationName)
+	return s.completeLogin(ctx, row.ID, chosen.OrganizationID, row.Name, row.Email, chosen.RoleKey, chosen.OrganizationName, in.ClientIP)
 }
 
-func (s *Service) createSession(ctx context.Context, userID, orgID, userName, userEmail, roleKey, orgName string) (Result, error) {
+// createSession is the one place a real session row is ever written —
+// timeoutMinutes comes from the org's own configurable §30 Security
+// setting (organizations.session_timeout_minutes), not a flat package
+// constant anymore; migration 00032's own DEFAULT 43200 (30 days)
+// preserves every existing org's real behavior on day one.
+func (s *Service) createSession(ctx context.Context, userID, orgID, userName, userEmail, roleKey, orgName string, timeoutMinutes int) (Result, error) {
 	token, tokenHash, err := newBearerToken()
 	if err != nil {
 		return Result{}, err
 	}
-	expiresAt := time.Now().Add(sessionTTL)
+	expiresAt := time.Now().Add(time.Duration(timeoutMinutes) * time.Minute)
 	if err := s.repo.CreateSession(ctx, idgen.New(), userID, orgID, tokenHash, expiresAt); err != nil {
 		return Result{}, err
 	}
@@ -230,19 +273,6 @@ func (s *Service) createSession(ctx context.Context, userID, orgID, userName, us
 	}, nil
 }
 
-// VerifyEmailResult is VerifyEmail's return: the email is verified either
-// way once err is nil — Session is populated only when the account had
-// exactly one active organization membership to auto-log into (the
-// overwhelmingly common case: a signup verifying its own brand-new
-// Owner membership seconds after creating it). A user somehow holding
-// zero or multiple active memberships at verification time (e.g. also
-// separately accepted an invite in the interim) still gets verified,
-// just without an automatic session — apps/web sends them to /login
-// instead of straight into the app for that edge case.
-type VerifyEmailResult struct {
-	Session *Result
-}
-
 // VerifyEmail consumes a signup's emailed link — same one-time-token
 // shape as AcceptInvite (find by hash, must be unexpired), but there's no
 // separate "preview" step first (nothing to show before consuming: no
@@ -250,29 +280,102 @@ type VerifyEmailResult struct {
 // inbox access, exactly as strong as AcceptInvite's own proof (typing a
 // fresh password into that same request) — so this auto-logs in the same
 // way AcceptInvite does, not a separate "verified, now go log in by hand"
-// step for the common case.
-func (s *Service) VerifyEmail(ctx context.Context, token string) (VerifyEmailResult, error) {
+// step for the common case. A LoginOutcome with everything zeroed out
+// (no Session, no PendingToken) means "verified, but auto-login wasn't
+// attempted" — the account had zero or multiple active memberships at
+// verification time (e.g. also separately accepted an invite in the
+// interim); apps/web sends that case to /login instead of into the app.
+func (s *Service) VerifyEmail(ctx context.Context, token, clientIP string) (LoginOutcome, error) {
 	userID, name, email, err := s.repo.FindUserByVerificationToken(ctx, hashToken(token))
 	if err != nil {
-		return VerifyEmailResult{}, err
+		return LoginOutcome{}, err
 	}
 	if err := s.repo.MarkEmailVerified(ctx, userID); err != nil {
-		return VerifyEmailResult{}, err
+		return LoginOutcome{}, err
 	}
 
 	memberships, err := s.repo.activeMembershipsByUser(ctx, userID)
 	if err != nil {
-		return VerifyEmailResult{}, err
+		return LoginOutcome{}, err
 	}
 	if len(memberships) != 1 {
-		return VerifyEmailResult{}, nil
+		return LoginOutcome{}, nil
 	}
 
-	res, err := s.createSession(ctx, userID, memberships[0].OrganizationID, name, email, memberships[0].RoleKey, memberships[0].OrganizationName)
+	return s.completeLogin(ctx, userID, memberships[0].OrganizationID, name, email, memberships[0].RoleKey, memberships[0].OrganizationName, clientIP)
+}
+
+// completeLogin is the one real chokepoint every account-entry path
+// (Login, VerifyEmail, AcceptInvite) funnels through once password/
+// invite-token/email-link proof has already succeeded — §30 Security's
+// IP allowlist and 2FA policy are enforced exactly once, here, rather
+// than duplicated per caller.
+func (s *Service) completeLogin(ctx context.Context, userID, orgID, userName, userEmail, roleKey, orgName, clientIP string) (LoginOutcome, error) {
+	sec, userHasTOTP, err := s.repo.LoginSecurityContext(ctx, userID, orgID)
 	if err != nil {
-		return VerifyEmailResult{}, err
+		return LoginOutcome{}, err
 	}
-	return VerifyEmailResult{Session: &res}, nil
+
+	if !ipAllowed(sec.IPAllowlist, clientIP) {
+		return LoginOutcome{}, &apierror.Error{
+			Status:  http.StatusForbidden,
+			Code:    "ip_not_allowed",
+			Message: "sign-in is not allowed from this network",
+		}
+	}
+
+	if userHasTOTP || sec.TwoFactorRequired {
+		token, tokenHash, err := newBearerToken()
+		if err != nil {
+			return LoginOutcome{}, err
+		}
+		expiresAt := time.Now().Add(pendingTOTPLoginTTL)
+		requiresEnrollment := !userHasTOTP
+		if err := s.repo.CreatePendingTOTPLogin(ctx, idgen.New(), userID, orgID, tokenHash, requiresEnrollment, expiresAt); err != nil {
+			return LoginOutcome{}, err
+		}
+		return LoginOutcome{
+			PendingToken:           token,
+			RequiresTOTP:           userHasTOTP,
+			RequiresTOTPEnrollment: requiresEnrollment,
+		}, nil
+	}
+
+	res, err := s.createSession(ctx, userID, orgID, userName, userEmail, roleKey, orgName, sec.SessionTimeoutMinutes)
+	if err != nil {
+		return LoginOutcome{}, err
+	}
+	return LoginOutcome{Session: &res}, nil
+}
+
+// ipAllowed reports whether clientIP satisfies allowlist — an empty
+// allowlist means "no restriction" (the only sane default for a feature
+// nobody has configured). A clientIP that fails to parse is rejected
+// once the list is non-empty (fail closed: a spoofed/malformed address
+// must never bypass a restriction the org explicitly turned on), but
+// never rejected while the list is empty (an unparsed IP must not break
+// login for every org that hasn't touched this feature).
+func ipAllowed(allowlist []string, clientIP string) bool {
+	if len(allowlist) == 0 {
+		return true
+	}
+	parsed := net.ParseIP(clientIP)
+	if parsed == nil {
+		return false
+	}
+	for _, entry := range allowlist {
+		if strings.Contains(entry, "/") {
+			_, ipnet, err := net.ParseCIDR(entry)
+			if err == nil && ipnet.Contains(parsed) {
+				return true
+			}
+			continue
+		}
+		if candidate := net.ParseIP(entry); candidate != nil && candidate.Equal(parsed) {
+			return true
+		}
+	}
+	return false
 }
 
 // ResendVerification issues a fresh verification token and re-sends the
@@ -434,7 +537,7 @@ func (s *Service) PreviewInvite(ctx context.Context, token string) (InvitePrevie
 	return InvitePreview{OrganizationName: inv.OrganizationName, Email: inv.Email, RoleKey: inv.RoleKey}, nil
 }
 
-func (s *Service) AcceptInvite(ctx context.Context, in AcceptInviteInput) (Result, error) {
+func (s *Service) AcceptInvite(ctx context.Context, in AcceptInviteInput) (LoginOutcome, error) {
 	in.Name = strings.TrimSpace(in.Name)
 
 	fields := map[string]string{}
@@ -445,25 +548,25 @@ func (s *Service) AcceptInvite(ctx context.Context, in AcceptInviteInput) (Resul
 		fields["password"] = fmt.Sprintf("must be at least %d characters", minPasswordLength)
 	}
 	if len(fields) > 0 {
-		return Result{}, apierror.Validation("invalid", fields)
+		return LoginOutcome{}, apierror.Validation("invalid", fields)
 	}
 
 	inv, err := s.repo.FindMembershipByInviteToken(ctx, hashToken(in.Token))
 	if err != nil {
-		return Result{}, err
+		return LoginOutcome{}, err
 	}
 
 	hash, err := hashPassword(in.Password)
 	if err != nil {
-		return Result{}, err
+		return LoginOutcome{}, err
 	}
 	if err := s.repo.AcceptInvite(ctx, inv.MembershipID, inv.UserID, in.Name, hash); err != nil {
-		return Result{}, err
+		return LoginOutcome{}, err
 	}
 
 	actor := inv.UserID
 	_ = s.repo.RecordActivity(ctx, idgen.New(), inv.OrganizationID, &actor, "team.invite_accepted", "membership", inv.MembershipID)
-	return s.createSession(ctx, inv.UserID, inv.OrganizationID, in.Name, inv.Email, inv.RoleKey, inv.OrganizationName)
+	return s.completeLogin(ctx, inv.UserID, inv.OrganizationID, in.Name, inv.Email, inv.RoleKey, inv.OrganizationName, in.ClientIP)
 }
 
 func (s *Service) UpdateMembership(ctx context.Context, orgID, actorUserID, membershipID string, in UpdateMembershipInput) (Membership, error) {
@@ -505,4 +608,317 @@ func (s *Service) RemoveMember(ctx context.Context, orgID, actorUserID, membersh
 
 func (s *Service) ListActivity(ctx context.Context, orgID string) ([]ActivityEntry, error) {
 	return s.repo.ListActivity(ctx, orgID, activityListLimit)
+}
+
+const (
+	orgNameMinLen = 2
+	orgNameMaxLen = 80
+)
+
+var currencyPattern = regexp.MustCompile(`^[A-Z]{3}$`)
+
+func (s *Service) GetOrganizationSettings(ctx context.Context, orgID string) (OrganizationSettings, error) {
+	return s.repo.GetOrganizationSettings(ctx, orgID)
+}
+
+// UpdateOrganizationSettings validates timezone against Go's own IANA
+// tzdata (broader and more honest than the frontend's own short
+// dropdown of common zones — any real timezone an operator's browser
+// reports should be acceptable, not just the eight the UI happens to
+// list) and currency as a plausible ISO 4217-shaped code (3 uppercase
+// letters) rather than a fixed list — apps/internal/conversion.
+// PostgresFX already degrades gracefully (stores the original amount,
+// no USD value) when no fx_rates row exists for a currency/date, so
+// this never needs to double as "is this currency actually tradeable
+// today."
+func (s *Service) UpdateOrganizationSettings(ctx context.Context, orgID, actorUserID string, in UpdateOrganizationSettingsInput) (OrganizationSettings, error) {
+	if in.Name != nil {
+		trimmed := strings.TrimSpace(*in.Name)
+		if len(trimmed) < orgNameMinLen {
+			return OrganizationSettings{}, apierror.Validation("name must be at least 2 characters", map[string]string{"name": "too short"})
+		}
+		if len(trimmed) > orgNameMaxLen {
+			return OrganizationSettings{}, apierror.Validation("name is too long", map[string]string{"name": "too long"})
+		}
+		in.Name = &trimmed
+	}
+	if in.Timezone != nil {
+		if _, err := time.LoadLocation(*in.Timezone); err != nil {
+			return OrganizationSettings{}, apierror.Validation("unknown timezone", map[string]string{"timezone": "invalid"})
+		}
+	}
+	if in.Currency != nil {
+		upper := strings.ToUpper(strings.TrimSpace(*in.Currency))
+		if !currencyPattern.MatchString(upper) {
+			return OrganizationSettings{}, apierror.Validation("currency must be a 3-letter code", map[string]string{"currency": "invalid"})
+		}
+		in.Currency = &upper
+	}
+
+	updated, err := s.repo.UpdateOrganizationSettings(ctx, orgID, in)
+	if err != nil {
+		return OrganizationSettings{}, err
+	}
+	actor := actorUserID
+	_ = s.repo.RecordActivity(ctx, idgen.New(), orgID, &actor, "settings.updated", "organization", orgID)
+	return updated, nil
+}
+
+func (s *Service) GetSecuritySettings(ctx context.Context, orgID string) (SecuritySettings, error) {
+	return s.repo.GetSecuritySettings(ctx, orgID)
+}
+
+// UpdateSecuritySettings validates session_timeout_minutes against the
+// same 15-86400 bound migration 00032's own CHECK constraint enforces (a
+// clean 422 here beats a raw constraint-violation error reaching the
+// client) — deliberately wider than the frontend panel's own curated
+// dropdown range, same "backend validates broadly, frontend curates a
+// shortlist" precedent Organization settings' timezone/currency already
+// established: the real default (43200, matching the pre-existing
+// hardcoded 30-day session TTL) must itself remain a valid value to set
+// back to, not just a valid value to have inherited. Every IPAllowlist
+// entry is checked as a real IP or CIDR (net.ParseIP/net.ParseCIDR — not
+// a regex, so "999.999.999.999"-shaped garbage that merely looks right
+// is still rejected).
+//
+// The one safeguard against the feature's own real lockout risk: a
+// non-empty new allowlist must cover actingClientIP, the IP the request
+// making THIS change is coming from — reject the update otherwise. This
+// only protects the person saving the list from immediately locking out
+// their own current login; it deliberately does not (and structurally
+// cannot) guarantee no OTHER admin on a different network gets excluded
+// — that remains a real, visible consequence of the policy an Owner is
+// choosing to set, the same way a cloud security-group console warns
+// but still allows a narrow rule.
+func (s *Service) UpdateSecuritySettings(ctx context.Context, orgID, actorUserID, actingClientIP string, in UpdateSecuritySettingsInput) (SecuritySettings, error) {
+	if in.SessionTimeoutMinutes != nil {
+		if *in.SessionTimeoutMinutes < 15 || *in.SessionTimeoutMinutes > 86400 {
+			return SecuritySettings{}, apierror.Validation("session timeout must be 15-86400 minutes", map[string]string{"sessionTimeoutMinutes": "out of range"})
+		}
+	}
+	if in.IPAllowlist != nil {
+		for _, entry := range in.IPAllowlist {
+			if !validIPOrCIDR(entry) {
+				return SecuritySettings{}, apierror.Validation("invalid IP or CIDR", map[string]string{"ipAllowlist": entry})
+			}
+		}
+		if len(in.IPAllowlist) > 0 && !ipAllowed(in.IPAllowlist, actingClientIP) {
+			return SecuritySettings{}, apierror.Validation(
+				"this list would lock out your own current connection — add your own IP first",
+				map[string]string{"ipAllowlist": "excludes your current IP"},
+			)
+		}
+	}
+
+	updated, err := s.repo.UpdateSecuritySettings(ctx, orgID, in)
+	if err != nil {
+		return SecuritySettings{}, err
+	}
+	actor := actorUserID
+	_ = s.repo.RecordActivity(ctx, idgen.New(), orgID, &actor, "settings.updated", "organization", orgID)
+	return updated, nil
+}
+
+func validIPOrCIDR(entry string) bool {
+	if strings.Contains(entry, "/") {
+		_, _, err := net.ParseCIDR(entry)
+		return err == nil
+	}
+	return net.ParseIP(entry) != nil
+}
+
+// --- §30 Security: real per-user TOTP two-factor authentication ---
+
+func (s *Service) SetTOTPKey(key []byte) {
+	s.totpKey = key
+}
+
+func (s *Service) TOTPStatus(ctx context.Context, userID string) (bool, error) {
+	_, enabled, err := s.repo.GetUserTOTPSecret(ctx, userID)
+	return enabled, err
+}
+
+// EnrollTOTP generates a brand-new secret + QR code + backup codes,
+// encrypts and persists the secret as UNCONFIRMED (totp_enabled_at left
+// NULL — see repository.SetPendingUserTOTPSecret's own comment), and
+// replaces any previous backup codes immediately (a retried enrollment
+// invalidates whatever the last attempt generated, confirmed or not —
+// there's never a moment where two generations' worth of codes are both
+// valid).
+func (s *Service) EnrollTOTP(ctx context.Context, userID, accountEmail string) (TOTPEnrollment, error) {
+	if s.totpKey == nil {
+		return TOTPEnrollment{}, fmt.Errorf("auth: TOTP encryption key not configured")
+	}
+	enrollment, err := totpengine.GenerateEnrollment("FLOX", accountEmail)
+	if err != nil {
+		return TOTPEnrollment{}, err
+	}
+	encrypted, err := totpengine.EncryptSecret(s.totpKey, enrollment.Secret)
+	if err != nil {
+		return TOTPEnrollment{}, err
+	}
+	if err := s.repo.SetPendingUserTOTPSecret(ctx, userID, encrypted); err != nil {
+		return TOTPEnrollment{}, err
+	}
+
+	hashed := make([]string, len(enrollment.BackupCodes))
+	for i, code := range enrollment.BackupCodes {
+		hashed[i] = totpengine.HashBackupCode(code)
+	}
+	if err := s.repo.ReplaceBackupCodes(ctx, userID, hashed); err != nil {
+		return TOTPEnrollment{}, err
+	}
+
+	return TOTPEnrollment{
+		Secret:        enrollment.Secret,
+		QRCodeDataURI: "data:image/png;base64," + base64.StdEncoding.EncodeToString(enrollment.QRCodePNG),
+		BackupCodes:   enrollment.BackupCodes,
+	}, nil
+}
+
+// ConfirmTOTP verifies code against the pending (unconfirmed) secret
+// EnrollTOTP just stored and, on success, marks it enabled. Returns
+// apierror.Validation on a wrong code — the caller (handler) decides
+// whether that's a self-serve retry or a forced-enrollment-mid-login
+// retry; either way the pending secret is left in place so retrying
+// costs nothing.
+func (s *Service) ConfirmTOTP(ctx context.Context, userID, code string) error {
+	if s.totpKey == nil {
+		return fmt.Errorf("auth: TOTP encryption key not configured")
+	}
+	encrypted, enabled, err := s.repo.GetUserTOTPSecret(ctx, userID)
+	if err != nil {
+		return err
+	}
+	if encrypted == "" || enabled {
+		return apierror.Validation("no pending TOTP enrollment", map[string]string{"code": "no enrollment in progress"})
+	}
+	secret, err := totpengine.DecryptSecret(s.totpKey, encrypted)
+	if err != nil {
+		return err
+	}
+	if !totpengine.ValidateCode(secret, code) {
+		return apierror.Validation("incorrect code", map[string]string{"code": "incorrect"})
+	}
+	return s.repo.ConfirmUserTOTP(ctx, userID)
+}
+
+// DisableTOTP requires the account's own current password (a
+// destructive-enough action — losing 2FA protection — that re-proving
+// identity is warranted even for an already-authenticated session) and
+// refuses outright while the org's own two_factor_required policy is on:
+// an individual member cannot opt out of a workspace-wide requirement.
+func (s *Service) DisableTOTP(ctx context.Context, userID, orgID, password string) error {
+	sec, err := s.repo.GetSecuritySettings(ctx, orgID)
+	if err != nil {
+		return err
+	}
+	if sec.TwoFactorRequired {
+		return apierror.Validation("two-factor authentication is required by your organization and can't be disabled", nil)
+	}
+
+	row, found, err := s.repo.findUserByID(ctx, userID)
+	if err != nil {
+		return err
+	}
+	if !found || !checkPassword(row.PasswordHash, password) {
+		return apierror.Unauthorized("incorrect password")
+	}
+
+	return s.repo.DisableUserTOTP(ctx, userID)
+}
+
+// VerifyPendingLogin exchanges a PendingToken (from Login/VerifyEmail/
+// AcceptInvite's LoginOutcome) plus a live TOTP code or a backup code for
+// a real session — the only place completeLogin's "second factor still
+// outstanding" bridge ever resolves into an actual session.
+func (s *Service) VerifyPendingLogin(ctx context.Context, pendingToken, code string) (Result, error) {
+	if s.totpKey == nil {
+		return Result{}, fmt.Errorf("auth: TOTP encryption key not configured")
+	}
+	pending, err := s.repo.FindPendingTOTPLogin(ctx, hashToken(pendingToken))
+	if err != nil {
+		return Result{}, err
+	}
+	if pending.RequiresEnrollment {
+		return Result{}, apierror.Validation("complete enrollment first", map[string]string{"code": "enrollment required"})
+	}
+
+	encrypted, enabled, err := s.repo.GetUserTOTPSecret(ctx, pending.UserID)
+	if err != nil {
+		return Result{}, err
+	}
+	if !enabled {
+		return Result{}, apierror.Validation("no confirmed TOTP enrollment", nil)
+	}
+	secret, err := totpengine.DecryptSecret(s.totpKey, encrypted)
+	if err != nil {
+		return Result{}, err
+	}
+
+	valid := totpengine.ValidateCode(secret, code)
+	if !valid {
+		if consumed, err := s.repo.ConsumeBackupCode(ctx, pending.UserID, totpengine.HashBackupCode(code)); err != nil {
+			return Result{}, err
+		} else {
+			valid = consumed
+		}
+	}
+	if !valid {
+		return Result{}, apierror.Unauthorized("incorrect code")
+	}
+
+	who, err := s.repo.WhoAmI(ctx, pending.UserID, pending.OrganizationID)
+	if err != nil {
+		return Result{}, err
+	}
+	sec, err := s.repo.GetSecuritySettings(ctx, pending.OrganizationID)
+	if err != nil {
+		return Result{}, err
+	}
+	_ = s.repo.DeletePendingTOTPLogin(ctx, pending.ID)
+	return s.createSession(ctx, who.UserID, pending.OrganizationID, who.UserName, who.UserEmail, who.RoleKey, who.OrganizationName, sec.SessionTimeoutMinutes)
+}
+
+// ResolvePendingLoginSubject identifies who a pendingToken belongs to
+// without consuming it — TOTPHandler's dual-context enroll/confirm
+// endpoints need to know "who is this for" before deciding what to do,
+// separately from actually completing the login.
+func (s *Service) ResolvePendingLoginSubject(ctx context.Context, pendingToken string) (userID, orgID string, err error) {
+	pending, err := s.repo.FindPendingTOTPLogin(ctx, hashToken(pendingToken))
+	if err != nil {
+		return "", "", err
+	}
+	return pending.UserID, pending.OrganizationID, nil
+}
+
+// CompleteEnrollmentLogin is ConfirmTOTP's forced-enrollment-mid-login
+// sibling: verifies the code against the pending secret exactly like
+// ConfirmTOTP, but on success also completes the login that triggered
+// enrollment in the first place (the org's two_factor_required policy),
+// deleting the pending row and returning a real session in one step —
+// the frontend never gets a "confirmed, now please log in again" dead
+// end.
+func (s *Service) CompleteEnrollmentLogin(ctx context.Context, pendingToken, code string) (Result, error) {
+	pending, err := s.repo.FindPendingTOTPLogin(ctx, hashToken(pendingToken))
+	if err != nil {
+		return Result{}, err
+	}
+	if !pending.RequiresEnrollment {
+		return Result{}, apierror.Validation("already enrolled — enter your code instead", nil)
+	}
+	if err := s.ConfirmTOTP(ctx, pending.UserID, code); err != nil {
+		return Result{}, err
+	}
+
+	who, err := s.repo.WhoAmI(ctx, pending.UserID, pending.OrganizationID)
+	if err != nil {
+		return Result{}, err
+	}
+	sec, err := s.repo.GetSecuritySettings(ctx, pending.OrganizationID)
+	if err != nil {
+		return Result{}, err
+	}
+	_ = s.repo.DeletePendingTOTPLogin(ctx, pending.ID)
+	return s.createSession(ctx, who.UserID, pending.OrganizationID, who.UserName, who.UserEmail, who.RoleKey, who.OrganizationName, sec.SessionTimeoutMinutes)
 }

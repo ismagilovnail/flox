@@ -33,6 +33,15 @@ type Config struct {
 	SMTPURL  string
 	MailFrom string
 
+	// TOTPEncryptionKey is 32 raw bytes, base64-encoded, used by
+	// apps/internal/totp to AES-256-GCM encrypt a user's TOTP secret at
+	// rest (users.totp_secret) — the one secret in this codebase that
+	// must be decryptable, not just hashed, since verifying a live code
+	// needs the plaintext seed back. No default: an empty/missing key in
+	// a real deployment must fail loudly at startup rather than silently
+	// run 2FA with a well-known key.
+	TOTPEncryptionKey string
+
 	// --- Geo/ASN (apps/internal/classifier/maxmind) ---
 	// Local MaxMind GeoLite2 .mmdb file paths — both empty (the default,
 	// since no database ships in the repo; MaxMind's EULA requires a free
@@ -115,6 +124,8 @@ func load(portVar, portDefault, defaultServiceName string) (Config, error) {
 
 		SMTPURL:  getEnv("SMTP_URL", "smtp://localhost:1025"),
 		MailFrom: getEnv("MAIL_FROM", "FLOX <no-reply@floxlink.io>"),
+
+		TOTPEncryptionKey: getEnv("TOTP_ENCRYPTION_KEY", ""),
 
 		GeoIPCityDBPath: getEnv("GEOIP_CITY_DB_PATH", ""),
 		GeoIPASNDBPath:  getEnv("GEOIP_ASN_DB_PATH", ""),

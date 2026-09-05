@@ -1,15 +1,12 @@
 import { apiFetch } from "@/lib/api/client";
 import type { MemberStatus, Role } from "@/lib/mock/team";
 
-/** Mirrors apps/internal/auth.membershipResponse's JSON shape exactly.
- * Not the same type as lib/mock/team.ts's TeamMember — that mock roster
- * still backs the still-mock custom-metrics/content-gallery/referral
- * features' own "who am I" lookup (hooks/use-current-member.ts), which
- * this phase deliberately does not touch (those features aren't wired to
- * a real backend yet; rewiring their identity source ahead of their own
- * backend-integration phase would silently break "is this mine" checks
- * against their still-mock seed data). This is the real Team page's own
- * type instead. */
+/** Mirrors apps/internal/auth.membershipResponse's JSON shape exactly —
+ * the real Team page's own type. (Historical note: this used to differ
+ * from a lib/mock/team.ts TeamMember type that a mock "current member"
+ * hook exposed to Custom Metrics/Content Gallery/Referral before each got
+ * its own real backend — that mock roster and hook are gone now that all
+ * three read real session/team data directly.) */
 export type Membership = {
   id: string;
   userId: string;

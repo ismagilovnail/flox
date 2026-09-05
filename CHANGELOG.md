@@ -5,6 +5,270 @@ per-phase, matching `CLAUDE.md`'s phase protocol. The one exception is
 [Between phases], below: spec amendments and the code changes that follow from
 them land between phases and would otherwise be invisible here.
 
+## [Between phases] — Settings → Security (§30): real backend, real 2FA
+
+Phase 34's own audit list is fully closed by this point (Tags/Custom
+Metrics/Report Presets done this session; Organization + API Keys done
+earlier this session too). Security was Settings' own last deferred
+sub-panel (Integrations remains deferred). Scoped with the user to all
+three pieces in one phase: session timeout, IP allowlist, and 2FA —
+despite 2FA alone being a real, separate feature (full TOTP enrollment,
+backup codes, a login-flow change), not a settings toggle.
+
+Confirmed via grep before writing code: the spec has zero mentions of
+2FA/session-timeout/IP-allowlist/TOTP/MFA anywhere. The mock UI's shape
+(`lib/mock/settings.ts`'s `SecuritySettings`) was the only existing
+design and had zero real enrollment UX. Real session mechanics already
+existed (a hardcoded 30-day TTL, never configurable per-org); zero
+MFA/TOTP columns anywhere; no TOTP library in `go.mod` (added
+`github.com/pquerna/otp`, a real RFC 6238 implementation).
+
+**Backend.** Migration 00032 adds three `organizations` columns
+(`session_timeout_minutes` default 43200 — preserves every existing
+org's current behavior; `ip_allowlist text[]`; `two_factor_required`)
+and two `users` columns (`totp_secret` — the one symmetrically
+*encrypted*, not hashed, secret in this codebase, since verifying a
+live code needs it back in plaintext; `totp_enabled_at`), plus two new
+tables (`user_totp_backup_codes`, hashed like every other one-way
+credential; `pending_totp_logins`, deliberately a separate table from
+`sessions` so a half-authenticated row can never be mistaken for a real
+session).
+
+New `apps/internal/totp` (`totp.go`): AES-256-GCM secret
+encryption/decryption (key from `TOTP_ENCRYPTION_KEY`, no default — a
+missing key must fail startup loudly, never silently run 2FA with a
+well-known key); `GenerateEnrollment` (real secret + a server-rendered
+QR PNG as a `data:` URI — the secret never leaves this process);
+`ValidateCode` (RFC 6238, ±1 step skew); backup-code generation/hashing.
+
+`apps/internal/auth` additions (the largest single-package change):
+- Login/AcceptInvite/VerifyEmail now funnel through one `completeLogin`
+  chokepoint enforcing IP allowlist then 2FA in one place. All three
+  return a new `LoginOutcome` (`Session` | `RequiresTOTP`+pending token
+  | `RequiresTOTPEnrollment`+pending token) instead of a bare session —
+  backward compatible for every org that hasn't touched 2FA.
+- IP allowlist is enforced only at login/accept-invite/verify-email time
+  (granting a *new* session), never on existing sessions' later
+  requests — deliberately, to avoid kicking an already-logged-in
+  operator mid-work over an IP/list change.
+- `UpdateSecuritySettings` rejects a new IP allowlist that would exclude
+  the acting request's own current IP — the most common self-inflicted
+  lockout — but cannot and does not guarantee no *other* admin gets
+  excluded; that's a real, visible consequence of a policy an Owner
+  chose to set.
+- 2FA is real, per-user, and dual-context by design: the same
+  `POST /auth/2fa/enroll`/`confirm` endpoints serve both a self-serve
+  opt-in (identified by session cookie) and a forced enrollment
+  mid-login for a brand-new invitee whose org already requires 2FA
+  (identified by the pending token, before any session exists) — both
+  mounted under `RegisterPublic` for the no-session case. Confirming a
+  forced enrollment also completes the login that triggered it.
+- `DisableTOTP` requires re-entering the account's own current password
+  and refuses outright while the org's policy requires 2FA.
+- RBAC: `GET`/`PATCH /security` reuses the existing `settings.write`
+  permission; the five `/auth/2fa/*` and `/auth/login/totp` endpoints
+  carry no `settings.write` gate at all — 2FA is a personal-account
+  action gated only by "are you this account."
+
+**Frontend.** New `lib/security.ts` + `lib/api/security.ts` +
+`hooks/use-security.ts`. `lib/api/auth.ts` gained `LoginOutcome`
+(mirroring the Go JSON) and five TOTP functions/hooks; `login()`/
+`acceptInvite()` return types changed accordingly, and `useLogin`/
+`useAcceptInvite` only invalidate the session query when a real session
+was actually granted. New `features/auth/totp-step.tsx`
+(`TOTPCodeStep`/`TOTPEnrollStep`, shared by login and accept-invite,
+which both gained a `pending` state swapping the whole card for one of
+these steps). `features/settings/security-panel.tsx` rebuilt onto the
+real hooks plus a new "Your two-factor authentication" personal card.
+
+Verified: `go build/vet/test -count=1 ./...` clean, including a new
+`totp` package test file and 8 new `auth` integration tests against
+real Postgres (real defaults + persistence + the lockout safeguard,
+login respects a real IP allowlist with a real 403, full enroll-confirm-
+login-with-pending-token cycle, a real backup code consumes exactly
+once, org-required 2FA forces enrollment on an invited member's first
+login, `DisableTOTP` requires the real password and refuses while the
+org requires 2FA). One incidental bug this phase's own tests caught:
+`reflect.DeepEqual` was needed instead of `==` to compare
+`SecuritySettings` in a test, since `IPAllowlist` (`[]string`) makes the
+struct non-comparable — caught by `go vet`. `tsc`/`eslint`/`vitest`
+clean.
+
+Real, live, end-to-end verification over curl (the extension stayed
+disconnected). Confirmed real defaults; enrolled real TOTP via the
+self-serve endpoint; confirmed a wrong confirm-code 422s and the real
+code (computed independently in Python) confirms; confirmed a
+subsequent login returns `requiresTotp` with no session cookie; wrong
+login-time code 401s, correct code exchanges for a real session;
+confirmed a backup code works exactly once; confirmed `PATCH /security`
+rejects an allowlist excluding the caller's own IP and accepts one that
+includes it; confirmed login is blocked with a real `ip_not_allowed`
+403 when spoofing `X-Forwarded-For` to an excluded address; invited a
+real second member into an org with `two_factor_required` on, walked
+the dual-context enroll+confirm flow using only the pending token, and
+confirmed their second login falls through to the ordinary path, not
+enrollment again; confirmed `DisableTOTP` rejects/succeeds correctly
+against the org's policy and a wrong password; confirmed a Buyer's read
+succeeds and write gets a real 403. One environmental snag: this
+testing exhausted the real auth rate limiter for the test IP, which
+then made the repo's own e2e test 429 — not a code bug, confirmed by
+clearing the specific exhausted Redis keys and re-running clean. All
+test security settings/2FA state reset afterward.
+
+## [Between phases] — Referral Program (§30.7, Phase 14.8): real backend
+
+The last remaining item on Phase 34's audit list at the time (Tags,
+Custom Metrics, Settings > Organization/API Keys, Report Presets done
+earlier this session). Research before writing code: the spec text
+(§30.7) is ambiguous about the referral model, but the frontend mock's
+own doc comment already committed to a specific design — org-refers-org
+(a tenant refers *other advertiser orgs* to sign up for FLOX itself),
+one referral account per workspace, flat USD amounts explicitly exempt
+from §50-FX normalization, and a balance derived from an append-only
+ledger, never stored. Built to that design exactly, since it already
+matched the spec's actual wording once resolved.
+
+No commission formula is specified anywhere — resolved the same way
+§27-COST's cost-entry gap was: a referred signup is attributed
+automatically via a real referral code used at real signup time;
+crediting a dollar amount is a deliberate, audited Owner/Admin action
+(an `accrual` transaction), never an invented formula. No payment
+processor exists anywhere in this repo — payouts are a real state
+machine with a real audit trail, but fulfillment stays a manual,
+off-platform action, matching the mock's own design.
+
+**Backend.** Migration 00031 adds `referral_codes` (one row per org,
+lazily created), `referral_signups` (referrer/referred org, unique per
+referred org, snapshotting the signing-up user), `referral_payouts`
+(pending→approved→paid|rejected), and `referral_transactions`
+(append-only — no `UPDATE`/`DELETE` path exists on purpose). Plus
+`referral.read` (all roles) / `referral.write` (Owner/Admin only —
+narrower than every other Phase-34 feature's tiering this session,
+matching the mock's own gating and because money movement warrants it).
+
+New `apps/internal/referral`: no owner-based "manage only what I
+created" restriction at all — any `referral.write` holder can act on
+any payout/transaction for the org, simpler than Custom Metrics'
+tiering on purpose. `Repository.ComputeBalance` mirrors the mock's own
+`computeBalances` formula exactly and is never stored.
+`MarkPayoutPaid` updates the payout and inserts the `payout_paid`
+ledger row in one DB transaction. `RequestPayout` recomputes the
+available balance server-side and rejects an amount exceeding it —
+never trusts a client-supplied figure.
+
+Cross-package signup attribution without `auth` importing `referral`:
+a small `ReferralRecorder` interface lives in `auth` itself (mirroring
+the existing `Mailer` interface pattern), wired in `main.go` after
+constructing both services. `auth.Service.Signup` calls it best-effort,
+swallowing any error — the account is already real regardless of
+whether referral bookkeeping succeeds, and an unknown/garbage code is
+already a silent no-op, not an error, so a signing-up person's own typo
+never surfaces as a signup failure.
+
+**Frontend.** The real public `/signup` page now reads an optional
+`?ref=` query param and threads it through silently — no visible field,
+no client-side validation of the code's shape. New `lib/referral.ts` +
+`lib/api/referral.ts` + `hooks/use-referral.ts` replace
+`stores/referral.ts` and `lib/mock/referral.ts` outright (including
+their client-side balance-computation helpers, now redundant since the
+real response already carries a computed balance). All six
+`features/referral/*` files refactored onto the new hooks;
+`currentMemberId` prop-threading is gone throughout.
+
+Side effect: Referral was the last remaining consumer of the mock
+`useCurrentMember()` hook and of `stores/team.ts` — both deleted
+outright once confirmed to have zero other consumers.
+`referral-dashboard.tsx` now reads the real session via `useMe()`;
+`earnings-history-table.tsx` resolves a transaction's real
+`createdByUserId` via the real `useTeamMembers()` hook. `lib/mock/
+team.ts` trimmed (Role/Permission vocabulary stays; the fake member
+roster/activity fixtures go).
+
+Verified: `go build/vet/test -count=1 ./...` clean, including 8 new
+integration tests against real Postgres (stable/unique code generation,
+signup attribution and silent no-op on an unknown code, the full payout
+state machine, cross-org isolation). `tsc`/`eslint`/`vitest` clean.
+
+Real, live, end-to-end verification over curl. Signed up a real Org A,
+signed up a brand-new Org B using Org A's real code through the real
+signup endpoint, confirmed Org A's dashboard showed the real
+attribution; signed up Org C with a garbage code and confirmed the
+signup still succeeded with no attribution; added a real accrual
+transaction, requested a payout exceeding balance (real 422), requested
+a valid payout, confirmed mark-paid-before-approval 409s, approved and
+marked it paid, confirmed the final balance math and the
+auto-generated ledger row; invited a real Buyer, confirmed their read
+and payout-request succeed while adding a transaction gets a real 403;
+confirmed Org C's dashboard is fully independent. All test payouts
+resolved; throwaway test orgs/users left, matching precedent.
+
+## [Between phases] — Settings (§30): Organization + API Keys, real backend
+
+User picked Settings next off Phase 34's audit list. Settings turned
+out to be four panels with very different readiness: Organization
+(name/timezone/currency) and API Keys both had real, already-existing
+schema (organizations.timezone/currency since migration 00001; the
+whole `api_keys` table, unwired, since migration 00010) — zero new
+migrations needed. Security (2FA/session timeout/IP allowlist) and
+Integrations (ad platforms, registrar, DNS, Slack) were deferred as
+their own, larger, separately-scoped asks.
+
+**Backend.** Organization settings added to the existing
+`apps/internal/auth` package (a new `organization_handler.go` plus
+model/repository/service additions) rather than a new package — `GET`
+is open to any authenticated member, `PATCH` requires `settings.write`
+(Owner/Admin). Validation is deliberately broader than the frontend's
+own curated 8-timezone/8-currency dropdown lists: timezone via Go's
+real IANA tzdata, currency as a plausible 3-letter code — the FX
+converter already degrades gracefully for an untradeable currency, so
+there was never a narrower list to validate against. Every update is
+logged to the real `audit_logs` table.
+
+New `apps/internal/apikey` (model/repository/service/handler/crypto):
+key generation mirrors the frontend mock's exact format byte-for-byte
+(`flx_live_` + secret; a `flx_live_XXXX...` prefix, since the panel
+already renders `key.prefix` verbatim). Same one-way-hash-at-rest
+precedent as sessions/invite tokens — only the SHA-256 hash is
+persisted, the full key exists only in the create response. Revoke sets
+`revoked_at` rather than deleting the row, matching the mock's own
+revoke-removes-from-list behavior. Gated the same way as Organization
+settings.
+
+**Frontend.** New `lib/organization.ts` + `lib/api-keys.ts` hold the
+real vocabulary moved out of `lib/mock/settings.ts`. New `lib/api/
+{organization,api-keys}.ts` + `hooks/use-{organization,api-keys}.ts`
+replace the corresponding slices of `stores/settings.ts` — that store
+and the mock file were trimmed, not deleted (Integrations and Security
+stayed mock at this point). `organization-panel.tsx`'s form schema was
+deliberately loosened from a `z.enum` against the curated dropdown
+lists to a plain non-empty string, since a stricter frontend enum would
+reject loading/re-saving a real org already set to a value outside the
+UI's own shortlist even though the backend accepts it.
+
+Found one real cross-feature dependency while trimming the store, not
+by inspection: `features/referral/referral-dashboard.tsx` read the org
+name from the mock settings store for its referral-link preview — a
+hook this phase was about to make permanently undefined. Referral
+itself stayed mock (out of scope), but since the org's name was now
+genuinely real, pointed that one read at the new `useOrganization()`
+hook instead of leaving it broken.
+
+Verified: `go build/vet/test -count=1 ./...` clean, including 3 new
+`auth` integration tests (real defaults after signup, update persists
+and is independently re-readable, logged to audit_logs, invalid
+timezone/currency/name rejected) and 4 new `apikey` integration tests
+(create/list/revoke round-trip incl. the exact prefix shape, revoking
+twice rejected, invalid input rejected, cross-org isolation). `tsc`/
+`eslint`/`vitest` clean.
+
+Real, live, end-to-end verification over curl. Confirmed `GET
+/organization` returns real defaults, a real `PATCH` renames the org
+and normalizes currency casing, an invalid timezone 422s, a Buyer can
+read but not write (real 403); confirmed `POST /api-keys` returns a key
+matching the exact prefix shape, a Buyer can list but not revoke, Owner
+revoke succeeds and the key disappears from a later `GET`. All test
+mutations reverted afterward.
+
 ## [Between phases] — Report Presets (§27.5, Phase 14.7): real backend
 
 Continuing down Phase 34's audit list (Tags and Custom Metrics done

@@ -8,9 +8,8 @@ import { DataTable, dataTableFeatures } from "@/components/ui/data-table";
 import { Badge } from "@/components/ui/badge";
 import { Caption, Mono } from "@/components/ui/typography";
 import { formatUsd } from "@/lib/format";
-import { useReferralStore } from "@/stores/referral";
 import { PayoutRowActions } from "@/features/referral/payout-row-actions";
-import type { PayoutRequest, PayoutStatus } from "@/lib/mock/referral";
+import type { PayoutRequest, PayoutStatus } from "@/lib/referral";
 
 const STATUS_VARIANT: Record<PayoutStatus, "warning" | "info" | "success" | "danger"> = {
   pending: "warning",
@@ -19,9 +18,7 @@ const STATUS_VARIANT: Record<PayoutStatus, "warning" | "info" | "success" | "dan
   rejected: "danger",
 };
 
-export function PayoutsTable({ canManage, currentMemberId }: { canManage: boolean; currentMemberId: string }) {
-  const payouts = useReferralStore((s) => s.payouts);
-
+export function PayoutsTable({ payouts, canManage }: { payouts: PayoutRequest[]; canManage: boolean }) {
   const columns: ColumnDef<typeof dataTableFeatures, PayoutRequest>[] = React.useMemo(
     () => [
       {
@@ -56,14 +53,12 @@ export function PayoutsTable({ canManage, currentMemberId }: { canManage: boolea
               header: "",
               enableSorting: false,
               enableHiding: false,
-              cell: ({ row }: { row: { original: PayoutRequest } }) => (
-                <PayoutRowActions payout={row.original} currentMemberId={currentMemberId} />
-              ),
+              cell: ({ row }: { row: { original: PayoutRequest } }) => <PayoutRowActions payout={row.original} />,
             } satisfies ColumnDef<typeof dataTableFeatures, PayoutRequest>,
           ]
         : []),
     ],
-    [canManage, currentMemberId],
+    [canManage],
   );
 
   return (

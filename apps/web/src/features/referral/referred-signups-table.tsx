@@ -6,8 +6,7 @@ import { formatDistanceToNow } from "date-fns";
 import { DataTable, dataTableFeatures } from "@/components/ui/data-table";
 import { Badge } from "@/components/ui/badge";
 import { Caption } from "@/components/ui/typography";
-import { useReferralStore } from "@/stores/referral";
-import type { ReferredSignup, SignupStatus } from "@/lib/mock/referral";
+import type { ReferredSignup, SignupStatus } from "@/lib/referral";
 
 const STATUS_VARIANT: Record<SignupStatus, "warning" | "success" | "secondary"> = {
   trial: "warning",
@@ -41,9 +40,7 @@ const columns: ColumnDef<typeof dataTableFeatures, ReferredSignup>[] = [
   },
 ];
 
-export function ReferredSignupsTable() {
-  const signups = useReferralStore((s) => s.signups);
-
+export function ReferredSignupsTable({ signups }: { signups: ReferredSignup[] }) {
   return (
     <DataTable
       columns={columns}

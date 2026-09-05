@@ -83,10 +83,11 @@ services:
       test: ["CMD", "mc", "ready", "local"]
       interval: 5s
       timeout: 5s
+
       retries: 10
 
   mailhog:
-    # Not part of any §N in the spec — this project has no SMTP/email-
+    # Not part of any §N in the spec — this project   has no SMTP/email-
     # provider integration anywhere yet (see apps/internal/auth/model.go's
     # own comment: team invites deliberately generate a copyable link
     # instead of a real email, an explicit Phase 28 scope decision).
@@ -152,6 +153,9 @@ services:
       # actually delivering it, same as every other dev credential here.
       SMTP_URL: smtp://mailhog:1025
       MAIL_FROM: "FLOX <no-reply@floxlink.io>"
+      # Dev-only value, matches .env.example's own dev default exactly —
+      # never reuse this in staging/production (see .env.example's comment).
+      TOTP_ENCRYPTION_KEY: "IXkldrBTvgfDhIxzUBn3MrRAJq7Gh7z8mQ5UhBC4DRo="
       # The browser's own Origin (localhost:3000, web's host-published
       # port) — apps/internal/tenant.RequireSameOrigin (§54 CSRF) compares
       # against this literally, so it must never be the in-network "web"

@@ -5,13 +5,13 @@ import { toast } from "sonner";
 import { CopyIcon, LinkIcon, PlusIcon, WalletIcon } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { ErrorState } from "@/components/ui/error-state";
+import { LoadingState } from "@/components/ui/loading-state";
 import { StatCard } from "@/components/ui/stat-card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { formatUsd } from "@/lib/format";
-import { computeBalances, referralLink } from "@/lib/mock/referral";
-import { useReferralStore } from "@/stores/referral";
-import { useSettingsStore } from "@/stores/settings";
-import { useCurrentMember } from "@/hooks/use-current-member";
+import { useMe } from "@/hooks/use-auth";
+import { useReferralDashboard } from "@/hooks/use-referral";
 import { ReferredSignupsTable } from "@/features/referral/referred-signups-table";
 import { EarningsHistoryTable } from "@/features/referral/earnings-history-table";
 import { PayoutsTable } from "@/features/referral/payouts-table";
@@ -19,22 +19,35 @@ import { RequestPayoutDialog } from "@/features/referral/request-payout-dialog";
 import { AddAdjustmentDialog } from "@/features/referral/add-adjustment-dialog";
 
 export function ReferralDashboard() {
-  const signups = useReferralStore((s) => s.signups);
-  const transactions = useReferralStore((s) => s.transactions);
-  const payouts = useReferralStore((s) => s.payouts);
-  const orgName = useSettingsStore((s) => s.org.name);
-  const { memberId: CURRENT_USER_MEMBER_ID, isOwnerOrAdmin: canManage } = useCurrentMember();
+  // Real session — Custom Metrics established this same migration off the
+  // old mock useCurrentMember() hook; Referral was its last remaining
+  // consumer, so that hook (and its backing stores/team.ts) is now deleted.
+  const me = useMe();
+  const canManage = me.data?.role === "Owner" || me.data?.role === "Admin";
 
-  const balances = React.useMemo(() => computeBalances(transactions, payouts), [transactions, payouts]);
-  const link = referralLink(orgName);
+  const dashboardQuery = useReferralDashboard();
 
   const [requestingPayout, setRequestingPayout] = React.useState(false);
   const [addingAdjustment, setAddingAdjustment] = React.useState(false);
 
-  function copyLink() {
+  function copyLink(link: string) {
     navigator.clipboard.writeText(link);
     toast("Referral link copied", { description: link });
   }
+
+  if (dashboardQuery.isPending) {
+    return <LoadingState label="Loading referral dashboard…" />;
+  }
+  if (dashboardQuery.isError) {
+    return (
+      <ErrorState
+        title="Couldn't load the referral dashboard"
+        description={dashboardQuery.error.message}
+        onRetry={() => dashboardQuery.refetch()}
+      />
+    );
+  }
+  const dash = dashboardQuery.data;
 
   return (
     <div className="flex flex-col gap-6">
@@ -43,11 +56,11 @@ export function ReferralDashboard() {
           <h1 className="text-2xl font-semibold tracking-tight">Referral</h1>
           <button
             type="button"
-            onClick={copyLink}
+            onClick={() => copyLink(dash.link)}
             className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground"
           >
             <LinkIcon className="size-3" />
-            <span className="font-mono">{link}</span>
+            <span className="font-mono">{dash.link}</span>
             <CopyIcon className="size-3" />
           </button>
         </div>
@@ -57,17 +70,17 @@ export function ReferralDashboard() {
               <PlusIcon className="size-4" /> Add adjustment
             </Button>
           )}
-          <Button onClick={() => setRequestingPayout(true)} disabled={balances.availableBalance <= 0}>
+          <Button onClick={() => setRequestingPayout(true)} disabled={dash.balance.availableBalance <= 0}>
             <WalletIcon className="size-4" /> Request payout
           </Button>
         </div>
       </div>
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <StatCard label="Invited" value={signups.length.toLocaleString("en-US")} />
-        <StatCard label="Total earned" value={formatUsd(balances.totalEarned, 2)} />
-        <StatCard label="Pending payout" value={formatUsd(balances.pendingPayout, 2)} />
-        <StatCard label="Available balance" value={formatUsd(balances.availableBalance, 2)} />
+        <StatCard label="Invited" value={dash.signups.length.toLocaleString("en-US")} />
+        <StatCard label="Total earned" value={formatUsd(dash.balance.totalEarned, 2)} />
+        <StatCard label="Pending payout" value={formatUsd(dash.balance.pendingPayout, 2)} />
+        <StatCard label="Available balance" value={formatUsd(dash.balance.availableBalance, 2)} />
       </div>
 
       <Tabs defaultValue="signups">
@@ -77,13 +90,13 @@ export function ReferralDashboard() {
           <TabsTrigger value="payouts">Payouts</TabsTrigger>
         </TabsList>
         <TabsContent value="signups">
-          <ReferredSignupsTable />
+          <ReferredSignupsTable signups={dash.signups} />
         </TabsContent>
         <TabsContent value="history">
-          <EarningsHistoryTable />
+          <EarningsHistoryTable transactions={dash.transactions} />
         </TabsContent>
         <TabsContent value="payouts">
-          <PayoutsTable canManage={canManage} currentMemberId={CURRENT_USER_MEMBER_ID} />
+          <PayoutsTable payouts={dash.payouts} canManage={canManage} />
         </TabsContent>
       </Tabs>
 
@@ -91,16 +104,11 @@ export function ReferralDashboard() {
         <RequestPayoutDialog
           open
           onOpenChange={(open) => !open && setRequestingPayout(false)}
-          availableBalance={balances.availableBalance}
-          currentMemberId={CURRENT_USER_MEMBER_ID}
+          availableBalance={dash.balance.availableBalance}
         />
       )}
       {addingAdjustment && (
-        <AddAdjustmentDialog
-          open
-          onOpenChange={(open) => !open && setAddingAdjustment(false)}
-          currentMemberId={CURRENT_USER_MEMBER_ID}
-        />
+        <AddAdjustmentDialog open onOpenChange={(open) => !open && setAddingAdjustment(false)} />
       )}
     </div>
   );

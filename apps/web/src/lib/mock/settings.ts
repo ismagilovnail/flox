@@ -1,64 +1,19 @@
-/** Settings (§30) — organization, API keys, integrations, security. Custom
- * metrics is intentionally NOT here — it's Phase 14.6, a separate later
- * phase per the CLAUDE.md build order, even though §30 mentions it. */
-
-export type OrgSettings = {
-  name: string;
-  timezone: string;
-  currency: string;
-};
-
-export const TIMEZONES = [
-  "UTC",
-  "America/New_York",
-  "America/Los_Angeles",
-  "America/Chicago",
-  "Europe/London",
-  "Europe/Berlin",
-  "Asia/Dubai",
-  "Asia/Singapore",
-];
-
-/** This Settings page (§30's organization/API-keys/integrations panels)
- * has no real backend yet — components/shell/workspace-selector.tsx is
- * real (Phase 28B, GET /auth/me) and no longer reads this fixture. */
-export const ORG_SETTINGS: OrgSettings = {
-  name: "Acme Media",
-  timezone: "UTC",
-  currency: "USD",
-};
-
-export type ApiKeyScope = "read" | "write" | "admin";
-export const API_KEY_SCOPES: ApiKeyScope[] = ["read", "write", "admin"];
-
-export type ApiKey = {
-  id: string;
-  name: string;
-  /** Only the prefix is ever persisted/displayed after creation — the full key is shown once. */
-  prefix: string;
-  scope: ApiKeyScope;
-  createdAt: string;
-  lastUsedAt: string | null;
-};
-
-export const API_KEYS: ApiKey[] = [
-  {
-    id: "key_reporting",
-    name: "Reporting export",
-    prefix: "flx_live_8f3a...",
-    scope: "read",
-    createdAt: "2026-03-01T00:00:00Z",
-    lastUsedAt: "2026-08-10T09:00:00Z",
-  },
-  {
-    id: "key_zapier",
-    name: "Zapier webhook relay",
-    prefix: "flx_live_2c91...",
-    scope: "write",
-    createdAt: "2026-05-14T00:00:00Z",
-    lastUsedAt: "2026-07-22T14:30:00Z",
-  },
-];
+/** Settings (§30) — integrations only now. Organization (name/timezone/
+ * currency), API keys, and Security (2FA/session timeout/IP allowlist)
+ * all got real backends — see lib/organization.ts, lib/api-keys.ts,
+ * lib/security.ts, hooks/use-{organization,api-keys,security}.ts, plus
+ * hooks/use-auth.ts's TOTP hooks for real per-user 2FA enrollment.
+ * Custom metrics is intentionally NOT here — it's its own real feature
+ * (apps/internal/custommetrics), separate from Settings even though §30
+ * mentions it.
+ *
+ * Integrations (registrar/DNS/ad-platform/Slack OAuth) remain mock-only —
+ * real Facebook/TikTok Ads OAuth connections DO exist for real
+ * (apps/internal/adaccount), but they live under Traffic Sources' own
+ * per-source connection UI, not this org-level panel; the other four
+ * providers here (Google Ads, Namecheap, Cloudflare, Slack) have no
+ * backend anywhere. A real candidate for its own later phase.
+ */
 
 export type IntegrationProvider = "facebook_ads" | "tiktok_ads" | "google_ads" | "namecheap" | "cloudflare" | "slack";
 
@@ -123,15 +78,3 @@ export const INTEGRATIONS: Integration[] = [
     connectedAt: null,
   },
 ];
-
-export type SecuritySettings = {
-  twoFactorRequired: boolean;
-  sessionTimeoutMinutes: number;
-  ipAllowlist: string[];
-};
-
-export const SECURITY_SETTINGS: SecuritySettings = {
-  twoFactorRequired: false,
-  sessionTimeoutMinutes: 720,
-  ipAllowlist: [],
-};

@@ -9,6 +9,7 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"github.com/ismagilovnail/flox/apps/internal/apierror"
+	"github.com/ismagilovnail/flox/apps/internal/ratelimit"
 	"github.com/ismagilovnail/flox/apps/internal/tenant"
 )
 
@@ -75,14 +76,18 @@ func toAuthResponse(res Result) authResponse {
 	}
 }
 
-func (h *Handler) setSessionCookie(w http.ResponseWriter, token string, expiresAt time.Time) {
+// setSessionCookie is a free function (not a *Handler method) so
+// TOTPHandler — a separate type that also needs to set this exact
+// cookie when a 2FA flow completes a login — can call it too, without
+// either type reaching into the other's fields.
+func setSessionCookie(w http.ResponseWriter, secureCookies bool, token string, expiresAt time.Time) {
 	http.SetCookie(w, &http.Cookie{
 		Name:     tenant.CookieName,
 		Value:    token,
 		Path:     "/",
 		Expires:  expiresAt,
 		HttpOnly: true,
-		Secure:   h.secureCookies,
+		Secure:   secureCookies,
 		// Lax, not None: apps/web and apps/api are different origins but
 		// the same "site" (SameSite is defined by scheme+registrable
 		// domain, not port) in both local dev (localhost:3000/:8080) and
@@ -92,6 +97,10 @@ func (h *Handler) setSessionCookie(w http.ResponseWriter, token string, expiresA
 		// known limitation rather than built speculatively.
 		SameSite: http.SameSiteLaxMode,
 	})
+}
+
+func (h *Handler) setSessionCookie(w http.ResponseWriter, token string, expiresAt time.Time) {
+	setSessionCookie(w, h.secureCookies, token, expiresAt)
 }
 
 func (h *Handler) clearSessionCookie(w http.ResponseWriter) {
@@ -118,6 +127,7 @@ func (h *Handler) signup(w http.ResponseWriter, r *http.Request) {
 		Name             string `json:"name"`
 		Email            string `json:"email"`
 		Password         string `json:"password"`
+		ReferralCode     string `json:"referralCode"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		apierror.Write(w, h.logger, apierror.Validation("invalid request body", nil))
@@ -129,6 +139,7 @@ func (h *Handler) signup(w http.ResponseWriter, r *http.Request) {
 		Name:             body.Name,
 		Email:            body.Email,
 		Password:         body.Password,
+		ReferralCode:     body.ReferralCode,
 	})
 	if err != nil {
 		apierror.Write(w, h.logger, err)
@@ -156,19 +167,29 @@ func (h *Handler) verifyEmail(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	res, err := h.svc.VerifyEmail(r.Context(), body.Token)
+	outcome, err := h.svc.VerifyEmail(r.Context(), body.Token, ratelimit.ClientIP(r))
 	if err != nil {
 		apierror.Write(w, h.logger, err)
 		return
 	}
 
-	if res.Session != nil {
-		h.setSessionCookie(w, res.Session.Token, res.Session.ExpiresAt)
+	if outcome.Session != nil {
+		h.setSessionCookie(w, outcome.Session.Token, outcome.Session.ExpiresAt)
 		writeJSON(w, http.StatusOK, struct {
 			Verified bool         `json:"verified"`
 			LoggedIn bool         `json:"loggedIn"`
 			Auth     authResponse `json:"auth"`
-		}{Verified: true, LoggedIn: true, Auth: toAuthResponse(*res.Session)})
+		}{Verified: true, LoggedIn: true, Auth: toAuthResponse(*outcome.Session)})
+		return
+	}
+	if outcome.RequiresTOTP || outcome.RequiresTOTPEnrollment {
+		writeJSON(w, http.StatusOK, struct {
+			Verified               bool   `json:"verified"`
+			LoggedIn               bool   `json:"loggedIn"`
+			RequiresTOTP           bool   `json:"requiresTotp"`
+			RequiresTOTPEnrollment bool   `json:"requiresTotpEnrollment"`
+			PendingToken           string `json:"pendingToken"`
+		}{true, false, outcome.RequiresTOTP, outcome.RequiresTOTPEnrollment, outcome.PendingToken})
 		return
 	}
 
@@ -201,6 +222,23 @@ func (h *Handler) resendVerification(w http.ResponseWriter, r *http.Request) {
 	}{"if that email has a pending verification, a new link was just sent"})
 }
 
+// writeLoginOutcome renders whichever of LoginOutcome's three real shapes
+// applies — a real session (existing wire shape, unchanged), or one of
+// the two §30 Security "second factor still outstanding" shapes shared
+// by /auth/login and /auth/accept-invite alike.
+func (h *Handler) writeLoginOutcome(w http.ResponseWriter, outcome LoginOutcome) {
+	if outcome.Session != nil {
+		h.setSessionCookie(w, outcome.Session.Token, outcome.Session.ExpiresAt)
+		writeJSON(w, http.StatusOK, toAuthResponse(*outcome.Session))
+		return
+	}
+	writeJSON(w, http.StatusOK, struct {
+		RequiresTOTP           bool   `json:"requiresTotp"`
+		RequiresTOTPEnrollment bool   `json:"requiresTotpEnrollment"`
+		PendingToken           string `json:"pendingToken,omitempty"`
+	}{outcome.RequiresTOTP, outcome.RequiresTOTPEnrollment, outcome.PendingToken})
+}
+
 func (h *Handler) login(w http.ResponseWriter, r *http.Request) {
 	var body struct {
 		Email          string `json:"email"`
@@ -212,18 +250,17 @@ func (h *Handler) login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	res, err := h.svc.Login(r.Context(), LoginInput{
+	outcome, err := h.svc.Login(r.Context(), LoginInput{
 		Email:          body.Email,
 		Password:       body.Password,
 		OrganizationID: body.OrganizationID,
+		ClientIP:       ratelimit.ClientIP(r),
 	})
 	if err != nil {
 		apierror.Write(w, h.logger, err)
 		return
 	}
-
-	h.setSessionCookie(w, res.Token, res.ExpiresAt)
-	writeJSON(w, http.StatusOK, toAuthResponse(res))
+	h.writeLoginOutcome(w, outcome)
 }
 
 func (h *Handler) logout(w http.ResponseWriter, r *http.Request) {
@@ -285,16 +322,15 @@ func (h *Handler) acceptInvite(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	res, err := h.svc.AcceptInvite(r.Context(), AcceptInviteInput{
+	outcome, err := h.svc.AcceptInvite(r.Context(), AcceptInviteInput{
 		Token:    body.Token,
 		Name:     body.Name,
 		Password: body.Password,
+		ClientIP: ratelimit.ClientIP(r),
 	})
 	if err != nil {
 		apierror.Write(w, h.logger, err)
 		return
 	}
-
-	h.setSessionCookie(w, res.Token, res.ExpiresAt)
-	writeJSON(w, http.StatusOK, toAuthResponse(res))
+	h.writeLoginOutcome(w, outcome)
 }

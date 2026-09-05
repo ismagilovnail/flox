@@ -1,5 +1,6 @@
 "use client";
 
+import * as React from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -15,6 +16,8 @@ import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { useLogin, useResendVerification } from "@/hooks/use-auth";
 import { ApiError } from "@/lib/api/client";
+import { isPendingTOTP } from "@/lib/api/auth";
+import { TOTPCodeStep, TOTPEnrollStep } from "@/features/auth/totp-step";
 
 function buildLoginSchema(t: TFunction) {
   return z.object({
@@ -30,6 +33,12 @@ export function LoginForm() {
   const router = useRouter();
   const login = useLogin();
   const resend = useResendVerification();
+  // §30 Security: a login can resolve to "enter your existing 2FA code"
+  // or "the org now requires 2FA, set it up first" instead of a session —
+  // both cases replace this form with one of totp-step.tsx's two steps,
+  // same "swap the whole card, don't try to layer a second form on top"
+  // pattern signup-form.tsx already uses for its own post-submit state.
+  const [pending, setPending] = React.useState<{ token: string; needsEnrollment: boolean } | null>(null);
 
   const form = useForm<LoginFormValues>({
     resolver: zodResolver(buildLoginSchema(t)),
@@ -38,7 +47,13 @@ export function LoginForm() {
 
   function onSubmit(values: LoginFormValues) {
     login.mutate(values, {
-      onSuccess: () => router.push("/overview"),
+      onSuccess: (outcome) => {
+        if (isPendingTOTP(outcome)) {
+          setPending({ token: outcome.pendingToken, needsEnrollment: outcome.requiresTotpEnrollment });
+        } else {
+          router.push("/overview");
+        }
+      },
     });
   }
 
@@ -48,6 +63,15 @@ export function LoginForm() {
   // confirmed correct) gets a "resend the link" CTA instead of the
   // generic error message every other login failure renders as.
   const unverified = error?.code === "email_not_verified";
+
+  if (pending) {
+    const onComplete = () => router.push("/overview");
+    return pending.needsEnrollment ? (
+      <TOTPEnrollStep pendingToken={pending.token} onComplete={onComplete} />
+    ) : (
+      <TOTPCodeStep pendingToken={pending.token} onComplete={onComplete} />
+    );
+  }
 
   return (
     <Card>
