@@ -295,6 +295,10 @@ function InstallProgressRing({
       height={size}
       viewBox={`0 0 ${size} ${size}`}
       aria-hidden="true"
+      // The same next-frame flip that starts the arc also fades the whole
+      // ring in, so the track doesn't pop in at full opacity around an icon
+      // that is still easing down into it.
+      style={{ opacity: filled ? 1 : 0, transition: "opacity 250ms ease-out" }}
     >
       <circle cx={center} cy={center} r={radius} fill="none" stroke="var(--pv-border)" strokeWidth={strokeWidth} />
       <circle
@@ -570,9 +574,16 @@ export function PwaPreviewCard({
                     against the user's own screenshot of a live install. */}
                 <div
                   className={cn(
-                    "absolute overflow-hidden",
+                    // The inset/radius change is transitioned, not swapped
+                    // instantly: the reference visibly *eases* the icon down
+                    // into the ring rather than snapping it.
+                    "absolute overflow-hidden transition-all duration-500 ease-out",
                     installStatus === "installing"
-                      ? "inset-[9px] rounded-full"
+                      // 6px inset = a 60px circle inside the 72px ring, the
+                      // same ~0.83 icon:ring diameter ratio the reference
+                      // shows; a deeper inset shrinks the artwork more than
+                      // the real thing does.
+                      ? "inset-[6px] rounded-full"
                       : "inset-0 rounded-2xl",
                   )}
                 >
@@ -602,7 +613,10 @@ export function PwaPreviewCard({
               </p>
               <p className="flex items-center gap-1.5 text-base font-medium">
                 {installStatus === "installing" ? (
-                  <span className="text-[var(--pv-text-muted)]">
+                  // Dark and semibold, not muted — matches the reference,
+                  // where "Please wait…" reads as the app's own status line
+                  // rather than secondary metadata.
+                  <span className="font-semibold text-[var(--pv-text)]">
                     {t("preview.pleaseWait", { ns: "pwa" })}
                   </span>
                 ) : (
@@ -612,11 +626,15 @@ export function PwaPreviewCard({
                   </span>
                 )}
               </p>
-              <p className="text-xs text-[var(--pv-text-muted)]">
-                {monetizationNotes.length > 0
-                  ? monetizationNotes.join(" · ")
-                  : t("preview.adFree", { ns: "pwa" })}
-              </p>
+              {/* The ads/purchases line is dropped entirely while installing —
+                  the reference shows only the name + "Please wait…" then. */}
+              {installStatus !== "installing" && (
+                <p className="text-xs text-[var(--pv-text-muted)]">
+                  {monetizationNotes.length > 0
+                    ? monetizationNotes.join(" · ")
+                    : t("preview.adFree", { ns: "pwa" })}
+                </p>
+              )}
             </div>
           </div>
 
@@ -654,20 +672,37 @@ export function PwaPreviewCard({
             </div>
           </div>
 
-          {installStatus !== "installing" && (
-            <button
-              type="button"
-              onClick={() =>
-                setInstallStatus(installStatus === "idle" ? "installing" : "idle")
-              }
-              className="h-9 w-full rounded-lg text-sm font-bold text-white"
-              style={{ backgroundColor: accent }}
-            >
-              {installStatus === "installed"
-                ? t("preview.open", { ns: "pwa" })
-                : t("preview.install", { ns: "pwa" })}
-            </button>
-          )}
+          {/* Collapsed rather than unmounted while installing: the reference
+              eases the button's height away and lets everything below slide
+              up, instead of the content jumping the moment it's clicked.
+              A `grid-template-rows` 1fr -> 0fr transition is what makes an
+              auto-height element animatable at all (height:auto can't be
+              transitioned); the inner div owns the overflow clip. */}
+          <div
+            className={cn(
+              "grid transition-[grid-template-rows,opacity] duration-500 ease-out",
+              installStatus === "installing"
+                ? "grid-rows-[0fr] opacity-0"
+                : "grid-rows-[1fr] opacity-100",
+            )}
+            aria-hidden={installStatus === "installing"}
+          >
+            <div className="overflow-hidden">
+              <button
+                type="button"
+                tabIndex={installStatus === "installing" ? -1 : undefined}
+                onClick={() =>
+                  setInstallStatus(installStatus === "idle" ? "installing" : "idle")
+                }
+                className="h-9 w-full rounded-lg text-sm font-bold text-white"
+                style={{ backgroundColor: accent }}
+              >
+                {installStatus === "installed"
+                  ? t("preview.open", { ns: "pwa" })
+                  : t("preview.install", { ns: "pwa" })}
+              </button>
+            </div>
+          </div>
 
           <div
             className="flex items-start justify-between gap-4 text-[13px] font-medium"

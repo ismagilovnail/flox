@@ -5,6 +5,31 @@ per-phase, matching `CLAUDE.md`'s phase protocol. The one exception is
 [Between phases], below: spec amendments and the code changes that follow from
 them land between phases and would otherwise be invisible here.
 
+## [Between phases] — PWA live preview: the install transition is animated
+
+The user posted two reference frames of the same region — before the
+click and immediately after — and pointed out what the earlier passes
+missed: in the real Play Store the change is *animated*, not an instant
+swap ("логотип и верхняя часть плавно смещается"). Two smaller details
+differed too: the ads/purchases line is dropped during install, and
+"Please wait…" renders dark and semibold, not muted.
+
+`pwa-preview-card.tsx` now transitions the icon's inset/radius over
+500ms; the install button is **collapsed** rather than unmounted, via a
+`grid-template-rows` `1fr` → `0fr` + opacity transition (the technique
+that makes an auto-height element animatable at all), so everything
+below slides up smoothly instead of jumping; the ring fades in over
+250ms off the same next-frame flip that starts its arc. The collapsed
+button carries `tabIndex={-1}` under an `aria-hidden` wrapper so a
+zero-height control can't be tabbed into. The icon's shrink ratio was
+also corrected (inset 9px → 6px = a 60px circle in the 72px ring,
+matching the reference's ~0.83 icon:ring diameter).
+
+Verified live: two consecutive zooms right after one click caught real
+intermediate frames (icon mid-round, button half-collapsed and
+semi-transparent, share row sliding up behind it), and the settled
+state matches the reference frame. No console errors.
+
 ## [Between phases] — PWA live preview: install ring surrounds a circle-cropped icon
 
 Follow-up correction: the previous pass drew the ring at `inset-0`

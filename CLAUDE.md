@@ -125,14 +125,58 @@ STATUS        : done — user asked that pwa-preview-card.tsx's "Install"
                 the icon correctly returns to its rounded-square shape
                 with the developer name/badge once the cycle completes.
                 No console errors; tsc/eslint/vitest clean.
-LAST COMMIT   : fix(pwa): install ring wraps the icon, not the button,
-                matching real Android — 0d3efea (rounds 1-2; round 3's
-                circle-crop/inset correction above is this phase's own
-                work still uncommitted, see below)
-UNCOMMITTED   : round 3's own change — apps/web/src/features/pwa/
-                pwa-preview-card.tsx (the icon wrapper's conditional
-                circle-crop + inset while installing) — not yet
-                committed, waiting on the user.
+                Round 4, same phase: user posted two reference frames of
+                the SAME region (before the click, and immediately
+                after) and pointed out what rounds 1-3 all missed — in
+                the reference the change is ANIMATED ("логотип и верхняя
+                часть плавно смещается"), not an instant swap, and two
+                details differed: the ads/purchases third line is
+                dropped during install, and "Please wait…" is dark and
+                semibold (a status line), not muted secondary metadata.
+                Fixed all three: the icon wrapper's inset/radius change
+                is now a 500ms ease-out transition (the artwork visibly
+                eases down into the ring rather than snapping); the
+                install button is COLLAPSED rather than unmounted, via a
+                grid-template-rows 1fr->0fr + opacity transition (the
+                one technique that makes an auto-height element
+                animatable at all — height:auto can't be transitioned),
+                with the inner div owning the overflow clip, so
+                everything below slides up smoothly instead of jumping;
+                the ring fades in over 250ms off the same next-frame
+                flip that starts its arc. The button keeps `tabIndex=-1`
+                and its wrapper `aria-hidden` while collapsed, so a
+                zero-height control can't be tabbed into. Also matched
+                the two visual details, and corrected the icon's shrink
+                ratio (inset 9px -> 6px = a 60px circle inside the 72px
+                ring, the same ~0.83 icon:ring diameter the reference
+                shows; 9px shrank the artwork more than the real thing).
+                Verified live: two consecutive zooms taken right after
+                one click caught genuine intermediate frames — icon
+                mid-round, button half-collapsed and semi-transparent
+                with the share row sliding up behind it — proving the
+                transition is real and not an instant swap; the settled
+                state then matches the user's own second reference frame
+                closely (circular inset icon + ring, dark semibold
+                "Пожалуйста, подождите…", no third line, no button, the
+                share row raised). No console errors.
+                Cleanup: the icon-crop flow used during these rounds'
+                verification uploads a cropped derivative per Apply,
+                which left five square test files in the org's real
+                Content Gallery. Identified them by dimension (exactly
+                square = a 1:1 icon crop) rather than by timestamp
+                guessing, and ARCHIVED (not permanently deleted) only
+                those five — the user's own 479x935 reference screenshot
+                and one ambiguous 474x473 file were deliberately left
+                active and untouched.
+LAST COMMIT   : fix(pwa): install ring surrounds a circle-cropped icon,
+                matching the reference — 8cf0a3f (rounds 1-3; round 4's
+                animation work above is this phase's own work still
+                uncommitted, see below)
+UNCOMMITTED   : round 4's own changes — apps/web/src/features/pwa/
+                pwa-preview-card.tsx (transitioned icon inset/radius,
+                grid-rows button collapse, ring fade-in, the dropped
+                third line, the dark/semibold "Please wait…", the 6px
+                inset ratio) — not yet committed, waiting on the user.
 NEXT          : confirm scope before starting. Real candidates: (a)
                 retrofitting facebook_ads/tiktok_ads' own access_token
                 to real encryption now that four real AES-256-GCM
