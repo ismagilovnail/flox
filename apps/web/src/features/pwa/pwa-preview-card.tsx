@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type CSSProperties } from "react";
+import { useEffect, useState, type CSSProperties } from "react";
 import {
   ArrowRightIcon,
   BookOpenIcon,
@@ -241,6 +241,57 @@ function StarBar({ n, pct, accent }: { n: number; pct?: number; accent: string }
   );
 }
 
+const INSTALL_DURATION_MS = 1800;
+
+/**
+ * The reference's own downloading-ring affordance — a circular progress
+ * indicator that fills once, replacing the Install button's label while a
+ * (simulated) install runs. No real install happens anywhere in this
+ * preview card (there is no app to install — this mockup only ever
+ * renders form values); this is a deliberate FLOX-specific UI convenience
+ * so an operator can see the same interaction Google Play's own listing
+ * page shows, not a claim of real installation capability. Driven by a
+ * CSS transition rather than a JS progress loop: the ring starts fully
+ * "empty" (dashoffset = circumference) and a double-rAF flip to
+ * dashoffset 0 lets the browser's own transition animate the fill over
+ * `INSTALL_DURATION_MS`; `onDone` fires from a matching timeout rather
+ * than `onTransitionEnd` so it can't fire early from an unrelated
+ * transition on the same element (e.g. a theme/accent color change mid-
+ * animation).
+ */
+function InstallProgressRing({ accent, onDone }: { accent: string; onDone: () => void }) {
+  const [filled, setFilled] = useState(false);
+  useEffect(() => {
+    const raf = requestAnimationFrame(() => setFilled(true));
+    const timeout = setTimeout(onDone, INSTALL_DURATION_MS);
+    return () => {
+      cancelAnimationFrame(raf);
+      clearTimeout(timeout);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- runs exactly once per mount (the button remounts this via `key` on state change), re-running on a later `onDone` identity change would restart the animation
+  }, []);
+  const radius = 9;
+  const circumference = 2 * Math.PI * radius;
+  return (
+    <svg className="size-5 shrink-0" viewBox="0 0 24 24" aria-hidden="true">
+      <circle cx="12" cy="12" r={radius} fill="none" stroke="var(--pv-border)" strokeWidth="2" />
+      <circle
+        cx="12"
+        cy="12"
+        r={radius}
+        fill="none"
+        stroke={accent}
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeDasharray={circumference}
+        strokeDashoffset={filled ? 0 : circumference}
+        style={{ transition: `stroke-dashoffset ${INSTALL_DURATION_MS}ms linear` }}
+        transform="rotate(-90 12 12)"
+      />
+    </svg>
+  );
+}
+
 /**
  * A live Google-Play-listing mockup. Its own light/dark theme is
  * independent of the host app's theme (it's simulating a screenshot of a
@@ -396,6 +447,11 @@ export function PwaPreviewCard({
     inAppPurchases ? t("preview.inAppPurchases", { ns: "pwa" }) : "",
   ].filter(Boolean);
   const [aboutOpen, setAboutOpen] = useState(false);
+  // "idle" -> "installing" (ring animates for INSTALL_DURATION_MS) ->
+  // "installed" ("Open" label). Clicking "Open" resets back to "idle"
+  // rather than doing nothing, so the simulation can be replayed while
+  // designing a listing instead of only ever running once per page load.
+  const [installStatus, setInstallStatus] = useState<"idle" | "installing" | "installed">("idle");
 
   // The sheet's "detailed information" table, in the reference's own
   // order. A row with no value is dropped, not padded with "—": unlike
@@ -545,11 +601,34 @@ export function PwaPreviewCard({
 
           <button
             type="button"
-            disabled
-            className="h-9 w-full rounded-lg text-sm font-bold text-white disabled:opacity-100"
-            style={{ backgroundColor: accent }}
+            disabled={installStatus === "installing"}
+            onClick={() => {
+              if (installStatus === "idle") setInstallStatus("installing");
+              else if (installStatus === "installed") setInstallStatus("idle");
+            }}
+            className={cn(
+              "flex h-9 w-full items-center justify-center rounded-lg text-sm font-bold transition-colors",
+              installStatus === "installing"
+                ? "cursor-wait bg-transparent"
+                : "text-white",
+            )}
+            style={
+              installStatus === "installing"
+                ? { border: `1px solid ${accent}` }
+                : { backgroundColor: accent }
+            }
           >
-            {t("preview.install", { ns: "pwa" })}
+            {installStatus === "installing" ? (
+              <InstallProgressRing
+                key={installStatus}
+                accent={accent}
+                onDone={() => setInstallStatus("installed")}
+              />
+            ) : installStatus === "installed" ? (
+              t("preview.open", { ns: "pwa" })
+            ) : (
+              t("preview.install", { ns: "pwa" })
+            )}
           </button>
 
           <div

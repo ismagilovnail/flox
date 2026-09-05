@@ -19,6 +19,90 @@ referenced below as §N).
 ## CURRENT STATE — UPDATE THIS EVERY PHASE
 
 ```
+CURRENT PHASE : PWA LIVE PREVIEW — SIMULATED INSTALL FLOW (user-scoped, post-Phase-34)
+STATUS        : done — user asked that pwa-preview-card.tsx's "Install"
+                button (in the live Google-Play-listing mockup on the
+                PWA create/edit page) become clickable, and that
+                clicking it simulate a real install with a Google-
+                Play-style preloader, rather than sit `disabled` as a
+                purely decorative element (its shape since the original
+                PWA create-page-preview phase — `disabled:opacity-100`
+                just to keep it looking "on").
+                No real install happens anywhere in this card — it only
+                ever renders form values, there is no installable app
+                behind it — so this is a deliberate FLOX-specific
+                preview convenience, same "our own code, not a claim
+                about real store behavior" precedent every other
+                interactive preview affordance in this file already
+                carries (accentColor/backgroundColor driving the
+                mockup's own colors, the "Arabic text" RTL toggle),
+                documented the same way via a doc comment on the new
+                helper rather than added silently.
+                pwa-preview-card.tsx gained a 3-state installStatus
+                ("idle" | "installing" | "installed") and a new
+                InstallProgressRing helper: clicking Install swaps the
+                solid accent-colored button for a transparent, accent-
+                bordered button showing a small circular SVG progress
+                ring; the ring fills once via a CSS stroke-dashoffset
+                transition (double-rAF flip from full circumference to
+                0) over a fixed INSTALL_DURATION_MS (1800ms) — a real,
+                live-perceptible preloader, not an instant flip; a
+                matching setTimeout (not onTransitionEnd, so an
+                unrelated transition on the same element — e.g. an
+                accent-color change mid-animation — can't fire it
+                early) then flips the button to a solid "Open" label.
+                Clicking "Open" resets back to "idle" rather than doing
+                nothing, so an operator can replay the simulation while
+                designing a listing instead of it only ever running
+                once per page load. Button is disabled only while
+                "installing" (prevents a double-click restarting the
+                animation mid-flight); the ring itself is `aria-hidden`
+                since the button's own accessible state doesn't change
+                during the simulation. New i18n key preview.open (en+ru)
+                alongside the existing preview.install.
+                Verified: tsc --noEmit clean for this file (only the
+                pre-existing, unrelated [id]/page.tsx route-typing
+                errors remain); eslint (zero warnings) clean; vitest run
+                clean (21/21, unrelated). Real browser pass (Claude-in-
+                Chrome) on a fresh /pwa/new page (no submission — a pure
+                client-side preview interaction, nothing to persist or
+                clean up afterward): filled in name/short name,
+                confirmed the live preview's Install button renders
+                clickable (no longer `disabled`), clicked it and
+                confirmed via a zoomed mid-animation screenshot that the
+                button visibly switches to the transparent/accent-
+                bordered ring state (not an instant jump), confirmed it
+                auto-flips to a solid "Открыть" (Open) after the
+                animation completes, and confirmed clicking "Открыть"
+                resets it back to "Установить" (Install) for a repeat
+                run. No console errors during any of it.
+LAST COMMIT   : (this phase's own work is UNCOMMITTED, see below)
+UNCOMMITTED   : this entire phase's work — apps/web/src/features/pwa/
+                pwa-preview-card.tsx (InstallProgressRing + installStatus
+                state + the Install button rewrite); apps/web/src/lib/
+                i18n/locales/{en,ru}/pwa.json (preview.open) — not yet
+                committed, waiting on the user.
+NEXT          : confirm scope before starting. Real candidates: (a)
+                retrofitting facebook_ads/tiktok_ads' own access_token
+                to real encryption now that four real AES-256-GCM
+                implementations exist in this codebase — a deliberate
+                non-goal of the Google Ads phase, still open; (b) SMS/
+                email-based 2FA as an alternative delivery channel — not
+                built, deliberately; (c) the cloudflare_registrar
+                registrar value has no real adapter even though
+                Cloudflare IS connected as a DNS provider — a real
+                candidate if ever wanted; (d) the offer-columns.tsx
+                co-mounted-rename edge case, if a rename-without-
+                navigation flow is ever added to that page; (e) the
+                pre-existing list from the superseded block below, still
+                open.
+
+```
+
+<details>
+<summary>Superseded — Registrar/DNS automation for Domains (kept for history, see above for current state)</summary>
+
+```
 CURRENT PHASE : REGISTRAR/DNS AUTOMATION FOR DOMAINS (§30, user-scoped, post-Phase-34)
 STATUS        : done — user picked this off the Google Ads phase's own
                 NEXT list: wire the real Namecheap/Cloudflare credentials
@@ -139,26 +223,17 @@ STATUS        : done — user picked this off the Google Ads phase's own
                 confirmed Sync DNS's real network call. Test domain and
                 the manually-inserted org_integrations row deleted
                 afterward via SQL; test orgs deleted afterward too.
-LAST COMMIT   : (this phase's own work is UNCOMMITTED, see below)
-UNCOMMITTED   : this entire phase's work — apps/internal/integrations/
-                service.go's new CredentialsFor method + a new test;
-                apps/internal/domain's model.go/service.go/repository.go/
-                handler.go changes, a new crypto-round-trip-adjacent
-                test file (domain_test.go additions incl. fakes and the
-                regression test); apps/internal/domain/namecheap (new
-                package + test); apps/internal/domain/cloudflare (new
-                package + test); apps/internal/config/config.go
-                (TrackerDNSTarget); apps/api/main.go (wiring, reordered
-                so integrationsSvc constructs before domainHandler);
-                .env/.env.example (TRACKER_DNS_TARGET added, four stale
-                unused vars removed); infra/docker-compose.dev.yml
-                (TRACKER_DNS_TARGET on the api service); features/
-                domains/domain-automation-card.tsx (new); features/
-                domains/{domain-columns,domain-detail-view}.tsx; lib/
-                api/domains.ts; hooks/use-domains.ts;
-                docs/domains-tracking-links.md (new "Registrar/DNS
-                automation" section + one corrected "known gaps" line)
-                — not yet committed, waiting on the user.
+LAST COMMIT   : feat(domain): real registrar/DNS automation via
+                Namecheap/Cloudflare (§30) — 6f98c84
+UNCOMMITTED   : none — verified clean (`git status`) at the start of the
+                next session; full repo-wide re-verification also run
+                at that point: go build/vet/test -count=1 ./... clean
+                (all packages incl. domain/domain-namecheap/domain-
+                cloudflare/integrations), tsc --noEmit clean for this
+                phase's own files (only the pre-existing, unrelated
+                [id]/page.tsx route-typing errors remain, same ones
+                documented in every earlier phase), eslint (zero
+                warnings)/vitest (21/21, unrelated) clean.
 NEXT          : confirm scope before starting. Real candidates: (a)
                 retrofitting facebook_ads/tiktok_ads' own access_token
                 to real encryption now that four real AES-256-GCM
@@ -177,6 +252,8 @@ NEXT          : confirm scope before starting. Real candidates: (a)
                 superseded block below, still open.
 
 ```
+
+</details>
 
 <details>
 <summary>Superseded — Google Ads cost integration (kept for history, see above for current state)</summary>

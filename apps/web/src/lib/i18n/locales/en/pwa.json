@@ -121,6 +121,7 @@
     "downloadsLabel": "Downloads",
     "sizeMb": "{{size}} MB",
     "install": "Install",
+    "open": "Open",
     "share": "Share",
     "wishlist": "Wishlist",
     "availableOnDevices": "This app is available on all your devices",

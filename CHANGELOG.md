@@ -5,6 +5,34 @@ per-phase, matching `CLAUDE.md`'s phase protocol. The one exception is
 [Between phases], below: spec amendments and the code changes that follow from
 them land between phases and would otherwise be invisible here.
 
+## [Between phases] — PWA live preview: simulated install flow
+
+`features/pwa/pwa-preview-card.tsx`'s "Install" button — in the live
+Google-Play-listing mockup shown on the PWA create/edit page — was
+`disabled` since it was first built, purely decorative. The user asked
+for it to be clickable and to simulate an install with a Google-Play-
+style preloader.
+
+No real install happens anywhere in this card (it only ever renders
+form values — there's no installable app behind it), so this is a
+deliberate FLOX-specific preview convenience, the same "our own code,
+not a claim about real store behavior" precedent every other
+interactive preview affordance in this file already carries.
+
+The button now cycles `installStatus`: idle ("Установить") → clicking
+swaps it for a transparent, accent-bordered button showing a small
+circular SVG progress ring (a new `InstallProgressRing` helper) that
+fills once via a CSS `stroke-dashoffset` transition over a fixed
+1800ms → installed ("Открыть"/"Open"). Clicking "Open" resets back to
+idle so the simulation can be replayed while designing a listing.
+New i18n key `preview.open` (en+ru).
+
+Verified: `tsc --noEmit`/eslint/vitest clean; a real browser pass
+(Claude-in-Chrome) on a fresh `/pwa/new` page confirmed the button is
+clickable, the ring visibly animates mid-click (caught via a zoomed
+screenshot), it auto-flips to "Open," and "Open" resets back to
+"Install" — no console errors.
+
 ## [Between phases] — Registrar/DNS automation for Domains (§30)
 
 User picked this off the Google Ads phase's own NEXT list: wire the real
