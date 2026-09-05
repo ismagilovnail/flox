@@ -38,12 +38,16 @@ export function conversionColumns(
     {
       id: "campaign",
       header: t("columns.campaign", { ns: "conversions" }),
-      accessorFn: (row) => campaignNameById[row.campaignId] ?? row.campaignId,
+      // `cell`, not `accessorFn` — see campaign-columns.tsx's own comment:
+      // accessorFn's return value is cached per row and only re-evaluated
+      // when the `data` array's reference changes, not when campaignNameById
+      // (a separate, later-resolving query) changes.
+      cell: ({ row }) => campaignNameById[row.original.campaignId] ?? row.original.campaignId,
     },
     {
       id: "network",
       header: t("columns.network", { ns: "conversions" }),
-      accessorFn: (row) => networkNameById[row.networkId] ?? row.networkId,
+      cell: ({ row }) => networkNameById[row.original.networkId] ?? row.original.networkId,
     },
     {
       accessorKey: "type",

@@ -65,9 +65,14 @@ function costEntryColumns(
     {
       id: "source",
       header: t("columns.source", { ns: "cost" }),
-      accessorFn: (row) =>
-        row.trafficSourceId
-          ? (sourceNameById[row.trafficSourceId] ?? row.trafficSourceId)
+      // `cell`, not `accessorFn` — see features/campaigns/campaign-
+      // columns.tsx's own comment: accessorFn's return value is cached per
+      // row and only re-evaluated when the `data` array's reference
+      // changes, not when sourceNameById (a separate, later-resolving
+      // query) changes.
+      cell: ({ row }) =>
+        row.original.trafficSourceId
+          ? (sourceNameById[row.original.trafficSourceId] ?? row.original.trafficSourceId)
           : t("form.allSources", { ns: "cost" }),
     },
     {

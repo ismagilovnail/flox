@@ -48,7 +48,15 @@ export function campaignColumns(
     {
       id: "source",
       header: t("columns.source", { ns: "campaigns" }),
-      accessorFn: (row) => sourceNameById[row.trafficSourceId] ?? row.trafficSourceId,
+      // A `cell` renderer, not `accessorFn` — TanStack Table caches a row's
+      // computed value per (row, columnId) the first time it's read, and
+      // only invalidates it when the `data` array's own reference changes,
+      // not when an accessorFn's closed-over external state (sourceNameById,
+      // populated asynchronously by a separate query) changes. An accessorFn
+      // here would risk freezing on the raw trafficSourceId fallback if this
+      // column is ever read before sources finish loading. `cell` runs fresh
+      // on every render, so it always reflects the current sourceNameById.
+      cell: ({ row }) => sourceNameById[row.original.trafficSourceId] ?? row.original.trafficSourceId,
     },
     {
       id: "tags",

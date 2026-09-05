@@ -5,6 +5,84 @@ per-phase, matching `CLAUDE.md`'s phase protocol. The one exception is
 [Between phases], below: spec amendments and the code changes that follow from
 them land between phases and would otherwise be invisible here.
 
+## [Between phases] — Repo-wide `accessorFn` stale-cache audit
+
+Direct follow-up to the combined browser verification pass's own real
+finding: a live bug in Referral's Earnings History "By" column, caused
+by TanStack Table caching a row's `accessorFn`-computed value per (row,
+columnId) and never invalidating it when only the accessorFn's
+closed-over external state changes — only when the `data` array's own
+reference changes. That phase's own follow-up list flagged this exact
+class as "confirmed no other exact match exists today, but this is a
+real, easy-to-repeat mistake worth a deliberate sweep" — this phase is
+that sweep.
+
+Grepped the whole `apps/web/src` tree for every `accessorFn` use (9
+files) and read each one's full surrounding component, including
+reading `@tanstack/table-core`'s actual installed source (not
+documentation or assumption) to confirm the exact caching mechanism:
+`row_getValue` caches on `row._valuesCache[columnId]` on first read, and
+`Row` instances are rebuilt only when `table.options.data` changes
+reference — column array identity, accessorFn closure identity, and
+`useMemo` dependencies on the columns definition are all irrelevant to
+whether the cache gets busted. Also confirmed from the same source read
+that `column_getCanSort()` explicitly requires `!!column.accessorFn` —
+so a column with only a `cell` (no accessorFn/accessorKey) loses its
+sort control entirely, rather than silently sorting against a
+frozen/undefined value. This isn't a regression: sorting by a value
+frozen at whatever loaded first was never reliable to begin with, so
+dropping the sort affordance on these specific resolved-name columns is
+the correct outcome.
+
+Found five more real, live instances of the exact same bug shape
+(`xxxNameById[row.xxxId] ?? row.xxxId` inside `accessorFn`, where
+`xxxNameById` comes from a separate query than the one supplying the
+table's own `data`, and the page only gates its loading state on the
+data query, not the lookup query) — six fix sites across five files:
+
+- `features/campaigns/campaign-columns.tsx` ("source" column,
+  `sourceNameById` from `useTrafficSources()`)
+- `features/campaigns/campaign-cost-entries.tsx` ("source" column, the
+  identical shape behind an extra ternary branch)
+- `features/clicklogs/click-log-columns.tsx` ("campaign" column,
+  `campaignNameById` from `useCampaigns()`)
+- `features/conversions/conversion-columns.tsx` (two columns:
+  "campaign" via `useCampaigns()`, "network" via `useNetworks()`)
+- `features/postbacks/postback-log-columns.tsx` ("network" column,
+  `networkNameById` from `useNetworks()`)
+
+One near-miss confirmed safe, not just assumed: `features/offers/
+offer-columns.tsx`'s own "network" column has the identical shape, but
+`offer-list.tsx` gates its loading state on both the offers and
+networks queries together, so there's no empty-map first-read to freeze
+on. (A narrower, non-blocking residual risk noted, not fixed: if a
+network is ever renamed via a mutation while this page stays mounted,
+the column would freeze on the old name rather than a raw id — no such
+co-mounted rename flow exists today.) `features/analytics/
+report-table.tsx` and `features/campaigns/tracking-links.tsx` were also
+confirmed safe on the same read (pure row-local/static reads, no
+external lookup closed over at all).
+
+All six sites fixed identically to the referral fix: `accessorFn`
+removed, its exact resolution logic moved into `cell` (which runs fresh
+every render) reading from `row.original` instead of `row`. The same
+doc comment (cross-referencing `campaign-columns.tsx` as the canonical
+explanation) added at every site.
+
+Verified: `tsc --noEmit` clean (pre-existing, unrelated `[id]/page.tsx`
+errors remain); `eslint` clean (zero warnings) on all five touched
+files; `vitest` clean (21/21, unrelated). Real browser pass on a
+still-connected test account: Campaigns, Conversions, Postbacks, and
+Click Log pages all load with zero console errors post-fix (all four
+were empty on the throwaway test org used, so this confirms no runtime
+crash from the edit rather than a renewed visual "resolves correctly"
+check — that visual mechanism was already proven once, live, on the
+referral fix, and is identical here by construction and by the exact
+same library source just read). No further browser-side
+re-verification was attempted against fixture data across five
+unrelated domains purely to re-demonstrate an already source-verified
+library behavior a sixth time.
+
 ## [Between phases] — Combined real browser verification pass
 
 The browser tool reconnected mid-session after being unreachable for

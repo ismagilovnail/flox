@@ -80,7 +80,12 @@ export function clickLogColumns(
     {
       id: "campaign",
       header: t("columns.campaign", { ns: "clickLog" }),
-      accessorFn: (row) => campaignNameById[row.campaignId] ?? row.campaignId,
+      // `cell`, not `accessorFn` — see campaign-columns.tsx's own comment on
+      // this exact pattern: accessorFn's return value is cached per row and
+      // only re-evaluated when the `data` array's reference changes, not
+      // when campaignNameById (populated by a separate, later-resolving
+      // query) changes.
+      cell: ({ row }) => campaignNameById[row.original.campaignId] ?? row.original.campaignId,
     },
     {
       accessorKey: "clickId",

@@ -112,7 +112,12 @@ export function postbackLogColumns(
     {
       id: "network",
       header: t("columns.network", { ns: "postbacks" }),
-      accessorFn: (row) => networkNameById[row.networkId] ?? row.networkId,
+      // `cell`, not `accessorFn` — see features/campaigns/campaign-
+      // columns.tsx's own comment: accessorFn's return value is cached per
+      // row and only re-evaluated when the `data` array's reference
+      // changes, not when networkNameById (a separate, later-resolving
+      // query) changes.
+      cell: ({ row }) => networkNameById[row.original.networkId] ?? row.original.networkId,
     },
     {
       accessorKey: "clickId",
