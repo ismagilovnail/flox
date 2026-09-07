@@ -98,6 +98,7 @@ session.
 | Frontend permission-gating (finding-#1 follow-up: buttons across all 5 write keys) | done |
 | `offer-columns.tsx` `accessorFn` stale-cache fix (closed the one gap the repo-wide audit left open) | done |
 | `MultiSelect` real `disabled` support (closed domain-form.tsx's permission gap) | done |
+| `stream_set` analytics dimension (closed the stale "no stream_set_id on events" gap — the column already existed and was populated; only the whitelist/registry needed it) | done |
 
 ## Known open gaps
 
@@ -114,7 +115,7 @@ scoped phase; none blocks anything that ships today.
 | DataTable has no column resizing and no CSV export, both in §64's floor | `components/ui/data-table.tsx`, repo-wide |
 | Video upload/transcoding in Content Gallery (images only today) | needs a real ffmpeg/worker pipeline |
 | Flows have no top-level list view, so no "View statistics" drill-in row | flows live nested inside a campaign's edit page |
-| No `stream_set_id` on click/tracking/conversion events, so per-set stats can't be real | ClickHouse schema |
+| 4 of the report builder's 16 named dimensions still unbacked (`landing`/`pwa`/`postlanding`/`offer`) | need IDs threaded through `apps/tracker`'s event emission + a ClickHouse schema migration — `stream_set` (closed) shows the pattern once a column exists; these still need one |
 | Google Play URL parsing for the PWA listing preview | would need a scraper behind `apps/internal/urlsafety` |
 | General rate limit stays IP-keyed — a high-volume API-key integration shares one bucket with everything behind its IP | needs auth to resolve before the general limiter runs; a real middleware-ordering restructuring in `apps/api/main.go`/`apps/internal/httpserver` |
 | `TRUSTED_PROXIES` still on its default (no real reverse proxy/LB/CDN deployed yet) | set it once real infrastructure exists in front of `apps/api`/`apps/tracker` |
