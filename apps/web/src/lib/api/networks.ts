@@ -1,11 +1,11 @@
 import { apiFetch } from "@/lib/api/client";
 
-/** Mirrors apps/internal/network's real shape. Not the same file as
- * lib/mock/networks.ts / stores/networks.ts — those stay mocked and
- * in place because stream-sets/postbacks/conversions (still fully
- * mocked features) import them transitively, the same reason Phase 27
- * kept lib/mock/campaigns.ts around. This file is the real API layer,
- * used only by the Networks page/feature itself. */
+/** Mirrors apps/internal/network's real shape — the single client for
+ * the real Networks API, used by the Networks page and by every feature
+ * that resolves a network id to a name (offers, conversions, postback
+ * logs). No mock counterpart exists anymore: lib/mock/networks.ts and
+ * stores/networks.ts were deleted once stream-sets, postbacks and
+ * conversions all moved onto their own real backends. */
 export type NetworkStatus = "active" | "paused" | "archived";
 
 export type Network = {

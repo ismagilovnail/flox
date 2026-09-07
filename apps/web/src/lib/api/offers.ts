@@ -1,11 +1,10 @@
 import { apiFetch } from "@/lib/api/client";
 
-/** Mirrors apps/internal/offer's real shape. Not the same file as
- * lib/mock/offers.ts / stores/offers.ts — those stay mocked and in
- * place because stream-sets/conversions (still fully mocked features)
- * import them transitively, same reason Phase 27 kept
- * lib/mock/campaigns.ts around. This file is the real API layer, used
- * only by the Offers page/feature itself. */
+/** Mirrors apps/internal/offer's real shape — the single client for the
+ * real Offers API, used by the Offers page and by the stream-set editor's
+ * own offer picker. No mock counterpart exists anymore: lib/mock/offers.ts
+ * and stores/offers.ts were deleted once stream-sets and conversions both
+ * moved onto their own real backends. */
 export type OfferStatus = "active" | "paused" | "archived";
 
 export type OfferLink = {
