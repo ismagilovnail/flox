@@ -57,10 +57,8 @@ export function DomainForm({
   defaultValues: Partial<DomainFormValues>;
   submitLabel: string;
   onSubmit: (values: DomainFormValues) => void;
-  /** Locks the submit button and every field that supports a disabled
-   * state when the caller lacks settings.write. MultiSelect (Purpose)
-   * has no disabled prop to plumb this into — the submit button staying
-   * disabled is what actually blocks the write either way. */
+  /** Locks the submit button and every field, including MultiSelect
+   * (Purpose), when the caller lacks settings.write. */
   disabled?: boolean;
 }) {
   const form = useForm<DomainFormValues>({
@@ -118,6 +116,7 @@ export function DomainForm({
                   selected={field.value}
                   onChange={(values) => field.onChange(values as DomainPurpose[])}
                   className="w-full"
+                  disabled={disabled}
                 />
               )}
             />

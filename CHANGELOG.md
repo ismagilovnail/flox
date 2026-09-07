@@ -5,6 +5,35 @@ per-phase, matching `CLAUDE.md`'s phase protocol. The one exception is
 [Between phases], below: spec amendments and the code changes that follow from
 them land between phases and would otherwise be invisible here.
 
+## [Between phases] — MultiSelect gets real `disabled` support, closing domain-form.tsx's permission gap
+
+The frontend permission-gating phase (finding-#1 follow-up) locked every
+field in `domain-form.tsx` except one: `MultiSelect` (the Purpose field)
+had no `disabled` prop at all, so it stayed fully interactively editable
+— openable, toggleable — even when the rest of the form was locked for a
+role without `settings.write`. The submit button staying disabled meant
+no actual write was ever possible, so this was a UX gap, not a security
+hole, and was called out honestly rather than silently left as-is when
+the permission-gating phase shipped.
+
+Fixed at the source: `components/ui/multi-select.tsx` (shared across 7
+features — domains, offers, pixels, postlanding, stream-sets, analytics
+report controls, stream-set filter conditions) gained a real `disabled`
+prop, wired to the trigger `Button` (a disabled button never fires the
+Popover's open) and defensively into `onOpenChange`/`toggle()` too. All
+six other callers pass nothing and default to `false` — zero behavior
+change for them. `domain-form.tsx` now passes `disabled={disabled}`
+through; its own doc comment (which had explicitly named this exact gap)
+updated to match.
+
+Verified: `tsc`/`eslint`/`vitest` clean. Live browser pass: created a
+real domain as Owner, invited and accepted a real Viewer, confirmed
+clicking the Purpose field as Viewer opens nothing (previously it would
+have) with zero console errors; logged back in as Owner on the same
+domain and confirmed the dropdown still opens and toggles normally,
+proving the six other callers' default (unchanged) behavior wasn't
+affected either. Test org and fixtures deleted afterward via SQL.
+
 ## [Between phases] — offer-columns.tsx: close the accessorFn stale-cache gap the prior audit left open
 
 The repo-wide `accessorFn` stale-cache audit (see that entry, below)

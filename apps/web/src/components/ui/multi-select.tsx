@@ -24,17 +24,20 @@ function MultiSelect({
   onChange,
   label,
   className,
+  disabled = false,
 }: {
   options: MultiSelectOption[];
   selected: string[];
   onChange: (values: string[]) => void;
   label: string;
   className?: string;
+  disabled?: boolean;
 }) {
   const { t } = useTranslation("common");
   const [open, setOpen] = React.useState(false);
 
   function toggle(value: string) {
+    if (disabled) return;
     onChange(
       selected.includes(value)
         ? selected.filter((v) => v !== value)
@@ -52,11 +55,12 @@ function MultiSelect({
         : t("dataTable.selected", { count: selected.length });
 
   return (
-    <Popover open={open} onOpenChange={setOpen}>
+    <Popover open={open} onOpenChange={(next) => setOpen(disabled ? false : next)}>
       <PopoverTrigger asChild>
         <Button
           variant="outline"
           size="sm"
+          disabled={disabled}
           className={cn("justify-between gap-2 font-normal", className)}
         >
           <span className="text-muted-foreground">{label}:</span>
