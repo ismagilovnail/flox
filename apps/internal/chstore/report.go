@@ -15,13 +15,18 @@ import (
 // anything not in reportClickColumns/reportConversionColumns below before it gets
 // near SQL.
 //
-// Exactly the 11 dimensions apps/web/src/features/analytics/registry.ts's
-// DIMENSIONS exposes as of Phase 35. Of the 16 the UI originally named,
-// 5 — landing, pwa, postlanding, offer, network — have no backing column
-// anywhere in the event pipeline (not in apps/internal/event.Event, not
-// in this schema): adding them means threading new IDs through
-// apps/tracker's event emission and a schema migration first, confirmed
-// as a separate follow-up phase, not silently faked here.
+// 12 dimensions total, matching apps/web/src/features/analytics/registry.ts's
+// DIMENSIONS. Of the 16 the UI originally named at Phase 35, 5 — landing,
+// pwa, postlanding, offer, network — still have no backing column anywhere
+// in the event pipeline (not in apps/internal/event.Event, not in this
+// schema): adding them means threading new IDs through apps/tracker's
+// event emission and a schema migration first, confirmed as a separate
+// follow-up phase, not silently faked here. DimStreamSet is the one
+// addition beyond those original 16 — unlike the 5 deferred ones,
+// stream_set_id already existed on every relevant table's schema since
+// each one's original CREATE TABLE (apps/tracker has populated it on
+// every click since Phase 21); the roadmap gap it closes was a whitelist
+// omission, not a missing column.
 type ReportDimension string
 
 const (
@@ -44,6 +49,12 @@ const (
 	DimBrowser  ReportDimension = "browser"
 	DimLanguage ReportDimension = "language"
 	DimFlow     ReportDimension = "flow"
+	// DimStreamSet groups by the stream set a click's routing decision
+	// matched — empty string is its own real bucket (not missing data)
+	// for a campaign-fallback or fully-blocked click, the same way
+	// DimFlow's flow_id is empty whenever no flow was reached either;
+	// see routing.Engine's own doc comments on when each is set.
+	DimStreamSet ReportDimension = "stream_set"
 )
 
 // reportClickColumns is the whitelist for click_events and tracking_events,
@@ -51,17 +62,18 @@ const (
 // on the same underlying event.Event struct — see schema/002's own
 // comment on why they're still two tables).
 var reportClickColumns = map[ReportDimension]string{
-	DimCampaign: "campaign_id",
-	DimSource:   "campaign_id",
-	DimCountry:  "country",
-	DimRegion:   "region",
-	DimCity:     "city",
-	DimDevice:   "device",
-	DimPlatform: "platform",
-	DimOS:       "os",
-	DimBrowser:  "browser",
-	DimLanguage: "language",
-	DimFlow:     "flow_id",
+	DimCampaign:  "campaign_id",
+	DimSource:    "campaign_id",
+	DimCountry:   "country",
+	DimRegion:    "region",
+	DimCity:      "city",
+	DimDevice:    "device",
+	DimPlatform:  "platform",
+	DimOS:        "os",
+	DimBrowser:   "browser",
+	DimLanguage:  "language",
+	DimFlow:      "flow_id",
+	DimStreamSet: "stream_set_id",
 }
 
 // reportConversionColumns is the narrower whitelist for conversion_events
@@ -74,17 +86,18 @@ var reportClickColumns = map[ReportDimension]string{
 // click_id join, not a whitelist lookup) — see docs/analytics-report-api.md.
 // Service.Report returns null for those metrics rather than guessing.
 var reportConversionColumns = map[ReportDimension]string{
-	DimCampaign: "campaign_id",
-	DimSource:   "campaign_id",
-	DimCountry:  "country",
-	DimRegion:   "region",
-	DimCity:     "city",
-	DimDevice:   "device",
-	DimPlatform: "platform",
-	DimFlow:     "flow_id",
+	DimCampaign:  "campaign_id",
+	DimSource:    "campaign_id",
+	DimCountry:   "country",
+	DimRegion:    "region",
+	DimCity:      "city",
+	DimDevice:    "device",
+	DimPlatform:  "platform",
+	DimFlow:      "flow_id",
+	DimStreamSet: "stream_set_id",
 }
 
-// ValidDimension reports whether d is one of the 11 supported report
+// ValidDimension reports whether d is one of the 12 supported report
 // dimensions — the same check both click- and conversion-side queries can
 // always answer, since reportClickColumns is the wider of the two whitelists.
 func ValidDimension(d ReportDimension) bool {

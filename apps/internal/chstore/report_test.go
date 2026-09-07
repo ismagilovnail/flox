@@ -16,24 +16,28 @@ import (
 // docs/attribution.md documents, exactly why "clicks" and "unique clicks"
 // must differ), 1 SOURCE_FILTER row (must never count as a click), 2
 // LAND_VIEW rows, and 2 conversion rows (one CPA_ACCEPT, one CPA_HOLD —
-// HOLD must never count as a conversion).
+// HOLD must never count as a conversion). clickA/clickB each resolve to
+// their own stream set (streamSetA/streamSetB below) — conversion.go's
+// real ev.StreamSetID = click.StreamSetID copy is simulated by hand here,
+// not exercised, since this fixture builds event.Event directly.
 func seedReportFixture(t *testing.T, ctx context.Context, store *chstore.EventStore, orgID, campaignID string, day time.Time) (reusedClickID string) {
 	t.Helper()
 	clickA := idgen.New()
 	clickB := idgen.New()
 	reusedClickID = clickA
+	const streamSetA, streamSetB = "stream-set-a", "stream-set-b"
 
 	events := []event.Event{
-		{Type: event.SourceClick, EventAt: day.Add(1 * time.Hour), OrganizationID: orgID, CampaignID: campaignID, ClickID: clickA, Country: "US", Device: "Mobile", FlowID: "flow-1"},
-		{Type: event.SourceClick, EventAt: day.Add(2 * time.Hour), OrganizationID: orgID, CampaignID: campaignID, ClickID: clickA, Country: "US", Device: "Mobile", FlowID: "flow-1"}, // same click_id, returning visitor (sticky)
-		{Type: event.SourceClick, EventAt: day.Add(3 * time.Hour), OrganizationID: orgID, CampaignID: campaignID, ClickID: clickB, Country: "DE", Device: "Desktop", FlowID: "flow-1"},
-		{Type: event.SourceFilter, EventAt: day.Add(4 * time.Hour), OrganizationID: orgID, CampaignID: campaignID, ClickID: idgen.New(), Country: "US", FilterReason: "bot"},
+		{Type: event.SourceClick, EventAt: day.Add(1 * time.Hour), OrganizationID: orgID, CampaignID: campaignID, ClickID: clickA, Country: "US", Device: "Mobile", StreamSetID: streamSetA, FlowID: "flow-1"},
+		{Type: event.SourceClick, EventAt: day.Add(2 * time.Hour), OrganizationID: orgID, CampaignID: campaignID, ClickID: clickA, Country: "US", Device: "Mobile", StreamSetID: streamSetA, FlowID: "flow-1"}, // same click_id, returning visitor (sticky)
+		{Type: event.SourceClick, EventAt: day.Add(3 * time.Hour), OrganizationID: orgID, CampaignID: campaignID, ClickID: clickB, Country: "DE", Device: "Desktop", StreamSetID: streamSetB, FlowID: "flow-1"},
+		{Type: event.SourceFilter, EventAt: day.Add(4 * time.Hour), OrganizationID: orgID, CampaignID: campaignID, ClickID: idgen.New(), Country: "US", FilterReason: "bot"}, // no stream set matched — campaign fallback, StreamSetID stays ""
 
 		{Type: event.LandView, EventAt: day.Add(1*time.Hour + time.Minute), OrganizationID: orgID, CampaignID: campaignID, ClickID: clickA, Country: "US", Device: "Mobile"},
 		{Type: event.LandView, EventAt: day.Add(3*time.Hour + time.Minute), OrganizationID: orgID, CampaignID: campaignID, ClickID: clickB, Country: "DE", Device: "Desktop"},
 
-		{Type: event.CpaAccept, EventAt: day.Add(5 * time.Hour), OrganizationID: orgID, CampaignID: campaignID, ClickID: clickA, Country: "US", Device: "Mobile", USDValue: 25.5, HasUSDValue: true},
-		{Type: event.CpaHold, EventAt: day.Add(5 * time.Hour), OrganizationID: orgID, CampaignID: campaignID, ClickID: clickB, Country: "DE", Device: "Desktop", USDValue: 0, HasUSDValue: false},
+		{Type: event.CpaAccept, EventAt: day.Add(5 * time.Hour), OrganizationID: orgID, CampaignID: campaignID, ClickID: clickA, Country: "US", Device: "Mobile", StreamSetID: streamSetA, USDValue: 25.5, HasUSDValue: true},
+		{Type: event.CpaHold, EventAt: day.Add(5 * time.Hour), OrganizationID: orgID, CampaignID: campaignID, ClickID: clickB, Country: "DE", Device: "Desktop", StreamSetID: streamSetB, USDValue: 0, HasUSDValue: false},
 	}
 	if err := store.InsertBatch(ctx, events); err != nil {
 		t.Fatalf("seeding report fixture: %v", err)
@@ -99,6 +103,90 @@ func TestReportClicksGroupsByDimension(t *testing.T) {
 	}
 	if byCountry["DE"].Clicks != 1 || byCountry["DE"].UniqueClicks != 1 {
 		t.Fatalf("DE row = %+v, want Clicks=1 UniqueClicks=1", byCountry["DE"])
+	}
+}
+
+func TestReportClicksGroupsByStreamSet(t *testing.T) {
+	conn := mustConn(t)
+	store := chstore.NewEventStore(conn)
+	ctx := context.Background()
+	orgID, campaignID := idgen.New(), idgen.New()
+	day := time.Date(2026, 8, 21, 0, 0, 0, 0, time.UTC)
+	seedReportFixture(t, ctx, store, orgID, campaignID, day)
+	// One more click that matched no stream set at all (campaign fallback)
+	// — StreamSetID left as "", the same empty-bucket semantics DimFlow's
+	// flow_id already relies on. This must show up as its own "" group,
+	// not be dropped or merged into another bucket.
+	if err := store.InsertBatch(ctx, []event.Event{
+		{Type: event.SourceClick, EventAt: day.Add(6 * time.Hour), OrganizationID: orgID, CampaignID: campaignID, ClickID: idgen.New(), Country: "US", Device: "Mobile"},
+	}); err != nil {
+		t.Fatalf("seeding campaign-fallback click: %v", err)
+	}
+
+	aggs, err := store.ReportClicks(ctx, chstore.ReportQuery{
+		OrganizationID: orgID,
+		Dims:           []chstore.ReportDimension{chstore.DimStreamSet},
+		From:           day,
+		To:             day.Add(24 * time.Hour),
+	})
+	if err != nil {
+		t.Fatalf("ReportClicks (by stream_set): %v", err)
+	}
+	if len(aggs) != 3 {
+		t.Fatalf("ReportClicks (by stream_set) = %d rows, want 3 (stream-set-a, stream-set-b, \"\")", len(aggs))
+	}
+	byStreamSet := map[string]chstore.ClickAgg{}
+	for _, a := range aggs {
+		byStreamSet[a.Key.DimValues[chstore.DimStreamSet]] = a
+	}
+	if byStreamSet["stream-set-a"].Clicks != 2 || byStreamSet["stream-set-a"].UniqueClicks != 1 {
+		t.Fatalf("stream-set-a row = %+v, want Clicks=2 UniqueClicks=1", byStreamSet["stream-set-a"])
+	}
+	if byStreamSet["stream-set-b"].Clicks != 1 || byStreamSet["stream-set-b"].UniqueClicks != 1 {
+		t.Fatalf("stream-set-b row = %+v, want Clicks=1 UniqueClicks=1", byStreamSet["stream-set-b"])
+	}
+	if got, ok := byStreamSet[""]; !ok || got.Clicks != 1 || got.UniqueClicks != 1 {
+		t.Fatalf(`"" row (campaign fallback) = %+v (present=%v), want Clicks=1 UniqueClicks=1`, got, ok)
+	}
+}
+
+func TestReportConversionsGroupsByStreamSetPreservesEmptyBucket(t *testing.T) {
+	conn := mustConn(t)
+	store := chstore.NewEventStore(conn)
+	ctx := context.Background()
+	orgID, campaignID := idgen.New(), idgen.New()
+	day := time.Date(2026, 8, 21, 0, 0, 0, 0, time.UTC)
+	seedReportFixture(t, ctx, store, orgID, campaignID, day)
+	// An unattributed conversion — no click resolved, so StreamSetID stays
+	// "" exactly like FlowID would; this must be its own real group, not
+	// missing data.
+	if err := store.InsertBatch(ctx, []event.Event{
+		{Type: event.CpaAccept, EventAt: day.Add(6 * time.Hour), OrganizationID: orgID, CampaignID: campaignID, ClickID: idgen.New(), Country: "US", USDValue: 10, HasUSDValue: true},
+	}); err != nil {
+		t.Fatalf("seeding unattributed conversion: %v", err)
+	}
+
+	aggs, err := store.ReportConversions(ctx, chstore.ReportQuery{
+		OrganizationID: orgID,
+		Dims:           []chstore.ReportDimension{chstore.DimStreamSet},
+		From:           day,
+		To:             day.Add(24 * time.Hour),
+	})
+	if err != nil {
+		t.Fatalf("ReportConversions (by stream_set): %v", err)
+	}
+	if len(aggs) != 2 {
+		t.Fatalf("ReportConversions (by stream_set) = %d rows, want 2 (stream-set-a, \"\") — CPA_HOLD excluded", len(aggs))
+	}
+	byStreamSet := map[string]chstore.ConversionAgg{}
+	for _, a := range aggs {
+		byStreamSet[a.Key.DimValues[chstore.DimStreamSet]] = a
+	}
+	if byStreamSet["stream-set-a"].Conversions != 1 || byStreamSet["stream-set-a"].RevenueUSD != 25.5 {
+		t.Fatalf("stream-set-a row = %+v, want Conversions=1 RevenueUSD=25.5", byStreamSet["stream-set-a"])
+	}
+	if got, ok := byStreamSet[""]; !ok || got.Conversions != 1 || got.RevenueUSD != 10 {
+		t.Fatalf(`"" row (unattributed) = %+v (present=%v), want Conversions=1 RevenueUSD=10`, got, ok)
 	}
 }
 

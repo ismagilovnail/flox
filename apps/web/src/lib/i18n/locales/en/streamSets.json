@@ -188,6 +188,7 @@
     "expandAria": "Expand {{name}}",
     "collapseAria": "Collapse {{name}}",
     "moreActionsAria": "More actions for {{name}}",
+    "viewStatistics": "View statistics",
     "duplicate": "Duplicate",
     "delete": "Delete",
     "deleteConfirmTitle": "Delete \"{{name}}\"?",

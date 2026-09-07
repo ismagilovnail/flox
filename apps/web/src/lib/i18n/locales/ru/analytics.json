@@ -71,6 +71,7 @@
     "browser": "Браузер",
     "language": "Язык",
     "flow": "Поток",
+    "stream_set": "Стрим-сет",
     "landing": "Лендинг",
     "pwa": "PWA",
     "postlanding": "Постлендинг",

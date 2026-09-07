@@ -30,21 +30,41 @@ Request/response shapes: `apps/internal/analytics/handler.go`'s
 `reportRowResponse`/`metricValuesResponse`/`dashboardResponse`. The
 frontend mirrors them in `lib/api/analytics.ts`.
 
-## Dimension whitelist: 11 of the 16 the UI names
+## Dimension whitelist: 12 backed (11 of the original 16, plus stream_set)
 
-`chstore.ReportDimension` (11): campaign, source (proxy for campaign — see
+`chstore.ReportDimension` (12): campaign, source (proxy for campaign — see
 its own doc comment), country, region, city, device, platform, os,
-browser, language, flow.
+browser, language, flow, stream_set.
 
-`features/analytics/registry.ts`'s `DimensionKey` still lists 5 more —
-landing, pwa, postlanding, offer, network — with no backing column
-anywhere in the event pipeline (not on `event.Event`, not in this schema).
-Adding them means threading new IDs through `apps/tracker`'s event
-emission and a schema migration first: a separate, later phase, not
-silently faked here. The report builder's dimension picker still offers
-all 16 (unchanged — `registry.ts` is shared with the still-mocked Custom
-Metrics feature, which needs the full list); requesting one of the 5
-unbacked ones 400s with `apierror.Validation`.
+`stream_set` (`DimStreamSet`, backed by `stream_set_id`) is a later
+addition, not one of the original 16 the report builder's dimension
+picker was designed against — the column has existed and been populated
+by `apps/tracker` on every click since Phase 21; the gap closed here was
+a whitelist omission, not a missing column, migration, or backfill (see
+`chstore.ReportDimension`'s own doc comment). Empty string is a real
+group for this dimension, exactly like `flow`'s `flow_id`: a click that
+matched no stream set (campaign fallback) or was blocked (`SOURCE_FILTER`)
+carries `stream_set_id = ""`, as does a conversion that never resolved to
+a click — grouping by `stream_set` returns that as its own `""` row, not
+missing data. The stream sets list's "View statistics" action
+(`features/stream-sets/stream-set-row.tsx`) deep-links into this
+dimension with the set's real id, not its display name — unlike the
+pre-existing network/offer/source "View statistics" links (below), this
+one filters on the same value the column actually stores, so it works.
+The filter chip it produces shows that raw id, since `FilterCondition`
+(`features/analytics/aggregate.ts`) has no separate display-label field;
+adding one is out of scope for a query-layer/UI change.
+
+`features/analytics/registry.ts`'s `DimensionKey` still lists 5 more from
+the original 16 — landing, pwa, postlanding, offer, network — with no
+backing column anywhere in the event pipeline (not on `event.Event`, not
+in this schema). Adding them means threading new IDs through
+`apps/tracker`'s event emission and a schema migration first: a separate,
+later phase, not silently faked here. The report builder's dimension
+picker offers all 17 named keys now (unchanged in kind — `registry.ts` is
+shared with the still-mocked Custom Metrics feature, which needs the full
+list); requesting one of the 5 unbacked ones 400s with
+`apierror.Validation`.
 
 Of the 11 backed dimensions, only 8 have a column on `conversion_events`
 (`chstore.reportConversionColumns`) — it carries no `os`/`browser`/

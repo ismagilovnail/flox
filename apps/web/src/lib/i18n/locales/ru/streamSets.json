@@ -188,6 +188,7 @@
     "expandAria": "Развернуть «{{name}}»",
     "collapseAria": "Свернуть «{{name}}»",
     "moreActionsAria": "Другие действия для {{name}}",
+    "viewStatistics": "Посмотреть статистику",
     "duplicate": "Дублировать",
     "delete": "Удалить",
     "deleteConfirmTitle": "Удалить «{{name}}»?",

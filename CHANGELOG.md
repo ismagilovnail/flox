@@ -5,6 +5,62 @@ per-phase, matching `CLAUDE.md`'s phase protocol. The one exception is
 [Between phases], below: spec amendments and the code changes that follow from
 them land between phases and would otherwise be invisible here.
 
+## [Between phases] — add the stream_set analytics dimension, closing the "no stream_set_id on events" roadmap gap
+
+A prior research pass (this same session) traced the full event lifecycle
+and found the roadmap gap stale: `stream_set_id` has existed on
+`click_events`/`conversion_events` and been populated by `apps/tracker`
+on every click since Phase 21 (`conversion.go` copies it onto conversion
+events from the resolved click). The real gap was narrower — `chstore`'s
+report-dimension whitelist and the frontend's dimension registry never
+picked it up — so this phase is query-layer/UI only: no schema migration,
+no backfill, no tracker/conversion changes.
+
+Added `chstore.DimStreamSet` (`"stream_set"` → `stream_set_id`) to both
+`reportClickColumns` and `reportConversionColumns`, making it the 12th
+backed `ReportDimension` (11 of the original 16 registry-named
+dimensions, plus this one addition). Added `"stream_set"` to the
+frontend's `DimensionKey` union and `DIMENSIONS` registry, its i18n
+labels (en/ru), and the `VIEW_STATS_DIMENSIONS` allowlist that gates
+`?dim=&val=` deep-linking. Empty string is preserved as its own real
+bucket — a campaign-fallback click, a blocked (`SOURCE_FILTER`) click,
+and an unattributed conversion all carry `stream_set_id = ""`, the same
+"real group, not missing data" semantics `flow_id` already has.
+
+Stream Sets rows get the same "View statistics" drill-in
+`network-row-actions.tsx`/`offer-row-actions.tsx`/`source-row-actions.tsx`
+already use, but with one deliberate deviation: those three pass the
+entity's display `.name` (a pre-existing, already-decorative pattern —
+network/offer have no backing dimension at all, and source's link
+actually filters on `campaign_id`, not a name column). `stream_set` is a
+genuinely working dimension, so `stream-set-row.tsx` passes the set's
+real `.id` instead, matching what `stream_set_id` actually stores. The
+tradeoff: since `FilterCondition` (`aggregate.ts`) has no separate
+display-label field, the resulting filter chip on `/analytics` shows the
+raw ULID rather than the set's name — disclosed here rather than quietly
+shipped, and out of this phase's query-layer/UI-only scope to fix.
+
+Extended `chstore/report_test.go`'s shared fixture with real
+`StreamSetID` values (including an explicit empty-bucket case) and added
+two new tests against a live ClickHouse container —
+`TestReportClicksGroupsByStreamSet` and
+`TestReportConversionsGroupsByStreamSetPreservesEmptyBucket` — proving
+the grouping, including the `""` bucket, end to end. Updated
+`docs/analytics-report-api.md`'s stale "11 of 16" dimension count and
+added a `stream_set` section explaining the addition.
+
+Verified: `gofmt`/`go vet`/`go build`/`go test -count=1 ./...` clean
+across all Go packages against live Postgres/ClickHouse/Redis/MinIO;
+`tsc --noEmit`/`eslint`/`vitest` clean on `apps/web`. Real browser pass:
+signed up a test org, created a campaign with two real Stream Sets ("US
+Mobile Set" filtered on `sub1`, "EU Desktop Set" as the catch-all),
+generated real clicks against each through `apps/tracker` (4 vs 3), and
+confirmed each set's "View statistics" link lands on `/analytics` with a
+`stream_set` filter chip showing the exact, correct, distinct click
+count for that set — no console errors. All test fixtures (org, user,
+campaign, stream sets, network, offer, traffic source, domain, and the
+ClickHouse click events) removed afterward.
+
 ## [Between phases] — bump golang.org/x/crypto to close 2 of 3 remaining advisories
 
 Finding #6's Go 1.26.6 bump left 3 `golang.org/x/crypto` advisories in

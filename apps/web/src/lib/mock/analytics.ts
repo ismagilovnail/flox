@@ -28,6 +28,7 @@ const POOLS: Record<DimensionKey, string[]> = {
   browser: ["Chrome", "Safari", "Firefox", "Edge", "Samsung Internet"],
   language: ["en", "de", "fr", "es", "pt"],
   flow: ["Tier-1 English 70/30", "EU Nutra Weighted", "Push Fallback", "Native Priority"],
+  stream_set: ["Tier-1 Mobile", "EU Desktop", "Fallback Catch-all", "iOS Only"],
   landing: ["LP Sweeps A", "LP Sweeps B", "LP Nutra A", "LP Dating A"],
   pwa: ["PWA Sweeps", "PWA Nutra", "None"],
   postlanding: ["PL Upsell A", "PL Survey B", "None"],

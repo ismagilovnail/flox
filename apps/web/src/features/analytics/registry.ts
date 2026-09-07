@@ -14,6 +14,7 @@ export type DimensionKey =
   | "browser"
   | "language"
   | "flow"
+  | "stream_set"
   | "landing"
   | "pwa"
   | "postlanding"
@@ -32,6 +33,7 @@ export const DIMENSIONS: { key: DimensionKey; label: string }[] = [
   { key: "browser", label: "Browser" },
   { key: "language", label: "Language" },
   { key: "flow", label: "Flow" },
+  { key: "stream_set", label: "Stream Set" },
   { key: "landing", label: "Landing" },
   { key: "pwa", label: "PWA" },
   { key: "postlanding", label: "Postlanding" },

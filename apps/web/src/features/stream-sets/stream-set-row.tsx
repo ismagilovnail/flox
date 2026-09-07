@@ -1,9 +1,10 @@
 "use client";
 
 import * as React from "react";
+import Link from "next/link";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { ChevronDownIcon, CopyIcon, GripVerticalIcon, Trash2Icon } from "lucide-react";
+import { BarChart3Icon, ChevronDownIcon, CopyIcon, GripVerticalIcon, Trash2Icon } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 import { Badge } from "@/components/ui/badge";
@@ -30,6 +31,7 @@ import type { Postlanding } from "@/lib/api/postlanding";
 import type { Pixel } from "@/lib/api/pixels";
 import { FilterTreeSummary } from "@/features/stream-sets/filter-tree-summary";
 import { StreamSetEditor, type StreamSetFormValues } from "@/features/stream-sets/stream-set-editor";
+import { viewStatisticsHref } from "@/features/analytics/view-statistics-link";
 
 function toFormValues(streamSet: StreamSet): StreamSetFormValues {
   return {
@@ -136,6 +138,25 @@ export function StreamSetRow({
                 disabled={disabled}
                 aria-label={streamSet.status === "active" ? t("row.disableAria") : t("row.enableAria")}
               />
+              {/* streamSet.id, not .name — unlike network/offer/source's own
+               * viewStatisticsHref calls, chstore's stream_set dimension
+               * really does group by stream_set_id, so this is the one call
+               * site where the filter has to carry the value that actually
+               * matches the column, not a display name. The filter chip
+               * shows the raw id as a result — FilterCondition has no
+               * separate display-label field (analytics/aggregate.ts), and
+               * adding one is out of this phase's query-layer/UI-only
+               * scope. */}
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <IconButton aria-label={t("row.viewStatistics")} size="icon-sm" asChild>
+                    <Link href={viewStatisticsHref("stream_set", streamSet.id)}>
+                      <BarChart3Icon className="size-3.5" />
+                    </Link>
+                  </IconButton>
+                </TooltipTrigger>
+                <TooltipContent>{t("row.viewStatistics")}</TooltipContent>
+              </Tooltip>
               <Tooltip>
                 <TooltipTrigger asChild>
                   <IconButton aria-label={t("row.duplicate")} size="icon-sm" disabled={disabled} onClick={onDuplicate}>

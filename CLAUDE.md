@@ -19,29 +19,45 @@ referenced below as §N).
 ## CURRENT STATE — UPDATE THIS EVERY PHASE
 
 ```
-CURRENT PHASE : BUMP GOLANG.ORG/X/CRYPTO (2 of 3 remaining advisories)
-                (ad hoc, user-scoped — picked from a 2-option menu after
-                "continue" with no phase specified; user chose the
-                smaller of the two)
-STATUS        : done. Checked each of the 3 advisories directly rather
-                than assuming: GO-2026-6355/GO-2026-6354 (x/crypto/ssh
-                DoS) fixed in v0.56.0, already published; GO-2026-5932
-                (x/crypto/openpgp unmaintained/unsafe) has NO fix
-                (Fixed in: N/A — upstream abandoned the package, not a
-                missing release). Confirmed this codebase only imports
-                x/crypto/bcrypt (internal/auth/crypto.go) — a different
-                subpackage from both ssh and openpgp, matching
-                govulncheck's own "0 reachable" finding from the
-                finding-#6 phase. Bumped v0.55.0 -> v0.56.0 (go get +
-                go mod tidy) — the only actionable fix available; the
-                openpgp advisory stays permanently flagged, harmless.
-                VERIFIED: go build/vet/test -count=1 ./... clean, 41
-                packages, live Postgres/ClickHouse/Redis/MinIO; gofmt
-                clean; go.mod/go.sum diff is exactly the one version
-                bump, nothing else moved. govulncheck ./... now reports
-                1 advisory (was 3) — GO-2026-5932 only, unreachable, no
-                fix exists to apply, documented as such rather than
-                left to look like an oversight on the next audit.
+CURRENT PHASE : ADD STREAM_SET ANALYTICS DIMENSION (closes "no
+                stream_set_id on events" roadmap gap — query-layer/UI
+                only, per a prior research pass in this same session
+                that found the gap stale: the column already existed
+                and was populated, only the whitelist/registry were
+                missing it)
+STATUS        : done. Backend: chstore.DimStreamSet ("stream_set" ->
+                stream_set_id) added to reportClickColumns and
+                reportConversionColumns — the 12th backed
+                ReportDimension (11 original + this addition). Frontend:
+                "stream_set" added to DimensionKey/DIMENSIONS/i18n
+                (en/ru) and to VIEW_STATS_DIMENSIONS. Stream Sets rows
+                get a "View statistics" link (stream-set-row.tsx) like
+                network/offer/source already have, but passing the
+                set's real .id (not .name, unlike those three
+                pre-existing, partly-decorative links) since stream_set
+                genuinely filters on stream_set_id — the filter chip
+                shows the raw ULID as a disclosed tradeoff
+                (FilterCondition has no display-label field; adding one
+                was out of scope). Empty string preserved as its own
+                real bucket (campaign fallback / blocked click /
+                unattributed conversion), same semantics as flow_id.
+                Extended chstore/report_test.go's fixture with real
+                StreamSetID values incl. an empty-bucket case; added
+                TestReportClicksGroupsByStreamSet and
+                TestReportConversionsGroupsByStreamSetPreservesEmptyBucket
+                against live ClickHouse. Updated
+                docs/analytics-report-api.md's dimension count/section.
+                VERIFIED: gofmt/go vet/go build/go test -count=1 ./...
+                clean, all Go packages, live Postgres/ClickHouse/Redis/
+                MinIO; tsc --noEmit/eslint/vitest clean on apps/web.
+                Real browser pass: signed up a test org, created a
+                campaign with two real Stream Sets, generated real
+                clicks through apps/tracker (4 vs 3), confirmed each
+                set's "View statistics" link lands on /analytics with a
+                correct, distinct filtered count and no console errors.
+                All test fixtures (org/user/campaign/stream
+                sets/network/offer/traffic source/domain, ClickHouse
+                click events) removed afterward.
 LAST COMMIT   : 96dabb9 fix(ui): give MultiSelect real disabled support,
                 close domain-form.tsx's permission gap. Before it:
                 1c31660 fix(offers): close offer-columns.tsx's accessorFn
@@ -56,29 +72,44 @@ LAST COMMIT   : 96dabb9 fix(ui): give MultiSelect real disabled support,
                 pass); 2058b1b fix(security): trusted-proxy IP resolution
                 & pending-login lockout (audit findings #2, #3); 1e45953
                 fix(auth): enforce RBAC on every mutating route (audit
-                finding #1) — full detail for all in CHANGELOG.md.
+                finding #1) — full detail for all in CHANGELOG.md. Note:
+                the golang.org/x/crypto bump (GO-2026-6355/6354 closed,
+                GO-2026-5932 permanently flagged/unreachable) landed
+                between phases per CHANGELOG.md but was never captured
+                in this block's LAST COMMIT line by the phase that did
+                it — check `git log` if the exact commit hash is needed.
 UNCOMMITTED   : this phase's own work, about to be committed as one
-                logical commit — apps/go.mod, apps/go.sum; CHANGELOG.md;
-                this CLAUDE.md edit. Deliberately left out, unrelated and
+                logical commit — apps/internal/chstore/report.go,
+                apps/internal/chstore/report_test.go,
+                apps/web/src/features/analytics/registry.ts,
+                apps/web/src/features/analytics/analytics-view.tsx,
+                apps/web/src/features/analytics/view-statistics-link.ts,
+                apps/web/src/features/stream-sets/stream-set-row.tsx,
+                apps/web/src/lib/mock/analytics.ts,
+                apps/web/src/lib/i18n/locales/{en,ru}/analytics.json,
+                apps/web/src/lib/i18n/locales/{en,ru}/streamSets.json,
+                docs/analytics-report-api.md, CHANGELOG.md, this
+                CLAUDE.md edit. Deliberately left out, unrelated and
                 predating this phase: ROADMAP.md,
                 apps/e2e/scenario_test.go, apps/web/src/lib/api/
                 networks.ts and offers.ts remain unstaged from the older
                 repo+plan-audit pass; whoever picks those up next should
                 check they're still wanted.
 NEXT          : confirm scope before starting. All 7 numbered security-
-                audit findings are fully resolved (see prior phases'
-                blocks / CHANGELOG.md); the small known-gaps menu from
-                the last two rounds is now empty. Still open: TRUSTED_
+                audit findings are fully resolved; the stream_set
+                dimension gap is closed. Known remaining items: TRUSTED_
                 PROXIES needs a real proxy deployed first (finding-#2
-                phase, confirmed none exists yet); the general rate
-                limit's IP-keying not fitting high-volume API-key traffic
-                (finding-#4 phase's own known limitation) — the one
-                remaining substantial item, a real middleware-ordering
-                restructuring (auth needs to resolve before the general
-                limiter runs, which currently mounts earlier in the
-                chain). GO-2026-5932 (x/crypto/openpgp, no fix exists) is
-                a permanent, accepted, unreachable flag, not something to
-                revisit. Worth being aware of for future sessions: this
+                phase); the general rate limit's IP-keying not fitting
+                high-volume API-key traffic (finding-#4 phase's own known
+                limitation) — a real middleware-ordering restructuring.
+                GO-2026-5932 (x/crypto/openpgp, no fix exists) stays a
+                permanent, accepted, unreachable flag. The 4 remaining
+                unbacked registry dimensions (landing/pwa/postlanding/
+                offer) still need IDs threaded through apps/tracker's
+                event emission plus a schema migration before they could
+                follow the same pattern as stream_set — a separate,
+                larger phase, not a quick whitelist fix like this one
+                was. Worth being aware of for future sessions: this
                 session's own history/subagent tracking apparently does
                 not persist a prior turn's investigation request reliably
                 across some boundary — CHANGELOG.md and git log are the
