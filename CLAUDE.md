@@ -19,79 +19,58 @@ referenced below as §N).
 ## CURRENT STATE — UPDATE THIS EVERY PHASE
 
 ```
-CURRENT PHASE : STOP PROMISING API KEYS AUTHENTICATE CALLS
-                (security audit finding #4, user-scoped, follows the
-                finding-#2/#3 trusted-proxy phase)
-STATUS        : done. SCOPED WITH THE USER before writing code: the
-                audit found apikey.Repository really is just List/
-                Create/Revoke — real, hashed credential bookkeeping
-                (api_keys.key_hash unique-indexed, ready for a real
-                lookup) — but NOTHING authenticates a request with one.
-                Zero Authorization/X-Api-Key middleware exists anywhere
-                in the tree (confirmed by grep, not assumed — no dead or
-                commented-out attempt either, this was never started),
-                and the read/write/admin scope stored per key is read by
-                zero handlers. Settings > API keys nonetheless told
-                users "Used for programmatic access" and "Scope controls
-                what this key can read or change" — a direct hit against
-                CLAUDE.md's own "no fake APIs that look real" rule.
-                THE FORK: implement real key authentication now (a
-                second auth path mounted across the whole route tree,
-                deciding how a flat 3-value scope maps onto finding #1's
-                18-permission RBAC model, rate limiting for key traffic —
-                a feature on the scale of finding #1's own fix) vs. stop
-                the UI from claiming it works and defer the real feature
-                to its own future phase. USER PICKED THE LATTER
-                (recommended option) — cheap, honest, zero backend risk,
-                and building real key auth deserves its own scoping pass
-                with route-surface and rate-limit design up front rather
-                than being folded into a security-audit fix.
-                THE FIX: apps/web/src/features/settings/
-                api-keys-panel.tsx only — card description, a new inline
-                Alert ("API authentication isn't live yet... scope isn't
-                enforced"), the create dialog's scope description, and
-                the revoke confirmation all now say plainly that keys
-                don't authenticate anything yet. Key creation, one-time
-                reveal, and revocation are UNCHANGED — still real,
-                still hashed, still work exactly as before; only the
-                claims about what a key DOES changed. Zero backend
-                changes — apikey.Service/handler/repository untouched.
-                docs/security.md's Known limitations gets the same
-                explanation for a reader of the code rather than the UI.
-                VERIFIED: tsc --noEmit / eslint / vitest (21/21) all
-                clean — no existing test asserted the old copy strings,
-                so none needed updating. No Go changes this phase, so
-                go build/vet/test weren't re-run.
-                NOT done, by design: real API-key authentication itself
-                (deferred to a future phase, to be scoped when actually
-                built, not smuggled in here).
+CURRENT PHASE : BUMP GO TO 1.26.6 FOR STDLIB CVES
+                (security audit finding #6, user-scoped, follows the
+                finding-#4 API-keys-UI phase; user asked for this one
+                directly, no scoping questions needed — it's the cheap,
+                low-risk fix the audit's own NEXT note already called it)
+STATUS        : done. apps/go.mod's go directive bumped 1.26.5 -> 1.26.6;
+                GOTOOLCHAIN=auto (already the module's default, network
+                access confirmed working) downloaded the new toolchain on
+                the next build with no other config change. Checked
+                apps/{api,worker,tracker}/Dockerfile: all three already
+                build on golang:1.27-alpine, ahead of both versions, so
+                they were never affected and needed no edit. No other
+                go.mod/CI/Dockerfile referenced 1.26.5 anywhere in the
+                tree (grepped, not assumed).
+                VERIFIED: go build/vet clean under the new toolchain; go
+                test -count=1 ./... clean across all 41 packages against
+                live Postgres/ClickHouse/Redis/MinIO. govulncheck ./...
+                now reports 0 vulnerabilities reachable by this code
+                (was 7 stdlib ones under 1.26.5) — 3 unrelated, pre-
+                existing golang.org/x/crypto/{ssh,openpgp} advisories
+                remain in transitively-required deps this code never
+                calls (GO-2026-6355, GO-2026-6354, GO-2026-5932); NOT
+                fixed here — out of scope for a Go-version bump, noted
+                for whoever picks up dependency hygiene next. No apps/web
+                changes this phase, so tsc/eslint/vitest weren't re-run.
 LAST COMMIT   : (this phase's own work is uncommitted, see below). Before
-                it, 2058b1b fix(security): trusted-proxy IP resolution &
-                pending-login lockout (audit findings #2, #3); 1e45953
+                it: e757aaa fix(settings): stop claiming API keys
+                authenticate calls (audit finding #4); 2058b1b
+                fix(security): trusted-proxy IP resolution & pending-
+                login lockout (audit findings #2, #3); 1e45953
                 fix(auth): enforce RBAC on every mutating route (audit
-                finding #1) — full detail for both in CHANGELOG.md.
+                finding #1) — full detail for all in CHANGELOG.md.
 UNCOMMITTED   : this phase's own work, about to be committed as one
-                logical commit — apps/web/src/features/settings/
-                api-keys-panel.tsx's copy fix; docs/security.md's new
-                Known-limitations bullet; CHANGELOG.md; this CLAUDE.md
-                edit. No backend files touched. Deliberately left out,
-                unrelated and predating this phase: ROADMAP.md,
-                apps/e2e/scenario_test.go, apps/web/src/lib/api/
-                networks.ts and offers.ts remain unstaged from the older
-                repo+plan-audit pass; whoever picks those up next should
-                check they're still wanted.
+                logical commit — apps/go.mod's go directive; CHANGELOG.md;
+                this CLAUDE.md edit. Deliberately left out, unrelated and
+                predating this phase: ROADMAP.md, apps/e2e/scenario_test.go,
+                apps/web/src/lib/api/networks.ts and offers.ts remain
+                unstaged from the older repo+plan-audit pass; whoever
+                picks those up next should check they're still wanted.
 NEXT          : confirm scope before starting. Open from the audit: (5)
                 rate limiter fails open on Redis error is a deliberate,
                 documented stance (docs/security.md), not a bug needing a
-                fix; (6) bump Go to 1.26.6 for the stdlib CVEs is a
-                cheap, low-risk fix worth doing on its own; (7) moving
-                shadcn's CLI to devDependencies is similarly small. Also
-                open: permission-gating the frontend action buttons
-                (finding-#1 phase), setting TRUSTED_PROXIES to a real
-                value once an actual reverse proxy/LB/CDN is deployed
-                (finding-#2 phase), and — whenever it's actually wanted —
+                fix; (7) moving shadcn's CLI to devDependencies is a
+                similarly small, low-risk fix. Also open: permission-
+                gating the frontend action buttons (finding-#1 phase),
+                setting TRUSTED_PROXIES to a real value once an actual
+                reverse proxy/LB/CDN is deployed (finding-#2 phase),
                 scoping real API-key authentication as its own phase
-                (finding-#4 phase, deferred above).
+                whenever it's wanted (finding-#4, deferred), and the 3
+                golang.org/x/crypto advisories surfaced this phase
+                (unrelated to any numbered audit finding, dependency
+                hygiene rather than a live vulnerability today).
 ```
 
 > At the end of every phase: update the four lines above, add a CHANGELOG entry,

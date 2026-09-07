@@ -5,6 +5,24 @@ per-phase, matching `CLAUDE.md`'s phase protocol. The one exception is
 [Between phases], below: spec amendments and the code changes that follow from
 them land between phases and would otherwise be invisible here.
 
+## [Security] — bump Go to 1.26.6 (audit finding #6)
+
+The audit's `govulncheck` pass found the pinned toolchain, Go 1.26.5,
+carried 7 known stdlib vulnerabilities. `apps/go.mod`'s `go` directive is
+now `1.26.6`; `GOTOOLCHAIN=auto` (the module's existing default) picked up
+the new toolchain automatically on the next build, no other config
+changes needed. `apps/api`, `apps/worker`, and `apps/tracker`'s
+Dockerfiles already build on `golang:1.27-alpine`, ahead of either
+version, so they were never affected and needed no change.
+
+Verified: `go build`/`go vet` clean under the new toolchain; `go test
+-count=1 ./...` clean across all 41 packages against live
+Postgres/ClickHouse/Redis/MinIO; `govulncheck ./...` now reports zero
+vulnerabilities reachable by this codebase (3 unrelated, pre-existing
+`golang.org/x/crypto` advisories remain in transitively-required
+dependencies that this code never calls — out of scope for this fix,
+noted for later).
+
 ## [Security] — stop promising API keys authenticate calls (audit finding #4)
 
 The audit found `apps/internal/apikey` implements real, hashed credential
