@@ -90,6 +90,14 @@ session.
 | Google Ads cost integration | done |
 | Registrar/DNS automation for Domains | done |
 | Repo + plan audit | done |
+| Security audit + finding #1 — RBAC enforcement on every mutating route | done |
+| Security audit finding #2/#3 — trusted-proxy IP resolution + pending-login lockout | done |
+| Security audit finding #4 — API keys: UI honesty pass, then real authentication | done |
+| Security audit finding #6 — Go 1.26.6 + `golang.org/x/crypto` v0.56.0 | done |
+| Security audit finding #7 — shadcn CLI moved to devDependencies | done |
+| Frontend permission-gating (finding-#1 follow-up: buttons across all 5 write keys) | done |
+| `offer-columns.tsx` `accessorFn` stale-cache fix (closed the one gap the repo-wide audit left open) | done |
+| `MultiSelect` real `disabled` support (closed domain-form.tsx's permission gap) | done |
 
 ## Known open gaps
 
@@ -108,7 +116,9 @@ scoped phase; none blocks anything that ships today.
 | Flows have no top-level list view, so no "View statistics" drill-in row | flows live nested inside a campaign's edit page |
 | No `stream_set_id` on click/tracking/conversion events, so per-set stats can't be real | ClickHouse schema |
 | Google Play URL parsing for the PWA listing preview | would need a scraper behind `apps/internal/urlsafety` |
-| `offer-columns.tsx` keeps an `accessorFn` name lookup | safe today (both queries gated together); only breaks if a rename-without-navigation flow is added |
+| General rate limit stays IP-keyed — a high-volume API-key integration shares one bucket with everything behind its IP | needs auth to resolve before the general limiter runs; a real middleware-ordering restructuring in `apps/api/main.go`/`apps/internal/httpserver` |
+| `TRUSTED_PROXIES` still on its default (no real reverse proxy/LB/CDN deployed yet) | set it once real infrastructure exists in front of `apps/api`/`apps/tracker` |
+| `golang.org/x/crypto/openpgp` (`GO-2026-5932`) has no upstream fix | permanent, accepted, unreachable — this codebase only imports `bcrypt`; see `docs/security.md` Known limitations |
 
 Full acceptance criteria per phase: `docs/FLOX-master-prompt-v3.md`.
 Definition of Done (applies to every phase): `CLAUDE.md` → "DEFINITION OF
