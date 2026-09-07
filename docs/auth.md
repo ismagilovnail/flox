@@ -367,12 +367,105 @@ original ten permission keys long after `custom_metric.*`,
 as the org's access policy. It now carries all eighteen and is marked as
 a manual sync point with the migrations.
 
-The action buttons themselves are **not** yet permission-gated in the UI
-(only `features/team/member-list.tsx` checks `team.write`), so a
-read-only role still sees a "Create" button and now gets a 403 from it.
-That is a UX gap, not a security one, and it is the natural follow-up to
-this change.
+~~The action buttons themselves are **not** yet permission-gated in the
+UI~~ — closed as a follow-up phase: `usePermission(key)` +
+`PermissionDeniedState` now gate Create/Edit/Delete/Pause/Archive/
+Duplicate/Regenerate-secret buttons and the ~14 route-level create pages
+across all five write keys, matching the same convention
+`features/team/member-list.tsx` established first.
 
+
+## API key authentication (closed, post-Phase-34, security audit finding #4's real-auth follow-up)
+
+`apps/internal/apikey` (Settings > API keys) shipped real, hashed
+credential bookkeeping — `Create`/`List`/`Revoke` — but nothing ever
+authenticated a request with one; the audit flagged this as "fake API
+that looks real." Confirmed via `AskUserQuestion`, two decisions: a key
+authenticates against the exact same route tree a session does (no
+separate "public API" surface), and the existing flat `read`/`write`/
+`admin` scope maps onto the 18-permission vocabulary as coarse tiers
+rather than inheriting the creator's own role.
+
+### How it works
+
+`tenant.NewMiddleware` — the single choke point every one of ~25
+tenant-scoped route groups already shares — now checks for an
+`Authorization: Bearer flx_live_...` header before falling back to the
+session cookie. A match calls `apikey.Service.Authenticate` (hash
+lookup, `revoked_at IS NULL` check, best-effort `last_used_at` stamp —
+previously a dead column) and populates the exact same context
+(`tenant.OrgID`/`UserID`) a session would, plus a new
+`tenant.APIKeyScope`. Nothing downstream — 82 mutating routes across 17
+packages, every handler — needed to change.
+
+`RequirePermission` branches on `tenant.APIKeyScope`: present means skip
+the membership-table `HasPermission` query entirely and evaluate
+`apiKeyScopeAllows` instead — a pure string-suffix rule, no DB round
+trip. `read` = every `*.read` key; `write` = read plus every `*.write`
+key **except** `team.write`/`settings.write` (an integration was never
+meant to manage the roster or org security settings, even at its most
+permissive non-admin tier); `admin` = everything, matching an Owner's
+session.
+
+`userID` on an API-key-authenticated request is the key's creator
+(`created_by_user_id`) — used only for audit attribution (e.g. a
+campaign's `created_by_user_id`), never re-checked against
+`memberships`. A key deliberately outlives its creator's own membership:
+an integration set up by someone who has since left the org shouldn't
+silently break, the same way a Stripe or GitHub key isn't tied to its
+creator's continued employment — explicit revocation is the intended
+control.
+
+`RequireSameOrigin` (CSRF) needed no change: its own doc comment already
+treats an absent `Origin` header as "non-browser client," which is
+exactly what every API-key request looks like.
+
+### Frontend
+
+`features/settings/api-keys-panel.tsx`'s copy — changed by finding #4's
+first pass to say "API authentication isn't live yet" — is reverted to
+say what's now true: scope's real tiers are spelled out in the create
+dialog, and the one-time key-reveal dialog now shows the
+`Authorization: Bearer <key>` header format, the one piece of
+information actually needed to use the credential.
+
+### Verified
+
+`go build`/`vet`/`test -count=1 ./...` clean, 41 packages, live Postgres.
+New tests: `apikey.TestAuthenticateValidKey` (identity + scope + a real
+`last_used_at` write), `TestAuthenticateRejectsRevokedKey`,
+`TestAuthenticateRejectsUnknownOrGarbageKey`;
+`auth.TestRequirePermissionAPIKeyScope` (6 cases: all three tiers against
+both `team.read` and `team.write` — real, live-mounted keys, not
+synthetic ones). `tsc`/`eslint`/`vitest` (21/21) clean on the frontend
+copy change.
+
+Full live pass against the real running `apps/api` (rebuilt the dev
+Docker image to pick up the change): signed up a real org, verified via
+the real mailhog link, created three real keys (read/write/admin).
+`GET /campaigns` and `GET /team/members` (`team.read`) 200 for all three.
+`POST /campaigns` (`campaign.write`) 403 for read, granted (422 on
+missing fields, then a genuine 201 once a real `trafficSourceId` was
+supplied) for write/admin. `POST /team/members/invite` (`team.write`)
+403 for read **and** write, granted for admin only — confirming the
+write-tier exclusion actually holds against a live request, not just the
+unit test. `PATCH /security` (`settings.write`): identical pattern,
+403/403/200. A garbage Bearer token 401'd; the read key 401'd
+immediately after being revoked through the real `DELETE /api-keys/{id}`
+endpoint. Test org, its campaign/traffic-source/keys, and its user
+deleted afterward via SQL (FK order: campaigns → traffic_sources →
+api_keys → audit_logs → sessions → memberships → users → organizations).
+
+### Known limitation, not addressed this phase
+
+The general 300-req/min rate limit (`apps/internal/httpserver`) stays
+keyed by client IP, unchanged. A single high-volume legitimate
+integration server would share one bucket with anything else behind the
+same IP. Keying it by the API key's own identity instead would need auth
+resolution to happen before the general limiter runs, which currently
+mounts earlier in the middleware chain than tenant resolution does — a
+real restructuring, out of scope for this phase; noted for whoever picks
+up API traffic at real volume.
 
 ## Known limitations (explicitly out of scope for this phase)
 
@@ -384,10 +477,8 @@ this change.
 - **No password reset / MFA.** Email verification shipped later (see
   above) — not requested at the time this phase's scope was confirmed,
   and password reset/MFA still aren't; §52 doesn't call for them either.
-- **No API-key authentication.** `api_keys` (migration `00010`) still
-  exists and is still completely unused — this phase only built session-
-  cookie auth, matching what the user's original request ("Auth /
-  Organizations / RBAC") and §52's own "sessions" bullet named.
+- ~~**No API-key authentication.**~~ — closed, see "API key
+  authentication" below.
 - **No org switcher.** A user who accepts an invite into a second org
   (`TestLoginRequiresOrganizationIDWhenMultipleActiveMemberships`) can log
   into either org by passing `organizationId` at login, but there's no UI

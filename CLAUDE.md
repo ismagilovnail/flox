@@ -19,127 +19,132 @@ referenced below as §N).
 ## CURRENT STATE — UPDATE THIS EVERY PHASE
 
 ```
-CURRENT PHASE : PERMISSION-GATE THE FRONTEND ACTION BUTTONS
-                (finding-#1 follow-up, user-scoped, follows the finding-#7
-                shadcn-devDependencies phase)
-STATUS        : done. Finding #1 enforced campaign.write/offer.write/
-                source.write/content.write/settings.write on the API, but
-                the frontend still showed Create/Edit/Delete/Pause/
-                Archive/Duplicate/Regenerate-secret buttons to every role
-                regardless of permission — a read-only role saw a
-                "Create" button that then 403'd.
-                SCOPED WITH THE USER before starting: whether to also
-                guard the ~14 route-level new-*-view.tsx pages against
-                direct navigation (hiding a list's button alone doesn't
-                stop someone typing /campaigns/new and filling out the
-                whole form before a 403) — user said yes, guard those
-                too, roughly doubling the file count.
-                BUILT: usePermission(key) hook (hooks/use-auth.ts, on top
-                of useMe()'s permissions array) and PermissionDeniedState
-                component (components/ui/permission-denied-state.tsx,
-                matches EmptyState/ErrorState's shape), plus
-                common:permissionDenied.title/.description in both en/ru
-                locales. Convention matches team/member-list.tsx's
-                existing !!me.data?.permissions.includes(key) — extended
-                consistently to the other four write keys for the first
-                time.
-                campaigns/ built FIRST as the reference implementation
-                (done directly, not delegated) because it had the one
-                real subtlety: campaign-form.tsx/tracking-links.tsx
-                already had an "archived" notice tied to a shared
-                disabled prop — a plain disabled = isArchived || !canWrite
-                would have shown "this campaign is archived" to a
-                non-archived campaign's read-only viewer. Fixed with a
-                separate `archived` prop so the notice stays accurate to
-                the real reason. The other four groups (offer.write,
-                source.write, content.write, settings.write) were then
-                built by 4 parallel forks, each given the campaigns/
-                reference files to imitate plus an explicit file list —
-                none of their forms had a pre-existing disabled-tied
-                notice to disambiguate, confirmed by grep before
-                dispatching, so they needed no equivalent complication.
-                BUG FIXED ALONG THE WAY: content-gallery/gallery-
-                browser.tsx's existing role check (Owner/Admin only, and
-                only gating a filter dropdown, not any mutation) was
-                wrong on both counts — content.write's real seeded policy
-                (migration 00035) is Owner/Admin/Manager, and upload/
-                archive/restore/delete had ZERO check before this. Fixed
-                to usePermission("content.write") gating the real
-                mutations. gallery-folder-panel.tsx's folder CRUD also
-                had zero check before and now has one.
-                TAGS HANDLED ONCE: content.write also covers
-                apps/internal/tags (create/update/delete/assignment all
-                behind the same requireWrite). Rather than gating the
-                "Edit Tags" trigger on each of the ~10 host list pages
-                that embed it, tag-picker-popover.tsx and bulk-tag-
-                dialog.tsx — the two shared components every host page's
-                tag mutations actually route through — are gated once,
-                correctly covering every call site with zero per-page
-                duplication.
-                VERIFIED: tsc --noEmit / eslint / vitest (21/21) all
-                clean across every touched file (58 files: campaigns x7,
-                offers x5, networks x5, postbacks x2, traffic-sources x6,
-                landings x5, pwa x5, postlanding x5, pixels x5, content-
-                gallery x2, tags x2, domains x6, plus use-auth.ts + the
-                new PermissionDeniedState + 2 locale files). LIVE IN A
-                REAL BROWSER against the running dev stack (not just
-                static checks): stopped the infra-web-1 docker container
-                to free port 3000 for a local `next dev` bound to it
-                (CORS only allows APP_URL=http://localhost:3000, so a
-                mismatched port silently 503'd every API call — caught
-                and fixed before concluding anything was broken). Signed
-                in as the existing "Browser Verify Org" Owner — New-
-                campaign button visible. Invited and accepted a real
-                Viewer — New buttons hidden across campaigns/offers/
-                networks/pixels/landings; a real seeded traffic source's
-                row actions showed only Edit + View-statistics (Pause/
-                Duplicate/Archive gone); its detail form rendered every
-                field and the Save/Connect buttons disabled; navigating
-                directly to /campaigns/new rendered PermissionDeniedState
-                ("У вас нет прав для этого действия") instead of the
-                form, in the session's own Russian locale — confirming
-                the i18n keys resolve. Test invite and its fixtures
-                deleted afterward via SQL (audit_logs first, FK order);
-                infra-web-1 restarted, ad-hoc dev server killed —
-                environment back to its exact prior state.
+CURRENT PHASE : REAL API-KEY AUTHENTICATION
+                (audit finding #4, closed; follows the finding-#1
+                frontend-button-gating phase)
+STATUS        : done. Finding #4's first pass (earlier phase) left the
+                UI honestly saying "not live yet" and deferred the real
+                feature. SCOPED WITH THE USER before writing code, two
+                decisions: (a) a key authenticates against the exact
+                same route tree a session does — no separate "public
+                API"; (b) the flat read/write/admin scope maps onto the
+                18-permission vocabulary as coarse tiers (read = every
+                *.read key; write = read + every *.write key EXCEPT
+                team.write/settings.write; admin = everything) rather
+                than inheriting the creating user's own role.
+                THE MECHANISM: tenant.NewMiddleware — the single choke
+                point all ~25 tenant-scoped route groups already share
+                via one shared tenantMiddleware in main.go — now checks
+                Authorization: Bearer flx_live_... before falling back
+                to the session cookie. A match calls the new
+                apikey.Service.Authenticate (hash lookup, revoked_at IS
+                NULL check, best-effort last_used_at stamp — previously
+                a dead column, confirmed by finding #4's own earlier
+                research) and populates the SAME context (tenant.OrgID/
+                UserID) a session would, plus a new tenant.APIKeyScope.
+                Zero downstream handlers changed — 82 mutating routes
+                across 17 packages, untouched. RequirePermission branches
+                on APIKeyScope: present skips the membership-table
+                HasPermission DB query entirely, evaluating
+                apiKeyScopeAllows (pure string-suffix logic) instead.
+                userID on an API-key request is the key's creator
+                (created_by_user_id) — audit attribution only, never
+                re-checked against memberships; a key deliberately
+                outlives its creator's own membership (an integration
+                shouldn't break because the employee who set it up
+                left), matching how Stripe/GitHub keys work. CSRF's
+                RequireSameOrigin needed zero changes — it already treats
+                an absent Origin header as a non-browser client.
+                FRONTEND: api-keys-panel.tsx's "not live yet" copy
+                (finding #4's own earlier change) reverted to accurate —
+                the create dialog spells out what each tier grants, the
+                key-reveal dialog now shows the Authorization: Bearer
+                <key> header format.
+                VERIFIED: go build/vet/test -count=1 ./... clean, 41
+                packages, live Postgres. New tests: apikey.Test
+                AuthenticateValidKey/RejectsRevokedKey/
+                RejectsUnknownOrGarbageKey; auth.TestRequirePermission
+                APIKeyScope (6 cases, real live-mounted team.read/
+                team.write keys). tsc/eslint/vitest(21/21) clean on the
+                frontend copy change.
+                LIVE END-TO-END AGAINST THE REAL RUNNING API: rebuilt the
+                dev Docker image (no source volume mount on apps/api,
+                unlike apps/web) to pick up the Go changes. Signed up a
+                real org, verified via a real mailhog link, created three
+                real keys (read/write/admin) through the real session-
+                authenticated /api-keys endpoint. GET /campaigns and GET
+                /team/members (team.read): 200 for all three scopes.
+                POST /campaigns (campaign.write): 403 for read; write and
+                admin got PAST the permission check (422 on missing
+                fields, then a genuine 201 once given a real
+                trafficSourceId) — proving the write path is actually
+                unblocked, not merely not-403. POST /team/members/invite
+                and PATCH /security (team.write/settings.write): 403 for
+                BOTH read and write, granted only for admin — the exact
+                tier-exclusion the scoping decision called for, confirmed
+                against a live request. A garbage Bearer token 401'd; the
+                read key 401'd immediately after a real DELETE
+                /api-keys/{id}. Test org (its campaign, traffic source,
+                keys, user) deleted afterward via SQL, FK order respected
+                (campaigns -> traffic_sources -> api_keys -> audit_logs
+                -> sessions -> memberships -> users -> organizations).
+                DOCS: docs/auth.md gets a full "API key authentication"
+                section (mirrors "RBAC route coverage"'s style) plus two
+                stale bullets struck through (the frontend-button-gating
+                gap, closed by the prior phase; "no API-key auth", closed
+                by this one). docs/security.md gets a new §6 plus its
+                finding-#4 Known-limitations bullet struck through.
+                NOT addressed, called out honestly: the general rate
+                limit stays IP-keyed, so a high-volume legitimate
+                integration shares one bucket with anything else behind
+                its IP — fixing that needs auth to resolve before the
+                general limiter runs (it currently mounts earlier in the
+                chain), a bigger restructuring than this phase scoped.
 LAST COMMIT   : (this phase's own work is uncommitted, see below). Before
-                it: 734e54d chore(deps): move shadcn's CLI to
-                devDependencies (audit finding #7); d75198d chore(deps):
-                bump Go to 1.26.6 (audit finding #6); e757aaa
-                fix(settings): stop claiming API keys authenticate calls
-                (audit finding #4); 2058b1b fix(security): trusted-proxy
-                IP resolution & pending-login lockout (audit findings #2,
+                it: 13ae03c feat(web): permission-gate action buttons
+                across the API's five write keys (finding-#1 follow-up);
+                734e54d chore(deps): move shadcn's CLI to devDependencies
+                (audit finding #7); d75198d chore(deps): bump Go to
+                1.26.6 (audit finding #6); e757aaa fix(settings): stop
+                claiming API keys authenticate calls (audit finding #4,
+                first pass); 2058b1b fix(security): trusted-proxy IP
+                resolution & pending-login lockout (audit findings #2,
                 #3); 1e45953 fix(auth): enforce RBAC on every mutating
                 route (audit finding #1) — full detail for all in
                 CHANGELOG.md.
 UNCOMMITTED   : this phase's own work, about to be committed as one
-                logical commit — all 58 files listed under VERIFIED
-                above. Deliberately left out, unrelated and predating
-                this phase: ROADMAP.md, apps/e2e/scenario_test.go,
-                apps/web/src/lib/api/networks.ts and offers.ts remain
-                unstaged from the older repo+plan-audit pass; whoever
-                picks those up next should check they're still wanted.
+                logical commit — apps/internal/tenant/tenant.go (bearer-
+                token branch + APIKeyScope); apps/internal/apikey/
+                {model,crypto,repository,service}.go (Authenticate,
+                FindByHash, UpdateLastUsed, logger dependency) +
+                apikey_test.go (new tests + newService helper);
+                apps/internal/auth/service.go (RequirePermission's scope
+                branch + apiKeyScopeAllows) + auth_test.go (new fakes +
+                TestRequirePermissionAPIKeyScope); apps/api/main.go
+                (apiKeySvc constructed once, threaded into
+                tenant.NewMiddleware); apps/web/src/features/settings/
+                api-keys-panel.tsx; docs/auth.md; docs/security.md;
+                CHANGELOG.md; this CLAUDE.md edit. Deliberately left out,
+                unrelated and predating this phase: ROADMAP.md,
+                apps/e2e/scenario_test.go, apps/web/src/lib/api/
+                networks.ts and offers.ts remain unstaged from the older
+                repo+plan-audit pass; whoever picks those up next should
+                check they're still wanted.
 NEXT          : confirm scope before starting. All 7 numbered audit
-                findings are resolved or explicitly deferred by user
-                decision (see finding-#7 phase's own NEXT for the full
-                list); this phase closes the frontend follow-up finding
-                #1 left open. Still open, none of them numbered findings:
-                setting TRUSTED_PROXIES to a real value once an actual
-                reverse proxy/LB/CDN is deployed (finding-#2 phase);
-                scoping real API-key authentication as its own phase
-                whenever it's wanted (finding-#4, deferred); the 3
+                findings are now fully resolved (finding #4 was the last
+                one carrying a deferred half). Still open, none of them
+                numbered findings: setting TRUSTED_PROXIES to a real
+                value once an actual reverse proxy/LB/CDN is deployed
+                (finding-#2 phase; confirmed via AskUserQuestion that
+                none exists yet, nothing to do until one does); the 3
                 golang.org/x/crypto advisories surfaced in finding-#6's
                 govulncheck run (dependency hygiene, not a live
-                vulnerability today). Also worth a look, found but not
-                acted on this phase: domain-form.tsx's MultiSelect
-                (Purpose field) has no native disabled prop and stays
-                interactively editable even when the rest of the form is
-                locked (its per-field disabled-prop approach, unlike
-                pwa-form.tsx/postlanding-form.tsx/pixel-form.tsx's native
-                `<fieldset disabled>` wrapper, which correctly locks a
-                MultiSelect's button too) — the submit button still
-                blocks the actual write, so this is UX polish, not a
-                security gap.
+                vulnerability); the general rate limit's IP-keying not
+                fitting high-volume API-key traffic well (this phase's
+                own known limitation, above); domain-form.tsx's
+                MultiSelect field lacking a native disabled prop (UX
+                polish, not security, flagged in the finding-#1-follow-up
+                phase).
 ```
 
 > At the end of every phase: update the four lines above, add a CHANGELOG entry,

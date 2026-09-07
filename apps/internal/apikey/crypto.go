@@ -9,6 +9,13 @@ import (
 	"strings"
 )
 
+// keyPrefix is the fixed, publicly-known prefix on every key this package
+// mints — checking it before a DB round trip lets Authenticate reject
+// obviously-garbage input (a stray Bearer token from some other service)
+// for free, the same way an S3 access key or a Stripe secret key's own
+// prefix works.
+const keyPrefix = "flx_live_"
+
 // newKey mirrors the frontend mock's own exact format
 // (stores/settings.ts's createApiKey, kept identical so this real
 // backend produces keys indistinguishable in shape from what the UI
@@ -23,8 +30,8 @@ func newKey() (fullKey, prefix, hash string, err error) {
 		return "", "", "", fmt.Errorf("generating api key: %w", err)
 	}
 	secret := strings.ToLower(base32.StdEncoding.WithPadding(base32.NoPadding).EncodeToString(buf))
-	fullKey = "flx_live_" + secret
-	prefix = "flx_live_" + secret[:4] + "..."
+	fullKey = keyPrefix + secret
+	prefix = keyPrefix + secret[:4] + "..."
 	return fullKey, prefix, hashKey(fullKey), nil
 }
 

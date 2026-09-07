@@ -797,6 +797,25 @@ func (f fixedResolver) ResolveSession(ctx context.Context, token string) (string
 	return f.orgID, f.userID, nil
 }
 
+// nilAPIKeyAuthenticator implements tenant.APIKeyAuthenticator by always
+// rejecting — every cookie-based subtest never sends an Authorization
+// header, so this is never actually invoked; it exists only to satisfy
+// tenant.NewMiddleware's signature.
+type nilAPIKeyAuthenticator struct{}
+
+func (nilAPIKeyAuthenticator) Authenticate(ctx context.Context, rawKey string) (string, string, string, error) {
+	return "", "", "", apierror.Unauthorized("invalid api key")
+}
+
+// fixedAPIKeyAuthenticator implements tenant.APIKeyAuthenticator by
+// ignoring the raw key and always resolving to one fixed identity/scope —
+// same rationale as fixedResolver above, for TestRequirePermissionAPIKeyScope.
+type fixedAPIKeyAuthenticator struct{ orgID, userID, scope string }
+
+func (f fixedAPIKeyAuthenticator) Authenticate(ctx context.Context, rawKey string) (string, string, string, error) {
+	return f.orgID, f.userID, f.scope, nil
+}
+
 func TestRequirePermissionMiddleware(t *testing.T) {
 	pool := mustPool(t)
 	svc := newService(pool)
@@ -818,7 +837,7 @@ func TestRequirePermissionMiddleware(t *testing.T) {
 
 	handlerFor := func(userID, orgID string) http.Handler {
 		protected := requireWrite(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(http.StatusOK) }))
-		return tenant.NewMiddleware(fixedResolver{orgID: orgID, userID: userID}, logger, false)(protected)
+		return tenant.NewMiddleware(fixedResolver{orgID: orgID, userID: userID}, nilAPIKeyAuthenticator{}, logger, false)(protected)
 	}
 
 	newRequest := func() *http.Request {
@@ -842,6 +861,54 @@ func TestRequirePermissionMiddleware(t *testing.T) {
 			t.Fatalf("status = %d, want 403 for Viewer", rec.Code)
 		}
 	})
+}
+
+// TestRequirePermissionAPIKeyScope exercises RequirePermission's other
+// branch — no membership row, no DB query, purely apiKeyScopeAllows's
+// suffix rule (audit finding #4's real-auth follow-up). team.read/
+// team.write are real, live-mounted permission keys (team_handler.go) —
+// using them here means this test is checking the exact same keys a real
+// request would, not a synthetic one that happens to never be wired to a
+// route.
+func TestRequirePermissionAPIKeyScope(t *testing.T) {
+	logger := logging.New("error")
+	svc := newService(mustPool(t))
+	requireRead := svc.RequirePermission("team.read", logger)
+	requireWrite := svc.RequirePermission("team.write", logger)
+
+	build := func(scope string, requirePerm func(http.Handler) http.Handler) http.Handler {
+		protected := requirePerm(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(http.StatusOK) }))
+		return tenant.NewMiddleware(fixedResolver{}, fixedAPIKeyAuthenticator{orgID: "org1", userID: "creator1", scope: scope}, logger, false)(protected)
+	}
+
+	newRequest := func() *http.Request {
+		req := httptest.NewRequest(http.MethodPost, "/team/members/invite", nil)
+		req.Header.Set("Authorization", "Bearer flx_live_irrelevant-fixedAPIKeyAuthenticator-ignores-it")
+		return req
+	}
+
+	cases := []struct {
+		name        string
+		scope       string
+		requirePerm func(http.Handler) http.Handler
+		wantStatus  int
+	}{
+		{"read scope allows team.read", "read", requireRead, http.StatusOK},
+		{"read scope denies team.write", "read", requireWrite, http.StatusForbidden},
+		{"write scope allows team.read", "write", requireRead, http.StatusOK},
+		{"write scope denies team.write (excluded even at write tier)", "write", requireWrite, http.StatusForbidden},
+		{"admin scope allows team.read", "admin", requireRead, http.StatusOK},
+		{"admin scope allows team.write", "admin", requireWrite, http.StatusOK},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			rec := httptest.NewRecorder()
+			build(tc.scope, tc.requirePerm).ServeHTTP(rec, newRequest())
+			if rec.Code != tc.wantStatus {
+				t.Fatalf("status = %d, want %d", rec.Code, tc.wantStatus)
+			}
+		})
+	}
 }
 
 func tokenFromURL(t *testing.T, rawURL string) string {

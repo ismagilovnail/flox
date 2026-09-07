@@ -442,13 +442,25 @@ func (s *Service) Me(ctx context.Context, userID, orgID string) (WhoAmI, error) 
 
 // RequirePermission is a chi-compatible middleware factory — mount it
 // after the tenant middleware on any route this org's role-based access
-// control should gate. Confirmed via AskUserQuestion: this phase wires it
-// onto this package's own team endpoints only; applying it across every
-// pre-existing domain route is an explicit, separate follow-up (see
-// package doc comment).
+// control should gate.
+//
+// An API-key-authenticated request (tenant.APIKeyScope set — see
+// tenant.NewMiddleware) never reaches HasPermission's membership query at
+// all: a key has no membership row of its own to check (see
+// apikey.Service.Authenticate's own comment on why), so permission is
+// decided purely by apiKeyScopeAllows's scope-tier rule instead.
 func (s *Service) RequirePermission(permissionKey string, logger *slog.Logger) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if scope, ok := tenant.APIKeyScope(r.Context()); ok {
+				if !apiKeyScopeAllows(scope, permissionKey) {
+					apierror.Write(w, logger, apierror.Forbidden("missing permission: "+permissionKey))
+					return
+				}
+				next.ServeHTTP(w, r)
+				return
+			}
+
 			orgID, _ := tenant.OrgID(r.Context())
 			userID, _ := tenant.UserID(r.Context())
 
@@ -463,6 +475,30 @@ func (s *Service) RequirePermission(permissionKey string, logger *slog.Logger) f
 			}
 			next.ServeHTTP(w, r)
 		})
+	}
+}
+
+// apiKeyScopeAllows maps an API key's flat "read"/"write"/"admin" scope
+// onto the 18-key permission vocabulary as coarse tiers, purely by key
+// suffix — no DB query, unlike a session's HasPermission. Confirmed via
+// AskUserQuestion (the finding-#4 follow-up): read = every *.read key;
+// write = read plus every *.write key EXCEPT team.write/settings.write
+// (an integration key was never meant to manage the team roster or org
+// security settings, even at its most permissive non-admin tier); admin =
+// everything, matching what an Owner's session would pass.
+func apiKeyScopeAllows(scope, permissionKey string) bool {
+	switch scope {
+	case "admin":
+		return true
+	case "write":
+		if permissionKey == "team.write" || permissionKey == "settings.write" {
+			return false
+		}
+		return strings.HasSuffix(permissionKey, ".read") || strings.HasSuffix(permissionKey, ".write")
+	case "read":
+		return strings.HasSuffix(permissionKey, ".read")
+	default:
+		return false
 	}
 }
 

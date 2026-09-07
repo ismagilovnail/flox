@@ -10,7 +10,12 @@ import (
 
 	"github.com/ismagilovnail/flox/apps/internal/apikey"
 	"github.com/ismagilovnail/flox/apps/internal/idgen"
+	"github.com/ismagilovnail/flox/apps/internal/logging"
 )
+
+func newService(pool *pgxpool.Pool) *apikey.Service {
+	return apikey.NewService(apikey.NewRepository(pool), logging.New("error"))
+}
 
 func mustPool(t *testing.T) *pgxpool.Pool {
 	t.Helper()
@@ -43,7 +48,7 @@ func TestCreateListRevoke(t *testing.T) {
 	pool := mustPool(t)
 	ctx := context.Background()
 	orgID, userID := seedOrgAndUser(t, ctx, pool)
-	svc := apikey.NewService(apikey.NewRepository(pool))
+	svc := newService(pool)
 
 	result, err := svc.Create(ctx, orgID, userID, apikey.CreateInput{Name: "Reporting export", Scope: apikey.ScopeRead})
 	if err != nil {
@@ -83,7 +88,7 @@ func TestCreateRejectsInvalidInput(t *testing.T) {
 	pool := mustPool(t)
 	ctx := context.Background()
 	orgID, userID := seedOrgAndUser(t, ctx, pool)
-	svc := apikey.NewService(apikey.NewRepository(pool))
+	svc := newService(pool)
 
 	if _, err := svc.Create(ctx, orgID, userID, apikey.CreateInput{Name: "A", Scope: apikey.ScopeRead}); err == nil {
 		t.Error("too-short name accepted")
@@ -97,7 +102,7 @@ func TestRevokeIsIdempotentlyRejectedTwice(t *testing.T) {
 	pool := mustPool(t)
 	ctx := context.Background()
 	orgID, userID := seedOrgAndUser(t, ctx, pool)
-	svc := apikey.NewService(apikey.NewRepository(pool))
+	svc := newService(pool)
 
 	result, err := svc.Create(ctx, orgID, userID, apikey.CreateInput{Name: "Once", Scope: apikey.ScopeWrite})
 	if err != nil {
@@ -116,7 +121,7 @@ func TestCrossOrgIsolation(t *testing.T) {
 	ctx := context.Background()
 	orgA, userA := seedOrgAndUser(t, ctx, pool)
 	orgB, _ := seedOrgAndUser(t, ctx, pool)
-	svc := apikey.NewService(apikey.NewRepository(pool))
+	svc := newService(pool)
 
 	created, err := svc.Create(ctx, orgA, userA, apikey.CreateInput{Name: "Org A Key", Scope: apikey.ScopeRead})
 	if err != nil {
@@ -132,5 +137,77 @@ func TestCrossOrgIsolation(t *testing.T) {
 	}
 	if err := svc.Revoke(ctx, orgB, created.ApiKey.ID); err == nil {
 		t.Fatal("org B revoked org A's key, want not-found")
+	}
+}
+
+func TestAuthenticateValidKey(t *testing.T) {
+	pool := mustPool(t)
+	ctx := context.Background()
+	orgID, userID := seedOrgAndUser(t, ctx, pool)
+	svc := newService(pool)
+
+	created, err := svc.Create(ctx, orgID, userID, apikey.CreateInput{Name: "Integration", Scope: apikey.ScopeWrite})
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+
+	gotOrg, gotUser, gotScope, err := svc.Authenticate(ctx, created.FullKey)
+	if err != nil {
+		t.Fatalf("Authenticate: %v", err)
+	}
+	if gotOrg != orgID {
+		t.Errorf("organizationID = %q, want %q", gotOrg, orgID)
+	}
+	if gotUser != userID {
+		t.Errorf("userID = %q, want the key's creator %q", gotUser, userID)
+	}
+	if gotScope != string(apikey.ScopeWrite) {
+		t.Errorf("scope = %q, want %q", gotScope, apikey.ScopeWrite)
+	}
+
+	// last_used_at was a dead column before this phase (finding #4) —
+	// confirm Authenticate actually wrote it, not just returned identity.
+	list, err := svc.List(ctx, orgID)
+	if err != nil {
+		t.Fatalf("List: %v", err)
+	}
+	if len(list) != 1 || list[0].LastUsedAt == nil {
+		t.Fatalf("List = %+v, want the authenticated key's LastUsedAt set", list)
+	}
+}
+
+func TestAuthenticateRejectsRevokedKey(t *testing.T) {
+	pool := mustPool(t)
+	ctx := context.Background()
+	orgID, userID := seedOrgAndUser(t, ctx, pool)
+	svc := newService(pool)
+
+	created, err := svc.Create(ctx, orgID, userID, apikey.CreateInput{Name: "To be revoked", Scope: apikey.ScopeAdmin})
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	if err := svc.Revoke(ctx, orgID, created.ApiKey.ID); err != nil {
+		t.Fatalf("Revoke: %v", err)
+	}
+
+	if _, _, _, err := svc.Authenticate(ctx, created.FullKey); err == nil {
+		t.Fatal("Authenticate accepted a revoked key")
+	}
+}
+
+func TestAuthenticateRejectsUnknownOrGarbageKey(t *testing.T) {
+	pool := mustPool(t)
+	ctx := context.Background()
+	svc := newService(pool)
+
+	cases := []string{
+		"flx_live_" + strings.Repeat("z", 32), // right shape, never issued
+		"not-even-the-right-prefix",
+		"",
+	}
+	for _, raw := range cases {
+		if _, _, _, err := svc.Authenticate(ctx, raw); err == nil {
+			t.Errorf("Authenticate(%q) accepted, want rejected", raw)
+		}
 	}
 }

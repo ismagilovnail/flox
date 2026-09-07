@@ -141,6 +141,22 @@ deletes the pending row immediately (`DeletePendingTOTPLogin`), forcing a
 fresh `Login` call — the same "wrong attempt costs the whole token" trade
 `VerifyEmail`/invite tokens already make elsewhere in this file.
 
+## 6. API key authentication (audit finding #4, closed)
+
+`apps/internal/apikey`'s `Create`/`List`/`Revoke` were real, hashed
+credential bookkeeping, but nothing ever authenticated a request with
+one — no `Authorization` middleware existed anywhere, and the
+`read`/`write`/`admin` scope stored per key was read by zero handlers.
+Confirmed and fixed: `tenant.NewMiddleware` (the one choke point every
+tenant-scoped route already shares) now checks `Authorization: Bearer
+flx_live_...` before falling back to the session cookie, calling
+`apikey.Service.Authenticate` (hash lookup, `revoked_at IS NULL` check,
+best-effort `last_used_at` stamp). `RequirePermission` evaluates a
+key's scope as a coarse tier — `read`/`write`(minus `team.write` and
+`settings.write`)/`admin` — by permission-key suffix, no DB query.
+Full detail, including the live end-to-end verification against a real
+running API, is in `docs/auth.md`'s "API key authentication" section.
+
 ## Known limitations
 
 - No CAPTCHA/device-fingerprinting on `/auth/login`/`/auth/signup` — rate
@@ -156,13 +172,11 @@ fresh `Login` call — the same "wrong attempt costs the whole token" trade
   is not throttled by this layer; that's an infrastructure/WAF concern.
 - No CSP/security-header hardening (`X-Frame-Options`, `Content-Security-
   Policy`, ...) — out of scope for this phase, not requested.
-- API keys (Settings > API keys, `apps/internal/apikey`) authenticate
-  nothing (audit finding #4): `Create`/`List`/`Revoke` are real, hashed
-  credential bookkeeping, but no request path ever looks a key up —
-  there is no `Authorization`/`X-Api-Key` middleware anywhere in the
-  tree, and the `read`/`write`/`admin` scope stored per key is never
-  read by any handler. The Settings UI now says so explicitly rather
-  than implying otherwise; building real key authentication is a
-  dedicated future phase (route surface, rate limiting, and mapping the
-  flat scope onto the 18-permission RBAC model all need their own
-  design), not a security patch.
+- ~~API keys authenticate nothing (audit finding #4)~~ — closed, see §6
+  above.
+- API-key-authenticated requests share the general rate limit's
+  IP-keyed bucket with everything else behind the same address (§3) —
+  a single high-volume legitimate integration server could exhaust it.
+  Fixing this needs auth resolution to happen before the general
+  limiter runs, which is a bigger restructuring than §6's phase scoped;
+  noted for whoever picks up API traffic at real volume.

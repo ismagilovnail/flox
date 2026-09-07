@@ -19,6 +19,7 @@ import (
 	"context"
 	"log/slog"
 	"net/http"
+	"strings"
 
 	"github.com/ismagilovnail/flox/apps/internal/apierror"
 )
@@ -38,6 +39,7 @@ const CookieName = "flox_session"
 
 type contextKey struct{}
 type userContextKey struct{}
+type apiKeyScopeContextKey struct{}
 
 // SessionResolver validates a raw session token (the cookie's value) and
 // returns the organization/user it belongs to. Implemented by
@@ -49,17 +51,45 @@ type SessionResolver interface {
 	ResolveSession(ctx context.Context, token string) (organizationID, userID string, err error)
 }
 
+// APIKeyAuthenticator validates a raw API key (an Authorization: Bearer
+// token) and returns the organization it belongs to, the user who created
+// it (for audit attribution only — see NewMiddleware's own comment), and
+// its scope ("read"/"write"/"admin", checked by
+// apps/internal/auth.Service.RequirePermission). Implemented by
+// apps/internal/apikey.Service — declared here, at the point of use, for
+// the same import-cycle reason as SessionResolver.
+type APIKeyAuthenticator interface {
+	Authenticate(ctx context.Context, rawKey string) (organizationID, userID, scope string, err error)
+}
+
 // NewMiddleware builds the chi-compatible middleware every tenant-scoped
-// route mounts. A request with no session cookie, or one ResolveSession
-// rejects, never reaches a handler.
+// route mounts. A request with no session cookie and no valid API key
+// never reaches a handler.
 //
 // secureCookies must match the Secure attribute auth.Handler used when it
 // set the cookie (false in local dev, true anywhere served over HTTPS) —
 // clearing a cookie is itself a Set-Cookie, and a mismatched Secure flag
 // means the browser won't recognize it as the same cookie to overwrite.
-func NewMiddleware(resolver SessionResolver, logger *slog.Logger, secureCookies bool) func(http.Handler) http.Handler {
+func NewMiddleware(resolver SessionResolver, apiKeys APIKeyAuthenticator, logger *slog.Logger, secureCookies bool) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			// A Bearer token takes priority over any cookie present — a
+			// server-to-server integration call has no reason to carry a
+			// browser's session cookie too, but if both somehow are, the
+			// explicit credential the caller chose to send wins.
+			if rawKey, ok := bearerToken(r); ok {
+				orgID, userID, scope, err := apiKeys.Authenticate(r.Context(), rawKey)
+				if err != nil {
+					apierror.Write(w, logger, err)
+					return
+				}
+				ctx := context.WithValue(r.Context(), contextKey{}, orgID)
+				ctx = context.WithValue(ctx, userContextKey{}, userID)
+				ctx = context.WithValue(ctx, apiKeyScopeContextKey{}, scope)
+				next.ServeHTTP(w, r.WithContext(ctx))
+				return
+			}
+
 			cookie, err := r.Cookie(CookieName)
 			if err != nil || cookie.Value == "" {
 				apierror.Write(w, logger, apierror.Unauthorized("not signed in"))
@@ -89,6 +119,18 @@ func NewMiddleware(resolver SessionResolver, logger *slog.Logger, secureCookies 
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	}
+}
+
+// bearerToken extracts an "Authorization: Bearer <token>" header's token,
+// or ok=false if the header is absent or a different scheme.
+func bearerToken(r *http.Request) (string, bool) {
+	const prefix = "Bearer "
+	h := r.Header.Get("Authorization")
+	if !strings.HasPrefix(h, prefix) {
+		return "", false
+	}
+	token := strings.TrimSpace(h[len(prefix):])
+	return token, token != ""
 }
 
 // clearSessionCookie mirrors apps/internal/auth.Handler's own (unexported)
@@ -150,9 +192,21 @@ func OrgID(ctx context.Context) (string, bool) {
 	return v, ok
 }
 
-// UserID returns the current request's authenticated user id. Same
-// programmer-error contract as OrgID.
+// UserID returns the current request's authenticated user id. For an
+// API-key-authenticated request this is the key's creator, not a user with
+// their own active membership backing this request — see NewMiddleware's
+// APIKeyAuthenticator doc comment. Same programmer-error contract as OrgID.
 func UserID(ctx context.Context) (string, bool) {
 	v, ok := ctx.Value(userContextKey{}).(string)
+	return v, ok
+}
+
+// APIKeyScope returns the current request's API key scope
+// ("read"/"write"/"admin") and true, or ("", false) when the request was
+// authenticated by session cookie rather than an API key —
+// auth.Service.RequirePermission branches on this to check a scope tier
+// instead of querying memberships.
+func APIKeyScope(ctx context.Context) (string, bool) {
+	v, ok := ctx.Value(apiKeyScopeContextKey{}).(string)
 	return v, ok
 }

@@ -5,6 +5,66 @@ per-phase, matching `CLAUDE.md`'s phase protocol. The one exception is
 [Between phases], below: spec amendments and the code changes that follow from
 them land between phases and would otherwise be invisible here.
 
+## [Security] — real API-key authentication (audit finding #4, closed)
+
+`apps/internal/apikey`'s `Create`/`List`/`Revoke` were real, hashed
+credential bookkeeping, but nothing ever authenticated a request with one
+— no `Authorization` middleware existed anywhere, and the stored
+`read`/`write`/`admin` scope was read by zero handlers.
+
+Confirmed via `AskUserQuestion`: a key authenticates against the exact
+same route tree a session does (no separate "public API"), and the flat
+scope maps onto the 18-permission vocabulary as coarse tiers rather than
+inheriting the creator's own role.
+
+### The fix
+
+`tenant.NewMiddleware` — the single choke point every one of ~25
+tenant-scoped route groups already shares — checks `Authorization: Bearer
+flx_live_...` before falling back to the session cookie, calling a new
+`apikey.Service.Authenticate` (hash lookup, `revoked_at IS NULL` check,
+best-effort `last_used_at` stamp — previously a dead column). Zero
+downstream handlers changed. `RequirePermission` branches on a new
+`tenant.APIKeyScope`: present means skip the membership-table DB query
+entirely and evaluate a pure string-suffix rule instead — `read` = every
+`*.read` key; `write` = read plus every `*.write` key except
+`team.write`/`settings.write`; `admin` = everything. `userID` on an
+API-key request is the key's creator, used only for audit attribution —
+never re-checked against `memberships`, so a key outlives its creator's
+own membership by design (like a Stripe or GitHub key). CSRF's
+`RequireSameOrigin` needed no change: it already treats an absent
+`Origin` header as a non-browser client.
+
+`features/settings/api-keys-panel.tsx`'s "not live yet" copy (from
+finding #4's first pass) is reverted to accurate, with the create
+dialog now spelling out what each tier actually grants and the
+key-reveal dialog showing the `Authorization: Bearer <key>` header
+format.
+
+### Verified
+
+`go build`/`vet`/`test -count=1 ./...` clean, 41 packages, live Postgres
+— new tests cover `Authenticate` (valid/revoked/garbage keys, a real
+`last_used_at` write) and `RequirePermission`'s scope-tier branch (6
+cases against real, live-mounted `team.read`/`team.write` keys).
+`tsc`/`eslint`/`vitest` clean on the frontend copy.
+
+Full live pass against the real running API (rebuilt the dev Docker
+image): signed up a real org, verified via mailhog, created three real
+keys. `GET /campaigns`/`GET /team/members` 200 for all three scopes.
+`POST /campaigns` 403 for read, a genuine 201 for write once given valid
+fields. `POST /team/members/invite` and `PATCH /security` both 403 for
+read AND write, 200s/passes-permission only for admin — confirming the
+`team.write`/`settings.write` exclusion holds against a live request,
+not just the unit test. A garbage Bearer token 401'd; a revoked key
+401'd immediately after a real `DELETE /api-keys/{id}`. Test org and its
+fixtures deleted afterward via SQL, FK order respected.
+
+Known limitation, not addressed: the general rate limit stays IP-keyed,
+so a high-volume legitimate integration shares one bucket with anything
+else behind its IP — fixing that needs auth to resolve before the
+general limiter runs, a bigger restructuring than this phase scoped.
+
 ## [Security] — permission-gate the frontend action buttons (finding #1 follow-up)
 
 Finding #1's RBAC fix enforced `campaign.write`/`offer.write`/`source.write`/

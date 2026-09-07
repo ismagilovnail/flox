@@ -241,14 +241,24 @@ func run() error {
 		return err
 	}
 
+	// apiKeySvc is constructed here, ahead of tenant.NewMiddleware, so the
+	// same instance both authenticates every tenant-scoped request's
+	// Authorization: Bearer header (security audit finding #4's real-auth
+	// follow-up) and serves the Settings > API keys panel's own CRUD
+	// routes further down — one Service, not two.
+	apiKeySvc := apikey.NewService(apikey.NewRepository(db), logger)
+
 	// §54/Phase 30: RequireSameOrigin runs OUTSIDE (before) session
 	// resolution — rejecting a forged cross-origin mutation is cheaper
-	// and safer than first looking up whose session it claims to be.
+	// and safer than first looking up whose session it claims to be. A
+	// Bearer-token request naturally has no Origin header (RequireSameOrigin's
+	// own doc comment: absence means a non-browser client), so this needs
+	// no special-casing for API keys.
 	// tenantMiddleware keeps its original name/type (func(http.Handler)
 	// http.Handler) even though it's now two middlewares composed, so
 	// none of this file's r.Use(tenantMiddleware) call sites change.
 	csrfCheck := tenant.RequireSameOrigin(cfg.AppURL, logger)
-	sessionCheck := tenant.NewMiddleware(authSvc, logger, cfg.Env != "development")
+	sessionCheck := tenant.NewMiddleware(authSvc, apiKeySvc, logger, cfg.Env != "development")
 	tenantMiddleware := func(next http.Handler) http.Handler { return csrfCheck(sessionCheck(next)) }
 
 	// §52 RBAC. Until the 2026-09-06 audit, RequirePermission gated only
@@ -390,7 +400,7 @@ func run() error {
 	})
 
 	apiKeyHandler := apikey.NewHandler(
-		apikey.NewService(apikey.NewRepository(db)),
+		apiKeySvc,
 		requireSettingsWrite,
 		logger,
 	)

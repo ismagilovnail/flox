@@ -2,6 +2,7 @@ package apikey
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/jackc/pgx/v5"
@@ -62,13 +63,46 @@ func (r *Repository) Create(ctx context.Context, orgID, createdByUserID, prefix,
 	return scan(row)
 }
 
+// FindByHash looks up a key by its SHA-256 hash regardless of org — the
+// caller (Service.Authenticate) doesn't know which org a bearer token
+// belongs to until this returns it, unlike every other method here, which
+// is always scoped to an orgID the caller already resolved another way
+// (a session). Revoked keys are still returned (RevokedAt set, not
+// filtered here) so Authenticate can tell "wrong key" apart from "right
+// key, but revoked" for its own error message, and so a future audit
+// trail has the full row rather than a bare "not found."
+func (r *Repository) FindByHash(ctx context.Context, hash string) (ApiKey, error) {
+	row := r.db.QueryRow(ctx, `SELECT `+columns+` FROM api_keys WHERE key_hash = $1`, hash)
+	k, err := scan(row)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return ApiKey{}, apierror.Unauthorized("invalid api key")
+		}
+		return ApiKey{}, fmt.Errorf("apikey: finding by hash: %w", err)
+	}
+	return k, nil
+}
+
+// UpdateLastUsed stamps last_used_at on a successful Authenticate — best-
+// effort from the caller's side (Service logs and continues on failure
+// rather than rejecting a request over a bookkeeping write); id is already
+// known-valid at this point (FindByHash just returned it), so no rows-
+// affected check is needed the way Revoke's has one.
+func (r *Repository) UpdateLastUsed(ctx context.Context, id string) error {
+	_, err := r.db.Exec(ctx, `UPDATE api_keys SET last_used_at = now() WHERE id = $1`, id)
+	if err != nil {
+		return fmt.Errorf("apikey: updating last_used_at: %w", err)
+	}
+	return nil
+}
+
 // Revoke sets revoked_at rather than deleting the row — the raw key is
 // already unusable the instant a caller checks revoked_at (see
-// Service.Authenticate's own use of this table, if/when one exists),
-// and keeping the row preserves the audit trail (who created it, when,
-// with what scope) for as long as the org exists, matching api_keys'
-// own schema-level design (migration 00010 added revoked_at as a
-// nullable timestamp specifically for this, never a hard delete).
+// Service.Authenticate), and keeping the row preserves the audit trail
+// (who created it, when, with what scope) for as long as the org exists,
+// matching api_keys' own schema-level design (migration 00010 added
+// revoked_at as a nullable timestamp specifically for this, never a hard
+// delete).
 func (r *Repository) Revoke(ctx context.Context, orgID, id string) error {
 	tag, err := r.db.Exec(ctx, `
 		UPDATE api_keys SET revoked_at = now()
