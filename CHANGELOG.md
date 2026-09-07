@@ -5,6 +5,54 @@ per-phase, matching `CLAUDE.md`'s phase protocol. The one exception is
 [Between phases], below: spec amendments and the code changes that follow from
 them land between phases and would otherwise be invisible here.
 
+## [Between phases] — encrypt facebook_ads/tiktok_ads' access_token at rest, closing the last plain-text credential gap
+
+`ad_account_connections.access_token` (facebook_ads/tiktok_ads) was the
+one credential column in the codebase still stored in plain text —
+migration 00018 predated any encryption infrastructure, and Google
+Ads' own developer_token/client_secret/refresh_token (migration 00034)
+deliberately left this column as a flagged, real follow-up rather than
+silently retrofitting it in an unrelated phase. Four AES-256-GCM
+implementations already existed to copy the pattern from (TOTP,
+integrations, adaccount's own Google Ads fields) by the time this
+session picked it as the smallest, clearest remaining security win.
+
+Retrofitted `access_token` onto the exact same `apps/internal/adaccount/
+crypto.go`/`ADACCOUNT_ENCRYPTION_KEY` machinery Google Ads' three
+secrets already use. No schema migration: the column was already
+`text` and ciphertext is text too — only its *format* changed.
+`repository.go`'s `selectColumns` dropped the `right(access_token, 4)`
+SQL-level slice that only worked against plaintext; `scanConnection`
+now decrypts whichever secret is present (`access_token` or
+`refresh_token`) in Go to compute `TokenPreview`, mirroring how
+`refresh_token`'s own preview already worked. `Connect` encrypts via
+`encryptOptional`; `CredentialsByTrafficSourceID` decrypts via
+`decryptOptional` — the same two helpers the other three fields
+already used. No API/wire contract change: `Connection` never had an
+`AccessToken` field (write-only from Phase A), and the frontend's
+`Connect` request shape is unaffected.
+
+Added `TestAccessTokenRoundTripEncryption`, mirroring the existing
+`TestGoogleAdsCredentialsRoundTripEncryption`: connects a real
+plaintext token, reads the raw `access_token` column directly via SQL
+and asserts it is genuinely ciphertext, confirms
+`CredentialsByTrafficSourceID` decrypts it back to the exact original,
+and confirms `TokenPreview` still shows the real last-4 characters.
+The pre-existing `TestConnectGetDisconnect` needed no changes — its
+`TokenPreview` assertion passes unchanged, since the preview's value
+is unaffected by where in the stack it gets sliced from.
+
+Updated `docs/ad-account-connections.md` (added a "Phase D" section,
+left Phase A/Google Ads' own historical sections intact with forward
+pointers rather than rewritten) and `docs/settings-integrations.md`'s
+comparison line, both of which explicitly documented this as a known,
+flagged gap.
+
+Verified: `gofmt`/`go vet`/`go build`/`go test -count=1 ./...` clean
+across all Go packages against live Postgres/ClickHouse/Redis/MinIO,
+including the new test. No frontend changes were needed, so no
+`tsc`/`eslint`/`vitest`/browser pass was required for this phase.
+
 ## [Between phases] — add the stream_set analytics dimension, closing the "no stream_set_id on events" roadmap gap
 
 A prior research pass (this same session) traced the full event lifecycle

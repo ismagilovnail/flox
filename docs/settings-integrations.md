@@ -55,10 +55,14 @@ back in plaintext, unlike a password or API key which only ever need
 one-way comparison (same reasoning `apps/internal/totp.EncryptSecret`'s
 own doc comment gives for TOTP secrets).
 
-`ad_account_connections` (migration 00018, predates this) stores its own
-token in **plain text**, explicitly because no encryption infrastructure
-existed yet at the time. This table doesn't repeat that gap — it uses
-the real AES-256-GCM machinery `apps/internal/totp` already established,
+`ad_account_connections` (migration 00018, predates this) stored its own
+`access_token` in **plain text** at the time this table was built,
+explicitly because no encryption infrastructure existed yet — since
+retrofitted to real AES-256-GCM via the same `ADACCOUNT_ENCRYPTION_KEY`
+machinery Google Ads' own secrets already used (see
+docs/ad-account-connections.md's Phase D). This table never repeated
+that gap in the first place — it uses the real AES-256-GCM machinery
+`apps/internal/totp` already established,
 via its own dedicated `INTEGRATION_ENCRYPTION_KEY` (deliberately a
 separate key from `TOTP_ENCRYPTION_KEY`; rotating or compromising one
 should never force rotating the other). Parsed once at startup

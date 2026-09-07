@@ -189,6 +189,50 @@ func TestGoogleAdsCredentialsRoundTripEncryption(t *testing.T) {
 	}
 }
 
+// TestAccessTokenRoundTripEncryption confirms facebook_ads/tiktok_ads'
+// own access_token is now real AES-256-GCM ciphertext at rest — not just
+// that Connect/CredentialsByTrafficSourceID happen to agree — by reading
+// the raw column value directly and asserting it isn't the plaintext.
+// Mirrors TestGoogleAdsCredentialsRoundTripEncryption above; this column
+// used to be the one deliberately-flagged plain-text exception.
+func TestAccessTokenRoundTripEncryption(t *testing.T) {
+	pool := mustPool(t)
+	ctx := context.Background()
+	orgID := seedOrg(t, ctx, pool)
+	sourceID := seedTrafficSource(t, ctx, pool, orgID, "facebook_ads")
+
+	repo := adaccount.NewRepository(pool, testKey)
+	if _, err := repo.Connect(ctx, idgen.New(), orgID, sourceID, adaccount.ConnectInput{
+		AdAccountID: "act_123456789", AccessToken: "real-plaintext-access-token",
+	}); err != nil {
+		t.Fatalf("Connect: %v", err)
+	}
+
+	var rawAccessToken string
+	if err := pool.QueryRow(ctx, `SELECT access_token FROM ad_account_connections WHERE traffic_source_id = $1`, sourceID).Scan(&rawAccessToken); err != nil {
+		t.Fatalf("reading raw access_token column: %v", err)
+	}
+	if rawAccessToken == "real-plaintext-access-token" {
+		t.Fatal("access_token is stored in plain text, want it AES-256-GCM encrypted")
+	}
+
+	creds, err := repo.CredentialsByTrafficSourceID(ctx, orgID, sourceID)
+	if err != nil {
+		t.Fatalf("CredentialsByTrafficSourceID: %v", err)
+	}
+	if creds.AccessToken != "real-plaintext-access-token" {
+		t.Fatalf("CredentialsByTrafficSourceID.AccessToken = %q, want the exact plaintext round-tripped back", creds.AccessToken)
+	}
+
+	conn, err := repo.GetByTrafficSourceID(ctx, orgID, sourceID)
+	if err != nil {
+		t.Fatalf("GetByTrafficSourceID: %v", err)
+	}
+	if conn.TokenPreview != "oken" {
+		t.Fatalf("TokenPreview = %q, want the last 4 characters of the access token (oken)", conn.TokenPreview)
+	}
+}
+
 func TestConnectRejectsInvalidShapes(t *testing.T) {
 	pool := mustPool(t)
 	ctx := context.Background()

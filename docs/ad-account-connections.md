@@ -51,10 +51,12 @@ time instead (`Repository.TrafficSourceCostIntegration`, a raw
 cross-domain query — same pattern as `streamset`'s own `*BelongsToOrg`
 methods, not a package import) and rejects `none`/`manual`.
 
-## `access_token` is stored in plain text — and never leaves this package as such
+## `access_token` was stored in plain text — and never left this package as such
 
-No KMS/envelope-encryption infrastructure exists anywhere in this
-codebase yet. `api_keys` (migration 00010), the only prior
+Retrofitted to real AES-256-GCM encryption in Phase D, below — this
+section describes Phase A's original design, at a time when no
+encryption infrastructure existed anywhere in this codebase yet.
+`api_keys` (migration 00010), the only prior
 credential-shaped table, sidesteps the problem entirely by only ever
 needing to *verify* a value (a one-way hash suffices); this table's
 token must be read back out in full for a later phase's sync to call
@@ -503,10 +505,11 @@ the two-provider case, now extended to three.
 
 ## Real encryption, not a repeat of `access_token`'s own plain-text gap
 
-`access_token` (Phase A) is plain text — no encryption infrastructure
+`access_token` (Phase A) was plain text — no encryption infrastructure
 existed anywhere in this codebase at the time (that migration's own doc
-comment says so explicitly). It still does, unchanged; retrofitting it
-is separate hardening work, not this phase's job. But `apps/internal/
+comment says so explicitly). At the time this section was written it
+still was, unchanged; retrofitting it was flagged as separate hardening
+work, not this phase's job — Phase D, below, is that work. But `apps/internal/
 totp` and `apps/internal/integrations` have since built real AES-256-GCM
 encryption twice over, each with its own dedicated key — so this phase's
 three new secret fields (`developer_token`, `client_secret`,
@@ -623,7 +626,40 @@ curl pass) deleted afterward.
 - A real, live Google Ads developer account + OAuth client would let
   this adapter be verified against the genuine Ads API end to end, the
   same gap Facebook/TikTok Ads still have.
-- Retrofitting `access_token` (facebook_ads/tiktok_ads) to real
-  encryption, now that this phase and the two before it have all built
-  real AES-256-GCM infrastructure — a deliberate non-goal here, called
-  out explicitly rather than silently left inconsistent.
+
+## Phase D: `access_token` retrofitted to real encryption, closing the last plain-text gap
+
+The one deliberate non-goal this doc's own `NEXT` section used to list.
+`access_token` (facebook_ads/tiktok_ads) now goes through the exact same
+`crypto.go`/`ADACCOUNT_ENCRYPTION_KEY` machinery Google Ads' own
+developer_token/client_secret/refresh_token already used — no schema
+change needed, since `ad_account_connections.access_token` was already
+`text` and ciphertext is text too (no migration; the column's stored
+*format* changed, not its type). `repository.go`'s `selectColumns`
+dropped its `right(access_token, 4)` SQL-level slice (that only worked
+against plaintext) — `scanConnection` now decrypts whichever secret
+column is present (`access_token` for facebook_ads/tiktok_ads,
+`refresh_token` for google_ads) in Go, purely to compute `TokenPreview`,
+mirroring the pattern `refresh_token`'s own preview already used.
+`Connect` encrypts `access_token` via the same `encryptOptional` helper
+the other three fields use; `CredentialsByTrafficSourceID` decrypts it
+back via `decryptOptional`. No API contract change — `Connection` never
+had an `AccessToken` field to begin with (write-only from the start),
+and the request shape a browser sends to `Connect` is unchanged; only
+what Postgres stores changed.
+
+Verified: `TestAccessTokenRoundTripEncryption` (mirrors
+`TestGoogleAdsCredentialsRoundTripEncryption`) connects a real plaintext
+access token, reads the raw `access_token` column directly via SQL and
+asserts it does **not** equal the plaintext, confirms
+`CredentialsByTrafficSourceID` decrypts it back to the exact original,
+and confirms `TokenPreview` still shows the real last-4 characters. The
+existing `TestConnectGetDisconnect` (asserting `TokenPreview` on a fresh
+Connect) needed no changes — the preview's *value* is unaffected by
+where in the stack it gets sliced from. `gofmt`/`go vet`/`go build`/
+`go test -count=1 ./...` clean repo-wide against live Postgres/
+ClickHouse/Redis/MinIO. No frontend change: `apps/web`'s
+`ad-account-connections.ts` only ever sends `accessToken` on `Connect`
+and never reads one back — the wire contract this package's own
+`Connection` doc comment already documented as write-only stays exactly
+that.

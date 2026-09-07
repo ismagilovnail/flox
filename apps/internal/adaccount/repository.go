@@ -16,43 +16,45 @@ type Repository struct {
 	key []byte
 }
 
-// key encrypts/decrypts Google Ads' own developer_token/client_secret/
-// refresh_token columns (see crypto.go) — facebook_ads/tiktok_ads
-// connections never touch it, since access_token stays plain text
-// (migration 00018 predates this encryption infrastructure).
+// key encrypts/decrypts every secret column on ad_account_connections
+// (see crypto.go): Google Ads' own developer_token/client_secret/
+// refresh_token, and facebook_ads/tiktok_ads' own access_token.
 func NewRepository(db *pgxpool.Pool, key []byte) *Repository { return &Repository{db: db, key: key} }
 
 // selectColumns never includes the plaintext of access_token or any of
 // Google Ads' own secret columns — every public read goes through this,
 // so there is no query path in this package that could accidentally
-// leak a raw credential into a JSON response. For facebook_ads/
-// tiktok_ads rows, tokenPreview is computed in SQL (the last 4
-// characters of access_token) — one less place a future edit could
-// reintroduce the full plain-text column into a Go struct that then
-// gets marshaled. Google Ads rows have no plain-text secret for SQL to
-// slice: refresh_token is fetched here still encrypted and decrypted in
-// Go (scanConnection, via the repository's own key) purely to compute
-// its own last-4 preview, never returned as-is.
-const selectColumns = `id, organization_id, traffic_source_id, ad_account_id, right(access_token, 4), refresh_token, created_at, updated_at`
+// leak a raw credential into a JSON response. Both access_token and
+// refresh_token come back here still ciphertext; scanConnection decrypts
+// whichever one is present (via the repository's own key) purely to
+// compute its own last-4 preview, never returning the decrypted value
+// itself. Slicing in SQL (Phase A's original `right(access_token, 4)`)
+// stopped being possible the moment access_token became ciphertext —
+// four sliced ciphertext bytes are meaningless, not four real
+// characters, the same reason refresh_token's own preview was already
+// computed in Go.
+const selectColumns = `id, organization_id, traffic_source_id, ad_account_id, access_token, refresh_token, created_at, updated_at`
 
 func (r *Repository) scanConnection(row pgx.Row) (Connection, error) {
 	var c Connection
-	var accessTokenPreview *string
+	var encryptedAccessToken *string
 	var encryptedRefreshToken *string
-	if err := row.Scan(&c.ID, &c.OrganizationID, &c.TrafficSourceID, &c.AdAccountID, &accessTokenPreview, &encryptedRefreshToken, &c.CreatedAt, &c.UpdatedAt); err != nil {
+	if err := row.Scan(&c.ID, &c.OrganizationID, &c.TrafficSourceID, &c.AdAccountID, &encryptedAccessToken, &encryptedRefreshToken, &c.CreatedAt, &c.UpdatedAt); err != nil {
 		return Connection{}, err
 	}
-	if accessTokenPreview != nil {
-		c.TokenPreview = *accessTokenPreview
-	} else if encryptedRefreshToken != nil {
-		refreshToken, err := decrypt(r.key, *encryptedRefreshToken)
+	encryptedSecret := encryptedAccessToken
+	if encryptedSecret == nil {
+		encryptedSecret = encryptedRefreshToken
+	}
+	if encryptedSecret != nil {
+		secret, err := decrypt(r.key, *encryptedSecret)
 		if err != nil {
 			return Connection{}, err
 		}
-		if len(refreshToken) > 4 {
-			refreshToken = refreshToken[len(refreshToken)-4:]
+		if len(secret) > 4 {
+			secret = secret[len(secret)-4:]
 		}
-		c.TokenPreview = refreshToken
+		c.TokenPreview = secret
 	}
 	return c, nil
 }
@@ -81,9 +83,9 @@ func (r *Repository) GetByTrafficSourceID(ctx context.Context, orgID, trafficSou
 // empty string — a facebook_ads/tiktok_ads row has real NULLs in the
 // three Google Ads columns, and vice versa.
 func (r *Repository) Connect(ctx context.Context, id, orgID, trafficSourceID string, in ConnectInput) (Connection, error) {
-	var accessToken *string
-	if in.AccessToken != "" {
-		accessToken = &in.AccessToken
+	accessToken, err := encryptOptional(r.key, in.AccessToken)
+	if err != nil {
+		return Connection{}, err
 	}
 	developerToken, err := encryptOptional(r.key, in.DeveloperToken)
 	if err != nil {
@@ -151,11 +153,11 @@ func (r *Repository) CredentialsByTrafficSourceID(ctx context.Context, orgID, tr
 	if err != nil {
 		return Credentials{}, err
 	}
-	if accessToken != nil {
-		c.AccessToken = *accessToken
-	}
 	if clientID != nil {
 		c.ClientID = *clientID
+	}
+	if c.AccessToken, err = decryptOptional(r.key, accessToken); err != nil {
+		return Credentials{}, err
 	}
 	if c.DeveloperToken, err = decryptOptional(r.key, developerToken); err != nil {
 		return Credentials{}, err

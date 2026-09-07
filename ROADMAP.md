@@ -99,6 +99,7 @@ session.
 | `offer-columns.tsx` `accessorFn` stale-cache fix (closed the one gap the repo-wide audit left open) | done |
 | `MultiSelect` real `disabled` support (closed domain-form.tsx's permission gap) | done |
 | `stream_set` analytics dimension (closed the stale "no stream_set_id on events" gap — the column already existed and was populated; only the whitelist/registry needed it) | done |
+| `facebook_ads`/`tiktok_ads` `access_token` retrofitted to real AES-256-GCM encryption (Phase D, `docs/ad-account-connections.md`) — no schema change needed, the column was already `text` | done |
 
 ## Known open gaps
 
@@ -107,7 +108,6 @@ scoped phase; none blocks anything that ships today.
 
 | Gap | Where |
 |---|---|
-| `facebook_ads` / `tiktok_ads` `access_token` still stored in plain text | `apps/internal/adaccount` — four AES-256-GCM implementations now exist to copy |
 | `cloudflare_registrar` has no adapter, though Cloudflare works as a DNS provider | `apps/internal/domain/model.go` |
 | SMS/email 2FA as an alternative delivery channel (TOTP only today) | `apps/internal/totp` |
 | Report builder's filter-value dropdown suggests from a fixed pool | no "distinct values for dimension X" endpoint exists — `lib/mock/analytics.ts` |

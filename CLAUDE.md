@@ -19,99 +19,94 @@ referenced below as §N).
 ## CURRENT STATE — UPDATE THIS EVERY PHASE
 
 ```
-CURRENT PHASE : ADD STREAM_SET ANALYTICS DIMENSION (closes "no
-                stream_set_id on events" roadmap gap — query-layer/UI
-                only, per a prior research pass in this same session
-                that found the gap stale: the column already existed
-                and was populated, only the whitelist/registry were
-                missing it)
-STATUS        : done. Backend: chstore.DimStreamSet ("stream_set" ->
-                stream_set_id) added to reportClickColumns and
-                reportConversionColumns — the 12th backed
-                ReportDimension (11 original + this addition). Frontend:
-                "stream_set" added to DimensionKey/DIMENSIONS/i18n
-                (en/ru) and to VIEW_STATS_DIMENSIONS. Stream Sets rows
-                get a "View statistics" link (stream-set-row.tsx) like
-                network/offer/source already have, but passing the
-                set's real .id (not .name, unlike those three
-                pre-existing, partly-decorative links) since stream_set
-                genuinely filters on stream_set_id — the filter chip
-                shows the raw ULID as a disclosed tradeoff
-                (FilterCondition has no display-label field; adding one
-                was out of scope). Empty string preserved as its own
-                real bucket (campaign fallback / blocked click /
-                unattributed conversion), same semantics as flow_id.
-                Extended chstore/report_test.go's fixture with real
-                StreamSetID values incl. an empty-bucket case; added
-                TestReportClicksGroupsByStreamSet and
-                TestReportConversionsGroupsByStreamSetPreservesEmptyBucket
-                against live ClickHouse. Updated
-                docs/analytics-report-api.md's dimension count/section.
+CURRENT PHASE : ENCRYPT ACCESS_TOKEN AT REST (facebook_ads/tiktok_ads —
+                picked from a 3-option menu after "продолжай" with no
+                phase specified; user chose the smallest/clearest
+                security win)
+STATUS        : done. ad_account_connections.access_token — the last
+                credential column in the codebase still stored in plain
+                text (migration 00018 predated any encryption infra;
+                Google Ads' own developer_token/client_secret/
+                refresh_token, migration 00034, deliberately left this
+                one as a flagged follow-up) — now goes through the same
+                apps/internal/adaccount/crypto.go /
+                ADACCOUNT_ENCRYPTION_KEY AES-256-GCM machinery Google
+                Ads' three secrets already use. No schema migration:
+                the column was already `text`, only its stored format
+                changed. repository.go: selectColumns dropped the
+                `right(access_token, 4)` SQL-level slice (only worked
+                on plaintext); scanConnection now decrypts whichever
+                secret is present (access_token or refresh_token) in Go
+                to compute TokenPreview; Connect encrypts via
+                encryptOptional, CredentialsByTrafficSourceID decrypts
+                via decryptOptional — the same two helpers the other
+                three fields already used. No API/wire contract change
+                (Connection never had an AccessToken field; the
+                frontend's Connect request shape is unaffected — no
+                apps/web changes needed at all this phase). Added
+                TestAccessTokenRoundTripEncryption mirroring
+                TestGoogleAdsCredentialsRoundTripEncryption: connects
+                real plaintext, reads the raw access_token column via
+                SQL, asserts it's genuinely ciphertext, confirms
+                CredentialsByTrafficSourceID round-trips it exactly,
+                confirms TokenPreview's real last-4. Updated
+                docs/ad-account-connections.md (new "Phase D" section;
+                Phase A/Google Ads' own historical sections left intact
+                with forward pointers, not rewritten) and
+                docs/settings-integrations.md's comparison line.
                 VERIFIED: gofmt/go vet/go build/go test -count=1 ./...
                 clean, all Go packages, live Postgres/ClickHouse/Redis/
-                MinIO; tsc --noEmit/eslint/vitest clean on apps/web.
-                Real browser pass: signed up a test org, created a
-                campaign with two real Stream Sets, generated real
-                clicks through apps/tracker (4 vs 3), confirmed each
-                set's "View statistics" link lands on /analytics with a
-                correct, distinct filtered count and no console errors.
-                All test fixtures (org/user/campaign/stream
-                sets/network/offer/traffic source/domain, ClickHouse
-                click events) removed afterward.
-LAST COMMIT   : 96dabb9 fix(ui): give MultiSelect real disabled support,
-                close domain-form.tsx's permission gap. Before it:
-                1c31660 fix(offers): close offer-columns.tsx's accessorFn
-                stale-cache gap; 57b220d feat(auth): real API-key
-                authentication (audit finding #4, closed); 13ae03c
-                feat(web): permission-gate action buttons across the
-                API's five write keys (finding-#1 follow-up); 734e54d
-                chore(deps): move shadcn's CLI to devDependencies (audit
-                finding #7); d75198d chore(deps): bump Go to 1.26.6
-                (audit finding #6); e757aaa fix(settings): stop claiming
-                API keys authenticate calls (audit finding #4, first
-                pass); 2058b1b fix(security): trusted-proxy IP resolution
-                & pending-login lockout (audit findings #2, #3); 1e45953
-                fix(auth): enforce RBAC on every mutating route (audit
-                finding #1) — full detail for all in CHANGELOG.md. Note:
-                the golang.org/x/crypto bump (GO-2026-6355/6354 closed,
+                MinIO, incl. the new test. No frontend touched, so no
+                tsc/eslint/vitest/browser pass was needed this phase.
+LAST COMMIT   : 118bfed feat(analytics): add stream_set report
+                dimension, close stale roadmap gap. Before it: f382d10
+                docs(roadmap): close the stream_set gap, correct the
+                remaining unbacked-dimension count (a small follow-up
+                fixing ROADMAP.md's own now-stale gap row, committed
+                separately from 118bfed); 76b1279 docs(roadmap): record
+                this session's security-audit work, close the
+                accessorFn gap; 96dabb9 fix(ui): give MultiSelect real
+                disabled support, close domain-form.tsx's permission
+                gap — full detail for all in CHANGELOG.md. Note: the
+                golang.org/x/crypto bump (GO-2026-6355/6354 closed,
                 GO-2026-5932 permanently flagged/unreachable) landed
                 between phases per CHANGELOG.md but was never captured
-                in this block's LAST COMMIT line by the phase that did
-                it — check `git log` if the exact commit hash is needed.
+                in an earlier version of this block's LAST COMMIT line
+                — check `git log` if an exact hash is needed for it.
 UNCOMMITTED   : this phase's own work, about to be committed as one
-                logical commit — apps/internal/chstore/report.go,
-                apps/internal/chstore/report_test.go,
-                apps/web/src/features/analytics/registry.ts,
-                apps/web/src/features/analytics/analytics-view.tsx,
-                apps/web/src/features/analytics/view-statistics-link.ts,
-                apps/web/src/features/stream-sets/stream-set-row.tsx,
-                apps/web/src/lib/mock/analytics.ts,
-                apps/web/src/lib/i18n/locales/{en,ru}/analytics.json,
-                apps/web/src/lib/i18n/locales/{en,ru}/streamSets.json,
-                docs/analytics-report-api.md, CHANGELOG.md, this
-                CLAUDE.md edit. Deliberately left out, unrelated and
-                predating this phase: ROADMAP.md,
-                apps/e2e/scenario_test.go, apps/web/src/lib/api/
-                networks.ts and offers.ts remain unstaged from the older
-                repo+plan-audit pass; whoever picks those up next should
-                check they're still wanted.
+                logical commit — apps/internal/adaccount/crypto.go,
+                apps/internal/adaccount/repository.go,
+                apps/internal/adaccount/adaccount_test.go,
+                docs/ad-account-connections.md,
+                docs/settings-integrations.md, ROADMAP.md, CHANGELOG.md,
+                this CLAUDE.md edit. Deliberately left out, unrelated
+                and predating this phase: apps/e2e/scenario_test.go
+                remains unstaged from the older repo+plan-audit pass;
+                whoever picks it up next should check it's still
+                wanted.
 NEXT          : confirm scope before starting. All 7 numbered security-
                 audit findings are fully resolved; the stream_set
-                dimension gap is closed. Known remaining items: TRUSTED_
-                PROXIES needs a real proxy deployed first (finding-#2
-                phase); the general rate limit's IP-keying not fitting
-                high-volume API-key traffic (finding-#4 phase's own known
-                limitation) — a real middleware-ordering restructuring.
-                GO-2026-5932 (x/crypto/openpgp, no fix exists) stays a
-                permanent, accepted, unreachable flag. The 4 remaining
-                unbacked registry dimensions (landing/pwa/postlanding/
-                offer) still need IDs threaded through apps/tracker's
-                event emission plus a schema migration before they could
-                follow the same pattern as stream_set — a separate,
-                larger phase, not a quick whitelist fix like this one
-                was. Worth being aware of for future sessions: this
-                session's own history/subagent tracking apparently does
-                not persist a prior turn's investigation request reliably
+                dimension gap and the access_token plain-text gap are
+                both closed. Known remaining items in ROADMAP.md's
+                Known-open-gaps table: cloudflare_registrar has no
+                adapter; SMS/email 2FA as a TOTP alternative; the report
+                builder's filter-value dropdown is still a fixed mock
+                pool (needs a real "distinct values for dimension X"
+                endpoint); 7 feature areas are English-only in an EN/RU
+                app; DataTable has no column resizing/CSV export;
+                Content Gallery has no video upload/transcoding; Flows
+                have no top-level list view; 4 of 16 report dimensions
+                (landing/pwa/postlanding/offer) still need real columns
+                before they can follow stream_set's pattern; Google Play
+                URL parsing for PWA listings; the general rate limiter's
+                IP-keying (needs a real middleware-ordering
+                restructuring, auth before the limiter). TRUSTED_PROXIES
+                needs a real proxy deployed first (still blocked, no
+                infra exists). GO-2026-5932 (x/crypto/openpgp, no fix
+                exists) stays a permanent, accepted, unreachable flag.
+                Worth being aware of for future sessions: this session's
+                own history/subagent tracking apparently does not
+                persist a prior turn's investigation request reliably
                 across some boundary — CHANGELOG.md and git log are the
                 durable record to check first when a user references
                 earlier work this session has no trace of.

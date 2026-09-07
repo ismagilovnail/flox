@@ -12,15 +12,19 @@ import (
 
 // ParseKey decodes a base64-encoded 32-byte AES-256 key (config.
 // AdAccountEncryptionKey) — called once at startup so a misconfigured
-// key fails loudly before any request ever tries to encrypt/decrypt a
-// Google Ads credential with it. Deliberately a separate key from
+// key fails loudly before any request ever tries to encrypt/decrypt an
+// ad-platform credential with it. Deliberately a separate key from
 // TOTP_ENCRYPTION_KEY and INTEGRATION_ENCRYPTION_KEY even though the
 // AES-256-GCM mechanics are identical everywhere they're used — a real
 // secret rotation or compromise of one should never force rotating the
-// others. Facebook/TikTok Ads' own access_token predates this
-// encryption infrastructure and is left in plain text (migration
-// 00018's own doc comment) — this key only ever encrypts the new
-// Google Ads fields this package's own crypto.go introduces.
+// others. Encrypts every secret this package stores: Google Ads' own
+// developer_token/client_secret/refresh_token (migration 00034, this
+// key's original reason to exist) and facebook_ads/tiktok_ads' own
+// access_token too — access_token predated this encryption
+// infrastructure (migration 00018's own doc comment) and was left in
+// plain text as flagged, real follow-up hardening; that gap is now
+// closed by this same key, no schema change needed since the column
+// was already `text` and ciphertext is text too.
 func ParseKey(b64 string) ([]byte, error) {
 	if b64 == "" {
 		return nil, errors.New("adaccount: ADACCOUNT_ENCRYPTION_KEY is not set")
