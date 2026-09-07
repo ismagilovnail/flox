@@ -19,132 +19,96 @@ referenced below as §N).
 ## CURRENT STATE — UPDATE THIS EVERY PHASE
 
 ```
-CURRENT PHASE : REAL API-KEY AUTHENTICATION
-                (audit finding #4, closed; follows the finding-#1
-                frontend-button-gating phase)
-STATUS        : done. Finding #4's first pass (earlier phase) left the
-                UI honestly saying "not live yet" and deferred the real
-                feature. SCOPED WITH THE USER before writing code, two
-                decisions: (a) a key authenticates against the exact
-                same route tree a session does — no separate "public
-                API"; (b) the flat read/write/admin scope maps onto the
-                18-permission vocabulary as coarse tiers (read = every
-                *.read key; write = read + every *.write key EXCEPT
-                team.write/settings.write; admin = everything) rather
-                than inheriting the creating user's own role.
-                THE MECHANISM: tenant.NewMiddleware — the single choke
-                point all ~25 tenant-scoped route groups already share
-                via one shared tenantMiddleware in main.go — now checks
-                Authorization: Bearer flx_live_... before falling back
-                to the session cookie. A match calls the new
-                apikey.Service.Authenticate (hash lookup, revoked_at IS
-                NULL check, best-effort last_used_at stamp — previously
-                a dead column, confirmed by finding #4's own earlier
-                research) and populates the SAME context (tenant.OrgID/
-                UserID) a session would, plus a new tenant.APIKeyScope.
-                Zero downstream handlers changed — 82 mutating routes
-                across 17 packages, untouched. RequirePermission branches
-                on APIKeyScope: present skips the membership-table
-                HasPermission DB query entirely, evaluating
-                apiKeyScopeAllows (pure string-suffix logic) instead.
-                userID on an API-key request is the key's creator
-                (created_by_user_id) — audit attribution only, never
-                re-checked against memberships; a key deliberately
-                outlives its creator's own membership (an integration
-                shouldn't break because the employee who set it up
-                left), matching how Stripe/GitHub keys work. CSRF's
-                RequireSameOrigin needed zero changes — it already treats
-                an absent Origin header as a non-browser client.
-                FRONTEND: api-keys-panel.tsx's "not live yet" copy
-                (finding #4's own earlier change) reverted to accurate —
-                the create dialog spells out what each tier grants, the
-                key-reveal dialog now shows the Authorization: Bearer
-                <key> header format.
-                VERIFIED: go build/vet/test -count=1 ./... clean, 41
-                packages, live Postgres. New tests: apikey.Test
-                AuthenticateValidKey/RejectsRevokedKey/
-                RejectsUnknownOrGarbageKey; auth.TestRequirePermission
-                APIKeyScope (6 cases, real live-mounted team.read/
-                team.write keys). tsc/eslint/vitest(21/21) clean on the
-                frontend copy change.
-                LIVE END-TO-END AGAINST THE REAL RUNNING API: rebuilt the
-                dev Docker image (no source volume mount on apps/api,
-                unlike apps/web) to pick up the Go changes. Signed up a
-                real org, verified via a real mailhog link, created three
-                real keys (read/write/admin) through the real session-
-                authenticated /api-keys endpoint. GET /campaigns and GET
-                /team/members (team.read): 200 for all three scopes.
-                POST /campaigns (campaign.write): 403 for read; write and
-                admin got PAST the permission check (422 on missing
-                fields, then a genuine 201 once given a real
-                trafficSourceId) — proving the write path is actually
-                unblocked, not merely not-403. POST /team/members/invite
-                and PATCH /security (team.write/settings.write): 403 for
-                BOTH read and write, granted only for admin — the exact
-                tier-exclusion the scoping decision called for, confirmed
-                against a live request. A garbage Bearer token 401'd; the
-                read key 401'd immediately after a real DELETE
-                /api-keys/{id}. Test org (its campaign, traffic source,
-                keys, user) deleted afterward via SQL, FK order respected
-                (campaigns -> traffic_sources -> api_keys -> audit_logs
-                -> sessions -> memberships -> users -> organizations).
-                DOCS: docs/auth.md gets a full "API key authentication"
-                section (mirrors "RBAC route coverage"'s style) plus two
-                stale bullets struck through (the frontend-button-gating
-                gap, closed by the prior phase; "no API-key auth", closed
-                by this one). docs/security.md gets a new §6 plus its
-                finding-#4 Known-limitations bullet struck through.
-                NOT addressed, called out honestly: the general rate
-                limit stays IP-keyed, so a high-volume legitimate
-                integration shares one bucket with anything else behind
-                its IP — fixing that needs auth to resolve before the
-                general limiter runs (it currently mounts earlier in the
-                chain), a bigger restructuring than this phase scoped.
+CURRENT PHASE : OFFER-COLUMNS.TSX ACCESSORFN STALE-CACHE FIX
+                (ad hoc, user-scoped — a re-audit of a PAST session's
+                repo-wide accessorFn sweep, found only in CHANGELOG.md,
+                not in this session's own history/subagent record)
+STATUS        : done. User asked to "continue the investigation asked
+                about earlier" — no trace of it in this session
+                (ListAgents/TaskList both empty, nothing in the
+                conversation). Repeated the audit fresh per the user's
+                own fallback instruction rather than fabricate a result.
+                Grepped all 9 `accessorFn` uses in apps/web/src; only
+                new finding: features/offers/offer-columns.tsx:36 (no
+                `cell`, so the accessorFn's own output IS the rendered
+                cell) closes over networkNameById from a separate
+                useNetworks() query in offer-list.tsx — same shape as
+                six sites a PAST session already fixed elsewhere
+                (CHANGELOG.md "[Between phases] — Repo-wide accessorFn
+                stale-cache audit").
+                IMPORTANT CORRECTION found before committing: that past
+                audit had already examined this exact file and called it
+                safe (not a bug) BECAUSE offer-list.tsx:62 gates loading
+                on `offersQuery.isPending || networksQuery.isPending`
+                together — confirmed still true today, so the table
+                never mounts with an empty networkNameById and never
+                shows a raw id on load. The real, narrower gap that
+                audit flagged and knowingly left unfixed: a network
+                renamed while the Offers page stays mounted would freeze
+                the column on the OLD name. Fixed anyway, same reasoning
+                as the other six sites: `cell` removes the fragile
+                invariant entirely rather than leaving correctness
+                dependent on that loading-gate never changing.
+                THE FIX: accessorFn removed, cell: ({ row }) =>
+                networkNameById[row.original.networkId] ??
+                row.original.networkId, same doc comment convention as
+                the six already-fixed sites. New test file
+                offer-columns.test.ts (first test for this feature area)
+                — calls offerColumns() directly with different
+                networkNameById maps, asserts the column reflects
+                whichever was passed most recently (proves the
+                mechanism) and asserts no accessorFn exists on the
+                column (so the bug can't silently return).
+                VERIFIED: tsc/eslint/vitest (25/25, was 21) clean. Live
+                browser pass against the real running dev stack: signed
+                up a fresh org, created a real network + a real offer
+                through it, confirmed the Offers list shows the resolved
+                network name (not a raw id) on first load AND a hard
+                reload, zero console errors. Test org and fixtures
+                deleted afterward via SQL.
+                Did NOT touch anything classified SAFE (offer-columns.tsx's
+                own payout column; campaign-cost-entries.tsx;
+                tracking-links.tsx; report-table.tsx) or the six sites
+                already fixed by the past session, per explicit
+                instruction.
 LAST COMMIT   : (this phase's own work is uncommitted, see below). Before
-                it: 13ae03c feat(web): permission-gate action buttons
-                across the API's five write keys (finding-#1 follow-up);
-                734e54d chore(deps): move shadcn's CLI to devDependencies
-                (audit finding #7); d75198d chore(deps): bump Go to
-                1.26.6 (audit finding #6); e757aaa fix(settings): stop
-                claiming API keys authenticate calls (audit finding #4,
-                first pass); 2058b1b fix(security): trusted-proxy IP
-                resolution & pending-login lockout (audit findings #2,
-                #3); 1e45953 fix(auth): enforce RBAC on every mutating
-                route (audit finding #1) — full detail for all in
-                CHANGELOG.md.
+                it: 57b220d feat(auth): real API-key authentication
+                (audit finding #4, closed); 13ae03c feat(web):
+                permission-gate action buttons across the API's five
+                write keys (finding-#1 follow-up); 734e54d chore(deps):
+                move shadcn's CLI to devDependencies (audit finding #7);
+                d75198d chore(deps): bump Go to 1.26.6 (audit finding
+                #6); e757aaa fix(settings): stop claiming API keys
+                authenticate calls (audit finding #4, first pass);
+                2058b1b fix(security): trusted-proxy IP resolution &
+                pending-login lockout (audit findings #2, #3); 1e45953
+                fix(auth): enforce RBAC on every mutating route (audit
+                finding #1) — full detail for all in CHANGELOG.md.
 UNCOMMITTED   : this phase's own work, about to be committed as one
-                logical commit — apps/internal/tenant/tenant.go (bearer-
-                token branch + APIKeyScope); apps/internal/apikey/
-                {model,crypto,repository,service}.go (Authenticate,
-                FindByHash, UpdateLastUsed, logger dependency) +
-                apikey_test.go (new tests + newService helper);
-                apps/internal/auth/service.go (RequirePermission's scope
-                branch + apiKeyScopeAllows) + auth_test.go (new fakes +
-                TestRequirePermissionAPIKeyScope); apps/api/main.go
-                (apiKeySvc constructed once, threaded into
-                tenant.NewMiddleware); apps/web/src/features/settings/
-                api-keys-panel.tsx; docs/auth.md; docs/security.md;
-                CHANGELOG.md; this CLAUDE.md edit. Deliberately left out,
-                unrelated and predating this phase: ROADMAP.md,
-                apps/e2e/scenario_test.go, apps/web/src/lib/api/
-                networks.ts and offers.ts remain unstaged from the older
-                repo+plan-audit pass; whoever picks those up next should
-                check they're still wanted.
-NEXT          : confirm scope before starting. All 7 numbered audit
-                findings are now fully resolved (finding #4 was the last
-                one carrying a deferred half). Still open, none of them
-                numbered findings: setting TRUSTED_PROXIES to a real
-                value once an actual reverse proxy/LB/CDN is deployed
-                (finding-#2 phase; confirmed via AskUserQuestion that
-                none exists yet, nothing to do until one does); the 3
-                golang.org/x/crypto advisories surfaced in finding-#6's
-                govulncheck run (dependency hygiene, not a live
-                vulnerability); the general rate limit's IP-keying not
-                fitting high-volume API-key traffic well (this phase's
-                own known limitation, above); domain-form.tsx's
-                MultiSelect field lacking a native disabled prop (UX
-                polish, not security, flagged in the finding-#1-follow-up
-                phase).
+                logical commit — apps/web/src/features/offers/
+                offer-columns.tsx; apps/web/src/features/offers/
+                offer-columns.test.ts (new); CHANGELOG.md; this CLAUDE.md
+                edit. Deliberately left out, unrelated and predating
+                this phase: ROADMAP.md, apps/e2e/scenario_test.go,
+                apps/web/src/lib/api/networks.ts and offers.ts remain
+                unstaged from the older repo+plan-audit pass; whoever
+                picks those up next should check they're still wanted.
+NEXT          : confirm scope before starting. All 7 numbered security-
+                audit findings are fully resolved (see prior phases'
+                blocks / CHANGELOG.md). Still open, none of them numbered
+                findings: TRUSTED_PROXIES needs a real proxy deployed
+                first (finding-#2 phase, confirmed none exists yet); 3
+                golang.org/x/crypto advisories (dependency hygiene, not
+                live); the general rate limit's IP-keying not fitting
+                high-volume API-key traffic (finding-#4 phase's own known
+                limitation); domain-form.tsx's MultiSelect field lacking
+                a native disabled prop (UX polish, finding-#1-follow-up
+                phase). Also worth being aware of for future sessions:
+                this session's own history/subagent tracking apparently
+                does not persist a prior turn's investigation request
+                reliably across some boundary — CHANGELOG.md and git log
+                are the durable record to check first when a user
+                references earlier work this session has no trace of.
 ```
 
 > At the end of every phase: update the four lines above, add a CHANGELOG entry,

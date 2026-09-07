@@ -5,6 +5,46 @@ per-phase, matching `CLAUDE.md`'s phase protocol. The one exception is
 [Between phases], below: spec amendments and the code changes that follow from
 them land between phases and would otherwise be invisible here.
 
+## [Between phases] — offer-columns.tsx: close the accessorFn stale-cache gap the prior audit left open
+
+The repo-wide `accessorFn` stale-cache audit (see that entry, below)
+fixed six sites but explicitly left `features/offers/offer-columns.tsx`'s
+"network" column alone, classifying it "near miss, safe": `offer-list.tsx`
+gates its loading state on `offersQuery.isPending || networksQuery.isPending`
+together, so the table never mounts with an empty `networkNameById` — the
+"freezes on a raw id during initial load" failure mode the other six sites
+had doesn't apply here. That audit did flag one real, narrower residual
+risk and leave it unfixed: if a network is ever renamed while the Offers
+page stays mounted, the cached `accessorFn` value would freeze on the
+*old* name, not a raw id — accepted at the time since no co-mounted
+rename flow existed.
+
+Re-verified via a fresh audit request: the dual-loading-gate is still
+present and still holds (confirmed by reading `offer-list.tsx:62` again,
+not assumed), so the original "no raw-id-on-load" conclusion still
+stands. Fixed anyway, for the same reason the other six sites already
+were: `cell` removes the fragile invariant entirely rather than leaving
+correctness dependent on that gate never changing, and it closes the
+narrower rename-while-mounted gap the prior audit knowingly left open.
+Same fix shape as the other six: `accessorFn` removed, `cell: ({ row })
+=> networkNameById[row.original.networkId] ?? row.original.networkId`,
+same doc comment cross-referencing `campaign-columns.tsx`.
+
+New regression test (`offer-columns.test.ts`, the first test file for
+this feature area): calls `offerColumns()` directly with different
+`networkNameById` maps for the same row and asserts the network column
+reflects whichever map was passed on the most recent call — proving the
+mechanism (no accessorFn-style caching) rather than trying to reproduce
+the narrow race live. Also asserts the column carries no `accessorFn` at
+all, so the bug can't silently return.
+
+Verified: `tsc --noEmit`/`eslint`/`vitest` (25/25, was 21) all clean.
+Live browser pass against the real running dev stack: signed up a fresh
+org, created a real network and a real offer through it, confirmed the
+Offers list renders the resolved network name (not the raw id) on both
+first load and a hard reload, zero console errors. Test org and its
+fixtures deleted afterward via SQL.
+
 ## [Security] — real API-key authentication (audit finding #4, closed)
 
 `apps/internal/apikey`'s `Create`/`List`/`Revoke` were real, hashed

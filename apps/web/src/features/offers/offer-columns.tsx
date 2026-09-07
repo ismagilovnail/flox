@@ -33,7 +33,13 @@ export function offerColumns(
     {
       id: "network",
       header: t("columns.network", { ns: "offers" }),
-      accessorFn: (row) => networkNameById[row.networkId] ?? row.networkId,
+      // A `cell` renderer, not `accessorFn` — see campaign-columns.tsx's own
+      // comment: accessorFn's return value is cached per row and only
+      // re-evaluated when the `data` array's reference changes, not when
+      // networkNameById (a separate, later-resolving query) changes. An
+      // accessorFn here would risk freezing on the raw networkId fallback
+      // if this column is ever read before networks finish loading.
+      cell: ({ row }) => networkNameById[row.original.networkId] ?? row.original.networkId,
     },
     {
       accessorKey: "countries",
