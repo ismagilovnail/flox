@@ -9,6 +9,8 @@ import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { LoadingState } from "@/components/ui/loading-state";
 import { ErrorState } from "@/components/ui/error-state";
+import { PermissionDeniedState } from "@/components/ui/permission-denied-state";
+import { usePermission } from "@/hooks/use-auth";
 import { useCreateOffer } from "@/hooks/use-offers";
 import { useNetworks } from "@/hooks/use-networks";
 import { OfferForm, type OfferFormValues } from "@/features/offers/offer-form";
@@ -16,8 +18,13 @@ import { OfferForm, type OfferFormValues } from "@/features/offers/offer-form";
 export function NewOfferView() {
   const { t } = useTranslation(["offers", "nav"]);
   const router = useRouter();
+  const canWrite = usePermission("offer.write");
   const networksQuery = useNetworks();
   const createOffer = useCreateOffer();
+
+  if (!canWrite) {
+    return <PermissionDeniedState />;
+  }
 
   if (networksQuery.isPending) {
     return <LoadingState label={t("list.loading")} />;

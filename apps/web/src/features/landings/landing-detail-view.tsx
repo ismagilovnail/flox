@@ -5,6 +5,7 @@ import { useTranslation } from "react-i18next";
 
 import { LoadingState } from "@/components/ui/loading-state";
 import { ErrorState } from "@/components/ui/error-state";
+import { usePermission } from "@/hooks/use-auth";
 import { useLanding, useUpdateLanding } from "@/hooks/use-landings";
 import { LandingForm, type LandingFormValues } from "@/features/landings/landing-form";
 import type { Landing } from "@/lib/api/landings";
@@ -21,6 +22,7 @@ function toFormValues(landing: Landing): LandingFormValues {
 
 export function LandingDetailView({ id }: { id: string }) {
   const { t } = useTranslation("landings");
+  const canWrite = usePermission("content.write");
   const landingQuery = useLanding(id);
   const updateLanding = useUpdateLanding(id);
 
@@ -60,6 +62,7 @@ export function LandingDetailView({ id }: { id: string }) {
       defaultValues={toFormValues(landing)}
       submitLabel={t("form.submitEdit")}
       onSubmit={handleSubmit}
+      disabled={!canWrite}
     />
   );
 }

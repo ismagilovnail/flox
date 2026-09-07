@@ -18,10 +18,12 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { useActivatePixel, useArchivePixel, useDuplicatePixel, usePausePixel } from "@/hooks/use-pixels";
+import { usePermission } from "@/hooks/use-auth";
 import type { Pixel } from "@/lib/api/pixels";
 
 export function PixelRowActions({ pixel }: { pixel: Pixel }) {
   const { t } = useTranslation(["pixels", "common"]);
+  const canWrite = usePermission("content.write");
   const pause = usePausePixel();
   const activate = useActivatePixel();
   const duplicate = useDuplicatePixel();
@@ -70,7 +72,7 @@ export function PixelRowActions({ pixel }: { pixel: Pixel }) {
           <TooltipContent>{t("rowActions.edit")}</TooltipContent>
         </Tooltip>
 
-        {pixel.status !== "archived" && (
+        {canWrite && pixel.status !== "archived" && (
           <Tooltip>
             <TooltipTrigger asChild>
               <IconButton
@@ -85,16 +87,18 @@ export function PixelRowActions({ pixel }: { pixel: Pixel }) {
           </Tooltip>
         )}
 
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <IconButton aria-label={t("rowActions.duplicate")} size="icon-sm" onClick={handleDuplicate}>
-              <CopyIcon className="size-3.5" />
-            </IconButton>
-          </TooltipTrigger>
-          <TooltipContent>{t("rowActions.duplicate")}</TooltipContent>
-        </Tooltip>
+        {canWrite && (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <IconButton aria-label={t("rowActions.duplicate")} size="icon-sm" onClick={handleDuplicate}>
+                <CopyIcon className="size-3.5" />
+              </IconButton>
+            </TooltipTrigger>
+            <TooltipContent>{t("rowActions.duplicate")}</TooltipContent>
+          </Tooltip>
+        )}
 
-        {pixel.status !== "archived" && (
+        {canWrite && pixel.status !== "archived" && (
           <Tooltip>
             <TooltipTrigger asChild>
               <IconButton aria-label={t("rowActions.archive")} size="icon-sm" onClick={() => setConfirmArchive(true)}>

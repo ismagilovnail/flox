@@ -8,10 +8,12 @@ import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
 import { LoadingState } from "@/components/ui/loading-state";
 import { ErrorState } from "@/components/ui/error-state";
+import { usePermission } from "@/hooks/use-auth";
 import { useDomains } from "@/hooks/use-domains";
 import { domainColumns } from "@/features/domains/domain-columns";
 
 export function DomainList() {
+  const canWrite = usePermission("settings.write");
   const domainsQuery = useDomains();
 
   const columns = React.useMemo(() => domainColumns(), []);
@@ -19,12 +21,14 @@ export function DomainList() {
   const header = (
     <div className="flex items-center justify-between">
       <h1 className="text-2xl font-semibold tracking-tight">Domains</h1>
-      <Button asChild>
-        <Link href="/domains/new">
-          <PlusIcon className="size-4" />
-          New Domain
-        </Link>
-      </Button>
+      {canWrite && (
+        <Button asChild>
+          <Link href="/domains/new">
+            <PlusIcon className="size-4" />
+            New Domain
+          </Link>
+        </Button>
+      )}
     </div>
   );
 

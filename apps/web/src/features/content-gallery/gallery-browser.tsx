@@ -18,7 +18,7 @@ import { ErrorState } from "@/components/ui/error-state";
 import { LoadingState } from "@/components/ui/loading-state";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { useMe } from "@/hooks/use-auth";
+import { usePermission } from "@/hooks/use-auth";
 import {
   useArchiveGalleryFiles,
   useDeleteGalleryFiles,
@@ -55,10 +55,16 @@ export function GalleryBrowser({
    * you actually attach it to a field that needs a specific ratio. */
   requiredAspect?: number;
 }) {
-  const { data: me } = useMe();
+  // §52 "frontend permissions are UX only" — content.write is the same
+  // key apps/internal/tags.Handler and the other content-gallery routes
+  // (migration 00035) actually require server-side (Owner/Admin/Manager),
+  // replacing a stale Owner/Admin-only role check that (a) used the wrong
+  // tier and (b) never gated the real mutations below (upload, move,
+  // archive, restore, permanent delete) — only the "Uploaded by" filter,
+  // which isn't sensitive and is now shown to every role regardless.
+  const canWrite = usePermission("content.write");
   const { data: members } = useTeamMembers();
   const { data: folderData } = useGalleryFolders();
-  const canManage = me?.role === "Owner" || me?.role === "Admin";
 
   const [folder, setFolderRaw] = React.useState<string | undefined>(undefined);
   const [status, setStatusRaw] = React.useState<GalleryFileStatus>("active");
@@ -208,21 +214,19 @@ export function GalleryBrowser({
             </TabsList>
           </Tabs>
 
-          {canManage && (
-            <Select value={uploadedBy ?? "all"} onValueChange={(v) => setUploadedBy(v === "all" ? undefined : v)}>
-              <SelectTrigger className="w-48">
-                <SelectValue placeholder="Uploaded by" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Everyone</SelectItem>
-                {members?.map((m) => (
-                  <SelectItem key={m.userId} value={m.userId}>
-                    {m.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          )}
+          <Select value={uploadedBy ?? "all"} onValueChange={(v) => setUploadedBy(v === "all" ? undefined : v)}>
+            <SelectTrigger className="w-48">
+              <SelectValue placeholder="Uploaded by" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Everyone</SelectItem>
+              {members?.map((m) => (
+                <SelectItem key={m.userId} value={m.userId}>
+                  {m.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
       )}
 
@@ -235,6 +239,7 @@ export function GalleryBrowser({
               count={selected.size}
               status={status}
               folders={folderData?.folders ?? []}
+              canWrite={canWrite}
               onDeselect={() => setSelected(new Set())}
               onArchive={() => runBulk((ids) => archiveFiles.mutateAsync(ids), "archived")}
               onRestore={() => runBulk((ids) => restoreFiles.mutateAsync(ids), "restored")}
@@ -250,7 +255,10 @@ export function GalleryBrowser({
           ) : (
             <>
               <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
-                {(mode === "pick" || status === "active") && (
+                {/* Uploading is mode === "pick" (any role can attach an existing/new image
+                    to a field they already have content.write on elsewhere, e.g. a PWA
+                    icon) or a manage-mode upload, which DOES need content.write. */}
+                {(mode === "pick" || (status === "active" && canWrite)) && (
                   <GalleryUploadCell
                     folderId={folderId === "root" ? undefined : folderId}
                     onUploaded={mode === "pick" ? handleUploaded : undefined}
@@ -269,10 +277,20 @@ export function GalleryBrowser({
                     selected={selected.has(file.id)}
                     onToggleSelect={() => toggleSelect(file.id)}
                     onClick={() => toggleSelect(file.id)}
-                    onMove={mode === "manage" && status === "active" ? (folderId) => moveFiles.mutate({ ids: [file.id], folderId }) : undefined}
-                    onArchive={mode === "manage" && status === "active" ? () => archiveFiles.mutate([file.id]) : undefined}
-                    onRestore={mode === "manage" && status === "archived" ? () => restoreFiles.mutate([file.id]) : undefined}
-                    onDeletePermanently={mode === "manage" && status === "archived" ? () => setConfirmDeleteIds([file.id]) : undefined}
+                    onMove={
+                      mode === "manage" && status === "active" && canWrite
+                        ? (folderId) => moveFiles.mutate({ ids: [file.id], folderId })
+                        : undefined
+                    }
+                    onArchive={
+                      mode === "manage" && status === "active" && canWrite ? () => archiveFiles.mutate([file.id]) : undefined
+                    }
+                    onRestore={
+                      mode === "manage" && status === "archived" && canWrite ? () => restoreFiles.mutate([file.id]) : undefined
+                    }
+                    onDeletePermanently={
+                      mode === "manage" && status === "archived" && canWrite ? () => setConfirmDeleteIds([file.id]) : undefined
+                    }
                   />
                 ))}
               </div>
@@ -348,6 +366,7 @@ function BulkActionBar({
   count,
   status,
   folders,
+  canWrite,
   onDeselect,
   onArchive,
   onRestore,
@@ -357,6 +376,7 @@ function BulkActionBar({
   count: number;
   status: GalleryFileStatus;
   folders: GalleryFolder[];
+  canWrite: boolean;
   onDeselect: () => void;
   onArchive: () => void;
   onRestore: () => void;
@@ -367,31 +387,35 @@ function BulkActionBar({
     <div className="flex items-center gap-2 rounded-md border border-border bg-muted/40 px-3 py-2 text-sm">
       <span className="font-medium">{count} selected</span>
       <div className="ml-auto flex items-center gap-2">
-        <Select onValueChange={(v) => onMove(v === GALLERY_ROOT ? null : v)}>
-          <SelectTrigger className="h-7 w-40 text-xs">
-            <SelectValue placeholder="Move to…" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value={GALLERY_ROOT}>Unfiled</SelectItem>
-            {folders.map((f) => (
-              <SelectItem key={f.id} value={f.id}>
-                {f.name}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        {status === "active" ? (
-          <Button variant="outline" size="sm" onClick={onArchive}>
-            Archive
-          </Button>
-        ) : (
+        {canWrite && (
           <>
-            <Button variant="outline" size="sm" onClick={onRestore}>
-              Restore
-            </Button>
-            <Button variant="destructive" size="sm" onClick={onDeletePermanently}>
-              Delete permanently
-            </Button>
+            <Select onValueChange={(v) => onMove(v === GALLERY_ROOT ? null : v)}>
+              <SelectTrigger className="h-7 w-40 text-xs">
+                <SelectValue placeholder="Move to…" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={GALLERY_ROOT}>Unfiled</SelectItem>
+                {folders.map((f) => (
+                  <SelectItem key={f.id} value={f.id}>
+                    {f.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {status === "active" ? (
+              <Button variant="outline" size="sm" onClick={onArchive}>
+                Archive
+              </Button>
+            ) : (
+              <>
+                <Button variant="outline" size="sm" onClick={onRestore}>
+                  Restore
+                </Button>
+                <Button variant="destructive" size="sm" onClick={onDeletePermanently}>
+                  Delete permanently
+                </Button>
+              </>
+            )}
           </>
         )}
         <Button variant="ghost" size="sm" onClick={onDeselect}>

@@ -8,11 +8,13 @@ import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
 import { LoadingState } from "@/components/ui/loading-state";
 import { ErrorState } from "@/components/ui/error-state";
+import { usePermission } from "@/hooks/use-auth";
 import { usePostlandings } from "@/hooks/use-postlandings";
 import { postlandingColumns } from "@/features/postlanding/postlanding-columns";
 
 export function PostlandingList() {
   const { t } = useTranslation(["postlanding", "common"]);
+  const canWrite = usePermission("content.write");
   const postlandingsQuery = usePostlandings();
 
   const columns = postlandingColumns(t);
@@ -20,12 +22,14 @@ export function PostlandingList() {
   const header = (
     <div className="flex items-center justify-between">
       <h1 className="text-2xl font-semibold tracking-tight">{t("list.title", { ns: "postlanding" })}</h1>
-      <Button asChild>
-        <Link href="/postlanding/new">
-          <PlusIcon className="size-4" />
-          {t("list.newButton", { ns: "postlanding" })}
-        </Link>
-      </Button>
+      {canWrite && (
+        <Button asChild>
+          <Link href="/postlanding/new">
+            <PlusIcon className="size-4" />
+            {t("list.newButton", { ns: "postlanding" })}
+          </Link>
+        </Button>
+      )}
     </div>
   );
 

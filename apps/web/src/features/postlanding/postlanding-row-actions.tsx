@@ -18,10 +18,12 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { useActivatePostlanding, useArchivePostlanding, useDuplicatePostlanding, usePausePostlanding } from "@/hooks/use-postlandings";
+import { usePermission } from "@/hooks/use-auth";
 import type { Postlanding } from "@/lib/api/postlanding";
 
 export function PostlandingRowActions({ postlanding }: { postlanding: Postlanding }) {
   const { t } = useTranslation(["postlanding", "common"]);
+  const canWrite = usePermission("content.write");
   const pause = usePausePostlanding();
   const activate = useActivatePostlanding();
   const duplicate = useDuplicatePostlanding();
@@ -71,7 +73,7 @@ export function PostlandingRowActions({ postlanding }: { postlanding: Postlandin
           <TooltipContent>{t("rowActions.edit")}</TooltipContent>
         </Tooltip>
 
-        {postlanding.status !== "archived" && (
+        {canWrite && postlanding.status !== "archived" && (
           <Tooltip>
             <TooltipTrigger asChild>
               <IconButton
@@ -86,16 +88,18 @@ export function PostlandingRowActions({ postlanding }: { postlanding: Postlandin
           </Tooltip>
         )}
 
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <IconButton aria-label={t("rowActions.duplicate")} size="icon-sm" onClick={handleDuplicate}>
-              <CopyIcon className="size-3.5" />
-            </IconButton>
-          </TooltipTrigger>
-          <TooltipContent>{t("rowActions.duplicate")}</TooltipContent>
-        </Tooltip>
+        {canWrite && (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <IconButton aria-label={t("rowActions.duplicate")} size="icon-sm" onClick={handleDuplicate}>
+                <CopyIcon className="size-3.5" />
+              </IconButton>
+            </TooltipTrigger>
+            <TooltipContent>{t("rowActions.duplicate")}</TooltipContent>
+          </Tooltip>
+        )}
 
-        {postlanding.status !== "archived" && (
+        {canWrite && postlanding.status !== "archived" && (
           <Tooltip>
             <TooltipTrigger asChild>
               <IconButton aria-label={t("rowActions.archive")} size="icon-sm" onClick={() => setConfirmArchive(true)}>

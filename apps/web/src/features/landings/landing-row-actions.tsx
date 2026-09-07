@@ -18,10 +18,12 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { useActivateLanding, useArchiveLanding, useDuplicateLanding, usePauseLanding } from "@/hooks/use-landings";
+import { usePermission } from "@/hooks/use-auth";
 import type { Landing } from "@/lib/api/landings";
 
 export function LandingRowActions({ landing }: { landing: Landing }) {
   const { t } = useTranslation(["landings", "common"]);
+  const canWrite = usePermission("content.write");
   const pause = usePauseLanding();
   const activate = useActivateLanding();
   const duplicate = useDuplicateLanding();
@@ -70,7 +72,7 @@ export function LandingRowActions({ landing }: { landing: Landing }) {
           <TooltipContent>{t("rowActions.edit")}</TooltipContent>
         </Tooltip>
 
-        {landing.status !== "archived" && (
+        {canWrite && landing.status !== "archived" && (
           <Tooltip>
             <TooltipTrigger asChild>
               <IconButton
@@ -85,16 +87,18 @@ export function LandingRowActions({ landing }: { landing: Landing }) {
           </Tooltip>
         )}
 
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <IconButton aria-label={t("rowActions.duplicate")} size="icon-sm" onClick={handleDuplicate}>
-              <CopyIcon className="size-3.5" />
-            </IconButton>
-          </TooltipTrigger>
-          <TooltipContent>{t("rowActions.duplicate")}</TooltipContent>
-        </Tooltip>
+        {canWrite && (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <IconButton aria-label={t("rowActions.duplicate")} size="icon-sm" onClick={handleDuplicate}>
+                <CopyIcon className="size-3.5" />
+              </IconButton>
+            </TooltipTrigger>
+            <TooltipContent>{t("rowActions.duplicate")}</TooltipContent>
+          </Tooltip>
+        )}
 
-        {landing.status !== "archived" && (
+        {canWrite && landing.status !== "archived" && (
           <Tooltip>
             <TooltipTrigger asChild>
               <IconButton aria-label={t("rowActions.archive")} size="icon-sm" onClick={() => setConfirmArchive(true)}>

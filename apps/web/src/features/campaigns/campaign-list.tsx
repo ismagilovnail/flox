@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
 import { LoadingState } from "@/components/ui/loading-state";
 import { ErrorState } from "@/components/ui/error-state";
+import { usePermission } from "@/hooks/use-auth";
 import { useCampaigns } from "@/hooks/use-campaigns";
 import { useTrafficSources } from "@/hooks/use-traffic-sources";
 import { EMPTY_TAG_ASSIGNMENTS, useTagAssignments } from "@/hooks/use-tags";
@@ -19,6 +20,7 @@ import { filterByTags } from "@/features/tags/filter-by-tags";
 
 export function CampaignList() {
   const { t } = useTranslation(["campaigns", "common"]);
+  const canWrite = usePermission("campaign.write");
   const campaignsQuery = useCampaigns();
   const sourcesQuery = useTrafficSources();
   const assignments = useTagAssignments("campaign").data?.assignments ?? EMPTY_TAG_ASSIGNMENTS;
@@ -42,12 +44,14 @@ export function CampaignList() {
   const header = (
     <div className="flex items-center justify-between">
       <h1 className="text-2xl font-semibold tracking-tight">{t("list.title", { ns: "campaigns" })}</h1>
-      <Button asChild>
-        <Link href="/campaigns/new">
-          <PlusIcon className="size-4" />
-          {t("list.newButton", { ns: "campaigns" })}
-        </Link>
-      </Button>
+      {canWrite && (
+        <Button asChild>
+          <Link href="/campaigns/new">
+            <PlusIcon className="size-4" />
+            {t("list.newButton", { ns: "campaigns" })}
+          </Link>
+        </Button>
+      )}
     </div>
   );
 

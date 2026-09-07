@@ -19,6 +19,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { useActivateCampaign, useArchiveCampaign, useDuplicateCampaign, usePauseCampaign } from "@/hooks/use-campaigns";
+import { usePermission } from "@/hooks/use-auth";
 import type { Campaign } from "@/lib/api/campaigns";
 
 export function CampaignRowActions({
@@ -38,6 +39,7 @@ export function CampaignRowActions({
 }) {
   const { t } = useTranslation(["campaigns", "common"]);
   const router = useRouter();
+  const canWrite = usePermission("campaign.write");
   const pause = usePauseCampaign();
   const activate = useActivateCampaign();
   const duplicate = useDuplicateCampaign();
@@ -85,16 +87,18 @@ export function CampaignRowActions({
     <>
       {variant === "inline" ? (
         <div className="flex items-center gap-2">
-          {campaign.status !== "archived" && (
+          {canWrite && campaign.status !== "archived" && (
             <Button variant="outline" size="sm" onClick={togglePause}>
               {campaign.status === "active" ? <PauseIcon className="size-4" /> : <PlayIcon className="size-4" />}
               {pauseLabel}
             </Button>
           )}
-          <Button variant="outline" size="sm" onClick={handleDuplicate}>
-            <CopyIcon className="size-4" /> {t("rowActions.duplicate")}
-          </Button>
-          {campaign.status !== "archived" && (
+          {canWrite && (
+            <Button variant="outline" size="sm" onClick={handleDuplicate}>
+              <CopyIcon className="size-4" /> {t("rowActions.duplicate")}
+            </Button>
+          )}
+          {canWrite && campaign.status !== "archived" && (
             <Button variant="destructive" size="sm" onClick={() => setConfirmArchive(true)}>
               <Trash2Icon className="size-4" /> {t("rowActions.archive")}
             </Button>
@@ -113,7 +117,7 @@ export function CampaignRowActions({
             <TooltipContent>{t("rowActions.open")}</TooltipContent>
           </Tooltip>
 
-          {campaign.status !== "archived" && (
+          {canWrite && campaign.status !== "archived" && (
             <Tooltip>
               <TooltipTrigger asChild>
                 <IconButton aria-label={pauseLabel} size="icon-sm" onClick={togglePause}>
@@ -124,16 +128,18 @@ export function CampaignRowActions({
             </Tooltip>
           )}
 
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <IconButton aria-label={t("rowActions.duplicate")} size="icon-sm" onClick={handleDuplicate}>
-                <CopyIcon className="size-3.5" />
-              </IconButton>
-            </TooltipTrigger>
-            <TooltipContent>{t("rowActions.duplicate")}</TooltipContent>
-          </Tooltip>
+          {canWrite && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <IconButton aria-label={t("rowActions.duplicate")} size="icon-sm" onClick={handleDuplicate}>
+                  <CopyIcon className="size-3.5" />
+                </IconButton>
+              </TooltipTrigger>
+              <TooltipContent>{t("rowActions.duplicate")}</TooltipContent>
+            </Tooltip>
+          )}
 
-          {campaign.status !== "archived" && (
+          {canWrite && campaign.status !== "archived" && (
             <Tooltip>
               <TooltipTrigger asChild>
                 <IconButton aria-label={t("rowActions.archive")} size="icon-sm" onClick={() => setConfirmArchive(true)}>

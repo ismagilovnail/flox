@@ -5,6 +5,7 @@ import { useTranslation } from "react-i18next";
 
 import { LoadingState } from "@/components/ui/loading-state";
 import { ErrorState } from "@/components/ui/error-state";
+import { usePermission } from "@/hooks/use-auth";
 import { usePwa, useUpdatePwa } from "@/hooks/use-pwas";
 import { PwaForm, type PwaFormValues } from "@/features/pwa/pwa-form";
 import { PwaRowActions } from "@/features/pwa/pwa-row-actions";
@@ -45,6 +46,7 @@ function toFormValues(pwa: Pwa): PwaFormValues {
 
 export function PwaDetailView({ id }: { id: string }) {
   const { t } = useTranslation("pwa");
+  const canWrite = usePermission("content.write");
   const pwaQuery = usePwa(id);
   const updatePwa = useUpdatePwa(id);
 
@@ -74,6 +76,7 @@ export function PwaDetailView({ id }: { id: string }) {
       submitLabel={t("form.submitEdit")}
       onSubmit={handleSubmit}
       headerActions={<PwaRowActions pwa={pwa} variant="inline" />}
+      disabled={!canWrite}
     />
   );
 }

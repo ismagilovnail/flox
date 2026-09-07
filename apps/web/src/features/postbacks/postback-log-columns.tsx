@@ -10,6 +10,7 @@ import { IconButton } from "@/components/ui/icon-button";
 import { Caption, Mono } from "@/components/ui/typography";
 import { RelativeTime } from "@/components/ui/relative-time";
 import { CPA_STATUS_I18N_KEY } from "@/lib/api/conversions";
+import { usePermission } from "@/hooks/use-auth";
 import { useReplayIncomingPostback, useReplayOutgoingPostback } from "@/hooks/use-postback-logs";
 import type { PostbackLog, PostbackResult } from "@/lib/api/postback-logs";
 
@@ -34,8 +35,11 @@ const RESULT_VARIANT: Record<PostbackResult, "success" | "warning" | "danger" | 
  * came back (success/duplicate/ignored/error), not a fixed message. */
 function PostbackReplayButton({ log }: { log: PostbackLog }) {
   const { t } = useTranslation("postbacks");
+  const canWrite = usePermission("offer.write");
   const replayOutgoing = useReplayOutgoingPostback();
   const replayIncoming = useReplayIncomingPostback();
+
+  if (!canWrite) return null;
 
   if (log.direction === "outgoing") {
     if (!log.status || !log.url) return null;

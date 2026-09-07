@@ -5,6 +5,8 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { useTranslation } from "react-i18next";
 
+import { PermissionDeniedState } from "@/components/ui/permission-denied-state";
+import { usePermission } from "@/hooks/use-auth";
 import { useCreateNetwork } from "@/hooks/use-networks";
 import { NetworkForm, type NetworkFormValues } from "@/features/networks/network-form";
 import { PostbackSecretDialog } from "@/features/networks/network-list";
@@ -12,6 +14,7 @@ import { PostbackSecretDialog } from "@/features/networks/network-list";
 export function NewNetworkView() {
   const { t } = useTranslation("networks");
   const router = useRouter();
+  const canWrite = usePermission("offer.write");
   const createNetwork = useCreateNetwork();
   // Set only right after a successful create — postbackSecret is the ONE
   // time it's ever in a response (§54/Phase 30); showing it here instead
@@ -30,6 +33,10 @@ export function NewNetworkView() {
         onError: (err) => toast.error(t("toast.createError"), { description: err.message }),
       },
     );
+  }
+
+  if (!canWrite) {
+    return <PermissionDeniedState />;
   }
 
   if (revealed) {

@@ -6,10 +6,12 @@ import { useTranslation } from "react-i18next";
 import { LoadingState } from "@/components/ui/loading-state";
 import { ErrorState } from "@/components/ui/error-state";
 import { useNetwork, useUpdateNetwork } from "@/hooks/use-networks";
+import { usePermission } from "@/hooks/use-auth";
 import { NetworkForm, type NetworkFormValues } from "@/features/networks/network-form";
 
 export function NetworkDetailView({ id }: { id: string }) {
   const { t } = useTranslation("networks");
+  const canWrite = usePermission("offer.write");
   const networkQuery = useNetwork(id);
   const updateNetwork = useUpdateNetwork(id);
 
@@ -51,6 +53,7 @@ export function NetworkDetailView({ id }: { id: string }) {
       submitLabel={t("form.submitEdit")}
       showStatus
       onSubmit={handleSubmit}
+      disabled={!canWrite}
     />
   );
 }

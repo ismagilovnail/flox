@@ -19,6 +19,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { useActivatePwa, useArchivePwa, useDuplicatePwa, usePausePwa } from "@/hooks/use-pwas";
+import { usePermission } from "@/hooks/use-auth";
 import type { Pwa } from "@/lib/api/pwa";
 
 export function PwaRowActions({
@@ -35,6 +36,7 @@ export function PwaRowActions({
 }) {
   const { t } = useTranslation(["pwa", "common"]);
   const router = useRouter();
+  const canWrite = usePermission("content.write");
   const pause = usePausePwa();
   const activate = useActivatePwa();
   const duplicate = useDuplicatePwa();
@@ -76,16 +78,18 @@ export function PwaRowActions({
     <>
       {variant === "inline" ? (
         <div className="flex items-center gap-2">
-          {pwa.status !== "archived" && (
+          {canWrite && pwa.status !== "archived" && (
             <Button type="button" variant="outline" size="sm" onClick={togglePause}>
               {pwa.status === "active" ? <PauseIcon className="size-4" /> : <PlayIcon className="size-4" />}
               {pwa.status === "active" ? t("rowActions.pause") : t("rowActions.resume")}
             </Button>
           )}
-          <Button type="button" variant="outline" size="sm" onClick={handleDuplicate}>
-            <CopyIcon className="size-4" /> {t("rowActions.duplicate")}
-          </Button>
-          {pwa.status !== "archived" && (
+          {canWrite && (
+            <Button type="button" variant="outline" size="sm" onClick={handleDuplicate}>
+              <CopyIcon className="size-4" /> {t("rowActions.duplicate")}
+            </Button>
+          )}
+          {canWrite && pwa.status !== "archived" && (
             <Button type="button" variant="destructive" size="sm" onClick={() => setConfirmArchive(true)}>
               <Trash2Icon className="size-4" /> {t("rowActions.archive")}
             </Button>
@@ -104,7 +108,7 @@ export function PwaRowActions({
             <TooltipContent>{t("rowActions.edit")}</TooltipContent>
           </Tooltip>
 
-          {pwa.status !== "archived" && (
+          {canWrite && pwa.status !== "archived" && (
             <Tooltip>
               <TooltipTrigger asChild>
                 <IconButton
@@ -120,16 +124,18 @@ export function PwaRowActions({
             </Tooltip>
           )}
 
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <IconButton type="button" aria-label={t("rowActions.duplicate")} size="icon-sm" onClick={handleDuplicate}>
-                <CopyIcon className="size-3.5" />
-              </IconButton>
-            </TooltipTrigger>
-            <TooltipContent>{t("rowActions.duplicate")}</TooltipContent>
-          </Tooltip>
+          {canWrite && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <IconButton type="button" aria-label={t("rowActions.duplicate")} size="icon-sm" onClick={handleDuplicate}>
+                  <CopyIcon className="size-3.5" />
+                </IconButton>
+              </TooltipTrigger>
+              <TooltipContent>{t("rowActions.duplicate")}</TooltipContent>
+            </Tooltip>
+          )}
 
-          {pwa.status !== "archived" && (
+          {canWrite && pwa.status !== "archived" && (
             <Tooltip>
               <TooltipTrigger asChild>
                 <IconButton type="button" aria-label={t("rowActions.archive")} size="icon-sm" onClick={() => setConfirmArchive(true)}>

@@ -4,11 +4,13 @@ import { toast } from "sonner";
 
 import { LoadingState } from "@/components/ui/loading-state";
 import { ErrorState } from "@/components/ui/error-state";
+import { usePermission } from "@/hooks/use-auth";
 import { useDomain, useUpdateDomain } from "@/hooks/use-domains";
 import { DomainForm, type DomainFormValues } from "@/features/domains/domain-form";
 import { DomainAutomationCard } from "@/features/domains/domain-automation-card";
 
 export function DomainDetailView({ id }: { id: string }) {
+  const canWrite = usePermission("settings.write");
   const domainQuery = useDomain(id);
   const updateDomain = useUpdateDomain();
 
@@ -41,6 +43,7 @@ export function DomainDetailView({ id }: { id: string }) {
         defaultValues={domain}
         submitLabel="Save changes"
         onSubmit={handleSubmit}
+        disabled={!canWrite}
       />
       <DomainAutomationCard domain={domain} />
     </div>

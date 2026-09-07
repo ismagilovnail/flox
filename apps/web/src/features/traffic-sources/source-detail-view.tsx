@@ -6,10 +6,12 @@ import { useTranslation } from "react-i18next";
 import { LoadingState } from "@/components/ui/loading-state";
 import { ErrorState } from "@/components/ui/error-state";
 import { useTrafficSource, useUpdateTrafficSource } from "@/hooks/use-traffic-sources";
+import { usePermission } from "@/hooks/use-auth";
 import { SourceForm, type SourceFormValues } from "@/features/traffic-sources/source-form";
 
 export function SourceDetailView({ id }: { id: string }) {
   const { t } = useTranslation("trafficSources");
+  const canWrite = usePermission("source.write");
   const sourceQuery = useTrafficSource(id);
   const updateSource = useUpdateTrafficSource(id);
 
@@ -59,6 +61,7 @@ export function SourceDetailView({ id }: { id: string }) {
       showStatus
       sourceId={source.id}
       onSubmit={handleSubmit}
+      disabled={!canWrite}
     />
   );
 }

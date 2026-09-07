@@ -5,6 +5,82 @@ per-phase, matching `CLAUDE.md`'s phase protocol. The one exception is
 [Between phases], below: spec amendments and the code changes that follow from
 them land between phases and would otherwise be invisible here.
 
+## [Security] — permission-gate the frontend action buttons (finding #1 follow-up)
+
+Finding #1's RBAC fix enforced `campaign.write`/`offer.write`/`source.write`/
+`content.write`/`settings.write` on the API, but the frontend still showed
+Create/Edit/Delete/Pause/Archive/Duplicate/Regenerate-secret buttons to every
+role regardless of permission — a read-only role saw a "Create" button that
+then 403'd on click.
+
+### The fix
+
+A new `usePermission(key)` hook (`hooks/use-auth.ts`, built on the `useMe()`
+`permissions` array `/auth/me` already returns) and a new
+`PermissionDeniedState` component (`components/ui/permission-denied-state.tsx`,
+matching the existing `EmptyState`/`ErrorState` shape) are the two building
+blocks; everything else follows the same convention `team/member-list.tsx`
+already established (`!!me.data?.permissions.includes(key)`), applied
+consistently for the first time across the other four write keys.
+
+Across all five permission groups: list pages hide their "New X" button;
+row-actions components hide Delete/Archive/Pause/Duplicate/Regenerate-secret
+(Edit-links and read-only actions like Open/View-statistics/Verify stay
+visible); shared `*-form.tsx` components (used by both create and edit) take
+a `disabled` prop locking every field and the submit button; and — scoped
+with the user before starting, since this doubles the file count — the ~14
+route-level `new-*-view.tsx` create pages also guard against direct
+navigation, rendering `PermissionDeniedState` instead of the form for a
+role that can't write, closing the gap where hiding a list's button alone
+doesn't stop someone from typing `/campaigns/new` directly.
+
+`campaigns/` was built first as the reference implementation (it has the
+one real subtlety: `campaign-form.tsx`/`tracking-links.tsx` already had an
+`archived`-conditioned notice tied to a shared `disabled` prop, so a plain
+`disabled = isArchived || !canWrite` would have shown "this campaign is
+archived" to a non-archived campaign's read-only viewer — fixed by adding a
+separate `archived` prop so the notice text stays accurate to the real
+reason). The other four groups (offer.write, source.write, content.write,
+settings.write) followed the same pattern; none of their forms had a
+pre-existing `disabled`-tied notice to disambiguate, so they needed no
+equivalent.
+
+### Bug fixed along the way, not just a gap closed
+
+`content-gallery/gallery-browser.tsx` had an existing role check —
+`me?.role === "Owner" || "Admin"` — that (a) only gated the "Uploaded by"
+filter dropdown, not any real mutation, and (b) used the wrong tier:
+`content.write`'s actual seeded policy (migration `00035`) grants
+Owner/Admin/**Manager** write. Replaced with `usePermission("content.write")`
+and used to actually gate upload, archive, restore, and permanent-delete.
+`gallery-folder-panel.tsx`'s create/rename/delete-folder controls had zero
+check before this and now have one too.
+
+### Tags handled once, not per host page
+
+`content.write` also covers the tag system (`apps/internal/tags.Handler`:
+create/update/delete/assignment all sit behind the same `requireWrite`).
+Rather than gating the "Edit Tags" trigger button on every one of the ~10
+different entity list pages that embed it, `tag-picker-popover.tsx` and
+`bulk-tag-dialog.tsx` — the two shared components every host page's tag
+mutations actually route through — are gated once, correctly covering
+every call site with no per-page duplication.
+
+### Verified
+
+`tsc --noEmit`, `eslint`, and `vitest` (21/21) all clean across every
+touched file. Live in a real browser against the running dev stack: signed
+in as Owner (all buttons visible, e.g. campaigns' New button), invited and
+accepted a real Viewer, and confirmed as that Viewer — New-campaign/offer/
+network/pixel/landing buttons all hidden; a real traffic source's row
+actions showed only Edit and View-statistics (Pause/Duplicate/Archive
+gone); its detail form rendered with every field and the Save/Connect
+buttons disabled; navigating directly to `/campaigns/new` rendered
+`PermissionDeniedState` ("У вас нет прав для этого действия") instead of
+the form, in the session's own Russian locale, confirming the i18n keys
+resolve correctly. Test invite (`viewer-verify@example.com`) and its
+fixtures deleted afterward via SQL (`audit_logs` first, FK order).
+
 ## [Security] — move shadcn's CLI to devDependencies (audit finding #7)
 
 The audit found `shadcn` (the component-scaffolding CLI, invoked

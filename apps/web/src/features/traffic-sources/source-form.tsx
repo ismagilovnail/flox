@@ -61,6 +61,7 @@ export function SourceForm({
   showStatus = false,
   sourceId,
   onSubmit,
+  disabled = false,
 }: {
   title: string;
   defaultValues: Partial<SourceFormValues>;
@@ -71,6 +72,11 @@ export function SourceForm({
    * id yet for a connection to attach to. */
   sourceId?: string;
   onSubmit: (values: SourceFormValues) => void;
+  /** Locks every field and the submit button read-only — the caller
+   * lacks source.write. The create path never sets this: new-source-view
+   * shows a full-page permission-denied state instead of rendering this
+   * form at all when the role can't write. */
+  disabled?: boolean;
 }) {
   const { t } = useTranslation(["trafficSources", "common"]);
   const form = useForm<SourceFormValues>({
@@ -112,6 +118,7 @@ export function SourceForm({
                 placeholder={t("form.namePlaceholder", { ns: "trafficSources" })}
                 {...register("name")}
                 aria-invalid={!!errors.name}
+                disabled={disabled}
               />
               {errors.name && <p className="text-xs text-danger">{errors.name.message}</p>}
             </div>
@@ -122,7 +129,7 @@ export function SourceForm({
                 control={control}
                 name="type"
                 render={({ field }) => (
-                  <Select value={field.value} onValueChange={field.onChange}>
+                  <Select value={field.value} onValueChange={field.onChange} disabled={disabled}>
                     <SelectTrigger id="src-type" className="w-full">
                       <SelectValue />
                     </SelectTrigger>
@@ -152,6 +159,7 @@ export function SourceForm({
               className="font-mono text-xs"
               {...register("trackingTemplate")}
               aria-invalid={!!errors.trackingTemplate}
+              disabled={disabled}
             />
             {errors.trackingTemplate && <p className="text-xs text-danger">{errors.trackingTemplate.message}</p>}
           </div>
@@ -163,7 +171,7 @@ export function SourceForm({
                 control={control}
                 name="costIntegration"
                 render={({ field }) => (
-                  <Select value={field.value} onValueChange={field.onChange}>
+                  <Select value={field.value} onValueChange={field.onChange} disabled={disabled}>
                     <SelectTrigger id="src-cost" className="w-full">
                       <SelectValue />
                     </SelectTrigger>
@@ -187,7 +195,7 @@ export function SourceForm({
                   control={control}
                   name="status"
                   render={({ field }) => (
-                    <Select value={field.value} onValueChange={field.onChange}>
+                    <Select value={field.value} onValueChange={field.onChange} disabled={disabled}>
                       <SelectTrigger id="src-status" className="w-full">
                         <SelectValue />
                       </SelectTrigger>
@@ -227,7 +235,7 @@ export function SourceForm({
         <Button type="button" variant="outline" asChild>
           <Link href="/traffic-sources">{t("actions.cancel", { ns: "common" })}</Link>
         </Button>
-        <Button type="submit" disabled={isSubmitting}>
+        <Button type="submit" disabled={disabled || isSubmitting}>
           {submitLabel}
         </Button>
       </div>

@@ -18,11 +18,13 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { useActivateOffer, useArchiveOffer, useDuplicateOffer, usePauseOffer } from "@/hooks/use-offers";
+import { usePermission } from "@/hooks/use-auth";
 import { viewStatisticsHref } from "@/features/analytics/view-statistics-link";
 import type { Offer } from "@/lib/api/offers";
 
 export function OfferRowActions({ offer }: { offer: Offer }) {
   const { t } = useTranslation(["offers", "common"]);
+  const canWrite = usePermission("offer.write");
   const pause = usePauseOffer();
   const activate = useActivateOffer();
   const duplicate = useDuplicateOffer();
@@ -82,7 +84,7 @@ export function OfferRowActions({ offer }: { offer: Offer }) {
           <TooltipContent>{t("rowActions.viewStatistics")}</TooltipContent>
         </Tooltip>
 
-        {offer.status !== "archived" && (
+        {canWrite && offer.status !== "archived" && (
           <Tooltip>
             <TooltipTrigger asChild>
               <IconButton
@@ -97,16 +99,18 @@ export function OfferRowActions({ offer }: { offer: Offer }) {
           </Tooltip>
         )}
 
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <IconButton aria-label={t("rowActions.duplicate")} size="icon-sm" onClick={handleDuplicate}>
-              <CopyIcon className="size-3.5" />
-            </IconButton>
-          </TooltipTrigger>
-          <TooltipContent>{t("rowActions.duplicate")}</TooltipContent>
-        </Tooltip>
+        {canWrite && (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <IconButton aria-label={t("rowActions.duplicate")} size="icon-sm" onClick={handleDuplicate}>
+                <CopyIcon className="size-3.5" />
+              </IconButton>
+            </TooltipTrigger>
+            <TooltipContent>{t("rowActions.duplicate")}</TooltipContent>
+          </Tooltip>
+        )}
 
-        {offer.status !== "archived" && (
+        {canWrite && offer.status !== "archived" && (
           <Tooltip>
             <TooltipTrigger asChild>
               <IconButton aria-label={t("rowActions.archive")} size="icon-sm" onClick={() => setConfirmArchive(true)}>

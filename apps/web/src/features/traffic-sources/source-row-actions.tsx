@@ -23,11 +23,13 @@ import {
   useDuplicateTrafficSource,
   usePauseTrafficSource,
 } from "@/hooks/use-traffic-sources";
+import { usePermission } from "@/hooks/use-auth";
 import { viewStatisticsHref } from "@/features/analytics/view-statistics-link";
 import type { TrafficSource } from "@/lib/api/traffic-sources";
 
 export function SourceRowActions({ source }: { source: TrafficSource }) {
   const { t } = useTranslation(["trafficSources", "common"]);
+  const canWrite = usePermission("source.write");
   const pause = usePauseTrafficSource();
   const activate = useActivateTrafficSource();
   const duplicate = useDuplicateTrafficSource();
@@ -87,7 +89,7 @@ export function SourceRowActions({ source }: { source: TrafficSource }) {
           <TooltipContent>{t("rowActions.viewStatistics")}</TooltipContent>
         </Tooltip>
 
-        {source.status !== "archived" && (
+        {canWrite && source.status !== "archived" && (
           <Tooltip>
             <TooltipTrigger asChild>
               <IconButton
@@ -102,16 +104,18 @@ export function SourceRowActions({ source }: { source: TrafficSource }) {
           </Tooltip>
         )}
 
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <IconButton aria-label={t("rowActions.duplicate")} size="icon-sm" onClick={handleDuplicate}>
-              <CopyIcon className="size-3.5" />
-            </IconButton>
-          </TooltipTrigger>
-          <TooltipContent>{t("rowActions.duplicate")}</TooltipContent>
-        </Tooltip>
+        {canWrite && (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <IconButton aria-label={t("rowActions.duplicate")} size="icon-sm" onClick={handleDuplicate}>
+                <CopyIcon className="size-3.5" />
+              </IconButton>
+            </TooltipTrigger>
+            <TooltipContent>{t("rowActions.duplicate")}</TooltipContent>
+          </Tooltip>
+        )}
 
-        {source.status !== "archived" && (
+        {canWrite && source.status !== "archived" && (
           <Tooltip>
             <TooltipTrigger asChild>
               <IconButton aria-label={t("rowActions.archive")} size="icon-sm" onClick={() => setConfirmArchive(true)}>

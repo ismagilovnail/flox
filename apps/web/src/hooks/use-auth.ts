@@ -99,6 +99,16 @@ export function useLogin() {
   });
 }
 
+// §52: "frontend permissions are only UX" — every caller gating a button
+// or route on this must still rely on the server's own 403 as the real
+// control; this only decides what's worth showing. Undefined `me.data`
+// (still loading, or signed out) reads as false rather than throwing, so
+// a page can call this before useMe() resolves without an extra guard.
+export function usePermission(key: string): boolean {
+  const me = useMe();
+  return !!me.data?.permissions.includes(key);
+}
+
 export function useLogout() {
   const qc = useQueryClient();
   return useMutation({

@@ -45,11 +45,13 @@ export function PostlandingForm({
   defaultValues,
   submitLabel,
   onSubmit,
+  disabled = false,
 }: {
   title: string;
   defaultValues: Partial<PostlandingFormValues>;
   submitLabel: string;
   onSubmit: (values: PostlandingFormValues) => void;
+  disabled?: boolean;
 }) {
   const { t } = useTranslation(["postlanding", "common"]);
   const form = useForm<PostlandingFormValues>({
@@ -66,6 +68,7 @@ export function PostlandingForm({
 
   return (
     <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-4">
+      <fieldset disabled={disabled} className="contents">
       <Card>
         <CardHeader>
           <CardTitle>{title}</CardTitle>
@@ -137,12 +140,13 @@ export function PostlandingForm({
           </div>
         </CardContent>
       </Card>
+      </fieldset>
 
       <div className="flex justify-end gap-2">
         <Button type="button" variant="outline" asChild>
           <Link href="/postlanding">{t("actions.cancel", { ns: "common" })}</Link>
         </Button>
-        <Button type="submit" disabled={isSubmitting}>
+        <Button type="submit" disabled={disabled || isSubmitting}>
           {submitLabel}
         </Button>
       </div>

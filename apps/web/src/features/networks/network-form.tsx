@@ -45,12 +45,16 @@ export function NetworkForm({
   submitLabel,
   showStatus = false,
   onSubmit,
+  disabled = false,
 }: {
   title: string;
   defaultValues: Partial<NetworkFormValues>;
   submitLabel: string;
   showStatus?: boolean;
   onSubmit: (values: NetworkFormValues) => void;
+  /** Locks every field read-only (offer.write) via a native <fieldset
+   * disabled>, same technique offer-form.tsx/stream-set-editor.tsx use. */
+  disabled?: boolean;
 }) {
   const { t } = useTranslation(["networks", "common"]);
   const form = useForm<NetworkFormValues>({
@@ -75,6 +79,12 @@ export function NetworkForm({
           <CardDescription>{t("form.description", { ns: "networks" })}</CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-4">
+        <fieldset disabled={disabled} className="contents">
+          {disabled && (
+            <p className="rounded-md bg-muted px-3 py-2 text-xs text-muted-foreground">
+              {t("permissionDenied.title", { ns: "common" })}
+            </p>
+          )}
           <div className="grid gap-1.5">
             <Label htmlFor="net-name">{t("form.nameLabel", { ns: "networks" })}</Label>
             <Input
@@ -143,6 +153,7 @@ export function NetworkForm({
               />
             </div>
           )}
+        </fieldset>
         </CardContent>
       </Card>
 
@@ -150,7 +161,7 @@ export function NetworkForm({
         <Button type="button" variant="outline" asChild>
           <Link href="/networks">{t("actions.cancel", { ns: "common" })}</Link>
         </Button>
-        <Button type="submit" disabled={isSubmitting}>
+        <Button type="submit" disabled={disabled || isSubmitting}>
           {submitLabel}
         </Button>
       </div>

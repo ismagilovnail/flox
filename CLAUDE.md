@@ -19,58 +19,127 @@ referenced below as §N).
 ## CURRENT STATE — UPDATE THIS EVERY PHASE
 
 ```
-CURRENT PHASE : MOVE SHADCN'S CLI TO DEVDEPENDENCIES
-                (security audit finding #7, user-scoped, follows the
-                finding-#6 Go-bump phase; user asked for this one
-                directly, no scoping questions needed — cheap, low-risk,
-                already called out as such in the prior phase's NEXT)
-STATUS        : done. apps/web/package.json: shadcn moved from
-                dependencies to devDependencies (nothing at runtime
-                imports it — it's a CLI invoked manually via `npx shadcn
-                add ...` when scaffolding a new UI component).
-                package-lock.json regenerated (npm install) so its
-                transitive-only packages get re-flagged dev. VERIFIED
-                WITH A REAL INSTALL, not just the lockfile diff: npm ci
-                --omit=dev in an isolated /tmp copy installed 147
-                packages (was 790 including dev deps) and shadcn,
-                express, qs, and @modelcontextprotocol/sdk — the exact
-                packages the audit named — are absent from node_modules
-                entirely. npx shadcn from a real checkout is unaffected
-                (npx resolves devDependencies same as dependencies).
-                VERIFIED: tsc --noEmit / eslint / vitest (21/21) / next
-                build all clean. No Go changes this phase, so go
-                build/vet/test weren't re-run.
+CURRENT PHASE : PERMISSION-GATE THE FRONTEND ACTION BUTTONS
+                (finding-#1 follow-up, user-scoped, follows the finding-#7
+                shadcn-devDependencies phase)
+STATUS        : done. Finding #1 enforced campaign.write/offer.write/
+                source.write/content.write/settings.write on the API, but
+                the frontend still showed Create/Edit/Delete/Pause/
+                Archive/Duplicate/Regenerate-secret buttons to every role
+                regardless of permission — a read-only role saw a
+                "Create" button that then 403'd.
+                SCOPED WITH THE USER before starting: whether to also
+                guard the ~14 route-level new-*-view.tsx pages against
+                direct navigation (hiding a list's button alone doesn't
+                stop someone typing /campaigns/new and filling out the
+                whole form before a 403) — user said yes, guard those
+                too, roughly doubling the file count.
+                BUILT: usePermission(key) hook (hooks/use-auth.ts, on top
+                of useMe()'s permissions array) and PermissionDeniedState
+                component (components/ui/permission-denied-state.tsx,
+                matches EmptyState/ErrorState's shape), plus
+                common:permissionDenied.title/.description in both en/ru
+                locales. Convention matches team/member-list.tsx's
+                existing !!me.data?.permissions.includes(key) — extended
+                consistently to the other four write keys for the first
+                time.
+                campaigns/ built FIRST as the reference implementation
+                (done directly, not delegated) because it had the one
+                real subtlety: campaign-form.tsx/tracking-links.tsx
+                already had an "archived" notice tied to a shared
+                disabled prop — a plain disabled = isArchived || !canWrite
+                would have shown "this campaign is archived" to a
+                non-archived campaign's read-only viewer. Fixed with a
+                separate `archived` prop so the notice stays accurate to
+                the real reason. The other four groups (offer.write,
+                source.write, content.write, settings.write) were then
+                built by 4 parallel forks, each given the campaigns/
+                reference files to imitate plus an explicit file list —
+                none of their forms had a pre-existing disabled-tied
+                notice to disambiguate, confirmed by grep before
+                dispatching, so they needed no equivalent complication.
+                BUG FIXED ALONG THE WAY: content-gallery/gallery-
+                browser.tsx's existing role check (Owner/Admin only, and
+                only gating a filter dropdown, not any mutation) was
+                wrong on both counts — content.write's real seeded policy
+                (migration 00035) is Owner/Admin/Manager, and upload/
+                archive/restore/delete had ZERO check before this. Fixed
+                to usePermission("content.write") gating the real
+                mutations. gallery-folder-panel.tsx's folder CRUD also
+                had zero check before and now has one.
+                TAGS HANDLED ONCE: content.write also covers
+                apps/internal/tags (create/update/delete/assignment all
+                behind the same requireWrite). Rather than gating the
+                "Edit Tags" trigger on each of the ~10 host list pages
+                that embed it, tag-picker-popover.tsx and bulk-tag-
+                dialog.tsx — the two shared components every host page's
+                tag mutations actually route through — are gated once,
+                correctly covering every call site with zero per-page
+                duplication.
+                VERIFIED: tsc --noEmit / eslint / vitest (21/21) all
+                clean across every touched file (58 files: campaigns x7,
+                offers x5, networks x5, postbacks x2, traffic-sources x6,
+                landings x5, pwa x5, postlanding x5, pixels x5, content-
+                gallery x2, tags x2, domains x6, plus use-auth.ts + the
+                new PermissionDeniedState + 2 locale files). LIVE IN A
+                REAL BROWSER against the running dev stack (not just
+                static checks): stopped the infra-web-1 docker container
+                to free port 3000 for a local `next dev` bound to it
+                (CORS only allows APP_URL=http://localhost:3000, so a
+                mismatched port silently 503'd every API call — caught
+                and fixed before concluding anything was broken). Signed
+                in as the existing "Browser Verify Org" Owner — New-
+                campaign button visible. Invited and accepted a real
+                Viewer — New buttons hidden across campaigns/offers/
+                networks/pixels/landings; a real seeded traffic source's
+                row actions showed only Edit + View-statistics (Pause/
+                Duplicate/Archive gone); its detail form rendered every
+                field and the Save/Connect buttons disabled; navigating
+                directly to /campaigns/new rendered PermissionDeniedState
+                ("У вас нет прав для этого действия") instead of the
+                form, in the session's own Russian locale — confirming
+                the i18n keys resolve. Test invite and its fixtures
+                deleted afterward via SQL (audit_logs first, FK order);
+                infra-web-1 restarted, ad-hoc dev server killed —
+                environment back to its exact prior state.
 LAST COMMIT   : (this phase's own work is uncommitted, see below). Before
-                it: d75198d chore(deps): bump Go to 1.26.6 (audit finding
-                #6); e757aaa fix(settings): stop claiming API keys
-                authenticate calls (audit finding #4); 2058b1b
-                fix(security): trusted-proxy IP resolution & pending-
-                login lockout (audit findings #2, #3); 1e45953
-                fix(auth): enforce RBAC on every mutating route (audit
-                finding #1) — full detail for all in CHANGELOG.md.
+                it: 734e54d chore(deps): move shadcn's CLI to
+                devDependencies (audit finding #7); d75198d chore(deps):
+                bump Go to 1.26.6 (audit finding #6); e757aaa
+                fix(settings): stop claiming API keys authenticate calls
+                (audit finding #4); 2058b1b fix(security): trusted-proxy
+                IP resolution & pending-login lockout (audit findings #2,
+                #3); 1e45953 fix(auth): enforce RBAC on every mutating
+                route (audit finding #1) — full detail for all in
+                CHANGELOG.md.
 UNCOMMITTED   : this phase's own work, about to be committed as one
-                logical commit — apps/web/package.json,
-                apps/web/package-lock.json; CHANGELOG.md; this CLAUDE.md
-                edit. Deliberately left out, unrelated and predating this
-                phase: ROADMAP.md, apps/e2e/scenario_test.go,
+                logical commit — all 58 files listed under VERIFIED
+                above. Deliberately left out, unrelated and predating
+                this phase: ROADMAP.md, apps/e2e/scenario_test.go,
                 apps/web/src/lib/api/networks.ts and offers.ts remain
                 unstaged from the older repo+plan-audit pass; whoever
                 picks those up next should check they're still wanted.
 NEXT          : confirm scope before starting. All 7 numbered audit
-                findings are now resolved or explicitly deferred by user
-                decision: (1) RBAC, (2) trusted-proxy IP, (3) pending-
-                login lockout, (4) API-keys-UI honesty (real auth
-                deferred), (5) rate-limiter fail-open is a deliberate,
-                documented stance rather than a bug, (6) Go 1.26.6, (7)
-                this phase. Open follow-ups, none of them numbered
-                findings: permission-gating the frontend action buttons
-                (finding-#1 phase); setting TRUSTED_PROXIES to a real
-                value once an actual reverse proxy/LB/CDN is deployed
-                (finding-#2 phase); scoping real API-key authentication
-                as its own phase whenever it's wanted (finding-#4,
-                deferred); the 3 golang.org/x/crypto advisories surfaced
-                in finding-#6's govulncheck run (dependency hygiene, not
-                a live vulnerability today).
+                findings are resolved or explicitly deferred by user
+                decision (see finding-#7 phase's own NEXT for the full
+                list); this phase closes the frontend follow-up finding
+                #1 left open. Still open, none of them numbered findings:
+                setting TRUSTED_PROXIES to a real value once an actual
+                reverse proxy/LB/CDN is deployed (finding-#2 phase);
+                scoping real API-key authentication as its own phase
+                whenever it's wanted (finding-#4, deferred); the 3
+                golang.org/x/crypto advisories surfaced in finding-#6's
+                govulncheck run (dependency hygiene, not a live
+                vulnerability today). Also worth a look, found but not
+                acted on this phase: domain-form.tsx's MultiSelect
+                (Purpose field) has no native disabled prop and stays
+                interactively editable even when the rest of the form is
+                locked (its per-field disabled-prop approach, unlike
+                pwa-form.tsx/postlanding-form.tsx/pixel-form.tsx's native
+                `<fieldset disabled>` wrapper, which correctly locks a
+                MultiSelect's button too) — the submit button still
+                blocks the actual write, so this is UX polish, not a
+                security gap.
 ```
 
 > At the end of every phase: update the four lines above, add a CHANGELOG entry,

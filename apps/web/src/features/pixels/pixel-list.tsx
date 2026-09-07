@@ -8,11 +8,13 @@ import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
 import { LoadingState } from "@/components/ui/loading-state";
 import { ErrorState } from "@/components/ui/error-state";
+import { usePermission } from "@/hooks/use-auth";
 import { usePixels } from "@/hooks/use-pixels";
 import { pixelColumns } from "@/features/pixels/pixel-columns";
 
 export function PixelList() {
   const { t } = useTranslation(["pixels", "common"]);
+  const canWrite = usePermission("content.write");
   const pixelsQuery = usePixels();
 
   const columns = pixelColumns(t);
@@ -20,12 +22,14 @@ export function PixelList() {
   const header = (
     <div className="flex items-center justify-between">
       <h1 className="text-2xl font-semibold tracking-tight">{t("list.title", { ns: "pixels" })}</h1>
-      <Button asChild>
-        <Link href="/pixels/new">
-          <PlusIcon className="size-4" />
-          {t("list.newButton", { ns: "pixels" })}
-        </Link>
-      </Button>
+      {canWrite && (
+        <Button asChild>
+          <Link href="/pixels/new">
+            <PlusIcon className="size-4" />
+            {t("list.newButton", { ns: "pixels" })}
+          </Link>
+        </Button>
+      )}
     </div>
   );
 

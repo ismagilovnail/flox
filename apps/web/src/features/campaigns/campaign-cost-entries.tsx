@@ -28,6 +28,7 @@ import { DataTable, dataTableFeatures } from "@/components/ui/data-table";
 import { LoadingState } from "@/components/ui/loading-state";
 import { ErrorState } from "@/components/ui/error-state";
 import { formatUsd } from "@/lib/format";
+import { usePermission } from "@/hooks/use-auth";
 import { useTrafficSources } from "@/hooks/use-traffic-sources";
 import { useCostEntries, useDeleteCostEntry, useUpsertCostEntry } from "@/hooks/use-cost-entries";
 import type { CostEntry } from "@/lib/api/cost-entries";
@@ -59,6 +60,7 @@ function costEntryColumns(
   t: TFunction,
   sourceNameById: Record<string, string>,
   onDeleteRequest: (id: string) => void,
+  canWrite: boolean,
 ): ColumnDef<typeof dataTableFeatures, CostEntry>[] {
   return [
     { accessorKey: "entryDate", header: t("columns.date", { ns: "cost" }) },
@@ -97,9 +99,11 @@ function costEntryColumns(
       enableHiding: false,
       cell: ({ row }) => (
         <div className="flex justify-end">
-          <IconButton aria-label={t("list.deleteAria", { ns: "cost" })} onClick={() => onDeleteRequest(row.original.id)}>
-            <Trash2Icon className="size-4" />
-          </IconButton>
+          {canWrite && (
+            <IconButton aria-label={t("list.deleteAria", { ns: "cost" })} onClick={() => onDeleteRequest(row.original.id)}>
+              <Trash2Icon className="size-4" />
+            </IconButton>
+          )}
         </div>
       ),
     },
@@ -111,6 +115,7 @@ function costEntryColumns(
  * backend upserts, it never stacks (apps/internal/cost). */
 export function CampaignCostEntries({ campaignId }: { campaignId: string }) {
   const { t } = useTranslation("cost");
+  const canWrite = usePermission("campaign.write");
   const entriesQuery = useCostEntries(campaignId);
   const sourcesQuery = useTrafficSources();
   const upsert = useUpsertCostEntry(campaignId);
@@ -176,68 +181,70 @@ export function CampaignCostEntries({ campaignId }: { campaignId: string }) {
 
   return (
     <div className="flex flex-col gap-6">
-      <Card>
-        <CardHeader>
-          <CardTitle>{t("form.title")}</CardTitle>
-          <CardDescription>{t("form.description")}</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <form onSubmit={handleSubmit(onSubmit)} className="grid max-w-2xl grid-cols-2 gap-4 sm:grid-cols-4">
-            <div className="grid gap-1.5">
-              <Label htmlFor="entryDate">{t("form.dateLabel")}</Label>
-              <Input id="entryDate" type="date" {...register("entryDate")} aria-invalid={!!errors.entryDate} />
-              {errors.entryDate && <p className="text-xs text-danger">{errors.entryDate.message}</p>}
-            </div>
+      {canWrite && (
+        <Card>
+          <CardHeader>
+            <CardTitle>{t("form.title")}</CardTitle>
+            <CardDescription>{t("form.description")}</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <form onSubmit={handleSubmit(onSubmit)} className="grid max-w-2xl grid-cols-2 gap-4 sm:grid-cols-4">
+              <div className="grid gap-1.5">
+                <Label htmlFor="entryDate">{t("form.dateLabel")}</Label>
+                <Input id="entryDate" type="date" {...register("entryDate")} aria-invalid={!!errors.entryDate} />
+                {errors.entryDate && <p className="text-xs text-danger">{errors.entryDate.message}</p>}
+              </div>
 
-            <div className="grid gap-1.5">
-              <Label htmlFor="trafficSourceId">{t("form.sourceLabel")}</Label>
-              <Controller
-                control={control}
-                name="trafficSourceId"
-                render={({ field }) => (
-                  <Select value={field.value} onValueChange={field.onChange}>
-                    <SelectTrigger id="trafficSourceId" className="w-full">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value={ALL_SOURCES}>{t("form.allSources")}</SelectItem>
-                      {sources.map((s) => (
-                        <SelectItem key={s.id} value={s.id}>
-                          {s.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                )}
-              />
-            </div>
+              <div className="grid gap-1.5">
+                <Label htmlFor="trafficSourceId">{t("form.sourceLabel")}</Label>
+                <Controller
+                  control={control}
+                  name="trafficSourceId"
+                  render={({ field }) => (
+                    <Select value={field.value} onValueChange={field.onChange}>
+                      <SelectTrigger id="trafficSourceId" className="w-full">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value={ALL_SOURCES}>{t("form.allSources")}</SelectItem>
+                        {sources.map((s) => (
+                          <SelectItem key={s.id} value={s.id}>
+                            {s.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  )}
+                />
+              </div>
 
-            <div className="grid gap-1.5">
-              <Label htmlFor="amount">{t("form.amountLabel")}</Label>
-              <Input id="amount" type="number" step="0.01" min="0" {...register("amount")} aria-invalid={!!errors.amount} />
-              {errors.amount && <p className="text-xs text-danger">{errors.amount.message}</p>}
-            </div>
+              <div className="grid gap-1.5">
+                <Label htmlFor="amount">{t("form.amountLabel")}</Label>
+                <Input id="amount" type="number" step="0.01" min="0" {...register("amount")} aria-invalid={!!errors.amount} />
+                {errors.amount && <p className="text-xs text-danger">{errors.amount.message}</p>}
+              </div>
 
-            <div className="grid gap-1.5">
-              <Label htmlFor="currency">{t("form.currencyLabel")}</Label>
-              <Input
-                id="currency"
-                placeholder={t("form.currencyPlaceholder")}
-                maxLength={3}
-                {...register("currency")}
-                aria-invalid={!!errors.currency}
-              />
-              {errors.currency && <p className="text-xs text-danger">{errors.currency.message}</p>}
-            </div>
+              <div className="grid gap-1.5">
+                <Label htmlFor="currency">{t("form.currencyLabel")}</Label>
+                <Input
+                  id="currency"
+                  placeholder={t("form.currencyPlaceholder")}
+                  maxLength={3}
+                  {...register("currency")}
+                  aria-invalid={!!errors.currency}
+                />
+                {errors.currency && <p className="text-xs text-danger">{errors.currency.message}</p>}
+              </div>
 
-            <div className="col-span-full flex justify-end">
-              <Button type="submit" disabled={isSubmitting}>
-                {t("form.submitButton")}
-              </Button>
-            </div>
-          </form>
-        </CardContent>
-      </Card>
+              <div className="col-span-full flex justify-end">
+                <Button type="submit" disabled={isSubmitting}>
+                  {t("form.submitButton")}
+                </Button>
+              </div>
+            </form>
+          </CardContent>
+        </Card>
+      )}
 
       {entriesQuery.isPending ? (
         <LoadingState label={t("list.loading")} />
@@ -245,7 +252,7 @@ export function CampaignCostEntries({ campaignId }: { campaignId: string }) {
         <ErrorState title={t("list.loadError")} description={entriesQuery.error.message} onRetry={() => entriesQuery.refetch()} />
       ) : (
         <DataTable
-          columns={costEntryColumns(t, sourceNameById, setConfirmDeleteId)}
+          columns={costEntryColumns(t, sourceNameById, setConfirmDeleteId, canWrite)}
           data={entriesQuery.data.entries}
           emptyTitle={t("list.emptyTitle")}
           emptyDescription={t("list.emptyDescription")}

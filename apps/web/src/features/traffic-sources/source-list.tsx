@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
 import { LoadingState } from "@/components/ui/loading-state";
 import { ErrorState } from "@/components/ui/error-state";
+import { usePermission } from "@/hooks/use-auth";
 import { useTrafficSources } from "@/hooks/use-traffic-sources";
 import { EMPTY_TAG_ASSIGNMENTS, useTagAssignments } from "@/hooks/use-tags";
 import { sourceColumns } from "@/features/traffic-sources/source-columns";
@@ -18,6 +19,7 @@ import { filterByTags } from "@/features/tags/filter-by-tags";
 
 export function SourceList() {
   const { t } = useTranslation(["trafficSources", "common"]);
+  const canWrite = usePermission("source.write");
   const sourcesQuery = useTrafficSources();
   const assignments = useTagAssignments("traffic_source").data?.assignments ?? EMPTY_TAG_ASSIGNMENTS;
 
@@ -33,12 +35,14 @@ export function SourceList() {
   const header = (
     <div className="flex items-center justify-between">
       <h1 className="text-2xl font-semibold tracking-tight">{t("list.title", { ns: "trafficSources" })}</h1>
-      <Button asChild>
-        <Link href="/traffic-sources/new">
-          <PlusIcon className="size-4" />
-          {t("list.newButton", { ns: "trafficSources" })}
-        </Link>
-      </Button>
+      {canWrite && (
+        <Button asChild>
+          <Link href="/traffic-sources/new">
+            <PlusIcon className="size-4" />
+            {t("list.newButton", { ns: "trafficSources" })}
+          </Link>
+        </Button>
+      )}
     </div>
   );
 

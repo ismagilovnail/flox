@@ -194,6 +194,7 @@ export function PwaForm({
   submitLabel,
   onSubmit,
   headerActions,
+  disabled = false,
 }: {
   title: string;
   defaultValues: Partial<PwaFormValues>;
@@ -207,6 +208,7 @@ export function PwaForm({
    * for campaigns). Omitted on the new-PWA page — there's no existing
    * record yet to act on. */
   headerActions?: ReactNode;
+  disabled?: boolean;
 }) {
   const { t } = useTranslation(["pwa", "common"]);
   const form = useForm<PwaFormValues>({
@@ -266,6 +268,7 @@ export function PwaForm({
       onSubmit={handleSubmit(onSubmit)}
       className="flex flex-col gap-4 lg:grid lg:grid-cols-[1fr_440px] lg:items-start lg:gap-6"
     >
+      <fieldset disabled={disabled} className="contents">
       <div className="flex flex-col gap-4">
         <Card>
           <CardHeader>
@@ -903,6 +906,7 @@ export function PwaForm({
           </CardContent>
         </Card>
       </div>
+      </fieldset>
     </form>
   );
 }

@@ -5,6 +5,7 @@ import { useTranslation } from "react-i18next";
 
 import { LoadingState } from "@/components/ui/loading-state";
 import { ErrorState } from "@/components/ui/error-state";
+import { usePermission } from "@/hooks/use-auth";
 import { usePixel, useUpdatePixel } from "@/hooks/use-pixels";
 import { PixelForm, type PixelFormValues } from "@/features/pixels/pixel-form";
 import type { Pixel } from "@/lib/api/pixels";
@@ -21,6 +22,7 @@ function toFormValues(pixel: Pixel): PixelFormValues {
 
 export function PixelDetailView({ id }: { id: string }) {
   const { t } = useTranslation("pixels");
+  const canWrite = usePermission("content.write");
   const pixelQuery = usePixel(id);
   const updatePixel = useUpdatePixel(id);
 
@@ -49,6 +51,7 @@ export function PixelDetailView({ id }: { id: string }) {
       defaultValues={toFormValues(pixel)}
       submitLabel={t("form.submitEdit")}
       onSubmit={handleSubmit}
+      disabled={!canWrite}
     />
   );
 }

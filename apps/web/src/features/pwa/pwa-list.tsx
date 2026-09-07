@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
 import { LoadingState } from "@/components/ui/loading-state";
 import { ErrorState } from "@/components/ui/error-state";
+import { usePermission } from "@/hooks/use-auth";
 import { usePwas } from "@/hooks/use-pwas";
 import { EMPTY_TAG_ASSIGNMENTS, useTagAssignments } from "@/hooks/use-tags";
 import { pwaColumns } from "@/features/pwa/pwa-columns";
@@ -18,6 +19,7 @@ import { filterByTags } from "@/features/tags/filter-by-tags";
 
 export function PwaList() {
   const { t } = useTranslation(["pwa", "common"]);
+  const canWrite = usePermission("content.write");
   const pwasQuery = usePwas();
   const assignments = useTagAssignments("pwa").data?.assignments ?? EMPTY_TAG_ASSIGNMENTS;
 
@@ -33,12 +35,14 @@ export function PwaList() {
   const header = (
     <div className="flex items-center justify-between">
       <h1 className="text-2xl font-semibold tracking-tight">{t("list.title", { ns: "pwa" })}</h1>
-      <Button asChild>
-        <Link href="/pwa/new">
-          <PlusIcon className="size-4" />
-          {t("list.newButton", { ns: "pwa" })}
-        </Link>
-      </Button>
+      {canWrite && (
+        <Button asChild>
+          <Link href="/pwa/new">
+            <PlusIcon className="size-4" />
+            {t("list.newButton", { ns: "pwa" })}
+          </Link>
+        </Button>
+      )}
     </div>
   );
 

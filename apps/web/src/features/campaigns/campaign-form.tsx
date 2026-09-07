@@ -42,6 +42,7 @@ export function CampaignForm({
   onSubmit,
   formId,
   disabled = false,
+  archived = false,
 }: {
   defaultValues: Partial<CampaignFormValues>;
   submitLabel?: string;
@@ -50,11 +51,17 @@ export function CampaignForm({
    * places a `<Button type="submit" form={formId}>` wherever it wants
    * (e.g. a page header) instead of below the card. */
   formId?: string;
+  /** Locks every field read-only — either the campaign is archived or the
+   * caller (campaign.write) doesn't have permission to edit. Which one is
+   * shown in the notice below is `archived`, kept separate so a read-only
+   * role viewing an ACTIVE campaign doesn't see a false "this campaign is
+   * archived" message. */
+  disabled?: boolean;
   /** Archived campaigns are a terminal state (§ Duplicate's own doc
    * comment: reviving one is "a new starting point," not editing the old
-   * one back to life) — every field locks read-only rather than letting
-   * an edit look saved while it can't matter. */
-  disabled?: boolean;
+   * one back to life) — drives the notice text only; `disabled` alone
+   * still locks the fields regardless of this. */
+  archived?: boolean;
 }) {
   const { t } = useTranslation(["campaigns", "common"]);
   const sourcesQuery = useTrafficSources();
@@ -90,7 +97,7 @@ export function CampaignForm({
         <CardContent className="grid max-w-lg gap-4">
           {disabled && (
             <p className="rounded-md bg-muted px-3 py-2 text-xs text-muted-foreground">
-              {t("form.archivedNotice", { ns: "campaigns" })}
+              {archived ? t("form.archivedNotice", { ns: "campaigns" }) : t("permissionDenied.title", { ns: "common" })}
             </p>
           )}
           <div className="grid gap-1.5">

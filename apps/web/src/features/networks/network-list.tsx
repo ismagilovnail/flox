@@ -21,6 +21,7 @@ import {
 import { IconButton } from "@/components/ui/icon-button";
 import { Mono } from "@/components/ui/typography";
 import { useNetworks } from "@/hooks/use-networks";
+import { usePermission } from "@/hooks/use-auth";
 import { EMPTY_TAG_ASSIGNMENTS, useTagAssignments } from "@/hooks/use-tags";
 import { networkColumns } from "@/features/networks/network-columns";
 import { TagFilterControl } from "@/features/tags/tag-filter-control";
@@ -29,6 +30,7 @@ import { filterByTags } from "@/features/tags/filter-by-tags";
 
 export function NetworkList() {
   const { t } = useTranslation(["networks", "common"]);
+  const canWrite = usePermission("offer.write");
   const networksQuery = useNetworks();
   const assignments = useTagAssignments("network").data?.assignments ?? EMPTY_TAG_ASSIGNMENTS;
 
@@ -44,12 +46,14 @@ export function NetworkList() {
   const header = (
     <div className="flex items-center justify-between">
       <h1 className="text-2xl font-semibold tracking-tight">{t("list.title", { ns: "networks" })}</h1>
-      <Button asChild>
-        <Link href="/networks/new">
-          <PlusIcon className="size-4" />
-          {t("list.newButton", { ns: "networks" })}
-        </Link>
-      </Button>
+      {canWrite && (
+        <Button asChild>
+          <Link href="/networks/new">
+            <PlusIcon className="size-4" />
+            {t("list.newButton", { ns: "networks" })}
+          </Link>
+        </Button>
+      )}
     </div>
   );
 

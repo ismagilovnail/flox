@@ -15,6 +15,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { randomTagColor, tagColorHex, type TaggableEntityType } from "@/lib/tags";
+import { usePermission } from "@/hooks/use-auth";
 import {
   EMPTY_TAG_ASSIGNMENTS,
   EMPTY_TAGS,
@@ -42,6 +43,9 @@ export function BulkTagDialog({
   onOpenChange: (open: boolean) => void;
   onApplied: () => void;
 }) {
+  // content.write — same key apps/internal/tags.Handler requires for
+  // create and bulkEdit alike.
+  const canWrite = usePermission("content.write");
   const tags = useTags().data?.tags ?? EMPTY_TAGS;
   const assignments = useTagAssignments(entityType).data?.assignments ?? EMPTY_TAG_ASSIGNMENTS;
   const bulkEditMutation = useBulkEditTags();
@@ -114,7 +118,8 @@ export function BulkTagDialog({
                 key={tag.id}
                 type="button"
                 onClick={() => toggle(tag.id)}
-                className="flex items-center gap-2 rounded-md px-1.5 py-1.5 text-left hover:bg-muted"
+                disabled={!canWrite}
+                className="flex items-center gap-2 rounded-md px-1.5 py-1.5 text-left hover:bg-muted disabled:cursor-not-allowed disabled:opacity-70"
               >
                 <span
                   className={cn(
@@ -129,7 +134,7 @@ export function BulkTagDialog({
               </button>
             );
           })}
-          {trimmed && !exactMatch && (
+          {canWrite && trimmed && !exactMatch && (
             <button
               type="button"
               onClick={quickCreate}
@@ -144,7 +149,7 @@ export function BulkTagDialog({
           <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>
-          <Button type="button" onClick={apply}>
+          <Button type="button" onClick={apply} disabled={!canWrite}>
             Apply
           </Button>
         </DialogFooter>

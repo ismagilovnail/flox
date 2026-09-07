@@ -4,12 +4,15 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { useTranslation } from "react-i18next";
 
+import { PermissionDeniedState } from "@/components/ui/permission-denied-state";
+import { usePermission } from "@/hooks/use-auth";
 import { useCreatePwa } from "@/hooks/use-pwas";
 import { PwaForm, type PwaFormValues } from "@/features/pwa/pwa-form";
 
 export function NewPwaView() {
   const { t } = useTranslation("pwa");
   const router = useRouter();
+  const canWrite = usePermission("content.write");
   const createPwa = useCreatePwa();
 
   function handleSubmit(values: PwaFormValues) {
@@ -36,6 +39,15 @@ export function NewPwaView() {
         },
         onError: (err) => toast.error(t("toast.createError"), { description: err.message }),
       },
+    );
+  }
+
+  if (!canWrite) {
+    return (
+      <div className="flex flex-col gap-6">
+        <h1 className="text-2xl font-semibold tracking-tight">{t("form.titleNew")}</h1>
+        <PermissionDeniedState />
+      </div>
     );
   }
 

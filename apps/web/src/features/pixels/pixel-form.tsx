@@ -53,11 +53,13 @@ export function PixelForm({
   defaultValues,
   submitLabel,
   onSubmit,
+  disabled = false,
 }: {
   title: string;
   defaultValues: Partial<PixelFormValues>;
   submitLabel: string;
   onSubmit: (values: PixelFormValues) => void;
+  disabled?: boolean;
 }) {
   const { t } = useTranslation(["pixels", "common"]);
   const form = useForm<PixelFormValues>({
@@ -74,6 +76,7 @@ export function PixelForm({
 
   return (
     <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-4">
+      <fieldset disabled={disabled} className="contents">
       <Card>
         <CardHeader>
           <CardTitle>{title}</CardTitle>
@@ -168,12 +171,13 @@ export function PixelForm({
           </div>
         </CardContent>
       </Card>
+      </fieldset>
 
       <div className="flex justify-end gap-2">
         <Button type="button" variant="outline" asChild>
           <Link href="/pixels">{t("actions.cancel", { ns: "common" })}</Link>
         </Button>
-        <Button type="submit" disabled={isSubmitting}>
+        <Button type="submit" disabled={disabled || isSubmitting}>
           {submitLabel}
         </Button>
       </div>

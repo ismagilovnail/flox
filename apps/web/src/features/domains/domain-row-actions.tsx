@@ -16,10 +16,12 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { usePermission } from "@/hooks/use-auth";
 import { useDeleteDomain } from "@/hooks/use-domains";
 import type { Domain } from "@/lib/api/domains";
 
 export function DomainRowActions({ domain }: { domain: Domain }) {
+  const canWrite = usePermission("settings.write");
   const deleteDomain = useDeleteDomain();
   const [confirmRemove, setConfirmRemove] = React.useState(false);
 
@@ -50,14 +52,16 @@ export function DomainRowActions({ domain }: { domain: Domain }) {
           <TooltipContent>Edit</TooltipContent>
         </Tooltip>
 
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <IconButton aria-label="Remove" size="icon-sm" onClick={() => setConfirmRemove(true)}>
-              <Trash2Icon className="size-3.5" />
-            </IconButton>
-          </TooltipTrigger>
-          <TooltipContent>Remove</TooltipContent>
-        </Tooltip>
+        {canWrite && (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <IconButton aria-label="Remove" size="icon-sm" onClick={() => setConfirmRemove(true)}>
+                <Trash2Icon className="size-3.5" />
+              </IconButton>
+            </TooltipTrigger>
+            <TooltipContent>Remove</TooltipContent>
+          </Tooltip>
+        )}
       </div>
 
       <Dialog open={confirmRemove} onOpenChange={setConfirmRemove}>

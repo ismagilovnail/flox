@@ -17,6 +17,7 @@ import { LoadingState } from "@/components/ui/loading-state";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Mono } from "@/components/ui/typography";
 import { useNetworks } from "@/hooks/use-networks";
+import { usePermission } from "@/hooks/use-auth";
 import { useCreateEventMapping, useDeleteEventMapping, useEventMappings } from "@/hooks/use-event-mappings";
 import { CPA_STATUSES, CPA_STATUS_I18N_KEY, type CpaStatus } from "@/lib/api/conversions";
 import type { EventMapping } from "@/lib/api/event-mappings";
@@ -31,6 +32,7 @@ const STATUS_VARIANT: Record<CpaStatus, "warning" | "success" | "danger" | "seco
 };
 
 function NetworkMappingCard({ network, mappings, t }: { network: Network; mappings: EventMapping[]; t: TFunction }) {
+  const canWrite = usePermission("offer.write");
   const createMapping = useCreateEventMapping();
   const deleteMapping = useDeleteEventMapping();
 
@@ -71,53 +73,57 @@ function NetworkMappingCard({ network, mappings, t }: { network: Network; mappin
             <Badge variant={STATUS_VARIANT[mapping.floxStatus]}>
               {t(CPA_STATUS_I18N_KEY[mapping.floxStatus], { ns: "conversions" })}
             </Badge>
-            <IconButton
-              aria-label={t("eventMapping.removeAria", { status: mapping.networkStatus })}
-              size="icon-sm"
-              className="ml-auto"
-              disabled={deleteMapping.isPending}
-              onClick={() =>
-                deleteMapping.mutate(mapping.id, {
-                  onError: (err) => toast.error(t("eventMapping.toast.removeError"), { description: err.message }),
-                })
-              }
-            >
-              <XIcon className="size-3.5" />
-            </IconButton>
+            {canWrite && (
+              <IconButton
+                aria-label={t("eventMapping.removeAria", { status: mapping.networkStatus })}
+                size="icon-sm"
+                className="ml-auto"
+                disabled={deleteMapping.isPending}
+                onClick={() =>
+                  deleteMapping.mutate(mapping.id, {
+                    onError: (err) => toast.error(t("eventMapping.toast.removeError"), { description: err.message }),
+                  })
+                }
+              >
+                <XIcon className="size-3.5" />
+              </IconButton>
+            )}
           </div>
         ))}
         {mappings.length === 0 && <p className="text-xs text-muted-foreground">{t("eventMapping.emptyMappings")}</p>}
 
-        <div className="mt-1 flex items-center gap-2">
-          <Input
-            value={networkStatus}
-            onChange={(e) => setNetworkStatus(e.target.value)}
-            placeholder={t("eventMapping.statusPlaceholder")}
-            className="h-8 w-32 font-mono text-xs"
-          />
-          <span className="text-xs text-muted-foreground">→</span>
-          <Select value={floxStatus} onValueChange={(v) => setFloxStatus(v as CpaStatus)}>
-            <SelectTrigger size="sm" className="w-36">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {CPA_STATUSES.map((s) => (
-                <SelectItem key={s} value={s}>
-                  {t(CPA_STATUS_I18N_KEY[s], { ns: "conversions" })}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={handleAdd}
-            disabled={!networkStatus.trim() || createMapping.isPending}
-          >
-            <PlusIcon className="size-3.5" /> {t("eventMapping.addButton")}
-          </Button>
-        </div>
+        {canWrite && (
+          <div className="mt-1 flex items-center gap-2">
+            <Input
+              value={networkStatus}
+              onChange={(e) => setNetworkStatus(e.target.value)}
+              placeholder={t("eventMapping.statusPlaceholder")}
+              className="h-8 w-32 font-mono text-xs"
+            />
+            <span className="text-xs text-muted-foreground">→</span>
+            <Select value={floxStatus} onValueChange={(v) => setFloxStatus(v as CpaStatus)}>
+              <SelectTrigger size="sm" className="w-36">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {CPA_STATUSES.map((s) => (
+                  <SelectItem key={s} value={s}>
+                    {t(CPA_STATUS_I18N_KEY[s], { ns: "conversions" })}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={handleAdd}
+              disabled={!networkStatus.trim() || createMapping.isPending}
+            >
+              <PlusIcon className="size-3.5" /> {t("eventMapping.addButton")}
+            </Button>
+          </div>
+        )}
       </CardContent>
     </Card>
   );

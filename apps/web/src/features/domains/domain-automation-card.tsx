@@ -19,6 +19,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Caption } from "@/components/ui/typography";
+import { usePermission } from "@/hooks/use-auth";
 import { useRenewDomain, useSyncDomainDNS, useVerifyDomain } from "@/hooks/use-domains";
 import { STATUS_VARIANT, SSL_VARIANT } from "@/features/domains/domain-columns";
 import type { Domain } from "@/lib/api/domains";
@@ -33,6 +34,7 @@ import type { Domain } from "@/lib/api/domains";
  * gated behind their own confirm dialog, matching CLAUDE.md's
  * destructive/consequential-action confirmation rule. */
 export function DomainAutomationCard({ domain }: { domain: Domain }) {
+  const canWrite = usePermission("settings.write");
   const verify = useVerifyDomain();
   const renew = useRenewDomain();
   const syncDns = useSyncDomainDNS();
@@ -115,8 +117,8 @@ export function DomainAutomationCard({ domain }: { domain: Domain }) {
             variant="outline"
             size="sm"
             onClick={() => setRenewOpen(true)}
-            disabled={!canRenew || renew.isPending}
-            title={canRenew ? undefined : "Registrar must be Namecheap"}
+            disabled={!canWrite || !canRenew || renew.isPending}
+            title={!canWrite ? "You don't have permission to do this" : canRenew ? undefined : "Registrar must be Namecheap"}
           >
             <RefreshCwIcon className="size-3.5" /> Renew…
           </Button>
@@ -125,8 +127,8 @@ export function DomainAutomationCard({ domain }: { domain: Domain }) {
             variant="outline"
             size="sm"
             onClick={() => setSyncOpen(true)}
-            disabled={!canSyncDns || syncDns.isPending}
-            title={canSyncDns ? undefined : "DNS provider must be Cloudflare"}
+            disabled={!canWrite || !canSyncDns || syncDns.isPending}
+            title={!canWrite ? "You don't have permission to do this" : canSyncDns ? undefined : "DNS provider must be Cloudflare"}
           >
             <RefreshCwIcon className="size-3.5" /> Sync DNS record
           </Button>

@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
 import { LoadingState } from "@/components/ui/loading-state";
 import { ErrorState } from "@/components/ui/error-state";
+import { usePermission } from "@/hooks/use-auth";
 import { useLandings } from "@/hooks/use-landings";
 import { EMPTY_TAG_ASSIGNMENTS, useTagAssignments } from "@/hooks/use-tags";
 import { landingColumns } from "@/features/landings/landing-columns";
@@ -18,6 +19,7 @@ import { filterByTags } from "@/features/tags/filter-by-tags";
 
 export function LandingList() {
   const { t } = useTranslation(["landings", "common"]);
+  const canWrite = usePermission("content.write");
   const landingsQuery = useLandings();
   const assignments = useTagAssignments("landing").data?.assignments ?? EMPTY_TAG_ASSIGNMENTS;
 
@@ -33,12 +35,14 @@ export function LandingList() {
   const header = (
     <div className="flex items-center justify-between">
       <h1 className="text-2xl font-semibold tracking-tight">{t("list.title", { ns: "landings" })}</h1>
-      <Button asChild>
-        <Link href="/landings/new">
-          <PlusIcon className="size-4" />
-          {t("list.newButton", { ns: "landings" })}
-        </Link>
-      </Button>
+      {canWrite && (
+        <Button asChild>
+          <Link href="/landings/new">
+            <PlusIcon className="size-4" />
+            {t("list.newButton", { ns: "landings" })}
+          </Link>
+        </Button>
+      )}
     </div>
   );
 

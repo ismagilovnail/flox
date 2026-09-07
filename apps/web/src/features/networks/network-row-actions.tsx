@@ -24,12 +24,14 @@ import {
   usePauseNetwork,
   useRegeneratePostbackSecret,
 } from "@/hooks/use-networks";
+import { usePermission } from "@/hooks/use-auth";
 import { viewStatisticsHref } from "@/features/analytics/view-statistics-link";
 import { PostbackSecretDialog } from "@/features/networks/network-list";
 import type { Network } from "@/lib/api/networks";
 
 export function NetworkRowActions({ network }: { network: Network }) {
   const { t } = useTranslation(["networks", "common"]);
+  const canWrite = usePermission("offer.write");
   const pause = usePauseNetwork();
   const activate = useActivateNetwork();
   const duplicate = useDuplicateNetwork();
@@ -98,7 +100,7 @@ export function NetworkRowActions({ network }: { network: Network }) {
           <TooltipContent>{t("rowActions.viewStatistics")}</TooltipContent>
         </Tooltip>
 
-        {network.status !== "archived" && (
+        {canWrite && network.status !== "archived" && (
           <Tooltip>
             <TooltipTrigger asChild>
               <IconButton
@@ -113,25 +115,29 @@ export function NetworkRowActions({ network }: { network: Network }) {
           </Tooltip>
         )}
 
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <IconButton aria-label={t("rowActions.duplicate")} size="icon-sm" onClick={handleDuplicate}>
-              <CopyIcon className="size-3.5" />
-            </IconButton>
-          </TooltipTrigger>
-          <TooltipContent>{t("rowActions.duplicate")}</TooltipContent>
-        </Tooltip>
+        {canWrite && (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <IconButton aria-label={t("rowActions.duplicate")} size="icon-sm" onClick={handleDuplicate}>
+                <CopyIcon className="size-3.5" />
+              </IconButton>
+            </TooltipTrigger>
+            <TooltipContent>{t("rowActions.duplicate")}</TooltipContent>
+          </Tooltip>
+        )}
 
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <IconButton aria-label={t("rowActions.regenerateSecret")} size="icon-sm" onClick={handleRegenerateSecret}>
-              <KeyRoundIcon className="size-3.5" />
-            </IconButton>
-          </TooltipTrigger>
-          <TooltipContent>{t("rowActions.regenerateSecret")}</TooltipContent>
-        </Tooltip>
+        {canWrite && (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <IconButton aria-label={t("rowActions.regenerateSecret")} size="icon-sm" onClick={handleRegenerateSecret}>
+                <KeyRoundIcon className="size-3.5" />
+              </IconButton>
+            </TooltipTrigger>
+            <TooltipContent>{t("rowActions.regenerateSecret")}</TooltipContent>
+          </Tooltip>
+        )}
 
-        {network.status !== "archived" && (
+        {canWrite && network.status !== "archived" && (
           <Tooltip>
             <TooltipTrigger asChild>
               <IconButton aria-label={t("rowActions.archive")} size="icon-sm" onClick={() => setConfirmArchive(true)}>

@@ -20,6 +20,7 @@ import {
 } from "@/components/ui/dialog";
 import type { CampaignStatus } from "@/lib/api/campaigns";
 import { useArchiveCampaign, useCampaign, useUpdateCampaign } from "@/hooks/use-campaigns";
+import { usePermission } from "@/hooks/use-auth";
 import { CampaignRowActions } from "@/features/campaigns/campaign-row-actions";
 import { CampaignForm, type CampaignFormValues } from "@/features/campaigns/campaign-form";
 import { CampaignCostEntries } from "@/features/campaigns/campaign-cost-entries";
@@ -38,6 +39,7 @@ const SETTINGS_FORM_ID = "campaign-settings-form";
 
 export function CampaignDetailView({ id }: { id: string }) {
   const { t } = useTranslation(["campaigns", "common"]);
+  const canWrite = usePermission("campaign.write");
   const campaignQuery = useCampaign(id);
   const updateCampaign = useUpdateCampaign(id);
   const archiveCampaign = useArchiveCampaign();
@@ -59,6 +61,7 @@ export function CampaignDetailView({ id }: { id: string }) {
 
   const campaign = campaignQuery.data;
   const isArchived = campaign.status === "archived";
+  const readOnly = isArchived || !canWrite;
 
   function handleSettingsSubmit(values: CampaignFormValues) {
     updateCampaign.mutate(
@@ -100,7 +103,7 @@ export function CampaignDetailView({ id }: { id: string }) {
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <Button type="submit" form={SETTINGS_FORM_ID} disabled={isArchived}>
+          <Button type="submit" form={SETTINGS_FORM_ID} disabled={readOnly}>
             {t("detail.saveChanges")}
           </Button>
           <CampaignRowActions campaign={campaign} variant="inline" />
@@ -129,9 +132,10 @@ export function CampaignDetailView({ id }: { id: string }) {
               }}
               formId={SETTINGS_FORM_ID}
               onSubmit={handleSettingsSubmit}
-              disabled={isArchived}
+              disabled={readOnly}
+              archived={isArchived}
             />
-            <StreamSetList campaignId={campaign.id} disabled={isArchived} />
+            <StreamSetList campaignId={campaign.id} disabled={readOnly} />
           </div>
         </TabsContent>
 
@@ -153,7 +157,7 @@ export function CampaignDetailView({ id }: { id: string }) {
               {campaign.status === "archived" ? (
                 <p className="text-sm text-muted-foreground">{t("detail.alreadyArchived")}</p>
               ) : (
-                <Button variant="destructive" onClick={() => setConfirmArchive(true)}>
+                <Button variant="destructive" onClick={() => setConfirmArchive(true)} disabled={!canWrite}>
                   {t("detail.archiveButton")}
                 </Button>
               )}

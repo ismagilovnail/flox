@@ -53,5 +53,9 @@
   "multiSelect": {
     "none": "None",
     "searchPlaceholder": "Search {{label}}..."
+  },
+  "permissionDenied": {
+    "title": "You don't have permission to do this",
+    "description": "Ask an Owner or Admin for access if you think this is a mistake."
   }
 }

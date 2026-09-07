@@ -33,6 +33,7 @@ import { LoadingState } from "@/components/ui/loading-state";
 import { ErrorState } from "@/components/ui/error-state";
 import { EmptyState } from "@/components/ui/empty-state";
 import { useDomains } from "@/hooks/use-domains";
+import { usePermission } from "@/hooks/use-auth";
 import {
   useCreateTrackingLink,
   useDeleteTrackingLink,
@@ -184,6 +185,7 @@ export function TrackingLinks({
   disabled?: boolean;
 }) {
   const { t } = useTranslation(["campaigns", "common"]);
+  const canWrite = usePermission("campaign.write");
   const domainsQuery = useDomains();
   const linksQuery = useTrackingLinks(campaignId);
   const create = useCreateTrackingLink(campaignId);
@@ -274,7 +276,11 @@ export function TrackingLinks({
           <CardDescription>{t("trackingLinks.description")}</CardDescription>
         </CardHeader>
         <CardContent>
-          {disabled ? (
+          {!canWrite ? (
+            <p className="rounded-md bg-muted px-3 py-2 text-xs text-muted-foreground">
+              {t("permissionDenied.title", { ns: "common" })}
+            </p>
+          ) : disabled ? (
             <p className="rounded-md bg-muted px-3 py-2 text-xs text-muted-foreground">
               {t("trackingLinks.archivedNotice")}
             </p>
@@ -368,7 +374,7 @@ export function TrackingLinks({
         />
       ) : (
         <DataTable
-          columns={columns(t, handleToggleStatus, setConfirmDeleteId, disabled)}
+          columns={columns(t, handleToggleStatus, setConfirmDeleteId, disabled || !canWrite)}
           data={linksQuery.data.trackingLinks}
           emptyTitle={t("trackingLinks.emptyTitle")}
           emptyDescription={t("trackingLinks.emptyDescription")}

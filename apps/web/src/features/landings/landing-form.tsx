@@ -54,11 +54,13 @@ export function LandingForm({
   defaultValues,
   submitLabel,
   onSubmit,
+  disabled = false,
 }: {
   title: string;
   defaultValues: Partial<LandingFormValues>;
   submitLabel: string;
   onSubmit: (values: LandingFormValues) => void;
+  disabled?: boolean;
 }) {
   const { t } = useTranslation(["landings", "common"]);
   const form = useForm<LandingFormValues>({
@@ -92,6 +94,7 @@ export function LandingForm({
                 placeholder={t("form.namePlaceholder", { ns: "landings" })}
                 {...register("name")}
                 aria-invalid={!!errors.name}
+                disabled={disabled}
               />
               {errors.name && <p className="text-xs text-danger">{errors.name.message}</p>}
             </div>
@@ -102,7 +105,7 @@ export function LandingForm({
                 control={control}
                 name="type"
                 render={({ field }) => (
-                  <Select value={field.value} onValueChange={field.onChange}>
+                  <Select value={field.value} onValueChange={field.onChange} disabled={disabled}>
                     <SelectTrigger id="lnd-type" className="w-full">
                       <SelectValue />
                     </SelectTrigger>
@@ -125,6 +128,7 @@ export function LandingForm({
                 className="font-mono text-xs"
                 {...register("url")}
                 aria-invalid={!!errors.url}
+                disabled={disabled}
               />
               {errors.url && <p className="text-xs text-danger">{errors.url.message}</p>}
             </div>
@@ -138,6 +142,7 @@ export function LandingForm({
                   className="min-h-28 font-mono text-xs"
                   {...register("content")}
                   aria-invalid={!!errors.content}
+                  disabled={disabled}
                 />
                 {errors.content && <p className="text-xs text-danger">{errors.content.message}</p>}
               </div>
@@ -156,7 +161,7 @@ export function LandingForm({
               control={control}
               name="status"
               render={({ field }) => (
-                <Select value={field.value} onValueChange={field.onChange}>
+                <Select value={field.value} onValueChange={field.onChange} disabled={disabled}>
                   <SelectTrigger id="lnd-status" className="w-full">
                     <SelectValue />
                   </SelectTrigger>
@@ -178,7 +183,7 @@ export function LandingForm({
         <Button type="button" variant="outline" asChild>
           <Link href="/landings">{t("actions.cancel", { ns: "common" })}</Link>
         </Button>
-        <Button type="submit" disabled={isSubmitting}>
+        <Button type="submit" disabled={disabled || isSubmitting}>
           {submitLabel}
         </Button>
       </div>

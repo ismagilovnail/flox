@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/dialog";
 import { IconButton } from "@/components/ui/icon-button";
 import { Input } from "@/components/ui/input";
+import { usePermission } from "@/hooks/use-auth";
 import { cn } from "@/lib/utils";
 import {
   useCreateGalleryFolder,
@@ -39,6 +40,7 @@ export function GalleryFolderPanel({
   onSelect: (value: string | undefined) => void;
   className?: string;
 }) {
+  const canWrite = usePermission("content.write");
   const { data } = useGalleryFolders();
   const folders = data?.folders ?? [];
 
@@ -76,35 +78,42 @@ export function GalleryFolderPanel({
       <div className="my-1 h-px bg-border" />
 
       {folders.map((folder) => (
-        <FolderItem key={folder.id} folder={folder} active={selected === folder.id} onSelect={() => onSelect(folder.id)} />
+        <FolderItem
+          key={folder.id}
+          folder={folder}
+          active={selected === folder.id}
+          onSelect={() => onSelect(folder.id)}
+          canWrite={canWrite}
+        />
       ))}
 
-      {creating ? (
-        <div className="flex items-center gap-1 px-1">
-          <Input
-            autoFocus
-            value={newName}
-            maxLength={50}
-            placeholder="Folder name"
-            className="h-8 text-sm"
-            onChange={(e) => setNewName(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") submitCreate();
-              if (e.key === "Escape") setCreating(false);
-            }}
-          />
-          <IconButton size="icon-sm" variant="ghost" onClick={submitCreate} disabled={createFolder.isPending} aria-label="Save folder">
-            <CheckIcon className="size-3.5" />
-          </IconButton>
-          <IconButton size="icon-sm" variant="ghost" onClick={() => setCreating(false)} aria-label="Cancel">
-            <XIcon className="size-3.5" />
-          </IconButton>
-        </div>
-      ) : (
-        <Button variant="ghost" size="sm" className="justify-start gap-2 text-muted-foreground" onClick={() => setCreating(true)}>
-          <FolderPlusIcon className="size-3.5" /> New folder
-        </Button>
-      )}
+      {canWrite &&
+        (creating ? (
+          <div className="flex items-center gap-1 px-1">
+            <Input
+              autoFocus
+              value={newName}
+              maxLength={50}
+              placeholder="Folder name"
+              className="h-8 text-sm"
+              onChange={(e) => setNewName(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") submitCreate();
+                if (e.key === "Escape") setCreating(false);
+              }}
+            />
+            <IconButton size="icon-sm" variant="ghost" onClick={submitCreate} disabled={createFolder.isPending} aria-label="Save folder">
+              <CheckIcon className="size-3.5" />
+            </IconButton>
+            <IconButton size="icon-sm" variant="ghost" onClick={() => setCreating(false)} aria-label="Cancel">
+              <XIcon className="size-3.5" />
+            </IconButton>
+          </div>
+        ) : (
+          <Button variant="ghost" size="sm" className="justify-start gap-2 text-muted-foreground" onClick={() => setCreating(true)}>
+            <FolderPlusIcon className="size-3.5" /> New folder
+          </Button>
+        ))}
     </div>
   );
 }
@@ -135,7 +144,17 @@ function FolderRow({
   );
 }
 
-function FolderItem({ folder, active, onSelect }: { folder: GalleryFolder; active: boolean; onSelect: () => void }) {
+function FolderItem({
+  folder,
+  active,
+  onSelect,
+  canWrite,
+}: {
+  folder: GalleryFolder;
+  active: boolean;
+  onSelect: () => void;
+  canWrite: boolean;
+}) {
   const renameFolder = useRenameGalleryFolder();
   const deleteFolder = useDeleteGalleryFolder();
   const [editing, setEditing] = React.useState(false);
@@ -203,24 +222,28 @@ function FolderItem({ folder, active, onSelect }: { folder: GalleryFolder; activ
         <FolderIcon className="size-3.5 shrink-0" />
         <span className="truncate">{folder.name}</span>
       </button>
-      <IconButton
-        size="icon-sm"
-        variant="ghost"
-        className="opacity-0 group-hover:opacity-100"
-        onClick={() => setEditing(true)}
-        aria-label={`Rename ${folder.name}`}
-      >
-        <PencilIcon className="size-3" />
-      </IconButton>
-      <IconButton
-        size="icon-sm"
-        variant="ghost"
-        className="opacity-0 group-hover:opacity-100 hover:text-danger"
-        onClick={() => setConfirmDelete(true)}
-        aria-label={`Delete ${folder.name}`}
-      >
-        <Trash2Icon className="size-3" />
-      </IconButton>
+      {canWrite && (
+        <IconButton
+          size="icon-sm"
+          variant="ghost"
+          className="opacity-0 group-hover:opacity-100"
+          onClick={() => setEditing(true)}
+          aria-label={`Rename ${folder.name}`}
+        >
+          <PencilIcon className="size-3" />
+        </IconButton>
+      )}
+      {canWrite && (
+        <IconButton
+          size="icon-sm"
+          variant="ghost"
+          className="opacity-0 group-hover:opacity-100 hover:text-danger"
+          onClick={() => setConfirmDelete(true)}
+          aria-label={`Delete ${folder.name}`}
+        >
+          <Trash2Icon className="size-3" />
+        </IconButton>
+      )}
 
       <Dialog open={confirmDelete} onOpenChange={setConfirmDelete}>
         <DialogContent>

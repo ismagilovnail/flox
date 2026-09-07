@@ -63,6 +63,7 @@ export function OfferForm({
   submitLabel,
   showStatus = false,
   onSubmit,
+  disabled = false,
 }: {
   title: string;
   defaultValues: Partial<OfferFormValues>;
@@ -70,6 +71,10 @@ export function OfferForm({
   submitLabel: string;
   showStatus?: boolean;
   onSubmit: (values: OfferFormValues) => void;
+  /** Locks every field read-only (offer.write) — a native <fieldset
+   * disabled> so every nested input/select/link-row control locks in one
+   * shot, same technique stream-set-editor.tsx uses. */
+  disabled?: boolean;
 }) {
   // defaultValues, not RHF's `values` option: `values` re-syncs the whole
   // form (including useFieldArray's internal array state) on every render
@@ -114,6 +119,12 @@ export function OfferForm({
           <CardDescription>{t("form.description", { ns: "offers" })}</CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-4">
+        <fieldset disabled={disabled} className="contents">
+          {disabled && (
+            <p className="rounded-md bg-muted px-3 py-2 text-xs text-muted-foreground">
+              {t("permissionDenied.title", { ns: "common" })}
+            </p>
+          )}
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="grid gap-1.5">
               <Label htmlFor="off-name">{t("form.nameLabel", { ns: "offers" })}</Label>
@@ -304,6 +315,7 @@ export function OfferForm({
               <PlusIcon className="size-3.5" /> {t("form.addLinkButton", { ns: "offers" })}
             </Button>
           </div>
+        </fieldset>
         </CardContent>
       </Card>
 
@@ -311,7 +323,7 @@ export function OfferForm({
         <Button type="button" variant="outline" asChild>
           <Link href="/offers">{t("actions.cancel", { ns: "common" })}</Link>
         </Button>
-        <Button type="submit" disabled={isSubmitting}>
+        <Button type="submit" disabled={disabled || isSubmitting}>
           {submitLabel}
         </Button>
       </div>

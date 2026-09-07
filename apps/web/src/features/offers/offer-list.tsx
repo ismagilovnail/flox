@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
 import { LoadingState } from "@/components/ui/loading-state";
 import { ErrorState } from "@/components/ui/error-state";
+import { usePermission } from "@/hooks/use-auth";
 import { useOffers } from "@/hooks/use-offers";
 import { useNetworks } from "@/hooks/use-networks";
 import { EMPTY_TAG_ASSIGNMENTS, useTagAssignments } from "@/hooks/use-tags";
@@ -19,6 +20,7 @@ import { filterByTags } from "@/features/tags/filter-by-tags";
 
 export function OfferList() {
   const { t } = useTranslation(["offers", "common"]);
+  const canWrite = usePermission("offer.write");
   const offersQuery = useOffers();
   const networksQuery = useNetworks();
   const assignments = useTagAssignments("offer").data?.assignments ?? EMPTY_TAG_ASSIGNMENTS;
@@ -40,19 +42,20 @@ export function OfferList() {
   const header = (
     <div className="flex items-center justify-between">
       <h1 className="text-2xl font-semibold tracking-tight">{t("list.title", { ns: "offers" })}</h1>
-      {networks.length === 0 ? (
-        <Button disabled>
-          <PlusIcon className="size-4" />
-          {t("list.newButton", { ns: "offers" })}
-        </Button>
-      ) : (
-        <Button asChild>
-          <Link href="/offers/new">
+      {canWrite &&
+        (networks.length === 0 ? (
+          <Button disabled>
             <PlusIcon className="size-4" />
             {t("list.newButton", { ns: "offers" })}
-          </Link>
-        </Button>
-      )}
+          </Button>
+        ) : (
+          <Button asChild>
+            <Link href="/offers/new">
+              <PlusIcon className="size-4" />
+              {t("list.newButton", { ns: "offers" })}
+            </Link>
+          </Button>
+        ))}
     </div>
   );
 

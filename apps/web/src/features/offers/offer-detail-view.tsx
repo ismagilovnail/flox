@@ -7,6 +7,7 @@ import { LoadingState } from "@/components/ui/loading-state";
 import { ErrorState } from "@/components/ui/error-state";
 import { useOffer, useUpdateOffer } from "@/hooks/use-offers";
 import { useNetworks } from "@/hooks/use-networks";
+import { usePermission } from "@/hooks/use-auth";
 import { OfferForm, type OfferFormValues } from "@/features/offers/offer-form";
 import type { Offer } from "@/lib/api/offers";
 
@@ -25,6 +26,7 @@ function toFormValues(offer: Offer): OfferFormValues {
 
 export function OfferDetailView({ id }: { id: string }) {
   const { t } = useTranslation("offers");
+  const canWrite = usePermission("offer.write");
   const offerQuery = useOffer(id);
   const networksQuery = useNetworks();
   const updateOffer = useUpdateOffer(id);
@@ -81,6 +83,7 @@ export function OfferDetailView({ id }: { id: string }) {
       submitLabel={t("form.submitEdit")}
       showStatus
       onSubmit={handleSubmit}
+      disabled={!canWrite}
     />
   );
 }

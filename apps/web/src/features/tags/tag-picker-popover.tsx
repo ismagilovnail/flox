@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
 import { TAG_COLORS, randomTagColor, tagColorHex, type Tag, type TagColorId, type TaggableEntityType } from "@/lib/tags";
+import { usePermission } from "@/hooks/use-auth";
 import { EMPTY_TAGS, useCreateTag, useDeleteTag, useSetEntityTags, useTags, useUpdateTag } from "@/hooks/use-tags";
 import { useEntityTags } from "@/features/tags/use-entity-tags";
 
@@ -77,6 +78,11 @@ export function TagPickerPopover({
   const [openState, setOpenState] = React.useState(false);
   const open = openProp ?? openState;
   const setOpen = onOpenChange ?? setOpenState;
+
+  // content.write — same key apps/internal/tags.Handler requires for
+  // create/update/delete AND assignment (setEntityTags/bulkEdit), so one
+  // check covers every mutation in this popover.
+  const canWrite = usePermission("content.write");
 
   const [query, setQuery] = React.useState("");
   const [editingId, setEditingId] = React.useState<string | null>(null);
@@ -148,7 +154,8 @@ export function TagPickerPopover({
                 <button
                   type="button"
                   onClick={() => toggle(tag.id)}
-                  className="flex flex-1 items-center gap-2 text-left"
+                  disabled={!canWrite}
+                  className="flex flex-1 items-center gap-2 text-left disabled:cursor-not-allowed disabled:opacity-70"
                 >
                   <span
                     className={cn(
@@ -161,20 +168,22 @@ export function TagPickerPopover({
                   <span className="size-2 shrink-0 rounded-full" style={{ backgroundColor: tagColorHex(tag.color) }} />
                   <span className="flex-1 truncate text-sm">{tag.name}</span>
                 </button>
-                <IconButton
-                  aria-label={`Edit ${tag.name}`}
-                  size="icon-sm"
-                  variant="ghost"
-                  className="opacity-0 group-hover:opacity-100"
-                  onClick={() => setEditingId(tag.id)}
-                >
-                  <PencilIcon className="size-3.5" />
-                </IconButton>
+                {canWrite && (
+                  <IconButton
+                    aria-label={`Edit ${tag.name}`}
+                    size="icon-sm"
+                    variant="ghost"
+                    className="opacity-0 group-hover:opacity-100"
+                    onClick={() => setEditingId(tag.id)}
+                  >
+                    <PencilIcon className="size-3.5" />
+                  </IconButton>
+                )}
               </div>
             ),
           )}
 
-          {trimmed && !exactMatch && (
+          {canWrite && trimmed && !exactMatch && (
             <button
               type="button"
               onClick={quickCreate}

@@ -51,11 +51,17 @@ export function DomainForm({
   defaultValues,
   submitLabel,
   onSubmit,
+  disabled = false,
 }: {
   title: string;
   defaultValues: Partial<DomainFormValues>;
   submitLabel: string;
   onSubmit: (values: DomainFormValues) => void;
+  /** Locks the submit button and every field that supports a disabled
+   * state when the caller lacks settings.write. MultiSelect (Purpose)
+   * has no disabled prop to plumb this into — the submit button staying
+   * disabled is what actually blocks the write either way. */
+  disabled?: boolean;
 }) {
   const form = useForm<DomainFormValues>({
     resolver: zodResolver(domainFormSchema),
@@ -95,6 +101,7 @@ export function DomainForm({
               className="font-mono text-sm"
               {...register("domain")}
               aria-invalid={!!errors.domain}
+              disabled={disabled}
             />
             {errors.domain && <p className="text-xs text-danger">{errors.domain.message}</p>}
           </div>
@@ -124,7 +131,7 @@ export function DomainForm({
                 control={control}
                 name="registrar"
                 render={({ field }) => (
-                  <Select value={field.value} onValueChange={field.onChange}>
+                  <Select value={field.value} onValueChange={field.onChange} disabled={disabled}>
                     <SelectTrigger id="dom-registrar" className="w-full">
                       <SelectValue />
                     </SelectTrigger>
@@ -146,7 +153,7 @@ export function DomainForm({
                 control={control}
                 name="dnsProvider"
                 render={({ field }) => (
-                  <Select value={field.value} onValueChange={field.onChange}>
+                  <Select value={field.value} onValueChange={field.onChange} disabled={disabled}>
                     <SelectTrigger id="dom-dns" className="w-full">
                       <SelectValue />
                     </SelectTrigger>
@@ -169,7 +176,7 @@ export function DomainForm({
               control={control}
               name="status"
               render={({ field }) => (
-                <Select value={field.value} onValueChange={field.onChange}>
+                <Select value={field.value} onValueChange={field.onChange} disabled={disabled}>
                   <SelectTrigger id="dom-status" className="w-full">
                     <SelectValue />
                   </SelectTrigger>
@@ -191,7 +198,7 @@ export function DomainForm({
         <Button type="button" variant="outline" asChild>
           <Link href="/domains">Cancel</Link>
         </Button>
-        <Button type="submit" disabled={isSubmitting}>
+        <Button type="submit" disabled={disabled || isSubmitting}>
           {submitLabel}
         </Button>
       </div>

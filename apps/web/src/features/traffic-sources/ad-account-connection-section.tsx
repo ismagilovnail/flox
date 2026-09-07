@@ -13,6 +13,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Mono } from "@/components/ui/typography";
+import { usePermission } from "@/hooks/use-auth";
 import {
   useAdAccountConnection,
   useConnectAdAccount,
@@ -80,6 +81,7 @@ export function AdAccountConnectionSection({
   provider: AdAccountProvider;
 }) {
   const { t } = useTranslation(["trafficSources", "common"]);
+  const canWrite = usePermission("source.write");
   const connectionQuery = useAdAccountConnection(trafficSourceId);
   const connect = useConnectAdAccount(trafficSourceId);
   const disconnect = useDisconnectAdAccount(trafficSourceId);
@@ -139,13 +141,19 @@ export function AdAccountConnectionSection({
               </span>
             </div>
             <div className="flex items-center gap-2">
-              <Button type="button" variant="outline" size="sm" onClick={handleSync} disabled={sync.isPending}>
+              <Button type="button" variant="outline" size="sm" onClick={handleSync} disabled={!canWrite || sync.isPending}>
                 <RefreshCwIcon className={`size-3.5 ${sync.isPending ? "animate-spin" : ""}`} />
                 {sync.isPending
                   ? t("connection.syncing", { ns: "trafficSources" })
                   : t("connection.syncNow", { ns: "trafficSources" })}
               </Button>
-              <Button type="button" variant="outline" size="sm" onClick={handleDisconnect} disabled={disconnect.isPending}>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={handleDisconnect}
+                disabled={!canWrite || disconnect.isPending}
+              >
                 <Unlink2Icon className="size-3.5" /> {t("connection.disconnect", { ns: "trafficSources" })}
               </Button>
             </div>
@@ -218,6 +226,7 @@ export function AdAccountConnectionSection({
                 className="font-mono text-xs"
                 {...form.register("adAccountId")}
                 aria-invalid={!!form.formState.errors.adAccountId}
+                disabled={!canWrite}
               />
               {form.formState.errors.adAccountId && (
                 <p className="text-xs text-danger">{form.formState.errors.adAccountId.message}</p>
@@ -234,6 +243,7 @@ export function AdAccountConnectionSection({
                     className="font-mono text-xs"
                     {...form.register("developerToken")}
                     aria-invalid={!!form.formState.errors.developerToken}
+                    disabled={!canWrite}
                   />
                   {form.formState.errors.developerToken && (
                     <p className="text-xs text-danger">{form.formState.errors.developerToken.message}</p>
@@ -246,6 +256,7 @@ export function AdAccountConnectionSection({
                     className="font-mono text-xs"
                     {...form.register("clientId")}
                     aria-invalid={!!form.formState.errors.clientId}
+                    disabled={!canWrite}
                   />
                   {form.formState.errors.clientId && (
                     <p className="text-xs text-danger">{form.formState.errors.clientId.message}</p>
@@ -259,6 +270,7 @@ export function AdAccountConnectionSection({
                     className="font-mono text-xs"
                     {...form.register("clientSecret")}
                     aria-invalid={!!form.formState.errors.clientSecret}
+                    disabled={!canWrite}
                   />
                   {form.formState.errors.clientSecret && (
                     <p className="text-xs text-danger">{form.formState.errors.clientSecret.message}</p>
@@ -272,6 +284,7 @@ export function AdAccountConnectionSection({
                     className="font-mono text-xs"
                     {...form.register("refreshToken")}
                     aria-invalid={!!form.formState.errors.refreshToken}
+                    disabled={!canWrite}
                   />
                   {form.formState.errors.refreshToken && (
                     <p className="text-xs text-danger">{form.formState.errors.refreshToken.message}</p>
@@ -288,6 +301,7 @@ export function AdAccountConnectionSection({
                   className="font-mono text-xs"
                   {...form.register("accessToken")}
                   aria-invalid={!!form.formState.errors.accessToken}
+                  disabled={!canWrite}
                 />
                 {form.formState.errors.accessToken && (
                   <p className="text-xs text-danger">{form.formState.errors.accessToken.message}</p>
@@ -295,7 +309,7 @@ export function AdAccountConnectionSection({
               </div>
             )}
 
-            <Button type="button" size="sm" disabled={connect.isPending} onClick={form.handleSubmit(submit)}>
+            <Button type="button" size="sm" disabled={!canWrite || connect.isPending} onClick={form.handleSubmit(submit)}>
               <LinkIcon className="size-3.5" /> {t("connection.connect", { ns: "trafficSources" })}
             </Button>
           </div>

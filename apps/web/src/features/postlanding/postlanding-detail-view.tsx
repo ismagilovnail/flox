@@ -5,6 +5,7 @@ import { useTranslation } from "react-i18next";
 
 import { LoadingState } from "@/components/ui/loading-state";
 import { ErrorState } from "@/components/ui/error-state";
+import { usePermission } from "@/hooks/use-auth";
 import { usePostlanding, useUpdatePostlanding } from "@/hooks/use-postlandings";
 import { PostlandingForm, type PostlandingFormValues } from "@/features/postlanding/postlanding-form";
 import type { Postlanding } from "@/lib/api/postlanding";
@@ -20,6 +21,7 @@ function toFormValues(postlanding: Postlanding): PostlandingFormValues {
 
 export function PostlandingDetailView({ id }: { id: string }) {
   const { t } = useTranslation("postlanding");
+  const canWrite = usePermission("content.write");
   const postlandingQuery = usePostlanding(id);
   const updatePostlanding = useUpdatePostlanding(id);
 
@@ -55,6 +57,7 @@ export function PostlandingDetailView({ id }: { id: string }) {
       defaultValues={toFormValues(postlanding)}
       submitLabel={t("form.submitEdit")}
       onSubmit={handleSubmit}
+      disabled={!canWrite}
     />
   );
 }

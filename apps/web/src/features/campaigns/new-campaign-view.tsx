@@ -7,6 +7,8 @@ import { LinkIcon, RouteIcon } from "lucide-react";
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
+import { PermissionDeniedState } from "@/components/ui/permission-denied-state";
+import { usePermission } from "@/hooks/use-auth";
 import { useCreateCampaign } from "@/hooks/use-campaigns";
 import { CampaignForm, type CampaignFormValues } from "@/features/campaigns/campaign-form";
 
@@ -23,6 +25,7 @@ import { CampaignForm, type CampaignFormValues } from "@/features/campaigns/camp
 export function NewCampaignView() {
   const { t } = useTranslation(["campaigns", "streamSets"]);
   const router = useRouter();
+  const canWrite = usePermission("campaign.write");
   const createCampaign = useCreateCampaign();
 
   function handleSubmit(values: CampaignFormValues) {
@@ -41,6 +44,15 @@ export function NewCampaignView() {
         },
         onError: (err) => toast.error(t("toast.createError"), { description: err.message }),
       },
+    );
+  }
+
+  if (!canWrite) {
+    return (
+      <div className="flex flex-col gap-6">
+        <h1 className="text-2xl font-semibold tracking-tight">{t("newCampaign.title")}</h1>
+        <PermissionDeniedState />
+      </div>
     );
   }
 
