@@ -5,6 +5,31 @@ per-phase, matching `CLAUDE.md`'s phase protocol. The one exception is
 [Between phases], below: spec amendments and the code changes that follow from
 them land between phases and would otherwise be invisible here.
 
+## [Between phases] — bump golang.org/x/crypto to close 2 of 3 remaining advisories
+
+Finding #6's Go 1.26.6 bump left 3 `golang.org/x/crypto` advisories in
+place (`GO-2026-6355`, `GO-2026-6354`, `GO-2026-5932`), noted as
+"dependency hygiene, not live" since `govulncheck` already confirmed
+zero of them reachable from this code — only `internal/auth/crypto.go`'s
+`bcrypt` import touches the module at all, a different subpackage from
+the `ssh`/`openpgp` ones the advisories are about.
+
+Checked each one directly rather than assuming: `GO-2026-6355` and
+`GO-2026-6354` (both `x/crypto/ssh` DoS issues) are fixed in `v0.56.0`,
+already published; `GO-2026-5932` (`x/crypto/openpgp` is unmaintained
+and unsafe by design) has no fix — `Fixed in: N/A` — because the
+upstream package itself is deprecated, not because of a missing
+release. Bumped `golang.org/x/crypto` v0.55.0 -> v0.56.0
+(`go get` + `go mod tidy`, a two-line go.mod/go.sum diff, no other
+dependency changes) — the only actionable fix available; the third
+advisory stays permanently flagged (upstream has abandoned `openpgp`),
+harmless since this codebase never imports it.
+
+Verified: `go build`/`vet`/`test -count=1 ./...` clean across all 41
+packages against live Postgres/ClickHouse/Redis/MinIO; `gofmt` clean.
+`govulncheck ./...` now reports 1 advisory (was 3) — `GO-2026-5932`
+only, unreachable, no fix exists to apply.
+
 ## [Between phases] — MultiSelect gets real `disabled` support, closing domain-form.tsx's permission gap
 
 The frontend permission-gating phase (finding-#1 follow-up) locked every

@@ -19,70 +19,71 @@ referenced below as §N).
 ## CURRENT STATE — UPDATE THIS EVERY PHASE
 
 ```
-CURRENT PHASE : MULTISELECT DISABLED SUPPORT (domain-form.tsx gap)
-                (ad hoc, user-scoped — picked from a menu of open items
-                after "continue" with no phase specified; user chose the
-                smallest/safest of four offered options)
-STATUS        : done. Fixed at the shared component, not just the one
-                caller: components/ui/multi-select.tsx (used by 7
-                features) gained a real `disabled` prop — wired to the
-                trigger Button (a disabled button never fires the
-                Popover open) and defensively into onOpenChange/toggle()
-                too. domain-form.tsx passes disabled={disabled} through;
-                its doc comment (which had explicitly named this exact
-                gap) updated to match. The other 6 callers (offers,
-                pixels, postlanding, stream-sets x2, analytics report
-                controls) pass nothing, default false, zero behavior
-                change — confirmed by reading every call site first.
-                VERIFIED: tsc/eslint/vitest clean. Live browser pass:
-                created a real domain as Owner, invited and accepted a
-                real Viewer, confirmed clicking Purpose as Viewer opens
-                nothing (it would have before this fix) with zero
-                console errors; logged back in as Owner on the same
-                domain and confirmed the dropdown still opens/toggles
-                normally — proving the enabled path (all 6 other
-                callers' default behavior) wasn't broken. Test org and
-                fixtures deleted afterward via SQL.
-LAST COMMIT   : 1c31660 fix(offers): close offer-columns.tsx's accessorFn
-                stale-cache gap. Before it: 57b220d feat(auth): real
-                API-key authentication (audit finding #4, closed);
-                13ae03c feat(web): permission-gate action buttons across
-                the API's five write keys (finding-#1 follow-up);
-                734e54d chore(deps): move shadcn's CLI to
-                devDependencies (audit finding #7); d75198d chore(deps):
-                bump Go to 1.26.6 (audit finding #6); e757aaa
-                fix(settings): stop claiming API keys authenticate calls
-                (audit finding #4, first pass); 2058b1b fix(security):
-                trusted-proxy IP resolution & pending-login lockout
-                (audit findings #2, #3); 1e45953 fix(auth): enforce RBAC
-                on every mutating route (audit finding #1) — full detail
-                for all in CHANGELOG.md.
+CURRENT PHASE : BUMP GOLANG.ORG/X/CRYPTO (2 of 3 remaining advisories)
+                (ad hoc, user-scoped — picked from a 2-option menu after
+                "continue" with no phase specified; user chose the
+                smaller of the two)
+STATUS        : done. Checked each of the 3 advisories directly rather
+                than assuming: GO-2026-6355/GO-2026-6354 (x/crypto/ssh
+                DoS) fixed in v0.56.0, already published; GO-2026-5932
+                (x/crypto/openpgp unmaintained/unsafe) has NO fix
+                (Fixed in: N/A — upstream abandoned the package, not a
+                missing release). Confirmed this codebase only imports
+                x/crypto/bcrypt (internal/auth/crypto.go) — a different
+                subpackage from both ssh and openpgp, matching
+                govulncheck's own "0 reachable" finding from the
+                finding-#6 phase. Bumped v0.55.0 -> v0.56.0 (go get +
+                go mod tidy) — the only actionable fix available; the
+                openpgp advisory stays permanently flagged, harmless.
+                VERIFIED: go build/vet/test -count=1 ./... clean, 41
+                packages, live Postgres/ClickHouse/Redis/MinIO; gofmt
+                clean; go.mod/go.sum diff is exactly the one version
+                bump, nothing else moved. govulncheck ./... now reports
+                1 advisory (was 3) — GO-2026-5932 only, unreachable, no
+                fix exists to apply, documented as such rather than
+                left to look like an oversight on the next audit.
+LAST COMMIT   : 96dabb9 fix(ui): give MultiSelect real disabled support,
+                close domain-form.tsx's permission gap. Before it:
+                1c31660 fix(offers): close offer-columns.tsx's accessorFn
+                stale-cache gap; 57b220d feat(auth): real API-key
+                authentication (audit finding #4, closed); 13ae03c
+                feat(web): permission-gate action buttons across the
+                API's five write keys (finding-#1 follow-up); 734e54d
+                chore(deps): move shadcn's CLI to devDependencies (audit
+                finding #7); d75198d chore(deps): bump Go to 1.26.6
+                (audit finding #6); e757aaa fix(settings): stop claiming
+                API keys authenticate calls (audit finding #4, first
+                pass); 2058b1b fix(security): trusted-proxy IP resolution
+                & pending-login lockout (audit findings #2, #3); 1e45953
+                fix(auth): enforce RBAC on every mutating route (audit
+                finding #1) — full detail for all in CHANGELOG.md.
 UNCOMMITTED   : this phase's own work, about to be committed as one
-                logical commit — apps/web/src/components/ui/
-                multi-select.tsx; apps/web/src/features/domains/
-                domain-form.tsx; CHANGELOG.md; this CLAUDE.md edit.
-                Deliberately left out, unrelated and predating this
-                phase: ROADMAP.md, apps/e2e/scenario_test.go,
-                apps/web/src/lib/api/networks.ts and offers.ts remain
-                unstaged from the older repo+plan-audit pass; whoever
-                picks those up next should check they're still wanted.
+                logical commit — apps/go.mod, apps/go.sum; CHANGELOG.md;
+                this CLAUDE.md edit. Deliberately left out, unrelated and
+                predating this phase: ROADMAP.md,
+                apps/e2e/scenario_test.go, apps/web/src/lib/api/
+                networks.ts and offers.ts remain unstaged from the older
+                repo+plan-audit pass; whoever picks those up next should
+                check they're still wanted.
 NEXT          : confirm scope before starting. All 7 numbered security-
                 audit findings are fully resolved (see prior phases'
-                blocks / CHANGELOG.md). This phase closes the last of the
-                small known-gaps menu offered this round. Still open:
-                TRUSTED_PROXIES needs a real proxy deployed first
-                (finding-#2 phase, confirmed none exists yet); 3
-                golang.org/x/crypto advisories (dependency hygiene, not
-                live); the general rate limit's IP-keying not fitting
-                high-volume API-key traffic (finding-#4 phase's own known
-                limitation, the biggest of the remaining items — a real
-                middleware-ordering restructuring). Worth being aware of
-                for future sessions: this session's own history/subagent
-                tracking apparently does not persist a prior turn's
-                investigation request reliably across some boundary —
-                CHANGELOG.md and git log are the durable record to check
-                first when a user references earlier work this session
-                has no trace of.
+                blocks / CHANGELOG.md); the small known-gaps menu from
+                the last two rounds is now empty. Still open: TRUSTED_
+                PROXIES needs a real proxy deployed first (finding-#2
+                phase, confirmed none exists yet); the general rate
+                limit's IP-keying not fitting high-volume API-key traffic
+                (finding-#4 phase's own known limitation) — the one
+                remaining substantial item, a real middleware-ordering
+                restructuring (auth needs to resolve before the general
+                limiter runs, which currently mounts earlier in the
+                chain). GO-2026-5932 (x/crypto/openpgp, no fix exists) is
+                a permanent, accepted, unreachable flag, not something to
+                revisit. Worth being aware of for future sessions: this
+                session's own history/subagent tracking apparently does
+                not persist a prior turn's investigation request reliably
+                across some boundary — CHANGELOG.md and git log are the
+                durable record to check first when a user references
+                earlier work this session has no trace of.
 ```
 
 > At the end of every phase: update the four lines above, add a CHANGELOG entry,
