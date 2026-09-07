@@ -100,6 +100,7 @@ session.
 | `MultiSelect` real `disabled` support (closed domain-form.tsx's permission gap) | done |
 | `stream_set` analytics dimension (closed the stale "no stream_set_id on events" gap — the column already existed and was populated; only the whitelist/registry needed it) | done |
 | `facebook_ads`/`tiktok_ads` `access_token` retrofitted to real AES-256-GCM encryption (Phase D, `docs/ad-account-connections.md`) — no schema change needed, the column was already `text` | done |
+| General rate limit no longer stays IP-keyed for API-key traffic — `tenant.PeekIdentity` resolves identity before the limiter runs, keying by organization instead (`docs/security.md` §3) | done |
 
 ## Known open gaps
 
@@ -117,7 +118,6 @@ scoped phase; none blocks anything that ships today.
 | Flows have no top-level list view, so no "View statistics" drill-in row | flows live nested inside a campaign's edit page |
 | 4 of the report builder's 16 named dimensions still unbacked (`landing`/`pwa`/`postlanding`/`offer`) | need IDs threaded through `apps/tracker`'s event emission + a ClickHouse schema migration — `stream_set` (closed) shows the pattern once a column exists; these still need one |
 | Google Play URL parsing for the PWA listing preview | would need a scraper behind `apps/internal/urlsafety` |
-| General rate limit stays IP-keyed — a high-volume API-key integration shares one bucket with everything behind its IP | needs auth to resolve before the general limiter runs; a real middleware-ordering restructuring in `apps/api/main.go`/`apps/internal/httpserver` |
 | `TRUSTED_PROXIES` still on its default (no real reverse proxy/LB/CDN deployed yet) | set it once real infrastructure exists in front of `apps/api`/`apps/tracker` |
 | `golang.org/x/crypto/openpgp` (`GO-2026-5932`) has no upstream fix | permanent, accepted, unreachable — this codebase only imports `bcrypt`; see `docs/security.md` Known limitations |
 

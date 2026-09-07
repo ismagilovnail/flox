@@ -19,97 +19,106 @@ referenced below as §N).
 ## CURRENT STATE — UPDATE THIS EVERY PHASE
 
 ```
-CURRENT PHASE : ENCRYPT ACCESS_TOKEN AT REST (facebook_ads/tiktok_ads —
-                picked from a 3-option menu after "продолжай" with no
-                phase specified; user chose the smallest/clearest
-                security win)
-STATUS        : done. ad_account_connections.access_token — the last
-                credential column in the codebase still stored in plain
-                text (migration 00018 predated any encryption infra;
-                Google Ads' own developer_token/client_secret/
-                refresh_token, migration 00034, deliberately left this
-                one as a flagged follow-up) — now goes through the same
-                apps/internal/adaccount/crypto.go /
-                ADACCOUNT_ENCRYPTION_KEY AES-256-GCM machinery Google
-                Ads' three secrets already use. No schema migration:
-                the column was already `text`, only its stored format
-                changed. repository.go: selectColumns dropped the
-                `right(access_token, 4)` SQL-level slice (only worked
-                on plaintext); scanConnection now decrypts whichever
-                secret is present (access_token or refresh_token) in Go
-                to compute TokenPreview; Connect encrypts via
-                encryptOptional, CredentialsByTrafficSourceID decrypts
-                via decryptOptional — the same two helpers the other
-                three fields already used. No API/wire contract change
-                (Connection never had an AccessToken field; the
-                frontend's Connect request shape is unaffected — no
-                apps/web changes needed at all this phase). Added
-                TestAccessTokenRoundTripEncryption mirroring
-                TestGoogleAdsCredentialsRoundTripEncryption: connects
-                real plaintext, reads the raw access_token column via
-                SQL, asserts it's genuinely ciphertext, confirms
-                CredentialsByTrafficSourceID round-trips it exactly,
-                confirms TokenPreview's real last-4. Updated
-                docs/ad-account-connections.md (new "Phase D" section;
-                Phase A/Google Ads' own historical sections left intact
-                with forward pointers, not rewritten) and
-                docs/settings-integrations.md's comparison line.
+CURRENT PHASE : KEY THE GENERAL RATE LIMITER BY ORG FOR API-KEY TRAFFIC
+                (picked from a 3-option menu after "продолжай" with no
+                phase specified; user chose the most substantial
+                remaining known limitation)
+STATUS        : done. The general rate limiter (300/min,
+                apps/internal/httpserver) was purely IP-keyed since it
+                was built — a high-volume API-key integration shared one
+                bucket with everything else behind its address. Added
+                tenant.PeekIdentity: the same session/API-key resolution
+                NewMiddleware already does, but never rejecting on a
+                missing/invalid credential (needed since it's mounted
+                globally, ahead of genuinely public routes too). Mounted
+                in httpserver.New, immediately before the general
+                limiter; the limiter's key function (main.go) reads the
+                resolved identity — "org:"+orgID for API-key traffic,
+                "ip:"+clientIP for everything else (unauthenticated,
+                and session-cookie browser traffic, which isn't the
+                "many requests behind one address" case this fixes).
+                tenant.NewMiddleware now short-circuits when OrgID is
+                already in context (set by PeekIdentity), so an
+                authenticated request still costs exactly one Postgres/
+                session round trip total, not two — a request
+                PeekIdentity couldn't identify still falls through to
+                NewMiddleware's own resolution and 401 exactly as
+                before. httpserver.New's signature changed (clientIP
+                param replaced by generalLimitKey/identify, both built
+                in main.go); its one call site moved down, to after
+                tenantMiddleware exists (identify needs authSvc/
+                apiKeySvc). Added 5 new tenant-package tests (Peek's 3
+                resolution cases, NewMiddleware's short-circuit +
+                still-enforces-when-not-pre-identified) and 2 new
+                apps/internal/httpserver integration tests against live
+                Redis confirming the actual key created is org- vs
+                IP-scoped. Updated docs/security.md §3 + Known
+                limitations (struck through, matching the existing
+                convention) and ROADMAP.md.
                 VERIFIED: gofmt/go vet/go build/go test -count=1 ./...
                 clean, all Go packages, live Postgres/ClickHouse/Redis/
-                MinIO, incl. the new test. No frontend touched, so no
-                tsc/eslint/vitest/browser pass was needed this phase.
-LAST COMMIT   : 118bfed feat(analytics): add stream_set report
-                dimension, close stale roadmap gap. Before it: f382d10
-                docs(roadmap): close the stream_set gap, correct the
-                remaining unbacked-dimension count (a small follow-up
-                fixing ROADMAP.md's own now-stale gap row, committed
-                separately from 118bfed); 76b1279 docs(roadmap): record
-                this session's security-audit work, close the
-                accessorFn gap; 96dabb9 fix(ui): give MultiSelect real
-                disabled support, close domain-form.tsx's permission
-                gap — full detail for all in CHANGELOG.md. Note: the
-                golang.org/x/crypto bump (GO-2026-6355/6354 closed,
-                GO-2026-5932 permanently flagged/unreachable) landed
-                between phases per CHANGELOG.md but was never captured
-                in an earlier version of this block's LAST COMMIT line
-                — check `git log` if an exact hash is needed for it.
+                MinIO, incl. new tests; apps/api's own
+                rbac_coverage_test.go confirms the main.go reordering
+                dropped no route's RBAC gate. Live verification against
+                the real dev stack: signed up a real org, created a
+                real API key, hit a real endpoint, confirmed
+                ratelimit:api:org:<orgID> was the actual Redis key
+                created (not IP-keyed) — then confirmed a session-
+                cookie request from the same org still produced the
+                original ratelimit:api:ip:<addr> key, unaffected. Full
+                browser pass (login, /overview, /team, /settings, all
+                RBAC-gated): no regression, no console errors. All test
+                fixtures (org, user, API key, Redis keys) removed
+                afterward.
+LAST COMMIT   : 999f123 feat(security): encrypt facebook_ads/tiktok_ads
+                access_token at rest. Before it: 118bfed feat(analytics):
+                add stream_set report dimension, close stale roadmap
+                gap; f382d10 docs(roadmap): close the stream_set gap,
+                correct the remaining unbacked-dimension count; 76b1279
+                docs(roadmap): record this session's security-audit
+                work, close the accessorFn gap — full detail for all in
+                CHANGELOG.md. Note: the golang.org/x/crypto bump
+                (GO-2026-6355/6354 closed, GO-2026-5932 permanently
+                flagged/unreachable) landed between phases per
+                CHANGELOG.md but was never captured in an earlier
+                version of this block's LAST COMMIT line — check
+                `git log` if an exact hash is needed for it.
 UNCOMMITTED   : this phase's own work, about to be committed as one
-                logical commit — apps/internal/adaccount/crypto.go,
-                apps/internal/adaccount/repository.go,
-                apps/internal/adaccount/adaccount_test.go,
-                docs/ad-account-connections.md,
-                docs/settings-integrations.md, ROADMAP.md, CHANGELOG.md,
-                this CLAUDE.md edit. Deliberately left out, unrelated
-                and predating this phase: apps/e2e/scenario_test.go
-                remains unstaged from the older repo+plan-audit pass;
-                whoever picks it up next should check it's still
-                wanted.
+                logical commit — apps/internal/tenant/tenant.go,
+                apps/internal/tenant/tenant_test.go,
+                apps/internal/httpserver/server.go,
+                apps/internal/httpserver/server_test.go,
+                apps/api/main.go, docs/security.md, ROADMAP.md,
+                CHANGELOG.md, this CLAUDE.md edit. Deliberately left
+                out, unrelated and predating this phase:
+                apps/e2e/scenario_test.go remains unstaged from the
+                older repo+plan-audit pass; whoever picks it up next
+                should check it's still wanted.
 NEXT          : confirm scope before starting. All 7 numbered security-
                 audit findings are fully resolved; the stream_set
-                dimension gap and the access_token plain-text gap are
-                both closed. Known remaining items in ROADMAP.md's
-                Known-open-gaps table: cloudflare_registrar has no
-                adapter; SMS/email 2FA as a TOTP alternative; the report
-                builder's filter-value dropdown is still a fixed mock
-                pool (needs a real "distinct values for dimension X"
-                endpoint); 7 feature areas are English-only in an EN/RU
-                app; DataTable has no column resizing/CSV export;
-                Content Gallery has no video upload/transcoding; Flows
-                have no top-level list view; 4 of 16 report dimensions
-                (landing/pwa/postlanding/offer) still need real columns
-                before they can follow stream_set's pattern; Google Play
-                URL parsing for PWA listings; the general rate limiter's
-                IP-keying (needs a real middleware-ordering
-                restructuring, auth before the limiter). TRUSTED_PROXIES
-                needs a real proxy deployed first (still blocked, no
-                infra exists). GO-2026-5932 (x/crypto/openpgp, no fix
-                exists) stays a permanent, accepted, unreachable flag.
-                Worth being aware of for future sessions: this session's
-                own history/subagent tracking apparently does not
-                persist a prior turn's investigation request reliably
-                across some boundary — CHANGELOG.md and git log are the
-                durable record to check first when a user references
-                earlier work this session has no trace of.
+                dimension gap, the access_token plain-text gap, and the
+                rate-limiter IP-keying gap are all closed. Known
+                remaining items in ROADMAP.md's Known-open-gaps table:
+                cloudflare_registrar has no adapter; SMS/email 2FA as a
+                TOTP alternative; the report builder's filter-value
+                dropdown is still a fixed mock pool (needs a real
+                "distinct values for dimension X" endpoint); 7 feature
+                areas are English-only in an EN/RU app; DataTable has no
+                column resizing/CSV export; Content Gallery has no video
+                upload/transcoding; Flows have no top-level list view; 4
+                of 16 report dimensions (landing/pwa/postlanding/offer)
+                still need real columns before they can follow
+                stream_set's pattern; Google Play URL parsing for PWA
+                listings. TRUSTED_PROXIES needs a real proxy deployed
+                first (still blocked, no infra exists). GO-2026-5932
+                (x/crypto/openpgp, no fix exists) stays a permanent,
+                accepted, unreachable flag. Worth being aware of for
+                future sessions: this session's own history/subagent
+                tracking apparently does not persist a prior turn's
+                investigation request reliably across some boundary —
+                CHANGELOG.md and git log are the durable record to check
+                first when a user references earlier work this session
+                has no trace of.
 ```
 
 > At the end of every phase: update the four lines above, add a CHANGELOG entry,

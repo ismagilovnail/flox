@@ -5,6 +5,62 @@ per-phase, matching `CLAUDE.md`'s phase protocol. The one exception is
 [Between phases], below: spec amendments and the code changes that follow from
 them land between phases and would otherwise be invisible here.
 
+## [Between phases] — key the general rate limit by organization for API-key traffic, not client IP
+
+The general rate limiter (300 req/min, `apps/internal/httpserver`) has
+been purely IP-keyed since it was built — flagged as a known limitation
+the moment API-key authentication became real (finding #4): a
+high-volume legitimate integration shares one bucket with every other
+visitor behind the same address (shared hosting, corporate NAT, ...),
+while the limiter has no way to tell them apart, since auth had never
+resolved yet at the point it runs.
+
+Added `tenant.PeekIdentity` — the same session/API-key resolution
+`tenant.NewMiddleware` already does, but never rejecting the request on
+a missing or invalid credential (an absent/bad credential just leaves
+the request unidentified rather than 401ing, since this runs ahead of
+genuinely public routes too). Mounted once, globally, in
+`apps/internal/httpserver.New`, immediately before the general limiter —
+the limiter's key function (`apps/api/main.go`) reads the identity it
+resolved: `"org:" + orgID` for API-key-authenticated traffic, `"ip:" +
+clientIP` for everything else (unauthenticated requests, and
+session-cookie browser traffic, which isn't the "many unrelated
+requests behind one address" case this fixes).
+
+To avoid paying for two Postgres/session round trips per authenticated
+request, `tenant.NewMiddleware` (the real, per-route-group *enforcing*
+check) now short-circuits when `PeekIdentity` already resolved identity
+into context — a request it couldn't identify still falls through to
+NewMiddleware's own resolution and 401 exactly as before. `httpserver.
+New`'s signature changed (`clientIP *clientip.Resolver` replaced by a
+pre-built `generalLimitKey`/`identify` pair, both built in `main.go`,
+which already imports `tenant` — `httpserver` itself still doesn't) and
+its one call site moved down in `main.go`, to after `tenantMiddleware`
+exists.
+
+Added `TestPeekIdentityResolvesAPIKey`/`ResolvesSessionCookie`/
+`NeverRejects`, `TestNewMiddlewareSkipsReresolutionWhenAlreadyIdentified`/
+`StillEnforcesWhenNotPreIdentified` (`apps/internal/tenant`), and two new
+`apps/internal/httpserver` integration tests against live Redis
+confirming the actual Redis key an API-key request produces is
+org-scoped and an unauthenticated one is still IP-scoped. Updated
+`docs/security.md` §3 and its "Known limitations" list (struck through,
+matching the existing convention for closed items).
+
+Verified: `gofmt`/`go vet`/`go build`/`go test -count=1 ./...` clean
+across all Go packages against live Postgres/ClickHouse/Redis/MinIO,
+including the new tests — `apps/api`'s own `rbac_coverage_test.go`
+confirms the `main.go` reordering didn't drop any route's RBAC gate.
+Live verification against the real containerized dev stack: signed up
+a real test org, created a real API key, hit a real endpoint with it,
+and confirmed `ratelimit:api:org:<orgID>` was the Redis key actually
+created (not an IP-keyed one) — then confirmed a session-cookie request
+from the same org still produced the original `ratelimit:api:ip:<addr>`
+key, unaffected. A full browser pass (login, `/overview`, `/team`,
+`/settings`, all RBAC-gated) showed no regression and no console
+errors. All test fixtures (org, user, API key, Redis keys) removed
+afterward.
+
 ## [Between phases] — encrypt facebook_ads/tiktok_ads' access_token at rest, closing the last plain-text credential gap
 
 `ad_account_connections.access_token` (facebook_ads/tiktok_ads) was the

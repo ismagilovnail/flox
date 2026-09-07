@@ -181,7 +181,9 @@ func run() error {
 		logger.Warn("object storage unreachable at startup, Content Gallery will be unavailable until it recovers", "error", ensureErr)
 	}
 
-	srv := httpserver.New(logger, cfg.OTelServiceName, db, ch, cfg.AppURL, limiter, clientIP)
+	// httpserver.New itself is constructed further down, once authSvc/
+	// apiKeySvc exist — it needs tenant.PeekIdentity built from both (see
+	// the comment right before that call).
 
 	// Auth/RBAC (§52, Phase 28A). authSvc.ResolveSession implements
 	// tenant.SessionResolver — tenantMiddleware below replaces the old
@@ -260,6 +262,27 @@ func run() error {
 	csrfCheck := tenant.RequireSameOrigin(cfg.AppURL, logger)
 	sessionCheck := tenant.NewMiddleware(authSvc, apiKeySvc, logger, cfg.Env != "development")
 	tenantMiddleware := func(next http.Handler) http.Handler { return csrfCheck(sessionCheck(next)) }
+
+	// §54: closes the "general rate limit stays IP-keyed" gap
+	// (ROADMAP.md) — identify resolves a request's org/API-key identity
+	// into context, best-effort, before the general limiter below ever
+	// runs (tenant.PeekIdentity's own doc comment has the full reasoning
+	// and why NewMiddleware, above, doesn't pay for it twice).
+	// generalLimitKey is what actually uses that identity: an API-key-
+	// authenticated request keys by its organization; everything else
+	// (unauthenticated, or session-cookie browser traffic) still keys by
+	// client IP, same as before this phase — a browser session isn't the
+	// "many unrelated requests sharing one IP" case this is fixing.
+	identify := tenant.PeekIdentity(authSvc, apiKeySvc, logger)
+	generalLimitKey := func(r *http.Request) string {
+		if scope, ok := tenant.APIKeyScope(r.Context()); ok && scope != "" {
+			if orgID, ok := tenant.OrgID(r.Context()); ok {
+				return "org:" + orgID
+			}
+		}
+		return "ip:" + clientIP.String(r)
+	}
+	srv := httpserver.New(logger, cfg.OTelServiceName, db, ch, cfg.AppURL, limiter, generalLimitKey, identify)
 
 	// §52 RBAC. Until the 2026-09-06 audit, RequirePermission gated only
 	// /team, /security and the four features whose own phases wired it

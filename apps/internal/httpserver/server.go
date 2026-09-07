@@ -18,18 +18,21 @@ import (
 	"github.com/go-chi/cors"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 
-	"github.com/ismagilovnail/flox/apps/internal/clientip"
 	"github.com/ismagilovnail/flox/apps/internal/metrics"
 	"github.com/ismagilovnail/flox/apps/internal/ratelimit"
 )
 
-// generalRateLimit/generalRateLimitWindow: a broad per-IP ceiling across
-// every domain route (§54/Phase 30) — generous enough not to bother a
-// real dashboard session (TanStack Query re-fetching several resources,
-// ⌘K searches, ...) while still bounding a scripted abuse attempt. Auth
-// endpoints layer a much stricter, separate limit on top of this one
-// (apps/api/main.go) — this general limit alone isn't tuned for brute-
-// force protection.
+// generalRateLimit/generalRateLimitWindow: a broad ceiling across every
+// domain route (§54/Phase 30) — generous enough not to bother a real
+// dashboard session (TanStack Query re-fetching several resources, ⌘K
+// searches, ...) while still bounding a scripted abuse attempt. Keyed
+// per-organization for API-key-authenticated traffic, per-IP otherwise
+// (New's own generalLimitKey param, built in apps/api/main.go) — not
+// purely per-IP the way it originally was, so one high-volume
+// integration no longer shares a bucket with unrelated traffic behind
+// the same address. Auth endpoints layer a much stricter, separate
+// limit on top of this one (apps/api/main.go) — this general limit
+// alone isn't tuned for brute-force protection.
 const (
 	generalRateLimit       = 300
 	generalRateLimitWindow = time.Minute
@@ -55,12 +58,16 @@ type Server struct {
 // when the browser is told the response allows credentialed requests —
 // paired with a single explicit AllowedOrigins entry, never "*", which
 // the fetch spec forbids combining with credentials anyway.
-// clientIP resolves the real client address behind TRUSTED_PROXIES
-// (security audit finding #2) — replaces chi's own middleware.RealIP,
-// deprecated upstream for the same unconditional-XFF-trust reason
-// (GHSA-3fxj-6jh8-hvhx, GHSA-rjr7-jggh-pgcp, GHSA-9g5q-2w5x-hmxf) and
-// used here for the general rate limit's key instead.
-func New(logger *slog.Logger, serviceName string, db Pinger, ch Pinger, appURL string, limiter *ratelimit.Limiter, clientIP *clientip.Resolver) *Server {
+// identify is tenant.PeekIdentity, built in apps/api/main.go (this
+// package deliberately doesn't import apps/internal/tenant, to keep
+// cross-cutting infra and tenancy concerns from tangling) — mounted
+// globally, before the general rate limit, so that generalLimitKey (also
+// built in main.go, closing over both tenant's context helpers and a
+// clientip.Resolver) can key an API-key-authenticated request by its
+// organization instead of by client IP — see PeekIdentity's own doc
+// comment for why this ordering matters and what it fixes (ROADMAP.md:
+// "General rate limit stays IP-keyed").
+func New(logger *slog.Logger, serviceName string, db Pinger, ch Pinger, appURL string, limiter *ratelimit.Limiter, generalLimitKey func(r *http.Request) string, identify func(http.Handler) http.Handler) *Server {
 	r := chi.NewRouter()
 
 	r.Use(middleware.RequestID)
@@ -76,13 +83,16 @@ func New(logger *slog.Logger, serviceName string, db Pinger, ch Pinger, appURL s
 		MaxAge:           300,
 	}))
 
-	// §54/Phase 30. chi panics if Use is called after any route is
-	// registered on this mux ("all middlewares must be defined before
-	// routes"), so this must come before health/ready/metrics below —
-	// exemptPaths is what actually keeps an orchestrator's liveness probe
-	// or a Prometheus scrape from ever tripping a rate limit meant for
-	// abuse on domain routes, not registration order.
-	r.Use(exemptPaths(limiter.Middleware("api", clientIP.String, generalRateLimit, generalRateLimitWindow), "/health", "/ready", "/metrics"))
+	// identify must run before the general limiter (next line) — it's
+	// what populates the context the limiter's own generalLimitKey reads
+	// from. Both must come before health/ready/metrics below — chi panics
+	// if Use is called after any route is registered on this mux ("all
+	// middlewares must be defined before routes") — exemptPaths is what
+	// actually keeps an orchestrator's liveness probe or a Prometheus
+	// scrape from ever tripping a rate limit meant for abuse on domain
+	// routes, not registration order.
+	r.Use(identify)
+	r.Use(exemptPaths(limiter.Middleware("api", generalLimitKey, generalRateLimit, generalRateLimitWindow), "/health", "/ready", "/metrics"))
 
 	r.Get("/health", healthHandler)
 	r.Get("/ready", readyHandler(db, ch))

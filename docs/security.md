@@ -68,22 +68,35 @@ to Postgres directly). A limiter that failed closed would turn a Redis
 outage into a full API outage, strictly worse than temporarily losing
 brute-force protection.
 
-- General ceiling: 300 req/min per IP, across every `apps/api` domain
-  route (`apps/internal/httpserver`). Registered via `exemptPaths(...)` so
+- General ceiling: 300 req/min, across every `apps/api` domain route
+  (`apps/internal/httpserver`). Registered via `exemptPaths(...)` so
   `/health`, `/ready`, `/metrics` are never subject to it — an
   orchestrator's liveness probe or a Prometheus scrape should never trip a
   limit meant for abuse.
+- Keyed per-organization for API-key-authenticated traffic, per-IP for
+  everything else (unauthenticated requests and session-cookie browser
+  traffic) — `tenant.PeekIdentity` (`apps/internal/tenant`) resolves
+  identity into context, best-effort and without rejecting the request,
+  mounted globally *before* the general limiter (`apps/internal/
+  httpserver.New`'s own `identify` parameter); the limiter's key function
+  (`apps/api/main.go`) reads that context. Closes the "one high-volume
+  integration could exhaust the bucket shared with everything else behind
+  its IP" gap this section used to flag as a known limitation, below —
+  `NewMiddleware` (the real, enforcing per-route auth check) skips
+  re-resolving when `PeekIdentity` already succeeded, so an authenticated
+  request still costs exactly one Postgres/session round trip, not two.
 - Auth-specific ceiling: 20 req/15min per IP on `/auth/login` and
   `/auth/signup` (`apps/api/main.go`) — deliberately much stricter, sized
   for the actual brute-force/credential-stuffing concern those two routes
-  carry, not general dashboard traffic.
+  carry, not general dashboard traffic; stays IP-keyed (pre-session, no
+  identity to key by yet).
 - **Not** applied to `apps/tracker`'s redirect hot path — a synchronous
   Redis round trip on every click would blow the p50/p95 budget outright.
   Click-volume protection there is an infrastructure concern (CDN/load
   balancer), not an in-process limiter.
-- The "per IP" in both ceilings is `apps/internal/clientip.Resolver`'s
-  resolved address (§5 below), not a raw header read — see that section
-  for why that distinction is load-bearing.
+- The "per IP" case in every ceiling above is `apps/internal/
+  clientip.Resolver`'s resolved address (§5 below), not a raw header
+  read — see that section for why that distinction is load-bearing.
 
 ## 4. SSRF: `apps/internal/urlsafety`
 
@@ -174,9 +187,10 @@ running API, is in `docs/auth.md`'s "API key authentication" section.
   Policy`, ...) — out of scope for this phase, not requested.
 - ~~API keys authenticate nothing (audit finding #4)~~ — closed, see §6
   above.
-- API-key-authenticated requests share the general rate limit's
-  IP-keyed bucket with everything else behind the same address (§3) —
-  a single high-volume legitimate integration server could exhaust it.
+- ~~API-key-authenticated requests share the general rate limit's
+  IP-keyed bucket with everything else behind the same address~~ —
+  closed, see §3 above (`tenant.PeekIdentity` + a per-organization key
+  for that case).
 - `govulncheck ./...` reports one permanent, accepted advisory:
   `GO-2026-5932` (`golang.org/x/crypto/openpgp` is unmaintained and
   unsafe by design). `Fixed in: N/A` — upstream has abandoned the

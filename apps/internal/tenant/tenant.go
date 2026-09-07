@@ -70,9 +70,25 @@ type APIKeyAuthenticator interface {
 // set the cookie (false in local dev, true anywhere served over HTTPS) —
 // clearing a cookie is itself a Set-Cookie, and a mismatched Secure flag
 // means the browser won't recognize it as the same cookie to overwrite.
+//
+// Short-circuits when OrgID(ctx) is already set — PeekIdentity, mounted
+// once globally ahead of every route (apps/internal/httpserver), already
+// resolved most requests' identity before this middleware ever runs, so
+// re-authenticating here would cost a second Postgres round trip (API
+// key hash lookup, or session lookup) per request for no reason. Direct
+// callers of NewMiddleware against a bare context (every existing test)
+// are unaffected — OrgID is never pre-set there, so this never triggers.
+// A request PeekIdentity couldn't identify (bad token, no cookie, or it
+// simply never ran) falls through to the real resolution below exactly
+// as before, including the 401 on failure.
 func NewMiddleware(resolver SessionResolver, apiKeys APIKeyAuthenticator, logger *slog.Logger, secureCookies bool) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if _, ok := OrgID(r.Context()); ok {
+				next.ServeHTTP(w, r)
+				return
+			}
+
 			// A Bearer token takes priority over any cookie present — a
 			// server-to-server integration call has no reason to carry a
 			// browser's session cookie too, but if both somehow are, the
@@ -114,6 +130,64 @@ func NewMiddleware(resolver SessionResolver, apiKeys APIKeyAuthenticator, logger
 				return
 			}
 
+			ctx := context.WithValue(r.Context(), contextKey{}, orgID)
+			ctx = context.WithValue(ctx, userContextKey{}, userID)
+			next.ServeHTTP(w, r.WithContext(ctx))
+		})
+	}
+}
+
+// PeekIdentity resolves the current request's identity into context
+// best-effort, WITHOUT enforcing authentication — a missing or invalid
+// credential simply leaves the request unauthenticated (next runs with
+// context unchanged) rather than rejecting it, since this is mounted
+// once, globally, ahead of every route (apps/internal/httpserver,
+// before the general rate limit) — including public ones (/health,
+// /auth/login, webhooks) that must keep working with no credential at
+// all. Real enforcement (401 on an actually-protected route) still
+// happens downstream, per route group, via NewMiddleware — which skips
+// re-resolving when this middleware already succeeded (see its own doc
+// comment), so an authenticated request costs exactly one Postgres/
+// session round trip total, the same as before this middleware existed.
+//
+// This is what makes the general rate limiter able to key an API-key-
+// authenticated request by its organization instead of client IP: the
+// limiter's own key function (apps/api/main.go) reads OrgID/
+// APIKeyScope from context, and those are only ever populated this
+// early by this middleware. A high-volume integration no longer shares
+// one IP-keyed bucket with every other visitor behind the same address
+// (shared hosting, corporate NAT, ...) — closing the gap ROADMAP.md
+// flagged under "General rate limit stays IP-keyed."
+//
+// Never logs on a resolution failure — an absent or invalid credential
+// is completely normal here (most requests are either genuinely public
+// or will be identified properly, or correctly rejected, by
+// NewMiddleware downstream); logging every one would just be noise.
+func PeekIdentity(resolver SessionResolver, apiKeys APIKeyAuthenticator, logger *slog.Logger) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if rawKey, ok := bearerToken(r); ok {
+				if orgID, userID, scope, err := apiKeys.Authenticate(r.Context(), rawKey); err == nil {
+					ctx := context.WithValue(r.Context(), contextKey{}, orgID)
+					ctx = context.WithValue(ctx, userContextKey{}, userID)
+					ctx = context.WithValue(ctx, apiKeyScopeContextKey{}, scope)
+					next.ServeHTTP(w, r.WithContext(ctx))
+					return
+				}
+				next.ServeHTTP(w, r)
+				return
+			}
+
+			cookie, err := r.Cookie(CookieName)
+			if err != nil || cookie.Value == "" {
+				next.ServeHTTP(w, r)
+				return
+			}
+			orgID, userID, err := resolver.ResolveSession(r.Context(), cookie.Value)
+			if err != nil {
+				next.ServeHTTP(w, r)
+				return
+			}
 			ctx := context.WithValue(r.Context(), contextKey{}, orgID)
 			ctx = context.WithValue(ctx, userContextKey{}, userID)
 			next.ServeHTTP(w, r.WithContext(ctx))
