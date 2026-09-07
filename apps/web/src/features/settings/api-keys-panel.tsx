@@ -5,9 +5,10 @@ import { Controller, useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { toast } from "sonner";
 import { formatDistanceToNow } from "date-fns";
-import { CopyIcon, PlusIcon, Trash2Icon } from "lucide-react";
+import { CopyIcon, InfoIcon, PlusIcon, Trash2Icon } from "lucide-react";
 import { z } from "zod";
 
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardAction } from "@/components/ui/card";
@@ -87,13 +88,22 @@ export function ApiKeysPanel() {
     <Card>
       <CardHeader>
         <CardTitle>API keys</CardTitle>
-        <CardDescription>Used for programmatic access. The full key is shown once, at creation.</CardDescription>
+        <CardDescription>Credentials for programmatic access. The full key is shown once, at creation.</CardDescription>
         <CardAction>
           <Button size="sm" onClick={() => setCreating(true)}>
             <PlusIcon className="size-4" /> New API key
           </Button>
         </CardAction>
       </CardHeader>
+      <div className="px-4 pb-4">
+        <Alert>
+          <InfoIcon />
+          <AlertDescription>
+            API authentication isn&apos;t live yet — a key created here can&apos;t call FLOX&apos;s API, and scope
+            isn&apos;t enforced. Manage credentials now; they&apos;ll take effect once programmatic access ships.
+          </AlertDescription>
+        </Alert>
+      </div>
       <CardContent className="flex flex-col divide-y divide-border p-0">
         {apiKeysQuery.isPending && (
           <div className="px-4 py-6">
@@ -137,7 +147,9 @@ export function ApiKeysPanel() {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>New API key</DialogTitle>
-            <DialogDescription>Scope controls what this key can read or change.</DialogDescription>
+            <DialogDescription>
+              Scope will control what this key can read or change once API access ships — it isn&apos;t enforced yet.
+            </DialogDescription>
           </DialogHeader>
           <form onSubmit={form.handleSubmit(handleCreate)} className="flex flex-col gap-4">
             <div className="grid gap-1.5">
@@ -202,7 +214,7 @@ export function ApiKeysPanel() {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Revoke &ldquo;{revokeTarget?.name}&rdquo;?</DialogTitle>
-            <DialogDescription>Anything using this key stops working immediately.</DialogDescription>
+            <DialogDescription>A revoked key can never be used again, including once API access ships.</DialogDescription>
           </DialogHeader>
           <DialogFooter>
             <Button variant="outline" onClick={() => setRevokeTarget(null)}>

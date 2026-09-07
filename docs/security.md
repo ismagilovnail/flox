@@ -156,3 +156,13 @@ fresh `Login` call — the same "wrong attempt costs the whole token" trade
   is not throttled by this layer; that's an infrastructure/WAF concern.
 - No CSP/security-header hardening (`X-Frame-Options`, `Content-Security-
   Policy`, ...) — out of scope for this phase, not requested.
+- API keys (Settings > API keys, `apps/internal/apikey`) authenticate
+  nothing (audit finding #4): `Create`/`List`/`Revoke` are real, hashed
+  credential bookkeeping, but no request path ever looks a key up —
+  there is no `Authorization`/`X-Api-Key` middleware anywhere in the
+  tree, and the `read`/`write`/`admin` scope stored per key is never
+  read by any handler. The Settings UI now says so explicitly rather
+  than implying otherwise; building real key authentication is a
+  dedicated future phase (route surface, rate limiting, and mapping the
+  flat scope onto the 18-permission RBAC model all need their own
+  design), not a security patch.

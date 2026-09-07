@@ -5,6 +5,39 @@ per-phase, matching `CLAUDE.md`'s phase protocol. The one exception is
 [Between phases], below: spec amendments and the code changes that follow from
 them land between phases and would otherwise be invisible here.
 
+## [Security] — stop promising API keys authenticate calls (audit finding #4)
+
+The audit found `apps/internal/apikey` implements real, hashed credential
+bookkeeping (`Create`/`List`/`Revoke`, `api_keys.key_hash` unique-indexed)
+but nothing in the tree ever authenticates a request with one — no
+`Authorization`/`X-Api-Key` middleware exists anywhere, and the
+`read`/`write`/`admin` scope stored per key is read by zero handlers. The
+Settings > API keys panel nonetheless told users "Used for programmatic
+access" and "Scope controls what this key can read or change" — a direct
+hit against CLAUDE.md's own "no fake APIs that look real" rule.
+
+Scoped with the user before touching anything: building real key
+authentication is a substantial feature in its own right (a second auth
+path mounted across the whole route tree, plus deciding how a flat
+3-value scope maps onto the 18-permission RBAC model finding #1 just
+built, plus rate limiting for key traffic) — not something to fold into
+a security-audit pass. The user chose the cheap, honest fix: keep key
+management working exactly as before (creation, one-time reveal,
+revocation are all real and unchanged), but stop the UI from claiming it
+does something it doesn't.
+
+`apps/web/src/features/settings/api-keys-panel.tsx`: the card description,
+an added inline `Alert`, the create dialog's scope description, and the
+revoke confirmation now all say plainly that API authentication isn't
+live yet and scope isn't enforced. No backend changes — `apikey.Service`
+and its handler are untouched. `docs/security.md`'s Known limitations
+gets the same explanation for anyone reading the code instead of the UI.
+Real key authentication is deferred to its own future phase, scoped
+properly when it's actually built.
+
+Verified: `tsc --noEmit`, `eslint`, and `vitest` (21/21) all clean — no
+existing test asserted the old copy strings.
+
 ## [Security] — trusted-proxy IP resolution & pending-login lockout (audit findings #2, #3)
 
 Every client-IP read in the tree — `apps/internal/ratelimit`'s `ClientIP`,

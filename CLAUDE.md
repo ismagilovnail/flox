@@ -19,136 +19,79 @@ referenced below as §N).
 ## CURRENT STATE — UPDATE THIS EVERY PHASE
 
 ```
-CURRENT PHASE : TRUSTED-PROXY IP RESOLUTION & PENDING-LOGIN LOCKOUT
-                (security audit findings #2 + #3, user-scoped, post-
-                Phase-34, follows the finding-#1 RBAC phase)
-STATUS        : done. SCOPED WITH THE USER before writing code, same
-                pattern as finding #1: (a) fix #2 and #3 together, per
-                the prior phase's own NEXT note that they compound — #2
-                is what lets XFF-spoofing bypass the auth rate limit that
-                #3's unlimited-guessing bug needs to matter; (b) this
-                deployment has no real reverse proxy/LB/CDN in front of
-                it yet, so TRUSTED_PROXIES defaults to
-                clientip.DefaultTrustedProxies (loopback + RFC 1918/4193
-                private ranges) rather than a real address range — safe
-                because a public peer is never in that set, so a spoofed
-                header from the open internet is still ignored; (c) for
-                #3, invalidate the pending login on the FIRST wrong code
-                rather than adding an attempt-counter column — simpler,
-                no migration, and the cost (a typo forces a fresh login)
-                was judged acceptable.
-                FINDING #2: every client-IP read in the tree —
-                ratelimit.ClientIP, apps/tracker's own clientIP helper,
-                and chi's middleware.RealIP mounted in front of both —
-                took X-Forwarded-For's LEFTMOST entry unconditionally.
-                That is exactly the entry the client itself writes, so
-                all three were attacker-controlled: rotating the header
-                defeated the 20/15min auth rate limit outright, made the
-                Security IP allowlist decorative, and let a tracker
-                visitor spoof the country/ASN routing filters read and
-                choose its own weighted-flow arm (§38). A COMPLETE,
-                DOCUMENTED FIX for this was found already written but
-                never wired in or committed — apps/apps/internal/
-                clientip/clientip.go, at a doubled/wrong path — from
-                context lost to a prior compaction; moved to the correct
-                apps/internal/clientip/clientip.go rather than rewritten,
-                after reading it in full and confirming its design
-                (right-to-left trusted-chain walk, "none" to disable,
-                fail-loud on a malformed TRUSTED_PROXIES entry) was
-                sound. It shipped with zero tests; clientip_test.go is
-                new this phase (7 cases: untrusted-peer spoofing ignored,
-                trusted-chain walked right-to-left, all-trusted chain
-                falls back to leftmost, TrustNothing disables XFF
-                entirely, malformed entries rejected at New(), ParseList
-                trims/dedupes blanks, IPv4-mapped IPv6 unmaps to the same
-                identity as its IPv4 form).
-                THE FIX: one *clientip.Resolver built per binary
-                (apps/api/main.go, apps/tracker/main.go) from a new
-                TRUSTED_PROXIES env var (config.Config.TrustedProxies,
-                empty default), threaded as an explicit dependency —
-                NOT a package-level global — into httpserver.New,
-                auth.NewHandler, auth.NewSecurityHandler, and tracker's
-                Handler struct. ratelimit.ClientIP is DELETED, not left
-                beside the resolver as a second insecure way to get the
-                same value; its test (TestClientIP) is deleted with it.
-                chi's middleware.RealIP is unmounted from both apps/api
-                (httpserver/server.go) and apps/tracker (main.go) —
-                upstream deprecated it for the identical unconditional-
-                trust reason (GHSA-3fxj-6jh8-hvhx, GHSA-rjr7-jggh-pgcp,
-                GHSA-9g5q-2w5x-hmxf). apps/tracker's track() now resolves
-                the IP once per request and threads it through
-                classifier.Input, visitKey, and buildEvent (which gained
-                an ip parameter) instead of re-deriving it three times.
-                FINDING #3: VerifyPendingLogin (apps/internal/auth/
-                service.go) left the pending_totp_logins row untouched on
-                a wrong TOTP/backup code, so its 5-minute TTL allowed
-                unlimited guesses against one token. Fixed: a wrong code
-                now calls DeletePendingTOTPLogin before returning the
-                "incorrect code" error, so the same token is dead even
-                against the real code afterward — forcing a fresh Login
-                call, the same trade VerifyEmail/invite tokens already
-                make elsewhere in this file. TestSelfServeTOTPEnrollment-
-                AndLogin used to assert the OLD behavior in a comment
-                ("A wrong code doesn't consume the pending login") and
-                reuse the same token with the real code afterward — that
-                assertion is now inverted (same token + real code after
-                one wrong guess must fail) and the test performs a
-                second, fresh Login to reach a real session.
-                VERIFIED: go build/vet clean; go test -count=1 ./... clean
-                — 41 packages (clientip new), run with live Postgres/
-                ClickHouse/Redis/MinIO so DB-backed tests (auth: 3.8s)
-                actually executed. gofmt clean (fixed one pre-existing
-                doc-comment indentation nit in the moved clientip.go). No
-                apps/web changes this phase, so tsc/eslint/vitest weren't
-                re-run.
-                DOCS: docs/security.md gets a new "§5 Trusted-proxy IP
-                resolution & pending-login lockout" section plus a
-                TRUSTED_PROXIES caveat under Known limitations; its §3
-                Rate limiting section gets a one-line cross-reference.
-                .env.example documents TRUSTED_PROXIES (default empty,
-                "none" to disable entirely).
-                NOT done, called out honestly: findings (4) API keys
-                authenticate nothing, (5) rate limiter fails open on
-                Redis error (a deliberate, documented stance per
-                docs/security.md — not a bug), (6) Go 1.26.5 stdlib CVEs,
-                (7) shadcn CLI in prod dependencies — all still open,
-                full detail in the finding-#1 commit (1e45953 below) and
-                in CHANGELOG.md. Also still open from the finding-#1
-                phase itself: permission-gating the action buttons in the
-                frontend so a read-only role stops seeing controls that
-                403.
-LAST COMMIT   : a5ed68a chore: update CLAUDE.md CURRENT STATE for finding
-                #1 commit, drop dead campaigns mock (also carried the
-                earlier repo+plan-audit's staged CLAUDE.md rewrite). Before
-                it, 1e45953 fix(auth): enforce RBAC on every mutating
-                route (audit finding #1) — full detail in CHANGELOG.md.
+CURRENT PHASE : STOP PROMISING API KEYS AUTHENTICATE CALLS
+                (security audit finding #4, user-scoped, follows the
+                finding-#2/#3 trusted-proxy phase)
+STATUS        : done. SCOPED WITH THE USER before writing code: the
+                audit found apikey.Repository really is just List/
+                Create/Revoke — real, hashed credential bookkeeping
+                (api_keys.key_hash unique-indexed, ready for a real
+                lookup) — but NOTHING authenticates a request with one.
+                Zero Authorization/X-Api-Key middleware exists anywhere
+                in the tree (confirmed by grep, not assumed — no dead or
+                commented-out attempt either, this was never started),
+                and the read/write/admin scope stored per key is read by
+                zero handlers. Settings > API keys nonetheless told
+                users "Used for programmatic access" and "Scope controls
+                what this key can read or change" — a direct hit against
+                CLAUDE.md's own "no fake APIs that look real" rule.
+                THE FORK: implement real key authentication now (a
+                second auth path mounted across the whole route tree,
+                deciding how a flat 3-value scope maps onto finding #1's
+                18-permission RBAC model, rate limiting for key traffic —
+                a feature on the scale of finding #1's own fix) vs. stop
+                the UI from claiming it works and defer the real feature
+                to its own future phase. USER PICKED THE LATTER
+                (recommended option) — cheap, honest, zero backend risk,
+                and building real key auth deserves its own scoping pass
+                with route-surface and rate-limit design up front rather
+                than being folded into a security-audit fix.
+                THE FIX: apps/web/src/features/settings/
+                api-keys-panel.tsx only — card description, a new inline
+                Alert ("API authentication isn't live yet... scope isn't
+                enforced"), the create dialog's scope description, and
+                the revoke confirmation all now say plainly that keys
+                don't authenticate anything yet. Key creation, one-time
+                reveal, and revocation are UNCHANGED — still real,
+                still hashed, still work exactly as before; only the
+                claims about what a key DOES changed. Zero backend
+                changes — apikey.Service/handler/repository untouched.
+                docs/security.md's Known limitations gets the same
+                explanation for a reader of the code rather than the UI.
+                VERIFIED: tsc --noEmit / eslint / vitest (21/21) all
+                clean — no existing test asserted the old copy strings,
+                so none needed updating. No Go changes this phase, so
+                go build/vet/test weren't re-run.
+                NOT done, by design: real API-key authentication itself
+                (deferred to a future phase, to be scoped when actually
+                built, not smuggled in here).
+LAST COMMIT   : (this phase's own work is uncommitted, see below). Before
+                it, 2058b1b fix(security): trusted-proxy IP resolution &
+                pending-login lockout (audit findings #2, #3); 1e45953
+                fix(auth): enforce RBAC on every mutating route (audit
+                finding #1) — full detail for both in CHANGELOG.md.
 UNCOMMITTED   : this phase's own work, about to be committed as one
-                logical commit — new apps/internal/clientip/{clientip.go,
-                clientip_test.go} (clientip.go moved from the orphaned
-                apps/apps/internal/clientip/, gofmt'd); config.go +
-                .env.example's TRUSTED_PROXIES; apps/api/main.go and
-                apps/tracker/main.go build and inject the resolver;
-                httpserver/server.go, auth/{handler.go,security_handler.go,
-                model.go}, tracker/handler.go consume it; ratelimit.go's
-                ClientIP and its test deleted; auth/service.go's
-                VerifyPendingLogin fix + auth_test.go's updated assertion;
-                docs/security.md's new §5; CHANGELOG.md. Deliberately left
-                out, unrelated and predating this phase: .env.example's
-                OTHER pending changes are none (only TRUSTED_PROXIES
-                touched it) — but ROADMAP.md, apps/e2e/scenario_test.go,
-                apps/web/src/lib/api/networks.ts and offers.ts remain
-                unstaged from the older repo+plan-audit pass; whoever
-                picks those up next should check they're still wanted.
-NEXT          : confirm scope before starting. Open from the audit:
-                finding (4) API keys is a product decision (implement key
-                auth, or remove the UI that promises it) more than a
-                patch; (6) bump Go to 1.26.6 for the stdlib CVEs is a
+                logical commit — apps/web/src/features/settings/
+                api-keys-panel.tsx's copy fix; docs/security.md's new
+                Known-limitations bullet; CHANGELOG.md; this CLAUDE.md
+                edit. No backend files touched. Deliberately left out,
+                unrelated and predating this phase: ROADMAP.md,
+                apps/e2e/scenario_test.go, apps/web/src/lib/api/
+                networks.ts and offers.ts remain unstaged from the older
+                repo+plan-audit pass; whoever picks those up next should
+                check they're still wanted.
+NEXT          : confirm scope before starting. Open from the audit: (5)
+                rate limiter fails open on Redis error is a deliberate,
+                documented stance (docs/security.md), not a bug needing a
+                fix; (6) bump Go to 1.26.6 for the stdlib CVEs is a
                 cheap, low-risk fix worth doing on its own; (7) moving
                 shadcn's CLI to devDependencies is similarly small. Also
                 open: permission-gating the frontend action buttons
-                (finding-#1 phase) and setting TRUSTED_PROXIES to a real
-                value once an actual reverse proxy/LB/CDN is deployed in
-                front of apps/api and apps/tracker (finding-#2 phase).
+                (finding-#1 phase), setting TRUSTED_PROXIES to a real
+                value once an actual reverse proxy/LB/CDN is deployed
+                (finding-#2 phase), and — whenever it's actually wanted —
+                scoping real API-key authentication as its own phase
+                (finding-#4 phase, deferred above).
 ```
 
 > At the end of every phase: update the four lines above, add a CHANGELOG entry,
