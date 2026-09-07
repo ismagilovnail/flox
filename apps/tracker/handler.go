@@ -5,12 +5,12 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
-	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
 
 	"github.com/ismagilovnail/flox/apps/internal/classifier"
+	"github.com/ismagilovnail/flox/apps/internal/clientip"
 	"github.com/ismagilovnail/flox/apps/internal/event"
 	"github.com/ismagilovnail/flox/apps/internal/eventbuf"
 	"github.com/ismagilovnail/flox/apps/internal/idgen"
@@ -31,6 +31,7 @@ type Handler struct {
 	engine     routing.Router
 	events     *eventbuf.Writer
 	logger     *slog.Logger
+	clientIP   *clientip.Resolver
 }
 
 func (h *Handler) Register(r chi.Router) {
@@ -96,9 +97,10 @@ func (h *Handler) track(w http.ResponseWriter, r *http.Request) {
 	cfg := loaded.Config
 
 	params := parseParams(r)
+	ip := h.clientIP.NetIP(r)
 
 	attrs, err := h.classifier.Classify(ctx, classifier.Input{
-		IP:             clientIP(r),
+		IP:             ip,
 		UserAgent:      r.UserAgent(),
 		AcceptLanguage: r.Header.Get("Accept-Language"),
 	})
@@ -117,7 +119,7 @@ func (h *Handler) track(w http.ResponseWriter, r *http.Request) {
 		Attributes: attrs,
 		Config:     cfg,
 		Sticky:     sticky.routingState(),
-		VisitKey:   visitKey(link.CampaignID, clientIP(r), r.UserAgent()),
+		VisitKey:   visitKey(link.CampaignID, ip, r.UserAgent()),
 	})
 	if err != nil {
 		h.logger.Error("resolving route", "error", err, "campaign_id", link.CampaignID)
@@ -127,7 +129,7 @@ func (h *Handler) track(w http.ResponseWriter, r *http.Request) {
 
 	clickID := clickIDFor(sticky, result, loaded.StickyFlowKeepClickID)
 
-	ev := buildEvent(link, result, attrs, params, clickID, r)
+	ev := buildEvent(link, result, attrs, params, clickID, ip, r)
 
 	if result.Destination == "" {
 		// No flow, no stream-set fallback, no campaign fallback. The click
@@ -193,6 +195,7 @@ func buildEvent(
 	attrs routing.Attributes,
 	params params,
 	clickID string,
+	ip net.IP,
 	r *http.Request,
 ) event.Event {
 	return event.Event{
@@ -222,7 +225,7 @@ func buildEvent(
 		IsProxy:        attrs[routing.FieldProxy] == "1",
 		ASN:            attrs[routing.FieldASN],
 		ConnectionType: attrs[routing.FieldConnectionType],
-		IP:             clientIP(r).String(),
+		IP:             ip.String(),
 		UserAgent:      r.UserAgent(),
 		Referrer:       params.referrer,
 
@@ -246,19 +249,8 @@ func hostWithoutPort(host string) string {
 	return host
 }
 
-// clientIP prefers X-Forwarded-For's first entry, since the tracker runs
-// behind a load balancer/CDN in every real deployment.
-func clientIP(r *http.Request) net.IP {
-	if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
-		first := strings.TrimSpace(strings.SplitN(xff, ",", 2)[0])
-		if ip := net.ParseIP(first); ip != nil {
-			return ip
-		}
-	}
-	if host, _, err := net.SplitHostPort(r.RemoteAddr); err == nil {
-		if ip := net.ParseIP(host); ip != nil {
-			return ip
-		}
-	}
-	return net.ParseIP(r.RemoteAddr)
-}
+// A per-request clientIP helper used to live here, trusting X-Forwarded-
+// For's first entry unconditionally — the same client-controlled value
+// as apps/internal/ratelimit's own former ClientIP (security audit
+// finding #2). Both are replaced by *clientip.Resolver, which only
+// honours the header from a configured trusted proxy; see Handler.clientIP.

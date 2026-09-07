@@ -1104,16 +1104,32 @@ func TestSelfServeTOTPEnrollmentAndLogin(t *testing.T) {
 		t.Fatalf("Login outcome = %+v, want RequiresTOTP with a pending token and no session", outcome)
 	}
 
-	// A wrong code doesn't consume the pending login.
+	// A wrong code invalidates the pending login immediately (audit
+	// finding #3) rather than leaving the 5-minute window open to
+	// repeated guesses — so the very same token must now be rejected
+	// even with the real code afterward.
 	if _, err := svc.VerifyPendingLogin(ctx, outcome.PendingToken, "000000"); err == nil {
 		t.Fatal("VerifyPendingLogin accepted an arbitrary wrong code")
 	}
-
 	loginCode, err := stdtotp.GenerateCode(enrollment.Secret, time.Now())
 	if err != nil {
 		t.Fatalf("GenerateCode: %v", err)
 	}
-	res, err := svc.VerifyPendingLogin(ctx, outcome.PendingToken, loginCode)
+	if _, err := svc.VerifyPendingLogin(ctx, outcome.PendingToken, loginCode); err == nil {
+		t.Fatal("VerifyPendingLogin accepted the real code after a prior wrong guess invalidated the token")
+	}
+
+	// A fresh login issues a fresh pending token, which the real code
+	// still works against.
+	outcome2, err := svc.Login(ctx, auth.LoginInput{Email: email, Password: "correct-horse-battery-staple"})
+	if err != nil {
+		t.Fatalf("second Login: %v", err)
+	}
+	loginCode2, err := stdtotp.GenerateCode(enrollment.Secret, time.Now())
+	if err != nil {
+		t.Fatalf("GenerateCode: %v", err)
+	}
+	res, err := svc.VerifyPendingLogin(ctx, outcome2.PendingToken, loginCode2)
 	if err != nil {
 		t.Fatalf("VerifyPendingLogin with a real code: %v", err)
 	}
@@ -1122,7 +1138,7 @@ func TestSelfServeTOTPEnrollmentAndLogin(t *testing.T) {
 	}
 
 	// The pending token is single-use.
-	if _, err := svc.VerifyPendingLogin(ctx, outcome.PendingToken, loginCode); err == nil {
+	if _, err := svc.VerifyPendingLogin(ctx, outcome2.PendingToken, loginCode2); err == nil {
 		t.Fatal("VerifyPendingLogin succeeded twice with the same pending token")
 	}
 }

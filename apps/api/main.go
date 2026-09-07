@@ -26,6 +26,7 @@ import (
 	"github.com/ismagilovnail/flox/apps/internal/chconn"
 	"github.com/ismagilovnail/flox/apps/internal/chstore"
 	"github.com/ismagilovnail/flox/apps/internal/clicklogs"
+	"github.com/ismagilovnail/flox/apps/internal/clientip"
 	"github.com/ismagilovnail/flox/apps/internal/config"
 	"github.com/ismagilovnail/flox/apps/internal/contentgallery"
 	"github.com/ismagilovnail/flox/apps/internal/conversion"
@@ -84,6 +85,18 @@ func run() error {
 	}
 
 	logger := logging.New(cfg.LogLevel)
+
+	// clientIP resolves the real client address behind TRUSTED_PROXIES,
+	// replacing every previously-unconditional X-Forwarded-For read
+	// (ratelimit.ClientIP, chi's middleware.RealIP) — security audit
+	// finding #2. A malformed TRUSTED_PROXIES entry fails startup rather
+	// than silently narrowing or widening who gets trusted, the same
+	// stance cfg.TOTPEncryptionKey already takes on a bad key.
+	clientIP, err := clientip.New(clientip.ParseList(cfg.TrustedProxies), logger)
+	if err != nil {
+		logger.Error("trusted proxy configuration failed", "error", err)
+		return err
+	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
@@ -168,7 +181,7 @@ func run() error {
 		logger.Warn("object storage unreachable at startup, Content Gallery will be unavailable until it recovers", "error", ensureErr)
 	}
 
-	srv := httpserver.New(logger, cfg.OTelServiceName, db, ch, cfg.AppURL, limiter)
+	srv := httpserver.New(logger, cfg.OTelServiceName, db, ch, cfg.AppURL, limiter, clientIP)
 
 	// Auth/RBAC (§52, Phase 28A). authSvc.ResolveSession implements
 	// tenant.SessionResolver — tenantMiddleware below replaces the old
@@ -191,10 +204,10 @@ func run() error {
 
 	authRepo := auth.NewRepository(db)
 	authSvc := auth.NewService(authRepo, cfg.AppURL, mail)
-	authHandler := auth.NewHandler(authSvc, logger, cfg.Env != "development")
+	authHandler := auth.NewHandler(authSvc, logger, cfg.Env != "development", clientIP)
 	teamHandler := auth.NewTeamHandler(authSvc, logger)
 	organizationHandler := auth.NewOrganizationHandler(authSvc, logger)
-	securityHandler := auth.NewSecurityHandler(authSvc, logger)
+	securityHandler := auth.NewSecurityHandler(authSvc, logger, clientIP)
 	totpHandler := auth.NewTOTPHandler(authSvc, logger, cfg.Env != "development")
 
 	referralSvc := referral.NewService(referral.NewRepository(db))
@@ -271,7 +284,7 @@ func run() error {
 		authRateLimit       = 20
 		authRateLimitWindow = 15 * time.Minute
 	)
-	authLimit := limiter.Middleware("auth", ratelimit.ClientIP, authRateLimit, authRateLimitWindow)
+	authLimit := limiter.Middleware("auth", clientIP.String, authRateLimit, authRateLimitWindow)
 	srv.Mux().Group(func(r chi.Router) {
 		r.Use(csrfCheck)
 		r.Use(authLimit)

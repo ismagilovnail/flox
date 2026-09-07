@@ -153,28 +153,3 @@ func TestMiddlewareRejectsOverLimitAndFailsOpenOnNilClient(t *testing.T) {
 		}
 	})
 }
-
-func TestClientIP(t *testing.T) {
-	cases := []struct {
-		name       string
-		xff        string
-		remoteAddr string
-		want       string
-	}{
-		{"X-Forwarded-For single", "203.0.113.5", "10.0.0.1:12345", "203.0.113.5"},
-		{"X-Forwarded-For multiple, takes first", "203.0.113.5, 10.0.0.2", "10.0.0.1:12345", "203.0.113.5"},
-		{"no X-Forwarded-For, uses RemoteAddr", "", "203.0.113.9:54321", "203.0.113.9"},
-	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			req := httptest.NewRequest(http.MethodGet, "/", nil)
-			req.RemoteAddr = tc.remoteAddr
-			if tc.xff != "" {
-				req.Header.Set("X-Forwarded-For", tc.xff)
-			}
-			if got := ratelimit.ClientIP(req); got != tc.want {
-				t.Fatalf("ClientIP = %q, want %q", got, tc.want)
-			}
-		})
-	}
-}

@@ -5,6 +5,69 @@ per-phase, matching `CLAUDE.md`'s phase protocol. The one exception is
 [Between phases], below: spec amendments and the code changes that follow from
 them land between phases and would otherwise be invisible here.
 
+## [Security] — trusted-proxy IP resolution & pending-login lockout (audit findings #2, #3)
+
+Every client-IP read in the tree — `apps/internal/ratelimit`'s `ClientIP`,
+`apps/tracker`'s own `clientIP` helper, and chi's `middleware.RealIP`
+mounted in front of both — took `X-Forwarded-For`'s leftmost entry
+unconditionally. That entry is exactly the one the client itself writes,
+so all three were attacker-controlled: rotating the header defeated the
+20-req/15-min auth rate limit outright, made the Settings > Security IP
+allowlist decorative, and let a tracker visitor spoof the country/ASN
+routing filters read and choose its own weighted-flow arm.
+
+### The fix
+
+`apps/internal/clientip.Resolver` (new package) only trusts
+`X-Forwarded-For` from a peer address in `TRUSTED_PROXIES` — a new `.env`
+variable, empty by default, which falls back to loopback + the RFC
+1918/4193 private ranges. That default is a safe no-op for this
+deployment (nothing sits in front of it yet): a public peer is never in
+that set, so a spoofed header from the open internet is still ignored.
+Once trusted, it walks the header right-to-left for the first
+non-trusted entry — the header grows left to right as each proxy appends
+its own upstream peer, so the rightmost untrusted entry is the closest
+verifiable claim to the real client.
+
+Every prior call site now goes through one `*clientip.Resolver`
+constructed once per binary from `TRUSTED_PROXIES`: `apps/api/main.go`'s
+auth and general rate limits, `apps/internal/auth`'s `LoginInput.ClientIP`
+(feeds the IP allowlist) and email-verification audit trail, and
+`apps/tracker`'s classifier input and `visitKey` fingerprint. `ClientIP`
+is removed from `apps/internal/ratelimit` entirely rather than left
+alongside the resolver as a second, insecure way to get the same value.
+chi's own `middleware.RealIP` — deprecated upstream for the identical
+unconditional-trust reason (GHSA-3fxj-6jh8-hvhx, GHSA-rjr7-jggh-pgcp,
+GHSA-9g5q-2w5x-hmxf) — is no longer mounted in either binary.
+
+Separately, `VerifyPendingLogin` used to leave a wrong TOTP/backup-code
+attempt's pending row untouched, so its 5-minute TTL allowed unlimited
+guesses against one token. A wrong code now deletes the pending row
+immediately, forcing a fresh login — the same "one wrong attempt costs
+the whole token" trade `VerifyEmail`/invite tokens already make
+elsewhere in this codebase. `TestSelfServeTOTPEnrollmentAndLogin` is
+updated to assert the new behavior instead of documenting the old one.
+
+### Verified
+
+`go build`/`go vet` clean; `go test -count=1 ./...` clean — 41 packages
+(the new `clientip` package included), run with live Postgres/
+ClickHouse/Redis/MinIO. `apps/internal/clientip` ships its own test file
+(none existed before): untrusted-peer spoofing is ignored, a trusted
+chain is walked right-to-left, an all-trusted chain falls back to the
+leftmost entry, `TRUSTED_PROXIES=none` disables the header outright, and
+IPv4-mapped IPv6 addresses unmap to the same identity as their IPv4 form.
+
+### Known limitation, documented rather than left implied
+
+`TRUSTED_PROXIES` defaults to private ranges only. A deployment placed
+behind a real reverse proxy, load balancer, or CDN must set it to that
+proxy's actual address range in `.env`/deployment config, or
+`X-Forwarded-For` stays ignored and every client behind it shares one
+rate-limit bucket. Not done in this phase: no such proxy exists in this
+environment yet (confirmed with the user), so there was nothing real to
+set it to.
+
 ## [Security] — enforce RBAC on every mutating route (audit finding #1)
 
 A code/security audit found the role → permission policy seeded by migrations

@@ -82,6 +82,17 @@ type Config struct {
 	GeoIPCityDBPath string
 	GeoIPASNDBPath  string
 
+	// TrustedProxies is a raw comma-separated TRUSTED_PROXIES value (CIDR
+	// blocks or bare IPs), passed to apps/internal/clientip.ParseList by
+	// whichever binary constructs a Resolver. Empty means "use
+	// clientip.DefaultTrustedProxies" (loopback + RFC 1918/4193 private
+	// ranges) — the safe default for a deployment with no reverse proxy
+	// in front of it yet: a public peer address is never in that set, so
+	// X-Forwarded-For is ignored regardless of TRUSTED_PROXIES until a
+	// real proxy's address range is configured here (security audit
+	// finding #2).
+	TrustedProxies string
+
 	// --- OpenTelemetry ---
 	OTelExporterOTLPEndpoint string
 	OTelServiceName          string
@@ -162,6 +173,8 @@ func load(portVar, portDefault, defaultServiceName string) (Config, error) {
 
 		GeoIPCityDBPath: getEnv("GEOIP_CITY_DB_PATH", ""),
 		GeoIPASNDBPath:  getEnv("GEOIP_ASN_DB_PATH", ""),
+
+		TrustedProxies: getEnv("TRUSTED_PROXIES", ""),
 
 		OTelExporterOTLPEndpoint: getEnv("OTEL_EXPORTER_OTLP_ENDPOINT", ""),
 		OTelServiceName:          getEnv("OTEL_SERVICE_NAME", defaultServiceName),

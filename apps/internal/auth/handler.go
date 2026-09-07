@@ -9,7 +9,7 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"github.com/ismagilovnail/flox/apps/internal/apierror"
-	"github.com/ismagilovnail/flox/apps/internal/ratelimit"
+	"github.com/ismagilovnail/flox/apps/internal/clientip"
 	"github.com/ismagilovnail/flox/apps/internal/tenant"
 )
 
@@ -22,14 +22,15 @@ type Handler struct {
 	svc           *Service
 	logger        *slog.Logger
 	secureCookies bool
+	clientIP      *clientip.Resolver
 }
 
 // secureCookies should be true in any environment served over HTTPS.
 // False in local dev: a Secure cookie is dropped by browsers over plain
 // http, and this project's dev stack runs apps/api on http://localhost
 // with no TLS termination in front of it.
-func NewHandler(svc *Service, logger *slog.Logger, secureCookies bool) *Handler {
-	return &Handler{svc: svc, logger: logger, secureCookies: secureCookies}
+func NewHandler(svc *Service, logger *slog.Logger, secureCookies bool, clientIP *clientip.Resolver) *Handler {
+	return &Handler{svc: svc, logger: logger, secureCookies: secureCookies, clientIP: clientIP}
 }
 
 // RegisterPublic mounts the routes that must NOT sit behind the tenant
@@ -167,7 +168,7 @@ func (h *Handler) verifyEmail(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	outcome, err := h.svc.VerifyEmail(r.Context(), body.Token, ratelimit.ClientIP(r))
+	outcome, err := h.svc.VerifyEmail(r.Context(), body.Token, h.clientIP.String(r))
 	if err != nil {
 		apierror.Write(w, h.logger, err)
 		return
@@ -254,7 +255,7 @@ func (h *Handler) login(w http.ResponseWriter, r *http.Request) {
 		Email:          body.Email,
 		Password:       body.Password,
 		OrganizationID: body.OrganizationID,
-		ClientIP:       ratelimit.ClientIP(r),
+		ClientIP:       h.clientIP.String(r),
 	})
 	if err != nil {
 		apierror.Write(w, h.logger, err)
@@ -326,7 +327,7 @@ func (h *Handler) acceptInvite(w http.ResponseWriter, r *http.Request) {
 		Token:    body.Token,
 		Name:     body.Name,
 		Password: body.Password,
-		ClientIP: ratelimit.ClientIP(r),
+		ClientIP: h.clientIP.String(r),
 	})
 	if err != nil {
 		apierror.Write(w, h.logger, err)

@@ -18,6 +18,7 @@ import (
 	"github.com/go-chi/cors"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 
+	"github.com/ismagilovnail/flox/apps/internal/clientip"
 	"github.com/ismagilovnail/flox/apps/internal/metrics"
 	"github.com/ismagilovnail/flox/apps/internal/ratelimit"
 )
@@ -54,11 +55,15 @@ type Server struct {
 // when the browser is told the response allows credentialed requests —
 // paired with a single explicit AllowedOrigins entry, never "*", which
 // the fetch spec forbids combining with credentials anyway.
-func New(logger *slog.Logger, serviceName string, db Pinger, ch Pinger, appURL string, limiter *ratelimit.Limiter) *Server {
+// clientIP resolves the real client address behind TRUSTED_PROXIES
+// (security audit finding #2) — replaces chi's own middleware.RealIP,
+// deprecated upstream for the same unconditional-XFF-trust reason
+// (GHSA-3fxj-6jh8-hvhx, GHSA-rjr7-jggh-pgcp, GHSA-9g5q-2w5x-hmxf) and
+// used here for the general rate limit's key instead.
+func New(logger *slog.Logger, serviceName string, db Pinger, ch Pinger, appURL string, limiter *ratelimit.Limiter, clientIP *clientip.Resolver) *Server {
 	r := chi.NewRouter()
 
 	r.Use(middleware.RequestID)
-	r.Use(middleware.RealIP)
 	r.Use(responseRequestID)
 	r.Use(requestLogger(logger))
 	r.Use(middleware.Recoverer)
@@ -77,7 +82,7 @@ func New(logger *slog.Logger, serviceName string, db Pinger, ch Pinger, appURL s
 	// exemptPaths is what actually keeps an orchestrator's liveness probe
 	// or a Prometheus scrape from ever tripping a rate limit meant for
 	// abuse on domain routes, not registration order.
-	r.Use(exemptPaths(limiter.Middleware("api", ratelimit.ClientIP, generalRateLimit, generalRateLimitWindow), "/health", "/ready", "/metrics"))
+	r.Use(exemptPaths(limiter.Middleware("api", clientIP.String, generalRateLimit, generalRateLimitWindow), "/health", "/ready", "/metrics"))
 
 	r.Get("/health", healthHandler)
 	r.Get("/ready", readyHandler(db, ch))

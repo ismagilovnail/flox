@@ -8,7 +8,7 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"github.com/ismagilovnail/flox/apps/internal/apierror"
-	"github.com/ismagilovnail/flox/apps/internal/ratelimit"
+	"github.com/ismagilovnail/flox/apps/internal/clientip"
 	"github.com/ismagilovnail/flox/apps/internal/tenant"
 )
 
@@ -19,12 +19,13 @@ import (
 // to any authenticated member, same reasoning OrganizationHandler already
 // documents; writes require settings.write.
 type SecurityHandler struct {
-	svc    *Service
-	logger *slog.Logger
+	svc      *Service
+	logger   *slog.Logger
+	clientIP *clientip.Resolver
 }
 
-func NewSecurityHandler(svc *Service, logger *slog.Logger) *SecurityHandler {
-	return &SecurityHandler{svc: svc, logger: logger}
+func NewSecurityHandler(svc *Service, logger *slog.Logger, clientIP *clientip.Resolver) *SecurityHandler {
+	return &SecurityHandler{svc: svc, logger: logger, clientIP: clientIP}
 }
 
 func (h *SecurityHandler) Register(r chi.Router) {
@@ -71,7 +72,7 @@ func (h *SecurityHandler) update(w http.ResponseWriter, r *http.Request) {
 		apierror.Write(w, h.logger, apierror.Validation("invalid JSON body", nil))
 		return
 	}
-	s, err := h.svc.UpdateSecuritySettings(r.Context(), orgID, userID, ratelimit.ClientIP(r), UpdateSecuritySettingsInput{
+	s, err := h.svc.UpdateSecuritySettings(r.Context(), orgID, userID, h.clientIP.String(r), UpdateSecuritySettingsInput{
 		SessionTimeoutMinutes: req.SessionTimeoutMinutes,
 		IPAllowlist:           req.IPAllowlist,
 		TwoFactorRequired:     req.TwoFactorRequired,

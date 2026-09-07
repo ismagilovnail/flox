@@ -142,8 +142,10 @@ type SignupResult struct {
 // nothing in apps/web exposes multi-org membership yet, but memberships
 // are many-to-many by schema, so login must handle it rather than pick
 // arbitrarily). ClientIP feeds the org's own IP allowlist check (§30
-// Security) — extracted by the handler via ratelimit.ClientIP, the same
-// real extractor already used for rate limiting, not a second one.
+// Security) — extracted by the handler via clientip.Resolver.String, the
+// same trusted-proxy-aware extractor already used for rate limiting, not
+// a second one (a spoofable one here would make the allowlist decorative,
+// security audit finding #2).
 type LoginInput struct {
 	Email          string
 	Password       string

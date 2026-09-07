@@ -24,6 +24,7 @@ import (
 	"github.com/ismagilovnail/flox/apps/internal/chstore"
 	"github.com/ismagilovnail/flox/apps/internal/classifier"
 	"github.com/ismagilovnail/flox/apps/internal/classifier/maxmind"
+	"github.com/ismagilovnail/flox/apps/internal/clientip"
 	"github.com/ismagilovnail/flox/apps/internal/config"
 	"github.com/ismagilovnail/flox/apps/internal/conversion"
 	"github.com/ismagilovnail/flox/apps/internal/eventbuf"
@@ -52,6 +53,18 @@ func run() error {
 	}
 
 	logger := logging.New(cfg.LogLevel)
+
+	// See apps/api/main.go's identical construction — same TRUSTED_PROXIES
+	// value, same reasoning (security audit finding #2). apps/tracker's
+	// resolved IP feeds classifier.Input (geo/ASN) and the visit
+	// fingerprint (§38's deterministic flow pick), so a spoofable one here
+	// let a visitor choose its own A/B arm and defeat geo targeting, not
+	// just bypass a rate limit.
+	clientIP, err := clientip.New(clientip.ParseList(cfg.TrustedProxies), logger)
+	if err != nil {
+		logger.Error("trusted proxy configuration failed", "error", err)
+		return err
+	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
@@ -116,6 +129,7 @@ func run() error {
 		engine:     &routing.Engine{},
 		events:     events,
 		logger:     logger,
+		clientIP:   clientIP,
 	}
 
 	// ClickHouse is best-effort at startup, same stance as Redis below: a
@@ -175,7 +189,6 @@ func run() error {
 	}
 
 	r := chi.NewRouter()
-	r.Use(middleware.RealIP)
 	// RequestID + echoing it back is a plain context.WithValue and one
 	// response header write — negligible next to the hot path's real
 	// costs (DB reads, routing). It is NOT the per-request logging

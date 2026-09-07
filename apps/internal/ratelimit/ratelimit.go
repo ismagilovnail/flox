@@ -23,9 +23,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	"net"
 	"net/http"
-	"strings"
 	"time"
 
 	"github.com/redis/go-redis/v9"
@@ -92,17 +90,9 @@ func (l *Limiter) Middleware(keyPrefix string, keyFunc func(r *http.Request) str
 	}
 }
 
-// ClientIP extracts a request's client IP for use as (part of) a rate-
-// limit key. Prefers X-Forwarded-For's first entry — apps/api sits behind
-// a load balancer/CDN in any real deployment, the identical reasoning
-// apps/tracker's own clientIP helper already documents — falling back to
-// RemoteAddr for a direct connection (e.g. local dev).
-func ClientIP(r *http.Request) string {
-	if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
-		return strings.TrimSpace(strings.SplitN(xff, ",", 2)[0])
-	}
-	if host, _, err := net.SplitHostPort(r.RemoteAddr); err == nil {
-		return host
-	}
-	return r.RemoteAddr
-}
+// ClientIP has been removed (security audit finding #2): it trusted
+// X-Forwarded-For's first entry unconditionally, which is exactly the
+// entry a client controls, making every rate limit and the org IP
+// allowlist bypassable by rotating the header. Callers now take a
+// *clientip.Resolver (apps/internal/clientip), which only honours the
+// header from a configured trusted proxy.

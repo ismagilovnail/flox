@@ -81,6 +81,9 @@ brute-force protection.
   Redis round trip on every click would blow the p50/p95 budget outright.
   Click-volume protection there is an infrastructure concern (CDN/load
   balancer), not an in-process limiter.
+- The "per IP" in both ceilings is `apps/internal/clientip.Resolver`'s
+  resolved address (§5 below), not a raw header read — see that section
+  for why that distinction is load-bearing.
 
 ## 4. SSRF: `apps/internal/urlsafety`
 
@@ -108,10 +111,44 @@ The one outbound call in this codebase to an operator-supplied host:
   operator-supplied host (only a hardcoded API hostname), so they aren't an
   SSRF vector and don't use this package.
 
+## 5. Trusted-proxy IP resolution & pending-login lockout (audit findings #2, #3)
+
+Before this fix, every client-IP read in the tree —
+`apps/internal/ratelimit`'s own `ClientIP`, `apps/tracker`'s own `clientIP`
+helper, and chi's `middleware.RealIP` mounted in front of both — took
+`X-Forwarded-For`'s **leftmost** entry unconditionally. That entry is
+exactly the one the client itself writes, so all three were
+attacker-controlled: rotating the header defeated the §3 auth rate limit
+outright, made the org IP allowlist (Settings > Security) decorative, and
+let a tracker visitor spoof the country/ASN that feed routing filters and
+choose its own weighted-flow arm (§38).
+
+`apps/internal/clientip.Resolver` replaces all three. It trusts
+`X-Forwarded-For` only from a peer in `TRUSTED_PROXIES` (`.env`; default
+loopback + RFC 1918/4193 private ranges, covering "no real proxy
+deployed yet" safely since a public peer is never in that set), then walks
+the header right-to-left for the first non-trusted entry — the header
+grows left to right as each hop appends its upstream, so the rightmost
+untrusted entry is the closest verifiable claim to the real client. `chi`'s
+own `middleware.RealIP` is deprecated upstream for the identical
+unconditional-trust reason (GHSA-3fxj-6jh8-hvhx, GHSA-rjr7-jggh-pgcp,
+GHSA-9g5q-2w5x-hmxf) and is no longer mounted in either binary.
+
+Separately, `VerifyPendingLogin` (`apps/internal/auth/service.go`) used to
+leave a wrong TOTP/backup-code attempt's pending row untouched, so its
+5-minute TTL allowed unlimited guesses against one token. A wrong code now
+deletes the pending row immediately (`DeletePendingTOTPLogin`), forcing a
+fresh `Login` call — the same "wrong attempt costs the whole token" trade
+`VerifyEmail`/invite tokens already make elsewhere in this file.
+
 ## Known limitations
 
 - No CAPTCHA/device-fingerprinting on `/auth/login`/`/auth/signup` — rate
   limiting is the only brute-force defense.
+- `TRUSTED_PROXIES` defaults to private ranges only; a deployment behind a
+  real reverse proxy, load balancer, or CDN must set it to that proxy's
+  actual address range, or `X-Forwarded-For` stays ignored and every
+  client behind it shares one rate-limit bucket.
 - `urlsafety` validates IPv4/IPv6 private/loopback/link-local/metadata
   ranges; it does not maintain a cloud-provider-specific IP allowlist
   beyond the generic `169.254.0.0/16` metadata range.
