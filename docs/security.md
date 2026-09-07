@@ -177,6 +177,18 @@ running API, is in `docs/auth.md`'s "API key authentication" section.
 - API-key-authenticated requests share the general rate limit's
   IP-keyed bucket with everything else behind the same address (§3) —
   a single high-volume legitimate integration server could exhaust it.
+- `govulncheck ./...` reports one permanent, accepted advisory:
+  `GO-2026-5932` (`golang.org/x/crypto/openpgp` is unmaintained and
+  unsafe by design). `Fixed in: N/A` — upstream has abandoned the
+  package, there is no newer version that resolves it. Not a live risk:
+  this codebase's only `x/crypto` import is `bcrypt`
+  (`internal/auth/crypto.go`), a different subpackage `openpgp` doesn't
+  touch, and `govulncheck` independently confirms 0 reachable
+  vulnerabilities. The two `x/crypto/ssh` advisories that were flagged
+  alongside it (`GO-2026-6355`, `GO-2026-6354`) were fixed by bumping to
+  v0.56.0 — this is the one that can't be bumped away, and won't be
+  until/unless upstream either fixes or removes `openpgp`. Re-flagging
+  this in a future audit would be a false positive, not a regression.
   Fixing this needs auth resolution to happen before the general
   limiter runs, which is a bigger restructuring than §6's phase scoped;
   noted for whoever picks up API traffic at real volume.
