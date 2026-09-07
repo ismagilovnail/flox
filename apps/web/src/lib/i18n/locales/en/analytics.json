@@ -33,6 +33,7 @@
     "filter": "Filter",
     "dimension": "Dimension",
     "value": "Value",
+    "noValues": "No values yet",
     "addFilter": "Add filter",
     "dimensionsLabel": "Dimensions",
     "metricsLabel": "Metrics",

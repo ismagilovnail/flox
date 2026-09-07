@@ -1,14 +1,19 @@
 import type { DimensionKey } from "@/features/analytics/registry";
 
 /**
- * Report builder's filter-value dropdown still suggests from this fixed
- * pool rather than the real backend — apps/internal/chstore/report.go
- * (Phase 35) has no "distinct values seen for dimension X" endpoint, only
- * equals-filtering, and building that is a separate, undertaken-later
- * feature (see CHANGELOG's Phase 35 entry, Known issues). Filtering by an
- * arbitrary value still round-trips to the real API correctly; a value
- * that never occurs in real event data just yields a legitimate empty
- * report, not an error.
+ * Report builder's filter-value dropdown now suggests from the real
+ * backend (POST /analytics/dimension-values, hooks/use-analytics-
+ * report.ts's useDimensionValues) for the 12 dimensions
+ * apps/internal/chstore.ValidDimension backs. This pool now serves two
+ * narrower roles: the brief loading-state placeholder before that query
+ * resolves, and the only source at all for the 5 still-unbacked
+ * dimensions (landing/pwa/postlanding/offer/network), whose query always
+ * rejects with a validation error by design (no backing column exists
+ * yet — report-controls.tsx's own AddFilterPopover catches that and
+ * falls back to this). Filtering by an arbitrary value still round-trips
+ * to the real API correctly regardless of its source; a value that never
+ * occurs in real event data just yields a legitimate empty report, not
+ * an error.
  */
 const POOLS: Record<DimensionKey, string[]> = {
   campaign: [

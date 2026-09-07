@@ -44,6 +44,7 @@ func (h *Handler) Register(r chi.Router) {
 	r.Post("/breakdown", h.breakdown)
 	r.Post("/funnel", h.funnel)
 	r.Post("/dashboard", h.dashboard)
+	r.Post("/dimension-values", h.dimensionValues)
 }
 
 type dailyCountResponse struct {
@@ -416,6 +417,44 @@ func (h *Handler) dashboard(w http.ResponseWriter, r *http.Request) {
 		TopCountries: reportRowsToResponse(result.TopCountries),
 		TopFlows:     reportRowsToResponse(result.TopFlows),
 	})
+}
+
+type dimensionValuesRequest struct {
+	Dim  string `json:"dim"`
+	From string `json:"from"`
+	To   string `json:"to"`
+}
+
+// dimensionValues answers POST /analytics/dimension-values — the report
+// builder's filter-value dropdown's own endpoint (docs/analytics-report-
+// api.md). A dimension outside chstore.ValidDimension's 12 (the 5 still-
+// unbacked ones) surfaces as the same apierror.Validation every other
+// endpoint here already gives for an unsupported dimension; the frontend
+// falls back to its own mock pool for those rather than treating this
+// as a hard failure.
+func (h *Handler) dimensionValues(w http.ResponseWriter, r *http.Request) {
+	orgID, _ := tenant.OrgID(r.Context())
+	var req dimensionValuesRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		apierror.Write(w, h.logger, apierror.Validation("invalid JSON body", nil))
+		return
+	}
+	from, to, err := parseDateRangeBody(req.From, req.To)
+	if err != nil {
+		apierror.Write(w, h.logger, err)
+		return
+	}
+
+	values, err := h.svc.DimensionValues(r.Context(), orgID, DimensionValuesInput{
+		Dim:  chstore.ReportDimension(req.Dim),
+		From: from,
+		To:   to,
+	})
+	if err != nil {
+		apierror.Write(w, h.logger, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"values": values})
 }
 
 func writeJSON(w http.ResponseWriter, status int, body any) {

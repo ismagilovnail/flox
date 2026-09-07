@@ -101,6 +101,7 @@ session.
 | `stream_set` analytics dimension (closed the stale "no stream_set_id on events" gap — the column already existed and was populated; only the whitelist/registry needed it) | done |
 | `facebook_ads`/`tiktok_ads` `access_token` retrofitted to real AES-256-GCM encryption (Phase D, `docs/ad-account-connections.md`) — no schema change needed, the column was already `text` | done |
 | General rate limit no longer stays IP-keyed for API-key traffic — `tenant.PeekIdentity` resolves identity before the limiter runs, keying by organization instead (`docs/security.md` §3) | done |
+| Report builder's filter-value dropdown suggests real distinct values — new `POST /analytics/dimension-values` endpoint (`chstore.DistinctValues`); the mock pool now only backs the loading placeholder and the 5 still-unbacked dimensions | done |
 
 ## Known open gaps
 
@@ -111,7 +112,6 @@ scoped phase; none blocks anything that ships today.
 |---|---|
 | `cloudflare_registrar` has no adapter, though Cloudflare works as a DNS provider | `apps/internal/domain/model.go` |
 | SMS/email 2FA as an alternative delivery channel (TOTP only today) | `apps/internal/totp` |
-| Report builder's filter-value dropdown suggests from a fixed pool | no "distinct values for dimension X" endpoint exists — `lib/mock/analytics.ts` |
 | Seven feature areas are English-only in an EN/RU app | `content-gallery`, `custom-metrics`, `domains`, `referral`, `settings`, `tags`, `team` |
 | DataTable has no column resizing and no CSV export, both in §64's floor | `components/ui/data-table.tsx`, repo-wide |
 | Video upload/transcoding in Content Gallery (images only today) | needs a real ffmpeg/worker pipeline |

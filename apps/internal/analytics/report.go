@@ -187,6 +187,51 @@ func (s *Service) Breakdown(ctx context.Context, organizationID string, in Break
 	return rows, nil
 }
 
+// maxDimensionValues bounds the report builder's filter-value dropdown —
+// a client picking from a real list needs "the most common ones," not
+// every value that ever occurred; DistinctValues (chstore) already
+// orders by frequency descending, so this cap keeps the common case
+// (dozens of countries, not thousands of campaign ids) from turning
+// into an unusably long dropdown.
+const maxDimensionValues = 50
+
+// DimensionValuesInput is DimensionValues' request shape — one
+// dimension, one date range, no filters (a "what values exist at all"
+// query is deliberately unfiltered by other dimensions; scoping it to
+// the report's other active filters would be a real feature, not this
+// endpoint's job — see docs/analytics-report-api.md).
+type DimensionValuesInput struct {
+	Dim      chstore.ReportDimension
+	From, To time.Time
+}
+
+// DimensionValues answers "what real values has this dimension actually
+// taken" — backs the report builder's filter-value dropdown
+// (apps/web/src/features/analytics/report-controls.tsx), replacing the
+// fixed mock pool that used to be the only source. Rejects a dimension
+// outside chstore.ValidDimension's 12 with the same validation error
+// Report/Breakdown/Timeseries already give for one — the frontend falls
+// back to its own mock pool for the 5 still-unbacked dimensions rather
+// than treating this as a hard failure (see lib/mock/analytics.ts).
+func (s *Service) DimensionValues(ctx context.Context, organizationID string, in DimensionValuesInput) ([]string, error) {
+	if organizationID == "" {
+		return nil, apierror.Validation("missing organization", nil)
+	}
+	if err := s.validateReportInput([]chstore.ReportDimension{in.Dim}, nil, in.From, in.To); err != nil {
+		return nil, err
+	}
+	defer observeLatency("dimension_values")()
+
+	// +24h: In/To is the caller's inclusive last day (a UI date picker's
+	// own "to" selection), but chstore.ReportQuery.To is EXCLUSIVE — the
+	// same adjustment groupedReport makes centrally for Report/
+	// Timeseries/Breakdown/Dashboard, repeated here since this method
+	// calls the repository directly rather than through groupedReport.
+	// Missing this would silently exclude "today" itself whenever To is
+	// today's date, exactly the range a fresh page load defaults to.
+	return s.repo.DistinctValues(ctx, organizationID, in.Dim, in.From, in.To.Add(24*time.Hour), maxDimensionValues)
+}
+
 // groupedReport is the shared core Report/Timeseries/Breakdown/Dashboard
 // all build on: three ClickHouse queries (click_events, tracking_events,
 // conversion_events) with the same dims/byDay/filters/range, merged by

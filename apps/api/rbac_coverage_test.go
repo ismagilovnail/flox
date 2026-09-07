@@ -45,12 +45,13 @@ var deliberatelyOpen = map[string]string{
 	"auth.confirm":            "personal 2FA, every role manages its own",
 	"auth.disable":            "personal 2FA, re-proves the caller's password",
 	// POST-shaped reads: a JSON query body, no write.
-	"analytics.report":         "read-only query, POST only for its body",
-	"analytics.timeseries":     "read-only query, POST only for its body",
-	"analytics.breakdown":      "read-only query, POST only for its body",
-	"analytics.funnel":         "read-only query, POST only for its body",
-	"analytics.dashboard":      "read-only query, POST only for its body",
-	"routingsimulate.simulate": "in-memory simulation, persists nothing",
+	"analytics.report":          "read-only query, POST only for its body",
+	"analytics.timeseries":      "read-only query, POST only for its body",
+	"analytics.breakdown":       "read-only query, POST only for its body",
+	"analytics.funnel":          "read-only query, POST only for its body",
+	"analytics.dashboard":       "read-only query, POST only for its body",
+	"analytics.dimensionValues": "read-only query, POST only for its body",
+	"routingsimulate.simulate":  "in-memory simulation, persists nothing",
 	// Deliberate product decision, documented in the Referral phase:
 	// requesting a payout is open to every role; approving/paying is not.
 	"referral.requestPayout": "open to all roles by design; approve/pay are gated",

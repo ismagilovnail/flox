@@ -43,6 +43,10 @@ func (r *fakeRepo) FunnelCounts(_ context.Context, _ string, _, _ time.Time) (ma
 	return nil, nil
 }
 
+func (r *fakeRepo) DistinctValues(_ context.Context, _ string, _ chstore.ReportDimension, _, _ time.Time, _ int) ([]string, error) {
+	return nil, nil
+}
+
 func TestCampaignDailyReturnsRepositoryResult(t *testing.T) {
 	repo := &fakeRepo{counts: []chstore.DailyCount{{Type: event.SourceClick, EventCount: 3}}}
 	svc := analytics.NewService(repo, nil)

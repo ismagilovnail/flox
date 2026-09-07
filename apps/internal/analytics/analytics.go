@@ -30,6 +30,7 @@ type Repository interface {
 	ReportLandViews(ctx context.Context, q chstore.ReportQuery) ([]chstore.LandAgg, error)
 	ReportConversions(ctx context.Context, q chstore.ReportQuery) ([]chstore.ConversionAgg, error)
 	FunnelCounts(ctx context.Context, organizationID string, from, to time.Time) (map[string]uint64, error)
+	DistinctValues(ctx context.Context, organizationID string, dim chstore.ReportDimension, from, to time.Time, limit int) ([]string, error)
 }
 
 // CostSource is the narrow slice of *cost.Service Phase 35 needs — same

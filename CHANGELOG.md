@@ -5,6 +5,68 @@ per-phase, matching `CLAUDE.md`'s phase protocol. The one exception is
 [Between phases], below: spec amendments and the code changes that follow from
 them land between phases and would otherwise be invisible here.
 
+## [Between phases] — report builder's filter-value dropdown suggests real distinct values, not a fixed mock pool
+
+Closed a gap this same doc's own Phase 35 entry (and `docs/analytics-
+report-api.md`) had flagged since the real `/analytics` backend first
+landed: the report builder's filter popover picked its value suggestions
+from `lib/mock/analytics.ts`'s hand-written `POOLS`, the one piece of
+that screen still backed by mock data.
+
+Added `chstore.EventStore.DistinctValues` — real distinct values for one
+dimension from `click_events`, ordered by `count() DESC` (most-common
+first) and capped at 50 (`analytics.maxDimensionValues`), excluding the
+`flow`/`stream_set` empty-string bucket deliberately (useful to filter
+on, confusing to suggest as an unlabeled dropdown entry). Gated by the
+same `chstore.ValidDimension` whitelist every other report endpoint
+already uses, so the 5 still-unbacked dimensions (`landing`/`pwa`/
+`postlanding`/`offer`/`network`) 400 the same way `/analytics/report`
+already does for one. New `Service.DimensionValues` and `POST /analytics/
+dimension-values` follow the exact same shape as `Report`/`Breakdown`/
+etc.
+
+Frontend: `useDimensionValues` (`retry: false` — a 400 here is
+deterministic) backs `AddFilterPopover` (`report-controls.tsx`), which
+falls back to the mock pool both as the query's brief loading-state
+placeholder and as the only source for the 5 unbacked dimensions. A
+successful response — even an empty one, for a brand-new organization
+with no real events yet — wins outright once it lands, matching CLAUDE.md
+#6's "no fabricated data" bar. Rewrote the popover's selection state to
+derive the effective value during render (`manualValue` + a fallback to
+`values[0]`) rather than sync it via a `useEffect`, after React's own
+lint rules flagged the original `useEffect`-calls-`setState` version as
+the cascading-render anti-pattern it actually was.
+
+Caught and fixed live, via browser verification, not just in review: the
+first implementation of `Service.DimensionValues` forgot the `+24h`
+adjustment `groupedReport` already applies centrally to make a caller's
+inclusive "to" date match `chstore.ReportQuery.To`'s exclusive contract
+— every other endpoint gets this via `groupedReport`, but
+`DimensionValues` calls the repository directly. Silently excluded
+"today" whenever `to` was today's date, exactly the range a fresh
+`/analytics` page load defaults to; a real browser pass surfaced it
+immediately (the value dropdown showed "no values yet" for a dimension
+with real events from minutes earlier), fixed, and covered by a new
+regression test asserting the exact boundary passed to the repository.
+
+Verified: `gofmt`/`go vet`/`go build`/`go test -count=1 ./...` clean
+across all Go packages against live Postgres/ClickHouse/Redis/MinIO,
+including new tests in both `chstore` (live ClickHouse — frequency
+ordering, empty-bucket exclusion, the limit cap, the unsupported-
+dimension rejection) and `analytics` (pass-through, the unbacked-
+dimension rejection, the `+24h` boundary regression above).
+`tsc --noEmit`/`eslint`/`vitest` clean on `apps/web`. Real browser pass:
+created a test org, generated real clicks through `apps/tracker` with
+two distinct User-Agent strings (mobile/desktop — device/platform
+classification needs no GeoIP, unlike country/city, which stayed
+genuinely empty in this dev environment and correctly showed "No values
+yet" with the picker disabled rather than fabricated country names),
+confirmed the filter popover's value dropdown listed exactly the two
+real device values, and confirmed selecting one and adding the filter
+correctly narrowed the report's click count. No console errors. All
+test fixtures (org, user, campaign, traffic source, domain, tracking
+link, ClickHouse click events) removed afterward.
+
 ## [Between phases] — key the general rate limit by organization for API-key traffic, not client IP
 
 The general rate limiter (300 req/min, `apps/internal/httpserver`) has

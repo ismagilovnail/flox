@@ -28,6 +28,7 @@ import {
 import { DIMENSIONS, METRICS, TIMEZONES, dimensionLabel as dimensionLabelFor, metricLabel as metricLabelFor, type DimensionKey, type MetricKey } from "@/features/analytics/registry";
 import type { FilterCondition } from "@/features/analytics/aggregate";
 import { dimensionValues } from "@/lib/mock/analytics";
+import { useDimensionValues } from "@/hooks/use-analytics-report";
 
 export type ReportControlsState = {
   dateRange?: DateRange;
@@ -42,13 +43,34 @@ export type ReportControlsState = {
 
 function AddFilterPopover({
   onAdd,
+  dateRange,
 }: {
   onAdd: (f: FilterCondition) => void;
+  dateRange: { from: Date; to: Date };
 }) {
   const { t } = useTranslation("analytics");
   const [open, setOpen] = React.useState(false);
   const [dimension, setDimension] = React.useState<DimensionKey>("country");
-  const [value, setValue] = React.useState<string>(dimensionValues("country")[0]);
+  // The user's own explicit pick, if they've made one for the current
+  // values list — undefined means "not picked yet, or the values list
+  // moved out from under an earlier pick" (e.g. the real list finally
+  // loaded after the mock placeholder), in which case `value` below
+  // derives the first available option instead. Deriving during render
+  // rather than syncing via an effect avoids the cascading-render
+  // pattern React's own rules warn against for this exact "reset a
+  // selection when its source list changes" shape.
+  const [manualValue, setManualValue] = React.useState<string | undefined>(undefined);
+
+  // Real values (12 backed dimensions) once loaded; the mock pool covers
+  // both the loading flash and the 5 still-unbacked dimensions, whose
+  // query always rejects (retry: false) — see useDimensionValues' own
+  // doc comment. A successful response wins even when empty (a
+  // brand-new org with zero real events yet): trusting it completely
+  // once it lands is what CLAUDE.md #6's "no fabricated data" bar means
+  // here, the same as it does for cost.
+  const valuesQuery = useDimensionValues(dimension, dateRange.from, dateRange.to, { enabled: open });
+  const values = valuesQuery.isSuccess ? valuesQuery.data : dimensionValues(dimension);
+  const value = manualValue && values.includes(manualValue) ? manualValue : (values[0] ?? "");
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -65,9 +87,8 @@ function AddFilterPopover({
             <Select
               value={dimension}
               onValueChange={(v) => {
-                const dim = v as DimensionKey;
-                setDimension(dim);
-                setValue(dimensionValues(dim)[0]);
+                setDimension(v as DimensionKey);
+                setManualValue(undefined);
               }}
             >
               <SelectTrigger className="w-full">
@@ -84,12 +105,12 @@ function AddFilterPopover({
           </div>
           <div className="grid gap-1.5">
             <Label>{t("controls.value")}</Label>
-            <Select value={value} onValueChange={setValue}>
+            <Select value={value} onValueChange={setManualValue} disabled={values.length === 0}>
               <SelectTrigger className="w-full">
-                <SelectValue />
+                <SelectValue placeholder={values.length === 0 ? t("controls.noValues") : undefined} />
               </SelectTrigger>
               <SelectContent>
-                {dimensionValues(dimension).map((v) => (
+                {values.map((v) => (
                   <SelectItem key={v} value={v}>
                     {v}
                   </SelectItem>
@@ -99,6 +120,7 @@ function AddFilterPopover({
           </div>
           <Button
             size="sm"
+            disabled={values.length === 0}
             onClick={() => {
               onAdd({ dimension, value });
               setOpen(false);
@@ -127,6 +149,17 @@ export function ReportControls({
       label: metricLabelFor(t, m),
     })),
   ];
+
+  // Computed once per mount (empty deps), matching analytics-view.tsx's
+  // own React.useMemo(() => new Date(), []) pattern — a plain `new
+  // Date()`/`Date.now()` call directly in the render body is an impure
+  // render (React's own rules), since every re-render would produce a
+  // different value. Only ever used as a fallback for the filter
+  // popover's own date-range query when state.dateRange itself is
+  // somehow unset (AnalyticsView always initializes it, so this is a
+  // defensive default, not the common path).
+  const fallbackTo = React.useMemo(() => new Date(), []);
+  const fallbackFrom = React.useMemo(() => new Date(fallbackTo.getTime() - 29 * 24 * 60 * 60 * 1000), [fallbackTo]);
 
   return (
     <div className="flex flex-col gap-3">
@@ -235,7 +268,13 @@ export function ReportControls({
       </div>
 
       <div className="flex flex-wrap items-center gap-2">
-        <AddFilterPopover onAdd={(f) => onChange({ filters: [...state.filters, f] })} />
+        <AddFilterPopover
+          onAdd={(f) => onChange({ filters: [...state.filters, f] })}
+          dateRange={{
+            from: state.dateRange?.from ?? fallbackFrom,
+            to: state.dateRange?.to ?? state.dateRange?.from ?? fallbackTo,
+          }}
+        />
         {state.filters.length > 0 && (
           <FilterGroup joiner="AND">
             {state.filters.map((f, i) => (

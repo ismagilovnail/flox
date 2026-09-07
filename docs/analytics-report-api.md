@@ -24,11 +24,46 @@ querystring).
 | `POST /analytics/breakdown` | One dimension, sorted by one metric descending, top-N. Used internally by `/analytics/dashboard`'s Top-N cards; the frontend's own bar chart tab instead calls `/analytics/report` with a single dim and does its own client-side top-8 sort, so switching the bar chart's metric picker re-sorts instantly without a refetch (see `report-chart.tsx`'s `ReportBarChart`). |
 | `POST /analytics/funnel` | The §43 8-stage funnel's per-stage totals for a range. |
 | `POST /analytics/dashboard` | `/overview`'s endpoint — KPI totals, a daily series, and three Top-N breakdowns (campaigns/countries/flows). |
+| `POST /analytics/dimension-values` | The report builder's filter-value dropdown — real distinct values seen for one dimension, most-common first (below). |
 
 Request/response shapes: `apps/internal/analytics/handler.go`'s
-`reportRequest`/`timeseriesRequest`/`breakdownRequest`/`rangeRequest` and
-`reportRowResponse`/`metricValuesResponse`/`dashboardResponse`. The
-frontend mirrors them in `lib/api/analytics.ts`.
+`reportRequest`/`timeseriesRequest`/`breakdownRequest`/`rangeRequest`/
+`dimensionValuesRequest` and `reportRowResponse`/`metricValuesResponse`/
+`dashboardResponse`. The frontend mirrors them in `lib/api/analytics.ts`.
+
+## `dimension-values`: real filter-value suggestions, not a fixed mock pool
+
+Closes a gap this doc's own "Frontend integration" section used to flag:
+`dimensionValues()` (`lib/mock/analytics.ts`) was the *only* source the
+report builder's filter popover had for suggesting values to filter
+on — a fixed, hand-written list, never the real data. `chstore.
+EventStore.DistinctValues` answers "what values has this dimension
+actually taken" against `click_events` (never `conversion_events` — every
+backed dimension already has a column there, the wider whitelist, and a
+value that only ever appeared on a conversion but never the click that
+produced it isn't a scenario the event model allows for), ordered by
+`count() DESC` and capped (`analytics.maxDimensionValues`, 50) so a
+high-cardinality dimension like `campaign` doesn't produce an unusably
+long dropdown. The empty-string bucket (`flow`/`stream_set`'s own real
+"no match" semantics) is deliberately excluded from the result — useful
+to *filter* on, confusing to *suggest* as an unlabeled dropdown entry;
+an operator who wants it can still type `""` into the existing free-text
+value field.
+
+Gated by the same `chstore.ValidDimension` whitelist every other
+endpoint here already uses — a request for one of the 5 still-unbacked
+dimensions (`landing`/`pwa`/`postlanding`/`offer`/`network`) 400s, same
+as `/analytics/report` already does for one. The frontend's
+`useDimensionValues` hook (`retry: false` — a 400 here is deterministic,
+not transient) treats that rejection as expected, not an error to
+surface: `AddFilterPopover` (`report-controls.tsx`) falls back to
+`lib/mock/analytics.ts`'s pool for those 5, and also as the query's own
+brief loading-state placeholder for the 12 real ones. A *successful*
+response wins outright the moment it lands, even when empty (a brand-new
+organization with no real events yet) — CLAUDE.md #6's "no fabricated
+data" bar applies here the same way it does to cost: a genuine "nothing
+yet" must render as nothing, never as a plausible-looking placeholder
+value that isn't real.
 
 ## Dimension whitelist: 12 backed (11 of the original 16, plus stream_set)
 
@@ -118,11 +153,14 @@ not a sentinel value.
   view's own default until Report Presets gets its own integration phase.
   Documented here rather than silently reconciled, since fixing it means
   deciding what "now" means for a feature this phase didn't touch.
-- `dimensionValues()` (`lib/mock/analytics.ts`) still backs the filter
+- ~~`dimensionValues()` (`lib/mock/analytics.ts`) still backs the filter
   popover's value dropdown — no "distinct values seen for dimension X"
-  endpoint exists (only equals-filtering). Filtering by an arbitrary value
-  still round-trips to the real API correctly; a value that never occurs
-  in real event data just yields a legitimate empty report, not an error.
+  endpoint exists~~ — closed, see `dimension-values` above.
+  `lib/mock/analytics.ts` still backs the loading-state placeholder and
+  the 5 still-unbacked dimensions. Filtering by an arbitrary value still
+  round-trips to the real API correctly regardless of its source; a
+  value that never occurs in real event data just yields a legitimate
+  empty report, not an error.
 - `TopCampaigns`/`TopFlows` display the raw `campaign_id`/`flow_id` as
   both `id` and `name` — `chstore`'s dimension whitelist resolves to those
   raw ID columns, no name join exists yet. Honest but not pretty; a real

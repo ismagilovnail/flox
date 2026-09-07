@@ -414,6 +414,66 @@ func (s *EventStore) FunnelCounts(ctx context.Context, organizationID string, fr
 	return out, nil
 }
 
+// DistinctValues answers "what real values has dim actually taken" for
+// org across [from, to) — backs the report builder's filter-value
+// dropdown (docs/analytics-report-api.md), replacing the fixed mock
+// pool apps/web/src/lib/mock/analytics.ts used to be the only source
+// for. Ordered by frequency (most-common first, via count() DESC) so an
+// operator picking from a long tail sees the values actually worth
+// filtering on first, capped at limit.
+//
+// Reads click_events only, never conversion_events — reportClickColumns
+// is the wider whitelist (every dimension conversion_events supports,
+// click_events also supports, never the reverse), and a value that only
+// ever appeared on a conversion but never on the click that produced it
+// isn't a real scenario the event model allows for (every conversion
+// resolves back to a click, §43's canonical funnel).
+//
+// Excludes the "" bucket deliberately: DimFlow/DimStreamSet's own real
+// empty-string semantics (campaign fallback, blocked click) are
+// meaningful to filter on, but confusing to suggest as a pickable
+// dropdown value with no visible label — an operator who wants that
+// filter can still type "" directly into the existing free-text value
+// field, unaffected by this endpoint existing.
+func (s *EventStore) DistinctValues(ctx context.Context, organizationID string, dim ReportDimension, from, to time.Time, limit int) ([]string, error) {
+	col, ok := reportClickColumns[dim]
+	if !ok {
+		return nil, fmt.Errorf("chstore: unsupported dimension for distinct values: %s", dim)
+	}
+
+	query := fmt.Sprintf(`
+		SELECT %s AS value
+		FROM click_events
+		WHERE organization_id = ? AND event_at >= ? AND event_at < ? AND type = 'SOURCE_CLICK' AND %s != ''
+		GROUP BY value
+		ORDER BY count() DESC
+		LIMIT ?`,
+		col, col,
+	)
+
+	rows, err := s.conn.Query(ctx, query, organizationID, from, to, limit)
+	if err != nil {
+		return nil, fmt.Errorf("chstore: querying distinct values: %w", err)
+	}
+	defer rows.Close()
+
+	// Initialized non-nil (not `var out []string`) so a brand-new
+	// organization with zero matching clicks gets a real "[]" on the
+	// wire — the frontend's own fallback-to-mock-pool logic treats an
+	// empty real result as "genuinely nothing yet," not
+	// indistinguishable from a JSON `null` it would otherwise have to
+	// special-case.
+	out := []string{}
+	for rows.Next() {
+		var v string
+		if err := rows.Scan(&v); err != nil {
+			return nil, fmt.Errorf("chstore: scanning distinct value: %w", err)
+		}
+		out = append(out, v)
+	}
+	return out, rows.Err()
+}
+
 func scanFunnelCounts(rows driver.Rows, out map[string]uint64) error {
 	defer rows.Close()
 	for rows.Next() {

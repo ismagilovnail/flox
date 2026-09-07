@@ -21,8 +21,12 @@ type reportFakeRepo struct {
 	land   []chstore.LandAgg
 	conv   []chstore.ConversionAgg
 	funnel map[string]uint64
+	values []string
 
-	lastConvQuery *chstore.ReportQuery // nil unless ReportConversions was actually called
+	lastConvQuery   *chstore.ReportQuery // nil unless ReportConversions was actually called
+	lastValuesDim   chstore.ReportDimension
+	lastValuesTo    time.Time
+	lastValuesLimit int
 }
 
 func (r *reportFakeRepo) DailyCampaignCounts(context.Context, string, string, time.Time, time.Time) ([]chstore.DailyCount, error) {
@@ -43,6 +47,12 @@ func (r *reportFakeRepo) ReportConversions(_ context.Context, q chstore.ReportQu
 }
 func (r *reportFakeRepo) FunnelCounts(context.Context, string, time.Time, time.Time) (map[string]uint64, error) {
 	return r.funnel, nil
+}
+func (r *reportFakeRepo) DistinctValues(_ context.Context, _ string, dim chstore.ReportDimension, _, to time.Time, limit int) ([]string, error) {
+	r.lastValuesDim = dim
+	r.lastValuesTo = to
+	r.lastValuesLimit = limit
+	return r.values, nil
 }
 
 type fakeCost struct {
@@ -398,5 +408,68 @@ func TestDashboardNewOrganizationIsAllZeros(t *testing.T) {
 	}
 	if len(result.Daily) != 0 || len(result.TopCampaigns) != 0 {
 		t.Fatalf("Daily/TopCampaigns = %d/%d, want 0/0 with nothing to break down", len(result.Daily), len(result.TopCampaigns))
+	}
+}
+
+func TestDimensionValuesPassesThroughAndCaps(t *testing.T) {
+	repo := &reportFakeRepo{values: []string{"US", "DE", "GB"}}
+	svc := analytics.NewService(repo, nil)
+
+	to := time.Now()
+	values, err := svc.DimensionValues(context.Background(), "org-1", analytics.DimensionValuesInput{
+		Dim:  chstore.DimCountry,
+		From: to.AddDate(0, 0, -7),
+		To:   to,
+	})
+	if err != nil {
+		t.Fatalf("DimensionValues: %v", err)
+	}
+	if len(values) != 3 || values[0] != "US" || values[1] != "DE" || values[2] != "GB" {
+		t.Fatalf("values = %v, want the repo's own [US DE GB] passed through unchanged", values)
+	}
+	if repo.lastValuesDim != chstore.DimCountry {
+		t.Fatalf("DistinctValues called with dim=%q, want country", repo.lastValuesDim)
+	}
+	if repo.lastValuesLimit <= 0 {
+		t.Fatalf("DistinctValues called with limit=%d, want a real positive cap", repo.lastValuesLimit)
+	}
+	// The caller's To is an inclusive "last day" (a date picker's own
+	// selection), but chstore.ReportQuery.To is EXCLUSIVE — DimensionValues
+	// must add the same +24h groupedReport applies centrally for Report/
+	// Timeseries/Breakdown/Dashboard, since this method calls the
+	// repository directly. Missing it would silently exclude "today"
+	// whenever To is today's date — exactly a fresh page load's own
+	// default range, caught live via a real browser pass before this
+	// test was added to guard the regression.
+	if !repo.lastValuesTo.Equal(to.Add(24 * time.Hour)) {
+		t.Fatalf("DistinctValues called with to=%v, want the caller's To (%v) plus 24h (%v)", repo.lastValuesTo, to, to.Add(24*time.Hour))
+	}
+}
+
+// TestDimensionValuesRejectsUnbackedDimension mirrors
+// TestReportRejectsUnknownDimension — the frontend's own fallback to its
+// mock pool for the 5 still-unbacked dimensions depends on this coming
+// back as a real validation error, not a silent empty list or a panic.
+func TestDimensionValuesRejectsUnbackedDimension(t *testing.T) {
+	svc := analytics.NewService(&reportFakeRepo{}, nil)
+	_, err := svc.DimensionValues(context.Background(), "org-1", analytics.DimensionValuesInput{
+		Dim:  "offer", // one of the 5 deferred dimensions
+		From: time.Now().AddDate(0, 0, -7),
+		To:   time.Now(),
+	})
+	if err == nil {
+		t.Fatal("DimensionValues with dimension \"offer\" succeeded, want a validation error (deferred, no backing column)")
+	}
+}
+
+func TestDimensionValuesRejectsMissingOrganization(t *testing.T) {
+	svc := analytics.NewService(&reportFakeRepo{}, nil)
+	_, err := svc.DimensionValues(context.Background(), "", analytics.DimensionValuesInput{
+		Dim:  chstore.DimCountry,
+		From: time.Now().AddDate(0, 0, -7),
+		To:   time.Now(),
+	})
+	if err == nil {
+		t.Fatal("DimensionValues with no organization succeeded, want a validation error")
 	}
 }

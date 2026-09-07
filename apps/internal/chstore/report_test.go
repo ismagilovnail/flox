@@ -369,3 +369,77 @@ func TestCrossTenantIsolationInReports(t *testing.T) {
 		t.Fatalf("org B's report saw org A's clicks: %+v", aggs)
 	}
 }
+
+// TestDistinctValuesOrdersByFrequencyAndExcludesEmpty is the live-
+// ClickHouse verification behind the report builder's filter-value
+// dropdown (docs/analytics-report-api.md) — real distinct values, most-
+// common first, with the DimFlow/DimStreamSet empty bucket deliberately
+// left out of a value list meant to be clicked, not typed.
+func TestDistinctValuesOrdersByFrequencyAndExcludesEmpty(t *testing.T) {
+	conn := mustConn(t)
+	store := chstore.NewEventStore(conn)
+	ctx := context.Background()
+	orgID, campaignID := idgen.New(), idgen.New()
+	day := time.Date(2026, 8, 21, 0, 0, 0, 0, time.UTC)
+	seedReportFixture(t, ctx, store, orgID, campaignID, day)
+	// A third, real SOURCE_CLICK matching no stream set (campaign
+	// fallback) — StreamSetID stays "" even though this click counts,
+	// proving DistinctValues excludes the empty bucket rather than
+	// surfacing it as an unlabeled dropdown entry. Also a third US
+	// click, so country's frequency order is unambiguous (US=3, DE=1).
+	if err := store.InsertBatch(ctx, []event.Event{
+		{Type: event.SourceClick, EventAt: day.Add(6 * time.Hour), OrganizationID: orgID, CampaignID: campaignID, ClickID: idgen.New(), Country: "US"},
+	}); err != nil {
+		t.Fatalf("seeding campaign-fallback click: %v", err)
+	}
+
+	countryValues, err := store.DistinctValues(ctx, orgID, chstore.DimCountry, day, day.Add(24*time.Hour), 10)
+	if err != nil {
+		t.Fatalf("DistinctValues (country): %v", err)
+	}
+	if len(countryValues) != 2 || countryValues[0] != "US" || countryValues[1] != "DE" {
+		t.Fatalf("country values = %v, want [US DE] ordered by frequency (US=3, DE=1)", countryValues)
+	}
+
+	streamSetValues, err := store.DistinctValues(ctx, orgID, chstore.DimStreamSet, day, day.Add(24*time.Hour), 10)
+	if err != nil {
+		t.Fatalf("DistinctValues (stream_set): %v", err)
+	}
+	if len(streamSetValues) != 2 {
+		t.Fatalf("stream_set values = %v, want exactly 2 (stream-set-a, stream-set-b) — the fallback click's \"\" must be excluded, not a third entry", streamSetValues)
+	}
+	for _, v := range streamSetValues {
+		if v == "" {
+			t.Fatal(`DistinctValues returned "" as a pickable value, want the empty bucket excluded`)
+		}
+	}
+}
+
+// TestDistinctValuesLimitsResults confirms the limit argument actually
+// caps ClickHouse's own LIMIT clause, not just something the caller
+// truncates to after the fact.
+func TestDistinctValuesLimitsResults(t *testing.T) {
+	conn := mustConn(t)
+	store := chstore.NewEventStore(conn)
+	ctx := context.Background()
+	orgID, campaignID := idgen.New(), idgen.New()
+	day := time.Date(2026, 8, 21, 0, 0, 0, 0, time.UTC)
+	seedReportFixture(t, ctx, store, orgID, campaignID, day) // seeds 2 distinct countries: US, DE
+
+	values, err := store.DistinctValues(ctx, orgID, chstore.DimCountry, day, day.Add(24*time.Hour), 1)
+	if err != nil {
+		t.Fatalf("DistinctValues: %v", err)
+	}
+	if len(values) != 1 {
+		t.Fatalf("values = %v, want exactly 1 (limit=1 against 2 real distinct countries)", values)
+	}
+}
+
+func TestDistinctValuesRejectsUnsupportedDimension(t *testing.T) {
+	conn := mustConn(t)
+	store := chstore.NewEventStore(conn)
+	_, err := store.DistinctValues(context.Background(), idgen.New(), chstore.ReportDimension("offer"), time.Now().Add(-24*time.Hour), time.Now(), 10)
+	if err == nil {
+		t.Fatal(`DistinctValues with dimension "offer" succeeded, want an error — offer has no backing column`)
+	}
+}

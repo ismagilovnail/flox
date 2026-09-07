@@ -33,6 +33,7 @@
     "filter": "Фильтр",
     "dimension": "Измерение",
     "value": "Значение",
+    "noValues": "Пока нет значений",
     "addFilter": "Добавить фильтр",
     "dimensionsLabel": "Измерения",
     "metricsLabel": "Метрики",
