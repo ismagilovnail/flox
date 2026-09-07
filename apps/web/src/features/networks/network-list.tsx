@@ -87,6 +87,7 @@ export function NetworkList() {
         columns={columns}
         data={filtered}
         searchPlaceholder={t("list.searchPlaceholder", { ns: "networks" })}
+        exportFilename="networks"
         emptyTitle={t("list.emptyTitle", { ns: "networks" })}
         emptyDescription={t("list.emptyDescription", { ns: "networks" })}
         pageSize={10}

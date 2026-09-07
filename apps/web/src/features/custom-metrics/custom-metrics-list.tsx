@@ -103,6 +103,7 @@ export function CustomMetricsList() {
         columns={columns}
         data={visibleMetrics}
         searchPlaceholder="Search metrics..."
+        exportFilename="custom-metrics"
         emptyTitle="No custom metrics yet"
         emptyDescription="Build a formula on top of the metrics registry — safe division included."
         pageSize={10}

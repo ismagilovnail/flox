@@ -38,6 +38,7 @@ export function ClickLogView() {
           columns={columns}
           data={logsQuery.data.logs}
           getRowId={(row) => `${row.clickId}:${row.eventAt}`}
+          exportFilename="click-log"
           searchPlaceholder={t("view.searchPlaceholder")}
           emptyTitle={t("view.emptyTitle")}
           emptyDescription={t("view.emptyDescription")}

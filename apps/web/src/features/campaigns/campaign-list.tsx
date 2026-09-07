@@ -85,6 +85,7 @@ export function CampaignList() {
         columns={columns}
         data={filtered}
         searchPlaceholder={t("list.searchPlaceholder", { ns: "campaigns" })}
+        exportFilename="campaigns"
         emptyTitle={t("list.emptyTitle", { ns: "campaigns" })}
         emptyDescription={t("list.emptyDescription", { ns: "campaigns" })}
         pageSize={10}

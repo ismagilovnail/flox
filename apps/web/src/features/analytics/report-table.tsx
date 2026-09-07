@@ -61,6 +61,7 @@ export function ReportTable({
       columns={columns}
       data={rows}
       searchPlaceholder={t("table.searchPlaceholder")}
+      exportFilename="analytics-report"
       emptyTitle={t("table.emptyTitle")}
       emptyDescription={t("table.emptyDescription")}
       pageSize={10}

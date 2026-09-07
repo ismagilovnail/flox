@@ -19,98 +19,95 @@ referenced below as §N).
 ## CURRENT STATE — UPDATE THIS EVERY PHASE
 
 ```
-CURRENT PHASE : REAL DISTINCT VALUES FOR THE REPORT BUILDER'S FILTER-
-                VALUE DROPDOWN (picked from a 3-option menu after
-                "продолжай" with no phase specified)
-STATUS        : done. Added chstore.EventStore.DistinctValues — real
-                distinct values for one dimension from click_events,
-                count() DESC (most-common first), capped at 50
-                (analytics.maxDimensionValues), excluding the flow/
-                stream_set empty-string bucket (useful to filter on,
-                confusing to suggest as an unlabeled dropdown entry).
-                Gated by the same chstore.ValidDimension whitelist every
-                other report endpoint uses — the 5 unbacked dimensions
-                400 the same way /analytics/report already does. New
-                Service.DimensionValues + POST /analytics/dimension-
-                values, same shape as Report/Breakdown/etc (added to
-                rbac_coverage_test.go's deliberatelyOpen — POST-shaped
-                read, no write). Frontend: useDimensionValues (retry:
-                false) backs AddFilterPopover (report-controls.tsx),
-                falling back to lib/mock/analytics.ts's pool both for
-                the query's own loading-state placeholder and as the
-                only source for the 5 unbacked dimensions; a successful
-                response wins outright once it lands, even empty (no
-                fabricated data, CLAUDE.md #6). Rewrote the popover's
-                selection state to derive the effective value during
-                render (manualValue + a fallback to values[0]) rather
-                than sync via useEffect, after React's own lint rules
-                flagged the original version as a real cascading-render
-                bug. Caught and fixed LIVE via browser verification (not
-                just review): DimensionValues was missing the same +24h
-                adjustment groupedReport applies centrally to make an
-                inclusive "to" date match chstore.ReportQuery.To's
-                exclusive contract — silently excluded "today," exactly
-                a fresh page load's default range; fixed, with a new
-                regression test asserting the exact boundary passed to
-                the repository.
-                VERIFIED: gofmt/go vet/go build/go test -count=1 ./...
-                clean, all Go packages, live Postgres/ClickHouse/Redis/
-                MinIO, incl. new tests in chstore (live ClickHouse) and
-                analytics (unit, incl. the +24h regression).
-                tsc --noEmit/eslint/vitest clean on apps/web. Real
-                browser pass: real clicks through apps/tracker with two
-                distinct User-Agents (mobile/desktop — no GeoIP
-                dependency, unlike country/city which stayed genuinely
-                empty in this dev environment and correctly showed "No
-                values yet" with the picker disabled, not fabricated
-                country names), confirmed the filter popover listed
-                exactly the two real device values, confirmed selecting
-                one correctly narrowed the report. No console errors.
+CURRENT PHASE : DATATABLE COLUMN RESIZING + CSV EXPORT (§64 UX floor —
+                picked from a 3-option menu after "продолжай" with no
+                phase specified)
+STATUS        : done. components/ui/data-table.tsx (every list page's
+                shared table) had sort/paginate/search/column-visibility
+                but no resizing and no export — the last of §64's
+                explicit table requirements not yet shipped. Column
+                resizing: registered TanStack's columnSizingFeature +
+                columnResizingFeature, a resize handle on every
+                sortable column's right edge. Deliberately opt-in per
+                column, not table-wide fixed layout: a column only gets
+                an explicit pixel width once its own entry exists in
+                columnSizing state (someone actually dragged its
+                handle) — every other column keeps its natural,
+                auto-layout width exactly as before, so none of the 22
+                existing tables changed visually by default. A resized
+                column also gets overflow-hidden/text-ellipsis, so
+                narrowing one actually truncates instead of the browser
+                re-expanding it. CSV export: a new toolbar button
+                exports every row matching the current search/sort (not
+                just the current page — table.getSortedRowModel(), pre-
+                pagination) via each column's accessor value
+                (row.getValue(), the same mechanism the search box
+                already filters with — a column with no accessor was
+                already unsearchable for that reason and exports empty
+                here too, a pre-existing limitation, not a new one).
+                Columns with no real string header (row-actions icon
+                buttons, header: "") are skipped outright, not exported
+                as an unlabeled empty column. Added exportFilename prop
+                + set a real one at all 22 existing call sites; omitting
+                it still works (falls back to a generic name).
+                VERIFIED: tsc --noEmit/eslint/vitest clean on apps/web
+                (no Go code touched this phase). Real browser pass
+                against a real org with real networks: dragged a column
+                wider (others shifted naturally), dragged one
+                drastically narrower (correct ellipsis truncation, no
+                layout break), exported CSV and confirmed the
+                downloaded file's real content, re-exported after
+                typing into search and confirmed the file narrowed to
+                just the matching row (all-filtered-rows contract
+                proven, not just current page), confirmed a second page
+                (Team, whose Role column is an interactive <select>)
+                exported correctly too. No console errors either page.
                 All test fixtures removed afterward.
-LAST COMMIT   : da18c1f feat(security): key the general rate limit by
-                org for API-key traffic. Before it: 999f123
-                feat(security): encrypt facebook_ads/tiktok_ads
-                access_token at rest; 118bfed feat(analytics): add
-                stream_set report dimension, close stale roadmap gap;
-                f382d10 docs(roadmap): close the stream_set gap, correct
-                the remaining unbacked-dimension count — full detail for
-                all in CHANGELOG.md. Note: the golang.org/x/crypto bump
-                (GO-2026-6355/6354 closed, GO-2026-5932 permanently
-                flagged/unreachable) landed between phases per
-                CHANGELOG.md but was never captured in an earlier
-                version of this block's LAST COMMIT line — check
-                `git log` if an exact hash is needed for it.
+LAST COMMIT   : 9ac2e14 feat(analytics): report builder filter-value
+                dropdown suggests real data. Before it: da18c1f
+                feat(security): key the general rate limit by org for
+                API-key traffic; 999f123 feat(security): encrypt
+                facebook_ads/tiktok_ads access_token at rest; 118bfed
+                feat(analytics): add stream_set report dimension, close
+                stale roadmap gap — full detail for all in CHANGELOG.md.
+                Note: the golang.org/x/crypto bump (GO-2026-6355/6354
+                closed, GO-2026-5932 permanently flagged/unreachable)
+                landed between phases per CHANGELOG.md but was never
+                captured in an earlier version of this block's LAST
+                COMMIT line — check `git log` if an exact hash is
+                needed for it.
 UNCOMMITTED   : this phase's own work, about to be committed as one
-                logical commit — apps/internal/chstore/report.go,
-                apps/internal/chstore/report_test.go,
-                apps/internal/analytics/analytics.go,
-                apps/internal/analytics/analytics_test.go,
-                apps/internal/analytics/report.go,
-                apps/internal/analytics/report_test.go,
-                apps/internal/analytics/handler.go,
-                apps/api/rbac_coverage_test.go,
-                apps/web/src/lib/api/analytics.ts,
-                apps/web/src/hooks/use-analytics-report.ts,
-                apps/web/src/features/analytics/report-controls.tsx,
-                apps/web/src/lib/mock/analytics.ts,
-                apps/web/src/lib/i18n/locales/{en,ru}/analytics.json,
-                docs/analytics-report-api.md, ROADMAP.md, CHANGELOG.md,
-                this CLAUDE.md edit. Deliberately left out, unrelated
-                and predating this phase: apps/e2e/scenario_test.go
-                remains unstaged from the older repo+plan-audit pass;
-                whoever picks it up next should check it's still
-                wanted.
+                logical commit — apps/web/src/components/ui/
+                data-table.tsx, apps/web/src/lib/i18n/locales/{en,ru}/
+                common.json, and the exportFilename addition at all 21
+                other DataTable call sites: apps/web/src/features/
+                {analytics/report-table,campaigns/campaign-cost-entries,
+                campaigns/campaign-list,campaigns/tracking-links,
+                clicklogs/click-log-view,conversions/conversion-list,
+                custom-metrics/custom-metrics-list,dashboard/top-tables,
+                domains/domain-list,landings/landing-list,
+                networks/network-list,offers/offer-list,
+                pixels/pixel-list,postbacks/postback-logs-panel,
+                postlanding/postlanding-list,pwa/pwa-list,
+                referral/earnings-history-table,referral/payouts-table,
+                referral/referred-signups-table,team/member-list,
+                traffic-sources/source-list}.tsx, ROADMAP.md,
+                CHANGELOG.md, this CLAUDE.md edit. Deliberately left
+                out, unrelated and predating this phase:
+                apps/e2e/scenario_test.go remains unstaged from the
+                older repo+plan-audit pass; whoever picks it up next
+                should check it's still wanted.
 NEXT          : confirm scope before starting. All 7 numbered security-
                 audit findings are fully resolved; the stream_set
                 dimension gap, the access_token plain-text gap, the
-                rate-limiter IP-keying gap, and the filter-value-
-                dropdown mock-pool gap are all closed. Known remaining
-                items in ROADMAP.md's Known-open-gaps table:
-                cloudflare_registrar has no adapter; SMS/email 2FA as a
-                TOTP alternative; 7 feature areas are English-only in an
-                EN/RU app; DataTable has no column resizing/CSV export;
-                Content Gallery has no video upload/transcoding; Flows
-                have no top-level list view; 4 of 16 report dimensions
+                rate-limiter IP-keying gap, the filter-value-dropdown
+                mock-pool gap, and the DataTable resizing/CSV-export gap
+                are all closed. Known remaining items in ROADMAP.md's
+                Known-open-gaps table: cloudflare_registrar has no
+                adapter; SMS/email 2FA as a TOTP alternative; 7 feature
+                areas are English-only in an EN/RU app; Content Gallery
+                has no video upload/transcoding; Flows have no
+                top-level list view; 4 of 16 report dimensions
                 (landing/pwa/postlanding/offer) still need real columns
                 before they can follow stream_set's pattern; Google Play
                 URL parsing for PWA listings. TRUSTED_PROXIES needs a

@@ -63,6 +63,7 @@ export function PostlandingList() {
         columns={columns}
         data={postlandingsQuery.data?.postlandings ?? []}
         searchPlaceholder={t("list.searchPlaceholder", { ns: "postlanding" })}
+        exportFilename="postlanding"
         emptyTitle={t("list.emptyTitle", { ns: "postlanding" })}
         emptyDescription={t("list.emptyDescription", { ns: "postlanding" })}
         pageSize={10}

@@ -4,6 +4,8 @@ import * as React from "react"
 import {
   columnVisibilityFeature,
   columnFilteringFeature,
+  columnResizingFeature,
+  columnSizingFeature,
   globalFilteringFeature,
   createFilteredRowModel,
   createPaginatedRowModel,
@@ -17,6 +19,7 @@ import {
   tableFeatures,
   useTable,
   type ColumnDef,
+  type ColumnSizingState,
   type RowSelectionState,
 } from "@tanstack/react-table"
 import {
@@ -25,6 +28,7 @@ import {
   ArrowUpDownIcon,
   ChevronLeftIcon,
   ChevronRightIcon,
+  DownloadIcon,
   SearchIcon,
 } from "lucide-react"
 import { useTranslation } from "react-i18next"
@@ -53,6 +57,8 @@ export const dataTableFeatures = tableFeatures({
   filterFns: { includesString: filterFn_includesString },
   columnVisibilityFeature,
   rowSelectionFeature,
+  columnSizingFeature,
+  columnResizingFeature,
 })
 
 const SELECT_COLUMN_ID = "__select__"
@@ -80,7 +86,17 @@ function buildSelectColumn<TData extends Record<string, unknown>>(
     ),
     enableSorting: false,
     enableHiding: false,
+    enableResizing: false,
   }
+}
+
+/** RFC 4180-ish CSV cell quoting: wrap in quotes and escape embedded quotes
+ * whenever the value contains a comma, quote, or newline — the three cases
+ * a bare value would otherwise corrupt the file structure for. */
+function csvCell(value: unknown): string {
+  if (value === null || value === undefined) return ""
+  const s = value instanceof Date ? value.toISOString() : String(value)
+  return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s
 }
 
 /**
@@ -101,6 +117,7 @@ function DataTable<TData extends Record<string, unknown>>({
   getRowId,
   bulkActions,
   initialColumnVisibility,
+  exportFilename,
 }: {
   columns: ColumnDef<typeof dataTableFeatures, TData>[]
   data: TData[]
@@ -119,6 +136,8 @@ function DataTable<TData extends Record<string, unknown>>({
   bulkActions?: (ctx: { selectedRows: TData[]; clearSelection: () => void }) => React.ReactNode
   /** Columns hidden on first render (still toggleable via the Columns menu) — for a table with more columns than fit comfortably at once. Omitted means every column starts visible, as before. */
   initialColumnVisibility?: Record<string, boolean>
+  /** Base filename (without .csv) for the Export CSV button. Falls back to a generic name when omitted — every existing call site keeps working unchanged. */
+  exportFilename?: string
 }) {
   const { t } = useTranslation("common")
   const [sorting, setSorting] = React.useState<
@@ -133,6 +152,12 @@ function DataTable<TData extends Record<string, unknown>>({
     pageSize,
   })
   const [rowSelection, setRowSelection] = React.useState<RowSelectionState>({})
+  // Empty by default means every column renders at its natural, auto-layout
+  // width exactly as before this feature existed — a width only ever gets
+  // pinned here once a user actually drags that column's own resize handle
+  // (below), so tables nobody resizes look and behave identically to
+  // before, with zero visual change across the app.
+  const [columnSizing, setColumnSizing] = React.useState<ColumnSizingState>({})
 
   const tableColumns = React.useMemo(
     () =>
@@ -146,18 +171,52 @@ function DataTable<TData extends Record<string, unknown>>({
     features: dataTableFeatures,
     columns: tableColumns,
     data,
-    state: { sorting, globalFilter, columnVisibility, pagination, rowSelection },
+    state: { sorting, globalFilter, columnVisibility, pagination, rowSelection, columnSizing },
     onSortingChange: setSorting,
     onGlobalFilterChange: setGlobalFilter,
     onColumnVisibilityChange: setColumnVisibility,
     onPaginationChange: setPagination,
     onRowSelectionChange: setRowSelection,
+    onColumnSizingChange: setColumnSizing,
+    enableColumnResizing: true,
+    columnResizeMode: "onChange",
     getRowId: getRowId as ((row: TData) => string) | undefined,
     globalFilterFn: "includesString",
   })
 
   const rows = table.getRowModel().rows
   const selectedRows = enableRowSelection ? table.getSelectedRowModel().rows.map((r) => r.original) : []
+
+  // Every row matching the current search/sort, across every page — not
+  // just the rows currently on screen (table.getRowModel(), post-
+  // pagination) — since "export what I've filtered down to" is the
+  // useful contract for a CSV button, not "export this one page." Value
+  // extraction is accessor-based (cell.getValue()), the same mechanism
+  // the search box above already filters with — a column with no
+  // accessor (a pure computed/joined `cell` renderer and no
+  // accessorKey/accessorFn) was already unsearchable for that same
+  // reason and exports as an empty column here too, a pre-existing,
+  // consistent limitation rather than a new one. Columns with no
+  // meaningful string header (the row-actions column's icon buttons,
+  // conventionally `header: ""`) are skipped outright, not exported as
+  // an empty trailing column with nothing to label it.
+  function exportCsv() {
+    const exportColumns = table
+      .getVisibleLeafColumns()
+      .filter((c) => c.id !== SELECT_COLUMN_ID && typeof c.columnDef.header === "string" && c.columnDef.header !== "")
+    const header = exportColumns.map((c) => csvCell(c.columnDef.header as string))
+    const body = table.getSortedRowModel().rows.map((row) =>
+      exportColumns.map((c) => csvCell(row.getValue(c.id))).join(","),
+    )
+    const csv = [header.join(","), ...body].join("\n")
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement("a")
+    a.href = url
+    a.download = `${exportFilename ?? "export"}.csv`
+    a.click()
+    URL.revokeObjectURL(url)
+  }
 
   return (
     <div data-slot="data-table" className={cn("flex flex-col gap-3", className)}>
@@ -189,28 +248,40 @@ function DataTable<TData extends Record<string, unknown>>({
           </div>
           {filters}
         </div>
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button variant="outline" size="sm">
-              {t("dataTable.columns")}
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
-            {table
-              .getAllLeafColumns()
-              .filter((column) => column.getCanHide())
-              .map((column) => (
-                <DropdownMenuCheckboxItem
-                  key={column.id}
-                  checked={column.getIsVisible()}
-                  onCheckedChange={(value) => column.toggleVisibility(!!value)}
-                  onSelect={(e) => e.preventDefault()}
-                >
-                  {String(column.columnDef.header ?? column.id)}
-                </DropdownMenuCheckboxItem>
-              ))}
-          </DropdownMenuContent>
-        </DropdownMenu>
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            className="gap-1.5"
+            disabled={rows.length === 0}
+            onClick={exportCsv}
+          >
+            <DownloadIcon className="size-3.5" />
+            {t("dataTable.exportCsv")}
+          </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" size="sm">
+                {t("dataTable.columns")}
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              {table
+                .getAllLeafColumns()
+                .filter((column) => column.getCanHide())
+                .map((column) => (
+                  <DropdownMenuCheckboxItem
+                    key={column.id}
+                    checked={column.getIsVisible()}
+                    onCheckedChange={(value) => column.toggleVisibility(!!value)}
+                    onSelect={(e) => e.preventDefault()}
+                  >
+                    {String(column.columnDef.header ?? column.id)}
+                  </DropdownMenuCheckboxItem>
+                ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
       </div>
 
       <div className="overflow-x-auto rounded-lg ring-1 ring-foreground/10">
@@ -220,28 +291,49 @@ function DataTable<TData extends Record<string, unknown>>({
               <tr key={headerGroup.id} className="border-b border-border">
                 {headerGroup.headers.map((header) => {
                   const sortDir = header.column.getIsSorted()
+                  // A width is only ever pinned once this column's own
+                  // entry exists in columnSizing (i.e. someone actually
+                  // dragged its handle) — every other column keeps
+                  // rendering at its natural, auto-layout width exactly
+                  // as before this feature existed.
+                  const resized = header.column.id in columnSizing
                   return (
                     <th
                       key={header.id}
-                      className="h-9 px-3 text-left align-middle text-xs font-medium text-muted-foreground"
+                      className="relative h-9 px-3 text-left align-middle text-xs font-medium text-muted-foreground"
+                      style={resized ? { width: header.getSize(), minWidth: header.getSize(), maxWidth: header.getSize() } : undefined}
                     >
                       {header.isPlaceholder ? null : header.column.getCanSort() ? (
                         <button
                           type="button"
                           onClick={header.column.getToggleSortingHandler()}
-                          className="inline-flex items-center gap-1 hover:text-foreground"
+                          className="inline-flex max-w-full items-center gap-1 truncate hover:text-foreground"
                         >
                           <table.FlexRender header={header} />
                           {sortDir === "asc" ? (
-                            <ArrowUpIcon className="size-3" />
+                            <ArrowUpIcon className="size-3 shrink-0" />
                           ) : sortDir === "desc" ? (
-                            <ArrowDownIcon className="size-3" />
+                            <ArrowDownIcon className="size-3 shrink-0" />
                           ) : (
-                            <ArrowUpDownIcon className="size-3 opacity-40" />
+                            <ArrowUpDownIcon className="size-3 shrink-0 opacity-40" />
                           )}
                         </button>
                       ) : (
                         <table.FlexRender header={header} />
+                      )}
+                      {header.column.getCanResize() && (
+                        <div
+                          onMouseDown={header.getResizeHandler()}
+                          onTouchStart={header.getResizeHandler()}
+                          onClick={(e) => e.stopPropagation()}
+                          role="separator"
+                          aria-orientation="vertical"
+                          aria-label={t("dataTable.resizeColumnAria")}
+                          className={cn(
+                            "absolute right-0 top-0 h-full w-1.5 -translate-x-1/2 cursor-col-resize touch-none select-none hover:bg-primary/50",
+                            header.column.getIsResizing() && "bg-primary",
+                          )}
+                        />
                       )}
                     </th>
                   )
@@ -262,11 +354,18 @@ function DataTable<TData extends Record<string, unknown>>({
                   key={row.id}
                   className="border-b border-border last:border-0 hover:bg-muted/40"
                 >
-                  {row.getVisibleCells().map((cell) => (
-                    <td key={cell.id} className="h-10 px-3 align-middle">
-                      <table.FlexRender cell={cell} />
-                    </td>
-                  ))}
+                  {row.getVisibleCells().map((cell) => {
+                    const resized = cell.column.id in columnSizing
+                    return (
+                      <td
+                        key={cell.id}
+                        className={cn("h-10 px-3 align-middle", resized && "overflow-hidden text-ellipsis whitespace-nowrap")}
+                        style={resized ? { width: cell.column.getSize(), maxWidth: cell.column.getSize() } : undefined}
+                      >
+                        <table.FlexRender cell={cell} />
+                      </td>
+                    )
+                  })}
                 </tr>
               ))
             )}

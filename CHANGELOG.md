@@ -5,6 +5,62 @@ per-phase, matching `CLAUDE.md`'s phase protocol. The one exception is
 [Between phases], below: spec amendments and the code changes that follow from
 them land between phases and would otherwise be invisible here.
 
+## [Between phases] — DataTable gets real column resizing and CSV export (§64 UX floor)
+
+Closed the last of §64's own explicit table requirements that hadn't
+shipped yet: `components/ui/data-table.tsx` — the one shared table every
+list page in the app builds on — had sort, paginate, search, and column
+visibility, but no resizing and no export.
+
+Column resizing: registered TanStack Table's `columnSizingFeature` +
+`columnResizingFeature`, with a resize handle on every sortable column's
+right edge. Deliberately opt-in per column rather than switching the
+whole table to fixed-width layout: a column only ever gets an explicit
+pixel width once its own entry exists in `columnSizing` state (i.e.
+someone actually dragged its handle) — every other column keeps
+rendering at its natural, auto-layout width exactly as before this
+phase, so none of the 22 existing tables across the app changed
+visually by default. A resized column also gets `overflow-hidden
+text-ellipsis whitespace-nowrap`, so narrowing one actually does
+something instead of the browser just re-expanding it around long
+content.
+
+CSV export: a new toolbar button exports every row matching the current
+search/sort — not just the rows on screen (`table.getSortedRowModel()`,
+post-filter-and-sort, pre-pagination) — using each visible column's
+accessor value (`row.getValue()`), the same mechanism the existing
+search box already filters with. A column with no accessor (a pure
+computed/joined `cell` renderer, no `accessorKey`/`accessorFn`) was
+already unsearchable for that same reason and exports empty here too — a
+pre-existing, consistent limitation, not a new one. Columns with no real
+string header (the row-actions column's icon buttons, conventionally
+`header: ""`) are skipped outright rather than exported as an unlabeled
+empty column. RFC-4180-ish quoting handles embedded commas/quotes/
+newlines.
+
+Added `exportFilename` to `DataTable`'s props and set a real one at all
+22 existing call sites (offers, networks, campaigns, traffic sources,
+domains, landings, pwa, postlanding, pixels, conversions, click log,
+custom metrics, team members, tracking links, cost entries, three
+referral tables, postback logs, the dashboard's per-entity top tables,
+and the analytics report table) — every existing call site keeps
+working unchanged when the prop is omitted (falls back to a generic
+name), matching this component's existing "every new option is opt-in"
+convention.
+
+Verified: `tsc --noEmit`/`eslint`/`vitest` clean on `apps/web` (this
+phase touched no Go code). Real browser pass against a real org with
+real networks: dragged a column wider (every other column shifted
+naturally, no layout break), dragged one drastically narrower (content
+correctly truncated with an ellipsis instead of breaking the row),
+exported CSV and confirmed the downloaded file's real content matched
+exactly what was on screen, re-exported after typing into the search box
+and confirmed the file narrowed to just the matching row (proving the
+"all filtered rows, not just the current page" contract), and confirmed
+a second page (Team, whose Role column renders as an interactive
+`<select>`) exported correctly too. No console errors on either page.
+All test fixtures removed afterward.
+
 ## [Between phases] — report builder's filter-value dropdown suggests real distinct values, not a fixed mock pool
 
 Closed a gap this same doc's own Phase 35 entry (and `docs/analytics-

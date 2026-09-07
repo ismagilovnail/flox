@@ -379,6 +379,7 @@ export function TrackingLinks({
           emptyTitle={t("trackingLinks.emptyTitle")}
           emptyDescription={t("trackingLinks.emptyDescription")}
           pageSize={10}
+          exportFilename="tracking-links"
           getRowId={(row) => row.id}
         />
       )}

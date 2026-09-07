@@ -20,6 +20,8 @@
     "searchPlaceholder": "Поиск...",
     "emptyTitle": "Нет результатов",
     "columns": "Столбцы",
+    "exportCsv": "Экспорт CSV",
+    "resizeColumnAria": "Изменить ширину столбца",
     "selected_one": "Выбрана {{count}} строка",
     "selected_few": "Выбрано {{count}} строки",
     "selected_many": "Выбрано {{count}} строк",

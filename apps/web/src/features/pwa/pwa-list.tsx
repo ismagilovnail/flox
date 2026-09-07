@@ -76,6 +76,7 @@ export function PwaList() {
         columns={columns}
         data={filtered}
         searchPlaceholder={t("list.searchPlaceholder", { ns: "pwa" })}
+        exportFilename="pwa"
         emptyTitle={t("list.emptyTitle", { ns: "pwa" })}
         emptyDescription={t("list.emptyDescription", { ns: "pwa" })}
         pageSize={10}

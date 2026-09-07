@@ -101,6 +101,7 @@ export function OfferList() {
         columns={columns}
         data={filtered}
         searchPlaceholder={t("list.searchPlaceholder", { ns: "offers" })}
+        exportFilename="offers"
         emptyTitle={t("list.emptyTitle", { ns: "offers" })}
         emptyDescription={
           networks.length === 0

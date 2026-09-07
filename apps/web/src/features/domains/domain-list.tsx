@@ -62,6 +62,7 @@ export function DomainList() {
         columns={columns}
         data={domainsQuery.data.domains}
         searchPlaceholder="Search domains..."
+        exportFilename="domains"
         emptyTitle="No domains yet"
         emptyDescription="Park a domain for tracking links, PWA installs, or fallback destinations."
         pageSize={10}

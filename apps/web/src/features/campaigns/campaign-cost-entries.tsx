@@ -257,6 +257,7 @@ export function CampaignCostEntries({ campaignId }: { campaignId: string }) {
           emptyTitle={t("list.emptyTitle")}
           emptyDescription={t("list.emptyDescription")}
           pageSize={10}
+          exportFilename="cost-entries"
           getRowId={(row) => row.id}
         />
       )}

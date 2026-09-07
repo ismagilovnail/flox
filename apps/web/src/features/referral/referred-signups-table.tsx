@@ -46,6 +46,7 @@ export function ReferredSignupsTable({ signups }: { signups: ReferredSignup[] })
       columns={columns}
       data={signups}
       searchPlaceholder="Search signups..."
+      exportFilename="referral-signups"
       emptyTitle="No referred signups yet"
       emptyDescription="People who sign up through your referral link show up here."
       pageSize={10}

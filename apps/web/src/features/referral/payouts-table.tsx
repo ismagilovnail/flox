@@ -66,6 +66,7 @@ export function PayoutsTable({ payouts, canManage }: { payouts: PayoutRequest[];
       columns={columns}
       data={payouts}
       searchPlaceholder="Search payouts..."
+      exportFilename="referral-payouts"
       emptyTitle="No payout requests yet"
       emptyDescription="Request a payout from your available balance above."
       pageSize={10}

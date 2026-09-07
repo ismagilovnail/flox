@@ -41,6 +41,7 @@ export function PostbackLogsPanel() {
       columns={columns}
       data={logsQuery.data.logs}
       getRowId={(row) => `${row.direction}:${row.networkId}:${row.clickId}:${row.eventAt}`}
+      exportFilename="postback-logs"
       searchPlaceholder={t("logs.searchPlaceholder")}
       emptyTitle={t("logs.emptyTitle")}
       emptyDescription={t("logs.emptyDescription")}

@@ -102,6 +102,7 @@ session.
 | `facebook_ads`/`tiktok_ads` `access_token` retrofitted to real AES-256-GCM encryption (Phase D, `docs/ad-account-connections.md`) — no schema change needed, the column was already `text` | done |
 | General rate limit no longer stays IP-keyed for API-key traffic — `tenant.PeekIdentity` resolves identity before the limiter runs, keying by organization instead (`docs/security.md` §3) | done |
 | Report builder's filter-value dropdown suggests real distinct values — new `POST /analytics/dimension-values` endpoint (`chstore.DistinctValues`); the mock pool now only backs the loading placeholder and the 5 still-unbacked dimensions | done |
+| DataTable gets real column resizing (opt-in per-column, zero visual change until a user drags a handle) and CSV export (all filtered/sorted rows, not just the current page) — `components/ui/data-table.tsx`, repo-wide across all 22 call sites | done |
 
 ## Known open gaps
 
@@ -113,7 +114,6 @@ scoped phase; none blocks anything that ships today.
 | `cloudflare_registrar` has no adapter, though Cloudflare works as a DNS provider | `apps/internal/domain/model.go` |
 | SMS/email 2FA as an alternative delivery channel (TOTP only today) | `apps/internal/totp` |
 | Seven feature areas are English-only in an EN/RU app | `content-gallery`, `custom-metrics`, `domains`, `referral`, `settings`, `tags`, `team` |
-| DataTable has no column resizing and no CSV export, both in §64's floor | `components/ui/data-table.tsx`, repo-wide |
 | Video upload/transcoding in Content Gallery (images only today) | needs a real ffmpeg/worker pipeline |
 | Flows have no top-level list view, so no "View statistics" drill-in row | flows live nested inside a campaign's edit page |
 | 4 of the report builder's 16 named dimensions still unbacked (`landing`/`pwa`/`postlanding`/`offer`) | need IDs threaded through `apps/tracker`'s event emission + a ClickHouse schema migration — `stream_set` (closed) shows the pattern once a column exists; these still need one |

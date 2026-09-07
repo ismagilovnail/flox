@@ -76,6 +76,7 @@ export function SourceList() {
         columns={columns}
         data={filtered}
         searchPlaceholder={t("list.searchPlaceholder", { ns: "trafficSources" })}
+        exportFilename="traffic-sources"
         emptyTitle={t("list.emptyTitle", { ns: "trafficSources" })}
         emptyDescription={t("list.emptyDescription", { ns: "trafficSources" })}
         pageSize={10}

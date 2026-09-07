@@ -102,6 +102,7 @@ export function MemberList() {
         columns={columns}
         data={members}
         searchPlaceholder="Search members..."
+        exportFilename="team-members"
         emptyTitle="No members yet"
         emptyDescription="Invite teammates to give them access to this workspace."
         pageSize={10}

@@ -20,6 +20,8 @@
     "searchPlaceholder": "Search...",
     "emptyTitle": "No results",
     "columns": "Columns",
+    "exportCsv": "Export CSV",
+    "resizeColumnAria": "Resize column",
     "selected_one": "{{count}} selected",
     "selected_other": "{{count}} selected",
     "selectAllAria": "Select all rows on this page",

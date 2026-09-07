@@ -62,6 +62,7 @@ export function TopTable({ entity, rows }: { entity: Entity; rows: PerformanceRo
         searchPlaceholder={t(`topTables.${entity}SearchPlaceholder`)}
         emptyTitle={t(`topTables.${entity}EmptyTitle`)}
         pageSize={5}
+        exportFilename={`top-${entity}`}
       />
     </div>
   );

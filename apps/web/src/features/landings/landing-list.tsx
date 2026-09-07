@@ -76,6 +76,7 @@ export function LandingList() {
         columns={columns}
         data={filtered}
         searchPlaceholder={t("list.searchPlaceholder", { ns: "landings" })}
+        exportFilename="landings"
         emptyTitle={t("list.emptyTitle", { ns: "landings" })}
         emptyDescription={t("list.emptyDescription", { ns: "landings" })}
         pageSize={10}

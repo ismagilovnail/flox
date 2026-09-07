@@ -61,6 +61,7 @@ export function ConversionList() {
         columns={columns}
         data={conversionsQuery.data.conversions}
         getRowId={(row) => `${row.clickId}:${row.type}:${row.eventAt}`}
+        exportFilename="conversions"
         searchPlaceholder={t("list.searchPlaceholder")}
         emptyTitle={t("list.emptyTitle")}
         emptyDescription={t("list.emptyDescription")}

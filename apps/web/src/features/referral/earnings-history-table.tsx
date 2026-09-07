@@ -89,6 +89,7 @@ export function EarningsHistoryTable({ transactions }: { transactions: ReferralT
       columns={columns}
       data={transactions}
       searchPlaceholder="Search history..."
+      exportFilename="referral-earnings"
       emptyTitle="No earnings yet"
       emptyDescription="Accruals, adjustments, and payouts appear here — an immutable, append-only ledger (§54)."
       pageSize={10}

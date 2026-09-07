@@ -63,6 +63,7 @@ export function PixelList() {
         columns={columns}
         data={pixelsQuery.data?.pixels ?? []}
         searchPlaceholder={t("list.searchPlaceholder", { ns: "pixels" })}
+        exportFilename="pixels"
         emptyTitle={t("list.emptyTitle", { ns: "pixels" })}
         emptyDescription={t("list.emptyDescription", { ns: "pixels" })}
         pageSize={10}
