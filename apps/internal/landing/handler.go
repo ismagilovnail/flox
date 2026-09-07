@@ -12,25 +12,30 @@ import (
 )
 
 type Handler struct {
-	svc    *Service
-	logger *slog.Logger
+	svc *Service
+	// requireWrite is the RBAC middleware every mutating route below is
+	// wrapped in (Register). Read routes carry no permission requirement
+	// beyond tenantMiddleware — same split custommetrics/reportpresets/
+	// referral already use.
+	requireWrite func(http.Handler) http.Handler
+	logger       *slog.Logger
 }
 
-func NewHandler(svc *Service, logger *slog.Logger) *Handler {
-	return &Handler{svc: svc, logger: logger}
+func NewHandler(svc *Service, requireWrite func(http.Handler) http.Handler, logger *slog.Logger) *Handler {
+	return &Handler{svc: svc, requireWrite: requireWrite, logger: logger}
 }
 
 // Register mounts every /landings route onto r. The caller applies
 // tenant.Middleware first — same contract as every other handler.
 func (h *Handler) Register(r chi.Router) {
 	r.Get("/", h.list)
-	r.Post("/", h.create)
+	r.With(h.requireWrite).Post("/", h.create)
 	r.Get("/{id}", h.get)
-	r.Patch("/{id}", h.update)
-	r.Delete("/{id}", h.delete)
-	r.Post("/{id}/duplicate", h.duplicate)
-	r.Post("/{id}/pause", h.pause)
-	r.Post("/{id}/activate", h.activate)
+	r.With(h.requireWrite).Patch("/{id}", h.update)
+	r.With(h.requireWrite).Delete("/{id}", h.delete)
+	r.With(h.requireWrite).Post("/{id}/duplicate", h.duplicate)
+	r.With(h.requireWrite).Post("/{id}/pause", h.pause)
+	r.With(h.requireWrite).Post("/{id}/activate", h.activate)
 }
 
 func (h *Handler) list(w http.ResponseWriter, r *http.Request) {

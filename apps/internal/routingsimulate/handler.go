@@ -24,6 +24,10 @@ func NewHandler(svc *Service, logger *slog.Logger) *Handler {
 // caller applies tenant.Middleware first — same contract as every other
 // handler.
 func (h *Handler) Register(r chi.Router) {
+	// POST because it takes a simulated-visit body, but it resolves
+	// routing in memory and persists nothing — deliberately not
+	// behind campaign.write, so a read-only role can still explain
+	// why a click would route where it does (§72).
 	r.Post("/", h.simulate)
 }
 

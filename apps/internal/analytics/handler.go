@@ -34,6 +34,11 @@ func (h *Handler) Register(r chi.Router) {
 	// dims/filters/sort are structured, variable-length shapes, the same
 	// reason routingsimulate.Handler's /simulate is POST (see that
 	// package's own handler.go).
+	// These five are POST only because they carry a JSON query body —
+	// they read ClickHouse and write nothing, so they carry no
+	// requireWrite gate. Nor are they gated on analytics.read: every
+	// one of the six roles holds it (migration 00001), so the check
+	// would reject nobody and read as a control that isn't one.
 	r.Post("/report", h.report)
 	r.Post("/timeseries", h.timeseries)
 	r.Post("/breakdown", h.breakdown)

@@ -16,12 +16,17 @@ import (
 const dateLayout = "2006-01-02"
 
 type Handler struct {
-	svc    *Service
-	logger *slog.Logger
+	svc *Service
+	// requireWrite is the RBAC middleware every mutating route below is
+	// wrapped in (Register). Read routes carry no permission requirement
+	// beyond tenantMiddleware — same split custommetrics/reportpresets/
+	// referral already use.
+	requireWrite func(http.Handler) http.Handler
+	logger       *slog.Logger
 }
 
-func NewHandler(svc *Service, logger *slog.Logger) *Handler {
-	return &Handler{svc: svc, logger: logger}
+func NewHandler(svc *Service, requireWrite func(http.Handler) http.Handler, logger *slog.Logger) *Handler {
+	return &Handler{svc: svc, requireWrite: requireWrite, logger: logger}
 }
 
 // Register mounts every /campaigns/{campaignId}/cost-entries route onto
@@ -29,8 +34,8 @@ func NewHandler(svc *Service, logger *slog.Logger) *Handler {
 // campaign.Handler.Register.
 func (h *Handler) Register(r chi.Router) {
 	r.Get("/", h.list)
-	r.Post("/", h.upsert)
-	r.Delete("/{id}", h.delete)
+	r.With(h.requireWrite).Post("/", h.upsert)
+	r.With(h.requireWrite).Delete("/{id}", h.delete)
 	// Colocated with the CRUD it summarizes rather than under /analytics:
 	// unlike click/revenue analytics, spend never depends on ClickHouse
 	// being up (see this package's doc comment), so it shouldn't share

@@ -5,6 +5,210 @@ per-phase, matching `CLAUDE.md`'s phase protocol. The one exception is
 [Between phases], below: spec amendments and the code changes that follow from
 them land between phases and would otherwise be invisible here.
 
+## [Security] — enforce RBAC on every mutating route (audit finding #1)
+
+A code/security audit found the role → permission policy seeded by migrations
+`00001`/`00020` to be real in the database and enforced almost nowhere in the
+API. `RequirePermission` guarded `/team`, `/security` and the four features
+whose own later phases wired it (integrations, custom metrics, API keys,
+report presets, referral). The other 23 tenant-scoped route groups had no
+authorization at all beyond "is a member of this org".
+
+A **Viewer** — a role the Team UI presents as read-only, holding only
+`campaign.read` and `analytics.read` — could create, edit and delete
+campaigns, offers, networks, traffic sources, domains, tracking links and
+stream sets over the API. Editing a stream set rewrites where live traffic
+goes. The frontend hid the buttons; the API accepted the calls.
+`campaign.write`, `offer.write` and `source.write` existed as rows in
+`permissions` and in no production code path — the only references to
+`campaign.write` in the Go tree were inside `auth_test.go`.
+
+### Enforcement
+
+82 mutating routes across 17 packages now sit behind `RequirePermission`.
+Each handler takes a `requireWrite func(http.Handler) http.Handler` and wraps
+its own mutating routes with `r.With(h.requireWrite)` — the shape
+`custommetrics`/`reportpresets`/`referral`/`domain` already used;
+`apps/api/main.go` builds one middleware per key and injects it.
+
+- `campaign.write` — `/campaigns`, stream sets, tracking links, cost entries
+- `offer.write` — `/offers`, `/networks`, `/event-mappings`, postback replay
+- `source.write` — `/traffic-sources`, ad-account connection + spend sync
+- `content.write` — `/landings`, `/pwas`, `/postlandings`, `/pixels`, `/tags`,
+  `/content-gallery`
+- `settings.write` — `/domains` (its `renew`/`sync-dns` already used this key;
+  plain CRUD and `verify` were open and now don't)
+
+Reads stay open to any member of the org, matching the split those four
+packages already used — so no existing account loses access to anything it
+can see today, and the change carries no lockout risk. Gating reads as well
+would drop Viewer from `/offers`/`/networks` and Analyst from
+`/traffic-sources`; that is a deliberate product decision, not something to
+fold into a security fix.
+
+Migration `00035` adds `content.read`/`content.write` — the six route groups
+they cover had no permission key that could name them, so there was nothing
+to gate them with even in principle. One key pair rather than six per-entity
+pairs: all six are campaign creative/tracking assets landing on identical
+tiering (Owner/Admin/Manager write, everyone reads), so six pairs would have
+been six identical grants. Splitting later is a cheap additive migration;
+collapsing six back into one is not.
+
+### Deliberately left open
+
+`/analytics`'s five POST endpoints are POST only because they carry a JSON
+query body — they read ClickHouse and write nothing, and are not gated on
+`analytics.read` either since all six roles hold it (a check that rejects
+nobody reads as a control that isn't one). `POST /routing/simulate` resolves
+routing in memory and persists nothing. `POST /referral/payouts` stays open
+to every role by the Referral phase's own decision. Pre-session and personal
+2FA auth routes have no role to check yet.
+
+### Keeping it closed
+
+`apps/api/rbac_coverage_test.go` parses every handler's `Register` function
+with `go/ast` and fails on any `POST`/`PATCH`/`PUT`/`DELETE` not wrapped in
+`r.With(h.requireWrite)`; the exceptions above are its `deliberatelyOpen`
+allowlist, each with a stated reason. Verified it actually fails by
+unwrapping one route and watching it name `campaign.delete` — a unit test of
+`RequirePermission` itself could never have caught the original bug, since
+the middleware always worked and simply wasn't mounted.
+
+`TestPermissionGrantsMatchTheSeededPolicy` pins the whole 6-role ×
+18-permission matrix against real Postgres; these grants are load-bearing for
+the first time, so a wrong one is now an access-control bug.
+
+### Frontend vocabulary had drifted
+
+`lib/mock/team.ts` still listed only the original ten permission keys long
+after `custom_metric.*`, `report_preset.*` and `referral.*` were seeded — and
+`features/team/roles-permissions-panel.tsx` renders that copy to admins as
+the org's access policy, so the matrix they read to decide who to invite as
+what was incomplete. It now carries all eighteen, cross-checked
+programmatically against the migrations (all six roles, exact counts), and is
+marked as a manual sync point.
+
+Action buttons themselves are still not permission-gated in the UI (only
+`member-list.tsx` checks `team.write`), so a read-only role now sees a
+"Create" button and gets a 403 from it. That is a UX gap, not a security one,
+and it is the natural follow-up.
+
+### Verified
+
+`go build`/`go vet` clean; `go test -count=1 ./...` clean — 40 packages, run
+with live Postgres/ClickHouse/Redis/MinIO so the DB-backed tests actually
+executed rather than silently skipping. `tsc --noEmit`, `eslint`
+(zero warnings) and `vitest` (21/21) clean.
+
+Live end-to-end against the running containerized API: signed up a real org,
+pulled the real verification link out of mailhog, invited and accepted a real
+Analyst. `/auth/me` returned exactly the eight read keys for Analyst and all
+eighteen for Owner. Twelve writes (campaigns, offers, networks, traffic
+sources, domains, landings, PWAs, pixels, tags, content-gallery folders,
+postlandings, event mappings) all returned 403 with the correct
+`missing permission: <key>` message; twelve reads all returned 200 — no
+lockout. Against a real campaign: Analyst got 403 on DELETE, PATCH, pause and
+stream-set create, 200 on GET and on `routing/simulate`; Owner's PATCH
+returned 200 and the rename actually persisted, confirming the write path is
+intact rather than merely unblocked. Test org, users and every created
+fixture deleted afterwards via SQL.
+
+## [Between phases] — repo + plan audit: stale claims corrected, ROADMAP rewritten
+
+A full audit of the code and the planning documents, re-verifying every
+"done / not done" claim against what the tree actually contains. No feature
+work; three corrections fell out of the verification, plus two stale
+planning documents rewritten.
+
+Re-verified from scratch rather than trusted from earlier write-ups:
+`go build`/`go vet` clean, `go test -count=1 ./...` clean, `tsc --noEmit`
+clean, `eslint` clean (zero warnings), `vitest` 21/21, working tree clean at
+`1d345fe`.
+
+### The "pre-existing" TypeScript errors were a stale build artifact
+
+Every phase since the PWA-preview work has recorded 17 `[id]/page.tsx`
+route-typing errors as pre-existing and unrelated. They were never a code
+problem, and they are gone.
+
+`apps/web`'s containerized dev service mounts `web_next_cache` over
+`/app/.next`, so the container's `.next` is a Docker volume and the host's is
+never written by it. The host still carried
+`.next/dev/types/routes.d.ts` from a host-run `npm run dev` on 2026-09-02,
+predating every `[id]` route — and `next-env.d.ts` imported exactly that
+file, so `tsc` resolved `AppRoutes` from a fossil. `npx next typegen`
+regenerated the types and repointed `next-env.d.ts` (gitignored) at
+`.next/types/`. `tsc --noEmit` now exits 0.
+
+This comes back silently if anyone runs `next dev` on the host again; the fix
+is the same one-liner, not a code change.
+
+### Phase 34's "0.0% coverage" reading was measured with the DB switched off
+
+Phase 34's audit recorded that the repository/handler-layer Go packages
+(network, offer, pixel, campaign, streamset, cost, "and ~18 others") sat at
+0.0% unit-test coverage. That run had no `DATABASE_URL` set, so every
+DB-backed test silently `t.Skip`'d — and `go test ./...` passes either way,
+which is what made the number look real.
+
+Re-measured with the dev stack's own URLs exported: network 49.5%, offer
+52.0%, pixel 52.8%, campaign 42.8%, cost 51.0%, auth 56.8%, and comparable
+figures across the layer. The genuinely-0.0% packages are only infrastructure
+plumbing: `apierror`, `config`, `httpserver`, `idgen`, `logging`, `postgres`,
+`rediscache`, `storage`, `telemetry`, `routingstore`. Core computation
+remains high — event/macro/metrics/attribution 100%, classifier 94.7%,
+conversion 89.6%, routing 81.7%.
+
+Worth knowing generally: a bare `go test ./...` in this repo proves
+compilation and pure-Go logic only.
+
+### Dead code and stale comments
+
+- `lib/mock/campaigns.ts` deleted. Phase 34 kept it because
+  `tag-assignments.ts` imported its fixtures; the Tags phase then deleted
+  `tag-assignments.ts` and nothing rechecked the survivor. Confirmed zero real
+  importers — the only two remaining mentions were inside doc comments.
+- Those two comments (in `lib/api/networks.ts` and `lib/api/offers.ts`) were
+  themselves doubly stale, still describing `lib/mock/{networks,offers}.ts`
+  and `stores/{networks,offers}.ts` as live and calling stream-sets,
+  postbacks and conversions "still fully mocked features" long after all of
+  it became real. Rewritten to describe what those clients actually are.
+- `.env.example`'s `FX_RATE_PROVIDER_API_KEY` removed — no Go code has ever
+  read it. FX rates come from the `fx_rates` Postgres table; no provider
+  client exists. Replaced with a comment saying so, the same cleanup the
+  registrar/DNS phase did for its own stale placeholders.
+- `apps/api/main.go`'s note that "none of this file's 17
+  `r.Use(tenantMiddleware)` call sites change" — there are 29. Dropped the
+  count rather than correcting a number that rots on every new route group.
+
+### ROADMAP.md rewritten
+
+The worst-drifted document in the repo: it still listed Phase 1 as *in
+progress* and Phases 2 through 34 as *planned*, having gone untouched since
+Phase 1, while this CHANGELOG carries a real entry for every one of them.
+
+Rewritten into three tables — §9's fixed phase order (all done), the post-34
+user-scoped work (18 rows, each matching a real entry here), and a **Known
+open gaps** table that collects in one place the deliberately-unbuilt work
+that until now was scattered across ten phases' own NEXT lists.
+
+### Audited clean, no action needed
+
+Zero TODO/FIXME/console.log/debugger anywhere in source; all 29 tenant-scoped
+route groups behind `tenantMiddleware`; `config.go` and `.env.example` agree
+exactly once the dead FX key is gone; every §9 phase has a CHANGELOG entry;
+`stores/` holds only genuine UI state (command-menu, sidebar); `lib/mock/`
+holds only `team.ts` (real role/permission vocabulary, misfiled under
+`mock/` — flagged, not moved) and `analytics.ts` (the report builder's
+filter-value suggestion pool, a real and honestly-documented gap).
+
+### One newly-quantified gap
+
+Seven feature areas are English-only in an otherwise EN/RU app:
+`content-gallery`, `custom-metrics`, `domains`, `referral`, `settings`,
+`tags`, `team`. Settings' English-only state was an explicit earlier
+decision; the other six were never decided — they just never got a namespace.
+
 ## [Between phases] — PWA live preview: the header eases down on install
 
 Last difference from the original the user spotted: the avatar and the

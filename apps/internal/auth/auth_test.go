@@ -1275,3 +1275,84 @@ func TestDisableTOTPRequiresPasswordAndRespectsOrgPolicy(t *testing.T) {
 		t.Fatalf("TOTPStatus after disable = (%v, %v), want (false, nil)", enabled, err)
 	}
 }
+
+// TestPermissionGrantsMatchTheSeededPolicy pins the full role -> permission
+// matrix against the database, per role, rather than spot-checking a few
+// keys the way TestMeReturnsRoleAndPermissions does.
+//
+// It exists because the 2026-09-06 audit found this policy real in the
+// database and unenforced almost everywhere in the API — the fix mounts
+// auth.Service.RequirePermission across every mutating route, which makes
+// these grants load-bearing for the first time. A silently wrong grant
+// (a role that keeps a write key it shouldn't, or loses a read key it
+// needs) is now an access-control bug rather than a cosmetic one, so the
+// exact matrix is worth asserting rather than assuming.
+//
+// apps/web/src/lib/mock/team.ts renders this same matrix to admins from
+// its own hardcoded copy; keep the two in sync (that file says so too).
+func TestPermissionGrantsMatchTheSeededPolicy(t *testing.T) {
+	pool := mustPool(t)
+	svc := newService(pool)
+	repo := auth.NewRepository(pool)
+	ctx := context.Background()
+
+	universalReads := []string{
+		"campaign.read", "analytics.read", "content.read",
+		"custom_metric.read", "report_preset.read", "referral.read",
+	}
+	all := append(append([]string{}, universalReads...),
+		"campaign.write", "offer.read", "offer.write", "source.read", "source.write",
+		"content.write", "custom_metric.write", "report_preset.write", "referral.write",
+		"team.read", "team.write", "settings.write",
+	)
+
+	want := map[string][]string{
+		"Owner": all,
+		"Admin": all,
+		"Manager": append(append([]string{}, universalReads...),
+			"campaign.write", "offer.read", "offer.write", "source.read", "source.write",
+			"content.write", "custom_metric.write", "report_preset.write", "team.read"),
+		"Buyer":   append(append([]string{}, universalReads...), "campaign.write", "offer.read", "source.read", "source.write"),
+		"Analyst": append(append([]string{}, universalReads...), "offer.read", "source.read"),
+		"Viewer":  universalReads,
+	}
+
+	for role, expected := range want {
+		granted, err := repo.PermissionsForRole(ctx, role)
+		if err != nil {
+			t.Fatalf("PermissionsForRole(%q): %v", role, err)
+		}
+		has := map[string]bool{}
+		for _, p := range granted {
+			has[p] = true
+		}
+		if len(granted) != len(expected) {
+			t.Errorf("%s: has %d permissions %v, want exactly %d %v", role, len(granted), granted, len(expected), expected)
+		}
+		for _, p := range expected {
+			if !has[p] {
+				t.Errorf("%s: missing %q (has %v)", role, p, granted)
+			}
+		}
+	}
+
+	// The two keys migration 00035 added, checked through the same
+	// HasPermission path RequirePermission itself uses — not just the
+	// listing above — since that is what actually gates a request.
+	owner := signupOrg(t, ctx, pool, svc, "Content Perm Org", uniqueEmail(t, pool))
+	for _, tc := range []struct {
+		key  string
+		want bool
+	}{
+		{"content.read", true},
+		{"content.write", true},
+	} {
+		ok, err := repo.HasPermission(ctx, owner.User.ID, owner.Organization.ID, tc.key)
+		if err != nil {
+			t.Fatalf("HasPermission(%q): %v", tc.key, err)
+		}
+		if ok != tc.want {
+			t.Errorf("Owner HasPermission(%q) = %v, want %v", tc.key, ok, tc.want)
+		}
+	}
+}

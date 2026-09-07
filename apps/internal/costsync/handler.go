@@ -21,19 +21,23 @@ const defaultLookbackDays = 29
 const dateLayout = "2006-01-02"
 
 type Handler struct {
-	svc    *Service
-	logger *slog.Logger
+	svc *Service
+	// requireWrite gates POST /sync — it writes real cost_entries rows and
+	// makes real outbound ad-platform calls on the org's own credentials,
+	// so it is a mutation, not a read.
+	requireWrite func(http.Handler) http.Handler
+	logger       *slog.Logger
 }
 
-func NewHandler(svc *Service, logger *slog.Logger) *Handler {
-	return &Handler{svc: svc, logger: logger}
+func NewHandler(svc *Service, requireWrite func(http.Handler) http.Handler, logger *slog.Logger) *Handler {
+	return &Handler{svc: svc, requireWrite: requireWrite, logger: logger}
 }
 
 // Register mounts the single "sync now" action onto r, expected to be
 // nested under /traffic-sources/{id}/connection alongside adaccount's
 // own GET/PATCH/DELETE (same {id} URL param, same tenant.Middleware).
 func (h *Handler) Register(r chi.Router) {
-	r.Post("/sync", h.sync)
+	r.With(h.requireWrite).Post("/sync", h.sync)
 }
 
 func (h *Handler) sync(w http.ResponseWriter, r *http.Request) {

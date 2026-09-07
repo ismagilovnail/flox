@@ -24,16 +24,16 @@ Team UI, and a newly-built login/signup/accept-invite UI, to that API.
   mailer`), but invites deliberately stayed a copyable link even after: a
   reasonable product choice on its own, not merely the absence of
   infrastructure anymore.
-- **RBAC permission enforcement (`RequirePermission`) is wired onto this
-  package's own team/membership endpoints only.** §52 also calls for
-  enforcing authorization server-side across the whole product, but
-  retrofitting it onto every pre-existing domain route (campaigns, offers,
-  sources, pixels, stream sets, cost, ...) means touching ~15 already-
-  shipped packages' routes — confirmed as an explicit, separate follow-up
-  phase, not a silent expansion of this one. Tenant isolation (§36-
-  TENANCY: no org ever sees another org's data) is unaffected either way —
-  it was already enforced everywhere via org-scoped repositories, and is
-  orthogonal to role-based permission checks *within* one org.
+- **RBAC permission enforcement (`RequirePermission`) was originally wired
+  onto this package's own team/membership endpoints only** — retrofitting
+  it onto every pre-existing domain route was confirmed at the time as an
+  explicit, separate follow-up rather than a silent expansion of Phase 28.
+  That follow-up shipped on 2026-09-06 (see "RBAC route coverage" below);
+  this bullet is kept for the history of why the gap existed. Tenant
+  isolation (§36-TENANCY: no org ever sees another org's data) was
+  unaffected throughout — it was already enforced everywhere via
+  org-scoped repositories, and is orthogonal to role-based permission
+  checks *within* one org.
 
 ## What already existed (migration 00001, prior phases)
 
@@ -278,12 +278,106 @@ route accepts it anymore). `AllowedOrigins` stays a single explicit origin
 (`cfg.AppURL`) — the fetch spec forbids combining a wildcard origin with
 credentialed requests anyway.
 
+## RBAC route coverage (closed 2026-09-06)
+
+A code/security audit found that the role → permission policy seeded by
+migrations `00001`/`00020` was real in the database and enforced almost
+nowhere in the API. `RequirePermission` guarded `/team`, `/security` and
+the four features whose own later phases wired it (integrations, custom
+metrics, API keys, report presets, referral). The other 23 tenant-scoped
+route groups had no authorization at all beyond "is a member of this org".
+
+Concretely: a **Viewer** — a role the Team UI presents as read-only, and
+which holds only `campaign.read` and `analytics.read` — could create,
+edit and delete campaigns, offers, networks, traffic sources, domains,
+tracking links and stream sets through the API. Editing a stream set
+rewrites where live traffic goes. The frontend hid the buttons; the API
+accepted the calls. `campaign.write`, `offer.write` and `source.write`
+existed as rows in `permissions` and appeared in no production code path
+at all — the only references to `campaign.write` in the Go tree were in
+`auth_test.go`.
+
+### The mapping
+
+Writes are gated; **reads stay open to any member of the org**, matching
+the split `custommetrics`/`reportpresets`/`referral`/`domain` already
+used, and keeping the change free of any lockout risk for existing
+accounts. Each handler takes a `requireWrite func(http.Handler)
+http.Handler` and wraps its own mutating routes (`r.With(h.requireWrite)`)
+— the same shape those four packages already had; `apps/api/main.go`
+builds one middleware per key and passes it in.
+
+| Permission | Route groups |
+| --- | --- |
+| `campaign.write` | `/campaigns`, `/campaigns/{id}/stream-sets`, `/campaigns/{id}/tracking-links`, `/campaigns/{id}/cost-entries` |
+| `offer.write` | `/offers`, `/networks`, `/event-mappings`, `/postback-logs` (replay) |
+| `source.write` | `/traffic-sources`, `/traffic-sources/{id}/connection` (connect/disconnect + ad-spend sync) |
+| `content.write` | `/landings`, `/pwas`, `/postlandings`, `/pixels`, `/tags`, `/content-gallery` |
+| `settings.write` | `/domains` (its `renew`/`sync-dns` already used this key; plain CRUD and `verify` now do too) |
+
+`content.read`/`content.write` are new — migration `00035`. The six route
+groups they cover had no permission key that could name them, so there
+was nothing to gate them with even in principle. One key pair rather than
+six per-entity pairs: all six are campaign creative/tracking assets and
+every one lands on the identical tiering (Owner/Admin/Manager write,
+everyone reads), so six pairs would have been six identical grants.
+Splitting later is a cheap additive migration; collapsing six back into
+one is not.
+
+### Deliberately left open
+
+- **`/analytics`'s five POST endpoints** (`report`, `timeseries`,
+  `breakdown`, `funnel`, `dashboard`) are POST only because they carry a
+  JSON query body — they read ClickHouse and write nothing. They are not
+  gated on `analytics.read` either: all six roles hold it, so the check
+  would reject nobody and read as a control that isn't one.
+- **`POST /campaigns/{id}/routing/simulate`** resolves routing in memory
+  and persists nothing — a read-only role can still explain why a click
+  would route where it does (§72).
+- **`POST /referral/payouts`** stays open to every role by design (the
+  Referral phase's own decision); approving and marking-paid are gated on
+  `referral.write`.
+- **Pre-session and personal-account auth routes** (signup, login,
+  verify-email, accept-invite, logout, and the five `/auth/2fa/*` and
+  `/auth/login/totp` endpoints): there is no role to check yet, or the
+  action is the caller's own account.
+
+### Keeping it closed
+
+`apps/api/rbac_coverage_test.go` parses every handler's `Register`
+function with `go/ast` and fails on any `POST`/`PATCH`/`PUT`/`DELETE`
+that isn't wrapped in `r.With(h.requireWrite)`. The four bullets above
+are its `deliberatelyOpen` allowlist, each with a stated reason — adding
+a new mutating route without a gate fails the test run rather than
+waiting for the next audit. A unit test of `RequirePermission` itself
+could never have caught the original bug: the middleware always worked,
+it simply wasn't mounted.
+
+`TestPermissionGrantsMatchTheSeededPolicy` (`apps/internal/auth`) pins
+the whole 6-role × 18-permission matrix against real Postgres. These
+grants are load-bearing for the first time now, so a wrong one is an
+access-control bug rather than a cosmetic one.
+
+### Frontend
+
+`apps/web/src/lib/mock/team.ts` had drifted: it still listed only the
+original ten permission keys long after `custom_metric.*`,
+`report_preset.*` and `referral.*` were seeded, and
+`features/team/roles-permissions-panel.tsx` renders that copy to admins
+as the org's access policy. It now carries all eighteen and is marked as
+a manual sync point with the migrations.
+
+The action buttons themselves are **not** yet permission-gated in the UI
+(only `features/team/member-list.tsx` checks `team.write`), so a
+read-only role still sees a "Create" button and now gets a 403 from it.
+That is a UX gap, not a security one, and it is the natural follow-up to
+this change.
+
+
 ## Known limitations (explicitly out of scope for this phase)
 
-- **RBAC enforcement on pre-existing domain routes** (campaigns, offers,
-  sources, pixels, stream sets, cost, ...): none of them check permissions
-  yet — any authenticated member of an org can call any of their
-  endpoints regardless of role. Confirmed as a separate follow-up phase.
+- ~~**RBAC enforcement on pre-existing domain routes**~~ — closed
+  2026-09-06, see "RBAC route coverage" below.
 - **Invites still have no email delivery** — the link an inviter sends is
   still manual (Slack, copy-paste, whatever), a deliberate product choice
   now (see "Email verification" above), not an infrastructure gap.

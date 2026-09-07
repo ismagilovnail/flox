@@ -16,20 +16,25 @@ import (
 const dateLayout = "2006-01-02"
 
 type Handler struct {
-	svc    *Service
-	logger *slog.Logger
+	svc *Service
+	// requireWrite is the RBAC middleware every mutating route below is
+	// wrapped in (Register). Read routes carry no permission requirement
+	// beyond tenantMiddleware — same split custommetrics/reportpresets/
+	// referral already use.
+	requireWrite func(http.Handler) http.Handler
+	logger       *slog.Logger
 }
 
-func NewHandler(svc *Service, logger *slog.Logger) *Handler {
-	return &Handler{svc: svc, logger: logger}
+func NewHandler(svc *Service, requireWrite func(http.Handler) http.Handler, logger *slog.Logger) *Handler {
+	return &Handler{svc: svc, requireWrite: requireWrite, logger: logger}
 }
 
 // Register mounts every /postback-logs route onto r. The caller applies
 // tenant.Middleware first — same contract as every other handler.
 func (h *Handler) Register(r chi.Router) {
 	r.Get("/", h.list)
-	r.Post("/replay-outgoing", h.replayOutgoing)
-	r.Post("/replay-incoming", h.replayIncoming)
+	r.With(h.requireWrite).Post("/replay-outgoing", h.replayOutgoing)
+	r.With(h.requireWrite).Post("/replay-incoming", h.replayIncoming)
 }
 
 // list answers GET /postback-logs?from=&to=&limit=&offset= — org-wide,

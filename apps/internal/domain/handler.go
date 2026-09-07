@@ -30,11 +30,11 @@ func NewHandler(svc *Service, requireWrite func(http.Handler) http.Handler, logg
 // tenant.Middleware first — same contract as every other handler.
 func (h *Handler) Register(r chi.Router) {
 	r.Get("/", h.list)
-	r.Post("/", h.create)
+	r.With(h.requireWrite).Post("/", h.create)
 	r.Get("/{id}", h.get)
-	r.Patch("/{id}", h.update)
-	r.Delete("/{id}", h.delete)
-	r.Post("/{id}/verify", h.verify)
+	r.With(h.requireWrite).Patch("/{id}", h.update)
+	r.With(h.requireWrite).Delete("/{id}", h.delete)
+	r.With(h.requireWrite).Post("/{id}/verify", h.verify)
 	r.With(h.requireWrite).Post("/{id}/renew", h.renew)
 	r.With(h.requireWrite).Post("/{id}/sync-dns", h.syncDNS)
 }

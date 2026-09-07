@@ -233,10 +233,26 @@ func run() error {
 	// and safer than first looking up whose session it claims to be.
 	// tenantMiddleware keeps its original name/type (func(http.Handler)
 	// http.Handler) even though it's now two middlewares composed, so
-	// none of this file's 17 r.Use(tenantMiddleware) call sites change.
+	// none of this file's r.Use(tenantMiddleware) call sites change.
 	csrfCheck := tenant.RequireSameOrigin(cfg.AppURL, logger)
 	sessionCheck := tenant.NewMiddleware(authSvc, logger, cfg.Env != "development")
 	tenantMiddleware := func(next http.Handler) http.Handler { return csrfCheck(sessionCheck(next)) }
+
+	// §52 RBAC. Until the 2026-09-06 audit, RequirePermission gated only
+	// /team, /security and the four features whose own phases wired it
+	// (integrations, custom metrics, API keys, report presets, referral) —
+	// so the role -> permission policy migrations 00001/00020 seed was
+	// almost entirely unenforced: any member of any role, Viewer included,
+	// could create, edit and delete campaigns, offers, networks, traffic
+	// sources, domains and stream sets (i.e. rewrite live routing) through
+	// the API, with the frontend's hidden buttons the only thing in the
+	// way. These five cover every remaining mutating route; reads stay open
+	// to any member of the org, matching this codebase's existing split.
+	requireCampaignWrite := authSvc.RequirePermission("campaign.write", logger)
+	requireOfferWrite := authSvc.RequirePermission("offer.write", logger)
+	requireSourceWrite := authSvc.RequirePermission("source.write", logger)
+	requireContentWrite := authSvc.RequirePermission("content.write", logger)
+	requireSettingsWrite := authSvc.RequirePermission("settings.write", logger)
 
 	// signup/login/accept-invite are POST (mutating) but pre-session, so
 	// they can't go through tenantMiddleware (which requires a cookie
@@ -273,31 +289,31 @@ func run() error {
 
 	campaignRepo := campaign.NewRepository(db)
 	campaignSvc := campaign.NewService(campaignRepo)
-	campaignHandler := campaign.NewHandler(campaignSvc, logger)
+	campaignHandler := campaign.NewHandler(campaignSvc, requireCampaignWrite, logger)
 	srv.Mux().Route("/campaigns", func(r chi.Router) {
 		r.Use(tenantMiddleware)
 		campaignHandler.Register(r)
 	})
 
-	trafficSourceHandler := trafficsource.NewHandler(trafficsource.NewService(trafficsource.NewRepository(db)), logger)
+	trafficSourceHandler := trafficsource.NewHandler(trafficsource.NewService(trafficsource.NewRepository(db)), requireSourceWrite, logger)
 	srv.Mux().Route("/traffic-sources", func(r chi.Router) {
 		r.Use(tenantMiddleware)
 		trafficSourceHandler.Register(r)
 	})
 
-	trackingLinkHandler := trackinglink.NewHandler(trackinglink.NewService(trackinglink.NewRepository(db)), logger)
+	trackingLinkHandler := trackinglink.NewHandler(trackinglink.NewService(trackinglink.NewRepository(db)), requireCampaignWrite, logger)
 	srv.Mux().Route("/campaigns/{campaignId}/tracking-links", func(r chi.Router) {
 		r.Use(tenantMiddleware)
 		trackingLinkHandler.Register(r)
 	})
 
 	adAccountRepo := adaccount.NewRepository(db, adAccountKey)
-	adAccountHandler := adaccount.NewHandler(adaccount.NewService(adAccountRepo), logger)
+	adAccountHandler := adaccount.NewHandler(adaccount.NewService(adAccountRepo), requireSourceWrite, logger)
 
 	integrationsSvc := integrationsengine.NewService(integrationsengine.NewRepository(db), integrationKey, adAccountRepo)
 	integrationsHandler := integrationsengine.NewHandler(
 		integrationsSvc,
-		authSvc.RequirePermission("settings.write", logger),
+		requireSettingsWrite,
 		logger,
 	)
 	srv.Mux().Route("/integrations", func(r chi.Router) {
@@ -312,7 +328,7 @@ func run() error {
 	// same as before this phase.
 	domainHandler := domain.NewHandler(
 		domain.NewService(domain.NewRepository(db), integrationsSvc, domainnamecheap.New(), domaincloudflare.New(), cfg.TrackerDNSTarget),
-		authSvc.RequirePermission("settings.write", logger),
+		requireSettingsWrite,
 		logger,
 	)
 	srv.Mux().Route("/domains", func(r chi.Router) {
@@ -320,31 +336,31 @@ func run() error {
 		domainHandler.Register(r)
 	})
 
-	networkHandler := network.NewHandler(network.NewService(network.NewRepository(db)), logger)
+	networkHandler := network.NewHandler(network.NewService(network.NewRepository(db)), requireOfferWrite, logger)
 	srv.Mux().Route("/networks", func(r chi.Router) {
 		r.Use(tenantMiddleware)
 		networkHandler.Register(r)
 	})
 
-	landingHandler := landing.NewHandler(landing.NewService(landing.NewRepository(db)), logger)
+	landingHandler := landing.NewHandler(landing.NewService(landing.NewRepository(db)), requireContentWrite, logger)
 	srv.Mux().Route("/landings", func(r chi.Router) {
 		r.Use(tenantMiddleware)
 		landingHandler.Register(r)
 	})
 
-	pwaHandler := pwa.NewHandler(pwa.NewService(pwa.NewRepository(db)), logger)
+	pwaHandler := pwa.NewHandler(pwa.NewService(pwa.NewRepository(db)), requireContentWrite, logger)
 	srv.Mux().Route("/pwas", func(r chi.Router) {
 		r.Use(tenantMiddleware)
 		pwaHandler.Register(r)
 	})
 
-	contentGalleryHandler := contentgallery.NewHandler(contentgallery.NewService(contentgallery.NewRepository(db), storageClient), logger)
+	contentGalleryHandler := contentgallery.NewHandler(contentgallery.NewService(contentgallery.NewRepository(db), storageClient), requireContentWrite, logger)
 	srv.Mux().Route("/content-gallery", func(r chi.Router) {
 		r.Use(tenantMiddleware)
 		contentGalleryHandler.Register(r)
 	})
 
-	tagsHandler := tags.NewHandler(tags.NewService(tags.NewRepository(db)), logger)
+	tagsHandler := tags.NewHandler(tags.NewService(tags.NewRepository(db)), requireContentWrite, logger)
 	srv.Mux().Route("/tags", func(r chi.Router) {
 		r.Use(tenantMiddleware)
 		tagsHandler.Register(r)
@@ -362,7 +378,7 @@ func run() error {
 
 	apiKeyHandler := apikey.NewHandler(
 		apikey.NewService(apikey.NewRepository(db)),
-		authSvc.RequirePermission("settings.write", logger),
+		requireSettingsWrite,
 		logger,
 	)
 	srv.Mux().Route("/api-keys", func(r chi.Router) {
@@ -390,32 +406,32 @@ func run() error {
 		referralHandler.Register(r)
 	})
 
-	postlandingHandler := postlanding.NewHandler(postlanding.NewService(postlanding.NewRepository(db)), logger)
+	postlandingHandler := postlanding.NewHandler(postlanding.NewService(postlanding.NewRepository(db)), requireContentWrite, logger)
 	srv.Mux().Route("/postlandings", func(r chi.Router) {
 		r.Use(tenantMiddleware)
 		postlandingHandler.Register(r)
 	})
 
-	pixelHandler := pixel.NewHandler(pixel.NewService(pixel.NewRepository(db)), logger)
+	pixelHandler := pixel.NewHandler(pixel.NewService(pixel.NewRepository(db)), requireContentWrite, logger)
 	srv.Mux().Route("/pixels", func(r chi.Router) {
 		r.Use(tenantMiddleware)
 		pixelHandler.Register(r)
 	})
 
-	offerHandler := offer.NewHandler(offer.NewService(offer.NewRepository(db)), logger)
+	offerHandler := offer.NewHandler(offer.NewService(offer.NewRepository(db)), requireOfferWrite, logger)
 	srv.Mux().Route("/offers", func(r chi.Router) {
 		r.Use(tenantMiddleware)
 		offerHandler.Register(r)
 	})
 
-	eventMappingHandler := eventmapping.NewHandler(eventmapping.NewService(eventmapping.NewRepository(db)), logger)
+	eventMappingHandler := eventmapping.NewHandler(eventmapping.NewService(eventmapping.NewRepository(db)), requireOfferWrite, logger)
 	srv.Mux().Route("/event-mappings", func(r chi.Router) {
 		r.Use(tenantMiddleware)
 		eventMappingHandler.Register(r)
 	})
 
 	costSvc := cost.NewService(cost.NewRepository(db), conversion.NewPostgresFX(db))
-	costHandler := cost.NewHandler(costSvc, logger)
+	costHandler := cost.NewHandler(costSvc, requireCampaignWrite, logger)
 	srv.Mux().Route("/campaigns/{campaignId}/cost-entries", func(r chi.Router) {
 		r.Use(tenantMiddleware)
 		costHandler.Register(r)
@@ -436,14 +452,14 @@ func run() error {
 		FacebookAds: facebookads.New(),
 		TikTokAds:   tiktokads.New(),
 		GoogleAds:   googleads.New(),
-	}), logger)
+	}), requireSourceWrite, logger)
 	srv.Mux().Route("/traffic-sources/{id}/connection", func(r chi.Router) {
 		r.Use(tenantMiddleware)
 		adAccountHandler.Register(r)
 		costSyncHandler.Register(r)
 	})
 
-	streamSetHandler := streamset.NewHandler(streamset.NewService(streamset.NewRepository(db)), logger)
+	streamSetHandler := streamset.NewHandler(streamset.NewService(streamset.NewRepository(db)), requireCampaignWrite, logger)
 	srv.Mux().Route("/campaigns/{campaignId}/stream-sets", func(r chi.Router) {
 		r.Use(tenantMiddleware)
 		streamSetHandler.Register(r)
@@ -534,6 +550,7 @@ func run() error {
 				conversion.NewReplayNetworkLookup(conversion.NewPostgresNetworkLookup(db)),
 				conversion.NewReplayRecorder(convSvc),
 			),
+			requireOfferWrite,
 			logger,
 		)
 		srv.Mux().Route("/postback-logs", func(r chi.Router) {

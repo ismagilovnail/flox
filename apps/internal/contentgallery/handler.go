@@ -15,28 +15,33 @@ import (
 )
 
 type Handler struct {
-	svc    *Service
-	logger *slog.Logger
+	svc *Service
+	// requireWrite is the RBAC middleware every mutating route below is
+	// wrapped in (Register). Read routes carry no permission requirement
+	// beyond tenantMiddleware — same split custommetrics/reportpresets/
+	// referral already use.
+	requireWrite func(http.Handler) http.Handler
+	logger       *slog.Logger
 }
 
-func NewHandler(svc *Service, logger *slog.Logger) *Handler {
-	return &Handler{svc: svc, logger: logger}
+func NewHandler(svc *Service, requireWrite func(http.Handler) http.Handler, logger *slog.Logger) *Handler {
+	return &Handler{svc: svc, requireWrite: requireWrite, logger: logger}
 }
 
 // Register mounts every /content-gallery route onto r. The caller applies
 // tenant.Middleware first — same contract as every other handler.
 func (h *Handler) Register(r chi.Router) {
 	r.Get("/folders", h.listFolders)
-	r.Post("/folders", h.createFolder)
-	r.Patch("/folders/{id}", h.renameFolder)
-	r.Delete("/folders/{id}", h.deleteFolder)
+	r.With(h.requireWrite).Post("/folders", h.createFolder)
+	r.With(h.requireWrite).Patch("/folders/{id}", h.renameFolder)
+	r.With(h.requireWrite).Delete("/folders/{id}", h.deleteFolder)
 
 	r.Get("/files", h.listFiles)
-	r.Post("/files", h.uploadFile)
-	r.Post("/files/move", h.moveFiles)
-	r.Post("/files/archive", h.archiveFiles)
-	r.Post("/files/restore", h.restoreFiles)
-	r.Post("/files/delete", h.deleteFiles)
+	r.With(h.requireWrite).Post("/files", h.uploadFile)
+	r.With(h.requireWrite).Post("/files/move", h.moveFiles)
+	r.With(h.requireWrite).Post("/files/archive", h.archiveFiles)
+	r.With(h.requireWrite).Post("/files/restore", h.restoreFiles)
+	r.With(h.requireWrite).Post("/files/delete", h.deleteFiles)
 }
 
 func (h *Handler) listFolders(w http.ResponseWriter, r *http.Request) {

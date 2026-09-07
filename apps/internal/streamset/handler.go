@@ -12,12 +12,17 @@ import (
 )
 
 type Handler struct {
-	svc    *Service
-	logger *slog.Logger
+	svc *Service
+	// requireWrite is the RBAC middleware every mutating route below is
+	// wrapped in (Register). Read routes carry no permission requirement
+	// beyond tenantMiddleware — same split custommetrics/reportpresets/
+	// referral already use.
+	requireWrite func(http.Handler) http.Handler
+	logger       *slog.Logger
 }
 
-func NewHandler(svc *Service, logger *slog.Logger) *Handler {
-	return &Handler{svc: svc, logger: logger}
+func NewHandler(svc *Service, requireWrite func(http.Handler) http.Handler, logger *slog.Logger) *Handler {
+	return &Handler{svc: svc, requireWrite: requireWrite, logger: logger}
 }
 
 // Register mounts every /campaigns/{campaignId}/stream-sets route onto
@@ -25,12 +30,12 @@ func NewHandler(svc *Service, logger *slog.Logger) *Handler {
 // other handler.
 func (h *Handler) Register(r chi.Router) {
 	r.Get("/", h.list)
-	r.Post("/", h.create)
-	r.Post("/reorder", h.reorder)
+	r.With(h.requireWrite).Post("/", h.create)
+	r.With(h.requireWrite).Post("/reorder", h.reorder)
 	r.Get("/{id}", h.get)
-	r.Patch("/{id}", h.update)
-	r.Delete("/{id}", h.delete)
-	r.Post("/{id}/duplicate", h.duplicate)
+	r.With(h.requireWrite).Patch("/{id}", h.update)
+	r.With(h.requireWrite).Delete("/{id}", h.delete)
+	r.With(h.requireWrite).Post("/{id}/duplicate", h.duplicate)
 }
 
 func campaignID(r *http.Request) string { return chi.URLParam(r, "campaignId") }

@@ -12,12 +12,17 @@ import (
 )
 
 type Handler struct {
-	svc    *Service
-	logger *slog.Logger
+	svc *Service
+	// requireWrite is the RBAC middleware every mutating route below is
+	// wrapped in (Register). Read routes carry no permission requirement
+	// beyond tenantMiddleware — same split custommetrics/reportpresets/
+	// referral already use.
+	requireWrite func(http.Handler) http.Handler
+	logger       *slog.Logger
 }
 
-func NewHandler(svc *Service, logger *slog.Logger) *Handler {
-	return &Handler{svc: svc, logger: logger}
+func NewHandler(svc *Service, requireWrite func(http.Handler) http.Handler, logger *slog.Logger) *Handler {
+	return &Handler{svc: svc, requireWrite: requireWrite, logger: logger}
 }
 
 // Register mounts every /traffic-sources/{id}/connection route onto r.
@@ -29,8 +34,8 @@ func NewHandler(svc *Service, logger *slog.Logger) *Handler {
 // Flows replacement), DELETE disconnects.
 func (h *Handler) Register(r chi.Router) {
 	r.Get("/", h.get)
-	r.Patch("/", h.connect)
-	r.Delete("/", h.disconnect)
+	r.With(h.requireWrite).Patch("/", h.connect)
+	r.With(h.requireWrite).Delete("/", h.disconnect)
 }
 
 func trafficSourceID(r *http.Request) string { return chi.URLParam(r, "id") }
