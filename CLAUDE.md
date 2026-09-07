@@ -19,58 +19,58 @@ referenced below as §N).
 ## CURRENT STATE — UPDATE THIS EVERY PHASE
 
 ```
-CURRENT PHASE : BUMP GO TO 1.26.6 FOR STDLIB CVES
-                (security audit finding #6, user-scoped, follows the
-                finding-#4 API-keys-UI phase; user asked for this one
-                directly, no scoping questions needed — it's the cheap,
-                low-risk fix the audit's own NEXT note already called it)
-STATUS        : done. apps/go.mod's go directive bumped 1.26.5 -> 1.26.6;
-                GOTOOLCHAIN=auto (already the module's default, network
-                access confirmed working) downloaded the new toolchain on
-                the next build with no other config change. Checked
-                apps/{api,worker,tracker}/Dockerfile: all three already
-                build on golang:1.27-alpine, ahead of both versions, so
-                they were never affected and needed no edit. No other
-                go.mod/CI/Dockerfile referenced 1.26.5 anywhere in the
-                tree (grepped, not assumed).
-                VERIFIED: go build/vet clean under the new toolchain; go
-                test -count=1 ./... clean across all 41 packages against
-                live Postgres/ClickHouse/Redis/MinIO. govulncheck ./...
-                now reports 0 vulnerabilities reachable by this code
-                (was 7 stdlib ones under 1.26.5) — 3 unrelated, pre-
-                existing golang.org/x/crypto/{ssh,openpgp} advisories
-                remain in transitively-required deps this code never
-                calls (GO-2026-6355, GO-2026-6354, GO-2026-5932); NOT
-                fixed here — out of scope for a Go-version bump, noted
-                for whoever picks up dependency hygiene next. No apps/web
-                changes this phase, so tsc/eslint/vitest weren't re-run.
+CURRENT PHASE : MOVE SHADCN'S CLI TO DEVDEPENDENCIES
+                (security audit finding #7, user-scoped, follows the
+                finding-#6 Go-bump phase; user asked for this one
+                directly, no scoping questions needed — cheap, low-risk,
+                already called out as such in the prior phase's NEXT)
+STATUS        : done. apps/web/package.json: shadcn moved from
+                dependencies to devDependencies (nothing at runtime
+                imports it — it's a CLI invoked manually via `npx shadcn
+                add ...` when scaffolding a new UI component).
+                package-lock.json regenerated (npm install) so its
+                transitive-only packages get re-flagged dev. VERIFIED
+                WITH A REAL INSTALL, not just the lockfile diff: npm ci
+                --omit=dev in an isolated /tmp copy installed 147
+                packages (was 790 including dev deps) and shadcn,
+                express, qs, and @modelcontextprotocol/sdk — the exact
+                packages the audit named — are absent from node_modules
+                entirely. npx shadcn from a real checkout is unaffected
+                (npx resolves devDependencies same as dependencies).
+                VERIFIED: tsc --noEmit / eslint / vitest (21/21) / next
+                build all clean. No Go changes this phase, so go
+                build/vet/test weren't re-run.
 LAST COMMIT   : (this phase's own work is uncommitted, see below). Before
-                it: e757aaa fix(settings): stop claiming API keys
+                it: d75198d chore(deps): bump Go to 1.26.6 (audit finding
+                #6); e757aaa fix(settings): stop claiming API keys
                 authenticate calls (audit finding #4); 2058b1b
                 fix(security): trusted-proxy IP resolution & pending-
                 login lockout (audit findings #2, #3); 1e45953
                 fix(auth): enforce RBAC on every mutating route (audit
                 finding #1) — full detail for all in CHANGELOG.md.
 UNCOMMITTED   : this phase's own work, about to be committed as one
-                logical commit — apps/go.mod's go directive; CHANGELOG.md;
-                this CLAUDE.md edit. Deliberately left out, unrelated and
-                predating this phase: ROADMAP.md, apps/e2e/scenario_test.go,
+                logical commit — apps/web/package.json,
+                apps/web/package-lock.json; CHANGELOG.md; this CLAUDE.md
+                edit. Deliberately left out, unrelated and predating this
+                phase: ROADMAP.md, apps/e2e/scenario_test.go,
                 apps/web/src/lib/api/networks.ts and offers.ts remain
                 unstaged from the older repo+plan-audit pass; whoever
                 picks those up next should check they're still wanted.
-NEXT          : confirm scope before starting. Open from the audit: (5)
-                rate limiter fails open on Redis error is a deliberate,
-                documented stance (docs/security.md), not a bug needing a
-                fix; (7) moving shadcn's CLI to devDependencies is a
-                similarly small, low-risk fix. Also open: permission-
-                gating the frontend action buttons (finding-#1 phase),
-                setting TRUSTED_PROXIES to a real value once an actual
-                reverse proxy/LB/CDN is deployed (finding-#2 phase),
-                scoping real API-key authentication as its own phase
-                whenever it's wanted (finding-#4, deferred), and the 3
-                golang.org/x/crypto advisories surfaced this phase
-                (unrelated to any numbered audit finding, dependency
-                hygiene rather than a live vulnerability today).
+NEXT          : confirm scope before starting. All 7 numbered audit
+                findings are now resolved or explicitly deferred by user
+                decision: (1) RBAC, (2) trusted-proxy IP, (3) pending-
+                login lockout, (4) API-keys-UI honesty (real auth
+                deferred), (5) rate-limiter fail-open is a deliberate,
+                documented stance rather than a bug, (6) Go 1.26.6, (7)
+                this phase. Open follow-ups, none of them numbered
+                findings: permission-gating the frontend action buttons
+                (finding-#1 phase); setting TRUSTED_PROXIES to a real
+                value once an actual reverse proxy/LB/CDN is deployed
+                (finding-#2 phase); scoping real API-key authentication
+                as its own phase whenever it's wanted (finding-#4,
+                deferred); the 3 golang.org/x/crypto advisories surfaced
+                in finding-#6's govulncheck run (dependency hygiene, not
+                a live vulnerability today).
 ```
 
 > At the end of every phase: update the four lines above, add a CHANGELOG entry,

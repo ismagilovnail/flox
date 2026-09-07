@@ -5,6 +5,25 @@ per-phase, matching `CLAUDE.md`'s phase protocol. The one exception is
 [Between phases], below: spec amendments and the code changes that follow from
 them land between phases and would otherwise be invisible here.
 
+## [Security] — move shadcn's CLI to devDependencies (audit finding #7)
+
+The audit found `shadcn` (the component-scaffolding CLI, invoked
+manually via `npx shadcn add ...` when adding a new UI component) listed
+in `apps/web/package.json`'s `dependencies`, pulling `express`, `qs`, and
+`@modelcontextprotocol/sdk` into the production install tree for a tool
+Next.js's runtime never imports.
+
+Moved `shadcn` to `devDependencies` and regenerated `package-lock.json`
+(`npm install`) so its transitive-only packages are correctly re-flagged
+`dev`. Confirmed with a real `npm ci --omit=dev` in an isolated
+directory: 147 packages installed (was 790 with dev deps included), and
+`shadcn`, `express`, `qs`, and `@modelcontextprotocol/sdk` are absent
+from `node_modules` entirely. `npx shadcn` from a project checkout is
+unaffected — `npx` resolves devDependencies the same as dependencies.
+
+Verified: `tsc --noEmit`, `eslint`, `vitest` (21/21), and `next build`
+all clean.
+
 ## [Security] — bump Go to 1.26.6 (audit finding #6)
 
 The audit's `govulncheck` pass found the pinned toolchain, Go 1.26.5,
