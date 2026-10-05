@@ -193,7 +193,7 @@ func newHarness() (*conversion.Service, *fakeMapper, *fakeStore, *fakeEvents, *f
 	deliveries := &fakeDeliveries{}
 	attr := &fakeAttribution{
 		outcome: attribution.OutcomeAttributed,
-		click:   attribution.Click{ClickID: "click-1", OrganizationID: orgA, OccurredAt: time.Date(2026, 8, 20, 10, 0, 0, 0, time.UTC)},
+		click:   attribution.Click{ClickID: "click-1", OrganizationID: orgA, FlowID: "flow-1", LandingID: "landing-1", OccurredAt: time.Date(2026, 8, 20, 10, 0, 0, 0, time.UTC)},
 	}
 	svc := conversion.NewService(mapper, store, &fakeFX{rates: map[string]float64{"EUR": 1.1}}, attr, events, deliveries, &fakeAttempts{})
 	return svc, mapper, store, events, deliveries
@@ -257,6 +257,11 @@ func TestFirstConversionIsRecordedAndEmitted(t *testing.T) {
 	}
 	if got := events.last().Type; got != event.CpaAccept {
 		t.Fatalf("emitted event type = %q, want CPA_ACCEPT", got)
+	}
+	// The click's routing context rides onto the conversion, so revenue
+	// can be reported by flow and by landing (chstore.DimLanding).
+	if ev := events.last(); ev.FlowID != "flow-1" || ev.LandingID != "landing-1" {
+		t.Fatalf("conversion lost its click's flow/landing: flow=%q landing=%q", ev.FlowID, ev.LandingID)
 	}
 }
 

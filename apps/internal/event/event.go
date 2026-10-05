@@ -135,6 +135,11 @@ type Event struct {
 	Destination   string `json:"destination,omitempty"`
 	StickyApplied bool   `json:"stickyApplied,omitempty"`
 	ConfigVersion int64  `json:"configVersion,omitempty"`
+	// LandingID is the landing the visitor was shown on this journey —
+	// set on SOURCE_CLICK/LAND_VIEW/LAND_CLICK by apps/tracker and
+	// inherited by conversions via attribution. Empty when no landing
+	// stage applied.
+	LandingID string `json:"landingId,omitempty"`
 
 	// Classified request attributes.
 	Country        string `json:"country,omitempty"`

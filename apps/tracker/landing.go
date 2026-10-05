@@ -172,6 +172,7 @@ func landClickEvent(c landinglink.Claims, attrs routing.Attributes, ip net.IP, r
 		FlowID:        c.FlowID,
 		Destination:   c.Destination,
 		ConfigVersion: c.ConfigVersion,
+		LandingID:     c.LandingID,
 
 		Country:        attrs[routing.FieldCountry],
 		Region:         attrs[routing.FieldRegion],

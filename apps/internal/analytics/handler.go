@@ -427,7 +427,7 @@ type dimensionValuesRequest struct {
 
 // dimensionValues answers POST /analytics/dimension-values — the report
 // builder's filter-value dropdown's own endpoint (docs/analytics-report-
-// api.md). A dimension outside chstore.ValidDimension's 12 (the 5 still-
+// api.md). A dimension outside chstore.ValidDimension's 13 (the 4 still-
 // unbacked ones) surfaces as the same apierror.Validation every other
 // endpoint here already gives for an unsupported dimension; the frontend
 // falls back to its own mock pool for those rather than treating this

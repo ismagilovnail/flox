@@ -448,7 +448,7 @@ func TestDimensionValuesPassesThroughAndCaps(t *testing.T) {
 
 // TestDimensionValuesRejectsUnbackedDimension mirrors
 // TestReportRejectsUnknownDimension — the frontend's own fallback to its
-// mock pool for the 5 still-unbacked dimensions depends on this coming
+// mock pool for the 4 still-unbacked dimensions depends on this coming
 // back as a real validation error, not a silent empty list or a panic.
 func TestDimensionValuesRejectsUnbackedDimension(t *testing.T) {
 	svc := analytics.NewService(&reportFakeRepo{}, nil)

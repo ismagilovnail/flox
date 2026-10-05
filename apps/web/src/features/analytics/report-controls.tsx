@@ -29,6 +29,7 @@ import { DIMENSIONS, METRICS, TIMEZONES, dimensionLabel as dimensionLabelFor, me
 import type { FilterCondition } from "@/features/analytics/aggregate";
 import { dimensionValues } from "@/lib/mock/analytics";
 import { useDimensionValues } from "@/hooks/use-analytics-report";
+import { useDimensionValueLabel } from "@/features/analytics/use-dimension-value-label";
 
 export type ReportControlsState = {
   dateRange?: DateRange;
@@ -60,9 +61,10 @@ function AddFilterPopover({
   // pattern React's own rules warn against for this exact "reset a
   // selection when its source list changes" shape.
   const [manualValue, setManualValue] = React.useState<string | undefined>(undefined);
+  const valueLabel = useDimensionValueLabel();
 
-  // Real values (12 backed dimensions) once loaded; the mock pool covers
-  // both the loading flash and the 5 still-unbacked dimensions, whose
+  // Real values (13 backed dimensions) once loaded; the mock pool covers
+  // both the loading flash and the 4 still-unbacked dimensions, whose
   // query always rejects (retry: false) — see useDimensionValues' own
   // doc comment. A successful response wins even when empty (a
   // brand-new org with zero real events yet): trusting it completely
@@ -112,7 +114,7 @@ function AddFilterPopover({
               <SelectContent>
                 {values.map((v) => (
                   <SelectItem key={v} value={v}>
-                    {v}
+                    {valueLabel(dimension, v)}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -142,6 +144,7 @@ export function ReportControls({
   onChange: (patch: Partial<ReportControlsState>) => void;
 }) {
   const { t } = useTranslation(["analytics", "streamSets"]);
+  const valueLabel = useDimensionValueLabel();
   const sortOptions = [
     ...state.dimensions.map((d) => ({ value: d, label: dimensionLabelFor(t, d) })),
     ...state.metrics.map((m) => ({
@@ -282,7 +285,7 @@ export function ReportControls({
                 key={`${f.dimension}-${f.value}-${i}`}
                 field={dimensionLabelFor(t, f.dimension)}
                 operator={t("filters.operators.is", { ns: "streamSets" })}
-                value={f.value}
+                value={valueLabel(f.dimension, f.value)}
                 onRemove={() =>
                   onChange({ filters: state.filters.filter((_, idx) => idx !== i) })
                 }

@@ -3,7 +3,7 @@
 import * as React from "react";
 import Link from "next/link";
 import { toast } from "sonner";
-import { CodeIcon, CopyIcon, PauseIcon, PencilIcon, PlayIcon, Trash2Icon } from "lucide-react";
+import { BarChart3Icon, CodeIcon, CopyIcon, PauseIcon, PencilIcon, PlayIcon, Trash2Icon } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 import { IconButton } from "@/components/ui/icon-button";
@@ -21,6 +21,7 @@ import { useActivateLanding, useArchiveLanding, useDuplicateLanding, usePauseLan
 import { usePermission } from "@/hooks/use-auth";
 import type { Landing } from "@/lib/api/landings";
 import { LandingTemplateEditor } from "@/features/landings/landing-template-editor";
+import { viewStatisticsHref } from "@/features/analytics/view-statistics-link";
 
 export function LandingRowActions({ landing }: { landing: Landing }) {
   const { t } = useTranslation(["landings", "common"]);
@@ -72,6 +73,19 @@ export function LandingRowActions({ landing }: { landing: Landing }) {
             </IconButton>
           </TooltipTrigger>
           <TooltipContent>{t("rowActions.edit")}</TooltipContent>
+        </Tooltip>
+
+        {/* landing.id, not .name: the `landing` report dimension groups
+            by landing_id. */}
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <IconButton aria-label={t("rowActions.viewStatistics")} size="icon-sm" asChild>
+              <Link href={viewStatisticsHref("landing", landing.id)}>
+                <BarChart3Icon className="size-3.5" />
+              </Link>
+            </IconButton>
+          </TooltipTrigger>
+          <TooltipContent>{t("rowActions.viewStatistics")}</TooltipContent>
         </Tooltip>
 
         {canWrite && landing.type === "internal" && (

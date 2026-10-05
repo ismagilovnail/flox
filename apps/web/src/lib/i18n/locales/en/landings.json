@@ -68,7 +68,8 @@
     "archive": "Archive",
     "archiveConfirmTitle": "Archive \"{{name}}\"?",
     "archiveConfirmDescription": "Archived landings are hidden from flow pickers going forward. Existing flows that already reference this landing keep working. This can be reversed later.",
-    "editTemplate": "Edit template"
+    "editTemplate": "Edit template",
+    "viewStatistics": "View statistics"
   },
   "toast": {
     "updated": "Landing updated",

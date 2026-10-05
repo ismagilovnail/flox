@@ -369,7 +369,7 @@ func (s *scenario) createLanding() {
 	s.post("/landings", map[string]any{
 		"name":    "E2E Landing",
 		"type":    "external",
-		"url":     "https://landing.example.test",
+		"url":     landingURL,
 		"content": "",
 	}, &resp, http.StatusCreated)
 	if resp.ID == "" {
@@ -478,6 +478,10 @@ func (s *scenario) createStreamSetWithFlowAndFilter() {
 // the 302, it only inspects the Location header.
 const destinationURL = "https://converted.example.test/dest"
 
+// landingURL is the scenario's external landing — where the click is sent
+// first, since the flow's landing stage is enabled.
+const landingURL = "https://landing.example.test"
+
 func (s *scenario) enterCost() {
 	s.t.Helper()
 	var resp struct {
@@ -554,8 +558,11 @@ func (s *scenario) registerEventMappings() {
 
 // clickAndRoute hits the tracker's real hot path (GET /t/{slug}, §41) and
 // verifies it actually routed through the configured flow rather than
-// falling back — the Location header alone proves this, since the flow's
-// destination URL is unique to this scenario's fixtures.
+// falling back. The flow's landing stage is enabled with this scenario's
+// external landing, so the visitor is sent there first (§25's funnel:
+// Landing -> ... -> Destination; apps/tracker serves landing stages since
+// the ZIP-landings phase B) — the Location header alone proves the flow
+// matched, since the landing URL is unique to this scenario's fixtures.
 func (s *scenario) clickAndRoute() {
 	s.t.Helper()
 
@@ -588,8 +595,8 @@ func (s *scenario) clickAndRoute() {
 		s.t.Fatalf("click: want 302, got %d: %s", resp.StatusCode, string(body))
 	}
 	loc := resp.Header.Get("Location")
-	if loc != destinationURL {
-		s.t.Fatalf("click: routed to %q, want the configured flow's destination %q — did the bot=0 filter or the flow fail to match?", loc, destinationURL)
+	if loc != landingURL {
+		s.t.Fatalf("click: routed to %q, want the configured flow's landing %q — did the bot=0 filter or the flow fail to match?", loc, landingURL)
 	}
 	s.t.Logf("click routed correctly to %s", loc)
 }
@@ -611,21 +618,25 @@ func (s *scenario) recordEvent() {
 	s.t.Helper()
 	ctx := context.Background()
 
-	var clickID, streamSetID, flowID string
+	var clickID, streamSetID, flowID, landingID string
 	ok := pollUntil(s.t, pollBudget, 500*time.Millisecond, func() bool {
 		row := s.ch.QueryRow(ctx,
-			`SELECT click_id, stream_set_id, flow_id FROM click_events
+			`SELECT click_id, stream_set_id, flow_id, landing_id FROM click_events
 			  WHERE organization_id = ? AND type = 'SOURCE_CLICK'
 			  ORDER BY event_at DESC LIMIT 1`,
 			s.orgID,
 		)
-		return row.Scan(&clickID, &streamSetID, &flowID) == nil && clickID != ""
+		return row.Scan(&clickID, &streamSetID, &flowID, &landingID) == nil && clickID != ""
 	})
 	if !ok {
 		s.t.Fatalf("record event: click never appeared in ClickHouse click_events after worker flush (waited %s)", pollBudget)
 	}
 	if streamSetID != s.streamSetID || flowID != s.flowID {
 		s.t.Fatalf("record event: click routed through stream set %q / flow %q, want %q / %q", streamSetID, flowID, s.streamSetID, s.flowID)
+	}
+	// The `landing` report dimension's column (chstore schema/008).
+	if landingID != s.landingID {
+		s.t.Fatalf("record event: click carries landing_id %q, want %q", landingID, s.landingID)
 	}
 	s.clickID = clickID
 	s.t.Logf("confirmed click %s durably flushed to ClickHouse (stream set %s, flow %s)", s.clickID, streamSetID, flowID)

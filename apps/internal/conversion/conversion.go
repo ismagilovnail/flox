@@ -512,6 +512,7 @@ func buildEvent(p Postback, attr attribution.Attribution, status event.Type, eve
 		ev.CampaignID = click.CampaignID
 		ev.StreamSetID = click.StreamSetID
 		ev.FlowID = click.FlowID
+		ev.LandingID = click.LandingID
 		ev.Country = click.Country
 		ev.Region = click.Region
 		ev.City = click.City

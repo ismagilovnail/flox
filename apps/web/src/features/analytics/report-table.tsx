@@ -7,6 +7,7 @@ import { METRICS, dimensionLabel, metricLabel, formatMetric, type DimensionKey, 
 import type { ReportRow } from "@/features/analytics/aggregate";
 import { evaluateFormula } from "@/lib/formula-engine";
 import type { CustomMetric } from "@/lib/custom-metrics";
+import { useDimensionValueLabel } from "@/features/analytics/use-dimension-value-label";
 
 export function ReportTable({
   rows,
@@ -22,6 +23,7 @@ export function ReportTable({
   customMetrics?: CustomMetric[];
 }) {
   const { t } = useTranslation("analytics");
+  const valueLabel = useDimensionValueLabel();
 
   const columns: ColumnDef<typeof dataTableFeatures, ReportRow>[] = [
     ...(dimensions.length === 0
@@ -36,7 +38,9 @@ export function ReportTable({
           (d): ColumnDef<typeof dataTableFeatures, ReportRow> => ({
             id: d,
             header: dimensionLabel(t, d),
-            accessorFn: (row) => row.dims[d] ?? "",
+            // The label, not the raw id: what the cell shows is also what
+            // the table's search matches and its CSV export writes.
+            accessorFn: (row) => valueLabel(d, row.dims[d] ?? ""),
           }),
         )),
     ...metrics.map((m): ColumnDef<typeof dataTableFeatures, ReportRow> => {

@@ -51,25 +51,45 @@ an operator who wants it can still type `""` into the existing free-text
 value field.
 
 Gated by the same `chstore.ValidDimension` whitelist every other
-endpoint here already uses — a request for one of the 5 still-unbacked
-dimensions (`landing`/`pwa`/`postlanding`/`offer`/`network`) 400s, same
+endpoint here already uses — a request for one of the 4 still-unbacked
+dimensions (`pwa`/`postlanding`/`offer`/`network`) 400s, same
 as `/analytics/report` already does for one. The frontend's
 `useDimensionValues` hook (`retry: false` — a 400 here is deterministic,
 not transient) treats that rejection as expected, not an error to
 surface: `AddFilterPopover` (`report-controls.tsx`) falls back to
-`lib/mock/analytics.ts`'s pool for those 5, and also as the query's own
-brief loading-state placeholder for the 12 real ones. A *successful*
+`lib/mock/analytics.ts`'s pool for those 4, and also as the query's own
+brief loading-state placeholder for the 13 real ones. A *successful*
 response wins outright the moment it lands, even when empty (a brand-new
 organization with no real events yet) — CLAUDE.md #6's "no fabricated
 data" bar applies here the same way it does to cost: a genuine "nothing
 yet" must render as nothing, never as a plausible-looking placeholder
 value that isn't real.
 
-## Dimension whitelist: 12 backed (11 of the original 16, plus stream_set)
+## Dimension whitelist: 13 backed (12 of the original 16, plus stream_set)
 
-`chstore.ReportDimension` (12): campaign, source (proxy for campaign — see
+`chstore.ReportDimension` (13): campaign, source (proxy for campaign — see
 its own doc comment), country, region, city, device, platform, os,
-browser, language, flow, stream_set.
+browser, language, flow, stream_set, landing.
+
+`landing` (`DimLanding`, backed by `landing_id`) is the first of the
+original five unbacked dimensions to get a real column:
+`chstore/schema/008_landing_id.sql` adds `landing_id` to `click_events`,
+`tracking_events` and `conversion_events` (metadata-only `ADD COLUMN IF
+NOT EXISTS`, appended last — `EventStore`'s positional `batch.Append`
+writes it last too, and any other raw positional insert must as well).
+Populated since `apps/tracker` serves landings (`docs/landings.md`):
+SOURCE_CLICK and LAND_VIEW carry the landing actually shown, LAND_CLICK
+carries it from its signed click link, and conversions inherit it from
+their click through attribution (`attribution.Click.LandingID`,
+`chstore.ClickResolver`) exactly like `stream_set_id`/`flow_id` — so
+every metric, revenue included, works by landing. Empty is a real
+bucket: traffic whose flow had no landing stage, a skipped one (paused
+landing, no signing key), and every row from before landings were
+served. In the UI (`features/analytics/use-dimension-value-label.ts`)
+landing ids display as the landing's current name everywhere a value is
+shown — table (and therefore its search/CSV), bar chart, filter dropdown,
+filter chip — and `""` as "No landing"; the query and URL keep the id.
+The landings list's "View statistics" action deep-links here by id.
 
 `stream_set` (`DimStreamSet`, backed by `stream_set_id`) is a later
 addition, not one of the original 16 the report builder's dimension
@@ -90,8 +110,8 @@ The filter chip it produces shows that raw id, since `FilterCondition`
 (`features/analytics/aggregate.ts`) has no separate display-label field;
 adding one is out of scope for a query-layer/UI change.
 
-`features/analytics/registry.ts`'s `DimensionKey` still lists 5 more from
-the original 16 — landing, pwa, postlanding, offer, network — with no
+`features/analytics/registry.ts`'s `DimensionKey` still lists 4 more from
+the original 16 — pwa, postlanding, offer, network — with no
 backing column anywhere in the event pipeline (not on `event.Event`, not
 in this schema). Adding them means threading new IDs through
 `apps/tracker`'s event emission and a schema migration first: a separate,
@@ -157,7 +177,7 @@ not a sentinel value.
   popover's value dropdown — no "distinct values seen for dimension X"
   endpoint exists~~ — closed, see `dimension-values` above.
   `lib/mock/analytics.ts` still backs the loading-state placeholder and
-  the 5 still-unbacked dimensions. Filtering by an arbitrary value still
+  the 4 still-unbacked dimensions. Filtering by an arbitrary value still
   round-trips to the real API correctly regardless of its source; a
   value that never occurs in real event data just yields a legitimate
   empty report, not an error.

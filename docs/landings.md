@@ -165,8 +165,10 @@ also reads `S3_ENDPOINT`/`S3_PUBLIC_ENDPOINT`/`S3_BUCKET` to build asset
 URLs — no storage credentials, it never touches objects.
 
 Still not done: the landing's `asPwa` flag, the PWA/postlanding stages,
-the push/PWA variants of `engine_onClickButton`, and a `landing` report
-dimension (`tracking_events` has no `landing_id` column — ROADMAP gap).
+and the push/PWA variants of `engine_onClickButton`. (The `landing`
+report dimension followed in its own change — every event the tracker
+emits for a shown landing carries `landing_id`; see
+`docs/analytics-report-api.md`.)
 The flow editor still only offers a "preview" link for external landings
 (an internal one's `url` is an asset base, not a page).
 

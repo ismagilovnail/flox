@@ -209,9 +209,9 @@ type DimensionValuesInput struct {
 // taken" — backs the report builder's filter-value dropdown
 // (apps/web/src/features/analytics/report-controls.tsx), replacing the
 // fixed mock pool that used to be the only source. Rejects a dimension
-// outside chstore.ValidDimension's 12 with the same validation error
+// outside chstore.ValidDimension's 13 with the same validation error
 // Report/Breakdown/Timeseries already give for one — the frontend falls
-// back to its own mock pool for the 5 still-unbacked dimensions rather
+// back to its own mock pool for the 4 still-unbacked dimensions rather
 // than treating this as a hard failure (see lib/mock/analytics.ts).
 func (s *Service) DimensionValues(ctx context.Context, organizationID string, in DimensionValuesInput) ([]string, error) {
 	if organizationID == "" {

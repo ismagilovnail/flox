@@ -17,6 +17,7 @@ import { chartBaseOption, chartBarOption, CHART_COLORS, type ChartMode } from "@
 import type { ReportRow } from "@/features/analytics/aggregate";
 import type { TimeseriesPoint } from "@/lib/api/analytics";
 import { METRICS, metricLabel, formatMetric, type DimensionKey, type MetricKey } from "@/features/analytics/registry";
+import { useDimensionValueLabel } from "@/features/analytics/use-dimension-value-label";
 
 function MetricPicker({
   metrics,
@@ -118,15 +119,16 @@ export function ReportBarChart({
   const { resolvedTheme } = useTheme();
   const mode: ChartMode = resolvedTheme === "light" ? "light" : "dark";
   const [metric, setMetric] = React.useState<MetricKey>(metrics[0] ?? "clicks");
+  const valueLabel = useDimensionValueLabel();
   const activeMetric = metrics.includes(metric) ? metric : metrics[0];
 
   const bars = React.useMemo(
     () =>
       rows
-        .map((r) => ({ name: r.dims[dimension] ?? "", value: r.metrics[activeMetric] }))
+        .map((r) => ({ name: valueLabel(dimension, r.dims[dimension] ?? ""), value: r.metrics[activeMetric] }))
         .sort((a, b) => (b.value ?? -Infinity) - (a.value ?? -Infinity))
         .slice(0, 8),
-    [rows, dimension, activeMetric],
+    [rows, dimension, activeMetric, valueLabel],
   );
   const meta = METRICS.find((m) => m.key === activeMetric)!;
 

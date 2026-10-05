@@ -5,6 +5,33 @@ per-phase, matching `CLAUDE.md`'s phase protocol. The one exception is
 [Between phases], below: spec amendments and the code changes that follow from
 them land between phases and would otherwise be invisible here.
 
+## [Between phases] — `landing` report dimension
+
+The first of the report builder's five unbacked dimensions gets a real
+column. Detail: `docs/analytics-report-api.md`, "Dimension whitelist".
+
+- ClickHouse `schema/008_landing_id.sql`: `landing_id` on `click_events`,
+  `tracking_events`, `conversion_events` (metadata-only ADD COLUMN,
+  appended last to match `EventStore`'s positional inserts).
+- `event.Event.LandingID`: set by `apps/tracker` on SOURCE_CLICK/LAND_VIEW
+  (the landing actually shown — internal or external; empty when skipped)
+  and LAND_CLICK (from the signed link); copied onto conversions via
+  `attribution.Click.LandingID`. Revenue/CVR/everything works by landing.
+- `chstore.DimLanding` in both report whitelists (13 backed dimensions;
+  4 left: pwa/postlanding/offer/network). Report presets accept it too.
+- Frontend: `useDimensionValueLabel` shows landing names instead of ULIDs
+  in the report table (incl. search/CSV), bar chart, filter dropdown and
+  chip, `""` as "No landing"; landings list gets a "View statistics"
+  action.
+- Running `go test ./...` with ClickHouse configured (phase B's run
+  hadn't) surfaced two stale tests, both fixed: the e2e full-funnel
+  scenario still expected a click on a flow with an enabled external
+  landing to skip it (since phase B it goes to the landing first, per
+  §25 — the test now asserts that, plus the click's `landing_id`), and a
+  report-preset test used `landing` as its "unbacked dimension" example
+  (now `offer`). `click_log_test`'s raw positional insert got the new
+  column.
+
 ## [Between phases] — Tracker serves landings to visitors (ZIP landings phase B of 2)
 
 Closed the loop phase A left open: a flow's landing stage now actually

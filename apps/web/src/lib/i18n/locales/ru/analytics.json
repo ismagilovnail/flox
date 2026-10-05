@@ -103,5 +103,8 @@
     "CPA_HOLD": "CPA Холд",
     "CPA_ACCEPT": "CPA Принято",
     "CPA_REDEP": "CPA Редеп"
+  },
+  "values": {
+    "noLanding": "Без лендинга"
   }
 }

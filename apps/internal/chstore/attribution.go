@@ -42,7 +42,8 @@ const clickColumns = `
 	click_id, campaign_id, stream_set_id, flow_id, external_click_id, event_at,
 	country, region, city, device, platform, os,
 	utm_source, utm_medium, utm_campaign, utm_content, utm_term,
-	sub1, sub2, sub3, sub4, sub5, sub6, sub7, sub8, sub9, sub10`
+	sub1, sub2, sub3, sub4, sub5, sub6, sub7, sub8, sub9, sub10,
+	landing_id`
 
 // Both queries below filter to type = SOURCE_CLICK, excluding
 // SOURCE_FILTER rows: a filtered click never reached a destination, so a
@@ -63,6 +64,7 @@ func scanClick(r driver.Rows, organizationID string) (attribution.Click, error) 
 		&c.UTMSource, &c.UTMMedium, &c.UTMCampaign, &c.UTMContent, &c.UTMTerm,
 		&c.Subs[0], &c.Subs[1], &c.Subs[2], &c.Subs[3], &c.Subs[4],
 		&c.Subs[5], &c.Subs[6], &c.Subs[7], &c.Subs[8], &c.Subs[9],
+		&c.LandingID,
 	); err != nil {
 		return attribution.Click{}, err
 	}

@@ -162,6 +162,9 @@ func (h *Handler) track(w http.ResponseWriter, r *http.Request) {
 	// The flow's landing stage, if any, sits between this click and the
 	// destination (§25's funnel: Landing -> ... -> Destination).
 	lnd := h.decideLanding(r, link.OrganizationID, loaded, result.FlowID)
+	// Only a landing actually shown is attributed (the `landing` report
+	// dimension): a skipped stage — paused, unsignable — leaves it empty.
+	ev.LandingID = lnd.landingID
 
 	h.events.Enqueue(ev)
 

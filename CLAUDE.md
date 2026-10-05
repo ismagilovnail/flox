@@ -19,51 +19,52 @@ referenced below as §N).
 ## CURRENT STATE — UPDATE THIS EVERY PHASE
 
 ```
-CURRENT PHASE : LANDINGS AS ZIP BUNDLES — PHASE B of 2 (tracker serves
-                landings to visitors). Phase A (management: upload,
-                editor, runtime) committed as 420a2ce.
-STATUS        : done. apps/tracker /t/{slug}: a routed flow's enabled
-                internal landing (active/archived) is served as the
-                response (landing.Render, <base> to the bundle, signed
-                trackUrl), SOURCE_CLICK + LAND_VIEW recorded; paused →
-                skipped; external → 302 to its URL; load failure →
-                logged, 302 to destination. New GET /lc/{token}:
-                HMAC-signed link (apps/internal/landinglink, 30-day max
-                age) → LAND_CLICK on the same click_id with utm/subs →
-                302 to the destination; no DB; bad tokens 404 (no open
-                redirect). routingstore joins the landing stage with the
-                flows (org-scoped), page source read by PK only when
-                served. New LANDING_LINK_KEY (unset → internal landings
-                skipped with a startup warning) + tracker S3 endpoint/
-                bucket env. First time LAND_VIEW/LAND_CLICK are emitted
-                by anything. VERIFIED: go build/vet/gofmt/test ./...
-                green; new landinglink + tracker landing tests (real
-                Postgres). Bench: landing ≈0.49 ms (= plain redirect),
-                click-through ≈0.01 ms (docs/performance.md); fixed the
-                existing tracker benches panicking on nil clientIP. Live:
-                real API-built campaign + uploaded landing, opened the
-                tracking link in Chrome as a visitor, clicked through to
-                the offer; SOURCE_CLICK/LAND_VIEW/LAND_CLICK arrived in
-                ClickHouse via the real worker. Fixtures removed. No
-                frontend change this phase.
-LAST COMMIT   : this phase's commit — feat(tracker): serve landings,
-                signed click-through. Before it: 420a2ce
-                feat(landings): ZIP bundles, template editor, injected
-                runtime; 126e879 change font; da7fd9a feat(ui): DataTable
-                column resizing + CSV export — full detail in
-                CHANGELOG.md.
+CURRENT PHASE : `landing` REPORT DIMENSION (follow-up to ZIP landings
+                phases A 420a2ce + B aa8d2b4).
+STATUS        : done. ClickHouse schema/008_landing_id.sql: landing_id
+                on click_events/tracking_events/conversion_events
+                (metadata-only ADD COLUMN, appended last = where
+                EventStore's positional Append writes it). event.Event
+                .LandingID set by apps/tracker on SOURCE_CLICK/LAND_VIEW
+                (landing actually shown; empty when skipped) and
+                LAND_CLICK (from the signed link); conversions inherit it
+                via attribution.Click.LandingID. chstore.DimLanding in
+                both whitelists → 13 backed dims (4 left: pwa/
+                postlanding/offer/network); report presets accept it.
+                Frontend: useDimensionValueLabel shows landing names (not
+                ULIDs) in table/search/CSV, bar chart, filter dropdown +
+                chip, "" → "Без лендинга"; landings list "Посмотреть
+                статистику". VERIFIED: go build/vet/gofmt/test ./... green
+                WITH ClickHouse configured this time — which surfaced two
+                stale tests from phase B, fixed: e2e full funnel expected
+                an enabled external landing to be skipped (now asserts
+                redirect to it + landing_id on the click), reportpresets
+                used "landing" as its unbacked example (now "offer");
+                click_log_test's raw insert got the column. web tsc/
+                eslint/vitest/next build clean. Live: real traffic through
+                the tracker (two flows, with/without landing), CH counts
+                matched exactly, report by Лендинг in the browser showed
+                names + "Без лендинга", bars/filter/chip/deep-link all
+                correct. Fixtures removed.
+LAST COMMIT   : this phase's commit — feat(analytics): landing report
+                dimension. Before it: aa8d2b4 feat(tracker): serve
+                landings, signed click-through; 420a2ce feat(landings):
+                ZIP bundles, template editor, injected runtime — full
+                detail in CHANGELOG.md.
 UNCOMMITTED   : none after this phase's commit.
-NEXT          : confirm scope before starting. Landing-adjacent
-                follow-ups now unblocked: `landing` report dimension
-                (needs a landing_id column on tracking_events — the
-                event already knows it via the token); landing asPwa +
-                PWA/postlanding stages in the tracker; push/PWA variants
-                of engine_onClickButton. Other known gaps unchanged
-                (ROADMAP.md): cloudflare_registrar adapter; SMS/email
-                2FA; 7 English-only areas; Content Gallery video; Flows
-                list view; pwa/postlanding/offer report dimensions;
-                Google Play URL parsing; TRUSTED_PROXIES (blocked on
-                infra); GO-2026-5932 (permanent, unreachable).
+NEXT          : confirm scope before starting. Observed, not fixed (pre-
+                existing, outside this phase): the analytics "Линия" tab
+                rendered no visible line for a single day of data. Same
+                pattern now available for pwa/postlanding/offer
+                dimensions (column + tracker/attribution wiring). Landing
+                follow-ups: asPwa + PWA/postlanding stages in the tracker;
+                push/PWA variants of engine_onClickButton. Other known
+                gaps unchanged (ROADMAP.md): cloudflare_registrar adapter;
+                SMS/email 2FA; 7 English-only areas; Content Gallery
+                video; Flows list view; Google Play URL parsing;
+                TRUSTED_PROXIES (blocked on infra); GO-2026-5932
+                (permanent, unreachable). Tip: run go test with
+                CLICKHOUSE_URL set — without it chstore and e2e skip.
 ```
 
 > At the end of every phase: update the four lines above, add a CHANGELOG entry,

@@ -215,6 +215,11 @@ func TestTrackServesInternalLandingThenClickThrough(t *testing.T) {
 	if src.ClickID == "" || view.ClickID != src.ClickID || lc.ClickID != src.ClickID {
 		t.Fatalf("want SOURCE_CLICK, LAND_VIEW, LAND_CLICK on one click_id, got %+v", sink.events)
 	}
+	for _, e := range []event.Event{src, view, lc} {
+		if e.LandingID != fx.landingID {
+			t.Fatalf("%s LandingID = %q, want %q", e.Type, e.LandingID, fx.landingID)
+		}
+	}
 	if lc.OrganizationID != fx.orgID || lc.FlowID != src.FlowID || lc.Destination != landingTestOffer {
 		t.Fatalf("LAND_CLICK lost routing context: %+v", lc)
 	}
@@ -232,6 +237,7 @@ func TestTrackLandingStageFallbacks(t *testing.T) {
 		assertRedirect(t, get(h, fx.host, "/t/go"), landingTestOffer)
 		closeEvents()
 		assertNoLandView(t, sink)
+		assertNoLandingID(t, sink)
 	})
 
 	t.Run("archived landing is still served", func(t *testing.T) {
@@ -253,9 +259,12 @@ func TestTrackLandingStageFallbacks(t *testing.T) {
 
 	t.Run("external landing redirects to its URL", func(t *testing.T) {
 		fx := seedLandingFixture(t, pool, landing.Landing{Type: landing.TypeExternal, URL: "https://advertiser.example/lp", Status: landing.StatusActive})
-		h, _, closeEvents := newLandingHandler(t, pool, true)
-		defer closeEvents()
+		h, sink, closeEvents := newLandingHandler(t, pool, true)
 		assertRedirect(t, get(h, fx.host, "/t/go"), "https://advertiser.example/lp")
+		closeEvents()
+		if len(sink.events) != 1 || sink.events[0].LandingID != fx.landingID {
+			t.Fatalf("external landing's SOURCE_CLICK should carry its landing id, got %+v", sink.events)
+		}
 	})
 }
 
@@ -305,6 +314,15 @@ func assertNoLandView(t *testing.T, sink *captureSink) {
 	for _, e := range sink.events {
 		if e.Type == event.LandView {
 			t.Fatal("LAND_VIEW recorded though no landing was served")
+		}
+	}
+}
+
+func assertNoLandingID(t *testing.T, sink *captureSink) {
+	t.Helper()
+	for _, e := range sink.events {
+		if e.LandingID != "" {
+			t.Fatalf("%s carries LandingID %q though no landing was shown", e.Type, e.LandingID)
 		}
 	}
 }

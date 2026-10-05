@@ -443,3 +443,79 @@ func TestDistinctValuesRejectsUnsupportedDimension(t *testing.T) {
 		t.Fatal(`DistinctValues with dimension "offer" succeeded, want an error — offer has no backing column`)
 	}
 }
+
+// TestReportByLanding covers schema/008's landing_id end to end through
+// InsertBatch (all three tables' positional appends) and every report
+// query: clicks, land views, conversions — each with its own "" bucket
+// for traffic that was shown no landing.
+func TestReportByLanding(t *testing.T) {
+	conn := mustConn(t)
+	store := chstore.NewEventStore(conn)
+	ctx := context.Background()
+	orgID, campaignID := idgen.New(), idgen.New()
+	day := time.Date(2026, 9, 30, 0, 0, 0, 0, time.UTC)
+	clickA, clickB, clickC := idgen.New(), idgen.New(), idgen.New()
+	const lndA, lndB = "landing-a", "landing-b"
+
+	if err := store.InsertBatch(ctx, []event.Event{
+		{Type: event.SourceClick, EventAt: day.Add(1 * time.Hour), OrganizationID: orgID, CampaignID: campaignID, ClickID: clickA, LandingID: lndA},
+		{Type: event.SourceClick, EventAt: day.Add(2 * time.Hour), OrganizationID: orgID, CampaignID: campaignID, ClickID: clickB, LandingID: lndB},
+		{Type: event.SourceClick, EventAt: day.Add(3 * time.Hour), OrganizationID: orgID, CampaignID: campaignID, ClickID: clickC}, // no landing stage
+		{Type: event.LandView, EventAt: day.Add(1 * time.Hour), OrganizationID: orgID, CampaignID: campaignID, ClickID: clickA, LandingID: lndA},
+		{Type: event.LandView, EventAt: day.Add(2 * time.Hour), OrganizationID: orgID, CampaignID: campaignID, ClickID: clickB, LandingID: lndB},
+		{Type: event.LandClick, EventAt: day.Add(2 * time.Hour), OrganizationID: orgID, CampaignID: campaignID, ClickID: clickB, LandingID: lndB},
+		{Type: event.CpaAccept, EventAt: day.Add(4 * time.Hour), OrganizationID: orgID, CampaignID: campaignID, ClickID: clickB, LandingID: lndB, USDValue: 40, HasUSDValue: true},
+		{Type: event.CpaAccept, EventAt: day.Add(4 * time.Hour), OrganizationID: orgID, CampaignID: campaignID, ClickID: clickC, USDValue: 5, HasUSDValue: true},
+	}); err != nil {
+		t.Fatalf("InsertBatch with landing ids: %v", err)
+	}
+	q := chstore.ReportQuery{OrganizationID: orgID, Dims: []chstore.ReportDimension{chstore.DimLanding}, From: day, To: day.Add(24 * time.Hour)}
+
+	clicks, err := store.ReportClicks(ctx, q)
+	if err != nil {
+		t.Fatalf("ReportClicks by landing: %v", err)
+	}
+	gotClicks := map[string]uint64{}
+	for _, a := range clicks {
+		gotClicks[a.Key.DimValues[chstore.DimLanding]] = a.Clicks
+	}
+	if len(gotClicks) != 3 || gotClicks[lndA] != 1 || gotClicks[lndB] != 1 || gotClicks[""] != 1 {
+		t.Fatalf("clicks by landing = %v, want landing-a:1 landing-b:1 \"\":1", gotClicks)
+	}
+
+	views, err := store.ReportLandViews(ctx, q)
+	if err != nil {
+		t.Fatalf("ReportLandViews by landing: %v", err)
+	}
+	gotViews := map[string]uint64{}
+	for _, a := range views {
+		gotViews[a.Key.DimValues[chstore.DimLanding]] = a.LandViews
+	}
+	if len(gotViews) != 2 || gotViews[lndA] != 1 || gotViews[lndB] != 1 {
+		t.Fatalf("land views by landing = %v, want landing-a:1 landing-b:1", gotViews)
+	}
+
+	convs, err := store.ReportConversions(ctx, q)
+	if err != nil {
+		t.Fatalf("ReportConversions by landing: %v", err)
+	}
+	gotRevenue := map[string]float64{}
+	for _, a := range convs {
+		gotRevenue[a.Key.DimValues[chstore.DimLanding]] = a.RevenueUSD
+	}
+	if len(gotRevenue) != 2 || gotRevenue[lndB] != 40 || gotRevenue[""] != 5 {
+		t.Fatalf("revenue by landing = %v, want landing-b:40 \"\":5", gotRevenue)
+	}
+
+	values, err := store.DistinctValues(ctx, orgID, chstore.DimLanding, day, day.Add(24*time.Hour), 10)
+	if err != nil {
+		t.Fatalf("DistinctValues(landing): %v", err)
+	}
+	seen := map[string]bool{}
+	for _, v := range values {
+		seen[v] = true
+	}
+	if !seen[lndA] || !seen[lndB] {
+		t.Fatalf("DistinctValues(landing) = %v, want both landing ids", values)
+	}
+}

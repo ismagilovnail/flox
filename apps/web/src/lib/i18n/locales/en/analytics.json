@@ -103,5 +103,8 @@
     "CPA_HOLD": "CPA Hold",
     "CPA_ACCEPT": "CPA Accept",
     "CPA_REDEP": "CPA Redeposit"
+  },
+  "values": {
+    "noLanding": "No landing"
   }
 }
