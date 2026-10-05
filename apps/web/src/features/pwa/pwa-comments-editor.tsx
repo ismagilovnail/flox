@@ -50,6 +50,9 @@ export function PwaCommentsEditor({
   const allSelected = inSet.length > 0 && inSet.every((c) => selected.has(c));
 
   const setValid = newSet.geo !== "" && newSet.lang !== "";
+  const sortedGeos = [...COMMENT_GEOS].sort((a, b) =>
+    displayName("region", a.geo, locale).localeCompare(displayName("region", b.geo, locale), locale),
+  );
   const geoLangs = COMMENT_GEOS.find((g) => g.geo === newSet.geo)?.langs ?? [];
   const draftValid = draft.author.trim() !== "" && draft.text.trim() !== "" && draft.rating >= 1 && draft.rating <= 5;
 
@@ -152,7 +155,7 @@ export function PwaCommentsEditor({
                   <SelectValue placeholder={t("comments.geoPlaceholder")} />
                 </SelectTrigger>
                 <SelectContent>
-                  {COMMENT_GEOS.map((g) => (
+                  {sortedGeos.map((g) => (
                     <SelectItem key={g.geo} value={g.geo}>
                       {displayName("region", g.geo, locale)} ({g.geo})
                     </SelectItem>

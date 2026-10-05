@@ -25,6 +25,10 @@ through in the browser.
 
 ## [Between phases] — PWA comment sets: country and language dropdowns
 
+(Later widened from the top 20 to 134 countries — West/Central Africa incl.
+Mali, Burkina Faso, Senegal, Côte d'Ivoire; Latin America; Europe; Asia;
+Middle East — sorted by localized name.)
+
 Adding a comment set now uses two dropdowns instead of free text: top-20
 countries (US, IN, BR, ID, RU, MX, JP, DE, GB, FR, TR, IT, ES, PH, VN, TH,
 PL, CA, EG, NG), each with its common languages; picking a country preselects
