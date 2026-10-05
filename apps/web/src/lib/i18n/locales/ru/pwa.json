@@ -84,7 +84,6 @@
     "screenshotsUploadHint": "Загрузите скриншоты (рекомендуется 1080×1920px)",
     "screenshotsFormatsHint": "Поддерживаются: PNG, JPEG, WebP • Без ограничения по количеству",
     "removeScreenshotAria": "Удалить скриншот",
-    "addScreenshotFromGalleryButton": "Выбрать из галереи",
     "submitCreate": "Создать PWA",
     "submitEdit": "Сохранить изменения",
     "validation": {

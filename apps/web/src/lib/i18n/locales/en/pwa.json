@@ -84,7 +84,6 @@
     "screenshotsUploadHint": "Upload screenshots (1080×1920px recommended)",
     "screenshotsFormatsHint": "Supports: PNG, JPEG, WebP • No limit on quantity",
     "removeScreenshotAria": "Remove screenshot",
-    "addScreenshotFromGalleryButton": "Choose from gallery",
     "submitCreate": "Create PWA",
     "submitEdit": "Save changes",
     "validation": {

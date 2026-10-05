@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useState, type ReactNode } from "react";
 import { Controller, useFieldArray, useForm, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { ImagesIcon, XIcon } from "lucide-react";
+import { ImagesIcon, UploadCloudIcon, XIcon } from "lucide-react";
 import { z } from "zod";
 import { useTranslation } from "react-i18next";
 import type { TFunction } from "i18next";
@@ -36,7 +36,6 @@ import { PwaCommentsEditor } from "@/features/pwa/pwa-comments-editor";
 import { commentStats, setKey } from "@/features/pwa/pwa-comments";
 import { PwaPreviewCard } from "@/features/pwa/pwa-preview-card";
 import { GalleryFilePickerDialog } from "@/features/content-gallery/gallery-file-picker-dialog";
-import { GalleryUploadCell } from "@/features/content-gallery/gallery-upload-cell";
 import { cn } from "@/lib/utils";
 
 /** register(name, { setValueAs: numberOrUndefined }) turns an empty
@@ -972,7 +971,14 @@ export function PwaForm({
                     </IconButton>
                   </div>
                 ))}
-                <GalleryUploadCell className="aspect-[9/16]" onUploaded={(file) => screenshotArray.append({ url: file.url })} />
+                <button
+                  type="button"
+                  onClick={() => setPickingScreenshot(true)}
+                  className="flex aspect-[9/16] flex-col items-center justify-center gap-1 rounded-lg border-2 border-dashed border-border text-xs text-muted-foreground transition-colors hover:border-muted-foreground/50 hover:text-foreground"
+                >
+                  <UploadCloudIcon className="size-5" />
+                  Upload
+                </button>
               </div>
 
               {errors.screenshots?.message && (
@@ -980,10 +986,6 @@ export function PwaForm({
                   {errors.screenshots.message}
                 </p>
               )}
-
-              <Button type="button" variant="outline" size="sm" className="self-start" onClick={() => setPickingScreenshot(true)}>
-                <ImagesIcon className="size-3.5" /> {t("form.addScreenshotFromGalleryButton", { ns: "pwa" })}
-              </Button>
 
               <GalleryFilePickerDialog
                 open={pickingScreenshot}

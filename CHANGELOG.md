@@ -37,6 +37,13 @@ the first language. Names come from `Intl.DisplayNames` in the UI language.
 Other pairs still work through CSV import (the API accepts any two-letter
 codes). tsc, eslint clean; checked live on /pwa/new.
 
+## [Between phases] — PWA screenshots: Upload opens the gallery picker
+
+In the "Скриншоты" block the "Upload" tile now opens the Content Gallery
+picker (which also uploads new files) instead of uploading straight away; the
+separate "Выбрать из галереи" button is gone. tsc, eslint clean; not checked in
+the browser (the browser tool refused to open the page).
+
 ## [Between phases] — PWA form: bottom comments card removed
 
 The summary "Комментарии" card at the bottom of the form is gone; the comments
