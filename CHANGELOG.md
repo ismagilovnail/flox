@@ -5,6 +5,22 @@ per-phase, matching `CLAUDE.md`'s phase protocol. The one exception is
 [Between phases], below: spec amendments and the code changes that follow from
 them land between phases and would otherwise be invisible here.
 
+## [Between phases] — PWA install page laid out like the constructor card
+
+The visitor page at `/pwa/{token}/` now follows the editor preview's layout
+and install animation, minus everything numeric. Detail: `docs/pwa-serving.md`.
+
+- Header block, accent/theme-driven colors, light/dark from the PWA's
+  background color, screenshot strip, About + details sheet (`<dialog>`),
+  Updated on, What's new; ring-around-the-icon install sequence.
+- `routingstore.PwaPage` + `LoadPwaPage` gain whats_new, version, category,
+  interactive_elements, contains_ads, in_app_purchases, updated_date.
+- Not shown, by decision: rating/stars/review count/downloads/size/age
+  rating/verified badges and the store logo/nav/footer chrome (see doc).
+- Tests: `TestRenderPwaPageNoListingStats` (no DB), `TestPwaStageDirect`
+  extended (fields present, listing numbers absent). Full go test with all
+  deps green; checked live in Chrome (installing state, details sheet, dark).
+
 ## [Between phases] — Tracker serves the PWA stage (+ `pwa` report dimension, constructor test page)
 
 A flow's PWA stage now reaches real visitors. Full detail:

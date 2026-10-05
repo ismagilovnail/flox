@@ -15,6 +15,7 @@ import (
 	"github.com/ismagilovnail/flox/apps/internal/landing"
 	"github.com/ismagilovnail/flox/apps/internal/landinglink"
 	"github.com/ismagilovnail/flox/apps/internal/pwa"
+	"github.com/ismagilovnail/flox/apps/internal/routingstore"
 	"github.com/ismagilovnail/flox/apps/internal/streamset"
 )
 
@@ -25,6 +26,8 @@ func seedPwa(t *testing.T, pool *pgxpool.Pool, orgID string, bounce bool) string
 		IconURL: "https://cdn.example/icon.png", StartURL: "/install", BounceInAppWebview: bounce,
 		Developer: "Lucky Dev", Description: "Spin daily.", Screenshots: []string{"https://cdn.example/s1.png"},
 		Rating: ptr(4.9), RatingCount: ptrInt(120000), DownloadsLabel: "1M+",
+		RatingStars5: ptr(87.5), AgeRating: "12+ Teen", WhatsNew: "Bug fixes and a new wheel.", Version: "2.4.1",
+		Category: "Casual", ContainsAds: true,
 	})
 	if err != nil {
 		t.Fatalf("seeding pwa: %v", err)
@@ -74,9 +77,16 @@ func TestPwaStageDirect(t *testing.T) {
 		t.Fatalf("install page = %d:\n%s", page.Code, body)
 	}
 	// The visitor-facing page never imitates a store or shows its listing stats.
-	for _, banned := range []string{"Google Play", "4.9", "120000", "1M+"} {
+	for _, banned := range []string{"Google Play", "4.9", "120000", "1M+", "87.5", "12+ Teen"} {
 		if strings.Contains(body, banned) {
 			t.Fatalf("install page contains %q — store imitation / listing stats must never reach visitors", banned)
+		}
+	}
+
+	// What the editor preview shows besides the numbers does reach the visitor.
+	for _, want := range []string{"Bug fixes and a new wheel.", "2.4.1", "Casual", "Contains ads", "install", `id="sheet"`} {
+		if !strings.Contains(body, want) {
+			t.Fatalf("install page lacks %q", want)
 		}
 	}
 
@@ -228,5 +238,35 @@ func TestBounceTarget(t *testing.T) {
 	}
 	if got := bounceTarget("Mozilla/5.0 (iPhone; CPU iPhone OS 17_0) Instagram 300.0", self); got != "x-safari-https://trk.example/pwa/tok/" {
 		t.Fatalf("iOS Instagram bounce = %q", got)
+	}
+}
+
+// TestRenderPwaPageNoListingStats needs no database: the editor-style page
+// carries the listing's plain facts and never its operator-typed numbers.
+func TestRenderPwaPageNoListingStats(t *testing.T) {
+	p := routingstore.PwaPage{
+		Name: "Lucky App", ThemeColor: "#16a34a", BackgroundColor: "#111111", IconURL: "https://cdn.example/i.png",
+		Developer: "Lucky Dev", Description: "Spin daily.", WhatsNew: "New wheel", Version: "2.4.1",
+		ContainsAds: true, InAppPurchases: true, UpdatedDate: "2026-08-21",
+	}
+	for _, lang := range []string{"ru", "en"} {
+		body := string(renderPwaPage(p, false, lang))
+		for _, want := range []string{"Lucky App", "Lucky Dev", "Spin daily.", "New wheel", "2.4.1", "2026-08-21", "--bg:#18181b", "--accent:#16a34a"} {
+			if !strings.Contains(body, want) {
+				t.Fatalf("%s page lacks %q", lang, want)
+			}
+		}
+		for _, banned := range []string{"Google Play", "Gift cards", "Подарочные карты", "verified", "Downloads", "Скачивания"} {
+			if strings.Contains(body, banned) {
+				t.Fatalf("%s page contains %q", lang, banned)
+			}
+		}
+	}
+	// No optional fields: no empty sections or sheet.
+	bare := string(renderPwaPage(routingstore.PwaPage{Name: "X"}, false, "en"))
+	for _, banned := range []string{`id="sheet"`, "What's new", "Updated on", `class="shots"`} {
+		if strings.Contains(bare, banned) {
+			t.Fatalf("bare page contains %q", banned)
+		}
 	}
 }

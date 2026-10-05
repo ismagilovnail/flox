@@ -5,6 +5,7 @@ import (
 	"html/template"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 
@@ -321,6 +322,11 @@ var pwaCopy = map[string]map[string]string{
 		"test":        "Тестовый режим: события не записываются",
 		"bounceTitle": "Откройте страницу в браузере", "bounceHint": "Если ничего не произошло, нажмите ⋯ и выберите «Открыть в браузере».",
 		"bounceButton": "Открыть в браузере",
+		"pleaseWait":   "Пожалуйста, подождите…", "about": "О приложении", "aboutOpen": "Подробнее", "close": "Закрыть",
+		"whatsNew": "Что нового", "updated": "Дата обновления", "details": "Подробная информация",
+		"dUpdated": "Обновлено", "dVersion": "Текущая версия", "dDeveloper": "Разработчик",
+		"dCategory": "Категория", "dInteractive": "Интерактивные элементы",
+		"ads": "Есть реклама", "iap": "Покупки в приложении",
 	},
 	"en": {
 		"install": "Install", "continue": "Continue without installing", "by": "Developer",
@@ -330,9 +336,19 @@ var pwaCopy = map[string]map[string]string{
 		"test":        "Test mode: no events are recorded",
 		"bounceTitle": "Open this page in your browser", "bounceHint": "If nothing happens, tap ⋯ and choose “Open in browser”.",
 		"bounceButton": "Open in browser",
+		"pleaseWait":   "Please wait…", "about": "About this app", "aboutOpen": "More details", "close": "Close",
+		"whatsNew": "What's new", "updated": "Updated on", "details": "Details",
+		"dUpdated": "Updated", "dVersion": "Current version", "dDeveloper": "Developer",
+		"dCategory": "Category", "dInteractive": "Interactive elements",
+		"ads": "Contains ads", "iap": "In-app purchases",
 	},
 }
 
+// pwaPageTemplate mirrors the PWA editor's own preview card (header block,
+// ring-around-the-icon install animation, screenshot strip, About, What's
+// new, details sheet) with its light/dark scheme and accent. It leaves out
+// everything the editor can only fake: no rating, review count, downloads,
+// age rating or "verified" badge, and no store logo, nav or footer chrome.
 var pwaPageTemplate = template.Must(template.New("pwa").Parse(`<!DOCTYPE html>
 <html lang="{{.Lang}}">
 <head>
@@ -346,42 +362,86 @@ var pwaPageTemplate = template.Must(template.New("pwa").Parse(`<!DOCTYPE html>
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="{{.Short}}">
 <style>
-:root{--theme:{{.Theme}};--bg:{{.Background}}}
+:root{--accent:{{.Theme}};--bg:{{.Bg}};--text:{{.Text}};--muted:{{.Muted}};--subtle:{{.Subtle}};--border:{{.Border}};--chip:{{.Chip}}}
 *{box-sizing:border-box}
-body{margin:0;font:16px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;background:var(--bg);color:#1b1b1f}
-main{max-width:640px;margin:0 auto;padding:24px 16px 40px}
-.test{background:#fff4d6;color:#6b4e00;border-radius:8px;padding:8px 12px;font-size:13px;margin-bottom:16px}
-.head{display:flex;gap:16px;align-items:center}
-.icon{width:88px;height:88px;border-radius:22px;object-fit:cover;flex:none;box-shadow:0 1px 4px rgba(0,0,0,.15)}
-h1{font-size:24px;margin:0}
-.dev{color:#55565c;font-size:14px;margin-top:4px}
-.actions{margin:24px 0}
-button,.btn{display:block;width:100%;border:0;border-radius:12px;padding:14px 16px;font-size:16px;font-weight:600;text-align:center;text-decoration:none;cursor:pointer}
-.primary{background:var(--theme);color:#fff}
-.secondary{background:transparent;color:#55565c;font-weight:500;margin-top:8px}
-.shots{display:flex;gap:10px;overflow-x:auto;padding:4px 0 8px;scroll-snap-type:x mandatory}
-.shots img{height:280px;border-radius:12px;scroll-snap-align:start;flex:none}
-.desc{white-space:pre-line;color:#2c2d31}
-.ios{background:#fff;border-radius:12px;padding:16px;margin-top:16px;display:none}
+body{margin:0;font:16px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;background:var(--bg);color:var(--text)}
+main{max-width:480px;margin:0 auto;padding:20px 0 40px}
+.pad{padding:0 20px}
+.test{background:#fff4d6;color:#6b4e00;border-radius:8px;padding:8px 12px;font-size:13px;margin:0 20px 16px}
+.head{display:flex;gap:16px;align-items:flex-start;padding-top:0;transition:padding-top .5s ease-out}
+.head.busy{padding-top:12px}
+.iconbox{position:relative;width:72px;height:72px;flex:none}
+.iconbox .clip{position:absolute;inset:0;overflow:hidden;border-radius:16px;transition:all .5s ease-out}
+.head.busy .clip{inset:6px;border-radius:50%}
+.iconbox img{width:100%;height:100%;object-fit:cover;display:block}
+.ring{position:absolute;inset:0;opacity:0;transition:opacity .25s ease-out}
+.head.busy .ring{opacity:1}
+.ring circle{fill:none;stroke-width:3}
+.ring .track{stroke:var(--border)}
+.ring .arc{stroke:var(--accent);stroke-linecap:round;stroke-dasharray:201.06;stroke-dashoffset:201.06;transform:rotate(-90deg);transform-origin:50% 50%}
+.head.busy .ring .arc{stroke-dashoffset:0;transition:stroke-dashoffset 1.8s linear}
+.meta{min-width:0;display:flex;flex-direction:column;gap:2px}
+h1{font-size:22px;font-weight:600;line-height:1.2;margin:0}
+.dev{font-size:16px;font-weight:500;color:var(--accent)}
+.head.busy .dev{color:var(--text);font-weight:600}
+.note{font-size:12px;color:var(--muted)}
+.head.busy .note{display:none}
+.actions{margin:20px 20px 0}
+button,.btn{display:block;width:100%;border:0;border-radius:8px;padding:10px 16px;font-size:14px;font-weight:700;text-align:center;text-decoration:none;cursor:pointer;font-family:inherit}
+.primary{background:var(--accent);color:#fff}
+.secondary{background:transparent;color:var(--muted);font-weight:500;margin-top:8px}
+.collapse{display:grid;grid-template-rows:1fr;opacity:1;transition:grid-template-rows .5s ease-out,opacity .5s ease-out}
+.collapse>div{overflow:hidden}
+.busy-actions .collapse{grid-template-rows:0fr;opacity:0}
+.shots{display:flex;gap:12px;overflow-x:auto;padding:20px 16px 0;height:224px;scroll-snap-type:x proximity}
+.shots img{height:204px;width:auto;border-radius:12px;flex:none;scroll-snap-align:start}
+.sec{padding:20px 16px 0}
+.sec h2{font-size:18px;font-weight:700;margin:0}
+.row{display:flex;align-items:center;justify-content:space-between}
+.arrow{width:auto;padding:4px 8px;background:transparent;color:var(--text);font-size:18px;border-radius:6px}
+.arrow:hover{background:var(--chip)}
+.desc{white-space:pre-line;font-size:14px;line-height:1.6;margin:12px 0 0;display:-webkit-box;-webkit-line-clamp:5;-webkit-box-orient:vertical;overflow:hidden}
+.full{white-space:pre-line;font-size:14px;line-height:1.6;margin:0}
+.upd{font-size:14px;font-weight:700;color:var(--subtle);margin:0 0 4px}
+.upd+p{font-size:14px;margin:0}
+.line{border-top:1px solid var(--border);margin-top:20px}
+.news{font-size:14px;line-height:1.6;white-space:pre-line;margin:12px 0 0}
+.ios{background:var(--chip);border-radius:12px;padding:16px;margin-top:16px;display:none}
 .ios h2{font-size:16px;margin:0 0 8px}
 .ios ol{margin:0;padding-left:20px}
-.done{display:none;text-align:center;color:#2c2d31;margin-top:12px}
+.done{display:none;text-align:center;color:var(--muted);margin-top:12px;font-size:14px}
 [hidden]{display:none!important}
+dialog{width:calc(100% - 32px);max-width:448px;max-height:80%;padding:0;border:0;border-radius:16px;background:var(--bg);color:var(--text);box-shadow:0 20px 50px rgba(0,0,0,.3)}
+dialog::backdrop{background:rgba(0,0,0,.3)}
+.dh{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 16px;border-bottom:1px solid var(--border)}
+.dh b{font-size:16px}
+.x{width:auto;padding:4px 10px;background:transparent;color:var(--muted);font-size:16px;border-radius:999px}
+.x:hover{background:var(--chip)}
+.db{padding:16px;display:flex;flex-direction:column;gap:20px}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.grid b{display:block;font-size:14px}
+.grid span{display:block;font-size:14px;color:var(--muted)}
 </style>
 </head>
 <body>
 <main>
 {{if .Test}}<div class="test">{{index .Copy "test"}}</div>{{end}}
-<div class="head">
-  {{if .Page.IconURL}}<img class="icon" src="{{.Page.IconURL}}" alt="">{{end}}
-  <div>
+<div class="pad">
+<div class="head" id="head">
+  {{if .Page.IconURL}}<div class="iconbox"><div class="clip"><img src="{{.Page.IconURL}}" alt=""></div>
+    <svg class="ring" viewBox="0 0 72 72" aria-hidden="true"><circle class="track" cx="36" cy="36" r="32"/><circle class="arc" cx="36" cy="36" r="32"/></svg></div>{{end}}
+  <div class="meta">
     <h1>{{.Page.Name}}</h1>
-    {{if .Page.Developer}}<div class="dev">{{index .Copy "by"}}: {{.Page.Developer}}</div>{{end}}
+    <div class="dev" id="dev">{{if .Page.Developer}}{{.Page.Developer}}{{end}}</div>
+    {{if .Notes}}<div class="note">{{.Notes}}</div>{{end}}
   </div>
 </div>
-<div class="actions">
-  <button id="install" class="primary" hidden>{{index .Copy "install"}}</button>
-  <a id="open" class="btn primary" href="open" hidden>{{index .Copy "open"}}</a>
+</div>
+<div class="actions" id="actions">
+  <div class="collapse"><div>
+    <button id="install" class="primary" hidden>{{index .Copy "install"}}</button>
+    <a id="open" class="btn primary" href="open" hidden>{{index .Copy "open"}}</a>
+  </div></div>
   <div id="done" class="done">{{index .Copy "installed"}}</div>
   <div id="ios" class="ios">
     <h2>{{index .Copy "iosTitle"}}</h2>
@@ -390,12 +450,31 @@ button,.btn{display:block;width:100%;border:0;border-radius:12px;padding:14px 16
   <a class="btn secondary" href="continue">{{index .Copy "continue"}}</a>
 </div>
 {{if .Page.Screenshots}}<div class="shots">{{range .Page.Screenshots}}<img src="{{.}}" alt="" loading="lazy">{{end}}</div>{{end}}
-{{if .Page.Description}}<p class="desc">{{.Page.Description}}</p>{{end}}
+{{if .Page.Description}}<div class="sec">
+  <div class="row"><h2>{{index .Copy "about"}}</h2><button class="arrow" id="more" type="button" aria-label="{{index .Copy "aboutOpen"}}">→</button></div>
+  <p class="desc">{{.Page.Description}}</p>
+</div>{{end}}
+{{if .Page.UpdatedDate}}<div class="sec"><p class="upd">{{index .Copy "updated"}}</p><p>{{.Page.UpdatedDate}}</p></div>{{end}}
+{{if .Page.WhatsNew}}<div class="line"></div><div class="sec"><h2>{{index .Copy "whatsNew"}}</h2><p class="news">{{.Page.WhatsNew}}</p></div>{{end}}
 </main>
+{{if .Page.Description}}<dialog id="sheet" aria-label="{{index .Copy "about"}}">
+  <div class="dh"><b>{{.Page.Name}}</b><button class="x" id="close" type="button" aria-label="{{index .Copy "close"}}">✕</button></div>
+  <div class="db">
+    <p class="full">{{.Page.Description}}</p>
+    {{if .Details}}<div class="line" style="margin:0"></div>
+    <div><h2 style="font-size:18px;margin:0 0 16px">{{index .Copy "details"}}</h2>
+    <div class="grid">{{range .Details}}<div><b>{{.Label}}</b><span>{{.Value}}</span>{{range .Notes}}<span>{{.}}</span>{{end}}</div>{{end}}</div></div>{{end}}
+  </div>
+</dialog>{{end}}
 <script>
 (function () {
+  var COPY = {{.JSCopy}};
   if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js", { scope: "./" });
   var installBtn = document.getElementById("install");
+  var head = document.getElementById("head");
+  var dev = document.getElementById("dev");
+  var devText = dev.textContent;
+  var actions = document.getElementById("actions");
   var reported = false;
   function reportInstalled() {
     if (reported) return;
@@ -403,12 +482,34 @@ button,.btn{display:block;width:100%;border:0;border-radius:12px;padding:14px 16
     if (navigator.sendBeacon) navigator.sendBeacon("installed");
     else fetch("installed", { method: "POST", keepalive: true });
   }
+  var more = document.getElementById("more"), sheet = document.getElementById("sheet");
+  if (more && sheet && sheet.showModal) {
+    more.addEventListener("click", function () { sheet.showModal(); });
+    document.getElementById("close").addEventListener("click", function () { sheet.close(); });
+    sheet.addEventListener("click", function (e) { if (e.target === sheet) sheet.close(); });
+  }
   var standalone = window.matchMedia("(display-mode: standalone)").matches || navigator.standalone === true;
   if (standalone) { location.replace("open"); return; }
   var ua = navigator.userAgent;
   var isIOS = /iPhone|iPad|iPod/.test(ua) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
   if (isIOS) document.getElementById("ios").style.display = "block";
   var deferred = null;
+  // Same sequence as the editor preview: the button collapses, a ring fills
+  // around the icon with "Please wait…", then the page offers "Open".
+  function showInstalled() {
+    head.classList.remove("busy");
+    actions.classList.remove("busy-actions");
+    dev.textContent = devText;
+    installBtn.hidden = true;
+    document.getElementById("open").hidden = false;
+    document.getElementById("done").style.display = "block";
+  }
+  function showInstalling() {
+    head.classList.add("busy");
+    actions.classList.add("busy-actions");
+    dev.textContent = COPY.pleaseWait;
+    setTimeout(showInstalled, 1800);
+  }
   window.addEventListener("beforeinstallprompt", function (e) {
     e.preventDefault();
     deferred = e;
@@ -418,16 +519,13 @@ button,.btn{display:block;width:100%;border:0;border-radius:12px;padding:14px 16
     if (!deferred) return;
     deferred.prompt();
     deferred.userChoice.then(function (choice) {
-      if (choice.outcome === "accepted") reportInstalled();
+      if (choice.outcome === "accepted") { reportInstalled(); showInstalling(); }
       deferred = null;
-      installBtn.hidden = true;
     });
   });
   window.addEventListener("appinstalled", function () {
     reportInstalled();
-    installBtn.hidden = true;
-    document.getElementById("done").style.display = "block";
-    document.getElementById("open").hidden = false;
+    if (!head.classList.contains("busy")) showInstalled();
   });
 })();
 </script>
@@ -435,17 +533,69 @@ button,.btn{display:block;width:100%;border:0;border-radius:12px;padding:14px 16
 </html>
 `))
 
+type pwaDetail struct {
+	Label, Value string
+	Notes        []string
+}
+
 func renderPwaPage(p routingstore.PwaPage, test bool, lang string) []byte {
 	short := p.ShortName
 	if short == "" {
 		short = p.Name
 	}
+	cp := pwaCopy[lang]
+	var notes []string
+	if p.ContainsAds {
+		notes = append(notes, cp["ads"])
+	}
+	if p.InAppPurchases {
+		notes = append(notes, cp["iap"])
+	}
+	var details []pwaDetail
+	add := func(label, value string, n ...string) {
+		if value != "" {
+			details = append(details, pwaDetail{Label: label, Value: value, Notes: n})
+		}
+	}
+	add(cp["dUpdated"], p.UpdatedDate)
+	add(cp["dVersion"], p.Version)
+	add(cp["dDeveloper"], p.Developer, notes...)
+	add(cp["dCategory"], p.Category)
+	add(cp["dInteractive"], p.InteractiveElements)
+	// The editor's card flips light/dark from the PWA's background color.
+	bg := cssColor(p.BackgroundColor, "#ffffff")
+	scheme := map[bool][5]string{
+		false: {"#0f172a", "#475569", "#334155", "#dadce0", "#f1f5f9"},
+		true:  {"#f4f4f5", "#a1a1aa", "#d4d4d8", "#3f3f46", "#27272a"},
+	}[isDarkColor(string(bg))]
+	pageBg := "#ffffff"
+	if isDarkColor(string(bg)) {
+		pageBg = "#18181b"
+	}
+	jsCopy := map[string]string{"pleaseWait": cp["pleaseWait"]}
 	var b strings.Builder
 	_ = pwaPageTemplate.Execute(&b, map[string]any{
-		"Lang": lang, "Copy": pwaCopy[lang], "Page": p, "Test": test, "Short": short,
-		"Theme": cssColor(p.ThemeColor, "#1a73e8"), "Background": cssColor(p.BackgroundColor, "#ffffff"),
+		"Lang": lang, "Copy": cp, "JSCopy": jsCopy, "Page": p, "Test": test, "Short": short,
+		"Theme": cssColor(p.ThemeColor, "#00A173"), "Bg": template.CSS(pageBg),
+		"Text": template.CSS(scheme[0]), "Muted": template.CSS(scheme[1]), "Subtle": template.CSS(scheme[2]),
+		"Border": template.CSS(scheme[3]), "Chip": template.CSS(scheme[4]),
+		"Notes": strings.Join(notes, " · "), "Details": details,
 	})
 	return []byte(b.String())
+}
+
+// isDarkColor is the editor preview's perceived-brightness check
+// (ITU-R BT.601 weights) on a "#rrggbb" value; anything else reads as light.
+func isDarkColor(hex string) bool {
+	if len(hex) != 7 || hex[0] != '#' {
+		return false
+	}
+	v, err := strconv.ParseUint(hex[1:], 16, 32)
+	if err != nil {
+		return false
+	}
+	r, g, b := (v>>16)&0xff, (v>>8)&0xff, v&0xff
+	return (r*299+g*587+b*114)/1000 < 128
 }
 
 var bounceTemplate = template.Must(template.New("bounce").Parse(`<!DOCTYPE html>

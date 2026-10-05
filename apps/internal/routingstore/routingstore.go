@@ -111,6 +111,16 @@ type PwaPage struct {
 	Screenshots        []string
 	BounceInAppWebview bool
 	Status             string
+	// Listing facts the install page shows as plain text. Deliberately no
+	// rating, review count, downloads or age rating: those are operator-typed
+	// social proof and never reach visitors.
+	WhatsNew            string
+	Version             string
+	Category            string
+	InteractiveElements string
+	ContainsAds         bool
+	InAppPurchases      bool
+	UpdatedDate         string // YYYY-MM-DD, empty when unset
 }
 
 // FlowLanding is the small, per-flow part of a landing the tracker needs
@@ -442,12 +452,15 @@ func (s *Store) LoadPwaPage(ctx context.Context, orgID, pwaID string) (PwaPage, 
 	var p PwaPage
 	err := s.db.QueryRow(ctx, `
 		SELECT name, short_name, theme_color, background_color, icon_url, developer, description,
-		       screenshots, bounce_in_app_webview, status
+		       screenshots, bounce_in_app_webview, status,
+		       whats_new, version, category, interactive_elements, contains_ads, in_app_purchases,
+		       COALESCE(to_char(updated_date, 'YYYY-MM-DD'), '')
 		FROM pwas
 		WHERE id = $1 AND organization_id = $2`,
 		pwaID, orgID,
 	).Scan(&p.Name, &p.ShortName, &p.ThemeColor, &p.BackgroundColor, &p.IconURL, &p.Developer, &p.Description,
-		&p.Screenshots, &p.BounceInAppWebview, &p.Status)
+		&p.Screenshots, &p.BounceInAppWebview, &p.Status,
+		&p.WhatsNew, &p.Version, &p.Category, &p.InteractiveElements, &p.ContainsAds, &p.InAppPurchases, &p.UpdatedDate)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return PwaPage{}, ErrNotFound
 	}

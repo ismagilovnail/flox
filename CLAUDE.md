@@ -19,38 +19,21 @@ referenced below as §N).
 ## CURRENT STATE — UPDATE THIS EVERY PHASE
 
 ```
-CURRENT PHASE : PWA STAGE SERVED BY THE TRACKER (+ pwa report dimension,
-                constructor "Test page"). User asked for PWA + postlanding
-                serving; this phase is PWA only — postlanding next.
-STATUS        : done. apps/tracker /pwa/{token}/: installable install page
-                (manifest, pass-through SW, beforeinstallprompt, iOS
-                steps, continue-without-install), reached from the click
-                or after an internal landing; PWA_VIEW/INSTALL/OPEN on one
-                click_id; manifest/open survive the 30-day link age;
-                provider-neutral in-app WebView bounce. The page is the
-                operator's app as itself — the user asked to serve the
-                editor's Google Play imitation (with operator-entered
-                ratings/reviews/downloads) to visitors; DECLINED as
-                deceptive to people installing, neutral page built
-                instead; editor preview card left as-is (admin-only).
-                Constructor "Тестовая страница": POST /pwas/{id}/
-                test-link → signed Test link, served for real, no events.
-                pwa_id: CH schema/010, tracker/attribution/conversions,
-                DimPwa (15 backed). New config TRACKER_PUBLIC_URL (+
-                LANDING_LINK_KEY on api). VERIFIED: full go test with all
-                deps + e2e green (one e2e run flaked because air rebuilt
-                the worker mid-run; re-run green); benchmarks unchanged;
-                web tsc/eslint/vitest/build clean; live in Chrome:
-                installable (beforeinstallprompt fired), test mode
-                recorded 0 events, real tracker traffic → CH counts
-                exactly right incl. WebView bounce; report by PWA showed
-                name. Native install dialog not clicked (automation).
-                Fixtures removed. Detail: docs/pwa-serving.md.
-LAST COMMIT   : this phase's commit — feat(tracker): serve PWA install
-                pages. Before it: f1a7250 feat(analytics): offer report
-                dimension; caff39d landing report dimension; aa8d2b4
-                serve landings — full detail in CHANGELOG.md.
-UNCOMMITTED   : none after this phase's commit.
+CURRENT PHASE : PWA INSTALL PAGE LAID OUT LIKE THE CONSTRUCTOR CARD
+STATUS        : done. /pwa/{token}/ now mirrors the editor preview (header,
+                accent/dark theme, screenshots, About + details sheet,
+                What's new, ring-around-icon install sequence). By decision
+                it shows NO rating/stars/reviews/downloads/size/age/verified
+                badge and no store logo/nav/footer (operator-typed social
+                proof in a store look-alike deceives installers) — user
+                agreed ("без блоков с цифрами"). PwaPage loads the extra
+                text fields only. VERIFIED: full go test with all deps
+                green; live in Chrome (installing state, sheet, dark).
+                Detail: docs/pwa-serving.md.
+LAST COMMIT   : this phase's commit — feat(tracker): editor-style PWA page.
+                Before it: 1a5557d feat(tracker): serve PWA install pages.
+UNCOMMITTED   : user's own label rename in apps/web pwa-preview-card.tsx +
+                en/ru pwa.json (Google Play → Apps) — not part of this phase.
 NEXT          : postlanding stage serving (+ postlanding dimension) —
                 already requested by the user; confirm details first.
                 Then: network dimension; Top Offers card; PWA types

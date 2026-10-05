@@ -52,22 +52,38 @@ goes through the stage — ClickHouse `chstore/schema/010_pwa_id.sql`, the
 ## The page
 
 Rendered server-side (`html/template`, everything escaped; colors only
-admitted as `#rgb`/`#rrggbb`) from the PWA's own fields: name, icon,
-developer, description, screenshots, theme/background colors. Russian or
-English copy by `Accept-Language`. Install button appears on
-`beforeinstallprompt`; iOS gets "Share → Add to Home Screen" steps (Safari
-has no install event — iOS installs show up as PWA_OPEN when launched; no
-IOS_INSTALL is fabricated); an already-installed app opened in the
-browser goes straight to `open`; every browser gets "continue without
-installing" so no visitor is stranded.
+admitted as `#rgb`/`#rrggbb`) and laid out like the editor's preview card
+(`features/pwa/pwa-preview-card.tsx`): icon + name + developer header,
+install button, screenshot strip (fixed height, natural widths), "About"
+(5-line clamp, → opens a details sheet), "Updated on", "What's new". The
+accent is the manifest `theme_color`; light/dark follows `background_color`
+by the same BT.601 brightness check as the card. Russian or English copy by
+`Accept-Language`.
 
-**What it deliberately does not do:** imitate an app store. No store
-branding or chrome, and none of the PWA editor's store-listing fields
-(rating, review counts, downloads, size, "what's new", age rating) are
-ever shown to a visitor — a page that passes itself off as an official
-store with operator-entered social proof deceives the people installing.
-The editor's own store-styled preview card (`features/pwa/pwa-preview-card.tsx`)
-is unchanged and stays an admin-only preview; it is not what visitors see.
+Install flow mirrors the card: the button appears on `beforeinstallprompt`;
+on an accepted prompt it collapses, the icon becomes a circle with a ring
+filling around it and the developer line reads "Please wait…" (1.8 s), then
+"Open" (→ `open`). iOS gets "Share → Add to Home Screen" steps (Safari has
+no install event — iOS installs show up as PWA_OPEN when launched; no
+IOS_INSTALL is fabricated); an already-installed app opened in the browser
+goes straight to `open`; every browser gets "continue without installing"
+so no visitor is stranded.
+
+Fields shown (all plain facts from the PWA): name, icon, developer,
+description, screenshots, what's new, version, category, interactive
+elements, ads / in-app-purchase notes, updated date. The note line under the
+developer appears only when ads/purchases are set — the card's "no ads or
+paid content" fallback is an assertion, so it is not carried over.
+
+**What it deliberately does not show:** the operator-typed numbers and
+badges — rating, stars and star distribution, review count, downloads,
+size, age rating, "reviews verified"/verified-developer badge — and the
+store chrome around the card (store logo, bottom nav, footer links,
+"data safety" boilerplate, "available on all devices"). A page that
+presents operator-entered social proof inside a store look-alike deceives
+the people installing. The editor card itself is unchanged and stays an
+admin-only preview. `routingstore.PwaPage` does not even load those
+columns.
 
 ## In-app WebView bounce (§28/§73)
 
