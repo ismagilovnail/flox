@@ -1,5 +1,40 @@
 import type { PwaComment } from "@/lib/api/pwa";
 
+/** The 20 countries offered when adding a comment set, each with the
+ * languages commonly used there (the first is the default). Any other
+ * geo/lang pair still works via CSV import. */
+export const COMMENT_GEOS: { geo: string; langs: string[] }[] = [
+  { geo: "US", langs: ["en", "es"] },
+  { geo: "IN", langs: ["hi", "en"] },
+  { geo: "BR", langs: ["pt"] },
+  { geo: "ID", langs: ["id", "en"] },
+  { geo: "RU", langs: ["ru"] },
+  { geo: "MX", langs: ["es"] },
+  { geo: "JP", langs: ["ja"] },
+  { geo: "DE", langs: ["de"] },
+  { geo: "GB", langs: ["en"] },
+  { geo: "FR", langs: ["fr"] },
+  { geo: "TR", langs: ["tr"] },
+  { geo: "IT", langs: ["it"] },
+  { geo: "ES", langs: ["es", "ca"] },
+  { geo: "PH", langs: ["en", "tl"] },
+  { geo: "VN", langs: ["vi"] },
+  { geo: "TH", langs: ["th"] },
+  { geo: "PL", langs: ["pl"] },
+  { geo: "CA", langs: ["en", "fr"] },
+  { geo: "EG", langs: ["ar", "en"] },
+  { geo: "NG", langs: ["en"] },
+];
+
+/** Localised region/language name for a code, falling back to the code. */
+export function displayName(type: "region" | "language", code: string, locale: string): string {
+  try {
+    return new Intl.DisplayNames([locale], { type }).of(code) ?? code;
+  } catch {
+    return code;
+  }
+}
+
 /** A comment set is one geo + language pair; its key is "GEO-lang". */
 export const setKey = (c: Pick<PwaComment, "geo" | "lang">) => `${c.geo}-${c.lang}`;
 

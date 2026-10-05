@@ -230,6 +230,8 @@
     "importNone": "No usable rows in the file",
     "imported": "Imported comments: {{count}}",
     "importSkipped": "Skipped rows: {{count}}",
-    "saveError": "PWA saved, but the comments could not be saved"
+    "saveError": "PWA saved, but the comments could not be saved",
+    "geoPlaceholder": "Select a country",
+    "langPlaceholder": "Select a language"
   }
 }

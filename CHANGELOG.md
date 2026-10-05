@@ -23,6 +23,15 @@ eslint clean; migrated, block checked live on /pwa/new (set add). Known:
 Duplicate does not copy comments; add-comment/CSV/save flow not clicked
 through in the browser.
 
+## [Between phases] — PWA comment sets: country and language dropdowns
+
+Adding a comment set now uses two dropdowns instead of free text: top-20
+countries (US, IN, BR, ID, RU, MX, JP, DE, GB, FR, TR, IT, ES, PH, VN, TH,
+PL, CA, EG, NG), each with its common languages; picking a country preselects
+the first language. Names come from `Intl.DisplayNames` in the UI language.
+Other pairs still work through CSV import (the API accepts any two-letter
+codes). tsc, eslint clean; checked live on /pwa/new.
+
 ## [Between phases] — PWA bottom bar toggle
 
 Constructor switch "Нижняя панель меню" hides the bottom bar with the menu

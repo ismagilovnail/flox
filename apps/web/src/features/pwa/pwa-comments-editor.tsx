@@ -10,10 +10,11 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { IconButton } from "@/components/ui/icon-button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import type { PwaComment } from "@/lib/api/pwa";
-import { commentsToCsv, parseCommentsCsv, setKey } from "@/features/pwa/pwa-comments";
+import { COMMENT_GEOS, commentsToCsv, displayName, parseCommentsCsv, setKey } from "@/features/pwa/pwa-comments";
 import { cn } from "@/lib/utils";
 
 const MAX_COMMENTS = 500;
@@ -34,7 +35,8 @@ export function PwaCommentsEditor({
   activeSet: string;
   onActiveSetChange: (key: string) => void;
 }) {
-  const { t } = useTranslation("pwa");
+  const { t, i18n } = useTranslation("pwa");
+  const locale = i18n.language;
   const fileRef = useRef<HTMLInputElement>(null);
   const [selected, setSelected] = useState<Set<PwaComment>>(new Set());
   const [newSet, setNewSet] = useState({ geo: "", lang: "" });
@@ -47,12 +49,13 @@ export function PwaCommentsEditor({
   const countOf = (key: string) => value.filter((c) => setKey(c) === key).length;
   const allSelected = inSet.length > 0 && inSet.every((c) => selected.has(c));
 
-  const setValid = /^[A-Za-z]{2}$/.test(newSet.geo) && /^[A-Za-z]{2}$/.test(newSet.lang);
+  const setValid = newSet.geo !== "" && newSet.lang !== "";
+  const geoLangs = COMMENT_GEOS.find((g) => g.geo === newSet.geo)?.langs ?? [];
   const draftValid = draft.author.trim() !== "" && draft.text.trim() !== "" && draft.rating >= 1 && draft.rating <= 5;
 
   function addSet() {
     if (!setValid) return;
-    const key = `${newSet.geo.toUpperCase()}-${newSet.lang.toLowerCase()}`;
+    const key = `${newSet.geo}-${newSet.lang}`;
     if (!sets.includes(key)) setExtraSets((prev) => [...prev, key]);
     onActiveSetChange(key);
     setNewSet({ geo: "", lang: "" });
@@ -144,11 +147,33 @@ export function PwaCommentsEditor({
           <div className="flex flex-wrap items-end gap-2">
             <div className="grid gap-1">
               <Label htmlFor="pwa-set-geo" className="text-xs">{t("comments.geo")}</Label>
-              <Input id="pwa-set-geo" className="w-20 uppercase" maxLength={2} placeholder="RU" value={newSet.geo} onChange={(e) => setNewSet((s) => ({ ...s, geo: e.target.value }))} />
+              <Select value={newSet.geo} onValueChange={(geo) => setNewSet({ geo, lang: COMMENT_GEOS.find((g) => g.geo === geo)?.langs[0] ?? "" })}>
+                <SelectTrigger id="pwa-set-geo" className="w-52">
+                  <SelectValue placeholder={t("comments.geoPlaceholder")} />
+                </SelectTrigger>
+                <SelectContent>
+                  {COMMENT_GEOS.map((g) => (
+                    <SelectItem key={g.geo} value={g.geo}>
+                      {displayName("region", g.geo, locale)} ({g.geo})
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
             <div className="grid gap-1">
               <Label htmlFor="pwa-set-lang" className="text-xs">{t("comments.lang")}</Label>
-              <Input id="pwa-set-lang" className="w-20 lowercase" maxLength={2} placeholder="ru" value={newSet.lang} onChange={(e) => setNewSet((s) => ({ ...s, lang: e.target.value }))} />
+              <Select value={newSet.lang} disabled={!newSet.geo} onValueChange={(lang) => setNewSet((s) => ({ ...s, lang }))}>
+                <SelectTrigger id="pwa-set-lang" className="w-44">
+                  <SelectValue placeholder={t("comments.langPlaceholder")} />
+                </SelectTrigger>
+                <SelectContent>
+                  {geoLangs.map((l) => (
+                    <SelectItem key={l} value={l}>
+                      {displayName("language", l, locale)} ({l})
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
             <Button type="button" variant="outline" disabled={!setValid} onClick={addSet}>
               <PlusIcon className="size-3.5" /> {t("comments.addSet")}
