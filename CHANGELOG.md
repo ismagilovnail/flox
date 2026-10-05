@@ -37,6 +37,14 @@ the first language. Names come from `Intl.DisplayNames` in the UI language.
 Other pairs still work through CSV import (the API accepts any two-letter
 codes). tsc, eslint clean; checked live on /pwa/new.
 
+## [Between phases] — pointer cursor on buttons (app-wide)
+
+Tailwind's preflight leaves buttons with the arrow cursor. One base-layer rule
+in `globals.css` gives enabled buttons and button-like roles (combobox,
+checkbox, radio, switch, tab, menuitem, option) `cursor: pointer`, disabled
+ones `not-allowed`. Checked live: all 22 buttons on /pwa/new compute to
+pointer. tsc, eslint clean.
+
 ## [Between phases] — PWA screenshots: Upload opens the gallery picker
 
 In the "Скриншоты" block the "Upload" tile now opens the Content Gallery
