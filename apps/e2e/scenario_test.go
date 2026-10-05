@@ -225,6 +225,18 @@ func (s *scenario) doAPI(req *http.Request, wantStatus int, out any) {
 	}
 	defer resp.Body.Close()
 	body, _ := io.ReadAll(resp.Body)
+	// A 429 nobody asked for means this run tripped §54's auth rate limiter
+	// (20 requests / 15 min, keyed on client IP) — a shared, time-windowed
+	// property of the environment, not a defect in the code under test, and
+	// exactly the class requireHealthy already skips rather than fails on.
+	// One full scenario spends 2 of those 20, so ten runs fit in a window
+	// and the eleventh trips it; any other HTTP testing against this API
+	// from the same IP spends from the same budget. Skip with the remedy
+	// spelled out instead of failing with a status mismatch that reads like
+	// a real regression.
+	if resp.StatusCode == http.StatusTooManyRequests && wantStatus != http.StatusTooManyRequests {
+		s.t.Skipf("%s %s: rate limited (429) — this IP has spent its 20-request/15-minute auth budget. Wait for the window to roll over, or clear the key: docker exec <redis> redis-cli DEL ratelimit:auth:<client-ip>", req.Method, req.URL.Path)
+	}
 	if resp.StatusCode != wantStatus {
 		s.t.Fatalf("%s %s: want status %d, got %d: %s", req.Method, req.URL.Path, wantStatus, resp.StatusCode, string(body))
 	}
@@ -600,7 +612,7 @@ func (s *scenario) recordEvent() {
 	ctx := context.Background()
 
 	var clickID, streamSetID, flowID string
-	ok := pollUntil(s.t, 10*time.Second, 500*time.Millisecond, func() bool {
+	ok := pollUntil(s.t, pollBudget, 500*time.Millisecond, func() bool {
 		row := s.ch.QueryRow(ctx,
 			`SELECT click_id, stream_set_id, flow_id FROM click_events
 			  WHERE organization_id = ? AND type = 'SOURCE_CLICK'
@@ -610,7 +622,7 @@ func (s *scenario) recordEvent() {
 		return row.Scan(&clickID, &streamSetID, &flowID) == nil && clickID != ""
 	})
 	if !ok {
-		s.t.Fatal("record event: click never appeared in ClickHouse click_events after worker flush (waited 10s)")
+		s.t.Fatalf("record event: click never appeared in ClickHouse click_events after worker flush (waited %s)", pollBudget)
 	}
 	if streamSetID != s.streamSetID || flowID != s.flowID {
 		s.t.Fatalf("record event: click routed through stream set %q / flow %q, want %q / %q", streamSetID, flowID, s.streamSetID, s.flowID)
@@ -704,7 +716,7 @@ func (s *scenario) attributeConversion() {
 	}
 
 	seen := map[string]timelineEvent{}
-	ok := pollUntil(s.t, 10*time.Second, 500*time.Millisecond, func() bool {
+	ok := pollUntil(s.t, pollBudget, 500*time.Millisecond, func() bool {
 		s.get("/conversions/"+s.clickID, &timeline, http.StatusOK)
 		seen = map[string]timelineEvent{}
 		for _, e := range timeline.Events {
@@ -716,7 +728,7 @@ func (s *scenario) attributeConversion() {
 		return hasHold && hasAccept && hasRedep
 	})
 	if !ok {
-		s.t.Fatalf("attribute conversion: not all of CPA_HOLD/CPA_ACCEPT/CPA_REDEP appeared in /conversions/%s within 10s (saw: %v)", s.clickID, seen)
+		s.t.Fatalf("attribute conversion: not all of CPA_HOLD/CPA_ACCEPT/CPA_REDEP appeared in /conversions/%s within %s (saw: %v)", s.clickID, pollBudget, seen)
 	}
 
 	if timeline.CampaignID != s.campaignID {
@@ -796,7 +808,7 @@ func (s *scenario) analyticsAndLTV() {
 			EventCount uint64 `json:"eventCount"`
 		} `json:"counts"`
 	}
-	ok := pollUntil(s.t, 10*time.Second, 500*time.Millisecond, func() bool {
+	ok := pollUntil(s.t, pollBudget, 500*time.Millisecond, func() bool {
 		s.get(fmt.Sprintf("/analytics/campaigns/%s/daily?from=%s&to=%s", s.campaignID, today, today), &daily, http.StatusOK)
 		for _, c := range daily.Counts {
 			if c.Type == "SOURCE_CLICK" && c.EventCount >= 1 {
@@ -817,7 +829,7 @@ func (s *scenario) analyticsAndLTV() {
 			RevenueUSD float64 `json:"revenueUsd"`
 		} `json:"revenue"`
 	}
-	ok = pollUntil(s.t, 10*time.Second, 500*time.Millisecond, func() bool {
+	ok = pollUntil(s.t, pollBudget, 500*time.Millisecond, func() bool {
 		s.get(fmt.Sprintf("/analytics/campaigns/%s/daily-revenue?from=%s&to=%s", s.campaignID, today, today), &revenue, http.StatusOK)
 		for _, r := range revenue.Revenue {
 			if r.Type == "CPA_ACCEPT" && r.RevenueUSD > 0 {
@@ -886,6 +898,22 @@ func hasAnchor(cohorts []struct {
 // returned 200" and "the row is visible to a query" — asserting
 // synchronously would make this test flaky by construction, not
 // discovering a real bug.
+// pollBudget is deliberately far larger than the ~2s worker poll interval
+// (apps/worker's eventPollIdle) that actually governs when a row lands: the
+// tracker buffers to Postgres event_queue (1s flush) and the worker drains
+// that into ClickHouse, so a few seconds of real lag is normal and correct.
+//
+// Raised from 10s during the 2026-09-05 audit because a full `go test ./...`
+// saturates every core compiling, and the tracker/worker containers share
+// that CPU — but be honest about what this does and does not buy: a
+// TestFullFunnel failure at this step was still observed once at 30s under
+// full-suite load, so the wider budget reduces the false-failure rate
+// without being proven to eliminate it. The assertion itself is unchanged
+// ("the row must appear"); a row that genuinely never arrives still fails,
+// just later. Root-causing the remaining case needs the pipeline observed
+// under load, not a bigger number here.
+const pollBudget = 30 * time.Second
+
 func pollUntil(t *testing.T, timeout, interval time.Duration, fn func() bool) bool {
 	t.Helper()
 	deadline := time.Now().Add(timeout)

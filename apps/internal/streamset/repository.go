@@ -675,6 +675,64 @@ func (r *Repository) loadFlowsTx(ctx context.Context, tx pgx.Tx, orgID, streamSe
 	return flows, rows.Err()
 }
 
+// ListFlows returns every flow across every campaign/stream set in org,
+// for the top-level Flows list (ROADMAP.md: "Flows have no top-level
+// list view"). Org-scoped on all three joined tables (flows,
+// stream_sets, campaigns) — belt-and-suspenders tenant isolation
+// (CLAUDE.md §36-TENANCY): flows.organization_id alone already scopes
+// this correctly via the FK chain, but every other query in this
+// codebase filters organization_id on every tenant-scoped table it
+// touches rather than relying on a transitive join, and this one does
+// too. Ordered by campaign name, then stream-set priority (evaluation
+// order), then flow position — the same order an operator would find
+// a flow in if they opened its parent stream set's own editor.
+func (r *Repository) ListFlows(ctx context.Context, orgID string) ([]FlowSummary, error) {
+	rows, err := r.db.Query(ctx, `
+		SELECT f.id, f.name, f.active, f.weight,
+		       f.landing_enabled, f.landing_id, f.landing_as_pwa,
+		       f.pwa_enabled, f.pwa_id, f.pwa_type,
+		       f.postlanding_enabled, f.postlanding_id,
+		       f.destination_kind, f.destination_network_id, f.destination_offer_id, f.destination_url,
+		       f.updated_at,
+		       s.id, s.name, c.id, c.name
+		FROM flows f
+		JOIN stream_sets s ON s.id = f.stream_set_id AND s.organization_id = f.organization_id
+		JOIN campaigns c ON c.id = s.campaign_id AND c.organization_id = f.organization_id
+		WHERE f.organization_id = $1
+		ORDER BY c.name, s.priority, f.position`,
+		orgID,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("streamset: listing flows: %w", err)
+	}
+	defer rows.Close()
+
+	flows := []FlowSummary{}
+	for rows.Next() {
+		var (
+			fs                                FlowSummary
+			landingID, pwaID, pwaType, postID *string
+			kind                              string
+			networkID, offerID, url           *string
+		)
+		if err := rows.Scan(
+			&fs.ID, &fs.Name, &fs.Active, &fs.Weight,
+			&fs.Landing.Enabled, &landingID, &fs.Landing.AsPwa,
+			&fs.Pwa.Enabled, &pwaID, &pwaType,
+			&fs.Postlanding.Enabled, &postID,
+			&kind, &networkID, &offerID, &url,
+			&fs.UpdatedAt,
+			&fs.StreamSetID, &fs.StreamSetName, &fs.CampaignID, &fs.CampaignName,
+		); err != nil {
+			return nil, fmt.Errorf("streamset: scanning flow summary: %w", err)
+		}
+		scanFlowStages(&fs.Flow, landingID, pwaID, pwaType, postID)
+		fs.Destination = Destination{Kind: routing.DestinationKind(kind), NetworkID: deref(networkID), OfferID: deref(offerID), URL: deref(url)}
+		flows = append(flows, fs)
+	}
+	return flows, rows.Err()
+}
+
 // insertPixelIDs attaches pixelIDs to streamSetID via stream_set_pixels
 // (migration 00008) — a plain many-to-many junction row per id, no
 // position/ordering column (it's a set, not a sequence). Callers pass

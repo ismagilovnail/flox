@@ -510,6 +510,10 @@ func run() error {
 		r.Use(tenantMiddleware)
 		streamSetHandler.Register(r)
 	})
+	srv.Mux().Route("/flows", func(r chi.Router) {
+		r.Use(tenantMiddleware)
+		streamSetHandler.RegisterFlows(r)
+	})
 
 	routingSimulateHandler := routingsimulate.NewHandler(
 		routingsimulate.NewService(routingstore.New(db), &routing.Engine{}), logger,

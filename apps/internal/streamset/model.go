@@ -145,6 +145,47 @@ type Flow struct {
 	Destination Destination     `json:"destination"`
 }
 
+// FlowSummary is one row of the org-wide, cross-campaign Flows list
+// (ROADMAP.md: "Flows have no top-level list view") — Flow's own fields
+// plus the campaign/stream-set context that page needs but a flow
+// nested inside its own stream set's editor already has for free from
+// its surrounding page. UpdatedAt is the flow row's own last-write time
+// — the same moment its ID (below) was last reminted, since Update
+// deletes and reinserts every flow in a stream set whenever its Flows
+// array is saved (see Repository.Update / insertFlows) rather than
+// diffing and patching individual rows in place.
+//
+// That reminting is the reason this ID is NOT a stable, permanent
+// identity the way StreamSet.ID or Campaign.ID are — but only a real
+// editor save triggers it, not every write: apps/web's own
+// onToggleStatus (stream-set-list.tsx) PATCHes {status} alone, leaving
+// UpdateInput.Flows nil, which Repository.Update's own "else" branch
+// just re-reads unchanged — quick pause/activate/reorder actions never
+// touch a flow's id. Opening the full stream-set-editor.tsx form and
+// clicking "Save changes" does, though, even having changed nothing
+// about the flows themselves: that form is a single unified submit, not
+// per-field patches, so it always resubmits the complete flows array,
+// setting UpdateInput.Flows non-nil and hitting the delete-then-reinsert
+// path (see TestListFlowsSpansCampaignsAndCarriesContext's own two
+// subtests proving each case directly). apps/tracker still writes
+// exactly this ID as stream_set_id's own DimFlow counterpart
+// (routing.Engine's RouteResult.FlowID = flow.ID, apps/internal/routing/
+// engine.go), so a flow's "View statistics" link keeps working, but
+// only for events recorded since its current ID was minted — the next
+// full editor save resets that flow's visible history to zero. Disclosed
+// explicitly in the frontend (flow-columns.tsx's own comment + a UI
+// hint), not silently shipped as if IDs were permanent — the same
+// "document the gap, don't hide it" standard applied to Stream Set's
+// own raw-ULID-in-filter-chip tradeoff.
+type FlowSummary struct {
+	Flow
+	StreamSetID   string    `json:"streamSetId"`
+	StreamSetName string    `json:"streamSetName"`
+	CampaignID    string    `json:"campaignId"`
+	CampaignName  string    `json:"campaignName"`
+	UpdatedAt     time.Time `json:"updatedAt"`
+}
+
 // FlowInput omits ID — Flows are replaced wholesale on every write
 // (matching internal/offer's own offer_links precedent and the frontend
 // form's whole-array submission), so the server always mints fresh ids.

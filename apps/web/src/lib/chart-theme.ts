@@ -36,10 +36,17 @@ export const CHART_COLORS = {
 const FONT_SANS = "ui-sans-serif, system-ui, sans-serif";
 const FONT_MONO = "ui-monospace, SFMono-Regular, Menlo, monospace";
 
+/** next/font registers Manrope under a hashed family name, so the only
+ * way to hand it to the canvas is the body's resolved font-family. */
+function resolvedSansFont(): string {
+  if (typeof document === "undefined" || !document.body) return FONT_SANS;
+  return getComputedStyle(document.body).fontFamily || FONT_SANS;
+}
+
 export function chartBaseOption(mode: ChartMode) {
   const t = TOKENS[mode];
   return {
-    textStyle: { fontFamily: FONT_SANS, color: t.text },
+    textStyle: { fontFamily: resolvedSansFont(), color: t.text },
     // ECharts animation is OFF for every chart in this app, deliberately.
     //
     // zrender's Animator crashes with "Cannot read properties of

@@ -38,6 +38,26 @@ func (h *Handler) Register(r chi.Router) {
 	r.With(h.requireWrite).Post("/{id}/duplicate", h.duplicate)
 }
 
+// RegisterFlows mounts the org-wide, top-level /flows route (ROADMAP.md:
+// "Flows have no top-level list view") — a separate mount point from
+// Register above, since it's not nested under one campaign and reads
+// chi.URLParam(r, "campaignId") nowhere. Read-only: flows are still only
+// ever written wholesale through their parent stream set's own Update,
+// so there is nothing here for requireWrite to gate.
+func (h *Handler) RegisterFlows(r chi.Router) {
+	r.Get("/", h.listAllFlows)
+}
+
+func (h *Handler) listAllFlows(w http.ResponseWriter, r *http.Request) {
+	orgID, _ := tenant.OrgID(r.Context())
+	flows, err := h.svc.ListFlows(r.Context(), orgID)
+	if err != nil {
+		apierror.Write(w, h.logger, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"flows": flows})
+}
+
 func campaignID(r *http.Request) string { return chi.URLParam(r, "campaignId") }
 
 func (h *Handler) list(w http.ResponseWriter, r *http.Request) {

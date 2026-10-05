@@ -63,6 +63,13 @@ func (s *Service) Get(ctx context.Context, orgID, campaignID, id string) (Stream
 	return s.repo.GetByID(ctx, orgID, campaignID, id)
 }
 
+// ListFlows returns every flow across every campaign/stream set in org —
+// the top-level Flows list's own endpoint, org-wide rather than scoped
+// to one campaign the way List (above) is.
+func (s *Service) ListFlows(ctx context.Context, orgID string) ([]FlowSummary, error) {
+	return s.repo.ListFlows(ctx, orgID)
+}
+
 func (s *Service) Create(ctx context.Context, orgID, campaignID string, in CreateInput) (StreamSet, error) {
 	in.Name = strings.TrimSpace(in.Name)
 	fields := map[string]string{}

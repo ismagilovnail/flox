@@ -1,0 +1,27 @@
+{
+  "list": {
+    "title": "Flows",
+    "description": "Every weighted destination across every campaign's stream sets, in one place. A flow's \"View statistics\" only shows history recorded since its id was last minted — opening its stream set's own editor and saving resets that, even without changing the flow itself; a quick pause/activate toggle does not.",
+    "loading": "Loading flows…",
+    "loadError": "Couldn't load flows",
+    "searchPlaceholder": "Search flows...",
+    "emptyTitle": "No flows yet",
+    "emptyDescription": "Flows are created inside a campaign's Stream Sets — open a campaign to add one."
+  },
+  "columns": {
+    "name": "Flow",
+    "campaign": "Campaign",
+    "streamSet": "Stream Set",
+    "weight": "Weight",
+    "status": "Status",
+    "destination": "Destination",
+    "updated": "Updated"
+  },
+  "destination": {
+    "redirect": "Redirect"
+  },
+  "row": {
+    "viewStatisticsAria": "View statistics",
+    "viewStatisticsTooltip": "View statistics — resets whenever this flow's stream set is next saved"
+  }
+}

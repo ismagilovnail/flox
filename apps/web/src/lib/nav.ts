@@ -6,6 +6,7 @@ import {
   FileBarChart2Icon,
   FileTextIcon,
   GiftIcon,
+  GitBranchIcon,
   GlobeIcon,
   ImagesIcon,
   LayoutDashboardIcon,
@@ -61,6 +62,7 @@ export const NAV_GROUPS: NavGroup[] = [
     label: "groups.traffic",
     items: [
       { label: "items.campaigns", href: "/campaigns", icon: MegaphoneIcon },
+      { label: "items.flows", href: "/flows", icon: GitBranchIcon },
       { label: "items.clickLog", href: "/click-log", icon: ListIcon },
       { label: "items.trafficSources", href: "/traffic-sources", icon: RadioIcon },
       { label: "items.offers", href: "/offers", icon: TagIcon },

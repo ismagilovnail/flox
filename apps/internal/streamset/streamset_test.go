@@ -549,6 +549,133 @@ func TestCrossTenantIsolation(t *testing.T) {
 	})
 }
 
+// TestListFlowsSpansCampaignsAndCarriesContext is the top-level Flows
+// list's own repository test — two campaigns, each with its own stream
+// set and flow, proving ListFlows is genuinely org-wide (not scoped to
+// one campaign the way List/Get are) and that it carries the
+// campaign/stream-set context a flow's own row doesn't otherwise have
+// outside its parent stream set's editor.
+func TestListFlowsSpansCampaignsAndCarriesContext(t *testing.T) {
+	pool := mustPool(t)
+	ctx := context.Background()
+	orgID := seedOrg(t, ctx, pool)
+	campaignA := seedCampaign(t, ctx, pool, orgID)
+	campaignB := seedCampaign(t, ctx, pool, orgID)
+
+	svc := streamset.NewService(streamset.NewRepository(pool))
+	root := streamset.FilterNode{Kind: streamset.NodeGroup, Joiner: routing.JoinAND}
+
+	setA, err := svc.Create(ctx, orgID, campaignA, streamset.CreateInput{
+		Name: "Set A", RootFilter: root, Flows: []streamset.FlowInput{redirectFlow("Flow A", 100)},
+	})
+	if err != nil {
+		t.Fatalf("creating stream set A: %v", err)
+	}
+	setB, err := svc.Create(ctx, orgID, campaignB, streamset.CreateInput{
+		Name: "Set B", RootFilter: root, Flows: []streamset.FlowInput{redirectFlow("Flow B", 100)},
+	})
+	if err != nil {
+		t.Fatalf("creating stream set B: %v", err)
+	}
+
+	flows, err := svc.ListFlows(ctx, orgID)
+	if err != nil {
+		t.Fatalf("ListFlows: %v", err)
+	}
+	if len(flows) != 2 {
+		t.Fatalf("ListFlows = %d flows, want 2 (one per campaign)", len(flows))
+	}
+
+	byName := map[string]streamset.FlowSummary{}
+	for _, f := range flows {
+		byName[f.Name] = f
+	}
+	a, ok := byName["Flow A"]
+	if !ok {
+		t.Fatalf("Flow A missing from ListFlows result: %+v", flows)
+	}
+	if a.StreamSetID != setA.ID || a.CampaignID != campaignA {
+		t.Fatalf("Flow A context = (streamSetId=%q campaignId=%q), want (%q, %q)", a.StreamSetID, a.CampaignID, setA.ID, campaignA)
+	}
+	if a.StreamSetName != "Set A" {
+		t.Fatalf("Flow A StreamSetName = %q, want %q", a.StreamSetName, "Set A")
+	}
+
+	b, ok := byName["Flow B"]
+	if !ok {
+		t.Fatalf("Flow B missing from ListFlows result: %+v", flows)
+	}
+	if b.StreamSetID != setB.ID || b.CampaignID != campaignB {
+		t.Fatalf("Flow B context = (streamSetId=%q campaignId=%q), want (%q, %q)", b.StreamSetID, b.CampaignID, setB.ID, campaignB)
+	}
+
+	t.Run("cross-tenant isolation", func(t *testing.T) {
+		orgB := seedOrg(t, ctx, pool)
+		flows, err := svc.ListFlows(ctx, orgB)
+		if err != nil {
+			t.Fatalf("ListFlows as a different org: %v", err)
+		}
+		if len(flows) != 0 {
+			t.Fatalf("a different org saw %d flows, want 0", len(flows))
+		}
+	})
+
+	t.Run("a status-only toggle keeps the flow's id", func(t *testing.T) {
+		// apps/web's own onToggleStatus (stream-set-list.tsx) sends
+		// exactly this shape — {status} only, no flows key at all — so
+		// UpdateInput.Flows stays nil and Repository.Update's own "else"
+		// branch just re-reads the existing flow rows unchanged. A quick
+		// pause/activate toggle does NOT reset a flow's stats.
+		paused := streamset.StatusPaused
+		if _, err := svc.Update(ctx, orgID, campaignA, setA.ID, streamset.UpdateInput{Status: &paused}); err != nil {
+			t.Fatalf("pausing stream set A: %v", err)
+		}
+		flows, err := svc.ListFlows(ctx, orgID)
+		if err != nil {
+			t.Fatalf("ListFlows after the status toggle: %v", err)
+		}
+		var gotA streamset.FlowSummary
+		for _, f := range flows {
+			if f.Name == "Flow A" {
+				gotA = f
+			}
+		}
+		if gotA.ID != a.ID {
+			t.Fatalf("Flow A's id changed (%q -> %q) after a status-only toggle that never set Flows, want it unchanged", a.ID, gotA.ID)
+		}
+	})
+
+	t.Run("a full editor save reminting the flows array mints fresh ids", func(t *testing.T) {
+		// apps/web's stream-set-editor.tsx form always resubmits the
+		// complete flows array on every save (a single unified form, not
+		// per-field patches) — so opening the editor and clicking "Save
+		// changes," even having changed nothing about the flows
+		// themselves, sets UpdateInput.Flows non-nil and hits
+		// Repository.Update's delete-then-reinsert branch. This is the
+		// real, disclosed limitation FlowSummary's own doc comment and
+		// the frontend's "View statistics" hint describe — narrower than
+		// "any edit" (the status toggle above proves that), but real
+		// whenever the actual editor form is used.
+		sameFlows := []streamset.FlowInput{redirectFlow("Flow A", 100)}
+		if _, err := svc.Update(ctx, orgID, campaignA, setA.ID, streamset.UpdateInput{Flows: &sameFlows}); err != nil {
+			t.Fatalf("re-saving stream set A's flows: %v", err)
+		}
+		flows, err := svc.ListFlows(ctx, orgID)
+		if err != nil {
+			t.Fatalf("ListFlows after the editor save: %v", err)
+		}
+		var gotA streamset.FlowSummary
+		for _, f := range flows {
+			if f.Name == "Flow A" {
+				gotA = f
+			}
+		}
+		if gotA.ID == a.ID {
+			t.Fatalf("Flow A kept the same id (%q) after its stream set's flows array was resubmitted, want a freshly minted one — if this now fails, the wholesale-replace behavior FlowSummary's doc comment describes has changed and that comment (plus the frontend's disclosed-limitation copy) needs updating too", gotA.ID)
+		}
+	})
+}
+
 func mustPool(t *testing.T) *pgxpool.Pool {
 	t.Helper()
 	dsn := os.Getenv("DATABASE_URL")
