@@ -37,6 +37,17 @@ the first language. Names come from `Intl.DisplayNames` in the UI language.
 Other pairs still work through CSV import (the API accepts any two-letter
 codes). tsc, eslint clean; checked live on /pwa/new.
 
+## [Between phases] — fix: screenshot slider (preview and install page)
+
+The editor preview's Embla carousel did not react to mouse drag, and the
+install page's strip had a hidden scrollbar so a mouse could not scroll it at
+all. Both are now a native horizontal scroll (touch, trackpad, shift+wheel)
+with click-and-drag for the mouse (pointer capture, grab cursor, native image
+drag disabled). tsc, eslint, `go test ./tracker` clean; drag verified live in
+the editor preview. The tracker page itself was not opened live (needs a
+signed test link). `embla-carousel-react` is no longer imported (still listed
+in package.json).
+
 ## [Between phases] — comments modal: CSV format hint and preview caption removed
 
 The "CSV: geo,lang,…" line and the "Превью в реальном времени" caption are gone

@@ -453,6 +453,14 @@
       height:224px;
       scroll-snap-type:x proximity;
       scrollbar-width:none;
+      cursor:grab;
+      user-select:none;
+      -webkit-overflow-scrolling:touch;
+    }
+
+    .shots.dragging{
+      cursor:grabbing;
+      scroll-snap-type:none;
     }
 
     .shots::-webkit-scrollbar{
@@ -467,6 +475,7 @@
     }
 
     .shot img{
+      -webkit-user-drag:none;
       height:204px;
       width:auto;
       border-radius:12px;
@@ -1893,6 +1902,32 @@
   (function () {
 
     var COPY = {{.JSCopy}};
+
+    /* Screenshot strip: native touch/trackpad scroll, plus click-and-drag for
+       a mouse (the scrollbar is hidden). */
+    var shots = document.querySelector(".shots");
+    if (shots) {
+      var startX = 0, startLeft = 0, down = false;
+      shots.addEventListener("pointerdown", function (e) {
+        if (e.pointerType !== "mouse" || e.button !== 0) return;
+        down = true;
+        startX = e.clientX;
+        startLeft = shots.scrollLeft;
+        shots.setPointerCapture(e.pointerId);
+        shots.classList.add("dragging");
+      });
+      shots.addEventListener("pointermove", function (e) {
+        if (down) shots.scrollLeft = startLeft - (e.clientX - startX);
+      });
+      var stop = function (e) {
+        if (!down) return;
+        down = false;
+        shots.classList.remove("dragging");
+        shots.releasePointerCapture(e.pointerId);
+      };
+      shots.addEventListener("pointerup", stop);
+      shots.addEventListener("pointercancel", stop);
+    }
 
     /*
      * ============================================================
