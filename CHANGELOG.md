@@ -37,6 +37,15 @@ the first language. Names come from `Intl.DisplayNames` in the UI language.
 Other pairs still work through CSV import (the API accepts any two-letter
 codes). tsc, eslint clean; checked live on /pwa/new.
 
+## [Between phases] — PWA comments editor in a large modal
+
+The "Комментарии" card in the PWA form now shows a summary of the sets with
+counts and a "Управлять комментариями" button; sets, adding, selection,
+deletion and CSV live in a large modal (two columns: sets left, the selected
+set's comments right). The list stays in the form state, so edits reach the
+PWA on the form's own Save. tsc, eslint clean; modal opened live on /pwa/new
+(adding a comment inside the modal not clicked through).
+
 ## [Between phases] — PWA bottom bar toggle
 
 Constructor switch "Нижняя панель меню" hides the bottom bar with the menu

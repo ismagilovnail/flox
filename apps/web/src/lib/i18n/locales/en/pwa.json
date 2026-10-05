@@ -234,6 +234,9 @@
     "geoPlaceholder": "Select a country",
     "langPlaceholder": "Select a language",
     "geoSearch": "Search country",
-    "geoNotFound": "No country found"
+    "geoNotFound": "No country found",
+    "manage": "Manage comments",
+    "summaryEmpty": "No comments yet.",
+    "modalHint": "Sets on the left, the selected set's comments on the right. Changes reach the PWA when you save the form."
   }
 }
