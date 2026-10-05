@@ -41,6 +41,11 @@
     "showHeaderLabel": "Шапка страницы",
     "showHeaderHint": "Верхняя панель с логотипом, названием «Apps» и значками поиска и помощи.",
     "showHeaderAria": "Показывать шапку страницы",
+    "headerLogoLabel": "Логотип шапки",
+    "headerLogoRemoveAria": "Убрать логотип шапки",
+    "headerTitleLabel": "Название в шапке",
+    "headerTitlePlaceholder": "Apps",
+    "headerBrandHint": "Пусто — стандартный значок и надпись «Apps».",
     "backgroundTheme": {
       "light": "Светлая",
       "dark": "Тёмная",
@@ -81,6 +86,8 @@
     "submitCreate": "Создать PWA",
     "submitEdit": "Сохранить изменения",
     "validation": {
+      "headerTitleMax": "Не длиннее 40 символов",
+      "headerLogoUrlInvalid": "Введите корректную ссылку на логотип",
       "nameMin": "Название должно содержать не менее 2 символов",
       "shortNameRequired": "Обязательно для подписи значка на главном экране",
       "colorInvalid": "Введите цвет в формате #16a34a",

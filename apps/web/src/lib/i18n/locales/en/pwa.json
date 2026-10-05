@@ -41,6 +41,11 @@
     "showHeaderLabel": "Page header",
     "showHeaderHint": "The top bar with the logo, the \"Apps\" title and the search and help icons.",
     "showHeaderAria": "Show the page header",
+    "headerLogoLabel": "Header logo",
+    "headerLogoRemoveAria": "Remove the header logo",
+    "headerTitleLabel": "Header title",
+    "headerTitlePlaceholder": "Apps",
+    "headerBrandHint": "Empty — the default mark and the \"Apps\" title.",
     "backgroundTheme": {
       "light": "Light",
       "dark": "Dark",
@@ -81,6 +86,8 @@
     "submitCreate": "Create PWA",
     "submitEdit": "Save changes",
     "validation": {
+      "headerTitleMax": "Up to 40 characters",
+      "headerLogoUrlInvalid": "Enter a valid logo URL",
       "nameMin": "Name must be at least 2 characters",
       "shortNameRequired": "Required for the home-screen icon label",
       "colorInvalid": "Enter a hex color like #16a34a",

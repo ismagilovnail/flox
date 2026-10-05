@@ -365,6 +365,8 @@ export function PwaPreviewCard({
   backgroundColor,
   themeAuto,
   showHeader = true,
+  headerTitle,
+  headerLogoUrl,
   screenshots,
   whatsNew,
   ratingStars5,
@@ -417,6 +419,9 @@ export function PwaPreviewCard({
   themeAuto?: boolean;
   /** The top bar (brand mark, "Apps", search, help). Defaults to shown. */
   showHeader?: boolean;
+  /** Own title/logo for the top bar; empty = "Apps" and the default mark. */
+  headerTitle?: string;
+  headerLogoUrl?: string;
   screenshots?: string[];
   whatsNew?: string;
   ratingStars5?: number;
@@ -576,8 +581,18 @@ export function PwaPreviewCard({
             style={{ borderColor: "var(--pv-border)" }}
           >
             <div className="flex items-center gap-2 text-lg font-medium text-[var(--pv-text)]">
-              <AppsGlyph />
-              Apps
+              {headerLogoUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element -- operator-supplied logo URL, see the card header
+                <img
+                  src={headerLogoUrl}
+                  alt=""
+                  className="size-6 object-contain"
+                  onError={(e) => (e.currentTarget.style.display = "none")}
+                />
+              ) : (
+                <AppsGlyph />
+              )}
+              <span className="min-w-0 truncate">{headerTitle?.trim() || "Apps"}</span>
             </div>
             <div className="flex items-center gap-4 text-[var(--pv-text)]">
               <SearchIcon className="size-6" />

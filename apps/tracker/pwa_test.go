@@ -346,3 +346,29 @@ func TestRenderPwaPageShowHeader(t *testing.T) {
 		}
 	}
 }
+
+// TestRenderPwaPageHeaderBrand: the top bar shows the operator's own title
+// and logo when set, and the default "Apps" + built-in mark otherwise.
+func TestRenderPwaPageHeaderBrand(t *testing.T) {
+	render := func(p routingstore.PwaPage) string {
+		p.Name, p.ShowHeader = "X", true
+		out, err := renderPwaPage(p, false, "en")
+		if err != nil {
+			t.Fatal(err)
+		}
+		return string(out)
+	}
+	def := render(routingstore.PwaPage{})
+	if !strings.Contains(def, `<span class="brand-title">Apps</span>`) || !strings.Contains(def, `fill="#EA4335"`) {
+		t.Fatal("default header must show Apps and the built-in mark")
+	}
+	own := render(routingstore.PwaPage{HeaderTitle: "My <Store>", HeaderLogoURL: "https://cdn.example/logo.png"})
+	for _, want := range []string{`<span class="brand-title">My &lt;Store&gt;</span>`, `<img src="https://cdn.example/logo.png" alt="">`} {
+		if !strings.Contains(own, want) {
+			t.Fatalf("branded header lacks %q", want)
+		}
+	}
+	if strings.Contains(own, `fill="#EA4335"`) || strings.Contains(own, `brand-title">Apps<`) {
+		t.Fatal("branded header must not keep the default mark or title")
+	}
+}

@@ -5,6 +5,16 @@ per-phase, matching `CLAUDE.md`'s phase protocol. The one exception is
 [Between phases], below: spec amendments and the code changes that follow from
 them land between phases and would otherwise be invisible here.
 
+## [Between phases] — PWA header title and logo
+
+With "Шапка страницы" on, the constructor shows a logo picker (Content
+Gallery) and a title field (max 40); the top bar on the install page and in
+the preview uses them, falling back to the default mark and "Apps".
+`pwas.header_title` / `header_logo_url` (migration 00039, default '') through
+create/update/duplicate with validation (`validateHeaderBrand`), `PwaPage`,
+form and preview. Tests: `TestRenderPwaPageHeaderBrand`; full-env go test,
+tsc, eslint clean; fields checked live on /pwa/new.
+
 ## [Between phases] — PWA header toggle
 
 Constructor switch "Шапка страницы" hides the top bar (brand mark, "Apps",

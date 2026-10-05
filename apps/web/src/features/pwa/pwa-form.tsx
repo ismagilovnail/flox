@@ -107,6 +107,13 @@ export function buildPwaFormSchema(t: TFunction) {
     backgroundColor: hexColor,
     themeAuto: z.boolean(),
     showHeader: z.boolean(),
+    headerTitle: z
+      .string()
+      .max(40, t("form.validation.headerTitleMax", { ns: "pwa" })),
+    headerLogoUrl: z.union([
+      z.literal(""),
+      z.url(t("form.validation.headerLogoUrlInvalid", { ns: "pwa" })),
+    ]),
     iconUrl: z.url(t("form.validation.iconUrlInvalid", { ns: "pwa" })),
     startUrl: z
       .string()
@@ -222,6 +229,8 @@ export function PwaForm({
       backgroundColor: "#ffffff",
       themeAuto: false,
       showHeader: true,
+      headerTitle: "",
+      headerLogoUrl: "",
       iconUrl: "",
       startUrl: "/install",
       bounceInAppWebview: true,
@@ -253,6 +262,7 @@ export function PwaForm({
   const manifest = useWatch({ control });
   const [previewDir, setPreviewDir] = useState<"ltr" | "rtl">("ltr");
   const [pickingIcon, setPickingIcon] = useState(false);
+  const [pickingHeaderLogo, setPickingHeaderLogo] = useState(false);
   const [pickingScreenshot, setPickingScreenshot] = useState(false);
   const accentScheme = matchPreset(PWA_ACCENT_COLORS, manifest.themeColor);
   // "auto" is not a color: it is its own flag, shown as a third dropdown option.
@@ -483,6 +493,85 @@ export function PwaForm({
                 )}
               />
             </div>
+
+            {manifest.showHeader && (
+              <div className="grid gap-4 rounded-md border border-border p-2.5 sm:grid-cols-[auto_1fr]">
+                <div className="grid gap-1.5">
+                  <Label id="pwa-header-logo-label">
+                    {t("form.headerLogoLabel", { ns: "pwa" })}
+                  </Label>
+                  <div className="relative w-fit">
+                    <button
+                      type="button"
+                      aria-labelledby="pwa-header-logo-label"
+                      onClick={() => setPickingHeaderLogo(true)}
+                      className={cn(
+                        "group relative flex size-16 items-center justify-center overflow-hidden rounded-lg border-2 border-dashed text-muted-foreground transition-colors",
+                        errors.headerLogoUrl ? "border-danger" : "border-border hover:border-muted-foreground/50 hover:text-foreground",
+                      )}
+                    >
+                      {manifest.headerLogoUrl ? (
+                        <>
+                          {/* eslint-disable-next-line @next/next/no-img-element -- a Content Gallery public object-storage URL, same as the icon above */}
+                          <img src={manifest.headerLogoUrl} alt="" className="size-full object-contain p-1" />
+                          <div className="absolute inset-0 flex items-center justify-center bg-black/50 opacity-0 transition-opacity group-hover:opacity-100">
+                            <span className="text-xs font-medium text-white">{t("form.iconUrlChange", { ns: "pwa" })}</span>
+                          </div>
+                        </>
+                      ) : (
+                        <span className="flex flex-col items-center gap-1 px-1 text-center">
+                          <ImagesIcon className="size-4" />
+                          <span className="text-[10px] font-medium">{t("form.iconUrlChoose", { ns: "pwa" })}</span>
+                        </span>
+                      )}
+                    </button>
+                    {manifest.headerLogoUrl && (
+                      <IconButton
+                        type="button"
+                        size="icon-xs"
+                        variant="secondary"
+                        className="absolute -top-1.5 -right-1.5 rounded-full shadow"
+                        aria-label={t("form.headerLogoRemoveAria", { ns: "pwa" })}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          form.setValue("headerLogoUrl", "", { shouldValidate: true, shouldDirty: true });
+                        }}
+                      >
+                        <XIcon className="size-3" />
+                      </IconButton>
+                    )}
+                  </div>
+                  {errors.headerLogoUrl && (
+                    <p className="text-xs text-danger">{errors.headerLogoUrl.message}</p>
+                  )}
+                  <GalleryFilePickerDialog
+                    open={pickingHeaderLogo}
+                    onOpenChange={setPickingHeaderLogo}
+                    onPick={(file) =>
+                      form.setValue("headerLogoUrl", file.url, { shouldValidate: true, shouldDirty: true })
+                    }
+                  />
+                </div>
+                <div className="grid content-start gap-1.5">
+                  <Label htmlFor="pwa-header-title">
+                    {t("form.headerTitleLabel", { ns: "pwa" })}
+                  </Label>
+                  <Input
+                    id="pwa-header-title"
+                    maxLength={40}
+                    placeholder={t("form.headerTitlePlaceholder", { ns: "pwa" })}
+                    {...register("headerTitle")}
+                    aria-invalid={!!errors.headerTitle}
+                  />
+                  {errors.headerTitle && (
+                    <p className="text-xs text-danger">{errors.headerTitle.message}</p>
+                  )}
+                  <p className="text-xs text-muted-foreground">
+                    {t("form.headerBrandHint", { ns: "pwa" })}
+                  </p>
+                </div>
+              </div>
+            )}
 
             <Separator />
 
@@ -923,6 +1012,8 @@ export function PwaForm({
               backgroundColor={manifest.backgroundColor}
               themeAuto={manifest.themeAuto}
               showHeader={manifest.showHeader}
+              headerTitle={manifest.headerTitle}
+              headerLogoUrl={manifest.headerLogoUrl}
               description={manifest.description}
               rating={manifest.rating}
               ratingCount={manifest.ratingCount}

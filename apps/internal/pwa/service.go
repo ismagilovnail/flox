@@ -87,6 +87,9 @@ func (s *Service) Create(ctx context.Context, orgID string, in CreateInput) (Pwa
 	}) {
 		fields[k] = v
 	}
+	for k, v := range validateHeaderBrand(&in.HeaderTitle, &in.HeaderLogoURL) {
+		fields[k] = v
+	}
 	if len(fields) > 0 {
 		return Pwa{}, apierror.Validation("invalid pwa", fields)
 	}
@@ -118,6 +121,9 @@ func (s *Service) Update(ctx context.Context, orgID, id string, in UpdateInput) 
 	}
 	if in.IconURL != nil && !isValidURL(*in.IconURL) {
 		fields["iconUrl"] = "enter a valid icon URL"
+	}
+	for k, v := range validateHeaderBrand(in.HeaderTitle, in.HeaderLogoURL) {
+		fields[k] = v
 	}
 	if in.StartURL != nil {
 		trimmed := strings.TrimSpace(*in.StartURL)
@@ -220,6 +226,8 @@ func (s *Service) Duplicate(ctx context.Context, orgID, id string) (Pwa, error) 
 		BackgroundColor:     source.BackgroundColor,
 		ThemeAuto:           source.ThemeAuto,
 		ShowHeader:          source.ShowHeader,
+		HeaderTitle:         source.HeaderTitle,
+		HeaderLogoURL:       source.HeaderLogoURL,
 		IconURL:             source.IconURL,
 		StartURL:            source.StartURL,
 		BounceInAppWebview:  source.BounceInAppWebview,
@@ -305,6 +313,22 @@ func validate(name, shortName, themeColor, backgroundColor, iconURL, startURL st
 	}
 	if startURL == "" {
 		fields["startUrl"] = "required"
+	}
+	return fields
+}
+
+const headerTitleMaxLen = 40
+
+// validateHeaderBrand checks the optional top-bar title and logo: a title of
+// up to headerTitleMaxLen characters, a logo that is empty or an http(s) URL.
+// A nil pointer means "not provided" (update) and is not checked.
+func validateHeaderBrand(title, logo *string) map[string]string {
+	fields := map[string]string{}
+	if title != nil && len([]rune(strings.TrimSpace(*title))) > headerTitleMaxLen {
+		fields["headerTitle"] = fmt.Sprintf("up to %d characters", headerTitleMaxLen)
+	}
+	if logo != nil && *logo != "" && !isValidURL(*logo) {
+		fields["headerLogoUrl"] = "enter a valid logo URL"
 	}
 	return fields
 }

@@ -19,17 +19,19 @@ referenced below as §N).
 ## CURRENT STATE — UPDATE THIS EVERY PHASE
 
 ```
-CURRENT PHASE : PWA HEADER TOGGLE
-STATUS        : done. "Шапка страницы" switch on /pwa/new|[id]; pwas.show_header
-                (00038, default true) → tracker hides the top bar. VERIFIED:
-                full-env go test green, tsc + eslint clean, API rebuilt and
-                migrated, toggle checked live in the preview. Earlier this
-                session: auto theme (00037); pwa.html is the full card for all
-                visitors (operator decision); fake-reviews block and a
-                Google Play look-alike declined.
+CURRENT PHASE : PWA HEADER TITLE AND LOGO
+STATUS        : done. With the header toggle on, /pwa/new|[id] offers a logo
+                picker and a title; pwas.header_title/header_logo_url (00039)
+                → tracker top bar, default "Apps" + built-in mark when empty.
+                VERIFIED: full-env go test green, tsc + eslint clean, API
+                rebuilt and migrated, fields checked live in the preview.
+                Earlier this session: header toggle (00038), auto theme
+                (00037); pwa.html is the full card for all visitors (operator
+                decision); fake-reviews block and a Google Play look-alike
+                declined.
                 Open: user says test page misses some form params — DB row
                 was empty; ask which fields after a real save.
-LAST COMMIT   : this phase's commit — feat(pwa): header toggle.
+LAST COMMIT   : this phase's commit — feat(pwa): header title and logo.
 UNCOMMITTED   : none expected.
 NEXT          : postlanding stage serving (+ postlanding dimension) —
                 already requested by the user; confirm details first.

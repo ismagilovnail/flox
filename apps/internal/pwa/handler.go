@@ -79,6 +79,8 @@ type createRequest struct {
 	BackgroundColor     string   `json:"backgroundColor"`
 	ThemeAuto           bool     `json:"themeAuto"`
 	ShowHeader          *bool    `json:"showHeader"`
+	HeaderTitle         string   `json:"headerTitle"`
+	HeaderLogoURL       string   `json:"headerLogoUrl"`
 	IconURL             string   `json:"iconUrl"`
 	StartURL            string   `json:"startUrl"`
 	BounceInAppWebview  bool     `json:"bounceInAppWebview"`
@@ -120,6 +122,8 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 		BackgroundColor:     req.BackgroundColor,
 		ThemeAuto:           req.ThemeAuto,
 		ShowHeader:          showHeader(req.ShowHeader),
+		HeaderTitle:         req.HeaderTitle,
+		HeaderLogoURL:       req.HeaderLogoURL,
 		IconURL:             req.IconURL,
 		StartURL:            req.StartURL,
 		BounceInAppWebview:  req.BounceInAppWebview,
@@ -158,6 +162,8 @@ type updateRequest struct {
 	BackgroundColor     *string   `json:"backgroundColor"`
 	ThemeAuto           *bool     `json:"themeAuto"`
 	ShowHeader          *bool     `json:"showHeader"`
+	HeaderTitle         *string   `json:"headerTitle"`
+	HeaderLogoURL       *string   `json:"headerLogoUrl"`
 	IconURL             *string   `json:"iconUrl"`
 	StartURL            *string   `json:"startUrl"`
 	BounceInAppWebview  *bool     `json:"bounceInAppWebview"`
@@ -200,6 +206,8 @@ func (h *Handler) update(w http.ResponseWriter, r *http.Request) {
 		BackgroundColor:     req.BackgroundColor,
 		ThemeAuto:           req.ThemeAuto,
 		ShowHeader:          req.ShowHeader,
+		HeaderTitle:         req.HeaderTitle,
+		HeaderLogoURL:       req.HeaderLogoURL,
 		IconURL:             req.IconURL,
 		StartURL:            req.StartURL,
 		BounceInAppWebview:  req.BounceInAppWebview,

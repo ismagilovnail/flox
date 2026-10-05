@@ -99,6 +99,11 @@ hides the top bar — brand mark, "Apps" title, search and help icons. The app
 header block (icon, name, developer, install) is unaffected. A create request
 that omits the field gets "on".
 
+With the header on, the operator can set their own title (`header_title`, up
+to 40 characters) and logo (`header_logo_url`, picked from the Content Gallery,
+empty or an http(s) URL; migration 00039). Empty means the default "Apps" and
+the built-in mark. The title is escaped like every other template value.
+
 ## In-app WebView bounce (§28/§73)
 
 With the PWA's `bounceInAppWebview` on, a request whose user agent
