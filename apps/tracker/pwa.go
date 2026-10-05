@@ -380,7 +380,7 @@ var pwaStoreCopy = map[string]map[string]string{
 		"containsAds": "Есть реклама", "inAppPurchases": "Покупки в приложении",
 		"version": "Текущая версия", "category": "Категория", "ageRating": "Возраст",
 		"interactiveElements": "Интерактивные элементы", "developer": "Разработчик",
-		"dSize": "Размер", "dDownloads": "Скачивания", "dAge": "Возраст",
+		"dSize": "Размер", "dDownloads": "Скачивания", "dAge": "Возраст", "placeholderDeveloper": "Разработчик",
 	},
 	"en": {
 		"adFree": "No ads or paid content", "noData": "No rating yet", "reviews": "reviews",
@@ -397,7 +397,7 @@ var pwaStoreCopy = map[string]map[string]string{
 		"containsAds": "Contains ads", "inAppPurchases": "In-app purchases",
 		"version": "Current version", "category": "Category", "ageRating": "Age",
 		"interactiveElements": "Interactive elements", "developer": "Developer",
-		"dSize": "Size", "dDownloads": "Downloads", "dAge": "Age",
+		"dSize": "Size", "dDownloads": "Downloads", "dAge": "Age", "placeholderDeveloper": "Developer",
 	},
 }
 

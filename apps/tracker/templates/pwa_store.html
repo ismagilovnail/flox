@@ -915,9 +915,9 @@
       </svg>
 
       <svg viewBox="0 0 24 24" fill="none">
-        <circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.8"/>
-        <path d="M12 10v6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
-        <circle cx="12" cy="7" r="1" fill="currentColor"/>
+        <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2"/>
+        <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        <path d="M12 17h.01" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
       </svg>
     </div>
 
@@ -955,9 +955,7 @@
 
       <div class="developer" id="dev">
 
-        {{if .Page.Developer}}
-        <span>{{.Page.Developer}}</span>
-        {{end}}
+        <span>{{if .Page.Developer}}{{.Page.Developer}}{{else}}{{index .Copy "placeholderDeveloper"}}{{end}}</span>
 
         <svg class="verified" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
           <path
@@ -1920,6 +1918,7 @@
      */
 
     var deferred = null;
+    var devHTML = null;
 
 
     function showInstalled() {
@@ -1929,10 +1928,8 @@
 
       if (dev) {
 
-        var developerText = dev.getAttribute("data-developer");
-
-        if (developerText) {
-          dev.innerHTML = developerText;
+        if (devHTML !== null) {
+          dev.innerHTML = devHTML;
         }
 
       }
@@ -1962,6 +1959,10 @@
       actions.classList.add("busy-actions");
 
       if (dev) {
+
+        if (devHTML === null) {
+          devHTML = dev.innerHTML;
+        }
 
         dev.innerHTML =
                 "<span>" +
