@@ -183,6 +183,15 @@ services:
       CLICKHOUSE_USER: flox
       CLICKHOUSE_PASSWORD: ""
       REDIS_URL: redis://redis:6379/0
+      # Internal landings (docs/landings.md, "Serving visitors"): the
+      # click-link signing key (dev-only value, matches .env.example), and
+      # the object-storage endpoint/bucket so served pages' <base href>
+      # points at their assets. No storage credentials: the tracker only
+      # builds public URLs, it never reads or writes objects.
+      LANDING_LINK_KEY: "19RzlC3SBPwVig37KNN84MG90P84kvYsr8dVA+jnXn8="
+      S3_ENDPOINT: http://minio:9000
+      S3_PUBLIC_ENDPOINT: http://localhost:9002
+      S3_BUCKET: flox
     ports:
       - "8081:8081"
 

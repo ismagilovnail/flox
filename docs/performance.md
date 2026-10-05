@@ -134,6 +134,26 @@ this test; see **Caveats**.
   against the real Postgres matched the enqueued count exactly (104,999)
   after the full four-run sequence — durable, not just counter-reported.
 
+## Landing serving (ZIP landings phase B)
+
+Re-measured when `apps/tracker` started serving internal landings
+(`docs/landings.md`, "Serving visitors"), same machine, `-benchtime 2s
+-count 3`:
+
+| Benchmark | ns/op | ≈ |
+|---|---:|---:|
+| `BenchmarkTrack` (serial, 6 stream sets) | ~512,000 | 0.51 ms |
+| `BenchmarkTrack_Landing` (serial: route + PK read of the page + sign + render + 2 events + write HTML) | ~493,000 | **0.49 ms** |
+| `BenchmarkLandClick` (verify token + classify + enqueue + 302, no DB) | ~10,500 | **0.01 ms** |
+
+Serving a landing costs no more than a plain redirect: the extra
+`LoadLandingPage` primary-key read is offset by the fixture's smaller
+routing config, and signing + rendering a typical page is microseconds.
+The click-through never touches a database. Both stay ~40× under the
+20 ms p50 target. (These benchmarks also exposed that `BenchmarkTrack`/
+`BenchmarkTrack_Parallel` had been panicking on a nil `clientIP` since
+the trusted-proxy fix — fixed in the same change.)
+
 ## Conclusion
 
 At every scale tested, `apps/tracker`'s redirect path is measured at

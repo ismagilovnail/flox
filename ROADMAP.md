@@ -104,6 +104,7 @@ session.
 | Report builder's filter-value dropdown suggests real distinct values — new `POST /analytics/dimension-values` endpoint (`chstore.DistinctValues`); the mock pool now only backs the loading placeholder and the 5 still-unbacked dimensions | done |
 | DataTable gets real column resizing (opt-in per-column, zero visual change until a user drags a handle) and CSV export (all filtered/sorted rows, not just the current page) — `components/ui/data-table.tsx`, repo-wide across all 22 call sites | done |
 | Landings as uploaded ZIP bundles (reference: adset.pro custom landings) — upload/re-upload keeping the ID, logo/title, template editor with live preview, injected `trackUrl`/`engine_onClickButton` runtime (`docs/landings.md`) | done (phase A) |
+| Tracker serves landings: internal pages rendered on `/t/`, signed `/lc/` click-through, first real `LAND_VIEW`/`LAND_CLICK` events; external landings redirect to their URL (`docs/landings.md`, "Serving visitors") | done (phase B) |
 
 ## Known open gaps
 
@@ -118,7 +119,6 @@ scoped phase; none blocks anything that ships today.
 | Video upload/transcoding in Content Gallery (images only today) | needs a real ffmpeg/worker pipeline |
 | Flows have no top-level list view, so no "View statistics" drill-in row | flows live nested inside a campaign's edit page |
 | 4 of the report builder's 16 named dimensions still unbacked (`landing`/`pwa`/`postlanding`/`offer`) | need IDs threaded through `apps/tracker`'s event emission + a ClickHouse schema migration — `stream_set` (closed) shows the pattern once a column exists; these still need one |
-| Tracker doesn't serve landings yet: flows' landing stage is configuration only, `LAND_VIEW`/`LAND_CLICK` never emitted | phase B of the ZIP-landings work — `apps/tracker` serves `landing.Render(...)`, records the events, click URL continues to the offer (`docs/landings.md`) |
 | Google Play URL parsing for the PWA listing preview | would need a scraper behind `apps/internal/urlsafety` |
 | `TRUSTED_PROXIES` still on its default (no real reverse proxy/LB/CDN deployed yet) | set it once real infrastructure exists in front of `apps/api`/`apps/tracker` |
 | `golang.org/x/crypto/openpgp` (`GO-2026-5932`) has no upstream fix | permanent, accepted, unreachable — this codebase only imports `bcrypt`; see `docs/security.md` Known limitations |

@@ -19,57 +19,51 @@ referenced below as §N).
 ## CURRENT STATE — UPDATE THIS EVERY PHASE
 
 ```
-CURRENT PHASE : LANDINGS AS ZIP BUNDLES — PHASE A of 2 (management side),
-                modelled on adset.pro "Пользовательские лендинги". Scope
-                picked by the user: A now, B (tracker serving) next;
-                internal → ZIP, external URL landings kept.
-STATUS        : done. Internal landings are uploaded ZIPs: entry file
-                (index.html/index.twig, root or single top folder) in
-                Postgres, assets in object storage under a per-upload
-                version prefix; zip-slip/zip-bomb/limits guarded; root-
-                absolute asset refs returned as warnings. Re-upload keeps
-                the ID (new version first, row swap, old version
-                deleted). Logo (gallery 1:1 picker) + title. Full-screen
-                template editor (CodeMirror 6, lazy) with live preview
-                from POST /landings/{id}/preview — rendered by
-                landing.Render, the same pure Go function phase B's
-                tracker will serve visitors with (trackUrl global,
-                engine_onClickButton, all <a> bound incl. delegated,
-                data-flox-skip, {{ trackUrl }} macro, <base href>).
-                Sandboxed iframe, no allow-same-origin. Type immutable
-                after creation; fake slug CDN URL removed. Migration
-                00036. VERIFIED: go build/vet/gofmt/test ./... green
-                (landing tests run against real Postgres + MinIO; RBAC
-                coverage test caught preview ungated — fixed); web tsc/
-                eslint/vitest/next build clean. Real browser pass (ru):
-                validation, upload w/ logo crop, warning toast, editor
-                live preview + save + discard confirm, re-upload twig
-                keeps ID, list/duplicate/delete with S3 cleanup
-                confirmed. Fixed during the pass: preview trackUrl "#"
-                resolved against <base> and navigated the frame away
-                (now javascript:void(0)); ru discard-dialog buttons
-                overflowed. All fixtures removed. Full detail:
-                docs/landings.md.
-LAST COMMIT   : this phase's commit — feat(landings): ZIP bundles,
-                template editor, injected runtime. Before it: 126e879
-                change font; da7fd9a feat(ui): DataTable column resizing
-                + CSV export; 9ac2e14 feat(analytics): report builder
-                filter-value dropdown suggests real data — full detail in
+CURRENT PHASE : LANDINGS AS ZIP BUNDLES — PHASE B of 2 (tracker serves
+                landings to visitors). Phase A (management: upload,
+                editor, runtime) committed as 420a2ce.
+STATUS        : done. apps/tracker /t/{slug}: a routed flow's enabled
+                internal landing (active/archived) is served as the
+                response (landing.Render, <base> to the bundle, signed
+                trackUrl), SOURCE_CLICK + LAND_VIEW recorded; paused →
+                skipped; external → 302 to its URL; load failure →
+                logged, 302 to destination. New GET /lc/{token}:
+                HMAC-signed link (apps/internal/landinglink, 30-day max
+                age) → LAND_CLICK on the same click_id with utm/subs →
+                302 to the destination; no DB; bad tokens 404 (no open
+                redirect). routingstore joins the landing stage with the
+                flows (org-scoped), page source read by PK only when
+                served. New LANDING_LINK_KEY (unset → internal landings
+                skipped with a startup warning) + tracker S3 endpoint/
+                bucket env. First time LAND_VIEW/LAND_CLICK are emitted
+                by anything. VERIFIED: go build/vet/gofmt/test ./...
+                green; new landinglink + tracker landing tests (real
+                Postgres). Bench: landing ≈0.49 ms (= plain redirect),
+                click-through ≈0.01 ms (docs/performance.md); fixed the
+                existing tracker benches panicking on nil clientIP. Live:
+                real API-built campaign + uploaded landing, opened the
+                tracking link in Chrome as a visitor, clicked through to
+                the offer; SOURCE_CLICK/LAND_VIEW/LAND_CLICK arrived in
+                ClickHouse via the real worker. Fixtures removed. No
+                frontend change this phase.
+LAST COMMIT   : this phase's commit — feat(tracker): serve landings,
+                signed click-through. Before it: 420a2ce
+                feat(landings): ZIP bundles, template editor, injected
+                runtime; 126e879 change font; da7fd9a feat(ui): DataTable
+                column resizing + CSV export — full detail in
                 CHANGELOG.md.
 UNCOMMITTED   : none after this phase's commit.
-NEXT          : PHASE B of ZIP landings (already agreed with the user):
-                apps/tracker serves landing.Render(content, url, <click
-                URL>) when the routed flow has a landing, emits
-                LAND_VIEW; the click URL emits LAND_CLICK and continues to
-                the offer destination. Touches the redirect hot path
-                (invariant #9) — needs its own bench run. Confirm details
-                before starting. Other known gaps unchanged (ROADMAP.md
-                Known-open-gaps table): cloudflare_registrar adapter;
-                SMS/email 2FA; 7 English-only areas; Content Gallery
-                video; Flows list view; landing/pwa/postlanding/offer
-                report dimensions; Google Play URL parsing;
-                TRUSTED_PROXIES (blocked on infra); GO-2026-5932
-                (permanent, unreachable).
+NEXT          : confirm scope before starting. Landing-adjacent
+                follow-ups now unblocked: `landing` report dimension
+                (needs a landing_id column on tracking_events — the
+                event already knows it via the token); landing asPwa +
+                PWA/postlanding stages in the tracker; push/PWA variants
+                of engine_onClickButton. Other known gaps unchanged
+                (ROADMAP.md): cloudflare_registrar adapter; SMS/email
+                2FA; 7 English-only areas; Content Gallery video; Flows
+                list view; pwa/postlanding/offer report dimensions;
+                Google Play URL parsing; TRUSTED_PROXIES (blocked on
+                infra); GO-2026-5932 (permanent, unreachable).
 ```
 
 > At the end of every phase: update the four lines above, add a CHANGELOG entry,

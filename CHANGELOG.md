@@ -5,6 +5,32 @@ per-phase, matching `CLAUDE.md`'s phase protocol. The one exception is
 [Between phases], below: spec amendments and the code changes that follow from
 them land between phases and would otherwise be invisible here.
 
+## [Between phases] — Tracker serves landings to visitors (ZIP landings phase B of 2)
+
+Closed the loop phase A left open: a flow's landing stage now actually
+does something for a real visitor. Full detail: `docs/landings.md`,
+"Serving visitors".
+
+- `apps/tracker` `/t/{slug}`: an enabled internal landing (active or
+  archived) is served as the response itself — `landing.Render` with a
+  `<base href>` to the bundle and a signed `trackUrl` — recording
+  `SOURCE_CLICK` + `LAND_VIEW`. Paused → skipped; external → 302 to its
+  URL; page-load failure → logged, 302 to the destination.
+- New `GET /lc/{token}`: verifies the HMAC-signed click link
+  (`apps/internal/landinglink`), records `LAND_CLICK` on the same click_id
+  with the original utm/subs, 302 to the routed destination. No DB access.
+  Bad/forged/expired tokens → 404, nothing recorded (no open redirect).
+- `routingstore` loads each flow's landing stage with the flows (org-
+  scoped join) and reads page source by PK only when serving.
+- New config `LANDING_LINK_KEY` (unset → internal landings skipped, warned
+  at startup); tracker now also gets `S3_*` endpoint/bucket for asset URLs
+  (dev/test compose, `.env.example`).
+- First time `LAND_VIEW`/`LAND_CLICK` are emitted by anything — the
+  analytics funnel's landing stages now have real data.
+- Benchmarks: serving a landing ≈0.49 ms (same as a plain redirect),
+  click-through ≈0.01 ms. Also fixed `BenchmarkTrack`/`_Parallel`
+  panicking on a nil `clientIP` (broken since the trusted-proxy change).
+
 ## [Between phases] — Landings become uploaded ZIP bundles (phase A of 2, reference: adset.pro "custom landings")
 
 Brought the Landings module up to the reference product's custom-landing

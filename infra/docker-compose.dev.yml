@@ -221,6 +221,15 @@ services:
       # instead. Restart the tracker service after adding the files.
       GEOIP_CITY_DB_PATH: /geoip/dbip-city-lite.mmdb
       GEOIP_ASN_DB_PATH: /geoip/dbip-asn-lite.mmdb
+      # Internal landings (docs/landings.md, "Serving visitors"): the
+      # click-link signing key (dev-only value, matches .env.example), and
+      # the object-storage endpoint/bucket so served pages' <base href>
+      # points at their assets. No storage credentials: the tracker only
+      # builds public URLs, it never reads or writes objects.
+      LANDING_LINK_KEY: "19RzlC3SBPwVig37KNN84MG90P84kvYsr8dVA+jnXn8="
+      S3_ENDPOINT: http://minio:9000
+      S3_PUBLIC_ENDPOINT: http://localhost:9000
+      S3_BUCKET: flox
     volumes:
       - ../apps:/src
       - tracker_go_mod_cache:/go/pkg/mod

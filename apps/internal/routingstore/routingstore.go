@@ -77,6 +77,29 @@ func (s *Store) ResolveTrackingLink(ctx context.Context, host, slug string) (Tra
 type CampaignRouting struct {
 	Config                routing.RoutingConfig
 	StickyFlowKeepClickID bool
+	// FlowLandings maps a flow id to its enabled landing stage — only
+	// flows whose landing stage is enabled and points at a landing appear.
+	// Kept beside Config, not inside routing.Flow, for the same reason as
+	// StickyFlowKeepClickID: it changes what the tracker serves after a
+	// flow is chosen, never which flow is chosen.
+	FlowLandings map[string]FlowLanding
+}
+
+// FlowLanding is the small, per-flow part of a landing the tracker needs
+// to decide what to serve. The (possibly large) page source is only read
+// by LoadLandingPage, and only when an internal landing is actually being
+// served.
+type FlowLanding struct {
+	LandingID string
+	Type      string // "internal" | "external"
+	Status    string // "active" | "paused" | "archived"
+	URL       string // external landings only
+}
+
+// LandingPage is an internal landing's renderable source.
+type LandingPage struct {
+	Content      string
+	BundlePrefix string
 }
 
 // LoadRoutingConfig assembles the campaign's full routing configuration:
@@ -91,6 +114,7 @@ type CampaignRouting struct {
 func (s *Store) LoadRoutingConfig(ctx context.Context, orgID, campaignID string) (CampaignRouting, error) {
 	cfg := routing.RoutingConfig{CampaignID: campaignID}
 	var keepClickID bool
+	flowLandings := map[string]FlowLanding{}
 
 	var updatedAt time.Time
 	err := s.db.QueryRow(ctx, `
@@ -120,7 +144,7 @@ func (s *Store) LoadRoutingConfig(ctx context.Context, orgID, campaignID string)
 		if err != nil {
 			return CampaignRouting{}, err
 		}
-		flows, flowUpdated, err := s.loadFlows(ctx, orgID, setIDs)
+		flows, flowUpdated, err := s.loadFlows(ctx, orgID, setIDs, flowLandings)
 		if err != nil {
 			return CampaignRouting{}, err
 		}
@@ -144,7 +168,7 @@ func (s *Store) LoadRoutingConfig(ctx context.Context, orgID, campaignID string)
 	// needs. Milliseconds, so an edit and a read in the same second still
 	// produce different versions.
 	cfg.ConfigVersion = newest.UnixMilli()
-	return CampaignRouting{Config: cfg, StickyFlowKeepClickID: keepClickID}, nil
+	return CampaignRouting{Config: cfg, StickyFlowKeepClickID: keepClickID, FlowLandings: flowLandings}, nil
 }
 
 func (s *Store) loadStreamSets(ctx context.Context, orgID, campaignID string) ([]routing.StreamSet, []string, time.Time, error) {
@@ -281,13 +305,20 @@ func (s *Store) loadFilterTrees(ctx context.Context, orgID string, setIDs []stri
 // destination's offer is still active — the check internal/routing needs
 // for §58's "inactive offers" case. The offer's URL comes from its first
 // offer_link.
-func (s *Store) loadFlows(ctx context.Context, orgID string, setIDs []string) (map[string][]routing.Flow, time.Time, error) {
+//
+// It also fills landings with each flow's enabled landing stage, joined in
+// the same query — org-scoped on the landing side too, so a landing id
+// from another organization can never be served even if one were ever
+// written into a flow.
+func (s *Store) loadFlows(ctx context.Context, orgID string, setIDs []string, landings map[string]FlowLanding) (map[string][]routing.Flow, time.Time, error) {
 	rows, err := s.db.Query(ctx, `
 		SELECT f.stream_set_id, f.id, f.name, f.active, f.weight,
 		       f.destination_kind, f.destination_url,
-		       o.status, ol.url, f.updated_at
+		       o.status, ol.url, f.updated_at,
+		       l.id, l.type, l.status, l.url
 		FROM flows f
 		LEFT JOIN offers o ON o.id = f.destination_offer_id
+		LEFT JOIN landings l ON f.landing_enabled AND l.id = f.landing_id AND l.organization_id = f.organization_id
 		LEFT JOIN LATERAL (
 		    SELECT url FROM offer_links
 		    WHERE offer_id = f.destination_offer_id
@@ -314,9 +345,17 @@ func (s *Store) loadFlows(ctx context.Context, orgID string, setIDs []string) (m
 			offerStatus *string
 			offerURL    *string
 			updated     time.Time
+
+			landingID, landingType, landingStatus, landingURL *string
 		)
-		if err := rows.Scan(&setID, &f.ID, &f.Name, &f.Active, &f.Weight, &kind, &destURL, &offerStatus, &offerURL, &updated); err != nil {
+		if err := rows.Scan(&setID, &f.ID, &f.Name, &f.Active, &f.Weight, &kind, &destURL, &offerStatus, &offerURL, &updated,
+			&landingID, &landingType, &landingStatus, &landingURL); err != nil {
 			return nil, time.Time{}, fmt.Errorf("scanning flow: %w", err)
+		}
+		if landingID != nil {
+			landings[f.ID] = FlowLanding{
+				LandingID: *landingID, Type: deref(landingType), Status: deref(landingStatus), URL: deref(landingURL),
+			}
 		}
 		if updated.After(newest) {
 			newest = updated
@@ -336,6 +375,26 @@ func (s *Store) loadFlows(ctx context.Context, orgID string, setIDs []string) (m
 		flows[setID] = append(flows[setID], f)
 	}
 	return flows, newest, rows.Err()
+}
+
+// LoadLandingPage reads an internal landing's entry-file source and asset
+// prefix — one primary-key lookup, org-scoped, run only when the tracker
+// is about to serve that landing.
+func (s *Store) LoadLandingPage(ctx context.Context, orgID, landingID string) (LandingPage, error) {
+	var p LandingPage
+	err := s.db.QueryRow(ctx, `
+		SELECT content, bundle_prefix
+		FROM landings
+		WHERE id = $1 AND organization_id = $2 AND type = 'internal'`,
+		landingID, orgID,
+	).Scan(&p.Content, &p.BundlePrefix)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return LandingPage{}, ErrNotFound
+	}
+	if err != nil {
+		return LandingPage{}, fmt.Errorf("loading landing page: %w", err)
+	}
+	return p, nil
 }
 
 func deref(s *string) string {

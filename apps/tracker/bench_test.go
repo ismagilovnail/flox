@@ -8,14 +8,18 @@ import (
 	"net/http/httptest"
 	"os"
 	"testing"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/ismagilovnail/flox/apps/internal/campaign"
 	"github.com/ismagilovnail/flox/apps/internal/classifier"
+	"github.com/ismagilovnail/flox/apps/internal/clientip"
 	"github.com/ismagilovnail/flox/apps/internal/eventbuf"
 	"github.com/ismagilovnail/flox/apps/internal/idgen"
+	"github.com/ismagilovnail/flox/apps/internal/landing"
+	"github.com/ismagilovnail/flox/apps/internal/landinglink"
 	"github.com/ismagilovnail/flox/apps/internal/routing"
 	"github.com/ismagilovnail/flox/apps/internal/routingstore"
 	"github.com/ismagilovnail/flox/apps/internal/streamset"
@@ -170,6 +174,7 @@ func BenchmarkTrack(b *testing.B) {
 		engine:     &routing.Engine{},
 		events:     events,
 		logger:     slog.New(slog.NewTextHandler(io.Discard, nil)),
+		clientIP:   benchResolver(b),
 	}
 	r := chi.NewRouter()
 	handler.Register(r)
@@ -209,6 +214,7 @@ func BenchmarkTrack_Parallel(b *testing.B) {
 		engine:     &routing.Engine{},
 		events:     events,
 		logger:     slog.New(slog.NewTextHandler(io.Discard, nil)),
+		clientIP:   benchResolver(b),
 	}
 	r := chi.NewRouter()
 	handler.Register(r)
@@ -229,4 +235,56 @@ func BenchmarkTrack_Parallel(b *testing.B) {
 			}
 		}
 	})
+}
+
+// benchResolver: Handler.track resolves the client IP through
+// h.clientIP, which must be non-nil — these benchmarks predate that field
+// (security audit finding #2) and panicked on a nil resolver until it was
+// set here.
+func benchResolver(b *testing.B) *clientip.Resolver {
+	b.Helper()
+	r, err := clientip.New(nil, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	if err != nil {
+		b.Fatalf("clientip: %v", err)
+	}
+	return r
+}
+
+// BenchmarkTrack_Landing is BenchmarkTrack for a flow with an internal
+// landing: resolve, load config (now joining the landing stage), route,
+// load the page source, sign the click link, render, enqueue
+// SOURCE_CLICK + LAND_VIEW, write the HTML.
+func BenchmarkTrack_Landing(b *testing.B) {
+	pool := benchPool(b)
+	fx := seedLandingFixture(b, pool, internalLanding(landing.StatusActive))
+	h, _, closeEvents := newLandingHandler(b, pool, true)
+	b.Cleanup(closeEvents)
+
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		if rec := get(h, fx.host, "/t/go?sub1=a"); rec.Code != http.StatusOK {
+			b.Fatalf("status = %d, want 200", rec.Code)
+		}
+	}
+}
+
+// BenchmarkLandClick is the click-through: verify the signed token,
+// classify, enqueue LAND_CLICK, redirect — no database access at all.
+func BenchmarkLandClick(b *testing.B) {
+	pool := benchPool(b)
+	h, _, closeEvents := newLandingHandler(b, pool, true)
+	b.Cleanup(closeEvents)
+	tok := landinglink.NewSigner(testLinkKey).Sign(landinglink.Claims{
+		OrganizationID: "org", CampaignID: "camp", ClickID: "click", FlowID: "flow", LandingID: "lnd",
+		Destination: landingTestOffer, IssuedAt: time.Now().Unix(), Subs: []string{"a"},
+	})
+
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		if rec := get(h, "t.example", "/lc/"+tok); rec.Code != http.StatusFound {
+			b.Fatalf("status = %d, want 302", rec.Code)
+		}
+	}
 }

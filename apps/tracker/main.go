@@ -29,6 +29,7 @@ import (
 	"github.com/ismagilovnail/flox/apps/internal/conversion"
 	"github.com/ismagilovnail/flox/apps/internal/eventbuf"
 	"github.com/ismagilovnail/flox/apps/internal/eventqueue"
+	"github.com/ismagilovnail/flox/apps/internal/landinglink"
 	"github.com/ismagilovnail/flox/apps/internal/logging"
 	"github.com/ismagilovnail/flox/apps/internal/metrics"
 	"github.com/ismagilovnail/flox/apps/internal/postback"
@@ -37,6 +38,7 @@ import (
 	"github.com/ismagilovnail/flox/apps/internal/rediscache"
 	"github.com/ismagilovnail/flox/apps/internal/routing"
 	"github.com/ismagilovnail/flox/apps/internal/routingstore"
+	"github.com/ismagilovnail/flox/apps/internal/storage"
 	"github.com/ismagilovnail/flox/apps/internal/telemetry"
 )
 
@@ -130,6 +132,21 @@ func run() error {
 		events:     events,
 		logger:     logger,
 		clientIP:   clientIP,
+	}
+
+	// Internal landings (docs/landings.md, "Serving visitors"). Both
+	// dependencies are optional: without a signing key internal landing
+	// stages are skipped (straight to the destination, as before), without
+	// storage pages are served with no <base href>.
+	if key, err := landinglink.ParseKey(cfg.LandingLinkKey); err != nil {
+		logger.Warn("internal landings disabled: flows with one redirect straight to their destination", "error", err)
+	} else {
+		handler.links = landinglink.NewSigner(key)
+	}
+	if assets, err := storage.NewClient(cfg.S3); err != nil {
+		logger.Warn("object storage not configured, internal landings are served without asset base URLs", "error", err)
+	} else {
+		handler.assets = assets
 	}
 
 	// ClickHouse is best-effort at startup, same stance as Redis below: a

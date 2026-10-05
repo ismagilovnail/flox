@@ -72,6 +72,14 @@ type Config struct {
 	// plain text (migration 00018) — this key never touches it.
 	AdAccountEncryptionKey string
 
+	// LandingLinkKey is the HMAC key (32+ raw bytes, base64-encoded)
+	// apps/tracker signs internal landings' click links with
+	// (apps/internal/landinglink). Missing or invalid: the tracker logs a
+	// warning at startup and skips internal landing stages — redirecting
+	// straight to the flow's destination, exactly as before landings were
+	// served — rather than serving pages whose links it can't sign.
+	LandingLinkKey string
+
 	// --- Geo/ASN (apps/internal/classifier/maxmind) ---
 	// Local MaxMind GeoLite2 .mmdb file paths — both empty (the default,
 	// since no database ships in the repo; MaxMind's EULA requires a free
@@ -169,6 +177,7 @@ func load(portVar, portDefault, defaultServiceName string) (Config, error) {
 		TOTPEncryptionKey:        getEnv("TOTP_ENCRYPTION_KEY", ""),
 		IntegrationEncryptionKey: getEnv("INTEGRATION_ENCRYPTION_KEY", ""),
 		AdAccountEncryptionKey:   getEnv("ADACCOUNT_ENCRYPTION_KEY", ""),
+		LandingLinkKey:           getEnv("LANDING_LINK_KEY", ""),
 		TrackerDNSTarget:         getEnv("TRACKER_DNS_TARGET", ""),
 
 		GeoIPCityDBPath: getEnv("GEOIP_CITY_DB_PATH", ""),

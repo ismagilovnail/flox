@@ -14,9 +14,11 @@ import (
 	"github.com/ismagilovnail/flox/apps/internal/event"
 	"github.com/ismagilovnail/flox/apps/internal/eventbuf"
 	"github.com/ismagilovnail/flox/apps/internal/idgen"
+	"github.com/ismagilovnail/flox/apps/internal/landinglink"
 	"github.com/ismagilovnail/flox/apps/internal/metrics"
 	"github.com/ismagilovnail/flox/apps/internal/routing"
 	"github.com/ismagilovnail/flox/apps/internal/routingstore"
+	"github.com/ismagilovnail/flox/apps/internal/storage"
 )
 
 // Handler owns the §41 critical path:
@@ -32,10 +34,17 @@ type Handler struct {
 	events     *eventbuf.Writer
 	logger     *slog.Logger
 	clientIP   *clientip.Resolver
+	// links signs internal landings' click links; nil (LANDING_LINK_KEY
+	// unset/invalid) means internal landing stages are skipped.
+	links *landinglink.Signer
+	// assets builds a served landing's <base href>; nil means no object
+	// storage configured, pages are served without one.
+	assets *storage.Client
 }
 
 func (h *Handler) Register(r chi.Router) {
 	r.Get("/t/{trackingID}", h.track)
+	r.Get(landClickPath+"{token}", h.landClick)
 }
 
 // trackOutcome labels §53's tracking_requests_total counter — kept to a
@@ -46,6 +55,8 @@ type trackOutcome string
 
 const (
 	outcomeRedirected trackOutcome = "redirected"
+	outcomeLanding    trackOutcome = "landing"    // an internal landing was served
+	outcomeLandClick  trackOutcome = "land_click" // a visitor clicked through a served landing
 	outcomeBlocked    trackOutcome = "blocked"
 	outcomeNotFound   trackOutcome = "not_found"
 	outcomeError      trackOutcome = "error"
@@ -148,13 +159,28 @@ func (h *Handler) track(w http.ResponseWriter, r *http.Request) {
 		setStickyCookie(w, link.CampaignID, result, clickID, loaded.StickyFlowKeepClickID)
 	}
 
+	// The flow's landing stage, if any, sits between this click and the
+	// destination (§25's funnel: Landing -> ... -> Destination).
+	lnd := h.decideLanding(r, link.OrganizationID, loaded, result.FlowID)
+
 	h.events.Enqueue(ev)
+
+	if lnd.page != nil {
+		outcome = outcomeLanding
+		h.serveLanding(w, r, lnd, ev, params)
+		return
+	}
+
+	target := result.Destination
+	if lnd.externalURL != "" {
+		target = lnd.externalURL
+	}
 	outcome = outcomeRedirected
 
 	// 302, not 301: a permanently-cached redirect would bypass the tracker
 	// entirely on the next click, losing both the event and any future
 	// routing change.
-	http.Redirect(w, r, result.Destination, http.StatusFound)
+	http.Redirect(w, r, target, http.StatusFound)
 }
 
 // visitKey builds the value internal/routing hashes to pick a flow (§38).
