@@ -26,7 +26,7 @@ func TestClickResolverByClickID(t *testing.T) {
 	err := store.InsertBatch(ctx, []event.Event{{
 		Type: event.SourceClick, EventAt: occurredAt, OrganizationID: orgID, CampaignID: campaignID,
 		ClickID: clickID, Country: "US", Device: "mobile", ExternalClickID: "fb.123",
-		UTMSource: "facebook", Subs: event.Subs{"a", "b"}, LandingID: "landing-1", OfferID: "offer-1",
+		UTMSource: "facebook", Subs: event.Subs{"a", "b"}, LandingID: "landing-1", OfferID: "offer-1", PwaID: "pwa-1",
 	}})
 	if err != nil {
 		t.Fatalf("InsertBatch: %v", err)
@@ -39,7 +39,7 @@ func TestClickResolverByClickID(t *testing.T) {
 	if click.ClickID != clickID || click.CampaignID != campaignID || click.Country != "US" || click.Device != "mobile" {
 		t.Fatalf("click = %+v, want matching the inserted row", click)
 	}
-	if click.ExternalClickID != "fb.123" || click.UTMSource != "facebook" || click.Subs[0] != "a" || click.Subs[1] != "b" || click.LandingID != "landing-1" || click.OfferID != "offer-1" {
+	if click.ExternalClickID != "fb.123" || click.UTMSource != "facebook" || click.Subs[0] != "a" || click.Subs[1] != "b" || click.LandingID != "landing-1" || click.OfferID != "offer-1" || click.PwaID != "pwa-1" {
 		t.Fatalf("click pass-through fields wrong: %+v", click)
 	}
 	if !click.OccurredAt.Equal(occurredAt) {

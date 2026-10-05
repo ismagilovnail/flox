@@ -19,46 +19,45 @@ referenced below as §N).
 ## CURRENT STATE — UPDATE THIS EVERY PHASE
 
 ```
-CURRENT PHASE : `offer` REPORT DIMENSION (user asked for pwa, postlanding
-                and offer; offer shipped, pwa/postlanding deliberately
-                not — see STATUS).
-STATUS        : done. routing.RouteResult.OfferID (engine's "Offer"
-                branch only — never redirect/fallback/inactive offer),
-                loaded from flows.destination_offer_id; ClickHouse
-                schema/009_offer_id.sql (after 008's landing_id); tracker
-                stamps SOURCE_CLICK/LAND_VIEW, signed landing link carries
-                it to LAND_CLICK, attribution → conversions. DimOffer →
-                14 backed dims. UI: offer names, "Без оффера"; offers list
-                "View statistics" now passes the id (passed the name —
-                would match nothing). pwa/postlanding NOT done: the
-                tracker never serves those stages (no PWA_VIEW/
-                POSTLANDING_VIEW anywhere), so any pwa_id/postlanding_id
-                would be fabricated — they need stage serving first.
-                VERIFIED: go build/vet/gofmt/test ./... green with full
-                env (PG+CH+Redis+MinIO, e2e included); routing offer
-                tests (fresh+sticky), tracker offer test (real network/
-                offer, paused offer not attributed), CH grouping, attribution
-                + conversion copy. Web tsc/eslint/vitest/build clean. Live:
-                landing→real offer flow + redirect flow via the real
-                tracker; CH rows and browser report by Оффер+Лендинг
-                matched exactly; offers-list deep link filtered right.
-                Fixtures removed (an unrelated "QA Browser Offer" in
-                another org predates this session — left alone).
-LAST COMMIT   : this phase's commit — feat(analytics): offer report
-                dimension. Before it: caff39d feat(analytics): landing
-                report dimension; aa8d2b4 feat(tracker): serve landings,
-                signed click-through; 420a2ce feat(landings): ZIP bundles
-                — full detail in CHANGELOG.md.
+CURRENT PHASE : PWA STAGE SERVED BY THE TRACKER (+ pwa report dimension,
+                constructor "Test page"). User asked for PWA + postlanding
+                serving; this phase is PWA only — postlanding next.
+STATUS        : done. apps/tracker /pwa/{token}/: installable install page
+                (manifest, pass-through SW, beforeinstallprompt, iOS
+                steps, continue-without-install), reached from the click
+                or after an internal landing; PWA_VIEW/INSTALL/OPEN on one
+                click_id; manifest/open survive the 30-day link age;
+                provider-neutral in-app WebView bounce. The page is the
+                operator's app as itself — the user asked to serve the
+                editor's Google Play imitation (with operator-entered
+                ratings/reviews/downloads) to visitors; DECLINED as
+                deceptive to people installing, neutral page built
+                instead; editor preview card left as-is (admin-only).
+                Constructor "Тестовая страница": POST /pwas/{id}/
+                test-link → signed Test link, served for real, no events.
+                pwa_id: CH schema/010, tracker/attribution/conversions,
+                DimPwa (15 backed). New config TRACKER_PUBLIC_URL (+
+                LANDING_LINK_KEY on api). VERIFIED: full go test with all
+                deps + e2e green (one e2e run flaked because air rebuilt
+                the worker mid-run; re-run green); benchmarks unchanged;
+                web tsc/eslint/vitest/build clean; live in Chrome:
+                installable (beforeinstallprompt fired), test mode
+                recorded 0 events, real tracker traffic → CH counts
+                exactly right incl. WebView bounce; report by PWA showed
+                name. Native install dialog not clicked (automation).
+                Fixtures removed. Detail: docs/pwa-serving.md.
+LAST COMMIT   : this phase's commit — feat(tracker): serve PWA install
+                pages. Before it: f1a7250 feat(analytics): offer report
+                dimension; caff39d landing report dimension; aa8d2b4
+                serve landings — full detail in CHANGELOG.md.
 UNCOMMITTED   : none after this phase's commit.
-NEXT          : confirm scope before starting. Candidates: serve PWA and/
-                or postlanding stages in the tracker (prerequisite for
-                their report dimensions, emits PWA_*/POSTLANDING_* events);
-                `network` dimension (unblocked, same pattern as offer); a
-                Top Offers dashboard card (offer is now backed); analytics
-                "Линия" tab showing no line for single-day data (pre-
-                existing, observed). Other known gaps unchanged
-                (ROADMAP.md). Run go test with the full env line (memory:
-                flox-full-test-env) — without it CH/e2e tests skip.
+NEXT          : postlanding stage serving (+ postlanding dimension) —
+                already requested by the user; confirm details first.
+                Then: network dimension; Top Offers card; PWA types
+                external/ios_app + landing asPwa (need URL fields); push
+                from installed PWAs; analytics "Линия" single-day line
+                (pre-existing). Run go test with the full env line
+                (memory: flox-full-test-env).
 ```
 
 > At the end of every phase: update the four lines above, add a CHANGELOG entry,

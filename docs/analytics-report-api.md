@@ -51,25 +51,33 @@ an operator who wants it can still type `""` into the existing free-text
 value field.
 
 Gated by the same `chstore.ValidDimension` whitelist every other
-endpoint here already uses — a request for one of the 3 still-unbacked
-dimensions (`pwa`/`postlanding`/`network`) 400s, same
+endpoint here already uses — a request for one of the 2 still-unbacked
+dimensions (`postlanding`/`network`) 400s, same
 as `/analytics/report` already does for one. The frontend's
 `useDimensionValues` hook (`retry: false` — a 400 here is deterministic,
 not transient) treats that rejection as expected, not an error to
 surface: `AddFilterPopover` (`report-controls.tsx`) falls back to
-`lib/mock/analytics.ts`'s pool for those 3, and also as the query's own
-brief loading-state placeholder for the 14 real ones. A *successful*
+`lib/mock/analytics.ts`'s pool for those 2, and also as the query's own
+brief loading-state placeholder for the 15 real ones. A *successful*
 response wins outright the moment it lands, even when empty (a brand-new
 organization with no real events yet) — CLAUDE.md #6's "no fabricated
 data" bar applies here the same way it does to cost: a genuine "nothing
 yet" must render as nothing, never as a plausible-looking placeholder
 value that isn't real.
 
-## Dimension whitelist: 14 backed (13 of the original 16, plus stream_set)
+## Dimension whitelist: 15 backed (14 of the original 16, plus stream_set)
 
-`chstore.ReportDimension` (14): campaign, source (proxy for campaign — see
+`chstore.ReportDimension` (15): campaign, source (proxy for campaign — see
 its own doc comment), country, region, city, device, platform, os,
-browser, language, flow, stream_set, landing, offer.
+browser, language, flow, stream_set, landing, offer, pwa.
+
+`pwa` (`DimPwa`, `pwa_id`, `chstore/schema/010_pwa_id.sql`, after
+`offer_id`) became possible once `apps/tracker` started serving the PWA
+stage (`docs/pwa-serving.md`): set on every event of a journey whose
+routed path goes through the flow's PWA stage — SOURCE_CLICK, LAND_*,
+PWA_VIEW/INSTALL/OPEN — and inherited by conversions. Empty = no PWA stage
+reached (none configured, skipped, or behind an external landing). Names
+in the UI, "No PWA" for empty, "View statistics" from the PWA list.
 
 `offer` (`DimOffer`, backed by `offer_id`, `chstore/schema/009_offer_id.sql`
 — same three tables, appended after `landing_id`) is the offer a click was
@@ -125,18 +133,16 @@ The filter chip it produces shows that raw id, since `FilterCondition`
 (`features/analytics/aggregate.ts`) has no separate display-label field;
 adding one is out of scope for a query-layer/UI change.
 
-`features/analytics/registry.ts`'s `DimensionKey` still lists 3 more from
-the original 16 — pwa, postlanding, network — with no backing column
-anywhere in the event pipeline. pwa/postlanding are blocked on more than a
-column: `apps/tracker` doesn't serve the PWA or postlanding funnel stages
-at all yet (no PWA_VIEW/POSTLANDING_VIEW is ever emitted), so there is
-nothing honest to attribute — stamping a flow's configured-but-never-shown
-PWA onto its clicks would be fabricated data. They follow once those
-stages are served. network has no such blocker (an offer's network is
+`features/analytics/registry.ts`'s `DimensionKey` still lists 2 more from
+the original 16 — postlanding, network — with no backing column anywhere
+in the event pipeline. postlanding is blocked on more than a column:
+`apps/tracker` doesn't serve the postlanding stage yet (no
+POSTLANDING_VIEW is ever emitted), so there is nothing honest to
+attribute; it follows once that stage is served, like pwa did. network has no such blocker (an offer's network is
 known at routing time), it just hasn't been asked for. The report builder's dimension
 picker offers all 17 named keys now (unchanged in kind — `registry.ts` is
 shared with the still-mocked Custom Metrics feature, which needs the full
-list); requesting one of the 3 unbacked ones 400s with
+list); requesting one of the 2 unbacked ones 400s with
 `apierror.Validation`.
 
 Of the 11 backed dimensions, only 8 have a column on `conversion_events`
@@ -196,7 +202,7 @@ not a sentinel value.
   popover's value dropdown — no "distinct values seen for dimension X"
   endpoint exists~~ — closed, see `dimension-values` above.
   `lib/mock/analytics.ts` still backs the loading-state placeholder and
-  the 3 still-unbacked dimensions. Filtering by an arbitrary value still
+  the 2 still-unbacked dimensions. Filtering by an arbitrary value still
   round-trips to the real API correctly regardless of its source; a
   value that never occurs in real event data just yields a legitimate
   empty report, not an error.

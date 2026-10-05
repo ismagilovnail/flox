@@ -4,7 +4,7 @@ import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { CopyIcon, PauseIcon, PencilIcon, PlayIcon, Trash2Icon } from "lucide-react";
+import { BarChart3Icon, CopyIcon, ExternalLinkIcon, PauseIcon, PencilIcon, PlayIcon, Trash2Icon } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 import { IconButton } from "@/components/ui/icon-button";
@@ -20,7 +20,8 @@ import {
 } from "@/components/ui/dialog";
 import { useActivatePwa, useArchivePwa, useDuplicatePwa, usePausePwa } from "@/hooks/use-pwas";
 import { usePermission } from "@/hooks/use-auth";
-import type { Pwa } from "@/lib/api/pwa";
+import { getPwaTestLink, type Pwa } from "@/lib/api/pwa";
+import { viewStatisticsHref } from "@/features/analytics/view-statistics-link";
 
 export function PwaRowActions({
   pwa,
@@ -61,6 +62,24 @@ export function PwaRowActions({
     });
   }
 
+  // Opens the window synchronously (inside the click) so popup blockers
+  // allow it, then points it at the freshly minted link.
+  async function openTestPage() {
+    const win = window.open("", "_blank");
+    try {
+      const { url } = await getPwaTestLink(pwa.id);
+      if (win) {
+        win.opener = null;
+        win.location.href = url;
+      } else {
+        window.open(url, "_blank", "noopener");
+      }
+    } catch (err) {
+      win?.close();
+      toast.error(t("toast.testLinkError"), { description: (err as Error).message });
+    }
+  }
+
   function handleArchive() {
     archive.mutate(pwa.id, {
       onSuccess: () => {
@@ -78,6 +97,11 @@ export function PwaRowActions({
     <>
       {variant === "inline" ? (
         <div className="flex items-center gap-2">
+          {canWrite && (
+            <Button type="button" variant="outline" size="sm" onClick={openTestPage} title={t("rowActions.testPageHint")}>
+              <ExternalLinkIcon className="size-4" /> {t("rowActions.testPage")}
+            </Button>
+          )}
           {canWrite && pwa.status !== "archived" && (
             <Button type="button" variant="outline" size="sm" onClick={togglePause}>
               {pwa.status === "active" ? <PauseIcon className="size-4" /> : <PlayIcon className="size-4" />}
@@ -106,6 +130,18 @@ export function PwaRowActions({
               </IconButton>
             </TooltipTrigger>
             <TooltipContent>{t("rowActions.edit")}</TooltipContent>
+          </Tooltip>
+
+          {/* pwa.id: the `pwa` report dimension groups by pwa_id. */}
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <IconButton aria-label={t("rowActions.viewStatistics")} size="icon-sm" asChild>
+                <Link href={viewStatisticsHref("pwa", pwa.id)}>
+                  <BarChart3Icon className="size-3.5" />
+                </Link>
+              </IconButton>
+            </TooltipTrigger>
+            <TooltipContent>{t("rowActions.viewStatistics")}</TooltipContent>
           </Tooltip>
 
           {canWrite && pwa.status !== "archived" && (

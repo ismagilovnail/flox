@@ -43,6 +43,7 @@ import (
 	"github.com/ismagilovnail/flox/apps/internal/httpserver"
 	integrationsengine "github.com/ismagilovnail/flox/apps/internal/integrations"
 	"github.com/ismagilovnail/flox/apps/internal/landing"
+	"github.com/ismagilovnail/flox/apps/internal/landinglink"
 	"github.com/ismagilovnail/flox/apps/internal/logging"
 	"github.com/ismagilovnail/flox/apps/internal/ltv"
 	"github.com/ismagilovnail/flox/apps/internal/mailer"
@@ -394,7 +395,17 @@ func run() error {
 		landingHandler.Register(r)
 	})
 
-	pwaHandler := pwa.NewHandler(pwa.NewService(pwa.NewRepository(db)), requireContentWrite, logger)
+	pwaSvc := pwa.NewService(pwa.NewRepository(db))
+	// The PWA constructor's "open test page" needs the same click-link key
+	// apps/tracker verifies with, and the tracker's browser-reachable URL.
+	// Either missing → the button answers Unavailable; nothing else is
+	// affected.
+	if key, err := landinglink.ParseKey(cfg.LandingLinkKey); err != nil || cfg.TrackerPublicURL == "" {
+		logger.Warn("PWA test links disabled", "error", err, "tracker_public_url_set", cfg.TrackerPublicURL != "")
+	} else {
+		pwaSvc.SetTestLinks(pwa.TestLinks{Signer: landinglink.NewSigner(key), TrackerURL: cfg.TrackerPublicURL, AppURL: cfg.AppURL})
+	}
+	pwaHandler := pwa.NewHandler(pwaSvc, requireContentWrite, logger)
 	srv.Mux().Route("/pwas", func(r chi.Router) {
 		r.Use(tenantMiddleware)
 		pwaHandler.Register(r)

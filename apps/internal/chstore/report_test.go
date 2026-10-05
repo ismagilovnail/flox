@@ -438,7 +438,7 @@ func TestDistinctValuesLimitsResults(t *testing.T) {
 func TestDistinctValuesRejectsUnsupportedDimension(t *testing.T) {
 	conn := mustConn(t)
 	store := chstore.NewEventStore(conn)
-	_, err := store.DistinctValues(context.Background(), idgen.New(), chstore.ReportDimension("pwa"), time.Now().Add(-24*time.Hour), time.Now(), 10)
+	_, err := store.DistinctValues(context.Background(), idgen.New(), chstore.ReportDimension("postlanding"), time.Now().Add(-24*time.Hour), time.Now(), 10)
 	if err == nil {
 		t.Fatal(`DistinctValues with dimension "offer" succeeded, want an error — offer has no backing column`)
 	}
@@ -558,5 +558,42 @@ func TestReportByOffer(t *testing.T) {
 	}
 	if len(convs) != 1 || convs[0].Key.DimValues[chstore.DimOffer] != "offer-a" || convs[0].RevenueUSD != 30 {
 		t.Fatalf("conversions by offer = %+v, want offer-a with $30", convs)
+	}
+}
+
+// TestReportByPwa: pwa_id (schema/010) groups clicks, PWA funnel events
+// and conversions.
+func TestReportByPwa(t *testing.T) {
+	conn := mustConn(t)
+	store := chstore.NewEventStore(conn)
+	ctx := context.Background()
+	orgID, campaignID := idgen.New(), idgen.New()
+	day := time.Date(2026, 10, 2, 0, 0, 0, 0, time.UTC)
+	click := idgen.New()
+
+	if err := store.InsertBatch(ctx, []event.Event{
+		{Type: event.SourceClick, EventAt: day.Add(time.Hour), OrganizationID: orgID, CampaignID: campaignID, ClickID: click, PwaID: "pwa-a"},
+		{Type: event.SourceClick, EventAt: day.Add(2 * time.Hour), OrganizationID: orgID, CampaignID: campaignID, ClickID: idgen.New()},
+		{Type: event.PwaView, EventAt: day.Add(time.Hour), OrganizationID: orgID, CampaignID: campaignID, ClickID: click, PwaID: "pwa-a"},
+		{Type: event.PwaInstall, EventAt: day.Add(time.Hour), OrganizationID: orgID, CampaignID: campaignID, ClickID: click, PwaID: "pwa-a"},
+		{Type: event.CpaAccept, EventAt: day.Add(3 * time.Hour), OrganizationID: orgID, CampaignID: campaignID, ClickID: click, PwaID: "pwa-a", USDValue: 12, HasUSDValue: true},
+	}); err != nil {
+		t.Fatalf("InsertBatch with pwa ids: %v", err)
+	}
+	q := chstore.ReportQuery{OrganizationID: orgID, Dims: []chstore.ReportDimension{chstore.DimPwa}, From: day, To: day.Add(24 * time.Hour)}
+	clicks, err := store.ReportClicks(ctx, q)
+	if err != nil {
+		t.Fatalf("ReportClicks by pwa: %v", err)
+	}
+	got := map[string]uint64{}
+	for _, a := range clicks {
+		got[a.Key.DimValues[chstore.DimPwa]] = a.Clicks
+	}
+	if len(got) != 2 || got["pwa-a"] != 1 || got[""] != 1 {
+		t.Fatalf("clicks by pwa = %v", got)
+	}
+	convs, err := store.ReportConversions(ctx, q)
+	if err != nil || len(convs) != 1 || convs[0].RevenueUSD != 12 {
+		t.Fatalf("conversions by pwa = %+v, %v", convs, err)
 	}
 }

@@ -5,6 +5,45 @@ per-phase, matching `CLAUDE.md`'s phase protocol. The one exception is
 [Between phases], below: spec amendments and the code changes that follow from
 them land between phases and would otherwise be invisible here.
 
+## [Between phases] — Tracker serves the PWA stage (+ `pwa` report dimension, constructor test page)
+
+A flow's PWA stage now reaches real visitors. Full detail:
+`docs/pwa-serving.md`.
+
+- `apps/tracker` `/pwa/{token}/`: installable page (manifest, pass-through
+  service worker, `beforeinstallprompt` install button, iOS "Add to Home
+  Screen" steps, "continue without installing"), reached straight from
+  the click or after an internal landing's click-through. Events:
+  PWA_VIEW, PWA_INSTALL (`appinstalled` beacon), PWA_OPEN (the installed
+  app's start_url → destination). One signed token binds page, manifest,
+  SW scope and start_url to the click_id; manifest/open accept tokens past
+  the 30-day max age (`landinglink.VerifyAnyAge`) so installed apps keep
+  working.
+- In-app WebView bounce (§28/§73) when the PWA's flag is on: Android
+  `intent://`, iOS `x-safari-https://`; generic UA self-identification
+  only, never visitor detection.
+- The page is the operator's app as itself — name, icon, developer,
+  description, screenshots, colors. It does **not** imitate an app store
+  and never shows the editor's store-listing stats (ratings, reviews,
+  downloads) to visitors; the editor's store-styled preview card stays an
+  admin-only preview. The user asked for the Google Play imitation to be
+  served; declined (deceptive to the people installing), neutral page
+  built instead.
+- PWA constructor: **Test page** button — `POST /pwas/{id}/test-link`
+  mints a signed `Test` link; the tracker serves the real page but records
+  nothing. New config `TRACKER_PUBLIC_URL` (+ `LANDING_LINK_KEY` on api).
+- `pwa` report dimension: ClickHouse `schema/010_pwa_id.sql`,
+  `event.PwaID` through tracker/attribution/conversions, `chstore.DimPwa`
+  (15 backed), names + "No PWA" in the UI, PWA list "View statistics".
+- Skipped stages (302 to destination): types external/ios_app (no URL in
+  schema), paused PWA, PWA behind an external landing.
+- Verified: full `go test ./...` with all deps + e2e; benchmarks
+  unchanged; live in Chrome (installable — Chrome fired
+  beforeinstallprompt; test mode recorded zero events) and real traffic
+  through the tracker (ClickHouse SOURCE_CLICK 5 / PWA_VIEW 4 /
+  PWA_INSTALL 2 / PWA_OPEN 2, all with pwa_id; WebView bounce recorded no
+  view). Postlanding serving not in this phase.
+
 ## [Between phases] — `offer` report dimension (pwa/postlanding deliberately not)
 
 Asked for pwa, postlanding and offer dimensions; shipped offer. pwa and

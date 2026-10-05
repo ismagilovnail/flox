@@ -3,11 +3,11 @@ import type { DimensionKey } from "@/features/analytics/registry";
 /**
  * Report builder's filter-value dropdown now suggests from the real
  * backend (POST /analytics/dimension-values, hooks/use-analytics-
- * report.ts's useDimensionValues) for the 14 dimensions
+ * report.ts's useDimensionValues) for the 15 dimensions
  * apps/internal/chstore.ValidDimension backs. This pool now serves two
  * narrower roles: the brief loading-state placeholder before that query
- * resolves, and the only source at all for the 3 still-unbacked
- * dimensions (pwa/postlanding/network), whose query always
+ * resolves, and the only source at all for the 2 still-unbacked
+ * dimensions (postlanding/network), whose query always
  * rejects with a validation error by design (no backing column exists
  * yet — report-controls.tsx's own AddFilterPopover catches that and
  * falls back to this). Filtering by an arbitrary value still round-trips

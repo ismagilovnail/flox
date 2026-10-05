@@ -64,13 +64,14 @@ type landingFixture struct {
 // redirect destination of landingTestOffer.
 func seedLandingFixture(tb testing.TB, pool *pgxpool.Pool, lnd landing.Landing) landingFixture {
 	tb.Helper()
-	return seedFlowFixture(tb, pool, lnd, nil)
+	return seedFlowFixture(tb, pool, &lnd, nil)
 }
 
-// seedFlowFixture is seedLandingFixture with the flow's destination built
-// by dest (given the org id) instead of the default redirect to
-// landingTestOffer — used to route to a real offer.
-func seedFlowFixture(tb testing.TB, pool *pgxpool.Pool, lnd landing.Landing, dest func(orgID string) streamset.Destination) landingFixture {
+// seedFlowFixture is the general form: lnd nil means no landing stage, and
+// mod (given the org id) adjusts the flow before it's created — a real
+// offer destination, a PWA stage. Without mod the flow redirects to
+// landingTestOffer.
+func seedFlowFixture(tb testing.TB, pool *pgxpool.Pool, lnd *landing.Landing, mod func(orgID string, f *streamset.FlowInput)) landingFixture {
 	tb.Helper()
 	ctx := context.Background()
 
@@ -82,13 +83,17 @@ func seedFlowFixture(tb testing.TB, pool *pgxpool.Pool, lnd landing.Landing, des
 		_, _ = pool.Exec(context.Background(), `DELETE FROM organizations WHERE id = $1`, orgID)
 	})
 
-	lnd.ID = idgen.New()
-	lnd.OrganizationID = orgID
-	if lnd.Name == "" {
-		lnd.Name = "Fixture Landing"
-	}
-	if _, err := landing.NewRepository(pool).Create(ctx, lnd); err != nil {
-		tb.Fatalf("seeding landing: %v", err)
+	landingID := ""
+	if lnd != nil {
+		lnd.ID = idgen.New()
+		lnd.OrganizationID = orgID
+		if lnd.Name == "" {
+			lnd.Name = "Fixture Landing"
+		}
+		if _, err := landing.NewRepository(pool).Create(ctx, *lnd); err != nil {
+			tb.Fatalf("seeding landing: %v", err)
+		}
+		landingID = lnd.ID
 	}
 
 	ts, err := trafficsource.NewService(trafficsource.NewRepository(pool)).Create(ctx, orgID, trafficsource.CreateInput{
@@ -106,18 +111,18 @@ func seedFlowFixture(tb testing.TB, pool *pgxpool.Pool, lnd landing.Landing, des
 	if _, err := campSvc.Activate(ctx, orgID, camp.ID); err != nil {
 		tb.Fatalf("activating campaign: %v", err)
 	}
-	destination := streamset.Destination{Kind: routing.DestinationRedirect, URL: landingTestOffer}
-	if dest != nil {
-		destination = dest(orgID)
+	flowIn := streamset.FlowInput{
+		Name: "With Landing", Active: true, Weight: 100,
+		Landing:     streamset.FlowLanding{Enabled: landingID != "", LandingID: landingID},
+		Destination: streamset.Destination{Kind: routing.DestinationRedirect, URL: landingTestOffer},
+	}
+	if mod != nil {
+		mod(orgID, &flowIn)
 	}
 	if _, err := streamset.NewService(streamset.NewRepository(pool)).Create(ctx, orgID, camp.ID, streamset.CreateInput{
 		Name: "All Traffic", Priority: 1,
 		RootFilter: streamset.FilterNode{Kind: streamset.NodeGroup, Joiner: routing.JoinAND},
-		Flows: []streamset.FlowInput{{
-			Name: "With Landing", Active: true, Weight: 100,
-			Landing:     streamset.FlowLanding{Enabled: true, LandingID: lnd.ID},
-			Destination: destination,
-		}},
+		Flows:      []streamset.FlowInput{flowIn},
 	}); err != nil {
 		tb.Fatalf("seeding stream set: %v", err)
 	}
@@ -132,7 +137,7 @@ func seedFlowFixture(tb testing.TB, pool *pgxpool.Pool, lnd landing.Landing, des
 		idgen.New(), orgID, camp.ID, domainID); err != nil {
 		tb.Fatalf("seeding tracking link: %v", err)
 	}
-	return landingFixture{host: host, slug: "go", orgID: orgID, landingID: lnd.ID, pool: pool}
+	return landingFixture{host: host, slug: "go", orgID: orgID, landingID: landingID, pool: pool}
 }
 
 func internalLanding(status landing.Status) landing.Landing {
@@ -326,7 +331,8 @@ func TestOfferIDOnEveryLandingEvent(t *testing.T) {
 	ctx := context.Background()
 	const offerLink = "https://offer.example/real?aff=1"
 	var offerID string
-	fx := seedFlowFixture(t, pool, internalLanding(landing.StatusActive), func(orgID string) streamset.Destination {
+	lnd := internalLanding(landing.StatusActive)
+	fx := seedFlowFixture(t, pool, &lnd, func(orgID string, f *streamset.FlowInput) {
 		net, err := network.NewService(network.NewRepository(pool)).Create(ctx, orgID, network.CreateInput{Name: "Offer Net", PostbackURL: "https://net.example/pb"})
 		if err != nil {
 			t.Fatalf("seeding network: %v", err)
@@ -339,7 +345,7 @@ func TestOfferIDOnEveryLandingEvent(t *testing.T) {
 			t.Fatalf("seeding offer: %v", err)
 		}
 		offerID = off.ID
-		return streamset.Destination{Kind: routing.DestinationOffer, NetworkID: net.Network.ID, OfferID: off.ID}
+		f.Destination = streamset.Destination{Kind: routing.DestinationOffer, NetworkID: net.Network.ID, OfferID: off.ID}
 	})
 
 	h, sink, closeEvents := newLandingHandler(t, pool, true)

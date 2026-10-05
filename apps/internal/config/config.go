@@ -80,6 +80,13 @@ type Config struct {
 	// served — rather than serving pages whose links it can't sign.
 	LandingLinkKey string
 
+	// TrackerPublicURL is where a browser reaches apps/tracker directly
+	// (dev: http://localhost:8081) — used by apps/api only to mint the
+	// PWA constructor's test-page links (internal/pwa/testlink.go). Real
+	// visitor traffic reaches the tracker on campaign tracking domains,
+	// never through this. Empty: test links are unavailable.
+	TrackerPublicURL string
+
 	// --- Geo/ASN (apps/internal/classifier/maxmind) ---
 	// Local MaxMind GeoLite2 .mmdb file paths — both empty (the default,
 	// since no database ships in the repo; MaxMind's EULA requires a free
@@ -178,6 +185,7 @@ func load(portVar, portDefault, defaultServiceName string) (Config, error) {
 		IntegrationEncryptionKey: getEnv("INTEGRATION_ENCRYPTION_KEY", ""),
 		AdAccountEncryptionKey:   getEnv("ADACCOUNT_ENCRYPTION_KEY", ""),
 		LandingLinkKey:           getEnv("LANDING_LINK_KEY", ""),
+		TrackerPublicURL:         getEnv("TRACKER_PUBLIC_URL", ""),
 		TrackerDNSTarget:         getEnv("TRACKER_DNS_TARGET", ""),
 
 		GeoIPCityDBPath: getEnv("GEOIP_CITY_DB_PATH", ""),

@@ -106,6 +106,7 @@
   },
   "values": {
     "noLanding": "No landing",
-    "noOffer": "No offer"
+    "noOffer": "No offer",
+    "noPwa": "No PWA"
   }
 }

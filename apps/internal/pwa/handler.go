@@ -36,6 +36,20 @@ func (h *Handler) Register(r chi.Router) {
 	r.With(h.requireWrite).Post("/{id}/duplicate", h.duplicate)
 	r.With(h.requireWrite).Post("/{id}/pause", h.pause)
 	r.With(h.requireWrite).Post("/{id}/activate", h.activate)
+	r.With(h.requireWrite).Post("/{id}/test-link", h.testLink)
+}
+
+// testLink answers POST /pwas/{id}/test-link — {"url": ...}, a signed
+// apps/tracker install-page link for the constructor's "open test page"
+// (Service.TestLink). A POST because each call mints a new link.
+func (h *Handler) testLink(w http.ResponseWriter, r *http.Request) {
+	orgID, _ := tenant.OrgID(r.Context())
+	link, err := h.svc.TestLink(r.Context(), orgID, chi.URLParam(r, "id"))
+	if err != nil {
+		apierror.Write(w, h.logger, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"url": link})
 }
 
 func (h *Handler) list(w http.ResponseWriter, r *http.Request) {

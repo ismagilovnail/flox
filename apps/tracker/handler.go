@@ -45,6 +45,7 @@ type Handler struct {
 func (h *Handler) Register(r chi.Router) {
 	r.Get("/t/{trackingID}", h.track)
 	r.Get(landClickPath+"{token}", h.landClick)
+	h.registerPwa(r)
 }
 
 // trackOutcome labels §53's tracking_requests_total counter — kept to a
@@ -57,6 +58,7 @@ const (
 	outcomeRedirected trackOutcome = "redirected"
 	outcomeLanding    trackOutcome = "landing"    // an internal landing was served
 	outcomeLandClick  trackOutcome = "land_click" // a visitor clicked through a served landing
+	outcomePwa        trackOutcome = "pwa"        // a PWA install page was served
 	outcomeBlocked    trackOutcome = "blocked"
 	outcomeNotFound   trackOutcome = "not_found"
 	outcomeError      trackOutcome = "error"
@@ -165,12 +167,25 @@ func (h *Handler) track(w http.ResponseWriter, r *http.Request) {
 	// Only a landing actually shown is attributed (the `landing` report
 	// dimension): a skipped stage — paused, unsignable — leaves it empty.
 	ev.LandingID = lnd.landingID
+	// The PWA stage is reachable straight from the click, or after an
+	// internal landing (its click link leads there). An external landing
+	// is a page we can't link onward from, so the PWA behind it is never
+	// reached — and never attributed.
+	if lnd.externalURL == "" {
+		ev.PwaID = h.decidePwa(loaded, result.FlowID)
+	}
 
 	h.events.Enqueue(ev)
 
 	if lnd.page != nil {
 		outcome = outcomeLanding
 		h.serveLanding(w, r, lnd, ev, params)
+		return
+	}
+	if ev.PwaID != "" {
+		outcome = outcomeRedirected
+		token := h.links.Sign(clickClaims(ev, params, ""))
+		http.Redirect(w, r, pwaURL(requestOrigin(r), token), http.StatusFound)
 		return
 	}
 

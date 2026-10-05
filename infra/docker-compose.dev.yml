@@ -164,6 +164,11 @@ services:
       # Also set on the worker service below — apps/worker's own ad-spend
       # sync needs the same key to decrypt Google Ads credentials.
       ADACCOUNT_ENCRYPTION_KEY: "KatbgYl+Kd4KPI5T0hKfwZRYsij/t7g7fVomXdjhW/c="
+      # PWA constructor "open test page" links (internal/pwa/testlink.go):
+      # same click-link key apps/tracker verifies with, and the tracker's
+      # browser-reachable URL.
+      LANDING_LINK_KEY: "19RzlC3SBPwVig37KNN84MG90P84kvYsr8dVA+jnXn8="
+      TRACKER_PUBLIC_URL: http://localhost:8081
       # Dev placeholder — no domain in this stack has real DNS delegated
       # to a real Cloudflare account, so this never actually resolves
       # anywhere; it only exercises the real request shape (see

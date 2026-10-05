@@ -143,7 +143,7 @@ func TestCreateRejectsInvalidInput(t *testing.T) {
 		{"empty name", func() reportpresets.CreateInput { in := validInput(""); return in }},
 		{"unknown dimension", func() reportpresets.CreateInput {
 			in := validInput("X")
-			in.Dimensions = []string{"pwa"} // real, but not yet backed by chstore — must be rejected
+			in.Dimensions = []string{"postlanding"} // real, but not yet backed by chstore — must be rejected
 			return in
 		}},
 		{"too many dimensions", func() reportpresets.CreateInput {

@@ -76,30 +76,7 @@ func (h *Handler) decideLanding(r *http.Request, orgID string, loaded routingsto
 // link back to this tracker. The caller has already enqueued the
 // SOURCE_CLICK; LAND_VIEW is recorded here, on the same click_id.
 func (h *Handler) serveLanding(w http.ResponseWriter, r *http.Request, d landingDecision, ev event.Event, params params) {
-	claims := landinglink.Claims{
-		OrganizationID: ev.OrganizationID,
-		CampaignID:     ev.CampaignID,
-		ClickID:        ev.ClickID,
-		StreamSetID:    ev.StreamSetID,
-		FlowID:         ev.FlowID,
-		LandingID:      d.landingID,
-		Destination:    ev.Destination,
-		OfferID:        ev.OfferID,
-		ConfigVersion:  ev.ConfigVersion,
-		IssuedAt:       time.Now().Unix(),
-
-		UTMSource:       params.utmSource,
-		UTMMedium:       params.utmMedium,
-		UTMCampaign:     params.utmCampaign,
-		UTMContent:      params.utmContent,
-		UTMTerm:         params.utmTerm,
-		Subs:            landinglink.TrimSubs(params.subs),
-		ExternalClickID: params.externalClickID,
-		FBClickID:       params.fbClickID,
-		TTClickID:       params.ttClickID,
-		Referrer:        params.referrer,
-	}
-	trackURL := requestOrigin(r) + landClickPath + h.links.Sign(claims)
+	trackURL := requestOrigin(r) + landClickPath + h.links.Sign(clickClaims(ev, params, d.landingID))
 
 	assetBase := ""
 	if h.assets != nil && d.page.BundlePrefix != "" {
@@ -119,6 +96,36 @@ func (h *Handler) serveLanding(w http.ResponseWriter, r *http.Request, d landing
 	header.Set("X-Content-Type-Options", "nosniff")
 	w.WriteHeader(http.StatusOK)
 	_, _ = w.Write([]byte(page))
+}
+
+// clickClaims is everything a signed onward link (landing click-through,
+// PWA page) carries from the original click: routing + attribution
+// context, and which funnel stages (PWA) still lie ahead.
+func clickClaims(ev event.Event, params params, landingID string) landinglink.Claims {
+	return landinglink.Claims{
+		OrganizationID: ev.OrganizationID,
+		CampaignID:     ev.CampaignID,
+		ClickID:        ev.ClickID,
+		StreamSetID:    ev.StreamSetID,
+		FlowID:         ev.FlowID,
+		LandingID:      landingID,
+		PwaID:          ev.PwaID,
+		Destination:    ev.Destination,
+		OfferID:        ev.OfferID,
+		ConfigVersion:  ev.ConfigVersion,
+		IssuedAt:       time.Now().Unix(),
+
+		UTMSource:       params.utmSource,
+		UTMMedium:       params.utmMedium,
+		UTMCampaign:     params.utmCampaign,
+		UTMContent:      params.utmContent,
+		UTMTerm:         params.utmTerm,
+		Subs:            landinglink.TrimSubs(params.subs),
+		ExternalClickID: params.externalClickID,
+		FBClickID:       params.fbClickID,
+		TTClickID:       params.ttClickID,
+		Referrer:        params.referrer,
+	}
 }
 
 // landClick answers GET /lc/{token} — a visitor clicking through an
@@ -158,6 +165,11 @@ func (h *Handler) landClick(w http.ResponseWriter, r *http.Request) {
 
 	h.events.Enqueue(landClickEvent(claims, attrs, ip, r))
 	outcome = outcomeLandClick
+	if claims.PwaID != "" {
+		// Next funnel stage: the PWA install page, on the same token.
+		http.Redirect(w, r, pwaURL(requestOrigin(r), chi.URLParam(r, "token")), http.StatusFound)
+		return
+	}
 	http.Redirect(w, r, claims.Destination, http.StatusFound)
 }
 
@@ -175,6 +187,7 @@ func landClickEvent(c landinglink.Claims, attrs routing.Attributes, ip net.IP, r
 		ConfigVersion: c.ConfigVersion,
 		LandingID:     c.LandingID,
 		OfferID:       c.OfferID,
+		PwaID:         c.PwaID,
 
 		Country:        attrs[routing.FieldCountry],
 		Region:         attrs[routing.FieldRegion],

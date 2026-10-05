@@ -145,6 +145,10 @@ type Event struct {
 	// actually used), carried onto LAND_* events and, via attribution,
 	// conversions.
 	OfferID string `json:"offerId,omitempty"`
+	// PwaID is the flow's PWA stage when the click's routed path includes
+	// it (apps/tracker/pwa.go) — on SOURCE_CLICK, LAND_*, PWA_* and, via
+	// attribution, conversions.
+	PwaID string `json:"pwaId,omitempty"`
 
 	// Classified request attributes.
 	Country        string `json:"country,omitempty"`

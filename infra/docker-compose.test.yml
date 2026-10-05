@@ -162,6 +162,11 @@ services:
       TOTP_ENCRYPTION_KEY: "IXkldrBTvgfDhIxzUBn3MrRAJq7Gh7z8mQ5UhBC4DRo="
       INTEGRATION_ENCRYPTION_KEY: "wLE0wIEHBNnfVfq8d62JDEAltM4frTgYmPi8XAv1QpY="
       ADACCOUNT_ENCRYPTION_KEY: "KatbgYl+Kd4KPI5T0hKfwZRYsij/t7g7fVomXdjhW/c="
+      # PWA constructor "open test page" links (internal/pwa/testlink.go):
+      # same click-link key apps/tracker verifies with, and the tracker's
+      # browser-reachable URL.
+      LANDING_LINK_KEY: "19RzlC3SBPwVig37KNN84MG90P84kvYsr8dVA+jnXn8="
+      TRACKER_PUBLIC_URL: http://localhost:8081
     ports:
       - "8080:8080"
 

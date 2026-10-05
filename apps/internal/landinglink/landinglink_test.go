@@ -90,3 +90,19 @@ func TestTrimSubs(t *testing.T) {
 		t.Fatalf("TrimSubs = %v, want 3 entries", got)
 	}
 }
+
+func TestVerifyAnyAgeOnlyRelaxesAge(t *testing.T) {
+	now := time.Now()
+	s := NewSigner(testKey)
+	old := s.Sign(sample(now.Add(-MaxAge - 24*time.Hour)))
+	if _, err := s.Verify(old, now); err == nil {
+		t.Fatal("Verify accepted an expired token")
+	}
+	if _, err := s.VerifyAnyAge(old, now); err != nil {
+		t.Fatalf("VerifyAnyAge rejected an old but validly signed token: %v", err)
+	}
+	other := NewSigner([]byte("ffffffffffffffffffffffffffffffff")).Sign(sample(now))
+	if _, err := s.VerifyAnyAge(other, now); err == nil {
+		t.Fatal("VerifyAnyAge accepted a token signed with another key")
+	}
+}

@@ -88,6 +88,13 @@ export function listPwas(): Promise<{ pwas: Pwa[] }> {
   return apiFetch("/pwas");
 }
 
+/** A signed apps/tracker URL for this PWA's real install page, marked as a
+ * test — served exactly as a visitor gets it, but no events are recorded.
+ * Reflects the saved PWA, not unsaved form edits. */
+export function getPwaTestLink(id: string): Promise<{ url: string }> {
+  return apiFetch(`/pwas/${id}/test-link`, { method: "POST" });
+}
+
 export function getPwa(id: string): Promise<Pwa> {
   return apiFetch(`/pwas/${id}`);
 }

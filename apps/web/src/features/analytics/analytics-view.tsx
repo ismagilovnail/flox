@@ -20,7 +20,7 @@ import { EMPTY_CUSTOM_METRICS, useCustomMetrics } from "@/hooks/use-custom-metri
 
 /** Dimensions "View statistics" (§27.5) is allowed to deep-link a filter for —
  * an allowlist so an arbitrary/malformed URL query can't inject a bogus filter. */
-const VIEW_STATS_DIMENSIONS: DimensionKey[] = ["network", "offer", "source", "stream_set", "flow", "landing"];
+const VIEW_STATS_DIMENSIONS: DimensionKey[] = ["network", "offer", "source", "stream_set", "flow", "landing", "pwa"];
 
 function previousRange(range: ReportControlsState["dateRange"]) {
   if (!range?.from) return undefined;

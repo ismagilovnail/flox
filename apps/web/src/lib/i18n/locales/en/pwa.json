@@ -173,7 +173,10 @@
     "duplicate": "Duplicate",
     "archive": "Archive",
     "archiveConfirmTitle": "Archive \"{{name}}\"?",
-    "archiveConfirmDescription": "Archived PWAs are hidden from flow pickers going forward. Existing flows that already reference this PWA keep working. This can be reversed later."
+    "archiveConfirmDescription": "Archived PWAs are hidden from flow pickers going forward. Existing flows that already reference this PWA keep working. This can be reversed later.",
+    "testPage": "Test page",
+    "testPageHint": "Opens the real visitor install page for the saved PWA — manifest, install prompt, service worker. Test opens record no events.",
+    "viewStatistics": "View statistics"
   },
   "toast": {
     "updated": "PWA updated",
@@ -186,6 +189,7 @@
     "duplicatedSuffix": "{{name}} (Copy)",
     "archived": "PWA archived",
     "archiveError": "Couldn't archive PWA",
-    "duplicateError": "Couldn't duplicate PWA"
+    "duplicateError": "Couldn't duplicate PWA",
+    "testLinkError": "Couldn't open the test page"
   }
 }

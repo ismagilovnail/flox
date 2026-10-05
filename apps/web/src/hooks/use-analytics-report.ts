@@ -50,7 +50,7 @@ export function useDashboardReport(from: Date, to: Date) {
 
 /**
  * `retry: false` — a rejection here is a deterministic 400 for one of
- * the 3 still-unbacked dimensions (chstore.ValidDimension), not a
+ * the 2 still-unbacked dimensions (chstore.ValidDimension), not a
  * transient failure retrying would ever fix; the caller (report-
  * controls.tsx) falls back to the mock pool on `isError`, so retrying
  * would only delay that fallback for no benefit. `enabled` lets the

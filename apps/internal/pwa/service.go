@@ -31,7 +31,8 @@ const (
 var hexColor = regexp.MustCompile(`^#[0-9a-fA-F]{6}$`)
 
 type Service struct {
-	repo *Repository
+	repo      *Repository
+	testLinks *TestLinks // nil: TestLink unavailable (see testlink.go)
 }
 
 func NewService(repo *Repository) *Service {

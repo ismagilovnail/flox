@@ -93,9 +93,9 @@ export function getFunnel(from: Date, to: Date): Promise<FunnelStepData[]> {
 /**
  * Real distinct values seen for one dimension — backs the report
  * builder's filter-value dropdown, replacing lib/mock/analytics.ts's
- * fixed pool for the 14 dimensions apps/internal/chstore.ValidDimension
- * actually backs. Rejects (ApiError, status 400) for the 3 still-
- * unbacked dimensions (pwa/postlanding/network) — callers
+ * fixed pool for the 15 dimensions apps/internal/chstore.ValidDimension
+ * actually backs. Rejects (ApiError, status 400) for the 2 still-
+ * unbacked dimensions (postlanding/network) — callers
  * catch that and fall back to the mock pool rather than treating it as
  * a hard failure; see hooks/use-analytics-report.ts's useDimensionValues.
  */

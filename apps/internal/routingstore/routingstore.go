@@ -83,6 +83,34 @@ type CampaignRouting struct {
 	// StickyFlowKeepClickID: it changes what the tracker serves after a
 	// flow is chosen, never which flow is chosen.
 	FlowLandings map[string]FlowLanding
+	// FlowPwas maps a flow id to its enabled PWA stage, same contract as
+	// FlowLandings.
+	FlowPwas map[string]FlowPwa
+}
+
+// FlowPwa is the per-flow part of a PWA stage the tracker needs to decide
+// whether to show it; the page itself is read by LoadPwaPage.
+type FlowPwa struct {
+	PwaID  string
+	Type   string // flows.pwa_type: "internal" | "external" | "ios_app"
+	Status string // pwas.status
+}
+
+// PwaPage is what the tracker renders a PWA install page and its web app
+// manifest from. Deliberately not the whole pwa row: the store-listing
+// fields (ratings, review counts, downloads) are never shown to visitors
+// — see apps/tracker/pwa.go.
+type PwaPage struct {
+	Name               string
+	ShortName          string
+	ThemeColor         string
+	BackgroundColor    string
+	IconURL            string
+	Developer          string
+	Description        string
+	Screenshots        []string
+	BounceInAppWebview bool
+	Status             string
 }
 
 // FlowLanding is the small, per-flow part of a landing the tracker needs
@@ -115,6 +143,7 @@ func (s *Store) LoadRoutingConfig(ctx context.Context, orgID, campaignID string)
 	cfg := routing.RoutingConfig{CampaignID: campaignID}
 	var keepClickID bool
 	flowLandings := map[string]FlowLanding{}
+	flowPwas := map[string]FlowPwa{}
 
 	var updatedAt time.Time
 	err := s.db.QueryRow(ctx, `
@@ -144,7 +173,7 @@ func (s *Store) LoadRoutingConfig(ctx context.Context, orgID, campaignID string)
 		if err != nil {
 			return CampaignRouting{}, err
 		}
-		flows, flowUpdated, err := s.loadFlows(ctx, orgID, setIDs, flowLandings)
+		flows, flowUpdated, err := s.loadFlows(ctx, orgID, setIDs, flowLandings, flowPwas)
 		if err != nil {
 			return CampaignRouting{}, err
 		}
@@ -168,7 +197,7 @@ func (s *Store) LoadRoutingConfig(ctx context.Context, orgID, campaignID string)
 	// needs. Milliseconds, so an edit and a read in the same second still
 	// produce different versions.
 	cfg.ConfigVersion = newest.UnixMilli()
-	return CampaignRouting{Config: cfg, StickyFlowKeepClickID: keepClickID, FlowLandings: flowLandings}, nil
+	return CampaignRouting{Config: cfg, StickyFlowKeepClickID: keepClickID, FlowLandings: flowLandings, FlowPwas: flowPwas}, nil
 }
 
 func (s *Store) loadStreamSets(ctx context.Context, orgID, campaignID string) ([]routing.StreamSet, []string, time.Time, error) {
@@ -310,15 +339,17 @@ func (s *Store) loadFilterTrees(ctx context.Context, orgID string, setIDs []stri
 // the same query — org-scoped on the landing side too, so a landing id
 // from another organization can never be served even if one were ever
 // written into a flow.
-func (s *Store) loadFlows(ctx context.Context, orgID string, setIDs []string, landings map[string]FlowLanding) (map[string][]routing.Flow, time.Time, error) {
+func (s *Store) loadFlows(ctx context.Context, orgID string, setIDs []string, landings map[string]FlowLanding, pwas map[string]FlowPwa) (map[string][]routing.Flow, time.Time, error) {
 	rows, err := s.db.Query(ctx, `
 		SELECT f.stream_set_id, f.id, f.name, f.active, f.weight,
 		       f.destination_kind, f.destination_url, f.destination_offer_id,
 		       o.status, ol.url, f.updated_at,
-		       l.id, l.type, l.status, l.url
+		       l.id, l.type, l.status, l.url,
+		       p.id, f.pwa_type, p.status
 		FROM flows f
 		LEFT JOIN offers o ON o.id = f.destination_offer_id
 		LEFT JOIN landings l ON f.landing_enabled AND l.id = f.landing_id AND l.organization_id = f.organization_id
+		LEFT JOIN pwas p ON f.pwa_enabled AND p.id = f.pwa_id AND p.organization_id = f.organization_id
 		LEFT JOIN LATERAL (
 		    SELECT url FROM offer_links
 		    WHERE offer_id = f.destination_offer_id
@@ -348,9 +379,11 @@ func (s *Store) loadFlows(ctx context.Context, orgID string, setIDs []string, la
 			updated     time.Time
 
 			landingID, landingType, landingStatus, landingURL *string
+			pwaID, pwaType, pwaStatus                         *string
 		)
 		if err := rows.Scan(&setID, &f.ID, &f.Name, &f.Active, &f.Weight, &kind, &destURL, &offerID, &offerStatus, &offerURL, &updated,
-			&landingID, &landingType, &landingStatus, &landingURL); err != nil {
+			&landingID, &landingType, &landingStatus, &landingURL,
+			&pwaID, &pwaType, &pwaStatus); err != nil {
 			return nil, time.Time{}, fmt.Errorf("scanning flow: %w", err)
 		}
 		if landingID != nil {
@@ -374,6 +407,10 @@ func (s *Store) loadFlows(ctx context.Context, orgID string, setIDs []string, la
 			}
 		}
 
+		if pwaID != nil {
+			pwas[f.ID] = FlowPwa{PwaID: *pwaID, Type: deref(pwaType), Status: deref(pwaStatus)}
+		}
+
 		flows[setID] = append(flows[setID], f)
 	}
 	return flows, newest, rows.Err()
@@ -395,6 +432,27 @@ func (s *Store) LoadLandingPage(ctx context.Context, orgID, landingID string) (L
 	}
 	if err != nil {
 		return LandingPage{}, fmt.Errorf("loading landing page: %w", err)
+	}
+	return p, nil
+}
+
+// LoadPwaPage reads one PWA's install-page fields — primary-key lookup,
+// org-scoped, run only when a PWA page or manifest is being served.
+func (s *Store) LoadPwaPage(ctx context.Context, orgID, pwaID string) (PwaPage, error) {
+	var p PwaPage
+	err := s.db.QueryRow(ctx, `
+		SELECT name, short_name, theme_color, background_color, icon_url, developer, description,
+		       screenshots, bounce_in_app_webview, status
+		FROM pwas
+		WHERE id = $1 AND organization_id = $2`,
+		pwaID, orgID,
+	).Scan(&p.Name, &p.ShortName, &p.ThemeColor, &p.BackgroundColor, &p.IconURL, &p.Developer, &p.Description,
+		&p.Screenshots, &p.BounceInAppWebview, &p.Status)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return PwaPage{}, ErrNotFound
+	}
+	if err != nil {
+		return PwaPage{}, fmt.Errorf("loading pwa page: %w", err)
 	}
 	return p, nil
 }

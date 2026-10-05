@@ -47,8 +47,15 @@ type Claims struct {
 	LandingID      string `json:"l"`
 	Destination    string `json:"d"`
 	OfferID        string `json:"of,omitempty"`
-	ConfigVersion  int64  `json:"v,omitempty"`
-	IssuedAt       int64  `json:"t"` // unix seconds
+	// PwaID is the flow's PWA stage (internal type) — set when the visitor
+	// is to be shown that PWA's install page after this step.
+	PwaID string `json:"p,omitempty"`
+	// Test marks a link minted by the PWA constructor's "open test page"
+	// (apps/api), not by a real click: the tracker serves it normally but
+	// records no events, so testing never pollutes analytics.
+	Test          bool  `json:"tst,omitempty"`
+	ConfigVersion int64 `json:"v,omitempty"`
+	IssuedAt      int64 `json:"t"` // unix seconds
 
 	// Pass-through attribution parameters from the original click, so a
 	// LAND_CLICK row filters by utm/sub exactly like its SOURCE_CLICK.
@@ -100,6 +107,18 @@ func (s *Signer) Sign(c Claims) string {
 // is the same ErrInvalid: a caller has nothing useful to tell a visitor
 // holding a bad link beyond "not found".
 func (s *Signer) Verify(token string, now time.Time) (Claims, error) {
+	return s.verify(token, now, true)
+}
+
+// VerifyAnyAge is Verify without MaxAge — only for the routes an
+// installed PWA keeps calling for as long as it stays installed (its
+// manifest and its start_url). The signature is still checked: age is
+// the only thing relaxed, so nothing unsigned ever gets through.
+func (s *Signer) VerifyAnyAge(token string, now time.Time) (Claims, error) {
+	return s.verify(token, now, false)
+}
+
+func (s *Signer) verify(token string, now time.Time, checkAge bool) (Claims, error) {
 	payload, sig, ok := strings.Cut(token, ".")
 	if !ok || payload == "" || sig == "" {
 		return Claims{}, ErrInvalid
@@ -117,7 +136,10 @@ func (s *Signer) Verify(token string, now time.Time) (Claims, error) {
 		return Claims{}, ErrInvalid
 	}
 	issued := time.Unix(c.IssuedAt, 0)
-	if c.IssuedAt == 0 || now.Sub(issued) > MaxAge || issued.Sub(now) > time.Minute {
+	if c.IssuedAt == 0 || issued.Sub(now) > time.Minute {
+		return Claims{}, ErrInvalid
+	}
+	if checkAge && now.Sub(issued) > MaxAge {
 		return Claims{}, ErrInvalid
 	}
 	if c.OrganizationID == "" || c.ClickID == "" || c.Destination == "" {

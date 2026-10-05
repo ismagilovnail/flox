@@ -106,6 +106,7 @@
   },
   "values": {
     "noLanding": "Без лендинга",
-    "noOffer": "Без оффера"
+    "noOffer": "Без оффера",
+    "noPwa": "Без PWA"
   }
 }
