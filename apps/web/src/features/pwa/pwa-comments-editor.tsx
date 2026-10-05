@@ -10,6 +10,9 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { IconButton } from "@/components/ui/icon-button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { ChevronDownIcon } from "lucide-react";
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -43,6 +46,7 @@ export function PwaCommentsEditor({
   const [extraSets, setExtraSets] = useState<string[]>([]);
   const [draft, setDraft] = useState(EMPTY_DRAFT);
   const [adding, setAdding] = useState(false);
+  const [geoOpen, setGeoOpen] = useState(false);
 
   const sets = Array.from(new Set([...value.map(setKey), ...extraSets]));
   const inSet = value.filter((c) => setKey(c) === activeSet);
@@ -150,18 +154,42 @@ export function PwaCommentsEditor({
           <div className="flex flex-wrap items-end gap-2">
             <div className="grid gap-1">
               <Label htmlFor="pwa-set-geo" className="text-xs">{t("comments.geo")}</Label>
-              <Select value={newSet.geo} onValueChange={(geo) => setNewSet({ geo, lang: COMMENT_GEOS.find((g) => g.geo === geo)?.langs[0] ?? "" })}>
-                <SelectTrigger id="pwa-set-geo" className="w-52">
-                  <SelectValue placeholder={t("comments.geoPlaceholder")} />
-                </SelectTrigger>
-                <SelectContent>
-                  {sortedGeos.map((g) => (
-                    <SelectItem key={g.geo} value={g.geo}>
-                      {displayName("region", g.geo, locale)} ({g.geo})
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <Popover open={geoOpen} onOpenChange={setGeoOpen}>
+                <PopoverTrigger asChild>
+                  <Button id="pwa-set-geo" type="button" variant="outline" role="combobox" aria-expanded={geoOpen} className="w-52 justify-between font-normal">
+                    <span className={cn("truncate", !newSet.geo && "text-muted-foreground")}>
+                      {newSet.geo ? `${displayName("region", newSet.geo, locale)} (${newSet.geo})` : t("comments.geoPlaceholder")}
+                    </span>
+                    <ChevronDownIcon className="size-4 opacity-50" />
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-64 p-0" align="start">
+                  <Command>
+                    <CommandInput placeholder={t("comments.geoSearch")} />
+                    <CommandList>
+                      <CommandEmpty>{t("comments.geoNotFound")}</CommandEmpty>
+                      <CommandGroup>
+                        {sortedGeos.map((g) => {
+                          const name = displayName("region", g.geo, locale);
+                          return (
+                            <CommandItem
+                              key={g.geo}
+                              value={`${name} ${g.geo} ${displayName("region", g.geo, "en")}`}
+                              data-checked={newSet.geo === g.geo}
+                              onSelect={() => {
+                                setNewSet({ geo: g.geo, lang: g.langs[0] });
+                                setGeoOpen(false);
+                              }}
+                            >
+                              {name} ({g.geo})
+                            </CommandItem>
+                          );
+                        })}
+                      </CommandGroup>
+                    </CommandList>
+                  </Command>
+                </PopoverContent>
+              </Popover>
             </div>
             <div className="grid gap-1">
               <Label htmlFor="pwa-set-lang" className="text-xs">{t("comments.lang")}</Label>

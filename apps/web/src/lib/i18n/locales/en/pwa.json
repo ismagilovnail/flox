@@ -232,6 +232,8 @@
     "importSkipped": "Skipped rows: {{count}}",
     "saveError": "PWA saved, but the comments could not be saved",
     "geoPlaceholder": "Select a country",
-    "langPlaceholder": "Select a language"
+    "langPlaceholder": "Select a language",
+    "geoSearch": "Search country",
+    "geoNotFound": "No country found"
   }
 }

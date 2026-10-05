@@ -234,6 +234,8 @@
     "importSkipped": "Пропущено строк: {{count}}",
     "saveError": "PWA сохранено, но комментарии сохранить не удалось",
     "geoPlaceholder": "Выберите страну",
-    "langPlaceholder": "Выберите язык"
+    "langPlaceholder": "Выберите язык",
+    "geoSearch": "Поиск страны",
+    "geoNotFound": "Страна не найдена"
   }
 }
