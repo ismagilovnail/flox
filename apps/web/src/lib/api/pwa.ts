@@ -14,6 +14,8 @@ export type Pwa = {
   themeAuto: boolean;
   /** Show the install page's top bar (brand mark, title, search). */
   showHeader: boolean;
+  /** Show the install page's bottom bar with the menu buttons. */
+  showBottomNav: boolean;
   /** Own title/logo for the top bar; empty = "Apps" and the default mark. */
   headerTitle: string;
   headerLogoUrl: string;

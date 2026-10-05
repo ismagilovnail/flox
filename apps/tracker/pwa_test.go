@@ -275,7 +275,7 @@ func TestRenderPwaPageAllFormFields(t *testing.T) {
 		Developer: "DEVX", Description: "DESCX", Screenshots: []string{"https://cdn.example/s1.png"},
 		WhatsNew: "WNX", Version: "VERX", Category: "CATX", InteractiveElements: "INTX", ContainsAds: true, InAppPurchases: true,
 		UpdatedDate: "2026-08-21", Rating: 4.3, RatingCount: 777, DownloadsLabel: "DLX", SizeMB: 38, AgeRating: "AGEX",
-		RatingStars5: 61, RatingStars4: 22, RatingStars3: 7, RatingStars2: 5, RatingStars1: 3, ShowHeader: true,
+		RatingStars5: 61, RatingStars4: 22, RatingStars3: 7, RatingStars2: 5, RatingStars1: 3, ShowHeader: true, ShowBottomNav: true,
 	}
 	for _, lang := range []string{"ru", "en"} {
 		for _, test := range []bool{false, true} {
@@ -370,5 +370,24 @@ func TestRenderPwaPageHeaderBrand(t *testing.T) {
 	}
 	if strings.Contains(own, `fill="#EA4335"`) || strings.Contains(own, `brand-title">Apps<`) {
 		t.Fatal("branded header must not keep the default mark or title")
+	}
+}
+
+// TestRenderPwaPageShowBottomNav: the bottom bar with the menu buttons is
+// rendered only while show_bottom_nav is on, and its reserved page padding
+// goes with it.
+func TestRenderPwaPageShowBottomNav(t *testing.T) {
+	for _, show := range []bool{true, false} {
+		out, err := renderPwaPage(routingstore.PwaPage{Name: "X", ShowBottomNav: show}, false, "en")
+		if err != nil {
+			t.Fatal(err)
+		}
+		b := string(out)
+		if got := strings.Contains(b, `class="bottom-nav"`); got != show {
+			t.Fatalf("show_bottom_nav=%v: bar present = %v", show, got)
+		}
+		if got := strings.Contains(b, `<main class="no-nav">`); got == show {
+			t.Fatalf("show_bottom_nav=%v: no-nav class present = %v", show, got)
+		}
 	}
 }

@@ -79,6 +79,7 @@ type createRequest struct {
 	BackgroundColor     string   `json:"backgroundColor"`
 	ThemeAuto           bool     `json:"themeAuto"`
 	ShowHeader          *bool    `json:"showHeader"`
+	ShowBottomNav       *bool    `json:"showBottomNav"`
 	HeaderTitle         string   `json:"headerTitle"`
 	HeaderLogoURL       string   `json:"headerLogoUrl"`
 	IconURL             string   `json:"iconUrl"`
@@ -121,7 +122,8 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 		ThemeColor:          req.ThemeColor,
 		BackgroundColor:     req.BackgroundColor,
 		ThemeAuto:           req.ThemeAuto,
-		ShowHeader:          showHeader(req.ShowHeader),
+		ShowHeader:          defaultOn(req.ShowHeader),
+		ShowBottomNav:       defaultOn(req.ShowBottomNav),
 		HeaderTitle:         req.HeaderTitle,
 		HeaderLogoURL:       req.HeaderLogoURL,
 		IconURL:             req.IconURL,
@@ -162,6 +164,7 @@ type updateRequest struct {
 	BackgroundColor     *string   `json:"backgroundColor"`
 	ThemeAuto           *bool     `json:"themeAuto"`
 	ShowHeader          *bool     `json:"showHeader"`
+	ShowBottomNav       *bool     `json:"showBottomNav"`
 	HeaderTitle         *string   `json:"headerTitle"`
 	HeaderLogoURL       *string   `json:"headerLogoUrl"`
 	IconURL             *string   `json:"iconUrl"`
@@ -206,6 +209,7 @@ func (h *Handler) update(w http.ResponseWriter, r *http.Request) {
 		BackgroundColor:     req.BackgroundColor,
 		ThemeAuto:           req.ThemeAuto,
 		ShowHeader:          req.ShowHeader,
+		ShowBottomNav:       req.ShowBottomNav,
 		HeaderTitle:         req.HeaderTitle,
 		HeaderLogoURL:       req.HeaderLogoURL,
 		IconURL:             req.IconURL,
@@ -285,6 +289,6 @@ func writeJSON(w http.ResponseWriter, status int, body any) {
 	_ = json.NewEncoder(w).Encode(body)
 }
 
-// showHeader defaults a create request that omits the field to on, so
+// defaultOn defaults a create request that omits a show_* toggle to on, so
 // clients that predate the toggle keep today's page.
-func showHeader(v *bool) bool { return v == nil || *v }
+func defaultOn(v *bool) bool { return v == nil || *v }

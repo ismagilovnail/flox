@@ -365,6 +365,7 @@ export function PwaPreviewCard({
   backgroundColor,
   themeAuto,
   showHeader = true,
+  showBottomNav = true,
   headerTitle,
   headerLogoUrl,
   screenshots,
@@ -419,6 +420,8 @@ export function PwaPreviewCard({
   themeAuto?: boolean;
   /** The top bar (brand mark, "Apps", search, help). Defaults to shown. */
   showHeader?: boolean;
+  /** The bottom bar with the menu buttons. Defaults to shown. */
+  showBottomNav?: boolean;
   /** Own title/logo for the top bar; empty = "Apps" and the default mark. */
   headerTitle?: string;
   headerLogoUrl?: string;
@@ -902,46 +905,48 @@ export function PwaPreviewCard({
           <span>{t("preview.footer.developers", { ns: "pwa" })}</span>
         </div>
 
-        <div
-          className="sticky bottom-0 z-30 mt-auto flex items-center justify-around border-t bg-[var(--pv-bg)] px-2 py-2"
-          style={{ borderColor: "var(--pv-border)" }}
-        >
-          {[
-            {
-              Icon: GamepadIcon,
-              label: t("preview.nav.games", { ns: "pwa" }),
-              active: true,
-            },
-            {
-              Icon: LayoutGridIcon,
-              label: t("preview.nav.apps", { ns: "pwa" }),
-              active: false,
-            },
-            {
-              Icon: BookOpenIcon,
-              label: t("preview.nav.books", { ns: "pwa" }),
-              active: false,
-            },
-            {
-              Icon: SmileIcon,
-              label: t("preview.nav.kids", { ns: "pwa" }),
-              active: false,
-            },
-          ].map(({ Icon, label, active }) => (
-            <div
-              key={label}
-              className="flex min-w-[70px] flex-col items-center gap-1 rounded-lg px-2 py-1 text-[var(--pv-text-muted)]"
-              style={
-                active
-                  ? { color: accent, backgroundColor: withAlpha(accent, 0.1) }
-                  : undefined
-              }
-            >
-              <Icon className="size-6" />
-              <span className="text-[10px]">{label}</span>
-            </div>
-          ))}
-        </div>
+        {showBottomNav && (
+          <div
+            className="sticky bottom-0 z-30 mt-auto flex items-center justify-around border-t bg-[var(--pv-bg)] px-2 py-2"
+            style={{ borderColor: "var(--pv-border)" }}
+          >
+            {[
+              {
+                Icon: GamepadIcon,
+                label: t("preview.nav.games", { ns: "pwa" }),
+                active: true,
+              },
+              {
+                Icon: LayoutGridIcon,
+                label: t("preview.nav.apps", { ns: "pwa" }),
+                active: false,
+              },
+              {
+                Icon: BookOpenIcon,
+                label: t("preview.nav.books", { ns: "pwa" }),
+                active: false,
+              },
+              {
+                Icon: SmileIcon,
+                label: t("preview.nav.kids", { ns: "pwa" }),
+                active: false,
+              },
+            ].map(({ Icon, label, active }) => (
+              <div
+                key={label}
+                className="flex min-w-[70px] flex-col items-center gap-1 rounded-lg px-2 py-1 text-[var(--pv-text-muted)]"
+                style={
+                  active
+                    ? { color: accent, backgroundColor: withAlpha(accent, 0.1) }
+                    : undefined
+                }
+              >
+                <Icon className="size-6" />
+                <span className="text-[10px]">{label}</span>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       {aboutOpen && (

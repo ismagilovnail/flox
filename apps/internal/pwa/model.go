@@ -37,6 +37,8 @@ type Pwa struct {
 	ThemeAuto bool `json:"themeAuto"`
 	// ShowHeader: the install page's top bar (brand mark, title, search).
 	ShowHeader bool `json:"showHeader"`
+	// ShowBottomNav: the bottom bar with the menu buttons.
+	ShowBottomNav bool `json:"showBottomNav"`
 	// HeaderTitle/HeaderLogoURL brand the top bar; empty = default "Apps" and mark.
 	HeaderTitle   string `json:"headerTitle"`
 	HeaderLogoURL string `json:"headerLogoUrl"`
@@ -101,6 +103,7 @@ type CreateInput struct {
 	BackgroundColor     string
 	ThemeAuto           bool
 	ShowHeader          bool
+	ShowBottomNav       bool
 	HeaderTitle         string
 	HeaderLogoURL       string
 	IconURL             string
@@ -144,6 +147,7 @@ type UpdateInput struct {
 	BackgroundColor     *string
 	ThemeAuto           *bool
 	ShowHeader          *bool
+	ShowBottomNav       *bool
 	HeaderTitle         *string
 	HeaderLogoURL       *string
 	IconURL             *string

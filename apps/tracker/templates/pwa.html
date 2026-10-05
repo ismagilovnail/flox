@@ -61,6 +61,10 @@
       padding:0 0 76px;
     }
 
+    main.no-nav{
+      padding-bottom:24px;
+    }
+
     [hidden]{
       display:none!important;
     }
@@ -912,7 +916,7 @@
 
 <body>
 
-<main>
+<main{{if not .Page.ShowBottomNav}} class="no-nav"{{end}}>
 
   {{if .Test}}
   <div class="test">{{index .Copy "test"}}</div>
@@ -1541,6 +1545,7 @@
      BOTTOM NAVIGATION
 ======================================================= -->
 
+{{if .Page.ShowBottomNav}}
 <div class="bottom-nav">
 
   <div class="nav-item active">
@@ -1611,6 +1616,7 @@
   </div>
 
 </div>
+{{end}}
 
 
 <!-- =======================================================

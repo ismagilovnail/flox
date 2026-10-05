@@ -226,6 +226,7 @@ func (s *Service) Duplicate(ctx context.Context, orgID, id string) (Pwa, error) 
 		BackgroundColor:     source.BackgroundColor,
 		ThemeAuto:           source.ThemeAuto,
 		ShowHeader:          source.ShowHeader,
+		ShowBottomNav:       source.ShowBottomNav,
 		HeaderTitle:         source.HeaderTitle,
 		HeaderLogoURL:       source.HeaderLogoURL,
 		IconURL:             source.IconURL,

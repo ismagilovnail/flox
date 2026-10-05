@@ -19,6 +19,7 @@ function toFormValues(pwa: Pwa): PwaFormValues {
     backgroundColor: pwa.backgroundColor,
     themeAuto: pwa.themeAuto,
     showHeader: pwa.showHeader,
+    showBottomNav: pwa.showBottomNav,
     headerTitle: pwa.headerTitle,
     headerLogoUrl: pwa.headerLogoUrl,
     iconUrl: pwa.iconUrl,

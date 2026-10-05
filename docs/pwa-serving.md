@@ -104,6 +104,11 @@ to 40 characters) and logo (`header_logo_url`, picked from the Content Gallery,
 empty or an http(s) URL; migration 00039). Empty means the default "Apps" and
 the built-in mark. The title is escaped like every other template value.
 
+**Bottom bar toggle.** `pwas.show_bottom_nav` (migration 00040, default on)
+shows or hides the bottom bar with the menu buttons (Games / Apps / Books /
+Kids). With it off the page drops the space reserved under the content too.
+A create request that omits the field gets "on".
+
 ## In-app WebView bounce (§28/§73)
 
 With the PWA's `bounceInAppWebview` on, a request whose user agent

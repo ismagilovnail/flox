@@ -5,6 +5,15 @@ per-phase, matching `CLAUDE.md`'s phase protocol. The one exception is
 [Between phases], below: spec amendments and the code changes that follow from
 them land between phases and would otherwise be invisible here.
 
+## [Between phases] — PWA bottom bar toggle
+
+Constructor switch "Нижняя панель меню" hides the bottom bar with the menu
+buttons on the install page (and the padding reserved for it) and in the
+preview. `pwas.show_bottom_nav` (migration 00040, default true) through
+create/update/duplicate, `PwaPage`, form and preview card. Tests:
+`TestRenderPwaPageShowBottomNav`; full-env go test, tsc, eslint clean;
+toggle checked live on /pwa/new.
+
 ## [Between phases] — PWA header title and logo
 
 With "Шапка страницы" on, the constructor shows a logo picker (Content

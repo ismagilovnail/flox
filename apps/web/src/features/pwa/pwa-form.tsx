@@ -107,6 +107,7 @@ export function buildPwaFormSchema(t: TFunction) {
     backgroundColor: hexColor,
     themeAuto: z.boolean(),
     showHeader: z.boolean(),
+    showBottomNav: z.boolean(),
     headerTitle: z
       .string()
       .max(40, t("form.validation.headerTitleMax", { ns: "pwa" })),
@@ -229,6 +230,7 @@ export function PwaForm({
       backgroundColor: "#ffffff",
       themeAuto: false,
       showHeader: true,
+      showBottomNav: true,
       headerTitle: "",
       headerLogoUrl: "",
       iconUrl: "",
@@ -572,6 +574,28 @@ export function PwaForm({
                 </div>
               </div>
             )}
+
+            <div className="flex items-center justify-between rounded-md border border-border p-2.5">
+              <div>
+                <p className="text-sm font-medium">
+                  {t("form.showBottomNavLabel", { ns: "pwa" })}
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  {t("form.showBottomNavHint", { ns: "pwa" })}
+                </p>
+              </div>
+              <Controller
+                control={control}
+                name="showBottomNav"
+                render={({ field }) => (
+                  <Switch
+                    checked={field.value}
+                    onCheckedChange={field.onChange}
+                    aria-label={t("form.showBottomNavAria", { ns: "pwa" })}
+                  />
+                )}
+              />
+            </div>
 
             <Separator />
 
@@ -1012,6 +1036,7 @@ export function PwaForm({
               backgroundColor={manifest.backgroundColor}
               themeAuto={manifest.themeAuto}
               showHeader={manifest.showHeader}
+              showBottomNav={manifest.showBottomNav}
               headerTitle={manifest.headerTitle}
               headerLogoUrl={manifest.headerLogoUrl}
               description={manifest.description}
