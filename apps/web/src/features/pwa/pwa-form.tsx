@@ -176,8 +176,12 @@ export function buildPwaFormSchema(t: TFunction) {
         geo: z.string(),
         lang: z.string(),
         author: z.string(),
+        avatarUrl: z.string(),
         rating: z.number(),
+        likes: z.number(),
+        date: z.string(),
         text: z.string(),
+        reply: z.string(),
       }),
     ),
     updatedDate: z

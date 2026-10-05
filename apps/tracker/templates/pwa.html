@@ -688,6 +688,40 @@
       color:var(--accent);
     }
 
+    .review-head{
+      display:flex;
+      align-items:center;
+      gap:10px;
+      margin-bottom:2px;
+    }
+
+    .review-avatar{
+      width:32px;
+      height:32px;
+      border-radius:50%;
+      object-fit:cover;
+      flex:none;
+    }
+
+    .review-avatar-blank{
+      background:var(--chip);
+    }
+
+    .review-meta{
+      font-size:12px;
+      color:var(--muted);
+    }
+
+    .review-reply{
+      margin:8px 0 0;
+      padding:8px 12px;
+      border-radius:8px;
+      background:var(--chip);
+      font-size:13px;
+      line-height:1.4;
+      overflow-wrap:anywhere;
+    }
+
     .review-text{
       margin:4px 0 0;
       font-size:14px;
@@ -1519,9 +1553,14 @@
     <ul class="review-list">
       {{range .Comments}}
       <li class="review-item">
-        <span class="review-author">{{.Author}}</span>
-        <span class="review-stars" aria-label="{{.Rating}}/5">{{starText .Rating}}</span>
+        <div class="review-head">
+          {{if .AvatarURL}}<img class="review-avatar" src="{{.AvatarURL}}" alt="">{{else}}<span class="review-avatar review-avatar-blank" aria-hidden="true"></span>{{end}}
+          <span class="review-author">{{.Author}}</span>
+        </div>
+        <span class="review-stars" aria-label="{{.Rating}}/5">{{starText .Rating}}</span>{{if .Date}} <span class="review-meta">{{.Date}}</span>{{end}}
         <p class="review-text">{{.Text}}</p>
+        {{if .Likes}}<span class="review-meta">👍 {{.Likes}}</span>{{end}}
+        {{if .Reply}}<p class="review-reply"><span class="review-meta">{{index $.Copy "devReply"}}</span><br>{{.Reply}}</p>{{end}}
       </li>
       {{end}}
     </ul>

@@ -37,6 +37,19 @@ the first language. Names come from `Intl.DisplayNames` in the UI language.
 Other pairs still work through CSV import (the API accepts any two-letter
 codes). tsc, eslint clean; checked live on /pwa/new.
 
+## [Between phases] — PWA comment form: avatar, likes, date, developer reply
+
+"Новый комментарий" dialog (also used to edit): username, avatar from the
+Content Gallery, 5-star rating, likes, comment date, text (500) and an
+optional developer reply (500). `pwa_comments` gained avatar_url, likes,
+comment_date, reply (migration 00042); validation in the service; the editor
+preview and the tracker's test-link page show them; CSV is now
+`geo,lang,author,rating,text,likes,date,reply,avatar`. Deliberately NOT
+built: the reference's "actual date spread randomly over the last 5 days" and
+"date with offset" modes — a comment date is a specific day the operator
+types, or empty (none shown). Tests: round-trip and validation of the new
+fields; full-env go test, tsc, eslint clean; dialog opened live.
+
 ## [Between phases] — PWA comments editor in a large modal
 
 The "Комментарии" card in the PWA form now shows a summary of the sets with

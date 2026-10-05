@@ -394,7 +394,7 @@ export function PwaPreviewCard({
   rating?: number;
   ratingCount?: number;
   /** Hand-entered comments of the set being edited, listed under the stars. */
-  comments?: { author: string; rating: number; text: string }[];
+  comments?: { author: string; avatarUrl: string; rating: number; likes: number; date: string; text: string; reply: string }[];
   downloadsLabel?: string;
   sizeMb?: number;
   /** The PWA's own manifest `theme_color` (pwa-form.tsx's "Цветовая
@@ -873,9 +873,23 @@ export function PwaPreviewCard({
             <ul className="mt-4 flex flex-col gap-4">
               {comments.map((c, i) => (
                 <li key={i} className="flex flex-col gap-1">
-                  <span className="text-sm font-medium text-[var(--pv-text)]">{c.author}</span>
-                  <span className="text-xs text-[var(--pv-text-muted)]">{"★".repeat(c.rating)}{"☆".repeat(5 - c.rating)}</span>
+                  <div className="flex items-center gap-2">
+                    {c.avatarUrl ? (
+                      // eslint-disable-next-line @next/next/no-img-element -- a Content Gallery public object-storage URL
+                      <img src={c.avatarUrl} alt="" className="size-8 rounded-full object-cover" />
+                    ) : (
+                      <span className="size-8 rounded-full bg-[var(--pv-subtle-bg)]" aria-hidden="true" />
+                    )}
+                    <span className="text-sm font-medium text-[var(--pv-text)]">{c.author}</span>
+                  </div>
+                  <span className="text-xs text-[var(--pv-text-muted)]">
+                    {"★".repeat(c.rating)}{"☆".repeat(5 - c.rating)}{c.date ? ` · ${c.date}` : ""}
+                  </span>
                   <p className="whitespace-pre-line break-words text-sm text-[var(--pv-text)]">{c.text}</p>
+                  {c.likes > 0 && <span className="text-xs text-[var(--pv-text-muted)]">👍 {c.likes}</span>}
+                  {!!c.reply && (
+                    <p className="whitespace-pre-line break-words rounded-lg bg-[var(--pv-subtle-bg)] px-3 py-2 text-[13px] text-[var(--pv-text)]">{c.reply}</p>
+                  )}
                 </li>
               ))}
             </ul>

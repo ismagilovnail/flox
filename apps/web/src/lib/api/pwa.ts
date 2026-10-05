@@ -144,8 +144,14 @@ export type PwaComment = {
   geo: string;
   lang: string;
   author: string;
+  /** Gallery image URL, "" = none. */
+  avatarUrl: string;
   rating: number;
+  likes: number;
+  /** YYYY-MM-DD, "" = no date shown. */
+  date: string;
   text: string;
+  reply: string;
 };
 
 export function getPwaComments(id: string): Promise<{ comments: PwaComment[] }> {

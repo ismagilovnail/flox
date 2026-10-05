@@ -682,6 +682,24 @@ func TestCommentsReplaceRoundTripAndValidation(t *testing.T) {
 		t.Fatalf("saved = %+v, want normalised values", saved)
 	}
 
+	rich, err := svc.ReplaceComments(ctx, orgID, p.ID, []pwa.CommentInput{{
+		Geo: "ML", Lang: "fr", Author: "Awa", AvatarURL: "https://cdn.example.com/a.png", Rating: 4, Likes: 12,
+		Date: "2026-09-30", Text: "Bien", Reply: " Merci ",
+	}})
+	if err != nil {
+		t.Fatalf("ReplaceComments with details: %v", err)
+	}
+	if r := rich[0]; r.Likes != 12 || r.Date != "2026-09-30" || r.Reply != "Merci" || r.AvatarURL == "" {
+		t.Fatalf("details not kept: %+v", r)
+	}
+	if back, _ := svc.ListComments(ctx, orgID, p.ID); len(back) != 1 || back[0].Date != "2026-09-30" || back[0].Likes != 12 || back[0].Reply != "Merci" {
+		t.Fatalf("details lost on read-back: %+v", back)
+	}
+	noDate, _ := svc.ReplaceComments(ctx, orgID, p.ID, []pwa.CommentInput{{Geo: "ML", Lang: "fr", Author: "Awa", Rating: 4, Text: "Bien"}})
+	if back, _ := svc.ListComments(ctx, orgID, p.ID); len(noDate) != 1 || back[0].Date != "" {
+		t.Fatalf("a comment without a date came back with %q", back[0].Date)
+	}
+
 	// Replaced wholesale, order kept.
 	if _, err := svc.ReplaceComments(ctx, orgID, p.ID, []pwa.CommentInput{{Geo: "DE", Lang: "de", Author: "Max", Rating: 4, Text: "Gut"}}); err != nil {
 		t.Fatalf("second ReplaceComments: %v", err)
@@ -697,6 +715,11 @@ func TestCommentsReplaceRoundTripAndValidation(t *testing.T) {
 		"author": {Geo: "RU", Lang: "ru", Author: " ", Rating: 5, Text: "x"},
 		"rating": {Geo: "RU", Lang: "ru", Author: "A", Rating: 6, Text: "x"},
 		"text":   {Geo: "RU", Lang: "ru", Author: "A", Rating: 5, Text: " "},
+		"long":   {Geo: "RU", Lang: "ru", Author: "A", Rating: 5, Text: strings.Repeat("я", 501)},
+		"reply":  {Geo: "RU", Lang: "ru", Author: "A", Rating: 5, Text: "x", Reply: strings.Repeat("я", 501)},
+		"date":   {Geo: "RU", Lang: "ru", Author: "A", Rating: 5, Text: "x", Date: "30.09.2026"},
+		"likes":  {Geo: "RU", Lang: "ru", Author: "A", Rating: 5, Text: "x", Likes: -1},
+		"avatar": {Geo: "RU", Lang: "ru", Author: "A", Rating: 5, Text: "x", AvatarURL: "javascript:alert(1)"},
 	} {
 		if _, err := svc.ReplaceComments(ctx, orgID, p.ID, []pwa.CommentInput{bad}); err == nil {
 			t.Errorf("invalid %s accepted", name)

@@ -171,12 +171,12 @@ export function commentStats(comments: PwaComment[]) {
   };
 }
 
-const CSV_HEADER = ["geo", "lang", "author", "rating", "text"];
+const CSV_HEADER = ["geo", "lang", "author", "rating", "text", "likes", "date", "reply", "avatar"];
 
 const quote = (v: string) => (/[",\n\r]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v);
 
 export function commentsToCsv(comments: PwaComment[]): string {
-  const rows = comments.map((c) => [c.geo, c.lang, c.author, String(c.rating), c.text].map(quote).join(","));
+  const rows = comments.map((c) => [c.geo, c.lang, c.author, String(c.rating), c.text, String(c.likes), c.date, c.reply, c.avatarUrl].map(quote).join(","));
   return [CSV_HEADER.join(","), ...rows].join("\n");
 }
 
@@ -226,13 +226,18 @@ export function parseCommentsCsv(input: string): { comments: PwaComment[]; skipp
   const comments: PwaComment[] = [];
   let skipped = 0;
   for (const r of body) {
-    const [geo = "", lang = "", author = "", rating = "", text = ""] = r.map((c) => c.trim());
+    const [geo = "", lang = "", author = "", rating = "", text = "", likes = "", date = "", reply = "", avatar = ""] = r.map((c) => c.trim());
     const n = Number(rating);
-    if (!/^[A-Za-z]{2}$/.test(geo) || !/^[A-Za-z]{2}$/.test(lang) || !author || !text || !Number.isInteger(n) || n < 1 || n > 5) {
+    const l = likes === "" ? 0 : Number(likes);
+    if (
+      !/^[A-Za-z]{2}$/.test(geo) || !/^[A-Za-z]{2}$/.test(lang) || !author || !text || text.length > 500 || reply.length > 500 ||
+      !Number.isInteger(n) || n < 1 || n > 5 || !Number.isInteger(l) || l < 0 ||
+      (date !== "" && !/^\d{4}-\d{2}-\d{2}$/.test(date)) || (avatar !== "" && !/^https?:\/\//.test(avatar))
+    ) {
       skipped++;
       continue;
     }
-    comments.push({ geo: geo.toUpperCase(), lang: lang.toLowerCase(), author, rating: n, text });
+    comments.push({ geo: geo.toUpperCase(), lang: lang.toLowerCase(), author, avatarUrl: avatar, rating: n, likes: l, date, text, reply });
   }
   return { comments, skipped };
 }

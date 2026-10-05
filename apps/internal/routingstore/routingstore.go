@@ -146,15 +146,17 @@ type PwaPage struct {
 // PwaComment is one hand-entered comment of a PWA (pwa_comments).
 type PwaComment struct {
 	Geo, Lang, Author string
-	Rating            int
-	Text              string
+	AvatarURL         string
+	Rating, Likes     int
+	Date              string // YYYY-MM-DD, empty = none
+	Text, Reply       string
 }
 
 // LoadPwaComments reads a PWA's comments in entry order, org-scoped. Only
 // the constructor's test links render them (see apps/tracker/pwa.go).
 func (s *Store) LoadPwaComments(ctx context.Context, orgID, pwaID string) ([]PwaComment, error) {
 	rows, err := s.db.Query(ctx, `
-		SELECT geo, lang, author, rating, body
+		SELECT geo, lang, author, avatar_url, rating, likes, COALESCE(to_char(comment_date, 'YYYY-MM-DD'), ''), body, reply
 		FROM pwa_comments
 		WHERE organization_id = $1 AND pwa_id = $2
 		ORDER BY position`, orgID, pwaID)
@@ -165,7 +167,7 @@ func (s *Store) LoadPwaComments(ctx context.Context, orgID, pwaID string) ([]Pwa
 	var out []PwaComment
 	for rows.Next() {
 		var c PwaComment
-		if err := rows.Scan(&c.Geo, &c.Lang, &c.Author, &c.Rating, &c.Text); err != nil {
+		if err := rows.Scan(&c.Geo, &c.Lang, &c.Author, &c.AvatarURL, &c.Rating, &c.Likes, &c.Date, &c.Text, &c.Reply); err != nil {
 			return nil, fmt.Errorf("scanning pwa comment: %w", err)
 		}
 		out = append(out, c)

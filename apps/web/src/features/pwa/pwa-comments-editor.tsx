@@ -8,21 +8,19 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { IconButton } from "@/components/ui/icon-button";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ChevronDownIcon } from "lucide-react";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Textarea } from "@/components/ui/textarea";
 import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import type { PwaComment } from "@/lib/api/pwa";
+import { EMPTY_COMMENT_DRAFT, PwaCommentDialog, type CommentDraft } from "@/features/pwa/pwa-comment-dialog";
 import { COMMENT_GEOS, commentsToCsv, displayName, parseCommentsCsv, setKey } from "@/features/pwa/pwa-comments";
 import { cn } from "@/lib/utils";
 
 const MAX_COMMENTS = 500;
-const EMPTY_DRAFT = { author: "", rating: 5, text: "" };
 
 /** Hand-entered comments for the install page, grouped into sets by geo +
  * language. Everything here is typed or imported by the operator — there is
@@ -45,8 +43,8 @@ export function PwaCommentsEditor({
   const [selected, setSelected] = useState<Set<PwaComment>>(new Set());
   const [newSet, setNewSet] = useState({ geo: "", lang: "" });
   const [extraSets, setExtraSets] = useState<string[]>([]);
-  const [draft, setDraft] = useState(EMPTY_DRAFT);
-  const [adding, setAdding] = useState(false);
+  // null = dialog closed; { comment: null } = a new comment; else editing.
+  const [dialog, setDialog] = useState<{ comment: PwaComment | null; key: number } | null>(null);
   const [geoOpen, setGeoOpen] = useState(false);
   const [open, setOpen] = useState(false);
 
@@ -60,7 +58,6 @@ export function PwaCommentsEditor({
     displayName("region", a.geo, locale).localeCompare(displayName("region", b.geo, locale), locale),
   );
   const geoLangs = COMMENT_GEOS.find((g) => g.geo === newSet.geo)?.langs ?? [];
-  const draftValid = draft.author.trim() !== "" && draft.text.trim() !== "" && draft.rating >= 1 && draft.rating <= 5;
 
   function addSet() {
     if (!setValid) return;
@@ -77,12 +74,13 @@ export function PwaCommentsEditor({
     if (activeSet === key) onActiveSetChange(sets.find((k) => k !== key) ?? "");
   }
 
-  function addComment() {
-    if (!activeSet || !draftValid || value.length >= MAX_COMMENTS) return;
+  function saveComment(draft: CommentDraft) {
+    if (!activeSet || !dialog) return;
     const [geo, lang] = activeSet.split("-");
-    onChange([...value, { geo, lang, author: draft.author.trim(), rating: draft.rating, text: draft.text.trim() }]);
-    setDraft(EMPTY_DRAFT);
-    setAdding(false);
+    const next: PwaComment = { geo, lang, ...draft };
+    if (dialog.comment) onChange(value.map((c) => (c === dialog.comment ? { ...dialog.comment, ...draft } : c)));
+    else if (value.length < MAX_COMMENTS) onChange([...value, next]);
+    setDialog(null);
   }
 
   function deleteSelected() {
@@ -243,7 +241,7 @@ export function PwaCommentsEditor({
         ) : (
           <div className="flex flex-col gap-3">
             <div className="flex flex-wrap items-center gap-2">
-              <Button type="button" size="sm" onClick={() => setAdding((v) => !v)} disabled={value.length >= MAX_COMMENTS}>
+              <Button type="button" size="sm" onClick={() => setDialog({ comment: null, key: Date.now() })} disabled={value.length >= MAX_COMMENTS}>
                 <PlusIcon className="size-3.5" /> {t("comments.add")}
               </Button>
               <Button type="button" size="sm" variant="outline" onClick={() => fileRef.current?.click()}>
@@ -266,33 +264,6 @@ export function PwaCommentsEditor({
               <span className="ml-auto text-xs text-muted-foreground">{t("comments.csvFormat")}</span>
             </div>
 
-            {adding && (
-              <div className="grid gap-3 rounded-md border p-3">
-                <div className="grid gap-3 sm:grid-cols-[1fr_120px]">
-                  <div className="grid gap-1.5">
-                    <Label htmlFor="pwa-comment-author">{t("comments.author")}</Label>
-                    <Input id="pwa-comment-author" maxLength={100} value={draft.author} onChange={(e) => setDraft((d) => ({ ...d, author: e.target.value }))} />
-                  </div>
-                  <div className="grid gap-1.5">
-                    <Label htmlFor="pwa-comment-rating">{t("comments.rating")}</Label>
-                    <Input id="pwa-comment-rating" type="number" min={1} max={5} step={1} value={draft.rating} onChange={(e) => setDraft((d) => ({ ...d, rating: Number(e.target.value) }))} />
-                  </div>
-                </div>
-                <div className="grid gap-1.5">
-                  <Label htmlFor="pwa-comment-text">{t("comments.text")}</Label>
-                  <Textarea id="pwa-comment-text" rows={3} maxLength={2000} value={draft.text} onChange={(e) => setDraft((d) => ({ ...d, text: e.target.value }))} />
-                </div>
-                <div className="flex justify-end gap-2">
-                  <Button type="button" variant="outline" size="sm" onClick={() => { setAdding(false); setDraft(EMPTY_DRAFT); }}>
-                    {t("comments.cancel")}
-                  </Button>
-                  <Button type="button" size="sm" disabled={!draftValid} onClick={addComment}>
-                    {t("comments.save")}
-                  </Button>
-                </div>
-              </div>
-            )}
-
             <div className="flex items-center justify-between rounded-md border px-3 py-2">
               <label className="flex items-center gap-2 text-sm">
                 <Checkbox
@@ -314,15 +285,27 @@ export function PwaCommentsEditor({
                 {inSet.map((c, i) => (
                   <li key={i} className="flex items-start gap-3 px-3 py-2">
                     <Checkbox className="mt-1" checked={selected.has(c)} onCheckedChange={() => toggle(c)} />
+                    {c.avatarUrl ? (
+                      // eslint-disable-next-line @next/next/no-img-element -- a Content Gallery public object-storage URL
+                      <img src={c.avatarUrl} alt="" className="size-8 rounded-full object-cover" />
+                    ) : (
+                      <span className="size-8 rounded-full bg-muted" aria-hidden="true" />
+                    )}
                     <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-2 text-sm font-medium">
+                      <div className="flex flex-wrap items-center gap-2 text-sm font-medium">
                         {c.author}
                         <span className="inline-flex items-center gap-0.5 text-xs text-muted-foreground tabular-nums">
                           <StarIcon className="size-3 fill-current" /> {c.rating}
                         </span>
+                        {c.date && <span className="text-xs font-normal text-muted-foreground tabular-nums">{c.date}</span>}
+                        {c.likes > 0 && <span className="text-xs font-normal text-muted-foreground tabular-nums">👍 {c.likes}</span>}
                       </div>
                       <p className="whitespace-pre-line break-words text-sm text-muted-foreground">{c.text}</p>
+                      {c.reply && <p className="mt-1 whitespace-pre-line break-words border-l-2 pl-2 text-xs text-muted-foreground">{c.reply}</p>}
                     </div>
+                    <Button type="button" size="sm" variant="ghost" onClick={() => setDialog({ comment: c, key: Date.now() })}>
+                      {t("comments.edit")}
+                    </Button>
                   </li>
                 ))}
               </ul>
@@ -332,6 +315,17 @@ export function PwaCommentsEditor({
           </div>
         </DialogContent>
       </Dialog>
+      {dialog && (
+        <PwaCommentDialog
+          key={dialog.key}
+          open
+          onOpenChange={(o) => !o && setDialog(null)}
+          setLabel={activeSet.replace("-", " · ")}
+          initial={dialog.comment ?? EMPTY_COMMENT_DRAFT}
+          editing={!!dialog.comment}
+          onSave={saveComment}
+        />
+      )}
     </Card>
   );
 }
