@@ -1,48 +1,48 @@
 package landing_test
 
 import (
+	"archive/zip"
+	"bytes"
 	"context"
+	"errors"
+	"io"
+	"net/http"
 	"os"
+	"strings"
 	"testing"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/ismagilovnail/flox/apps/internal/apierror"
+	"github.com/ismagilovnail/flox/apps/internal/config"
 	"github.com/ismagilovnail/flox/apps/internal/idgen"
 	"github.com/ismagilovnail/flox/apps/internal/landing"
+	"github.com/ismagilovnail/flox/apps/internal/storage"
 )
 
-func TestCreateGetUpdateDelete(t *testing.T) {
+func TestExternalCreateGetUpdateDelete(t *testing.T) {
 	pool := mustPool(t)
 	ctx := context.Background()
 	orgID := seedOrg(t, ctx, pool)
-
-	svc := landing.NewService(landing.NewRepository(pool))
+	svc := landing.NewService(landing.NewRepository(pool), nil, nil)
 
 	created, err := svc.Create(ctx, orgID, landing.CreateInput{
-		Name: "Quiz Lander", Type: landing.TypeInternal, Content: "<h1>Quiz</h1>",
+		Name: "Advertiser Lander", Title: "Spring Promo", Type: landing.TypeExternal, URL: "https://example.com/lnd",
 	})
 	if err != nil {
 		t.Fatalf("Create: %v", err)
 	}
-	if created.Status != landing.StatusActive {
-		t.Fatalf("Status = %q, want active (the DB default)", created.Status)
+	if created.Status != landing.StatusActive || created.Title != "Spring Promo" {
+		t.Fatalf("Create returned %+v, want active with the given title", created)
 	}
 
-	got, err := svc.Get(ctx, orgID, created.ID)
-	if err != nil {
-		t.Fatalf("Get: %v", err)
-	}
-	if got.Name != created.Name {
-		t.Fatalf("Get returned %+v, want the just-created row", got)
-	}
-
-	newName := "Quiz Lander (renamed)"
-	updated, err := svc.Update(ctx, orgID, created.ID, landing.UpdateInput{Name: &newName})
+	newName, newURL := "Advertiser Lander v2", "https://example.com/lnd-v2"
+	updated, err := svc.Update(ctx, orgID, created.ID, landing.UpdateInput{Name: &newName, URL: &newURL})
 	if err != nil {
 		t.Fatalf("Update: %v", err)
 	}
-	if updated.Name != newName {
-		t.Fatalf("Name = %q, want %q", updated.Name, newName)
+	if updated.Name != newName || updated.URL != newURL {
+		t.Fatalf("Update returned %+v", updated)
 	}
 
 	if err := svc.Delete(ctx, orgID, created.ID); err != nil {
@@ -53,48 +53,20 @@ func TestCreateGetUpdateDelete(t *testing.T) {
 	}
 }
 
-// TestInternalLandingURLIsServerComputed exercises the one piece of real
-// business logic this domain has: an internal landing's URL is always
-// derived from its name server-side (§28), never trusted from the client,
-// and stays in sync as the name changes.
-func TestInternalLandingURLIsServerComputed(t *testing.T) {
+func TestCreateCanSetPausedStatus(t *testing.T) {
 	pool := mustPool(t)
 	ctx := context.Background()
 	orgID := seedOrg(t, ctx, pool)
-
-	svc := landing.NewService(landing.NewRepository(pool))
+	svc := landing.NewService(landing.NewRepository(pool), nil, nil)
 
 	created, err := svc.Create(ctx, orgID, landing.CreateInput{
-		Name: "Sweeps Quiz!!", Type: landing.TypeInternal, Content: "<h1>Go</h1>",
-		URL: "https://attacker.example/not-trusted", // must be ignored for internal
+		Name: "Starts Paused", Type: landing.TypeExternal, URL: "https://example.com/p", Status: landing.StatusPaused,
 	})
 	if err != nil {
 		t.Fatalf("Create: %v", err)
 	}
-	if want := "https://cdn.floxlink.io/lnd/sweeps-quiz"; created.URL != want {
-		t.Fatalf("URL = %q, want %q (slugified from name, client URL ignored)", created.URL, want)
-	}
-
-	renamed := "Brand New Name"
-	updated, err := svc.Update(ctx, orgID, created.ID, landing.UpdateInput{Name: &renamed})
-	if err != nil {
-		t.Fatalf("Update (rename): %v", err)
-	}
-	if want := "https://cdn.floxlink.io/lnd/brand-new-name"; updated.URL != want {
-		t.Fatalf("URL after rename = %q, want %q", updated.URL, want)
-	}
-
-	// A status-only update (the shape Pause/Activate/Duplicate's
-	// preserve-status follow-up all send) must not touch url/content at
-	// all — recomputing on every unrelated PATCH would be wasteful, not
-	// just untested.
-	paused := landing.StatusPaused
-	statusOnly, err := svc.Update(ctx, orgID, created.ID, landing.UpdateInput{Status: &paused})
-	if err != nil {
-		t.Fatalf("Update (status only): %v", err)
-	}
-	if statusOnly.URL != updated.URL {
-		t.Fatalf("URL changed on a status-only update: got %q, want unchanged %q", statusOnly.URL, updated.URL)
+	if created.Status != landing.StatusPaused {
+		t.Fatalf("Status = %q, want paused", created.Status)
 	}
 }
 
@@ -102,17 +74,43 @@ func TestCreateRejectsInvalidShapes(t *testing.T) {
 	pool := mustPool(t)
 	ctx := context.Background()
 	orgID := seedOrg(t, ctx, pool)
+	svc := landing.NewService(landing.NewRepository(pool), nil, nil)
 
-	svc := landing.NewService(landing.NewRepository(pool))
+	cases := map[string]struct {
+		in    landing.CreateInput
+		field string
+	}{
+		"invalid url":       {landing.CreateInput{Name: "Bad External", Type: landing.TypeExternal, URL: "not-a-url"}, "url"},
+		"short name":        {landing.CreateInput{Name: "X", Type: landing.TypeExternal, URL: "https://example.com"}, "name"},
+		"internal via JSON": {landing.CreateInput{Name: "Internal", Type: landing.TypeInternal}, "archive"},
+		"invalid logo":      {landing.CreateInput{Name: "Logo", Type: landing.TypeExternal, URL: "https://example.com", LogoURL: "nope"}, "logoUrl"},
+		"archived status":   {landing.CreateInput{Name: "Status", Type: landing.TypeExternal, URL: "https://example.com", Status: landing.StatusArchived}, "status"},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			_, err := svc.Create(ctx, orgID, tc.in)
+			assertFieldError(t, err, tc.field)
+		})
+	}
+}
 
-	if _, err := svc.Create(ctx, orgID, landing.CreateInput{Name: "Bad External", Type: landing.TypeExternal, URL: "not-a-url"}); err == nil {
-		t.Fatal("Create external with an invalid URL succeeded, want a validation error")
+func TestTypeCannotChange(t *testing.T) {
+	pool := mustPool(t)
+	ctx := context.Background()
+	orgID := seedOrg(t, ctx, pool)
+	svc := landing.NewService(landing.NewRepository(pool), nil, nil)
+
+	created, err := svc.Create(ctx, orgID, landing.CreateInput{Name: "Fixed Type", Type: landing.TypeExternal, URL: "https://example.com"})
+	if err != nil {
+		t.Fatalf("Create: %v", err)
 	}
-	if _, err := svc.Create(ctx, orgID, landing.CreateInput{Name: "Bad Internal", Type: landing.TypeInternal, Content: "   "}); err == nil {
-		t.Fatal("Create internal with blank content succeeded, want a validation error")
-	}
-	if _, err := svc.Create(ctx, orgID, landing.CreateInput{Name: "X", Type: landing.TypeInternal, Content: "ok"}); err == nil {
-		t.Fatal("Create with a 1-character name succeeded, want a validation error")
+	internal := landing.TypeInternal
+	_, err = svc.Update(ctx, orgID, created.ID, landing.UpdateInput{Type: &internal})
+	assertFieldError(t, err, "type")
+
+	same := landing.TypeExternal
+	if _, err := svc.Update(ctx, orgID, created.ID, landing.UpdateInput{Type: &same}); err != nil {
+		t.Fatalf("resending the current type was rejected: %v", err)
 	}
 }
 
@@ -120,8 +118,8 @@ func TestPauseActivateTransitions(t *testing.T) {
 	pool := mustPool(t)
 	ctx := context.Background()
 	orgID := seedOrg(t, ctx, pool)
+	svc := landing.NewService(landing.NewRepository(pool), nil, nil)
 
-	svc := landing.NewService(landing.NewRepository(pool))
 	created, err := svc.Create(ctx, orgID, landing.CreateInput{Name: "Toggle Lander", Type: landing.TypeExternal, URL: "https://example.com/lnd"})
 	if err != nil {
 		t.Fatalf("Create: %v", err)
@@ -152,36 +150,131 @@ func TestPauseActivateTransitions(t *testing.T) {
 	}
 }
 
-func TestDuplicateKeepsStatusAndRecomputesInternalURL(t *testing.T) {
+func TestArchiveUploadWithoutStorageIsUnavailable(t *testing.T) {
 	pool := mustPool(t)
 	ctx := context.Background()
 	orgID := seedOrg(t, ctx, pool)
+	svc := landing.NewService(landing.NewRepository(pool), nil, nil)
 
-	svc := landing.NewService(landing.NewRepository(pool))
-	created, err := svc.Create(ctx, orgID, landing.CreateInput{Name: "Original", Type: landing.TypeInternal, Content: "<p>hi</p>"})
+	_, err := svc.CreateFromArchive(ctx, orgID, archiveInput("No Storage", map[string]string{"index.html": "<p>hi</p>"}))
+	var apiErr *apierror.Error
+	if !errors.As(err, &apiErr) || apiErr.Status != http.StatusServiceUnavailable {
+		t.Fatalf("err = %v, want 503 Unavailable", err)
+	}
+}
+
+// TestArchiveLifecycle covers the whole bundle contract against real
+// Postgres + object storage: upload, assets publicly served under the
+// derived URL, template edit, re-upload keeping the ID and dropping the
+// old version's objects, duplicate getting its own copy, delete cleaning
+// everything up.
+func TestArchiveLifecycle(t *testing.T) {
+	pool := mustPool(t)
+	store := mustStorage(t)
+	ctx := context.Background()
+	orgID := seedOrg(t, ctx, pool)
+	svc := landing.NewService(landing.NewRepository(pool), store, nil)
+
+	res, err := svc.CreateFromArchive(ctx, orgID, archiveInput("Spin Wheel", map[string]string{
+		"spin/index.html":   `<html><head><link href="/abs.css"></head><body><a href="#">Go</a></body></html>`,
+		"spin/css/main.css": "body{color:red}",
+		"spin/img/logo.png": "\x89PNG fake",
+		"__MACOSX/spin/._x": "junk",
+		"spin/.DS_Store":    "junk",
+	}))
 	if err != nil {
-		t.Fatalf("Create: %v", err)
+		t.Fatalf("CreateFromArchive: %v", err)
 	}
-	if _, err := svc.Pause(ctx, orgID, created.ID); err != nil {
-		t.Fatalf("Pause: %v", err)
+	l := res.Landing
+	if l.Type != landing.TypeInternal || l.EntryFile != "index.html" || l.FileCount != 3 {
+		t.Fatalf("created %+v, want internal/index.html/3 files (top folder stripped, junk skipped)", l)
+	}
+	if len(res.Warnings) != 1 || res.Warnings[0] != "/abs.css" {
+		t.Fatalf("Warnings = %v, want [/abs.css]", res.Warnings)
+	}
+	if !strings.HasSuffix(l.URL, "/") {
+		t.Fatalf("URL = %q, want a base URL ending in /", l.URL)
+	}
+	assertServed(t, l.URL+"css/main.css", "body{color:red}")
+	firstURL := l.URL
+
+	edited := "<html><head></head><body><h1>Edited</h1></body></html>"
+	updated, err := svc.Update(ctx, orgID, l.ID, landing.UpdateInput{Content: &edited})
+	if err != nil || updated.Content != edited {
+		t.Fatalf("template edit: %+v, %v", updated, err)
 	}
 
-	dup, err := svc.Duplicate(ctx, orgID, created.ID)
+	preview, err := svc.Preview(ctx, orgID, l.ID, nil)
+	if err != nil {
+		t.Fatalf("Preview: %v", err)
+	}
+	if !strings.Contains(preview, "<h1>Edited</h1>") || !strings.Contains(preview, `<base href="`+firstURL+`">`) {
+		t.Fatalf("Preview didn't render the stored template with its base URL:\n%s", preview)
+	}
+
+	replaced, err := svc.ReplaceArchive(ctx, orgID, l.ID, archiveFor(map[string]string{
+		"index.twig": `<a href="{{ trackUrl }}">Go</a>`,
+		"new/app.js": "console.log(1)",
+	}))
+	if err != nil {
+		t.Fatalf("ReplaceArchive: %v", err)
+	}
+	if replaced.Landing.ID != l.ID || replaced.Landing.EntryFile != "index.twig" || replaced.Landing.Content != `<a href="{{ trackUrl }}">Go</a>` {
+		t.Fatalf("replaced %+v, want same ID with the new archive's entry file", replaced.Landing)
+	}
+	if replaced.Landing.URL == firstURL {
+		t.Fatal("re-upload reused the old version's prefix")
+	}
+	assertServed(t, replaced.Landing.URL+"new/app.js", "console.log(1)")
+	assertGone(t, firstURL+"css/main.css")
+
+	dup, err := svc.Duplicate(ctx, orgID, l.ID)
 	if err != nil {
 		t.Fatalf("Duplicate: %v", err)
 	}
-	if dup.ID == created.ID {
-		t.Fatal("Duplicate returned the same id as the source")
+	if dup.ID == l.ID || dup.URL == replaced.Landing.URL || dup.Content != replaced.Landing.Content {
+		t.Fatalf("duplicate %+v doesn't have its own bundle copy", dup)
 	}
-	if dup.Name != "Original (Copy)" {
-		t.Fatalf("Name = %q, want %q", dup.Name, "Original (Copy)")
+	assertServed(t, dup.URL+"new/app.js", "console.log(1)")
+
+	if err := svc.Delete(ctx, orgID, l.ID); err != nil {
+		t.Fatalf("Delete: %v", err)
 	}
-	if dup.Status != landing.StatusPaused {
-		t.Fatalf("Status = %q, want paused (copied from the source, not reset)", dup.Status)
+	assertGone(t, replaced.Landing.URL+"new/app.js")
+	assertServed(t, dup.URL+"new/app.js", "console.log(1)") // the copy is unaffected
+
+	if err := svc.Delete(ctx, orgID, dup.ID); err != nil {
+		t.Fatalf("Delete duplicate: %v", err)
 	}
-	if want := "https://cdn.floxlink.io/lnd/original-copy"; dup.URL != want {
-		t.Fatalf("URL = %q, want %q (recomputed for the new name, not copied verbatim)", dup.URL, want)
+}
+
+func TestArchiveRejectsBadArchives(t *testing.T) {
+	pool := mustPool(t)
+	store := mustStorage(t)
+	ctx := context.Background()
+	orgID := seedOrg(t, ctx, pool)
+	svc := landing.NewService(landing.NewRepository(pool), store, nil)
+
+	_, err := svc.CreateFromArchive(ctx, orgID, landing.ArchiveCreateInput{
+		Name: "Not A Zip", Title: "T", LogoURL: "https://example.com/logo.png",
+		Archive: landing.Archive{ReaderAt: strings.NewReader("plain text"), Size: 10},
+	})
+	assertFieldError(t, err, "archive")
+
+	_, err = svc.CreateFromArchive(ctx, orgID, archiveInput("No Index", map[string]string{"page.html": "<p>hi</p>"}))
+	assertFieldError(t, err, "archive")
+
+	in := archiveInput("No Logo", map[string]string{"index.html": "<p>hi</p>"})
+	in.LogoURL = ""
+	_, err = svc.CreateFromArchive(ctx, orgID, in)
+	assertFieldError(t, err, "logoUrl")
+
+	ext, err := svc.Create(ctx, orgID, landing.CreateInput{Name: "External", Type: landing.TypeExternal, URL: "https://example.com"})
+	if err != nil {
+		t.Fatalf("Create: %v", err)
 	}
+	_, err = svc.ReplaceArchive(ctx, orgID, ext.ID, archiveFor(map[string]string{"index.html": "<p>hi</p>"}))
+	assertFieldError(t, err, "archive")
 }
 
 func TestCrossTenantIsolation(t *testing.T) {
@@ -189,8 +282,8 @@ func TestCrossTenantIsolation(t *testing.T) {
 	ctx := context.Background()
 	orgA := seedOrg(t, ctx, pool)
 	orgB := seedOrg(t, ctx, pool)
+	svc := landing.NewService(landing.NewRepository(pool), nil, nil)
 
-	svc := landing.NewService(landing.NewRepository(pool))
 	created, err := svc.Create(ctx, orgA, landing.CreateInput{Name: "Org A Lander", Type: landing.TypeExternal, URL: "https://example.com/lnd"})
 	if err != nil {
 		t.Fatalf("creating for org A: %v", err)
@@ -205,6 +298,21 @@ func TestCrossTenantIsolation(t *testing.T) {
 		name := "hijacked"
 		if _, err := svc.Update(ctx, orgB, created.ID, landing.UpdateInput{Name: &name}); err == nil {
 			t.Fatal("org B updated org A's landing, want not-found")
+		}
+	})
+	t.Run("archive", func(t *testing.T) {
+		if _, err := svc.ReplaceArchive(ctx, orgB, created.ID, archiveFor(map[string]string{"index.html": "x"})); err == nil {
+			t.Fatal("org B replaced org A's archive, want not-found")
+		}
+	})
+	t.Run("preview", func(t *testing.T) {
+		if _, err := svc.Preview(ctx, orgB, created.ID, nil); err == nil {
+			t.Fatal("org B previewed org A's landing, want not-found")
+		}
+	})
+	t.Run("duplicate", func(t *testing.T) {
+		if _, err := svc.Duplicate(ctx, orgB, created.ID); err == nil {
+			t.Fatal("org B duplicated org A's landing, want not-found")
 		}
 	})
 	t.Run("delete", func(t *testing.T) {
@@ -223,6 +331,60 @@ func TestCrossTenantIsolation(t *testing.T) {
 	})
 }
 
+func archiveInput(name string, files map[string]string) landing.ArchiveCreateInput {
+	return landing.ArchiveCreateInput{
+		Name: name, Title: name + " title", LogoURL: "https://example.com/logo.png",
+		Archive: archiveFor(files),
+	}
+}
+
+func archiveFor(files map[string]string) landing.Archive {
+	var buf bytes.Buffer
+	zw := zip.NewWriter(&buf)
+	for name, body := range files {
+		w, _ := zw.Create(name)
+		_, _ = w.Write([]byte(body))
+	}
+	_ = zw.Close()
+	return landing.Archive{ReaderAt: bytes.NewReader(buf.Bytes()), Size: int64(buf.Len())}
+}
+
+func assertFieldError(t *testing.T, err error, field string) {
+	t.Helper()
+	var apiErr *apierror.Error
+	if !errors.As(err, &apiErr) {
+		t.Fatalf("err = %v, want a validation error on %q", err, field)
+	}
+	if _, ok := apiErr.Fields[field]; !ok {
+		t.Fatalf("validation fields = %v, want %q", apiErr.Fields, field)
+	}
+}
+
+func assertServed(t *testing.T, url, want string) {
+	t.Helper()
+	resp, err := http.Get(url)
+	if err != nil {
+		t.Fatalf("GET %s: %v", url, err)
+	}
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode != http.StatusOK || string(body) != want {
+		t.Fatalf("GET %s = %d %q, want 200 %q", url, resp.StatusCode, body, want)
+	}
+}
+
+func assertGone(t *testing.T, url string) {
+	t.Helper()
+	resp, err := http.Get(url)
+	if err != nil {
+		t.Fatalf("GET %s: %v", url, err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusNotFound {
+		t.Fatalf("GET %s = %d, want 404 (objects should have been removed)", url, resp.StatusCode)
+	}
+}
+
 func mustPool(t *testing.T) *pgxpool.Pool {
 	t.Helper()
 	dsn := os.Getenv("DATABASE_URL")
@@ -235,6 +397,29 @@ func mustPool(t *testing.T) *pgxpool.Pool {
 	}
 	t.Cleanup(pool.Close)
 	return pool
+}
+
+func mustStorage(t *testing.T) *storage.Client {
+	t.Helper()
+	endpoint := os.Getenv("S3_ENDPOINT")
+	if endpoint == "" {
+		t.Skip("S3_ENDPOINT not set, skipping integration test")
+	}
+	client, err := storage.NewClient(config.S3Config{
+		Endpoint:        endpoint,
+		Region:          os.Getenv("S3_REGION"),
+		Bucket:          os.Getenv("S3_BUCKET"),
+		AccessKeyID:     os.Getenv("S3_ACCESS_KEY_ID"),
+		SecretAccessKey: os.Getenv("S3_SECRET_ACCESS_KEY"),
+		PublicEndpoint:  os.Getenv("S3_PUBLIC_ENDPOINT"),
+	})
+	if err != nil {
+		t.Fatalf("building storage client: %v", err)
+	}
+	if err := client.EnsureBucket(context.Background(), os.Getenv("S3_REGION")); err != nil {
+		t.Skipf("object storage unreachable, skipping integration test: %v", err)
+	}
+	return client
 }
 
 func seedOrg(t *testing.T, ctx context.Context, pool *pgxpool.Pool) string {

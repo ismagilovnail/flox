@@ -3,7 +3,7 @@
 import * as React from "react";
 import Link from "next/link";
 import { toast } from "sonner";
-import { CopyIcon, PauseIcon, PencilIcon, PlayIcon, Trash2Icon } from "lucide-react";
+import { CodeIcon, CopyIcon, PauseIcon, PencilIcon, PlayIcon, Trash2Icon } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 import { IconButton } from "@/components/ui/icon-button";
@@ -20,6 +20,7 @@ import {
 import { useActivateLanding, useArchiveLanding, useDuplicateLanding, usePauseLanding } from "@/hooks/use-landings";
 import { usePermission } from "@/hooks/use-auth";
 import type { Landing } from "@/lib/api/landings";
+import { LandingTemplateEditor } from "@/features/landings/landing-template-editor";
 
 export function LandingRowActions({ landing }: { landing: Landing }) {
   const { t } = useTranslation(["landings", "common"]);
@@ -29,6 +30,7 @@ export function LandingRowActions({ landing }: { landing: Landing }) {
   const duplicate = useDuplicateLanding();
   const archive = useArchiveLanding();
   const [confirmArchive, setConfirmArchive] = React.useState(false);
+  const [editingTemplate, setEditingTemplate] = React.useState(false);
 
   function togglePause() {
     const action = landing.status === "active" ? pause : activate;
@@ -72,6 +74,17 @@ export function LandingRowActions({ landing }: { landing: Landing }) {
           <TooltipContent>{t("rowActions.edit")}</TooltipContent>
         </Tooltip>
 
+        {canWrite && landing.type === "internal" && (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <IconButton aria-label={t("rowActions.editTemplate")} size="icon-sm" onClick={() => setEditingTemplate(true)}>
+                <CodeIcon className="size-3.5" />
+              </IconButton>
+            </TooltipTrigger>
+            <TooltipContent>{t("rowActions.editTemplate")}</TooltipContent>
+          </Tooltip>
+        )}
+
         {canWrite && landing.status !== "archived" && (
           <Tooltip>
             <TooltipTrigger asChild>
@@ -109,6 +122,10 @@ export function LandingRowActions({ landing }: { landing: Landing }) {
           </Tooltip>
         )}
       </div>
+
+      {editingTemplate && (
+        <LandingTemplateEditor landing={landing} open={editingTemplate} onOpenChange={setEditingTemplate} />
+      )}
 
       <Dialog open={confirmArchive} onOpenChange={setConfirmArchive}>
         <DialogContent>

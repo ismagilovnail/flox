@@ -19,11 +19,13 @@ type Repository struct {
 
 func NewRepository(db *pgxpool.Pool) *Repository { return &Repository{db: db} }
 
-const selectColumns = `id, organization_id, name, type, url, content, status, created_at, updated_at`
+const selectColumns = `id, organization_id, name, title, logo_url, type, url, content, entry_file,
+	bundle_prefix, file_count, bundle_size, status, created_at, updated_at`
 
 func scanLanding(row pgx.Row) (Landing, error) {
 	var l Landing
-	err := row.Scan(&l.ID, &l.OrganizationID, &l.Name, &l.Type, &l.URL, &l.Content, &l.Status, &l.CreatedAt, &l.UpdatedAt)
+	err := row.Scan(&l.ID, &l.OrganizationID, &l.Name, &l.Title, &l.LogoURL, &l.Type, &l.URL, &l.Content, &l.EntryFile,
+		&l.BundlePrefix, &l.FileCount, &l.BundleSize, &l.Status, &l.CreatedAt, &l.UpdatedAt)
 	return l, err
 }
 
@@ -65,14 +67,40 @@ func (r *Repository) GetByID(ctx context.Context, orgID, id string) (Landing, er
 	return l, err
 }
 
-func (r *Repository) Create(ctx context.Context, id, orgID string, in CreateInput) (Landing, error) {
+// Create inserts l as-is — ID and OrganizationID included; the service
+// has already validated and derived every field. An empty Status means
+// the DB default (active).
+func (r *Repository) Create(ctx context.Context, l Landing) (Landing, error) {
+	if l.EntryFile == "" {
+		l.EntryFile = "index.html"
+	}
 	row := r.db.QueryRow(ctx, `
-		INSERT INTO landings (id, organization_id, name, type, url, content)
-		VALUES ($1, $2, $3, $4, $5, $6)
+		INSERT INTO landings (id, organization_id, name, title, logo_url, type, url, content, entry_file,
+			bundle_prefix, file_count, bundle_size, status)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, COALESCE(NULLIF($13, ''), 'active'))
 		RETURNING `+selectColumns,
-		id, orgID, in.Name, in.Type, in.URL, in.Content,
+		l.ID, l.OrganizationID, l.Name, l.Title, l.LogoURL, l.Type, l.URL, l.Content, l.EntryFile,
+		l.BundlePrefix, l.FileCount, l.BundleSize, string(l.Status),
 	)
 	return scanLanding(row)
+}
+
+// SetBundle swaps in a newly uploaded archive's entry file and asset
+// prefix in one statement — the ID (and everything flows reference it
+// by) stays the same.
+func (r *Repository) SetBundle(ctx context.Context, orgID, id string, b *bundle, prefix string) (Landing, error) {
+	row := r.db.QueryRow(ctx, `
+		UPDATE landings
+		SET content = $3, entry_file = $4, bundle_prefix = $5, file_count = $6, bundle_size = $7
+		WHERE id = $1 AND organization_id = $2
+		RETURNING `+selectColumns,
+		id, orgID, b.EntryHTML, b.EntryFile, prefix, b.FileCount, b.TotalSize,
+	)
+	l, err := scanLanding(row)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return Landing{}, apierror.NotFound("landing not found")
+	}
+	return l, err
 }
 
 func (r *Repository) Update(ctx context.Context, orgID, id string, in UpdateInput) (Landing, error) {
@@ -86,8 +114,11 @@ func (r *Repository) Update(ctx context.Context, orgID, id string, in UpdateInpu
 	if in.Name != nil {
 		sets = append(sets, "name = "+arg(*in.Name))
 	}
-	if in.Type != nil {
-		sets = append(sets, "type = "+arg(*in.Type))
+	if in.Title != nil {
+		sets = append(sets, "title = "+arg(*in.Title))
+	}
+	if in.LogoURL != nil {
+		sets = append(sets, "logo_url = "+arg(*in.LogoURL))
 	}
 	if in.URL != nil {
 		sets = append(sets, "url = "+arg(*in.URL))
@@ -117,9 +148,8 @@ func (r *Repository) Update(ctx context.Context, orgID, id string, in UpdateInpu
 }
 
 // Delete: flows.landing_id (00006) has no ON DELETE clause (defaults to
-// RESTRICT) — no Flow CRUD exists yet to ever populate that column, but
-// the 23503 catch is here defensively for when it does, same shape as
-// network.Repository.Delete.
+// RESTRICT), and Flow CRUD populates it — a landing still used by a flow
+// surfaces as a Conflict, same shape as network.Repository.Delete.
 func (r *Repository) Delete(ctx context.Context, orgID, id string) error {
 	tag, err := r.db.Exec(ctx, `DELETE FROM landings WHERE id = $1 AND organization_id = $2`, id, orgID)
 	if err != nil {

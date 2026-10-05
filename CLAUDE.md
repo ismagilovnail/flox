@@ -19,107 +19,57 @@ referenced below as §N).
 ## CURRENT STATE — UPDATE THIS EVERY PHASE
 
 ```
-CURRENT PHASE : DATATABLE COLUMN RESIZING + CSV EXPORT (§64 UX floor —
-                picked from a 3-option menu after "продолжай" with no
-                phase specified)
-STATUS        : done. components/ui/data-table.tsx (every list page's
-                shared table) had sort/paginate/search/column-visibility
-                but no resizing and no export — the last of §64's
-                explicit table requirements not yet shipped. Column
-                resizing: registered TanStack's columnSizingFeature +
-                columnResizingFeature, a resize handle on every
-                sortable column's right edge. Deliberately opt-in per
-                column, not table-wide fixed layout: a column only gets
-                an explicit pixel width once its own entry exists in
-                columnSizing state (someone actually dragged its
-                handle) — every other column keeps its natural,
-                auto-layout width exactly as before, so none of the 22
-                existing tables changed visually by default. A resized
-                column also gets overflow-hidden/text-ellipsis, so
-                narrowing one actually truncates instead of the browser
-                re-expanding it. CSV export: a new toolbar button
-                exports every row matching the current search/sort (not
-                just the current page — table.getSortedRowModel(), pre-
-                pagination) via each column's accessor value
-                (row.getValue(), the same mechanism the search box
-                already filters with — a column with no accessor was
-                already unsearchable for that reason and exports empty
-                here too, a pre-existing limitation, not a new one).
-                Columns with no real string header (row-actions icon
-                buttons, header: "") are skipped outright, not exported
-                as an unlabeled empty column. Added exportFilename prop
-                + set a real one at all 22 existing call sites; omitting
-                it still works (falls back to a generic name).
-                VERIFIED: tsc --noEmit/eslint/vitest clean on apps/web
-                (no Go code touched this phase). Real browser pass
-                against a real org with real networks: dragged a column
-                wider (others shifted naturally), dragged one
-                drastically narrower (correct ellipsis truncation, no
-                layout break), exported CSV and confirmed the
-                downloaded file's real content, re-exported after
-                typing into search and confirmed the file narrowed to
-                just the matching row (all-filtered-rows contract
-                proven, not just current page), confirmed a second page
-                (Team, whose Role column is an interactive <select>)
-                exported correctly too. No console errors either page.
-                All test fixtures removed afterward.
-LAST COMMIT   : 9ac2e14 feat(analytics): report builder filter-value
-                dropdown suggests real data. Before it: da18c1f
-                feat(security): key the general rate limit by org for
-                API-key traffic; 999f123 feat(security): encrypt
-                facebook_ads/tiktok_ads access_token at rest; 118bfed
-                feat(analytics): add stream_set report dimension, close
-                stale roadmap gap — full detail for all in CHANGELOG.md.
-                Note: the golang.org/x/crypto bump (GO-2026-6355/6354
-                closed, GO-2026-5932 permanently flagged/unreachable)
-                landed between phases per CHANGELOG.md but was never
-                captured in an earlier version of this block's LAST
-                COMMIT line — check `git log` if an exact hash is
-                needed for it.
-UNCOMMITTED   : this phase's own work, about to be committed as one
-                logical commit — apps/web/src/components/ui/
-                data-table.tsx, apps/web/src/lib/i18n/locales/{en,ru}/
-                common.json, and the exportFilename addition at all 21
-                other DataTable call sites: apps/web/src/features/
-                {analytics/report-table,campaigns/campaign-cost-entries,
-                campaigns/campaign-list,campaigns/tracking-links,
-                clicklogs/click-log-view,conversions/conversion-list,
-                custom-metrics/custom-metrics-list,dashboard/top-tables,
-                domains/domain-list,landings/landing-list,
-                networks/network-list,offers/offer-list,
-                pixels/pixel-list,postbacks/postback-logs-panel,
-                postlanding/postlanding-list,pwa/pwa-list,
-                referral/earnings-history-table,referral/payouts-table,
-                referral/referred-signups-table,team/member-list,
-                traffic-sources/source-list}.tsx, ROADMAP.md,
-                CHANGELOG.md, this CLAUDE.md edit. Deliberately left
-                out, unrelated and predating this phase:
-                apps/e2e/scenario_test.go remains unstaged from the
-                older repo+plan-audit pass; whoever picks it up next
-                should check it's still wanted.
-NEXT          : confirm scope before starting. All 7 numbered security-
-                audit findings are fully resolved; the stream_set
-                dimension gap, the access_token plain-text gap, the
-                rate-limiter IP-keying gap, the filter-value-dropdown
-                mock-pool gap, and the DataTable resizing/CSV-export gap
-                are all closed. Known remaining items in ROADMAP.md's
-                Known-open-gaps table: cloudflare_registrar has no
-                adapter; SMS/email 2FA as a TOTP alternative; 7 feature
-                areas are English-only in an EN/RU app; Content Gallery
-                has no video upload/transcoding; Flows have no
-                top-level list view; 4 of 16 report dimensions
-                (landing/pwa/postlanding/offer) still need real columns
-                before they can follow stream_set's pattern; Google Play
-                URL parsing for PWA listings. TRUSTED_PROXIES needs a
-                real proxy deployed first (still blocked, no infra
-                exists). GO-2026-5932 (x/crypto/openpgp, no fix exists)
-                stays a permanent, accepted, unreachable flag. Worth
-                being aware of for future sessions: this session's own
-                history/subagent tracking apparently does not persist a
-                prior turn's investigation request reliably across some
-                boundary — CHANGELOG.md and git log are the durable
-                record to check first when a user references earlier
-                work this session has no trace of.
+CURRENT PHASE : LANDINGS AS ZIP BUNDLES — PHASE A of 2 (management side),
+                modelled on adset.pro "Пользовательские лендинги". Scope
+                picked by the user: A now, B (tracker serving) next;
+                internal → ZIP, external URL landings kept.
+STATUS        : done. Internal landings are uploaded ZIPs: entry file
+                (index.html/index.twig, root or single top folder) in
+                Postgres, assets in object storage under a per-upload
+                version prefix; zip-slip/zip-bomb/limits guarded; root-
+                absolute asset refs returned as warnings. Re-upload keeps
+                the ID (new version first, row swap, old version
+                deleted). Logo (gallery 1:1 picker) + title. Full-screen
+                template editor (CodeMirror 6, lazy) with live preview
+                from POST /landings/{id}/preview — rendered by
+                landing.Render, the same pure Go function phase B's
+                tracker will serve visitors with (trackUrl global,
+                engine_onClickButton, all <a> bound incl. delegated,
+                data-flox-skip, {{ trackUrl }} macro, <base href>).
+                Sandboxed iframe, no allow-same-origin. Type immutable
+                after creation; fake slug CDN URL removed. Migration
+                00036. VERIFIED: go build/vet/gofmt/test ./... green
+                (landing tests run against real Postgres + MinIO; RBAC
+                coverage test caught preview ungated — fixed); web tsc/
+                eslint/vitest/next build clean. Real browser pass (ru):
+                validation, upload w/ logo crop, warning toast, editor
+                live preview + save + discard confirm, re-upload twig
+                keeps ID, list/duplicate/delete with S3 cleanup
+                confirmed. Fixed during the pass: preview trackUrl "#"
+                resolved against <base> and navigated the frame away
+                (now javascript:void(0)); ru discard-dialog buttons
+                overflowed. All fixtures removed. Full detail:
+                docs/landings.md.
+LAST COMMIT   : this phase's commit — feat(landings): ZIP bundles,
+                template editor, injected runtime. Before it: 126e879
+                change font; da7fd9a feat(ui): DataTable column resizing
+                + CSV export; 9ac2e14 feat(analytics): report builder
+                filter-value dropdown suggests real data — full detail in
+                CHANGELOG.md.
+UNCOMMITTED   : none after this phase's commit.
+NEXT          : PHASE B of ZIP landings (already agreed with the user):
+                apps/tracker serves landing.Render(content, url, <click
+                URL>) when the routed flow has a landing, emits
+                LAND_VIEW; the click URL emits LAND_CLICK and continues to
+                the offer destination. Touches the redirect hot path
+                (invariant #9) — needs its own bench run. Confirm details
+                before starting. Other known gaps unchanged (ROADMAP.md
+                Known-open-gaps table): cloudflare_registrar adapter;
+                SMS/email 2FA; 7 English-only areas; Content Gallery
+                video; Flows list view; landing/pwa/postlanding/offer
+                report dimensions; Google Play URL parsing;
+                TRUSTED_PROXIES (blocked on infra); GO-2026-5932
+                (permanent, unreachable).
 ```
 
 > At the end of every phase: update the four lines above, add a CHANGELOG entry,

@@ -388,7 +388,7 @@ func run() error {
 		networkHandler.Register(r)
 	})
 
-	landingHandler := landing.NewHandler(landing.NewService(landing.NewRepository(db)), requireContentWrite, logger)
+	landingHandler := landing.NewHandler(landing.NewService(landing.NewRepository(db), storageClient, logger), requireContentWrite, logger)
 	srv.Mux().Route("/landings", func(r chi.Router) {
 		r.Use(tenantMiddleware)
 		landingHandler.Register(r)

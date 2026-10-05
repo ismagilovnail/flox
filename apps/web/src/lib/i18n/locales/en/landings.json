@@ -4,7 +4,7 @@
     "newButton": "New Landing",
     "searchPlaceholder": "Search landings...",
     "emptyTitle": "No landings yet",
-    "emptyDescription": "Add a landing page to use as the first step of a flow.",
+    "emptyDescription": "Upload a ZIP landing or add an external URL to use it as the first step of a flow.",
     "loading": "Loading landings…",
     "loadError": "Couldn't load landings",
     "editTagsButton": "Edit Tags"
@@ -12,35 +12,52 @@
   "columns": {
     "name": "Name",
     "type": "Type",
-    "url": "URL",
     "status": "Status",
     "tags": "Tags",
-    "updated": "Updated"
+    "updated": "Updated",
+    "source": "Source"
   },
   "type": {
-    "internal": "internal",
-    "external": "external"
+    "internal": "uploaded (ZIP)",
+    "external": "external URL"
   },
   "form": {
     "titleNew": "New Landing",
     "titleEdit": "Edit {{name}}",
-    "description": "Internal landings are hosted on our CDN with content you edit here; external landings point at a URL you already control (§28).",
+    "description": "Uploaded landings are a ZIP with index.html (or index.twig) at the root plus its assets — tracking links and the click handler are injected automatically. External landings point at a URL you already host.",
     "nameLabel": "Name",
     "namePlaceholder": "Quiz Lander",
     "typeLabel": "Type",
     "urlLabel": "URL",
     "urlPlaceholder": "https://advertiser.example/landing",
-    "contentLabel": "Content",
-    "contentPlaceholder": "<h1>Headline</h1><p>Copy...</p>",
-    "hostedUrlLabel": "Hosted URL",
     "statusLabel": "Status",
     "submitCreate": "Create landing",
     "submitEdit": "Save changes",
     "validation": {
       "nameMin": "Name must be at least 2 characters",
       "urlInvalid": "Enter a valid URL",
-      "contentRequired": "Add page content"
-    }
+      "titleRequired": "Add a title",
+      "logoRequired": "Choose a logo",
+      "archiveRequired": "Attach a ZIP archive",
+      "archiveNotZip": "The file must be a .zip archive",
+      "archiveTooLarge": "The archive must be 50 MB or smaller"
+    },
+    "optional": "(optional)",
+    "logoLabel": "Logo",
+    "logoChoose": "Choose",
+    "logoChange": "Change",
+    "logoRemoveAria": "Remove logo",
+    "logoHint": "Square, 300×300 px",
+    "titleLabel": "Title",
+    "titlePlaceholder": "Spin the wheel and win",
+    "typeLocked": "The type can't be changed after creation.",
+    "archiveLabel": "ZIP archive",
+    "archiveReplaceLabel": "Replace archive (optional)",
+    "archiveChoose": "Choose a .zip or drop it here",
+    "archiveHint": "Up to 50 MB · index.html or index.twig at the root",
+    "archiveRemoveAria": "Remove the chosen archive",
+    "archiveReplaceHint": "Re-uploading keeps this landing's ID (flows stay attached) and replaces all of its files, including template edits.",
+    "uploading": "Uploading…"
   },
   "rowActions": {
     "actionsAria": "Actions for {{name}}",
@@ -50,7 +67,8 @@
     "duplicate": "Duplicate",
     "archive": "Archive",
     "archiveConfirmTitle": "Archive \"{{name}}\"?",
-    "archiveConfirmDescription": "Archived landings are hidden from flow pickers going forward. Existing flows that already reference this landing keep working. This can be reversed later."
+    "archiveConfirmDescription": "Archived landings are hidden from flow pickers going forward. Existing flows that already reference this landing keep working. This can be reversed later.",
+    "editTemplate": "Edit template"
   },
   "toast": {
     "updated": "Landing updated",
@@ -63,6 +81,45 @@
     "duplicatedSuffix": "{{name}} (Copy)",
     "archived": "Landing archived",
     "archiveError": "Couldn't archive landing",
-    "duplicateError": "Couldn't duplicate landing"
+    "duplicateError": "Couldn't duplicate landing",
+    "archiveReplaced": "Archive replaced",
+    "absolutePathsTitle_one": "{{count}} absolute path won't load",
+    "absolutePathsTitle_other": "{{count}} absolute paths won't load",
+    "absolutePathsDescription": "Make these references relative:"
+  },
+  "bundle": {
+    "entryFile": "Entry file",
+    "files": "Files",
+    "size": "Size",
+    "assetsUrl": "Assets URL",
+    "fileCount_one": "{{count}} file",
+    "fileCount_other": "{{count}} files"
+  },
+  "requirements": {
+    "title": "Archive requirements",
+    "entry": "index.html (or index.twig) must be at the root of the archive — or at the root of its single top-level folder.",
+    "relative": "Reference assets with relative paths:",
+    "notAbsolute": "not root-absolute ones like",
+    "trackUrl": "Added to every page automatically:",
+    "links": "Every <a> link gets the tracking URL and click handler — no tracking code needed in your HTML.",
+    "manualBind": "For a non-link button, bind the handler yourself:",
+    "twig": "In index.twig you can also use the macro",
+    "skip": "To keep a link (e.g. a privacy policy) out of the flow, add",
+    "limits": "Limits: 50 MB archive, 100 MB unpacked, 1000 files, 2 MB entry file."
+  },
+  "editor": {
+    "title": "Edit template — {{name}}",
+    "description": "Changes preview live on the right, rendered exactly as visitors get it. Saving updates only the entry file; other files in the archive stay as uploaded.",
+    "unsaved": "Unsaved",
+    "codeAria": "Template source",
+    "previewTitle": "Landing preview",
+    "previewError": "Preview failed",
+    "save": "Save template",
+    "saved": "Template saved",
+    "saveError": "Couldn't save the template",
+    "discardTitle": "Discard unsaved changes?",
+    "discardDescription": "Your edits to the template haven't been saved.",
+    "keepEditing": "Keep editing",
+    "discard": "Discard"
   }
 }

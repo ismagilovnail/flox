@@ -64,7 +64,9 @@ export function FlowFunnel({
         enabled={flow.landing.enabled}
         onToggleEnabled={(enabled) => onChange({ landing: { ...flow.landing, enabled } })}
         configured={!!flow.landing.landingId}
-        previewUrl={landingOption?.url}
+        // Only an external landing's URL is a page; an internal one's is
+        // its bundle's asset base, which isn't openable on its own.
+        previewUrl={landingOption?.type === "external" ? landingOption.url : undefined}
       >
         <Select
           value={flow.landing.landingId || NONE}

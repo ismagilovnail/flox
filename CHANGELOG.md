@@ -5,6 +5,41 @@ per-phase, matching `CLAUDE.md`'s phase protocol. The one exception is
 [Between phases], below: spec amendments and the code changes that follow from
 them land between phases and would otherwise be invisible here.
 
+## [Between phases] — Landings become uploaded ZIP bundles (phase A of 2, reference: adset.pro "custom landings")
+
+Brought the Landings module up to the reference product's custom-landing
+feature set, management side. Full detail: `docs/landings.md`.
+
+- **ZIP upload** (`POST /landings/upload`): `index.html`/`index.twig` at
+  the root (or under one top-level folder, stripped), zip-slip/zip-bomb/
+  size/file-count guards, OS junk dropped. Entry file → Postgres (what the
+  editor edits); assets → object storage under a per-upload version
+  prefix. Root-absolute asset paths come back as warnings.
+- **Re-upload keeps the ID** (`POST /landings/{id}/archive`): new version
+  uploaded first, row switched in one UPDATE, old version deleted.
+- **Logo + title** fields (required for internal, optional for external;
+  logo via the Content Gallery 1:1 crop picker). Status can now be set on
+  create (the form already showed it; the API used to ignore it).
+- **Template editor**: full-screen CodeMirror 6 (lazy-loaded) + live
+  preview from `POST /landings/{id}/preview`, rendered by the same Go
+  `Render` the tracker will use; sandboxed iframe without
+  `allow-same-origin`.
+- **Injected runtime** (`render.go`): global `trackUrl`,
+  `engine_onClickButton()`, every `<a>` bound (incl. framework-rendered
+  ones via delegation), `data-flox-skip` opt-out, `{{ trackUrl }}` macro,
+  `<base href>` to the bundle.
+- Duplicate copies the bundle server-side; delete cleans every version.
+- `type` is now immutable after creation. The fake slug URL
+  (`cdn.floxlink.io/lnd/…`, served by nothing) is gone; an internal
+  landing's `url` is its real asset base, derived at read time.
+- New dependency: `@uiw/react-codemirror` + `@codemirror/lang-html` +
+  `@codemirror/theme-one-dark` (template editor only).
+- Migration `00036_landing_bundles.sql` (up/down/up verified).
+
+Not in this phase (phase B): the tracker serving landings to visitors and
+emitting `LAND_VIEW`/`LAND_CLICK`. Out of scope: full Twig, and the
+push-subscription/PWA-install variants of `engine_onClickButton`.
+
 ## [Between phases] — DataTable gets real column resizing and CSV export (§64 UX floor)
 
 Closed the last of §64's own explicit table requirements that hadn't

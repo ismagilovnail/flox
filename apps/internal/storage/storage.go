@@ -155,3 +155,64 @@ func (c *Client) DeleteObject(ctx context.Context, key string) error {
 func (c *Client) PublicURL(key string) string {
 	return c.publicEndpoint + "/" + c.bucket + "/" + key
 }
+
+// CopyPrefix copies every object under srcPrefix to the same relative key
+// under dstPrefix, server-side (no bytes pass through this process) —
+// content types and other metadata carry over. First consumer:
+// landing.Service.Duplicate, so a duplicated bundle never shares objects
+// with its source (re-uploading one must not change the other).
+func (c *Client) CopyPrefix(ctx context.Context, srcPrefix, dstPrefix string) error {
+	for obj := range c.mc.ListObjects(ctx, c.bucket, minio.ListObjectsOptions{Prefix: srcPrefix, Recursive: true}) {
+		if obj.Err != nil {
+			return fmt.Errorf("storage: listing %s: %w", srcPrefix, obj.Err)
+		}
+		dst := dstPrefix + strings.TrimPrefix(obj.Key, srcPrefix)
+		if _, err := c.mc.CopyObject(ctx,
+			minio.CopyDestOptions{Bucket: c.bucket, Object: dst},
+			minio.CopySrcOptions{Bucket: c.bucket, Object: obj.Key},
+		); err != nil {
+			return fmt.Errorf("storage: copying %s: %w", obj.Key, err)
+		}
+	}
+	return nil
+}
+
+// DeletePrefix removes every object under prefix. Best-effort cleanup,
+// same contract as DeleteObject.
+func (c *Client) DeletePrefix(ctx context.Context, prefix string) error {
+	if prefix == "" {
+		return fmt.Errorf("storage: refusing to delete an empty prefix")
+	}
+	objects := make(chan minio.ObjectInfo)
+	listDone := make(chan struct{})
+	var listErr error
+	go func() {
+		defer close(listDone)
+		defer close(objects)
+		for obj := range c.mc.ListObjects(ctx, c.bucket, minio.ListObjectsOptions{Prefix: prefix, Recursive: true}) {
+			if obj.Err != nil {
+				listErr = obj.Err
+				return
+			}
+			select {
+			case objects <- obj:
+			case <-ctx.Done():
+				return
+			}
+		}
+	}()
+	var firstErr error
+	for res := range c.mc.RemoveObjects(ctx, c.bucket, objects, minio.RemoveObjectsOptions{}) {
+		if res.Err != nil && firstErr == nil {
+			firstErr = res.Err
+		}
+	}
+	<-listDone
+	if listErr != nil {
+		return fmt.Errorf("storage: listing %s: %w", prefix, listErr)
+	}
+	if firstErr != nil {
+		return fmt.Errorf("storage: deleting under %s: %w", prefix, firstErr)
+	}
+	return nil
+}

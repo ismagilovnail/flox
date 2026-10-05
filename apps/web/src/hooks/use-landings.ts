@@ -10,9 +10,12 @@ import {
   getLanding,
   listLandings,
   pauseLanding,
+  replaceLandingArchive,
   updateLanding,
+  uploadLanding,
   type CreateLandingInput,
   type UpdateLandingInput,
+  type UploadLandingInput,
 } from "@/lib/api/landings";
 
 const landingsKey = ["landings"] as const;
@@ -31,6 +34,25 @@ export function useCreateLanding() {
   return useMutation({
     mutationFn: (input: CreateLandingInput) => createLanding(input),
     onSuccess: () => qc.invalidateQueries({ queryKey: landingsKey }),
+  });
+}
+
+export function useUploadLanding() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: UploadLandingInput) => uploadLanding(input),
+    onSuccess: () => qc.invalidateQueries({ queryKey: landingsKey }),
+  });
+}
+
+export function useReplaceLandingArchive(id: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (archive: File) => replaceLandingArchive(id, archive),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: landingsKey });
+      qc.invalidateQueries({ queryKey: landingKey(id) });
+    },
   });
 }
 
