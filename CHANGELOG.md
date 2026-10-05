@@ -5,6 +5,18 @@ per-phase, matching `CLAUDE.md`'s phase protocol. The one exception is
 [Between phases], below: spec amendments and the code changes that follow from
 them land between phases and would otherwise be invisible here.
 
+## [Between phases] — One store-style PWA page for visitors and test links
+
+By the operator's decision `templates/pwa.html` is now the full editor card
+for everyone; `pwa_store.html` and the test-only branch are gone. A bad edit
+of `pwa.html` (missing `stars`/`fill` funcs) had crashed the tracker at init.
+
+- `pwaPageTemplate` carries the `stars`/`fill` funcs; copy and details rows
+  are built once for every render.
+- Tests: `TestRenderPwaPageAllFormFields` (every form value, visitor + test),
+  `TestPwaStageDirect` now expects the numbers. Full-env go test green;
+  tracker container back up.
+
 ## [Between phases] — Store-style PWA page for constructor test links
 
 Signed test links now render the full editor card (`templates/pwa_store.html`);

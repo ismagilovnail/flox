@@ -353,16 +353,30 @@ var pwaCopy = map[string]map[string]string{
 	},
 }
 
-// pwaPageTemplate mirrors the PWA editor's own preview card (header block,
-// ring-around-the-icon install animation, screenshot strip, About, What's
-// new, details sheet) with its light/dark scheme and accent. It leaves out
-// everything the editor can only fake: no rating, review count, downloads,
-// age rating or "verified" badge, and no store logo, nav or footer chrome.
+// pwaPageTemplate is the install page every visitor and the constructor's
+// test link get: the editor preview card laid out one to one (store-style
+// header, rating and star distribution, downloads, size, screenshots, About
+// and details sheet, data safety, ratings and reviews, What's new, footer,
+// bottom nav) with its light/dark scheme and accent. The numbers are exactly
+// what the operator typed into the constructor form.
 //
 //go:embed templates/pwa.html
 var pwaPageSource string
 
-var pwaPageTemplate = template.Must(template.New("pwa").Parse(pwaPageSource))
+var pwaPageTemplate = template.Must(template.New("pwa").Funcs(template.FuncMap{
+	"stars": func() []int { return []int{1, 2, 3, 4, 5} },
+	// fill is how much of star i (1..5) a rating covers, as a percentage.
+	"fill": func(rating float64, i int) int {
+		v := rating - float64(i-1)
+		switch {
+		case v >= 1:
+			return 100
+		case v <= 0:
+			return 0
+		}
+		return int(v * 100)
+	},
+}).Parse(pwaPageSource))
 
 var pwaStoreCopy = map[string]map[string]string{
 	"ru": {
@@ -401,29 +415,6 @@ var pwaStoreCopy = map[string]map[string]string{
 	},
 }
 
-// The store-style template (templates/pwa_store.html) imitates a store
-// listing with operator-typed rating, reviews, downloads and size. It is
-// only ever rendered for the constructor's signed test links — the
-// operator's own preview, never for visitors from tracked traffic.
-//
-//go:embed templates/pwa_store.html
-var pwaStoreSource string
-
-var pwaStoreTemplate = template.Must(template.New("pwa_store").Funcs(template.FuncMap{
-	"stars": func() []int { return []int{1, 2, 3, 4, 5} },
-	// fill is how much of star i (1..5) a rating covers, as a percentage.
-	"fill": func(rating float64, i int) int {
-		v := rating - float64(i-1)
-		switch {
-		case v >= 1:
-			return 100
-		case v <= 0:
-			return 0
-		}
-		return int(v * 100)
-	},
-}).Parse(pwaStoreSource))
-
 type pwaDetail struct {
 	Label, Value string
 	Notes        []string
@@ -448,8 +439,24 @@ func renderPwaPage(p routingstore.PwaPage, test bool, lang string) ([]byte, erro
 			details = append(details, pwaDetail{Label: label, Value: value, Notes: n})
 		}
 	}
+	// pwaCopy is shared between requests: extend a clone, never the map.
+	merged := make(map[string]string, len(cp)+len(pwaStoreCopy[lang]))
+	for k, v := range cp {
+		merged[k] = v
+	}
+	for k, v := range pwaStoreCopy[lang] {
+		if _, ok := merged[k]; !ok {
+			merged[k] = v
+		}
+	}
+	cp = merged
 	add(cp["dUpdated"], p.UpdatedDate)
+	if p.SizeMB > 0 {
+		add(cp["dSize"], strconv.FormatFloat(p.SizeMB, 'f', -1, 64)+" MB")
+	}
+	add(cp["dDownloads"], p.DownloadsLabel)
 	add(cp["dVersion"], p.Version)
+	add(cp["dAge"], p.AgeRating)
 	add(cp["dDeveloper"], p.Developer, notes...)
 	add(cp["dCategory"], p.Category)
 	add(cp["dInteractive"], p.InteractiveElements)
@@ -464,35 +471,8 @@ func renderPwaPage(p routingstore.PwaPage, test bool, lang string) ([]byte, erro
 		pageBg = "#18181b"
 	}
 	jsCopy := map[string]string{"pleaseWait": cp["pleaseWait"]}
-	tpl := pwaPageTemplate
-	if test {
-		// Operator's own preview: the store-style template and its extra copy.
-		tpl = pwaStoreTemplate
-		// pwaCopy is shared between requests: extend a clone, never the map.
-		merged := make(map[string]string, len(cp)+len(pwaStoreCopy[lang]))
-		for k, v := range cp {
-			merged[k] = v
-		}
-		for k, v := range pwaStoreCopy[lang] {
-			if _, ok := merged[k]; !ok {
-				merged[k] = v
-			}
-		}
-		cp = merged
-		details = details[:0]
-		add(cp["dUpdated"], p.UpdatedDate)
-		if p.SizeMB > 0 {
-			add(cp["dSize"], strconv.FormatFloat(p.SizeMB, 'f', -1, 64)+" MB")
-		}
-		add(cp["dDownloads"], p.DownloadsLabel)
-		add(cp["dVersion"], p.Version)
-		add(cp["dAge"], p.AgeRating)
-		add(cp["dDeveloper"], p.Developer, notes...)
-		add(cp["dCategory"], p.Category)
-		add(cp["dInteractive"], p.InteractiveElements)
-	}
 	var b strings.Builder
-	err := tpl.Execute(&b, map[string]any{
+	err := pwaPageTemplate.Execute(&b, map[string]any{
 		"Lang": lang, "Copy": cp, "JSCopy": jsCopy, "Page": p, "Test": test, "Short": short,
 		"Theme": cssColor(p.ThemeColor, "#00A173"), "Bg": template.CSS(pageBg),
 		"Text": template.CSS(scheme[0]), "Muted": template.CSS(scheme[1]), "Subtle": template.CSS(scheme[2]),

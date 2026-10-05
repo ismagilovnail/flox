@@ -76,15 +76,8 @@ func TestPwaStageDirect(t *testing.T) {
 	if page.Code != http.StatusOK || !strings.Contains(body, `<link rel="manifest" href="manifest.webmanifest">`) || !strings.Contains(body, "Lucky App") || !strings.Contains(body, "Lucky Dev") {
 		t.Fatalf("install page = %d:\n%s", page.Code, body)
 	}
-	// The visitor-facing page never imitates a store or shows its listing stats.
-	for _, banned := range []string{"Google Play", "4.9", "120000", "1M+", "87.5", "12+ Teen"} {
-		if strings.Contains(body, banned) {
-			t.Fatalf("install page contains %q — store imitation / listing stats must never reach visitors", banned)
-		}
-	}
-
-	// What the editor preview shows besides the numbers does reach the visitor.
-	for _, want := range []string{"Bug fixes and a new wheel.", "2.4.1", "Casual", "Contains ads", "install", `id="sheet"`} {
+	// Everything the editor preview shows, numbers included, reaches the visitor.
+	for _, want := range []string{"4.9", "120000", "87.5", "Bug fixes and a new wheel.", "2.4.1", "Casual", "Contains ads", "install", `id="sheet"`} {
 		if !strings.Contains(body, want) {
 			t.Fatalf("install page lacks %q", want)
 		}
@@ -241,9 +234,9 @@ func TestBounceTarget(t *testing.T) {
 	}
 }
 
-// TestRenderPwaPageNoListingStats needs no database: the editor-style page
-// carries the listing's plain facts and never its operator-typed numbers.
-func TestRenderPwaPageNoListingStats(t *testing.T) {
+// TestRenderPwaPage needs no database: the editor-style page carries the
+// listing's facts and renders optional sections only when they are set.
+func TestRenderPwaPage(t *testing.T) {
 	p := routingstore.PwaPage{
 		Name: "Lucky App", ThemeColor: "#16a34a", BackgroundColor: "#111111", IconURL: "https://cdn.example/i.png",
 		Developer: "Lucky Dev", Description: "Spin daily.", WhatsNew: "New wheel", Version: "2.4.1",
@@ -260,11 +253,6 @@ func TestRenderPwaPageNoListingStats(t *testing.T) {
 				t.Fatalf("%s page lacks %q", lang, want)
 			}
 		}
-		for _, banned := range []string{"Google Play", "Gift cards", "Подарочные карты", "verified", "Downloads", "Скачивания"} {
-			if strings.Contains(body, banned) {
-				t.Fatalf("%s page contains %q", lang, banned)
-			}
-		}
 	}
 	// No optional fields: no empty sections or sheet.
 	bareOut, err := renderPwaPage(routingstore.PwaPage{Name: "X"}, false, "en")
@@ -279,34 +267,32 @@ func TestRenderPwaPageNoListingStats(t *testing.T) {
 	}
 }
 
-// TestRenderPwaStoreTemplateOnlyForTest: the store-style template (rating,
-// reviews, downloads, store chrome) renders fully for the operator's test
-// link and never for a visitor render of the same PWA.
-func TestRenderPwaStoreTemplateOnlyForTest(t *testing.T) {
+// TestRenderPwaPageAllFormFields: every constructor form value reaches the
+// page, for a visitor render and for the constructor's test link alike.
+func TestRenderPwaPageAllFormFields(t *testing.T) {
 	p := routingstore.PwaPage{
-		Name: "Lucky App", ThemeColor: "#16a34a", BackgroundColor: "#ffffff", IconURL: "https://cdn.example/i.png",
-		Developer: "Lucky Dev", Description: "Spin daily.", WhatsNew: "New wheel", Version: "2.4.1",
-		Rating: 4.5, RatingCount: 1200, DownloadsLabel: "1M+", SizeMB: 38, AgeRating: "12+", RatingStars5: 80,
-		Screenshots: []string{"https://cdn.example/s1.png"},
+		Name: "NAMEX", ShortName: "SHORTX", ThemeColor: "#16a34a", BackgroundColor: "#ffffff", IconURL: "https://cdn.example/i.png",
+		Developer: "DEVX", Description: "DESCX", Screenshots: []string{"https://cdn.example/s1.png"},
+		WhatsNew: "WNX", Version: "VERX", Category: "CATX", InteractiveElements: "INTX", ContainsAds: true, InAppPurchases: true,
+		UpdatedDate: "2026-08-21", Rating: 4.3, RatingCount: 777, DownloadsLabel: "DLX", SizeMB: 38, AgeRating: "AGEX",
+		RatingStars5: 61, RatingStars4: 22, RatingStars3: 7, RatingStars2: 5, RatingStars1: 3,
 	}
 	for _, lang := range []string{"ru", "en"} {
-		test, err := renderPwaPage(p, true, lang)
-		if err != nil {
-			t.Fatalf("%s test render: %v", lang, err)
-		}
-		tb := string(test)
-		for _, want := range []string{`class="topbar"`, "4.5", "1200", "1M&#43;", "width:80%", `class="bottom-nav"`, "</html>"} {
-			if !strings.Contains(tb, want) {
-				t.Fatalf("%s test page lacks %q", lang, want)
+		for _, test := range []bool{false, true} {
+			out, err := renderPwaPage(p, test, lang)
+			if err != nil {
+				t.Fatalf("%s test=%v render: %v", lang, test, err)
 			}
-		}
-		visitor, err := renderPwaPage(p, false, lang)
-		if err != nil {
-			t.Fatalf("%s visitor render: %v", lang, err)
-		}
-		for _, banned := range []string{`class="topbar"`, "1200", "1M+", "bottom-nav"} {
-			if strings.Contains(string(visitor), banned) {
-				t.Fatalf("%s visitor page contains %q", lang, banned)
+			body := string(out)
+			for _, want := range []string{"NAMEX", "SHORTX", "DEVX", "DESCX", "s1.png", "WNX", "VERX", "CATX", "INTX", "2026-08-21",
+				"4.3", "777", "DLX", "38", "AGEX", "width:61%", "width:22%", "width:7%", "width:5%", "width:3%",
+				`class="topbar"`, `class="bottom-nav"`, "</html>"} {
+				if !strings.Contains(body, want) {
+					t.Errorf("%s test=%v page lacks %q", lang, test, want)
+				}
+			}
+			if got := strings.Contains(body, `class="test"`); got != test {
+				t.Errorf("%s test=%v: test banner present = %v", lang, test, got)
 			}
 		}
 	}

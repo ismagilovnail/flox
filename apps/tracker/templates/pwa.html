@@ -1,182 +1,2125 @@
 <!DOCTYPE html>
 <html lang="{{.Lang}}">
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>{{.Page.Name}}</title>
-<meta name="theme-color" content="{{.Theme}}">
-<link rel="manifest" href="manifest.webmanifest">
-<link rel="icon" href="{{.Page.IconURL}}">
-<link rel="apple-touch-icon" href="{{.Page.IconURL}}">
-<meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-title" content="{{.Short}}">
-<style>
-:root{--accent:{{.Theme}};--bg:{{.Bg}};--text:{{.Text}};--muted:{{.Muted}};--subtle:{{.Subtle}};--border:{{.Border}};--chip:{{.Chip}}}
-*{box-sizing:border-box}
-body{margin:0;font:16px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;background:var(--bg);color:var(--text)}
-main{max-width:480px;margin:0 auto;padding:20px 0 40px}
-.pad{padding:0 20px}
-.test{background:#fff4d6;color:#6b4e00;border-radius:8px;padding:8px 12px;font-size:13px;margin:0 20px 16px}
-.head{display:flex;gap:16px;align-items:flex-start;padding-top:0;transition:padding-top .5s ease-out}
-.head.busy{padding-top:12px}
-.iconbox{position:relative;width:72px;height:72px;flex:none}
-.iconbox .clip{position:absolute;inset:0;overflow:hidden;border-radius:16px;transition:all .5s ease-out}
-.head.busy .clip{inset:6px;border-radius:50%}
-.iconbox img{width:100%;height:100%;object-fit:cover;display:block}
-.ring{position:absolute;inset:0;opacity:0;transition:opacity .25s ease-out}
-.head.busy .ring{opacity:1}
-.ring circle{fill:none;stroke-width:3}
-.ring .track{stroke:var(--border)}
-.ring .arc{stroke:var(--accent);stroke-linecap:round;stroke-dasharray:201.06;stroke-dashoffset:201.06;transform:rotate(-90deg);transform-origin:50% 50%}
-.head.busy .ring .arc{stroke-dashoffset:0;transition:stroke-dashoffset 1.8s linear}
-.meta{min-width:0;display:flex;flex-direction:column;gap:2px}
-h1{font-size:22px;font-weight:600;line-height:1.2;margin:0}
-.dev{font-size:16px;font-weight:500;color:var(--accent)}
-.head.busy .dev{color:var(--text);font-weight:600}
-.note{font-size:12px;color:var(--muted)}
-.head.busy .note{display:none}
-.actions{margin:20px 20px 0}
-button,.btn{display:block;width:100%;border:0;border-radius:8px;padding:10px 16px;font-size:14px;font-weight:700;text-align:center;text-decoration:none;cursor:pointer;font-family:inherit}
-.primary{background:var(--accent);color:#fff}
-.secondary{background:transparent;color:var(--muted);font-weight:500;margin-top:8px}
-.collapse{display:grid;grid-template-rows:1fr;opacity:1;transition:grid-template-rows .5s ease-out,opacity .5s ease-out}
-.collapse>div{overflow:hidden}
-.busy-actions .collapse{grid-template-rows:0fr;opacity:0}
-.shots{display:flex;gap:12px;overflow-x:auto;padding:20px 16px 0;height:224px;scroll-snap-type:x proximity}
-.shots img{height:204px;width:auto;border-radius:12px;flex:none;scroll-snap-align:start}
-.sec{padding:20px 16px 0}
-.sec h2{font-size:18px;font-weight:700;margin:0}
-.row{display:flex;align-items:center;justify-content:space-between}
-.arrow{width:auto;padding:4px 8px;background:transparent;color:var(--text);font-size:18px;border-radius:6px}
-.arrow:hover{background:var(--chip)}
-.desc{white-space:pre-line;font-size:14px;line-height:1.6;margin:12px 0 0;display:-webkit-box;-webkit-line-clamp:5;-webkit-box-orient:vertical;overflow:hidden}
-.full{white-space:pre-line;font-size:14px;line-height:1.6;margin:0}
-.upd{font-size:14px;font-weight:700;color:var(--subtle);margin:0 0 4px}
-.upd+p{font-size:14px;margin:0}
-.line{border-top:1px solid var(--border);margin-top:20px}
-.news{font-size:14px;line-height:1.6;white-space:pre-line;margin:12px 0 0}
-.ios{background:var(--chip);border-radius:12px;padding:16px;margin-top:16px;display:none}
-.ios h2{font-size:16px;margin:0 0 8px}
-.ios ol{margin:0;padding-left:20px}
-.done{display:none;text-align:center;color:var(--muted);margin-top:12px;font-size:14px}
-[hidden]{display:none!important}
-dialog{width:calc(100% - 32px);max-width:448px;max-height:80%;padding:0;border:0;border-radius:16px;background:var(--bg);color:var(--text);box-shadow:0 20px 50px rgba(0,0,0,.3)}
-dialog::backdrop{background:rgba(0,0,0,.3)}
-.dh{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 16px;border-bottom:1px solid var(--border)}
-.dh b{font-size:16px}
-.x{width:auto;padding:4px 10px;background:transparent;color:var(--muted);font-size:16px;border-radius:999px}
-.x:hover{background:var(--chip)}
-.db{padding:16px;display:flex;flex-direction:column;gap:20px}
-.grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}
-.grid b{display:block;font-size:14px}
-.grid span{display:block;font-size:14px;color:var(--muted)}
-</style>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+
+  <title>{{.Page.Name}}</title>
+
+  <meta name="theme-color" content="{{.Theme}}">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="{{.Page.IconURL}}">
+  <link rel="apple-touch-icon" href="{{.Page.IconURL}}">
+
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="{{.Short}}">
+
+  <style>
+    :root{
+      --accent:{{.Theme}};
+      --bg:{{.Bg}};
+      --text:{{.Text}};
+      --muted:{{.Muted}};
+      --subtle:{{.Subtle}};
+      --border:{{.Border}};
+      --chip:{{.Chip}};
+    }
+
+    *{
+      box-sizing:border-box;
+    }
+
+    html{
+      background:var(--bg);
+    }
+
+    body{
+      margin:0;
+      font:16px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+      background:var(--bg);
+      color:var(--text);
+    }
+
+    main{
+      width:100%;
+      max-width:480px;
+      margin:0 auto;
+      padding:0 0 76px;
+    }
+
+    [hidden]{
+      display:none!important;
+    }
+
+    /* ---------------------------------------------------------
+       TEST
+    --------------------------------------------------------- */
+
+    .test{
+      background:#fff4d6;
+      color:#6b4e00;
+      border-radius:8px;
+      padding:8px 12px;
+      font-size:13px;
+      margin:12px 16px 0;
+    }
+
+    /* ---------------------------------------------------------
+       TOP BAR
+    --------------------------------------------------------- */
+
+    .topbar{
+      height:60px;
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      padding:0 16px;
+      border-bottom:1px solid var(--border);
+      background:var(--bg);
+    }
+
+    .play-brand{
+      display:flex;
+      align-items:center;
+      gap:8px;
+      font-size:18px;
+      font-weight:500;
+      min-width:0;
+    }
+
+    .play-brand svg{
+      width:24px;
+      height:24px;
+      flex:none;
+    }
+
+    .top-icons{
+      display:flex;
+      align-items:center;
+      gap:18px;
+      color:var(--text);
+    }
+
+    .top-icons svg{
+      width:23px;
+      height:23px;
+    }
+
+    /* ---------------------------------------------------------
+       APP HEADER
+    --------------------------------------------------------- */
+
+    .app-header{
+      display:flex;
+      align-items:flex-start;
+      gap:16px;
+      padding:20px 20px 0;
+      transition:padding-top .5s ease-out;
+    }
+
+    .app-header.busy{
+      padding-top:32px;
+    }
+
+    .iconbox{
+      position:relative;
+      width:72px;
+      height:72px;
+      flex:none;
+    }
+
+    .iconbox .clip{
+      position:absolute;
+      inset:0;
+      overflow:hidden;
+      border-radius:16px;
+      transition:all .5s ease-out;
+    }
+
+    .app-header.busy .clip{
+      inset:6px;
+      border-radius:50%;
+    }
+
+    .iconbox img{
+      width:100%;
+      height:100%;
+      object-fit:cover;
+      display:block;
+    }
+
+    .ring{
+      position:absolute;
+      inset:0;
+      opacity:0;
+      transition:opacity .25s ease-out;
+    }
+
+    .app-header.busy .ring{
+      opacity:1;
+    }
+
+    .ring circle{
+      fill:none;
+      stroke-width:3;
+    }
+
+    .ring .track{
+      stroke:var(--border);
+    }
+
+    .ring .arc{
+      stroke:var(--accent);
+      stroke-linecap:round;
+      stroke-dasharray:201.06;
+      stroke-dashoffset:201.06;
+      transform:rotate(-90deg);
+      transform-origin:50% 50%;
+    }
+
+    .app-header.busy .ring .arc{
+      stroke-dashoffset:0;
+      transition:stroke-dashoffset 1.8s linear;
+    }
+
+    .app-meta{
+      min-width:0;
+      display:flex;
+      flex-direction:column;
+      gap:2px;
+    }
+
+    .app-name{
+      font-size:22px;
+      font-weight:600;
+      line-height:1.2;
+      margin:0;
+      color:var(--text);
+    }
+
+    .developer{
+      display:flex;
+      align-items:center;
+      gap:6px;
+      min-width:0;
+      color:var(--accent);
+      font-size:16px;
+      font-weight:500;
+    }
+
+    .app-header.busy .developer{
+      color:var(--text);
+      font-weight:600;
+    }
+
+    .verified{
+      width:16px;
+      height:16px;
+      flex:none;
+    }
+
+    .monetization{
+      font-size:12px;
+      color:var(--muted);
+    }
+
+    .app-header.busy .monetization{
+      display:none;
+    }
+
+    /* ---------------------------------------------------------
+       RATING / STATS
+    --------------------------------------------------------- */
+
+    .stats{
+      display:flex;
+      align-items:center;
+      justify-content:space-around;
+      text-align:center;
+      padding:22px 20px 4px;
+    }
+
+    .stat{
+      display:flex;
+      flex-direction:column;
+      align-items:center;
+      gap:4px;
+      min-width:0;
+    }
+
+    .stat-main{
+      display:flex;
+      align-items:center;
+      gap:4px;
+      font-size:16px;
+      font-weight:600;
+    }
+
+    .stat-main svg{
+      width:14px;
+      height:14px;
+    }
+
+    .stat-label{
+      display:flex;
+      align-items:center;
+      gap:4px;
+      font-size:12px;
+      color:var(--muted);
+    }
+
+    .stat-label svg{
+      width:12px;
+      height:12px;
+    }
+
+    .stat-divider{
+      width:1px;
+      height:24px;
+      background:var(--border);
+    }
+
+    /* ---------------------------------------------------------
+       ACTIONS
+    --------------------------------------------------------- */
+
+    .actions{
+      padding:16px 20px 0;
+    }
+
+    .collapse{
+      display:grid;
+      grid-template-rows:1fr;
+      opacity:1;
+      transition:
+              grid-template-rows .5s ease-out,
+              opacity .5s ease-out;
+    }
+
+    .collapse>div{
+      overflow:hidden;
+    }
+
+    .busy-actions .collapse{
+      grid-template-rows:0fr;
+      opacity:0;
+    }
+
+    button,
+    .btn{
+      display:block;
+      width:100%;
+      border:0;
+      border-radius:8px;
+      padding:10px 16px;
+      font-size:14px;
+      font-weight:700;
+      text-align:center;
+      text-decoration:none;
+      cursor:pointer;
+      font-family:inherit;
+    }
+
+    .primary{
+      background:var(--accent);
+      color:#fff;
+    }
+
+    .secondary{
+      background:transparent;
+      color:var(--accent);
+      font-weight:500;
+      margin-top:8px;
+    }
+
+    .done{
+      display:none;
+      text-align:center;
+      color:var(--muted);
+      margin-top:12px;
+      font-size:14px;
+    }
+
+    /* ---------------------------------------------------------
+       SHARE / WISHLIST
+    --------------------------------------------------------- */
+
+    .quick-actions{
+      display:flex;
+      align-items:flex-start;
+      justify-content:space-between;
+      gap:20px;
+      padding:18px 20px 0;
+    }
+
+    .quick-action{
+      display:flex;
+      align-items:center;
+      gap:8px;
+      color:var(--accent);
+      font-size:13px;
+      font-weight:500;
+      width:auto;
+      padding:0;
+      background:transparent;
+    }
+
+    .quick-action svg{
+      width:20px;
+      height:20px;
+      flex:none;
+    }
+
+    /* ---------------------------------------------------------
+       AVAILABLE ON DEVICES
+    --------------------------------------------------------- */
+
+    .devices{
+      display:flex;
+      align-items:center;
+      gap:8px;
+      padding:18px 20px 0;
+      color:var(--muted);
+      font-size:12px;
+    }
+
+    .devices svg{
+      width:18px;
+      height:18px;
+      flex:none;
+    }
+
+    /* ---------------------------------------------------------
+       IOS
+    --------------------------------------------------------- */
+
+    .ios{
+      background:var(--chip);
+      border-radius:12px;
+      padding:16px;
+      margin-top:16px;
+      display:none;
+    }
+
+    .ios h2{
+      font-size:16px;
+      margin:0 0 8px;
+    }
+
+    .ios ol{
+      margin:0;
+      padding-left:20px;
+    }
+
+    /* ---------------------------------------------------------
+       SCREENSHOTS
+    --------------------------------------------------------- */
+
+    .shots{
+      display:flex;
+      gap:12px;
+      overflow-x:auto;
+      padding:20px 16px 0;
+      height:224px;
+      scroll-snap-type:x proximity;
+      scrollbar-width:none;
+    }
+
+    .shots::-webkit-scrollbar{
+      display:none;
+    }
+
+    .shot{
+      height:204px;
+      width:auto;
+      flex:none;
+      scroll-snap-align:start;
+    }
+
+    .shot img{
+      height:204px;
+      width:auto;
+      border-radius:12px;
+      object-fit:cover;
+      display:block;
+    }
+
+    /* ---------------------------------------------------------
+       SECTIONS
+    --------------------------------------------------------- */
+
+    .sec{
+      padding:20px 16px 0;
+    }
+
+    .sec h2{
+      font-size:18px;
+      font-weight:700;
+      margin:0;
+    }
+
+    .row{
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:12px;
+    }
+
+    .arrow{
+      width:auto;
+      padding:4px 8px;
+      background:transparent;
+      color:var(--text);
+      font-size:22px;
+      border-radius:6px;
+    }
+
+    .arrow:hover{
+      background:var(--chip);
+    }
+
+    .desc{
+      white-space:pre-line;
+      font-size:14px;
+      line-height:1.6;
+      margin:12px 0 0;
+      display:-webkit-box;
+      -webkit-line-clamp:5;
+      -webkit-box-orient:vertical;
+      overflow:hidden;
+    }
+
+    .full{
+      white-space:pre-line;
+      font-size:14px;
+      line-height:1.6;
+      margin:0;
+    }
+
+    .upd{
+      font-size:14px;
+      font-weight:700;
+      color:var(--subtle);
+      margin:0 0 4px;
+    }
+
+    .upd+p{
+      font-size:14px;
+      margin:0;
+    }
+
+    .line{
+      border-top:1px solid var(--border);
+      margin-top:20px;
+    }
+
+    .news{
+      font-size:14px;
+      line-height:1.6;
+      white-space:pre-line;
+      margin:12px 0 0;
+    }
+
+    /* ---------------------------------------------------------
+       DATA SAFETY
+    --------------------------------------------------------- */
+
+    .safety{
+      border-top:1px solid var(--border);
+      margin-top:20px;
+      padding:20px 16px;
+    }
+
+    .safety-head{
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:12px;
+    }
+
+    .safety h2{
+      font-size:18px;
+      font-weight:700;
+      margin:0;
+    }
+
+    .safety-arrow{
+      font-size:24px;
+      line-height:1;
+      font-weight:300;
+    }
+
+    .safety p{
+      margin:10px 0 0;
+      font-size:14px;
+      line-height:1.6;
+      color:var(--subtle);
+    }
+
+    /* ---------------------------------------------------------
+       REVIEWS
+    --------------------------------------------------------- */
+
+    .reviews{
+      border-top:1px solid var(--border);
+      padding:20px 16px;
+      margin-top:0;
+    }
+
+    .reviews-title{
+      font-size:18px;
+      font-weight:600;
+      margin:0;
+    }
+
+    .reviews-subtitle{
+      font-size:13px;
+      color:var(--subtle);
+      margin:4px 0 16px;
+    }
+
+    .review-summary{
+      display:flex;
+      align-items:center;
+      gap:20px;
+    }
+
+    .review-score{
+      width:100px;
+      flex:none;
+      display:flex;
+      flex-direction:column;
+      align-items:center;
+      gap:6px;
+    }
+
+    .big-rating{
+      font-size:56px;
+      font-weight:400;
+      line-height:1;
+    }
+
+    .stars{
+      display:flex;
+      align-items:center;
+    }
+
+    .star{
+      position:relative;
+      width:16px;
+      height:16px;
+      display:inline-flex;
+    }
+
+    .star svg{
+      width:16px;
+      height:16px;
+    }
+
+    .star-empty{
+      fill:var(--border);
+      color:var(--border);
+    }
+
+    .star-fill{
+      position:absolute;
+      inset:0 auto 0 0;
+      overflow:hidden;
+    }
+
+    .star-fill svg{
+      fill:var(--accent);
+      color:var(--accent);
+    }
+
+    .review-count{
+      font-size:12px;
+      color:var(--muted);
+    }
+
+    .star-bars{
+      flex:1;
+      display:flex;
+      flex-direction:column;
+      gap:5px;
+    }
+
+    .star-row{
+      display:flex;
+      align-items:center;
+      gap:8px;
+      font-size:12px;
+      color:var(--muted);
+    }
+
+    .star-number{
+      width:8px;
+      text-align:right;
+    }
+
+    .star-track{
+      flex:1;
+      height:10px;
+      overflow:hidden;
+      border-radius:999px;
+      background:var(--chip);
+    }
+
+    .star-value{
+      height:100%;
+      border-radius:999px;
+      background:var(--accent);
+    }
+
+    /* ---------------------------------------------------------
+       FOOTER
+    --------------------------------------------------------- */
+
+    .footer{
+      border-top:1px solid var(--border);
+      padding:20px;
+      display:flex;
+      flex-direction:column;
+      gap:10px;
+      font-size:14px;
+      color:var(--text);
+    }
+
+    .footer-title{
+      padding-top:6px;
+      font-weight:600;
+    }
+
+    .footer-small{
+      border-top:1px solid var(--border);
+      margin-top:8px;
+      padding-top:12px;
+      display:flex;
+      flex-wrap:wrap;
+      gap:14px;
+      font-size:10px;
+      color:var(--muted);
+    }
+
+    /* ---------------------------------------------------------
+       BOTTOM NAV
+    --------------------------------------------------------- */
+
+    .bottom-nav{
+      position:fixed;
+      z-index:30;
+      bottom:0;
+      left:50%;
+      transform:translateX(-50%);
+      width:100%;
+      max-width:480px;
+      display:flex;
+      align-items:center;
+      justify-content:space-around;
+      padding:8px 8px;
+      border-top:1px solid var(--border);
+      background:var(--bg);
+    }
+
+    .nav-item{
+      min-width:70px;
+      display:flex;
+      flex-direction:column;
+      align-items:center;
+      gap:4px;
+      padding:5px 8px;
+      border-radius:8px;
+      color:var(--muted);
+      font-size:10px;
+    }
+
+    .nav-item svg{
+      width:24px;
+      height:24px;
+    }
+
+    .nav-item.active{
+      color:var(--accent);
+      background:color-mix(in srgb, var(--accent) 10%, transparent);
+    }
+
+    /* ---------------------------------------------------------
+       ABOUT DIALOG
+    --------------------------------------------------------- */
+
+    dialog{
+      width:calc(100% - 32px);
+      max-width:448px;
+      max-height:80%;
+      padding:0;
+      border:0;
+      border-radius:16px;
+      background:var(--bg);
+      color:var(--text);
+      box-shadow:0 20px 50px rgba(0,0,0,.3);
+    }
+
+    dialog::backdrop{
+      background:rgba(0,0,0,.3);
+    }
+
+    .dh{
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:12px;
+      padding:12px 16px;
+      border-bottom:1px solid var(--border);
+    }
+
+    .dh-app{
+      display:flex;
+      align-items:center;
+      gap:12px;
+      min-width:0;
+    }
+
+    .dh-icon{
+      width:40px;
+      height:40px;
+      flex:none;
+      border-radius:50%;
+      overflow:hidden;
+    }
+
+    .dh-icon img{
+      width:100%;
+      height:100%;
+      object-fit:cover;
+    }
+
+    .dh-meta{
+      min-width:0;
+    }
+
+    .dh-meta b{
+      display:block;
+      font-size:16px;
+      white-space:nowrap;
+      overflow:hidden;
+      text-overflow:ellipsis;
+    }
+
+    .dh-meta span{
+      display:block;
+      font-size:12px;
+      color:var(--muted);
+    }
+
+    .x{
+      width:auto;
+      padding:4px 10px;
+      background:transparent;
+      color:var(--muted);
+      font-size:16px;
+      border-radius:999px;
+    }
+
+    .x:hover{
+      background:var(--chip);
+    }
+
+    .db{
+      padding:16px;
+      display:flex;
+      flex-direction:column;
+      gap:20px;
+      overflow-y:auto;
+    }
+
+    .detail-title{
+      font-size:18px;
+      margin:0 0 16px;
+    }
+
+    .grid{
+      display:grid;
+      grid-template-columns:1fr 1fr;
+      gap:16px;
+    }
+
+    .grid b{
+      display:block;
+      font-size:14px;
+    }
+
+    .grid span{
+      display:block;
+      font-size:14px;
+      color:var(--muted);
+    }
+
+    .modal-line{
+      border-top:1px solid var(--border);
+    }
+
+    /* ---------------------------------------------------------
+       RESPONSIVE
+    --------------------------------------------------------- */
+
+    @media(max-width:360px){
+      .app-header{
+        padding-left:16px;
+        padding-right:16px;
+      }
+
+      .stats{
+        padding-left:12px;
+        padding-right:12px;
+      }
+
+      .review-summary{
+        gap:12px;
+      }
+
+      .review-score{
+        width:90px;
+      }
+    }
+  </style>
 </head>
+
 <body>
+
 <main>
-{{if .Test}}<div class="test">{{index .Copy "test"}}</div>{{end}}
-<div class="pad">
-<div class="head" id="head">
-  {{if .Page.IconURL}}<div class="iconbox"><div class="clip"><img src="{{.Page.IconURL}}" alt=""></div>
-    <svg class="ring" viewBox="0 0 72 72" aria-hidden="true"><circle class="track" cx="36" cy="36" r="32"/><circle class="arc" cx="36" cy="36" r="32"/></svg></div>{{end}}
-  <div class="meta">
-    <h1>{{.Page.Name}}</h1>
-    <div class="dev" id="dev">{{if .Page.Developer}}{{.Page.Developer}}{{end}}</div>
-    {{if .Notes}}<div class="note">{{.Notes}}</div>{{end}}
+
+  {{if .Test}}
+  <div class="test">{{index .Copy "test"}}</div>
+  {{end}}
+
+  <!-- =======================================================
+       TOP BAR
+  ======================================================= -->
+
+  <div class="topbar">
+
+    <div class="play-brand">
+      <svg viewBox="0 0 40 40" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+        <path d="M19.7 19.2 4.3 35.3c.5 1.7 2.1 3 4 3 .8 0 1.5-.2 2.1-.6l17.4-9.9-8.1-8.6Z" fill="#EA4335"/>
+        <path d="m35.3 16.4-7.5-4.3-8.4 7.4 8.5 8.3 7.5-4.2c1.3-.7 2.2-2.1 2.2-3.6s-.9-2.9-2.2-3.6Z" fill="#FBBC04"/>
+        <path d="M4.3 4.7c-.1.3-.1.7-.1 1.1v28.5c0 .4 0 .7.1 1.1l16-15.7-16-15Z" fill="#4285F4"/>
+        <path d="m19.8 20 8-7.9L10.5 2.3c-.6-.4-1.4-.6-2.2-.6-1.9 0-3.6 1.3-4 3l15.5 15.3Z" fill="#34A853"/>
+      </svg>
+      Apps
+    </div>
+
+    <div class="top-icons" aria-hidden="true">
+      <svg viewBox="0 0 24 24" fill="none">
+        <circle cx="10.8" cy="10.8" r="6.8" stroke="currentColor" stroke-width="1.8"/>
+        <path d="m16 16 5 5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+      </svg>
+
+      <svg viewBox="0 0 24 24" fill="none">
+        <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2"/>
+        <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        <path d="M12 17h.01" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+      </svg>
+    </div>
+
   </div>
-</div>
-</div>
-<div class="actions" id="actions">
-  <div class="collapse"><div>
-    <button id="install" class="primary" hidden>{{index .Copy "install"}}</button>
-    <a id="open" class="btn primary" href="open" hidden>{{index .Copy "open"}}</a>
-  </div></div>
-  <div id="done" class="done">{{index .Copy "installed"}}</div>
-  <div id="ios" class="ios">
-    <h2>{{index .Copy "iosTitle"}}</h2>
-    <ol><li>{{index .Copy "iosStep1"}}</li><li>{{index .Copy "iosStep2"}}</li><li>{{index .Copy "iosStep3"}}</li></ol>
+
+
+  <!-- =======================================================
+       APP HEADER
+  ======================================================= -->
+
+  <div class="app-header" id="head">
+
+    {{if .Page.IconURL}}
+
+    <div class="iconbox">
+
+      <div class="clip">
+        <img src="{{.Page.IconURL}}" alt="">
+      </div>
+
+      <svg class="ring" viewBox="0 0 72 72" aria-hidden="true">
+        <circle class="track" cx="36" cy="36" r="32"/>
+        <circle class="arc" cx="36" cy="36" r="32"/>
+      </svg>
+
+    </div>
+
+    {{end}}
+
+    <div class="app-meta">
+
+      <h1 class="app-name">
+        {{.Page.Name}}
+      </h1>
+
+      <div class="developer" id="dev">
+
+        <span>{{if .Page.Developer}}{{.Page.Developer}}{{else}}{{index .Copy "placeholderDeveloper"}}{{end}}</span>
+
+        <svg class="verified" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+          <path
+                  d="M256 472.153 176.892 512l-41.725-81.129-86.275-16.654 11.596-91.422L0 256l60.488-66.795-11.596-91.422 86.275-16.654L176.892 0 256 39.847 335.108 0l41.725 81.129 86.275 16.654-11.596 91.422L512 256l-60.488 66.795 11.596 91.422-86.275 16.654L335.108 512z"
+                  fill="#4285f4"
+          />
+          <path
+                  d="m211.824 284.5-40.824-40.822-36 36 40.824 40.824-.063.062 36 36 .063-.062.062.062 36-36-.062-.062L376.324 192l-36-36z"
+                  fill="#fff"
+          />
+        </svg>
+
+      </div>
+
+      <div class="monetization" id="monetization">
+
+        {{if .Page.ContainsAds}}
+        {{index .Copy "containsAds"}}
+        {{end}}
+
+        {{if .Page.InAppPurchases}}
+        {{if .Page.ContainsAds}} · {{end}}
+        {{index .Copy "inAppPurchases"}}
+        {{end}}
+
+        {{if and (not .Page.ContainsAds) (not .Page.InAppPurchases)}}
+        {{index .Copy "adFree"}}
+        {{end}}
+
+      </div>
+
+    </div>
+
   </div>
-  <a class="btn secondary" href="continue">{{index .Copy "continue"}}</a>
-</div>
-{{if .Page.Screenshots}}<div class="shots">{{range .Page.Screenshots}}<img src="{{.}}" alt="" loading="lazy">{{end}}</div>{{end}}
-{{if .Page.Description}}<div class="sec">
-  <div class="row"><h2>{{index .Copy "about"}}</h2><button class="arrow" id="more" type="button" aria-label="{{index .Copy "aboutOpen"}}">→</button></div>
-  <p class="desc">{{.Page.Description}}</p>
-</div>{{end}}
-{{if .Page.UpdatedDate}}<div class="sec"><p class="upd">{{index .Copy "updated"}}</p><p>{{.Page.UpdatedDate}}</p></div>{{end}}
-{{if .Page.WhatsNew}}<div class="line"></div><div class="sec"><h2>{{index .Copy "whatsNew"}}</h2><p class="news">{{.Page.WhatsNew}}</p></div>{{end}}
+
+
+  <!-- =======================================================
+       STATS
+  ======================================================= -->
+
+  <div class="stats">
+
+    <div class="stat">
+
+      <div class="stat-main">
+
+        {{if .Page.Rating}}
+        {{.Page.Rating}}
+        {{else}}
+        —
+        {{end}}
+
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path
+                  d="m12 3 2.8 5.7 6.2.9-4.5 4.4 1.1 6.2-5.6-2.9-5.6 2.9 1.1-6.2L3 9.6l6.2-.9L12 3Z"
+                  fill="var(--accent)"
+          />
+        </svg>
+
+      </div>
+
+      <div class="stat-label">
+
+        {{if .Page.RatingCount}}
+        {{.Page.RatingCount}} {{index .Copy "reviews"}}
+        {{else}}
+        {{index .Copy "noData"}}
+        {{end}}
+
+        <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.5"/>
+          <path d="M12 10v6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+          <circle cx="12" cy="7" r="1" fill="currentColor"/>
+        </svg>
+
+      </div>
+
+    </div>
+
+
+    <div class="stat-divider"></div>
+
+
+    <div class="stat">
+
+      <div class="stat-main">
+        {{if .Page.DownloadsLabel}}
+        {{.Page.DownloadsLabel}}
+        {{else}}
+        —
+        {{end}}
+      </div>
+
+      <div class="stat-label">
+        {{index .Copy "downloadsLabel"}}
+      </div>
+
+    </div>
+
+
+    <div class="stat-divider"></div>
+
+
+    <div class="stat">
+
+      <div class="stat-main">
+
+        <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                width="18"
+                height="18"
+                aria-hidden="true"
+        >
+          <path
+                  d="M6 18h12"
+                  stroke="currentColor"
+                  stroke-width="1.5"
+                  stroke-linecap="round"
+          />
+          <path
+                  d="M12 6v8m0 0 3.5-3.5M12 14l-3.5-3.5"
+                  stroke="currentColor"
+                  stroke-width="1.5"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+          />
+          <path
+                  d="M3 20.4V3.6C3 3.27 3.27 3 3.6 3h16.8c.33 0 .6.27.6.6v16.8c0 .33-.27.6-.6.6H3.6a.6.6 0 0 1-.6-.6Z"
+                  stroke="currentColor"
+                  stroke-width="1.5"
+          />
+        </svg>
+
+      </div>
+
+      <div class="stat-label">
+
+        {{if .Page.SizeMB}}
+        {{.Page.SizeMB}} MB
+        {{else}}
+        —
+        {{end}}
+
+      </div>
+
+    </div>
+
+  </div>
+
+
+  <!-- =======================================================
+       INSTALL ACTION
+  ======================================================= -->
+
+  <div class="actions" id="actions">
+
+    <div class="collapse">
+
+      <div>
+
+        <button
+                id="install"
+                class="primary"
+                hidden
+        >
+          {{index .Copy "install"}}
+        </button>
+
+        <a
+                id="open"
+                class="btn primary"
+                href="open"
+                hidden
+        >
+          {{index .Copy "open"}}
+        </a>
+
+      </div>
+
+    </div>
+
+    <div id="done" class="done">
+      {{index .Copy "installed"}}
+    </div>
+
+    <div id="ios" class="ios">
+
+      <h2>{{index .Copy "iosTitle"}}</h2>
+
+      <ol>
+        <li>{{index .Copy "iosStep1"}}</li>
+        <li>{{index .Copy "iosStep2"}}</li>
+        <li>{{index .Copy "iosStep3"}}</li>
+      </ol>
+
+    </div>
+
+  </div>
+
+
+  <!-- =======================================================
+       SHARE / WISHLIST
+  ======================================================= -->
+
+  <div class="quick-actions">
+
+    <button
+            class="quick-action"
+            type="button"
+            id="share"
+    >
+      <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+        <circle cx="18" cy="5" r="2.5" stroke="currentColor" stroke-width="1.7"/>
+        <circle cx="6" cy="12" r="2.5" stroke="currentColor" stroke-width="1.7"/>
+        <circle cx="18" cy="19" r="2.5" stroke="currentColor" stroke-width="1.7"/>
+        <path d="m8.3 10.8 7.4-4.4M8.3 13.2l7.4 4.4" stroke="currentColor" stroke-width="1.7"/>
+      </svg>
+
+      {{index .Copy "share"}}
+    </button>
+
+
+    <button
+            class="quick-action"
+            type="button"
+            id="wishlist"
+    >
+      <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+        <path
+                d="M6 3.5h12c.55 0 1 .45 1 1v16l-7-3.8-7 3.8v-16c0-.55.45-1 1-1Z"
+                stroke="currentColor"
+                stroke-width="1.7"
+                stroke-linejoin="round"
+        />
+      </svg>
+
+      {{index .Copy "wishlist"}}
+    </button>
+
+  </div>
+
+
+  <!-- =======================================================
+       AVAILABLE ON DEVICES
+  ======================================================= -->
+
+  <div class="devices">
+
+    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <rect x="6" y="3" width="12" height="18" rx="2" stroke="currentColor" stroke-width="1.5"/>
+      <path d="M10 18h4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+    </svg>
+
+    {{index .Copy "availableOnDevices"}}
+
+  </div>
+
+
+  <!-- =======================================================
+       SCREENSHOTS
+  ======================================================= -->
+
+  {{if .Page.Screenshots}}
+
+  <div class="shots">
+
+    {{range .Page.Screenshots}}
+
+    <div class="shot">
+      <img
+              src="{{.}}"
+              alt=""
+              loading="lazy"
+              onerror="this.parentElement.style.display='none'"
+      >
+    </div>
+
+    {{end}}
+
+  </div>
+
+  {{end}}
+
+
+  <!-- =======================================================
+       ABOUT
+  ======================================================= -->
+
+  {{if .Page.Description}}
+
+  <div class="sec">
+
+    <div class="row">
+
+      <h2>{{index .Copy "about"}}</h2>
+
+      <button
+              class="arrow"
+              id="more"
+              type="button"
+              aria-label="{{index .Copy "aboutOpen"}}"
+      >
+      →
+      </button>
+
+    </div>
+
+    <p class="desc">
+      {{.Page.Description}}
+    </p>
+
+  </div>
+
+  {{end}}
+
+
+  <!-- =======================================================
+       UPDATED
+  ======================================================= -->
+
+  {{if .Page.UpdatedDate}}
+
+  <div class="sec">
+
+    <p class="upd">
+      {{index .Copy "updated"}}
+    </p>
+
+    <p>
+      {{.Page.UpdatedDate}}
+    </p>
+
+  </div>
+
+  {{end}}
+
+
+  <!-- =======================================================
+       DATA SAFETY
+  ======================================================= -->
+
+  <div class="safety">
+
+    <div class="safety-head">
+
+      <h2>
+        {{index .Copy "dataSafetyTitle"}}
+      </h2>
+
+      <span class="safety-arrow" aria-hidden="true">
+      ›
+    </span>
+
+    </div>
+
+    <p>
+      {{index .Copy "dataSafetyText"}}
+    </p>
+
+  </div>
+
+
+  <!-- =======================================================
+       REVIEWS
+  ======================================================= -->
+
+  <div class="reviews">
+
+    <h2 class="reviews-title">
+      {{index .Copy "reviewsTitle"}}
+    </h2>
+
+    <p class="reviews-subtitle">
+      {{index .Copy "reviewsVerified"}}
+    </p>
+
+
+    <div class="review-summary">
+
+      <div class="review-score">
+
+        <div class="big-rating">
+          {{if .Page.Rating}}
+          {{.Page.Rating}}
+          {{else}}
+          —
+          {{end}}
+        </div>
+
+
+        <div class="stars">
+
+          {{range $i := stars}}
+
+          <span class="star">
+
+          <svg
+                  class="star-empty"
+                  viewBox="0 0 24 24"
+                  aria-hidden="true"
+          >
+            <path d="m12 3 2.8 5.7 6.2.9-4.5 4.4 1.1 6.2-5.6-2.9-5.6 2.9 1.1-6.2L3 9.6l6.2-.9L12 3Z"/>
+          </svg>
+
+          <span
+                  class="star-fill"
+                  style="width:
+            {{fill $.Page.Rating $i}}%"
+          >
+            <svg
+                    viewBox="0 0 24 24"
+                    aria-hidden="true"
+            >
+              <path d="m12 3 2.8 5.7 6.2.9-4.5 4.4 1.1 6.2-5.6 2.9 1.1-6.2L3 9.6l6.2-.9L12 3Z"/>
+            </svg>
+          </span>
+
+        </span>
+
+          {{end}}
+
+        </div>
+
+
+        <div class="review-count">
+
+          {{if .Page.RatingCount}}
+          {{.Page.RatingCount}} {{index .Copy "reviews"}}
+          {{else}}
+          {{index .Copy "noData"}}
+          {{end}}
+
+        </div>
+
+      </div>
+
+
+      <div class="star-bars">
+
+        <div class="star-row">
+          <span class="star-number">5</span>
+          <div class="star-track">
+            <div
+                    class="star-value"
+                    style="width:{{if .Page.RatingStars5}}{{.Page.RatingStars5}}{{else}}0{{end}}%"
+            ></div>
+          </div>
+        </div>
+
+        <div class="star-row">
+          <span class="star-number">4</span>
+          <div class="star-track">
+            <div
+                    class="star-value"
+                    style="width:{{if .Page.RatingStars4}}{{.Page.RatingStars4}}{{else}}0{{end}}%"
+            ></div>
+          </div>
+        </div>
+
+        <div class="star-row">
+          <span class="star-number">3</span>
+          <div class="star-track">
+            <div
+                    class="star-value"
+                    style="width:{{if .Page.RatingStars3}}{{.Page.RatingStars3}}{{else}}0{{end}}%"
+            ></div>
+          </div>
+        </div>
+
+        <div class="star-row">
+          <span class="star-number">2</span>
+          <div class="star-track">
+            <div
+                    class="star-value"
+                    style="width:{{if .Page.RatingStars2}}{{.Page.RatingStars2}}{{else}}0{{end}}%"
+            ></div>
+          </div>
+        </div>
+
+        <div class="star-row">
+          <span class="star-number">1</span>
+          <div class="star-track">
+            <div
+                    class="star-value"
+                    style="width:{{if .Page.RatingStars1}}{{.Page.RatingStars1}}{{else}}0{{end}}%"
+            ></div>
+          </div>
+        </div>
+
+      </div>
+
+    </div>
+
+  </div>
+
+
+  <!-- =======================================================
+       WHAT'S NEW
+  ======================================================= -->
+
+  {{if .Page.WhatsNew}}
+
+  <div class="sec">
+
+    <div class="line"></div>
+
+    <h2 style="margin-top:20px">
+      {{index .Copy "whatsNew"}}
+    </h2>
+
+    <p class="news">
+      {{.Page.WhatsNew}}
+    </p>
+
+  </div>
+
+  {{end}}
+
+
+  <!-- =======================================================
+       FOOTER
+  ======================================================= -->
+
+  <div class="footer">
+
+    <span>{{index .Copy "footerStore"}}</span>
+    <span>{{index .Copy "footerGiftCards"}}</span>
+    <span>{{index .Copy "footerRedeemCode"}}</span>
+    <span>{{index .Copy "footerFamilyLibrary"}}</span>
+
+    <span class="footer-title">
+    {{index .Copy "footerKidsFamilyTitle"}}
+  </span>
+
+    <span>{{index .Copy "footerParentGuide"}}</span>
+    <span>{{index .Copy "footerFamilyLibrary"}}</span>
+
+    <div class="footer-small">
+      <span>{{index .Copy "footerTerms"}}</span>
+      <span>{{index .Copy "footerPrivacy"}}</span>
+      <span>{{index .Copy "footerDevelopers"}}</span>
+    </div>
+
+  </div>
+
 </main>
-{{if .Page.Description}}<dialog id="sheet" aria-label="{{index .Copy "about"}}">
-  <div class="dh"><b>{{.Page.Name}}</b><button class="x" id="close" type="button" aria-label="{{index .Copy "close"}}">✕</button></div>
-  <div class="db">
-    <p class="full">{{.Page.Description}}</p>
-    {{if .Details}}<div class="line" style="margin:0"></div>
-    <div><h2 style="font-size:18px;margin:0 0 16px">{{index .Copy "details"}}</h2>
-    <div class="grid">{{range .Details}}<div><b>{{.Label}}</b><span>{{.Value}}</span>{{range .Notes}}<span>{{.}}</span>{{end}}</div>{{end}}</div></div>{{end}}
+
+
+<!-- =======================================================
+     BOTTOM NAVIGATION
+======================================================= -->
+
+<div class="bottom-nav">
+
+  <div class="nav-item active">
+
+    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path
+              d="M4 6.5C4 5.67 4.67 5 5.5 5h5v5.5H4v-4Zm0 8h6.5V19h-5c-.83 0-1.5-.67-1.5-1.5v-3Zm9.5-9.5h5c.83 0 1.5.67 1.5 1.5v4H13.5V5Zm0 8H20v4.5c0 .83-.67 1.5-1.5 1.5h-5v-6Z"
+              fill="currentColor"
+      />
+    </svg>
+
+    <span>{{index .Copy "navGames"}}</span>
+
   </div>
-</dialog>{{end}}
+
+
+  <div class="nav-item">
+
+    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <rect x="4" y="4" width="6" height="6" rx="1" stroke="currentColor" stroke-width="1.6"/>
+      <rect x="14" y="4" width="6" height="6" rx="1" stroke="currentColor" stroke-width="1.6"/>
+      <rect x="4" y="14" width="6" height="6" rx="1" stroke="currentColor" stroke-width="1.6"/>
+      <rect x="14" y="14" width="6" height="6" rx="1" stroke="currentColor" stroke-width="1.6"/>
+    </svg>
+
+    <span>{{index .Copy "navApps"}}</span>
+
+  </div>
+
+
+  <div class="nav-item">
+
+    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path
+              d="M6 4.5h12v15H6z"
+              stroke="currentColor"
+              stroke-width="1.6"
+      />
+      <path
+              d="M8.5 8h7M8.5 11h7M8.5 14h5"
+              stroke="currentColor"
+              stroke-width="1.4"
+              stroke-linecap="round"
+      />
+    </svg>
+
+    <span>{{index .Copy "navBooks"}}</span>
+
+  </div>
+
+
+  <div class="nav-item">
+
+    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <circle cx="12" cy="12" r="8" stroke="currentColor" stroke-width="1.6"/>
+      <circle cx="9" cy="10" r="1" fill="currentColor"/>
+      <circle cx="15" cy="10" r="1" fill="currentColor"/>
+      <path
+              d="M8.5 14c1.8 2 5.2 2 7 0"
+              stroke="currentColor"
+              stroke-width="1.6"
+              stroke-linecap="round"
+      />
+    </svg>
+
+    <span>{{index .Copy "navKids"}}</span>
+
+  </div>
+
+</div>
+
+
+<!-- =======================================================
+     ABOUT DIALOG
+======================================================= -->
+
+{{if .Page.Description}}
+
+<dialog
+        id="sheet"
+        aria-label="{{index .Copy "about"}}"
+>
+
+<div class="dh">
+
+  <div class="dh-app">
+
+    {{if .Page.IconURL}}
+
+    <div class="dh-icon">
+      <img src="{{.Page.IconURL}}" alt="">
+    </div>
+
+    {{end}}
+
+    <div class="dh-meta">
+
+      <b>{{.Page.Name}}</b>
+
+      <span>
+          {{index .Copy "about"}}
+        </span>
+
+    </div>
+
+  </div>
+
+  <button
+          class="x"
+          id="close"
+          type="button"
+          aria-label="{{index .Copy "close"}}"
+  >
+  ✕
+  </button>
+
+</div>
+
+
+<div class="db">
+
+  <p class="full">
+    {{.Page.Description}}
+  </p>
+
+
+  {{if .Details}}
+
+  <div class="modal-line"></div>
+
+  <div>
+
+    <h2 class="detail-title">
+      {{index .Copy "details"}}
+    </h2>
+
+    <div class="grid">
+
+      {{range .Details}}
+
+      <div>
+
+        <b>{{.Label}}</b>
+
+        <span>{{.Value}}</span>
+
+        {{range .Notes}}
+        <span>{{.}}</span>
+        {{end}}
+
+      </div>
+
+      {{end}}
+
+    </div>
+
+  </div>
+
+  {{end}}
+
+
+  <!-- Additional listing information -->
+
+  {{if or
+  .Page.SizeMB
+  .Page.DownloadsLabel
+  .Page.Version
+  .Page.AgeRating
+  .Page.Developer
+  .Page.Category
+  .Page.InteractiveElements
+  .Page.UpdatedDate
+  }}
+
+  <div class="modal-line"></div>
+
+  <div>
+
+    <h2 class="detail-title">
+      {{index .Copy "details"}}
+    </h2>
+
+    <div class="grid">
+
+      {{if .Page.UpdatedDate}}
+      <div>
+        <b>{{index .Copy "updated"}}</b>
+        <span>{{.Page.UpdatedDate}}</span>
+      </div>
+      {{end}}
+
+      {{if .Page.SizeMB}}
+      <div>
+        <b>{{index .Copy "size"}}</b>
+        <span>{{.Page.SizeMB}} MB</span>
+      </div>
+      {{end}}
+
+      {{if .Page.DownloadsLabel}}
+      <div>
+        <b>{{index .Copy "downloadsLabel"}}</b>
+        <span>{{.Page.DownloadsLabel}}</span>
+      </div>
+      {{end}}
+
+      {{if .Page.Version}}
+      <div>
+        <b>{{index .Copy "version"}}</b>
+        <span>{{.Page.Version}}</span>
+      </div>
+      {{end}}
+
+      {{if .Page.AgeRating}}
+      <div>
+        <b>{{index .Copy "ageRating"}}</b>
+        <span>{{.Page.AgeRating}}</span>
+      </div>
+      {{end}}
+
+      {{if .Page.Developer}}
+      <div>
+        <b>{{index .Copy "developer"}}</b>
+        <span>{{.Page.Developer}}</span>
+
+        {{if .Page.ContainsAds}}
+        <span>{{index .Copy "containsAds"}}</span>
+        {{end}}
+
+        {{if .Page.InAppPurchases}}
+        <span>{{index .Copy "inAppPurchases"}}</span>
+        {{end}}
+
+      </div>
+      {{end}}
+
+      {{if .Page.Category}}
+      <div>
+        <b>{{index .Copy "category"}}</b>
+        <span>{{.Page.Category}}</span>
+      </div>
+      {{end}}
+
+      {{if .Page.InteractiveElements}}
+      <div>
+        <b>{{index .Copy "interactiveElements"}}</b>
+        <span>{{.Page.InteractiveElements}}</span>
+      </div>
+      {{end}}
+
+    </div>
+
+  </div>
+
+  {{end}}
+
+</div>
+
+</dialog>
+
+{{end}}
+
+
 <script>
-(function () {
-  var COPY = {{.JSCopy}};
-  if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js", { scope: "./" });
-  var installBtn = document.getElementById("install");
-  var head = document.getElementById("head");
-  var dev = document.getElementById("dev");
-  var devText = dev.textContent;
-  var actions = document.getElementById("actions");
-  var reported = false;
-  function reportInstalled() {
-    if (reported) return;
-    reported = true;
-    if (navigator.sendBeacon) navigator.sendBeacon("installed");
-    else fetch("installed", { method: "POST", keepalive: true });
-  }
-  var more = document.getElementById("more"), sheet = document.getElementById("sheet");
-  if (more && sheet && sheet.showModal) {
-    more.addEventListener("click", function () { sheet.showModal(); });
-    document.getElementById("close").addEventListener("click", function () { sheet.close(); });
-    sheet.addEventListener("click", function (e) { if (e.target === sheet) sheet.close(); });
-  }
-  var standalone = window.matchMedia("(display-mode: standalone)").matches || navigator.standalone === true;
-  if (standalone) { location.replace("open"); return; }
-  var ua = navigator.userAgent;
-  var isIOS = /iPhone|iPad|iPod/.test(ua) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
-  if (isIOS) document.getElementById("ios").style.display = "block";
-  var deferred = null;
-  // Same sequence as the editor preview: the button collapses, a ring fills
-  // around the icon with "Please wait…", then the page offers "Open".
-  function showInstalled() {
-    head.classList.remove("busy");
-    actions.classList.remove("busy-actions");
-    dev.textContent = devText;
-    installBtn.hidden = true;
-    document.getElementById("open").hidden = false;
-    document.getElementById("done").style.display = "block";
-  }
-  function showInstalling() {
-    head.classList.add("busy");
-    actions.classList.add("busy-actions");
-    dev.textContent = COPY.pleaseWait;
-    setTimeout(showInstalled, 1800);
-  }
-  window.addEventListener("beforeinstallprompt", function (e) {
-    e.preventDefault();
-    deferred = e;
-    installBtn.hidden = false;
-  });
-  installBtn.addEventListener("click", function () {
-    if (!deferred) return;
-    deferred.prompt();
-    deferred.userChoice.then(function (choice) {
-      if (choice.outcome === "accepted") { reportInstalled(); showInstalling(); }
-      deferred = null;
-    });
-  });
-  window.addEventListener("appinstalled", function () {
-    reportInstalled();
-    if (!head.classList.contains("busy")) showInstalled();
-  });
-})();
+  (function () {
+
+    var COPY = {{.JSCopy}};
+
+    /*
+     * ============================================================
+     * REAL PWA LOGIC
+     * ============================================================
+     */
+
+    if ("serviceWorker" in navigator) {
+      navigator.serviceWorker.register("sw.js", {
+        scope: "./"
+      });
+    }
+
+
+    var installBtn = document.getElementById("install");
+    var openBtn = document.getElementById("open");
+
+    var head = document.getElementById("head");
+    var dev = document.getElementById("dev");
+
+    var monetization = document.getElementById("monetization");
+
+    var actions = document.getElementById("actions");
+    var done = document.getElementById("done");
+
+    var reported = false;
+
+
+    /*
+     * ------------------------------------------------------------
+     * REPORT INSTALL
+     * ------------------------------------------------------------
+     */
+
+    function reportInstalled() {
+
+      if (reported) return;
+
+      reported = true;
+
+      if (navigator.sendBeacon) {
+
+        navigator.sendBeacon("installed");
+
+      } else {
+
+        fetch("installed", {
+          method: "POST",
+          keepalive: true
+        });
+
+      }
+
+    }
+
+
+    /*
+     * ------------------------------------------------------------
+     * ABOUT DIALOG
+     * ------------------------------------------------------------
+     */
+
+    var more = document.getElementById("more");
+    var sheet = document.getElementById("sheet");
+    var close = document.getElementById("close");
+
+    if (more && sheet && sheet.showModal) {
+
+      more.addEventListener("click", function () {
+        sheet.showModal();
+      });
+
+      if (close) {
+
+        close.addEventListener("click", function () {
+          sheet.close();
+        });
+
+      }
+
+      sheet.addEventListener("click", function (e) {
+
+        if (e.target === sheet) {
+          sheet.close();
+        }
+
+      });
+
+    }
+
+
+    /*
+     * ------------------------------------------------------------
+     * STANDALONE / ALREADY INSTALLED
+     * ------------------------------------------------------------
+     */
+
+    var standalone =
+            window.matchMedia("(display-mode: standalone)").matches ||
+            navigator.standalone === true;
+
+    if (standalone) {
+
+      location.replace("open");
+
+      return;
+
+    }
+
+
+    /*
+     * ------------------------------------------------------------
+     * IOS
+     * ------------------------------------------------------------
+     */
+
+    var ua = navigator.userAgent;
+
+    var isIOS =
+            /iPhone|iPad|iPod/.test(ua) ||
+            (
+                    navigator.platform === "MacIntel" &&
+                    navigator.maxTouchPoints > 1
+            );
+
+    if (isIOS) {
+
+      var ios = document.getElementById("ios");
+
+      if (ios) {
+        ios.style.display = "block";
+      }
+
+    }
+
+
+    /*
+     * ------------------------------------------------------------
+     * INSTALL ANIMATION
+     * ------------------------------------------------------------
+     */
+
+    var deferred = null;
+    var devHTML = null;
+
+
+    function showInstalled() {
+
+      head.classList.remove("busy");
+      actions.classList.remove("busy-actions");
+
+      if (dev) {
+
+        if (devHTML !== null) {
+          dev.innerHTML = devHTML;
+        }
+
+      }
+
+      if (installBtn) {
+        installBtn.hidden = true;
+      }
+
+      if (openBtn) {
+        openBtn.hidden = false;
+      }
+
+      if (done) {
+        done.style.display = "block";
+      }
+
+      if (monetization) {
+        monetization.style.display = "";
+      }
+
+    }
+
+
+    function showInstalling() {
+
+      head.classList.add("busy");
+      actions.classList.add("busy-actions");
+
+      if (dev) {
+
+        if (devHTML === null) {
+          devHTML = dev.innerHTML;
+        }
+
+        dev.innerHTML =
+                "<span>" +
+                (COPY.pleaseWait || "Please wait…") +
+                "</span>";
+
+      }
+
+      if (monetization) {
+        monetization.style.display = "none";
+      }
+
+      setTimeout(showInstalled, 1800);
+
+    }
+
+
+    /*
+     * ------------------------------------------------------------
+     * BEFORE INSTALL PROMPT
+     * ------------------------------------------------------------
+     */
+
+    window.addEventListener(
+            "beforeinstallprompt",
+            function (e) {
+
+              e.preventDefault();
+
+              deferred = e;
+
+              if (installBtn) {
+                installBtn.hidden = false;
+              }
+
+            }
+    );
+
+
+    /*
+     * ------------------------------------------------------------
+     * INSTALL CLICK
+     * ------------------------------------------------------------
+     */
+
+    if (installBtn) {
+
+      installBtn.addEventListener(
+              "click",
+              function () {
+
+                if (!deferred) return;
+
+                deferred.prompt();
+
+                deferred.userChoice.then(
+                        function (choice) {
+
+                          if (choice.outcome === "accepted") {
+
+                            reportInstalled();
+
+                            showInstalling();
+
+                          }
+
+                          deferred = null;
+
+                        }
+                );
+
+              }
+      );
+
+    }
+
+
+    /*
+     * ------------------------------------------------------------
+     * APP INSTALLED
+     * ------------------------------------------------------------
+     */
+
+    window.addEventListener(
+            "appinstalled",
+            function () {
+
+              reportInstalled();
+
+              if (!head.classList.contains("busy")) {
+
+                showInstalled();
+
+              }
+
+            }
+    );
+
+
+    /*
+     * ============================================================
+     * SHARE
+     * ============================================================
+     */
+
+    var share = document.getElementById("share");
+
+    if (share) {
+
+      share.addEventListener("click", function () {
+
+        if (navigator.share) {
+
+          navigator.share({
+            title: document.title,
+            url: window.location.href
+          }).catch(function () {});
+
+        } else if (navigator.clipboard) {
+
+          navigator.clipboard.writeText(
+                  window.location.href
+          );
+
+        }
+
+      });
+
+    }
+
+
+    /*
+     * ============================================================
+     * WISHLIST
+     * ============================================================
+     */
+
+    var wishlist = document.getElementById("wishlist");
+
+    if (wishlist) {
+
+      wishlist.addEventListener("click", function () {
+
+        wishlist.setAttribute(
+                "aria-pressed",
+                "true"
+        );
+
+        wishlist.style.opacity = "0.65";
+
+      });
+
+    }
+
+
+  })();
 </script>
+
 </body>
 </html>

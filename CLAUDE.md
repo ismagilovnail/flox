@@ -19,14 +19,15 @@ referenced below as §N).
 ## CURRENT STATE — UPDATE THIS EVERY PHASE
 
 ```
-CURRENT PHASE : STORE-STYLE PWA PAGE FOR CONSTRUCTOR TEST LINKS
-STATUS        : done. Signed test links render templates/pwa_store.html (full
-                editor card, header "Apps"); visitors keep the stats-free
-                templates/pwa.html. Render errors redirect to destination.
-                VERIFIED: go test ./tracker ./internal/routingstore green;
-                full-env run and live Chrome check not repeated this step.
-                Detail: docs/pwa-serving.md.
-LAST COMMIT   : this phase's commit — feat(tracker): store-style PWA test page.
+CURRENT PHASE : ONE STORE-STYLE PWA PAGE FOR VISITORS AND TEST LINKS
+STATUS        : done. templates/pwa.html is the full editor card (ratings,
+                reviews, downloads, nav) for every render, by the operator's
+                decision (supersedes "no numbers"); pwa_store.html removed.
+                VERIFIED: full-env go test green; tracker container healthy.
+                Open: user reports test page misses some form params —
+                DB row of "Тест PWA" was empty, save path reads clean; ask
+                which fields after a real save. Detail: docs/pwa-serving.md.
+LAST COMMIT   : this phase's commit — feat(tracker): one store-style PWA page.
 UNCOMMITTED   : user's own label rename in apps/web pwa-preview-card.tsx +
                 en/ru pwa.json (Google Play → Apps) — not part of this phase.
 NEXT          : postlanding stage serving (+ postlanding dimension) —

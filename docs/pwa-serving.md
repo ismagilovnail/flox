@@ -77,21 +77,16 @@ elements, ads / in-app-purchase notes, updated date. The note line under the
 developer appears only when ads/purchases are set — the card's "no ads or
 paid content" fallback is an assertion, so it is not carried over.
 
-**Two templates.** Visitors get `templates/pwa.html`, which deliberately does
-not show the operator-typed numbers and badges (rating, stars and
-distribution, review count, downloads, size, age rating, verified badge) nor
-the store chrome (bottom nav, footer links, "data safety" boilerplate,
-"available on all devices"): operator-entered social proof inside a store
-look-alike deceives the people installing.
-
-The constructor's signed test links (`c.Test`) render
-`templates/pwa_store.html` instead — the full editor card (header labelled
-"Apps", rating block and star distribution, downloads, size, Share/Wishlist,
-screenshots, About + details sheet, Data safety, ratings and reviews,
-What's new, footer, bottom nav) so the operator sees exactly the editor
-preview on a real page. `PwaPage` loads the numeric columns for it; tracked
-traffic never reaches that template. A template execution error redirects the
-visitor to the destination rather than serving half a page.
+**One template.** Every render — a visitor from a campaign and the
+constructor's signed test link alike — uses `templates/pwa.html`, the editor
+card one to one: "Apps" header, rating and star distribution, review count,
+downloads, size, Share/Wishlist, screenshots, About + details sheet, data
+safety, ratings and reviews, What's new, footer, bottom nav. All numbers are
+exactly what the operator typed in the constructor form; the test link only
+adds a "test mode" banner and records no events. (Decision 2026-10-05, the
+operator's: visitors see the full card. Earlier versions withheld the numbers
+from visitors.) A template execution error redirects the visitor to the
+destination rather than serving half a page.
 
 ## In-app WebView bounce (§28/§73)
 
