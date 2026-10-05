@@ -37,6 +37,11 @@ the first language. Names come from `Intl.DisplayNames` in the UI language.
 Other pairs still work through CSV import (the API accepts any two-letter
 codes). tsc, eslint clean; checked live on /pwa/new.
 
+## [Between phases] — PWA form: bottom comments card removed
+
+The summary "Комментарии" card at the bottom of the form is gone; the comments
+modal is reachable only from the header button. tsc, eslint clean.
+
 ## [Between phases] — PWA form: manifest preview removed, comments button in the header
 
 The "Превью манифеста" JSON block is gone from the form. "Управлять

@@ -13,7 +13,6 @@ import { ChevronDownIcon } from "lucide-react";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import type { PwaComment } from "@/lib/api/pwa";
 import { EMPTY_COMMENT_DRAFT, PwaCommentDialog, type CommentDraft } from "@/features/pwa/pwa-comment-dialog";
@@ -129,29 +128,7 @@ export function PwaCommentsEditor({
   }
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>{t("comments.title")}</CardTitle>
-        <CardDescription>{t("comments.hint")}</CardDescription>
-        <CardAction>
-          <Button type="button" variant="outline" onClick={() => onOpenChange(true)}>
-            {t("comments.manage")}
-          </Button>
-        </CardAction>
-      </CardHeader>
-      <CardContent>
-        {sets.length === 0 ? (
-          <p className="text-sm text-muted-foreground">{t("comments.summaryEmpty")}</p>
-        ) : (
-          <div className="flex flex-wrap gap-2">
-            {sets.map((key) => (
-              <span key={key} className="rounded-md border px-2 py-1 text-sm tabular-nums">
-                {key.replace("-", " · ")} <span className="text-muted-foreground">({countOf(key)})</span>
-              </span>
-            ))}
-          </div>
-        )}
-      </CardContent>
+    <>
       <Dialog open={open} onOpenChange={onOpenChange}>
         <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-5xl">
           <DialogHeader>
@@ -330,6 +307,6 @@ export function PwaCommentsEditor({
           onSave={saveComment}
         />
       )}
-    </Card>
+    </>
   );
 }
