@@ -51,7 +51,9 @@ goes through the stage — ClickHouse `chstore/schema/010_pwa_id.sql`, the
 
 ## The page
 
-Rendered server-side (`html/template`, everything escaped; colors only
+Rendered server-side from `apps/tracker/templates/pwa.html` (a plain
+`html/template` file, compiled into the binary with `go:embed` — edit the
+file, rebuild the tracker; not Twig, which is PHP) (`html/template`, everything escaped; colors only
 admitted as `#rgb`/`#rrggbb`) and laid out like the editor's preview card
 (`features/pwa/pwa-preview-card.tsx`): icon + name + developer header,
 install button, screenshot strip (fixed height, natural widths), "About"
