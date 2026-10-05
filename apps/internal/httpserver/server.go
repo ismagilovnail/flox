@@ -77,7 +77,7 @@ func New(logger *slog.Logger, serviceName string, db Pinger, ch Pinger, appURL s
 	r.Use(middleware.Timeout(30 * time.Second))
 	r.Use(cors.Handler(cors.Options{
 		AllowedOrigins:   []string{appURL},
-		AllowedMethods:   []string{http.MethodGet, http.MethodPost, http.MethodPatch, http.MethodDelete},
+		AllowedMethods:   []string{http.MethodGet, http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodDelete},
 		AllowedHeaders:   []string{"Content-Type"},
 		AllowCredentials: true,
 		MaxAge:           300,

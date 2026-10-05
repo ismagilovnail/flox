@@ -33,6 +33,8 @@ import {
 } from "@/components/ui/card";
 import { Mono } from "@/components/ui/typography";
 import type { PwaStatus } from "@/lib/api/pwa";
+import { PwaCommentsEditor } from "@/features/pwa/pwa-comments-editor";
+import { commentStats, setKey } from "@/features/pwa/pwa-comments";
 import { PwaPreviewCard } from "@/features/pwa/pwa-preview-card";
 import { GalleryFilePickerDialog } from "@/features/content-gallery/gallery-file-picker-dialog";
 import { GalleryUploadCell } from "@/features/content-gallery/gallery-upload-cell";
@@ -169,6 +171,15 @@ export function buildPwaFormSchema(t: TFunction) {
     interactiveElements: detailLabel,
     containsAds: z.boolean(),
     inAppPurchases: z.boolean(),
+    comments: z.array(
+      z.object({
+        geo: z.string(),
+        lang: z.string(),
+        author: z.string(),
+        rating: z.number(),
+        text: z.string(),
+      }),
+    ),
     updatedDate: z
       .string()
       .regex(
@@ -241,6 +252,7 @@ export function PwaForm({
       description: "",
       downloadsLabel: "",
       screenshots: [],
+      comments: [],
       whatsNew: "",
       version: "",
       containsAds: false,
@@ -262,6 +274,12 @@ export function PwaForm({
 
   const screenshotArray = useFieldArray({ control, name: "screenshots" });
   const manifest = useWatch({ control });
+  const allComments = useWatch({ control, name: "comments" }) ?? [];
+  const [activeSet, setActiveSet] = useState(() => (defaultValues.comments?.[0] ? setKey(defaultValues.comments[0]) : ""));
+  // The preview shows the comment set being edited; its rating, count and
+  // star bars come from those comments when there are any.
+  const setComments = allComments.filter((c) => setKey(c) === activeSet);
+  const stats = commentStats(setComments);
   const [previewDir, setPreviewDir] = useState<"ltr" | "rtl">("ltr");
   const [pickingIcon, setPickingIcon] = useState(false);
   const [pickingHeaderLogo, setPickingHeaderLogo] = useState(false);
@@ -300,7 +318,15 @@ export function PwaForm({
             <CardDescription>
               {t("form.description", { ns: "pwa" })}
             </CardDescription>
-            {headerActions && <CardAction>{headerActions}</CardAction>}
+            <CardAction className="flex flex-wrap items-center justify-end gap-2">
+              {headerActions}
+              <Button type="button" variant="outline" asChild>
+                <Link href="/pwa">{t("actions.cancel", { ns: "common" })}</Link>
+              </Button>
+              <Button type="submit" disabled={isSubmitting}>
+                {submitLabel}
+              </Button>
+            </CardAction>
           </CardHeader>
           <CardContent className="flex flex-col gap-4">
             <div className="grid gap-4 sm:grid-cols-2">
@@ -989,15 +1015,18 @@ export function PwaForm({
             </div>
           </CardContent>
         </Card>
-
-        <div className="flex justify-end gap-2">
-          <Button type="button" variant="outline" asChild>
-            <Link href="/pwa">{t("actions.cancel", { ns: "common" })}</Link>
-          </Button>
-          <Button type="submit" disabled={isSubmitting}>
-            {submitLabel}
-          </Button>
-        </div>
+        <Controller
+          control={control}
+          name="comments"
+          render={({ field }) => (
+            <PwaCommentsEditor
+              value={field.value}
+              onChange={field.onChange}
+              activeSet={activeSet}
+              onActiveSetChange={setActiveSet}
+            />
+          )}
+        />
       </div>
 
       <div className="lg:sticky lg:top-4">
@@ -1040,19 +1069,20 @@ export function PwaForm({
               headerTitle={manifest.headerTitle}
               headerLogoUrl={manifest.headerLogoUrl}
               description={manifest.description}
-              rating={manifest.rating}
-              ratingCount={manifest.ratingCount}
+              rating={stats?.rating ?? manifest.rating}
+              ratingCount={stats?.count ?? manifest.ratingCount}
+              comments={setComments}
               downloadsLabel={manifest.downloadsLabel}
               sizeMb={manifest.sizeMb}
               screenshots={(manifest.screenshots ?? [])
                 .map((s) => s?.url)
                 .filter((u): u is string => !!u)}
               whatsNew={manifest.whatsNew}
-              ratingStars5={manifest.ratingStars5}
-              ratingStars4={manifest.ratingStars4}
-              ratingStars3={manifest.ratingStars3}
-              ratingStars2={manifest.ratingStars2}
-              ratingStars1={manifest.ratingStars1}
+              ratingStars5={stats?.stars[5] ?? manifest.ratingStars5}
+              ratingStars4={stats?.stars[4] ?? manifest.ratingStars4}
+              ratingStars3={stats?.stars[3] ?? manifest.ratingStars3}
+              ratingStars2={stats?.stars[2] ?? manifest.ratingStars2}
+              ratingStars1={stats?.stars[1] ?? manifest.ratingStars1}
               version={manifest.version}
               ageRating={manifest.ageRating}
               category={manifest.category}

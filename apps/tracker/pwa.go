@@ -144,7 +144,17 @@ func (h *Handler) pwaPage(w http.ResponseWriter, r *http.Request) {
 
 	h.recordClaimsEvent(r, event.PwaView, c)
 	outcome = outcomePwa
-	body, err := renderPwaPage(page, c.Test, pageLang(r))
+	lang := pageLang(r)
+	var comments []routingstore.PwaComment
+	if c.Test {
+		// Hand-entered comments are part of the constructor's test view
+		// only; a real visitor's page never carries them.
+		var err error
+		if comments, err = h.store.LoadPwaComments(r.Context(), c.OrganizationID, c.PwaID); err != nil {
+			h.logger.Error("loading pwa comments", "error", err, "pwa_id", c.PwaID)
+		}
+	}
+	body, err := renderPwaPage(page, c.Test, lang, commentsForLang(comments, lang))
 	if err != nil {
 		// A broken template must not strand the visitor on half a page.
 		h.logger.Error("rendering pwa page", "error", err, "pwa_id", c.PwaID)
@@ -365,6 +375,13 @@ var pwaPageSource string
 
 var pwaPageTemplate = template.Must(template.New("pwa").Funcs(template.FuncMap{
 	"stars": func() []int { return []int{1, 2, 3, 4, 5} },
+	// starText draws a comment's own 1..5 rating as filled/empty stars.
+	"starText": func(n int) string {
+		if n < 0 || n > 5 {
+			return ""
+		}
+		return strings.Repeat("★", n) + strings.Repeat("☆", 5-n)
+	},
 	// fill is how much of star i (1..5) a rating covers, as a percentage.
 	"fill": func(rating float64, i int) int {
 		v := rating - float64(i-1)
@@ -420,7 +437,47 @@ type pwaDetail struct {
 	Notes        []string
 }
 
-func renderPwaPage(p routingstore.PwaPage, test bool, lang string) ([]byte, error) {
+// commentsForLang picks the comment set shown to a page language: the
+// entries whose language matches, else the first set entered.
+func commentsForLang(all []routingstore.PwaComment, lang string) []routingstore.PwaComment {
+	var out []routingstore.PwaComment
+	for _, c := range all {
+		if c.Lang == lang {
+			out = append(out, c)
+		}
+	}
+	if len(out) > 0 || len(all) == 0 {
+		return out
+	}
+	for _, c := range all {
+		if c.Geo == all[0].Geo && c.Lang == all[0].Lang {
+			out = append(out, c)
+		}
+	}
+	return out
+}
+
+// applyCommentStats replaces the typed rating, count and star shares with
+// the ones the shown comments add up to.
+func applyCommentStats(p *routingstore.PwaPage, comments []routingstore.PwaComment) {
+	var counts [6]int
+	sum := 0
+	for _, c := range comments {
+		counts[c.Rating]++
+		sum += c.Rating
+	}
+	n := float64(len(comments))
+	round1 := func(v float64) float64 { return float64(int(v*10+0.5)) / 10 }
+	p.Rating = round1(float64(sum) / n)
+	p.RatingCount = len(comments)
+	pct := func(i int) float64 { return round1(float64(counts[i]) / n * 100) }
+	p.RatingStars5, p.RatingStars4, p.RatingStars3, p.RatingStars2, p.RatingStars1 = pct(5), pct(4), pct(3), pct(2), pct(1)
+}
+
+func renderPwaPage(p routingstore.PwaPage, test bool, lang string, comments []routingstore.PwaComment) ([]byte, error) {
+	if len(comments) > 0 {
+		applyCommentStats(&p, comments)
+	}
 	short := p.ShortName
 	if short == "" {
 		short = p.Name
@@ -481,7 +538,7 @@ func renderPwaPage(p routingstore.PwaPage, test bool, lang string) ([]byte, erro
 	jsCopy := map[string]string{"pleaseWait": cp["pleaseWait"]}
 	var b strings.Builder
 	err := pwaPageTemplate.Execute(&b, map[string]any{
-		"Lang": lang, "Copy": cp, "JSCopy": jsCopy, "Page": p, "Test": test, "Short": short,
+		"Lang": lang, "Copy": cp, "JSCopy": jsCopy, "Page": p, "Comments": comments, "Test": test, "Short": short,
 		"Theme": cssColor(p.ThemeColor, "#00A173"), "Bg": template.CSS(pageBg),
 		"Text": template.CSS(scheme[0]), "Muted": template.CSS(scheme[1]), "Subtle": template.CSS(scheme[2]),
 		"Border": template.CSS(scheme[3]), "Chip": template.CSS(scheme[4]),

@@ -42,7 +42,7 @@ export class ApiError extends Error {
 }
 
 type RequestOptions = {
-  method?: "GET" | "POST" | "PATCH" | "DELETE";
+  method?: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
   // A FormData body (Content Gallery file uploads) is sent as-is, with no
   // Content-Type header set — the browser fills in
   // "multipart/form-data; boundary=..." itself, which it can only do

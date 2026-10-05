@@ -655,3 +655,89 @@ func seedOrg(t *testing.T, ctx context.Context, pool *pgxpool.Pool) string {
 	})
 	return id
 }
+
+func TestCommentsReplaceRoundTripAndValidation(t *testing.T) {
+	pool := mustPool(t)
+	ctx := context.Background()
+	orgID := seedOrg(t, ctx, pool)
+	svc := pwa.NewService(pwa.NewRepository(pool))
+	p, err := svc.Create(ctx, orgID, validInput("Comments PWA"))
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+
+	empty, err := svc.ListComments(ctx, orgID, p.ID)
+	if err != nil || empty == nil || len(empty) != 0 {
+		t.Fatalf("ListComments on a fresh PWA = %#v, %v; want an empty slice", empty, err)
+	}
+
+	saved, err := svc.ReplaceComments(ctx, orgID, p.ID, []pwa.CommentInput{
+		{Geo: " ru ", Lang: "RU", Author: " Анна ", Rating: 5, Text: " Отлично "},
+		{Geo: "US", Lang: "en", Author: "Sam", Rating: 3, Text: "Fine"},
+	})
+	if err != nil {
+		t.Fatalf("ReplaceComments: %v", err)
+	}
+	if len(saved) != 2 || saved[0].Geo != "RU" || saved[0].Lang != "ru" || saved[0].Author != "Анна" || saved[0].Text != "Отлично" {
+		t.Fatalf("saved = %+v, want normalised values", saved)
+	}
+
+	// Replaced wholesale, order kept.
+	if _, err := svc.ReplaceComments(ctx, orgID, p.ID, []pwa.CommentInput{{Geo: "DE", Lang: "de", Author: "Max", Rating: 4, Text: "Gut"}}); err != nil {
+		t.Fatalf("second ReplaceComments: %v", err)
+	}
+	got, _ := svc.ListComments(ctx, orgID, p.ID)
+	if len(got) != 1 || got[0].Author != "Max" {
+		t.Fatalf("after replace = %+v, want only Max", got)
+	}
+
+	for name, bad := range map[string]pwa.CommentInput{
+		"geo":    {Geo: "RUS", Lang: "ru", Author: "A", Rating: 5, Text: "x"},
+		"lang":   {Geo: "RU", Lang: "r", Author: "A", Rating: 5, Text: "x"},
+		"author": {Geo: "RU", Lang: "ru", Author: " ", Rating: 5, Text: "x"},
+		"rating": {Geo: "RU", Lang: "ru", Author: "A", Rating: 6, Text: "x"},
+		"text":   {Geo: "RU", Lang: "ru", Author: "A", Rating: 5, Text: " "},
+	} {
+		if _, err := svc.ReplaceComments(ctx, orgID, p.ID, []pwa.CommentInput{bad}); err == nil {
+			t.Errorf("invalid %s accepted", name)
+		}
+	}
+	if kept, _ := svc.ListComments(ctx, orgID, p.ID); len(kept) != 1 {
+		t.Errorf("a rejected save changed the stored comments: %+v", kept)
+	}
+
+	// Deleting the PWA takes its comments with it.
+	if err := svc.Delete(ctx, orgID, p.ID); err != nil {
+		t.Fatalf("Delete: %v", err)
+	}
+	var n int
+	if err := pool.QueryRow(ctx, `SELECT count(*) FROM pwa_comments WHERE pwa_id = $1`, p.ID).Scan(&n); err != nil || n != 0 {
+		t.Errorf("orphaned comments after delete: %d, %v", n, err)
+	}
+}
+
+func TestCommentsTenantIsolation(t *testing.T) {
+	pool := mustPool(t)
+	ctx := context.Background()
+	orgA := seedOrg(t, ctx, pool)
+	orgB := seedOrg(t, ctx, pool)
+	svc := pwa.NewService(pwa.NewRepository(pool))
+	p, err := svc.Create(ctx, orgA, validInput("Org A PWA"))
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	if _, err := svc.ReplaceComments(ctx, orgA, p.ID, []pwa.CommentInput{{Geo: "RU", Lang: "ru", Author: "A", Rating: 5, Text: "mine"}}); err != nil {
+		t.Fatalf("ReplaceComments: %v", err)
+	}
+
+	if _, err := svc.ListComments(ctx, orgB, p.ID); err == nil {
+		t.Error("org B listed org A's comments")
+	}
+	if _, err := svc.ReplaceComments(ctx, orgB, p.ID, []pwa.CommentInput{{Geo: "RU", Lang: "ru", Author: "B", Rating: 1, Text: "theirs"}}); err == nil {
+		t.Error("org B replaced org A's comments")
+	}
+	got, _ := svc.ListComments(ctx, orgA, p.ID)
+	if len(got) != 1 || got[0].Text != "mine" {
+		t.Errorf("org A's comments changed: %+v", got)
+	}
+}

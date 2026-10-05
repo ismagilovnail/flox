@@ -8,10 +8,13 @@ import {
   createPwa,
   duplicatePwa,
   getPwa,
+  getPwaComments,
   listPwas,
   pausePwa,
+  replacePwaComments,
   updatePwa,
   type CreatePwaInput,
+  type PwaComment,
   type UpdatePwaInput,
 } from "@/lib/api/pwa";
 
@@ -83,5 +86,19 @@ export function useArchivePwa() {
       qc.invalidateQueries({ queryKey: pwasKey });
       qc.invalidateQueries({ queryKey: pwaKey(id) });
     },
+  });
+}
+
+const pwaCommentsKey = (id: string) => ["pwas", id, "comments"] as const;
+
+export function usePwaComments(id: string) {
+  return useQuery({ queryKey: pwaCommentsKey(id), queryFn: () => getPwaComments(id), enabled: !!id });
+}
+
+export function useReplacePwaComments() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, comments }: { id: string; comments: PwaComment[] }) => replacePwaComments(id, comments),
+    onSuccess: (_data, { id }) => qc.invalidateQueries({ queryKey: pwaCommentsKey(id) }),
   });
 }

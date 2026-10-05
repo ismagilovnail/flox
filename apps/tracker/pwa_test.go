@@ -243,7 +243,7 @@ func TestRenderPwaPage(t *testing.T) {
 		ContainsAds: true, InAppPurchases: true, UpdatedDate: "2026-08-21",
 	}
 	for _, lang := range []string{"ru", "en"} {
-		out, err := renderPwaPage(p, false, lang)
+		out, err := renderPwaPage(p, false, lang, nil)
 		if err != nil {
 			t.Fatalf("%s render: %v", lang, err)
 		}
@@ -255,7 +255,7 @@ func TestRenderPwaPage(t *testing.T) {
 		}
 	}
 	// No optional fields: no empty sections or sheet.
-	bareOut, err := renderPwaPage(routingstore.PwaPage{Name: "X"}, false, "en")
+	bareOut, err := renderPwaPage(routingstore.PwaPage{Name: "X"}, false, "en", nil)
 	if err != nil {
 		t.Fatalf("bare render: %v", err)
 	}
@@ -279,7 +279,7 @@ func TestRenderPwaPageAllFormFields(t *testing.T) {
 	}
 	for _, lang := range []string{"ru", "en"} {
 		for _, test := range []bool{false, true} {
-			out, err := renderPwaPage(p, test, lang)
+			out, err := renderPwaPage(p, test, lang, nil)
 			if err != nil {
 				t.Fatalf("%s test=%v render: %v", lang, test, err)
 			}
@@ -305,7 +305,7 @@ func TestRenderPwaPageThemeModes(t *testing.T) {
 	render := func(bg string, auto bool) string {
 		p := base
 		p.BackgroundColor, p.ThemeAuto = bg, auto
-		out, err := renderPwaPage(p, false, "en")
+		out, err := renderPwaPage(p, false, "en", nil)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -334,7 +334,7 @@ func TestRenderPwaPageThemeModes(t *testing.T) {
 // rendered only while the PWA's show_header toggle is on.
 func TestRenderPwaPageShowHeader(t *testing.T) {
 	for _, show := range []bool{true, false} {
-		out, err := renderPwaPage(routingstore.PwaPage{Name: "X", ShowHeader: show}, false, "en")
+		out, err := renderPwaPage(routingstore.PwaPage{Name: "X", ShowHeader: show}, false, "en", nil)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -352,7 +352,7 @@ func TestRenderPwaPageShowHeader(t *testing.T) {
 func TestRenderPwaPageHeaderBrand(t *testing.T) {
 	render := func(p routingstore.PwaPage) string {
 		p.Name, p.ShowHeader = "X", true
-		out, err := renderPwaPage(p, false, "en")
+		out, err := renderPwaPage(p, false, "en", nil)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -378,7 +378,7 @@ func TestRenderPwaPageHeaderBrand(t *testing.T) {
 // goes with it.
 func TestRenderPwaPageShowBottomNav(t *testing.T) {
 	for _, show := range []bool{true, false} {
-		out, err := renderPwaPage(routingstore.PwaPage{Name: "X", ShowBottomNav: show}, false, "en")
+		out, err := renderPwaPage(routingstore.PwaPage{Name: "X", ShowBottomNav: show}, false, "en", nil)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -389,5 +389,46 @@ func TestRenderPwaPageShowBottomNav(t *testing.T) {
 		if got := strings.Contains(b, `<main class="no-nav">`); got == show {
 			t.Fatalf("show_bottom_nav=%v: no-nav class present = %v", show, got)
 		}
+	}
+}
+
+func TestPwaPageComments(t *testing.T) {
+	comments := []routingstore.PwaComment{
+		{Geo: "RU", Lang: "ru", Author: "Анна", Rating: 5, Text: "Отлично <b>работает</b>"},
+		{Geo: "RU", Lang: "ru", Author: "Иван", Rating: 3, Text: "Нормально"},
+		{Geo: "US", Lang: "en", Author: "Sam", Rating: 1, Text: "Not for me"},
+	}
+	if got := commentsForLang(comments, "ru"); len(got) != 2 {
+		t.Fatalf("ru set = %d comments, want 2", len(got))
+	}
+	if got := commentsForLang(comments, "de"); len(got) != 2 || got[0].Author != "Анна" {
+		t.Fatalf("fallback set = %+v, want the first set (RU/ru)", got)
+	}
+	if got := commentsForLang(nil, "en"); len(got) != 0 {
+		t.Fatalf("no comments = %+v, want none", got)
+	}
+
+	out, err := renderPwaPage(routingstore.PwaPage{Name: "X", Rating: 4.9, RatingCount: 1000}, true, "ru", commentsForLang(comments, "ru"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	html := string(out)
+	for _, want := range []string{"Анна", "Иван", "★★★★★", "&lt;b&gt;работает&lt;/b&gt;"} {
+		if !strings.Contains(html, want) {
+			t.Errorf("page missing %q", want)
+		}
+	}
+	if strings.Contains(html, "<b>работает</b>") {
+		t.Error("comment text was not escaped")
+	}
+	if strings.Contains(html, "1000") {
+		t.Error("typed rating count survived; it should come from the comments (2)")
+	}
+	plain, err := renderPwaPage(routingstore.PwaPage{Name: "X"}, false, "en", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(plain), "review-item") {
+		t.Error("a page without comments rendered a comment list")
 	}
 }

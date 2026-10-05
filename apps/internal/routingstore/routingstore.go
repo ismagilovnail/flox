@@ -143,6 +143,36 @@ type PwaPage struct {
 	RatingStars1   float64
 }
 
+// PwaComment is one hand-entered comment of a PWA (pwa_comments).
+type PwaComment struct {
+	Geo, Lang, Author string
+	Rating            int
+	Text              string
+}
+
+// LoadPwaComments reads a PWA's comments in entry order, org-scoped. Only
+// the constructor's test links render them (see apps/tracker/pwa.go).
+func (s *Store) LoadPwaComments(ctx context.Context, orgID, pwaID string) ([]PwaComment, error) {
+	rows, err := s.db.Query(ctx, `
+		SELECT geo, lang, author, rating, body
+		FROM pwa_comments
+		WHERE organization_id = $1 AND pwa_id = $2
+		ORDER BY position`, orgID, pwaID)
+	if err != nil {
+		return nil, fmt.Errorf("loading pwa comments: %w", err)
+	}
+	defer rows.Close()
+	var out []PwaComment
+	for rows.Next() {
+		var c PwaComment
+		if err := rows.Scan(&c.Geo, &c.Lang, &c.Author, &c.Rating, &c.Text); err != nil {
+			return nil, fmt.Errorf("scanning pwa comment: %w", err)
+		}
+		out = append(out, c)
+	}
+	return out, rows.Err()
+}
+
 // FlowLanding is the small, per-flow part of a landing the tracker needs
 // to decide what to serve. The (possibly large) page source is only read
 // by LoadLandingPage, and only when an internal landing is actually being

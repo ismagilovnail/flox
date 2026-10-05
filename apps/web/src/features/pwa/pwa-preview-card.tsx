@@ -359,6 +359,7 @@ export function PwaPreviewCard({
   description,
   rating,
   ratingCount,
+  comments,
   downloadsLabel,
   sizeMb,
   accentColor,
@@ -392,6 +393,8 @@ export function PwaPreviewCard({
   description?: string;
   rating?: number;
   ratingCount?: number;
+  /** Hand-entered comments of the set being edited, listed under the stars. */
+  comments?: { author: string; rating: number; text: string }[];
   downloadsLabel?: string;
   sizeMb?: number;
   /** The PWA's own manifest `theme_color` (pwa-form.tsx's "Цветовая
@@ -866,6 +869,17 @@ export function PwaPreviewCard({
               ))}
             </div>
           </div>
+          {!!comments?.length && (
+            <ul className="mt-4 flex flex-col gap-4">
+              {comments.map((c, i) => (
+                <li key={i} className="flex flex-col gap-1">
+                  <span className="text-sm font-medium text-[var(--pv-text)]">{c.author}</span>
+                  <span className="text-xs text-[var(--pv-text-muted)]">{"★".repeat(c.rating)}{"☆".repeat(5 - c.rating)}</span>
+                  <p className="whitespace-pre-line break-words text-sm text-[var(--pv-text)]">{c.text}</p>
+                </li>
+              ))}
+            </ul>
+          )}
         </div>
 
         {!!whatsNew?.trim() && (

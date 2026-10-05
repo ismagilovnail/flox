@@ -37,6 +37,37 @@ func (h *Handler) Register(r chi.Router) {
 	r.With(h.requireWrite).Post("/{id}/pause", h.pause)
 	r.With(h.requireWrite).Post("/{id}/activate", h.activate)
 	r.With(h.requireWrite).Post("/{id}/test-link", h.testLink)
+	r.Get("/{id}/comments", h.listComments)
+	r.With(h.requireWrite).Put("/{id}/comments", h.replaceComments)
+}
+
+func (h *Handler) listComments(w http.ResponseWriter, r *http.Request) {
+	orgID, _ := tenant.OrgID(r.Context())
+	comments, err := h.svc.ListComments(r.Context(), orgID, chi.URLParam(r, "id"))
+	if err != nil {
+		apierror.Write(w, h.logger, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"comments": comments})
+}
+
+// replaceComments answers PUT /pwas/{id}/comments — the whole list is
+// swapped, which is what the constructor form sends on save.
+func (h *Handler) replaceComments(w http.ResponseWriter, r *http.Request) {
+	orgID, _ := tenant.OrgID(r.Context())
+	var req struct {
+		Comments []CommentInput `json:"comments"`
+	}
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 4<<20)).Decode(&req); err != nil {
+		apierror.Write(w, h.logger, apierror.Validation("invalid JSON body", nil))
+		return
+	}
+	comments, err := h.svc.ReplaceComments(r.Context(), orgID, chi.URLParam(r, "id"), req.Comments)
+	if err != nil {
+		apierror.Write(w, h.logger, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"comments": comments})
 }
 
 // testLink answers POST /pwas/{id}/test-link — {"url": ...}, a signed

@@ -137,3 +137,22 @@ export function activatePwa(id: string): Promise<Pwa> {
 export function archivePwa(id: string): Promise<Pwa> {
   return apiFetch(`/pwas/${id}`, { method: "PATCH", body: { status: "archived" } });
 }
+
+/** One hand-entered comment on the install page; geo is an upper-case
+ * country code and lang a lower-case language code (together: its set). */
+export type PwaComment = {
+  geo: string;
+  lang: string;
+  author: string;
+  rating: number;
+  text: string;
+};
+
+export function getPwaComments(id: string): Promise<{ comments: PwaComment[] }> {
+  return apiFetch(`/pwas/${id}/comments`);
+}
+
+/** Replaces the PWA's whole comment list. */
+export function replacePwaComments(id: string, comments: PwaComment[]): Promise<{ comments: PwaComment[] }> {
+  return apiFetch(`/pwas/${id}/comments`, { method: "PUT", body: { comments } });
+}

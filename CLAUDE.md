@@ -19,18 +19,17 @@ referenced below as §N).
 ## CURRENT STATE — UPDATE THIS EVERY PHASE
 
 ```
-CURRENT PHASE : PWA BOTTOM BAR TOGGLE
-STATUS        : done. "Нижняя панель меню" switch on /pwa/new|[id];
-                pwas.show_bottom_nav (00040, default true) → tracker drops the
-                bottom bar and its padding. VERIFIED: full-env go test green,
-                tsc + eslint clean, API rebuilt and migrated, toggle checked
-                live in the preview. Earlier this session: header title/logo
-                (00039), header toggle (00038), auto theme (00037); pwa.html
-                is the full card for all visitors (operator decision);
-                fake-reviews block and a Google Play look-alike declined.
-                Open: user says test page misses some form params — DB row
-                was empty; ask which fields after a real save.
-LAST COMMIT   : this phase's commit — feat(pwa): bottom bar toggle.
+CURRENT PHASE : PWA COMMENTS BLOCK
+STATUS        : done. Save/Cancel moved to the top card header. "Комментарии"
+                block (sets geo+lang, manual entry, CSV in/out, no generator)
+                saved with the form via GET|PUT /pwas/{id}/comments
+                (pwa_comments, 00041). Tracker shows comments on test links
+                only. VERIFIED: full-env go test green, tsc + eslint clean,
+                migrated, API rebuilt. Gaps: Duplicate skips comments; the
+                add/CSV/save flow not clicked through in the browser.
+                Install page still says "Оценки и отзывы проверены" (existing
+                copy) — flagged to the user.
+LAST COMMIT   : this phase's commit — feat(pwa): comments block.
 UNCOMMITTED   : none expected.
 NEXT          : postlanding stage serving (+ postlanding dimension) —
                 already requested by the user; confirm details first.

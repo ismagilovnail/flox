@@ -5,6 +5,24 @@ per-phase, matching `CLAUDE.md`'s phase protocol. The one exception is
 [Between phases], below: spec amendments and the code changes that follow from
 them land between phases and would otherwise be invisible here.
 
+## [Between phases] — PWA comments block; save/cancel moved to the top
+
+Constructor form: "Отмена"/"Сохранить" now sit in the top card header next to
+the status buttons. New "Комментарии" block on /pwa/new|[id]: sets by geo +
+language, hand-entered comments (author, 1-5 rating, text), select/delete,
+CSV import/export (client-side, `geo,lang,author,rating,text`). No generator
+by design. The list is part of the form state and saved with it:
+`pwa_comments` (migration 00041, ON DELETE CASCADE), `GET|PUT
+/pwas/{id}/comments` (replace-all in one tx, validated, org-scoped), CORS now
+allows PUT. The editor preview shows the active set and takes rating, count
+and star shares from it. The tracker renders comments only on the
+constructor's signed test links (`LoadPwaComments`, set picked by page
+language), never to real visitors. Tests: `TestCommentsReplaceRoundTripAndValidation`,
+`TestCommentsTenantIsolation`, `TestPwaPageComments`; full-env go test, tsc,
+eslint clean; migrated, block checked live on /pwa/new (set add). Known:
+Duplicate does not copy comments; add-comment/CSV/save flow not clicked
+through in the browser.
+
 ## [Between phases] — PWA bottom bar toggle
 
 Constructor switch "Нижняя панель меню" hides the bottom bar with the menu
