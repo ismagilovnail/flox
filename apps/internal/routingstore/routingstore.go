@@ -313,7 +313,7 @@ func (s *Store) loadFilterTrees(ctx context.Context, orgID string, setIDs []stri
 func (s *Store) loadFlows(ctx context.Context, orgID string, setIDs []string, landings map[string]FlowLanding) (map[string][]routing.Flow, time.Time, error) {
 	rows, err := s.db.Query(ctx, `
 		SELECT f.stream_set_id, f.id, f.name, f.active, f.weight,
-		       f.destination_kind, f.destination_url,
+		       f.destination_kind, f.destination_url, f.destination_offer_id,
 		       o.status, ol.url, f.updated_at,
 		       l.id, l.type, l.status, l.url
 		FROM flows f
@@ -342,13 +342,14 @@ func (s *Store) loadFlows(ctx context.Context, orgID string, setIDs []string, la
 			f           routing.Flow
 			kind        string
 			destURL     *string
+			offerID     *string
 			offerStatus *string
 			offerURL    *string
 			updated     time.Time
 
 			landingID, landingType, landingStatus, landingURL *string
 		)
-		if err := rows.Scan(&setID, &f.ID, &f.Name, &f.Active, &f.Weight, &kind, &destURL, &offerStatus, &offerURL, &updated,
+		if err := rows.Scan(&setID, &f.ID, &f.Name, &f.Active, &f.Weight, &kind, &destURL, &offerID, &offerStatus, &offerURL, &updated,
 			&landingID, &landingType, &landingStatus, &landingURL); err != nil {
 			return nil, time.Time{}, fmt.Errorf("scanning flow: %w", err)
 		}
@@ -369,6 +370,7 @@ func (s *Store) loadFlows(ctx context.Context, orgID string, setIDs []string, la
 				Kind:        routing.DestinationOffer,
 				URL:         deref(offerURL),
 				OfferActive: offerStatus != nil && *offerStatus == "active",
+				OfferID:     deref(offerID),
 			}
 		}
 

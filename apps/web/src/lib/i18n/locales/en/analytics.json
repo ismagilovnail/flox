@@ -105,6 +105,7 @@
     "CPA_REDEP": "CPA Redeposit"
   },
   "values": {
-    "noLanding": "No landing"
+    "noLanding": "No landing",
+    "noOffer": "No offer"
   }
 }

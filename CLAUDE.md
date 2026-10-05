@@ -19,52 +19,46 @@ referenced below as §N).
 ## CURRENT STATE — UPDATE THIS EVERY PHASE
 
 ```
-CURRENT PHASE : `landing` REPORT DIMENSION (follow-up to ZIP landings
-                phases A 420a2ce + B aa8d2b4).
-STATUS        : done. ClickHouse schema/008_landing_id.sql: landing_id
-                on click_events/tracking_events/conversion_events
-                (metadata-only ADD COLUMN, appended last = where
-                EventStore's positional Append writes it). event.Event
-                .LandingID set by apps/tracker on SOURCE_CLICK/LAND_VIEW
-                (landing actually shown; empty when skipped) and
-                LAND_CLICK (from the signed link); conversions inherit it
-                via attribution.Click.LandingID. chstore.DimLanding in
-                both whitelists → 13 backed dims (4 left: pwa/
-                postlanding/offer/network); report presets accept it.
-                Frontend: useDimensionValueLabel shows landing names (not
-                ULIDs) in table/search/CSV, bar chart, filter dropdown +
-                chip, "" → "Без лендинга"; landings list "Посмотреть
-                статистику". VERIFIED: go build/vet/gofmt/test ./... green
-                WITH ClickHouse configured this time — which surfaced two
-                stale tests from phase B, fixed: e2e full funnel expected
-                an enabled external landing to be skipped (now asserts
-                redirect to it + landing_id on the click), reportpresets
-                used "landing" as its unbacked example (now "offer");
-                click_log_test's raw insert got the column. web tsc/
-                eslint/vitest/next build clean. Live: real traffic through
-                the tracker (two flows, with/without landing), CH counts
-                matched exactly, report by Лендинг in the browser showed
-                names + "Без лендинга", bars/filter/chip/deep-link all
-                correct. Fixtures removed.
-LAST COMMIT   : this phase's commit — feat(analytics): landing report
-                dimension. Before it: aa8d2b4 feat(tracker): serve
-                landings, signed click-through; 420a2ce feat(landings):
-                ZIP bundles, template editor, injected runtime — full
-                detail in CHANGELOG.md.
+CURRENT PHASE : `offer` REPORT DIMENSION (user asked for pwa, postlanding
+                and offer; offer shipped, pwa/postlanding deliberately
+                not — see STATUS).
+STATUS        : done. routing.RouteResult.OfferID (engine's "Offer"
+                branch only — never redirect/fallback/inactive offer),
+                loaded from flows.destination_offer_id; ClickHouse
+                schema/009_offer_id.sql (after 008's landing_id); tracker
+                stamps SOURCE_CLICK/LAND_VIEW, signed landing link carries
+                it to LAND_CLICK, attribution → conversions. DimOffer →
+                14 backed dims. UI: offer names, "Без оффера"; offers list
+                "View statistics" now passes the id (passed the name —
+                would match nothing). pwa/postlanding NOT done: the
+                tracker never serves those stages (no PWA_VIEW/
+                POSTLANDING_VIEW anywhere), so any pwa_id/postlanding_id
+                would be fabricated — they need stage serving first.
+                VERIFIED: go build/vet/gofmt/test ./... green with full
+                env (PG+CH+Redis+MinIO, e2e included); routing offer
+                tests (fresh+sticky), tracker offer test (real network/
+                offer, paused offer not attributed), CH grouping, attribution
+                + conversion copy. Web tsc/eslint/vitest/build clean. Live:
+                landing→real offer flow + redirect flow via the real
+                tracker; CH rows and browser report by Оффер+Лендинг
+                matched exactly; offers-list deep link filtered right.
+                Fixtures removed (an unrelated "QA Browser Offer" in
+                another org predates this session — left alone).
+LAST COMMIT   : this phase's commit — feat(analytics): offer report
+                dimension. Before it: caff39d feat(analytics): landing
+                report dimension; aa8d2b4 feat(tracker): serve landings,
+                signed click-through; 420a2ce feat(landings): ZIP bundles
+                — full detail in CHANGELOG.md.
 UNCOMMITTED   : none after this phase's commit.
-NEXT          : confirm scope before starting. Observed, not fixed (pre-
-                existing, outside this phase): the analytics "Линия" tab
-                rendered no visible line for a single day of data. Same
-                pattern now available for pwa/postlanding/offer
-                dimensions (column + tracker/attribution wiring). Landing
-                follow-ups: asPwa + PWA/postlanding stages in the tracker;
-                push/PWA variants of engine_onClickButton. Other known
-                gaps unchanged (ROADMAP.md): cloudflare_registrar adapter;
-                SMS/email 2FA; 7 English-only areas; Content Gallery
-                video; Flows list view; Google Play URL parsing;
-                TRUSTED_PROXIES (blocked on infra); GO-2026-5932
-                (permanent, unreachable). Tip: run go test with
-                CLICKHOUSE_URL set — without it chstore and e2e skip.
+NEXT          : confirm scope before starting. Candidates: serve PWA and/
+                or postlanding stages in the tracker (prerequisite for
+                their report dimensions, emits PWA_*/POSTLANDING_* events);
+                `network` dimension (unblocked, same pattern as offer); a
+                Top Offers dashboard card (offer is now backed); analytics
+                "Линия" tab showing no line for single-day data (pre-
+                existing, observed). Other known gaps unchanged
+                (ROADMAP.md). Run go test with the full env line (memory:
+                flox-full-test-env) — without it CH/e2e tests skip.
 ```
 
 > At the end of every phase: update the four lines above, add a CHANGELOG entry,

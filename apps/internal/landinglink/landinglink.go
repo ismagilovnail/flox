@@ -46,6 +46,7 @@ type Claims struct {
 	FlowID         string `json:"f,omitempty"`
 	LandingID      string `json:"l"`
 	Destination    string `json:"d"`
+	OfferID        string `json:"of,omitempty"`
 	ConfigVersion  int64  `json:"v,omitempty"`
 	IssuedAt       int64  `json:"t"` // unix seconds
 

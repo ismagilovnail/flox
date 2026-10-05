@@ -24,6 +24,8 @@ import (
 	"github.com/ismagilovnail/flox/apps/internal/idgen"
 	"github.com/ismagilovnail/flox/apps/internal/landing"
 	"github.com/ismagilovnail/flox/apps/internal/landinglink"
+	"github.com/ismagilovnail/flox/apps/internal/network"
+	"github.com/ismagilovnail/flox/apps/internal/offer"
 	"github.com/ismagilovnail/flox/apps/internal/routing"
 	"github.com/ismagilovnail/flox/apps/internal/routingstore"
 	"github.com/ismagilovnail/flox/apps/internal/storage"
@@ -62,6 +64,14 @@ type landingFixture struct {
 // redirect destination of landingTestOffer.
 func seedLandingFixture(tb testing.TB, pool *pgxpool.Pool, lnd landing.Landing) landingFixture {
 	tb.Helper()
+	return seedFlowFixture(tb, pool, lnd, nil)
+}
+
+// seedFlowFixture is seedLandingFixture with the flow's destination built
+// by dest (given the org id) instead of the default redirect to
+// landingTestOffer — used to route to a real offer.
+func seedFlowFixture(tb testing.TB, pool *pgxpool.Pool, lnd landing.Landing, dest func(orgID string) streamset.Destination) landingFixture {
+	tb.Helper()
 	ctx := context.Background()
 
 	orgID := idgen.New()
@@ -96,13 +106,17 @@ func seedLandingFixture(tb testing.TB, pool *pgxpool.Pool, lnd landing.Landing) 
 	if _, err := campSvc.Activate(ctx, orgID, camp.ID); err != nil {
 		tb.Fatalf("activating campaign: %v", err)
 	}
+	destination := streamset.Destination{Kind: routing.DestinationRedirect, URL: landingTestOffer}
+	if dest != nil {
+		destination = dest(orgID)
+	}
 	if _, err := streamset.NewService(streamset.NewRepository(pool)).Create(ctx, orgID, camp.ID, streamset.CreateInput{
 		Name: "All Traffic", Priority: 1,
 		RootFilter: streamset.FilterNode{Kind: streamset.NodeGroup, Joiner: routing.JoinAND},
 		Flows: []streamset.FlowInput{{
 			Name: "With Landing", Active: true, Weight: 100,
 			Landing:     streamset.FlowLanding{Enabled: true, LandingID: lnd.ID},
-			Destination: streamset.Destination{Kind: routing.DestinationRedirect, URL: landingTestOffer},
+			Destination: destination,
 		}},
 	}); err != nil {
 		tb.Fatalf("seeding stream set: %v", err)
@@ -299,6 +313,66 @@ func TestLoadLandingPageIsOrgScoped(t *testing.T) {
 	}
 	if p, err := store.LoadLandingPage(context.Background(), fx.orgID, fx.landingID); err != nil || p.Content != landingTestPage {
 		t.Fatalf("own landing: %+v, %v", p, err)
+	}
+}
+
+// TestOfferIDOnEveryLandingEvent: a flow routing to a real offer through
+// an internal landing stamps that offer's id on SOURCE_CLICK, LAND_VIEW
+// and LAND_CLICK (the `offer` report dimension), and the click-through
+// lands on the offer's link. An inactive offer falls back — and is then
+// NOT attributed.
+func TestOfferIDOnEveryLandingEvent(t *testing.T) {
+	pool := testPool(t)
+	ctx := context.Background()
+	const offerLink = "https://offer.example/real?aff=1"
+	var offerID string
+	fx := seedFlowFixture(t, pool, internalLanding(landing.StatusActive), func(orgID string) streamset.Destination {
+		net, err := network.NewService(network.NewRepository(pool)).Create(ctx, orgID, network.CreateInput{Name: "Offer Net", PostbackURL: "https://net.example/pb"})
+		if err != nil {
+			t.Fatalf("seeding network: %v", err)
+		}
+		off, err := offer.NewService(offer.NewRepository(pool)).Create(ctx, orgID, offer.CreateInput{
+			NetworkID: net.Network.ID, Name: "Real Offer", Countries: []string{"US"}, Payout: 10, Currency: "USD",
+			Links: []offer.LinkInput{{Label: "main", URL: offerLink}},
+		})
+		if err != nil {
+			t.Fatalf("seeding offer: %v", err)
+		}
+		offerID = off.ID
+		return streamset.Destination{Kind: routing.DestinationOffer, NetworkID: net.Network.ID, OfferID: off.ID}
+	})
+
+	h, sink, closeEvents := newLandingHandler(t, pool, true)
+	rec := get(h, fx.host, "/t/go")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want the landing", rec.Code)
+	}
+	m := trackURLInPage.FindStringSubmatch(rec.Body.String())
+	if m == nil {
+		t.Fatal("no trackUrl in page")
+	}
+	assertRedirect(t, get(h, fx.host, strings.TrimPrefix(m[1], "http://"+fx.host)), offerLink)
+	closeEvents()
+	if len(sink.events) != 3 {
+		t.Fatalf("want SOURCE_CLICK, LAND_VIEW, LAND_CLICK, got %+v", sink.events)
+	}
+	for _, e := range sink.events {
+		if e.OfferID != offerID {
+			t.Fatalf("%s OfferID = %q, want %q", e.Type, e.OfferID, offerID)
+		}
+	}
+
+	// Paused offer: routing falls back past it, so no offer is attributed.
+	if _, err := pool.Exec(ctx, `UPDATE offers SET status = 'paused' WHERE id = $1`, offerID); err != nil {
+		t.Fatalf("pausing offer: %v", err)
+	}
+	h2, sink2, closeEvents2 := newLandingHandler(t, pool, true)
+	get(h2, fx.host, "/t/go")
+	closeEvents2()
+	for _, e := range sink2.events {
+		if e.OfferID != "" {
+			t.Fatalf("%s attributed to paused offer %q", e.Type, e.OfferID)
+		}
 	}
 }
 

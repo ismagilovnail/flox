@@ -76,7 +76,7 @@ export function OfferRowActions({ offer }: { offer: Offer }) {
         <Tooltip>
           <TooltipTrigger asChild>
             <IconButton aria-label={t("rowActions.viewStatistics")} size="icon-sm" asChild>
-              <Link href={viewStatisticsHref("offer", offer.name)}>
+              <Link href={viewStatisticsHref("offer", offer.id)}>
                 <BarChart3Icon className="size-3.5" />
               </Link>
             </IconButton>

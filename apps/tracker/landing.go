@@ -84,6 +84,7 @@ func (h *Handler) serveLanding(w http.ResponseWriter, r *http.Request, d landing
 		FlowID:         ev.FlowID,
 		LandingID:      d.landingID,
 		Destination:    ev.Destination,
+		OfferID:        ev.OfferID,
 		ConfigVersion:  ev.ConfigVersion,
 		IssuedAt:       time.Now().Unix(),
 
@@ -173,6 +174,7 @@ func landClickEvent(c landinglink.Claims, attrs routing.Attributes, ip net.IP, r
 		Destination:   c.Destination,
 		ConfigVersion: c.ConfigVersion,
 		LandingID:     c.LandingID,
+		OfferID:       c.OfferID,
 
 		Country:        attrs[routing.FieldCountry],
 		Region:         attrs[routing.FieldRegion],

@@ -145,6 +145,7 @@ type Destination struct {
 	Kind        DestinationKind
 	URL         string // redirect: the URL itself. offer: the offer's resolved link URL.
 	OfferActive bool   // only meaningful when Kind == DestinationOffer
+	OfferID     string // only meaningful when Kind == DestinationOffer
 }
 
 type StreamSetStatus string
@@ -219,10 +220,15 @@ type RequestContext struct {
 // and this package's own conformance tests need for deeper "why" answers
 // (§72) without growing this struct beyond what §38 specifies.
 type RouteResult struct {
-	CampaignID    string
-	StreamSetID   string
-	FlowID        string
-	Destination   string
+	CampaignID  string
+	StreamSetID string
+	FlowID      string
+	Destination string
+	// OfferID is set only when Destination IS the flow's offer — never for
+	// a redirect flow, and never when an inactive offer fell through to a
+	// fallback URL. It's what the `offer` report dimension attributes the
+	// click to, so it must name the offer the visitor was actually sent to.
+	OfferID       string
 	Reason        string
 	StickyApplied bool
 	ConfigVersion int64

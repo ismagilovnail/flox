@@ -5,6 +5,34 @@ per-phase, matching `CLAUDE.md`'s phase protocol. The one exception is
 [Between phases], below: spec amendments and the code changes that follow from
 them land between phases and would otherwise be invisible here.
 
+## [Between phases] — `offer` report dimension (pwa/postlanding deliberately not)
+
+Asked for pwa, postlanding and offer dimensions; shipped offer. pwa and
+postlanding have no honest data source yet: `apps/tracker` never serves
+the PWA or postlanding funnel stages (no PWA_VIEW/POSTLANDING_VIEW is
+emitted anywhere), so attributing a click to a flow's configured-but-never-
+shown PWA would be fabricated data (CLAUDE.md NEVER list). They need those
+stages served first.
+
+- Routing: `routing.Destination.OfferID` (loaded from
+  `flows.destination_offer_id`) and `RouteResult.OfferID`, set only on the
+  engine's "Offer" branch — never for redirects or an inactive offer's
+  fallback. Fresh + sticky covered (`routing/offer_id_test.go`).
+- ClickHouse `schema/009_offer_id.sql`: `offer_id` on click/tracking/
+  conversion events, after 008's `landing_id`.
+- Tracker stamps it on SOURCE_CLICK/LAND_VIEW and carries it in the signed
+  landing link to LAND_CLICK; attribution copies it onto conversions.
+- `chstore.DimOffer` (14 backed dimensions; pwa/postlanding/network left).
+- UI: offer names instead of ids, "" as "No offer"; the offers list's
+  "View statistics" now passes the offer **id** (it passed the name, which
+  would have matched nothing).
+- Tests that used `offer` as their "unbacked dimension" example moved to
+  `pwa` (analytics, chstore, reportpresets).
+- Verified live: a flow landing→real offer and a redirect flow, real
+  tracker traffic; ClickHouse rows and the browser report by Оффер+Лендинг
+  matched exactly (9 / 12 "Без оффера · Без лендинга"); deep link from the
+  offers list filtered correctly. Fixtures removed.
+
 ## [Between phases] — `landing` report dimension
 
 The first of the report builder's five unbacked dimensions gets a real

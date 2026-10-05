@@ -15,16 +15,16 @@ import (
 // anything not in reportClickColumns/reportConversionColumns below before it gets
 // near SQL.
 //
-// 13 dimensions total, matching apps/web/src/features/analytics/registry.ts's
-// DIMENSIONS. Of the 16 the UI originally named at Phase 35, 4 — pwa,
-// postlanding, offer, network — still have no backing column anywhere in
-// the event pipeline (not in apps/internal/event.Event, not in this
-// schema): adding them means threading new IDs through apps/tracker's
-// event emission and a schema migration first, not silently faking them
-// here. DimStreamSet was a whitelist omission (its column always
-// existed); DimLanding is the first of the original five to get a real
-// column — schema/008_landing_id.sql, populated since apps/tracker began
-// serving landings, the pattern the remaining four would follow.
+// 14 dimensions total, matching apps/web/src/features/analytics/registry.ts's
+// DIMENSIONS. Of the 16 the UI originally named at Phase 35, 3 — pwa,
+// postlanding, network — still have no backing column anywhere in the
+// event pipeline: pwa/postlanding because apps/tracker doesn't serve
+// those funnel stages yet (recording a PWA "shown" that never was would
+// be fabricated attribution), network because nothing carries it. Adding
+// one means threading its id through the tracker and a schema migration
+// first, never faking it here. DimStreamSet was a whitelist omission (its
+// column always existed); DimLanding (schema/008) and DimOffer
+// (schema/009) got real columns, the pattern the rest would follow.
 type ReportDimension string
 
 const (
@@ -59,6 +59,11 @@ const (
 	// served at all. Clicks, landing views/clicks and (via attribution)
 	// conversions all carry it, so every metric works by landing.
 	DimLanding ReportDimension = "landing"
+	// DimOffer groups by the offer a click was actually routed to
+	// (routing.RouteResult.OfferID). Empty is a real bucket: redirect
+	// flows, fallbacks (including an inactive offer that fell through),
+	// blocked clicks, and rows from before offers were attributed.
+	DimOffer ReportDimension = "offer"
 )
 
 // reportClickColumns is the whitelist for click_events and tracking_events,
@@ -79,6 +84,7 @@ var reportClickColumns = map[ReportDimension]string{
 	DimFlow:      "flow_id",
 	DimStreamSet: "stream_set_id",
 	DimLanding:   "landing_id",
+	DimOffer:     "offer_id",
 }
 
 // reportConversionColumns is the narrower whitelist for conversion_events
@@ -101,9 +107,10 @@ var reportConversionColumns = map[ReportDimension]string{
 	DimFlow:      "flow_id",
 	DimStreamSet: "stream_set_id",
 	DimLanding:   "landing_id",
+	DimOffer:     "offer_id",
 }
 
-// ValidDimension reports whether d is one of the 13 supported report
+// ValidDimension reports whether d is one of the 14 supported report
 // dimensions — the same check both click- and conversion-side queries can
 // always answer, since reportClickColumns is the wider of the two whitelists.
 func ValidDimension(d ReportDimension) bool {

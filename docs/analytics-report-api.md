@@ -51,25 +51,40 @@ an operator who wants it can still type `""` into the existing free-text
 value field.
 
 Gated by the same `chstore.ValidDimension` whitelist every other
-endpoint here already uses — a request for one of the 4 still-unbacked
-dimensions (`pwa`/`postlanding`/`offer`/`network`) 400s, same
+endpoint here already uses — a request for one of the 3 still-unbacked
+dimensions (`pwa`/`postlanding`/`network`) 400s, same
 as `/analytics/report` already does for one. The frontend's
 `useDimensionValues` hook (`retry: false` — a 400 here is deterministic,
 not transient) treats that rejection as expected, not an error to
 surface: `AddFilterPopover` (`report-controls.tsx`) falls back to
-`lib/mock/analytics.ts`'s pool for those 4, and also as the query's own
-brief loading-state placeholder for the 13 real ones. A *successful*
+`lib/mock/analytics.ts`'s pool for those 3, and also as the query's own
+brief loading-state placeholder for the 14 real ones. A *successful*
 response wins outright the moment it lands, even when empty (a brand-new
 organization with no real events yet) — CLAUDE.md #6's "no fabricated
 data" bar applies here the same way it does to cost: a genuine "nothing
 yet" must render as nothing, never as a plausible-looking placeholder
 value that isn't real.
 
-## Dimension whitelist: 13 backed (12 of the original 16, plus stream_set)
+## Dimension whitelist: 14 backed (13 of the original 16, plus stream_set)
 
-`chstore.ReportDimension` (13): campaign, source (proxy for campaign — see
+`chstore.ReportDimension` (14): campaign, source (proxy for campaign — see
 its own doc comment), country, region, city, device, platform, os,
-browser, language, flow, stream_set, landing.
+browser, language, flow, stream_set, landing, offer.
+
+`offer` (`DimOffer`, backed by `offer_id`, `chstore/schema/009_offer_id.sql`
+— same three tables, appended after `landing_id`) is the offer a click was
+**actually routed to**: `routing.RouteResult.OfferID`, set by the engine
+only on its "Offer" destination branch — empty for a redirect flow and for
+an inactive offer that fell through to a fallback URL, so a paused offer
+never collects clicks it didn't receive (`internal/routing/offer_id_test.go`
+covers fresh and sticky routing). `routingstore` loads each flow's
+`destination_offer_id` into `routing.Destination.OfferID`. The tracker
+stamps it on SOURCE_CLICK and LAND_VIEW and carries it through the signed
+landing click link onto LAND_CLICK; conversions inherit it through
+attribution. Empty is a real bucket ("No offer" in the UI), names resolve
+like landings' do, and the offers list's "View statistics" now passes the
+offer's **id** — it used to pass its name, which matched nothing once the
+dimension became real.
 
 `landing` (`DimLanding`, backed by `landing_id`) is the first of the
 original five unbacked dimensions to get a real column:
@@ -104,21 +119,24 @@ a click — grouping by `stream_set` returns that as its own `""` row, not
 missing data. The stream sets list's "View statistics" action
 (`features/stream-sets/stream-set-row.tsx`) deep-links into this
 dimension with the set's real id, not its display name — unlike the
-pre-existing network/offer/source "View statistics" links (below), this
+pre-existing network/source "View statistics" links (below), this
 one filters on the same value the column actually stores, so it works.
 The filter chip it produces shows that raw id, since `FilterCondition`
 (`features/analytics/aggregate.ts`) has no separate display-label field;
 adding one is out of scope for a query-layer/UI change.
 
-`features/analytics/registry.ts`'s `DimensionKey` still lists 4 more from
-the original 16 — pwa, postlanding, offer, network — with no
-backing column anywhere in the event pipeline (not on `event.Event`, not
-in this schema). Adding them means threading new IDs through
-`apps/tracker`'s event emission and a schema migration first: a separate,
-later phase, not silently faked here. The report builder's dimension
+`features/analytics/registry.ts`'s `DimensionKey` still lists 3 more from
+the original 16 — pwa, postlanding, network — with no backing column
+anywhere in the event pipeline. pwa/postlanding are blocked on more than a
+column: `apps/tracker` doesn't serve the PWA or postlanding funnel stages
+at all yet (no PWA_VIEW/POSTLANDING_VIEW is ever emitted), so there is
+nothing honest to attribute — stamping a flow's configured-but-never-shown
+PWA onto its clicks would be fabricated data. They follow once those
+stages are served. network has no such blocker (an offer's network is
+known at routing time), it just hasn't been asked for. The report builder's dimension
 picker offers all 17 named keys now (unchanged in kind — `registry.ts` is
 shared with the still-mocked Custom Metrics feature, which needs the full
-list); requesting one of the 5 unbacked ones 400s with
+list); requesting one of the 3 unbacked ones 400s with
 `apierror.Validation`.
 
 Of the 11 backed dimensions, only 8 have a column on `conversion_events`
@@ -161,9 +179,10 @@ not a sentinel value.
   `lib/mock/dashboard.ts` is deleted outright (zero remaining importers);
   `PerformanceRow`/`PeriodMetrics` moved to `features/dashboard/metrics.ts`
   alongside the new `metricsFromApi`/`performanceRowFromApi` mapping
-  functions. **No Top Offers card** — `offer` isn't a backed dimension
-  (above), and `DashboardResult` only ever returns three breakdowns; the
-  frontend drops the card rather than rendering it against fake data.
+  functions. **No Top Offers card** — `offer` wasn't a backed dimension
+  then (it is now, see above; adding the card is a separate, not-yet-made
+  product call), and `DashboardResult` only ever returns three breakdowns;
+  the frontend drops the card rather than rendering it against fake data.
 - Both views' default date range moved off the fixed mock "now"
   (`2026-08-11`) onto the real `new Date()` — real ClickHouse data has real
   timestamps. The Report Presets feature (`report-preset-bar.tsx`, itself
@@ -177,7 +196,7 @@ not a sentinel value.
   popover's value dropdown — no "distinct values seen for dimension X"
   endpoint exists~~ — closed, see `dimension-values` above.
   `lib/mock/analytics.ts` still backs the loading-state placeholder and
-  the 4 still-unbacked dimensions. Filtering by an arbitrary value still
+  the 3 still-unbacked dimensions. Filtering by an arbitrary value still
   round-trips to the real API correctly regardless of its source; a
   value that never occurs in real event data just yields a legitimate
   empty report, not an error.

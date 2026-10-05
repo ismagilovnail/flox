@@ -104,6 +104,7 @@ session.
 | Report builder's filter-value dropdown suggests real distinct values — new `POST /analytics/dimension-values` endpoint (`chstore.DistinctValues`); the mock pool now only backs the loading placeholder and the 5 still-unbacked dimensions | done |
 | DataTable gets real column resizing (opt-in per-column, zero visual change until a user drags a handle) and CSV export (all filtered/sorted rows, not just the current page) — `components/ui/data-table.tsx`, repo-wide across all 22 call sites | done |
 | Landings as uploaded ZIP bundles (reference: adset.pro custom landings) — upload/re-upload keeping the ID, logo/title, template editor with live preview, injected `trackUrl`/`engine_onClickButton` runtime (`docs/landings.md`) | done (phase A) |
+| `offer` report dimension: `RouteResult.OfferID` (only when the click really went to the offer), `offer_id` on events (`chstore/schema/009`), through landing links and attribution; offers list "View statistics" fixed to pass the id | done |
 | `landing` report dimension: `landing_id` column on click/tracking/conversion events, set by the tracker and carried through attribution; names instead of ids in the report UI (`docs/analytics-report-api.md`) | done |
 | Tracker serves landings: internal pages rendered on `/t/`, signed `/lc/` click-through, first real `LAND_VIEW`/`LAND_CLICK` events; external landings redirect to their URL (`docs/landings.md`, "Serving visitors") | done (phase B) |
 
@@ -119,7 +120,8 @@ scoped phase; none blocks anything that ships today.
 | Seven feature areas are English-only in an EN/RU app | `content-gallery`, `custom-metrics`, `domains`, `referral`, `settings`, `tags`, `team` |
 | Video upload/transcoding in Content Gallery (images only today) | needs a real ffmpeg/worker pipeline |
 | Flows have no top-level list view, so no "View statistics" drill-in row | flows live nested inside a campaign's edit page |
-| 4 of the report builder's named dimensions still unbacked (`pwa`/`postlanding`/`offer`/`network`) | need IDs threaded through `apps/tracker`'s event emission + a ClickHouse column — `landing` (closed: `chstore/schema/008`, tracker + attribution wiring) is the exact pattern to follow |
+| `pwa`/`postlanding` report dimensions | blocked on the tracker actually serving the PWA and postlanding stages (no PWA_VIEW/POSTLANDING_VIEW is emitted) — without that there's nothing honest to attribute; then follow `landing`/`offer`'s pattern (`chstore/schema/008`, `009`) |
+| `network` report dimension | unblocked (an offer's network is known at routing time) — not yet asked for; same pattern as `offer` |
 | Google Play URL parsing for the PWA listing preview | would need a scraper behind `apps/internal/urlsafety` |
 | `TRUSTED_PROXIES` still on its default (no real reverse proxy/LB/CDN deployed yet) | set it once real infrastructure exists in front of `apps/api`/`apps/tracker` |
 | `golang.org/x/crypto/openpgp` (`GO-2026-5932`) has no upstream fix | permanent, accepted, unreachable — this codebase only imports `bcrypt`; see `docs/security.md` Known limitations |

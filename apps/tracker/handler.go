@@ -237,6 +237,7 @@ func buildEvent(
 		StreamSetID:   result.StreamSetID,
 		FlowID:        result.FlowID,
 		Destination:   result.Destination,
+		OfferID:       result.OfferID,
 		StickyApplied: result.StickyApplied,
 		ConfigVersion: result.ConfigVersion,
 

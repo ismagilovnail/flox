@@ -96,7 +96,7 @@ func (e *Engine) trySticky(req RequestContext) (*RouteResult, string, string) {
 		return nil, "sticky flow is now inactive and stickyFlowSkipInactive is false; re-evaluated fresh", ""
 	}
 
-	destURL, destLabel := resolveDestination(flow, set.FallbackURL, cfg.FallbackURL)
+	destURL, destLabel, offerID := resolveDestination(flow, set.FallbackURL, cfg.FallbackURL)
 	reason := fmt.Sprintf("sticky assignment honored (stream set %q, flow %q)", set.Name, flow.Name)
 	if !eligible {
 		reason = fmt.Sprintf("sticky assignment honored despite inactive flow (stickyFlowSkipInactive=true; stream set %q, flow %q)", set.Name, flow.Name)
@@ -110,6 +110,7 @@ func (e *Engine) trySticky(req RequestContext) (*RouteResult, string, string) {
 		StreamSetID:   set.ID,
 		FlowID:        flow.ID,
 		Destination:   destURL,
+		OfferID:       offerID,
 		Reason:        reason,
 		StickyApplied: true,
 		ConfigVersion: cfg.ConfigVersion,
@@ -171,7 +172,7 @@ func (e *Engine) freshEvaluate(req RequestContext, stickyNote string) (RouteResu
 	if matched != nil {
 		streamSetFallback = matched.FallbackURL
 	}
-	destURL, destLabel := resolveDestination(selectedFlow, streamSetFallback, cfg.FallbackURL)
+	destURL, destLabel, offerID := resolveDestination(selectedFlow, streamSetFallback, cfg.FallbackURL)
 
 	reason := buildReason(matched, selectedFlow, destLabel)
 
@@ -188,6 +189,7 @@ func (e *Engine) freshEvaluate(req RequestContext, stickyNote string) (RouteResu
 		StreamSetID:   streamSetID,
 		FlowID:        flowID,
 		Destination:   destURL,
+		OfferID:       offerID,
 		Reason:        reason,
 		StickyApplied: false,
 		ConfigVersion: cfg.ConfigVersion,
@@ -216,21 +218,23 @@ func buildReason(matched *StreamSet, flow *Flow, destLabel string) string {
 // resolveDestination mirrors lib/routing-simulate.ts's resolveDestination,
 // extended with the OfferActive check §58 requires (see types.go's
 // Destination doc comment).
-func resolveDestination(flow *Flow, streamSetFallback, campaignFallback string) (url, label string) {
+//
+// offerID is non-empty only on the "Offer" branch — see RouteResult.OfferID.
+func resolveDestination(flow *Flow, streamSetFallback, campaignFallback string) (url, label, offerID string) {
 	if flow != nil {
 		d := flow.Destination
 		switch {
 		case d.Kind == DestinationRedirect && d.URL != "":
-			return d.URL, "Redirect"
+			return d.URL, "Redirect", ""
 		case d.Kind == DestinationOffer && d.URL != "" && d.OfferActive:
-			return d.URL, "Offer"
+			return d.URL, "Offer", d.OfferID
 		}
 	}
 	if streamSetFallback != "" {
-		return streamSetFallback, "Stream Set fallback"
+		return streamSetFallback, "Stream Set fallback", ""
 	}
 	if campaignFallback != "" {
-		return campaignFallback, "Campaign fallback"
+		return campaignFallback, "Campaign fallback", ""
 	}
-	return "", "No destination configured"
+	return "", "No destination configured", ""
 }

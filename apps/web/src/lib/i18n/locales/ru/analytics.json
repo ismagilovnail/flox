@@ -105,6 +105,7 @@
     "CPA_REDEP": "CPA Редеп"
   },
   "values": {
-    "noLanding": "Без лендинга"
+    "noLanding": "Без лендинга",
+    "noOffer": "Без оффера"
   }
 }

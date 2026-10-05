@@ -63,8 +63,8 @@ function AddFilterPopover({
   const [manualValue, setManualValue] = React.useState<string | undefined>(undefined);
   const valueLabel = useDimensionValueLabel();
 
-  // Real values (13 backed dimensions) once loaded; the mock pool covers
-  // both the loading flash and the 4 still-unbacked dimensions, whose
+  // Real values (14 backed dimensions) once loaded; the mock pool covers
+  // both the loading flash and the 3 still-unbacked dimensions, whose
   // query always rejects (retry: false) — see useDimensionValues' own
   // doc comment. A successful response wins even when empty (a
   // brand-new org with zero real events yet): trusting it completely

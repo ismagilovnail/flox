@@ -438,7 +438,7 @@ func TestDistinctValuesLimitsResults(t *testing.T) {
 func TestDistinctValuesRejectsUnsupportedDimension(t *testing.T) {
 	conn := mustConn(t)
 	store := chstore.NewEventStore(conn)
-	_, err := store.DistinctValues(context.Background(), idgen.New(), chstore.ReportDimension("offer"), time.Now().Add(-24*time.Hour), time.Now(), 10)
+	_, err := store.DistinctValues(context.Background(), idgen.New(), chstore.ReportDimension("pwa"), time.Now().Add(-24*time.Hour), time.Now(), 10)
 	if err == nil {
 		t.Fatal(`DistinctValues with dimension "offer" succeeded, want an error — offer has no backing column`)
 	}
@@ -517,5 +517,46 @@ func TestReportByLanding(t *testing.T) {
 	}
 	if !seen[lndA] || !seen[lndB] {
 		t.Fatalf("DistinctValues(landing) = %v, want both landing ids", values)
+	}
+}
+
+// TestReportByOffer: offer_id (schema/009) groups clicks and conversions,
+// with "" as its own bucket (redirect flows / fallbacks).
+func TestReportByOffer(t *testing.T) {
+	conn := mustConn(t)
+	store := chstore.NewEventStore(conn)
+	ctx := context.Background()
+	orgID, campaignID := idgen.New(), idgen.New()
+	day := time.Date(2026, 10, 1, 0, 0, 0, 0, time.UTC)
+	clickA, clickB := idgen.New(), idgen.New()
+
+	if err := store.InsertBatch(ctx, []event.Event{
+		{Type: event.SourceClick, EventAt: day.Add(time.Hour), OrganizationID: orgID, CampaignID: campaignID, ClickID: clickA, OfferID: "offer-a", LandingID: "landing-a"},
+		{Type: event.SourceClick, EventAt: day.Add(2 * time.Hour), OrganizationID: orgID, CampaignID: campaignID, ClickID: clickB},
+		{Type: event.LandClick, EventAt: day.Add(time.Hour), OrganizationID: orgID, CampaignID: campaignID, ClickID: clickA, OfferID: "offer-a", LandingID: "landing-a"},
+		{Type: event.CpaAccept, EventAt: day.Add(3 * time.Hour), OrganizationID: orgID, CampaignID: campaignID, ClickID: clickA, OfferID: "offer-a", USDValue: 30, HasUSDValue: true},
+	}); err != nil {
+		t.Fatalf("InsertBatch with offer ids: %v", err)
+	}
+	q := chstore.ReportQuery{OrganizationID: orgID, Dims: []chstore.ReportDimension{chstore.DimOffer, chstore.DimLanding}, From: day, To: day.Add(24 * time.Hour)}
+
+	clicks, err := store.ReportClicks(ctx, q)
+	if err != nil {
+		t.Fatalf("ReportClicks by offer+landing: %v", err)
+	}
+	got := map[string]uint64{}
+	for _, a := range clicks {
+		got[a.Key.DimValues[chstore.DimOffer]+"|"+a.Key.DimValues[chstore.DimLanding]] = a.Clicks
+	}
+	if len(got) != 2 || got["offer-a|landing-a"] != 1 || got["|"] != 1 {
+		t.Fatalf("clicks by offer|landing = %v, want offer-a|landing-a:1 and |:1", got)
+	}
+
+	convs, err := store.ReportConversions(ctx, chstore.ReportQuery{OrganizationID: orgID, Dims: []chstore.ReportDimension{chstore.DimOffer}, From: day, To: day.Add(24 * time.Hour)})
+	if err != nil {
+		t.Fatalf("ReportConversions by offer: %v", err)
+	}
+	if len(convs) != 1 || convs[0].Key.DimValues[chstore.DimOffer] != "offer-a" || convs[0].RevenueUSD != 30 {
+		t.Fatalf("conversions by offer = %+v, want offer-a with $30", convs)
 	}
 }

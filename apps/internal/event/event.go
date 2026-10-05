@@ -140,6 +140,11 @@ type Event struct {
 	// inherited by conversions via attribution. Empty when no landing
 	// stage applied.
 	LandingID string `json:"landingId,omitempty"`
+	// OfferID is the offer the click was routed to (routing.RouteResult
+	// .OfferID — empty unless the flow's offer was the destination
+	// actually used), carried onto LAND_* events and, via attribution,
+	// conversions.
+	OfferID string `json:"offerId,omitempty"`
 
 	// Classified request attributes.
 	Country        string `json:"country,omitempty"`

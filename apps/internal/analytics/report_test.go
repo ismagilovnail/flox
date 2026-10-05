@@ -282,12 +282,12 @@ func TestReportRejectsTooManyDimensions(t *testing.T) {
 func TestReportRejectsUnknownDimension(t *testing.T) {
 	svc := analytics.NewService(&reportFakeRepo{}, nil)
 	_, err := svc.Report(context.Background(), "org-1", analytics.ReportInput{
-		Dims: []chstore.ReportDimension{"offer"}, // one of the 5 deferred dimensions
+		Dims: []chstore.ReportDimension{"pwa"}, // one of the 3 deferred dimensions
 		From: time.Now().AddDate(0, 0, -7),
 		To:   time.Now(),
 	})
 	if err == nil {
-		t.Fatal("Report with dimension \"offer\" succeeded, want a validation error (deferred, no backing column)")
+		t.Fatal("Report with dimension \"pwa\" succeeded, want a validation error (deferred, no backing column)")
 	}
 }
 
@@ -374,9 +374,10 @@ func TestFunnelZeroFillsEveryStage(t *testing.T) {
 }
 
 func TestDashboardOmitsTopOffers(t *testing.T) {
-	// DashboardResult has no TopOffers field at all — "offer" is one of
-	// the 5 deferred dimensions (no backing column), and the type itself
-	// enforces that apps/web can't accidentally render a card for it.
+	// DashboardResult has no TopOffers field at all. "offer" became a
+	// backed dimension (chstore schema/009), but the dashboard card is a
+	// separate product decision nobody has made yet — the type keeps
+	// apps/web from rendering one by accident until then.
 	repo := &reportFakeRepo{
 		clicks: []chstore.ClickAgg{{Key: chstore.ReportKey{}, Clicks: 10, UniqueClicks: 9}},
 	}
@@ -448,17 +449,17 @@ func TestDimensionValuesPassesThroughAndCaps(t *testing.T) {
 
 // TestDimensionValuesRejectsUnbackedDimension mirrors
 // TestReportRejectsUnknownDimension — the frontend's own fallback to its
-// mock pool for the 4 still-unbacked dimensions depends on this coming
+// mock pool for the 3 still-unbacked dimensions depends on this coming
 // back as a real validation error, not a silent empty list or a panic.
 func TestDimensionValuesRejectsUnbackedDimension(t *testing.T) {
 	svc := analytics.NewService(&reportFakeRepo{}, nil)
 	_, err := svc.DimensionValues(context.Background(), "org-1", analytics.DimensionValuesInput{
-		Dim:  "offer", // one of the 5 deferred dimensions
+		Dim:  "pwa", // one of the 3 deferred dimensions
 		From: time.Now().AddDate(0, 0, -7),
 		To:   time.Now(),
 	})
 	if err == nil {
-		t.Fatal("DimensionValues with dimension \"offer\" succeeded, want a validation error (deferred, no backing column)")
+		t.Fatal("DimensionValues with dimension \"pwa\" succeeded, want a validation error (deferred, no backing column)")
 	}
 }
 

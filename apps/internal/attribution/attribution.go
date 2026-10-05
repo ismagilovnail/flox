@@ -74,6 +74,7 @@ type Click struct {
 	StreamSetID     string
 	FlowID          string
 	LandingID       string
+	OfferID         string
 	ExternalClickID string
 	OccurredAt      time.Time
 

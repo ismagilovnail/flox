@@ -4,6 +4,7 @@ import * as React from "react";
 import { useTranslation } from "react-i18next";
 
 import { useLandings } from "@/hooks/use-landings";
+import { useOffers } from "@/hooks/use-offers";
 import type { DimensionKey } from "@/features/analytics/registry";
 
 /**
@@ -12,25 +13,32 @@ import type { DimensionKey } from "@/features/analytics/registry";
  * entities can share one. This maps ids to current names for display
  * only; filters, exports of the raw query and the URL keep the id.
  *
- * Only `landing` is resolved so far: the `landing` dimension's values are
- * landing ULIDs that read as noise on their own, and its empty value is a
- * real bucket ("no landing shown") worth naming. Every other dimension
- * returns its value unchanged — the same rendering as before this hook.
- * A landing id with no current landing (deleted since) falls back to the
- * raw id rather than vanishing.
+ * Resolved: `landing` and `offer` — both group by ULIDs that read as noise
+ * on their own, and both have an empty value that is a real bucket worth
+ * naming ("no landing shown", "not routed to an offer"). Every other
+ * dimension returns its value unchanged — the same rendering as before
+ * this hook. An id with no current entity (deleted since) falls back to
+ * the raw id rather than vanishing.
  */
 export function useDimensionValueLabel(): (dimension: DimensionKey, value: string) => string {
   const { t } = useTranslation("analytics");
   const landings = useLandings().data?.landings;
+  const offers = useOffers().data?.offers;
 
   const landingNames = React.useMemo(() => new Map((landings ?? []).map((l) => [l.id, l.name])), [landings]);
+  const offerNames = React.useMemo(() => new Map((offers ?? []).map((o) => [o.id, o.name])), [offers]);
 
   return React.useCallback(
     (dimension: DimensionKey, value: string) => {
-      if (dimension !== "landing") return value;
-      if (value === "") return t("values.noLanding");
-      return landingNames.get(value) ?? value;
+      switch (dimension) {
+        case "landing":
+          return value === "" ? t("values.noLanding") : (landingNames.get(value) ?? value);
+        case "offer":
+          return value === "" ? t("values.noOffer") : (offerNames.get(value) ?? value);
+        default:
+          return value;
+      }
     },
-    [t, landingNames],
+    [t, landingNames, offerNames],
   );
 }
