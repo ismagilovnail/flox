@@ -5,6 +5,14 @@ per-phase, matching `CLAUDE.md`'s phase protocol. The one exception is
 [Between phases], below: spec amendments and the code changes that follow from
 them land between phases and would otherwise be invisible here.
 
+## [Between phases] — PWA header toggle
+
+Constructor switch "Шапка страницы" hides the top bar (brand mark, "Apps",
+search, help) on the install page and in the preview. `pwas.show_header`
+(migration 00038, default true) through create/update/duplicate, `PwaPage`,
+the form and the preview card. Tests: `TestRenderPwaPageShowHeader`;
+full-env go test, tsc and eslint clean; toggle checked live on /pwa/new.
+
 ## [Between phases] — PWA auto theme
 
 New "Авто (по устройству)" option in the constructor's Тема dropdown: the

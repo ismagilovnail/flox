@@ -12,6 +12,8 @@ export type Pwa = {
   backgroundColor: string;
   /** Follow the visitor's device light/dark theme on the install page. */
   themeAuto: boolean;
+  /** Show the install page's top bar (brand mark, title, search). */
+  showHeader: boolean;
   iconUrl: string;
   startUrl: string;
   bounceInAppWebview: boolean;

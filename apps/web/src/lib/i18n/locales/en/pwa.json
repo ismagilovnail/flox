@@ -38,6 +38,9 @@
       "purple": "Purple"
     },
     "backgroundThemeLabel": "Theme",
+    "showHeaderLabel": "Page header",
+    "showHeaderHint": "The top bar with the logo, the \"Apps\" title and the search and help icons.",
+    "showHeaderAria": "Show the page header",
     "backgroundTheme": {
       "light": "Light",
       "dark": "Dark",

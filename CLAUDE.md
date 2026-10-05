@@ -19,16 +19,17 @@ referenced below as §N).
 ## CURRENT STATE — UPDATE THIS EVERY PHASE
 
 ```
-CURRENT PHASE : PWA AUTO THEME
-STATUS        : done. Тема dropdown gains "Авто"; pwas.theme_auto (00037),
-                tracker emits light base + prefers-color-scheme dark palette.
-                VERIFIED: full-env go test green, tsc + eslint clean, API
-                rebuilt and migrated. Not checked live in Chrome. Also from
-                this session: pwa.html is the full store-style card for all
-                visitors (operator decision); fake-reviews block declined.
+CURRENT PHASE : PWA HEADER TOGGLE
+STATUS        : done. "Шапка страницы" switch on /pwa/new|[id]; pwas.show_header
+                (00038, default true) → tracker hides the top bar. VERIFIED:
+                full-env go test green, tsc + eslint clean, API rebuilt and
+                migrated, toggle checked live in the preview. Earlier this
+                session: auto theme (00037); pwa.html is the full card for all
+                visitors (operator decision); fake-reviews block and a
+                Google Play look-alike declined.
                 Open: user says test page misses some form params — DB row
                 was empty; ask which fields after a real save.
-LAST COMMIT   : this phase's commit — feat(pwa): auto theme.
+LAST COMMIT   : this phase's commit — feat(pwa): header toggle.
 UNCOMMITTED   : none expected.
 NEXT          : postlanding stage serving (+ postlanding dimension) —
                 already requested by the user; confirm details first.

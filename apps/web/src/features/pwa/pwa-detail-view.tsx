@@ -18,6 +18,7 @@ function toFormValues(pwa: Pwa): PwaFormValues {
     themeColor: pwa.themeColor,
     backgroundColor: pwa.backgroundColor,
     themeAuto: pwa.themeAuto,
+    showHeader: pwa.showHeader,
     iconUrl: pwa.iconUrl,
     startUrl: pwa.startUrl,
     bounceInAppWebview: pwa.bounceInAppWebview,

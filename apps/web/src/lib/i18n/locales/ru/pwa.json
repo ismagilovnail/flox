@@ -38,6 +38,9 @@
       "purple": "Фиолетовая"
     },
     "backgroundThemeLabel": "Тема",
+    "showHeaderLabel": "Шапка страницы",
+    "showHeaderHint": "Верхняя панель с логотипом, названием «Apps» и значками поиска и помощи.",
+    "showHeaderAria": "Показывать шапку страницы",
     "backgroundTheme": {
       "light": "Светлая",
       "dark": "Тёмная",

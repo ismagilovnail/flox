@@ -106,6 +106,7 @@ export function buildPwaFormSchema(t: TFunction) {
     themeColor: hexColor,
     backgroundColor: hexColor,
     themeAuto: z.boolean(),
+    showHeader: z.boolean(),
     iconUrl: z.url(t("form.validation.iconUrlInvalid", { ns: "pwa" })),
     startUrl: z
       .string()
@@ -220,6 +221,7 @@ export function PwaForm({
       themeColor: "#16a34a",
       backgroundColor: "#ffffff",
       themeAuto: false,
+      showHeader: true,
       iconUrl: "",
       startUrl: "/install",
       bounceInAppWebview: true,
@@ -455,6 +457,28 @@ export function PwaForm({
                     checked={field.value}
                     onCheckedChange={field.onChange}
                     aria-label={t("form.bounceAria", { ns: "pwa" })}
+                  />
+                )}
+              />
+            </div>
+
+            <div className="flex items-center justify-between rounded-md border border-border p-2.5">
+              <div>
+                <p className="text-sm font-medium">
+                  {t("form.showHeaderLabel", { ns: "pwa" })}
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  {t("form.showHeaderHint", { ns: "pwa" })}
+                </p>
+              </div>
+              <Controller
+                control={control}
+                name="showHeader"
+                render={({ field }) => (
+                  <Switch
+                    checked={field.value}
+                    onCheckedChange={field.onChange}
+                    aria-label={t("form.showHeaderAria", { ns: "pwa" })}
                   />
                 )}
               />
@@ -898,6 +922,7 @@ export function PwaForm({
               accentColor={manifest.themeColor}
               backgroundColor={manifest.backgroundColor}
               themeAuto={manifest.themeAuto}
+              showHeader={manifest.showHeader}
               description={manifest.description}
               rating={manifest.rating}
               ratingCount={manifest.ratingCount}

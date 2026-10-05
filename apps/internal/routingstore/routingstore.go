@@ -112,7 +112,9 @@ type PwaPage struct {
 	BounceInAppWebview bool
 	// ThemeAuto: follow the visitor's device light/dark theme.
 	ThemeAuto bool
-	Status    string
+	// ShowHeader: render the top bar (brand mark, title, search).
+	ShowHeader bool
+	Status     string
 	// Listing facts. The visitor page shows only the plain-text ones; the
 	// operator-typed numbers (rating, reviews, downloads, size, age) are read
 	// for the store-style template, which the tracker renders only on the
@@ -465,7 +467,7 @@ func (s *Store) LoadLandingPage(ctx context.Context, orgID, landingID string) (L
 func (s *Store) LoadPwaPage(ctx context.Context, orgID, pwaID string) (PwaPage, error) {
 	var p PwaPage
 	err := s.db.QueryRow(ctx, `
-		SELECT name, short_name, theme_color, background_color, theme_auto, icon_url, developer, description,
+		SELECT name, short_name, theme_color, background_color, theme_auto, show_header, icon_url, developer, description,
 		       screenshots, bounce_in_app_webview, status,
 		       whats_new, version, category, interactive_elements, contains_ads, in_app_purchases,
 		       COALESCE(to_char(updated_date, 'YYYY-MM-DD'), ''),
@@ -476,7 +478,7 @@ func (s *Store) LoadPwaPage(ctx context.Context, orgID, pwaID string) (PwaPage, 
 		FROM pwas
 		WHERE id = $1 AND organization_id = $2`,
 		pwaID, orgID,
-	).Scan(&p.Name, &p.ShortName, &p.ThemeColor, &p.BackgroundColor, &p.ThemeAuto, &p.IconURL, &p.Developer, &p.Description,
+	).Scan(&p.Name, &p.ShortName, &p.ThemeColor, &p.BackgroundColor, &p.ThemeAuto, &p.ShowHeader, &p.IconURL, &p.Developer, &p.Description,
 		&p.Screenshots, &p.BounceInAppWebview, &p.Status,
 		&p.WhatsNew, &p.Version, &p.Category, &p.InteractiveElements, &p.ContainsAds, &p.InAppPurchases, &p.UpdatedDate,
 		&p.Rating, &p.RatingCount, &p.DownloadsLabel, &p.SizeMB, &p.AgeRating,

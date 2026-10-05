@@ -364,6 +364,7 @@ export function PwaPreviewCard({
   accentColor,
   backgroundColor,
   themeAuto,
+  showHeader = true,
   screenshots,
   whatsNew,
   ratingStars5,
@@ -414,6 +415,8 @@ export function PwaPreviewCard({
   backgroundColor?: string;
   /** Follow the browser's own light/dark preference instead of `backgroundColor`. */
   themeAuto?: boolean;
+  /** The top bar (brand mark, "Apps", search, help). Defaults to shown. */
+  showHeader?: boolean;
   screenshots?: string[];
   whatsNew?: string;
   ratingStars5?: number;
@@ -567,19 +570,21 @@ export function PwaPreviewCard({
       }}
     >
       <div className="flex max-h-[70vh] flex-col overflow-y-auto">
-        <div
-          className="sticky top-0 z-10 flex items-center justify-between border-b bg-[var(--pv-bg)] px-4 py-3"
-          style={{ borderColor: "var(--pv-border)" }}
-        >
-          <div className="flex items-center gap-2 text-lg font-medium text-[var(--pv-text)]">
-            <AppsGlyph />
-            Apps
+        {showHeader && (
+          <div
+            className="sticky top-0 z-10 flex items-center justify-between border-b bg-[var(--pv-bg)] px-4 py-3"
+            style={{ borderColor: "var(--pv-border)" }}
+          >
+            <div className="flex items-center gap-2 text-lg font-medium text-[var(--pv-text)]">
+              <AppsGlyph />
+              Apps
+            </div>
+            <div className="flex items-center gap-4 text-[var(--pv-text)]">
+              <SearchIcon className="size-6" />
+              <HelpCircleIcon className="size-6" />
+            </div>
           </div>
-          <div className="flex items-center gap-4 text-[var(--pv-text)]">
-            <SearchIcon className="size-6" />
-            <HelpCircleIcon className="size-6" />
-          </div>
-        </div>
+        )}
 
         <div className="flex flex-col gap-4 px-5 py-5">
           {/* The whole header (icon + name) eases slightly downward while

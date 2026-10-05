@@ -78,6 +78,7 @@ type createRequest struct {
 	ThemeColor          string   `json:"themeColor"`
 	BackgroundColor     string   `json:"backgroundColor"`
 	ThemeAuto           bool     `json:"themeAuto"`
+	ShowHeader          *bool    `json:"showHeader"`
 	IconURL             string   `json:"iconUrl"`
 	StartURL            string   `json:"startUrl"`
 	BounceInAppWebview  bool     `json:"bounceInAppWebview"`
@@ -118,6 +119,7 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 		ThemeColor:          req.ThemeColor,
 		BackgroundColor:     req.BackgroundColor,
 		ThemeAuto:           req.ThemeAuto,
+		ShowHeader:          showHeader(req.ShowHeader),
 		IconURL:             req.IconURL,
 		StartURL:            req.StartURL,
 		BounceInAppWebview:  req.BounceInAppWebview,
@@ -155,6 +157,7 @@ type updateRequest struct {
 	ThemeColor          *string   `json:"themeColor"`
 	BackgroundColor     *string   `json:"backgroundColor"`
 	ThemeAuto           *bool     `json:"themeAuto"`
+	ShowHeader          *bool     `json:"showHeader"`
 	IconURL             *string   `json:"iconUrl"`
 	StartURL            *string   `json:"startUrl"`
 	BounceInAppWebview  *bool     `json:"bounceInAppWebview"`
@@ -196,6 +199,7 @@ func (h *Handler) update(w http.ResponseWriter, r *http.Request) {
 		ThemeColor:          req.ThemeColor,
 		BackgroundColor:     req.BackgroundColor,
 		ThemeAuto:           req.ThemeAuto,
+		ShowHeader:          req.ShowHeader,
 		IconURL:             req.IconURL,
 		StartURL:            req.StartURL,
 		BounceInAppWebview:  req.BounceInAppWebview,
@@ -272,3 +276,7 @@ func writeJSON(w http.ResponseWriter, status int, body any) {
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(body)
 }
+
+// showHeader defaults a create request that omits the field to on, so
+// clients that predate the toggle keep today's page.
+func showHeader(v *bool) bool { return v == nil || *v }

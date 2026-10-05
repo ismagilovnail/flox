@@ -94,6 +94,11 @@ fixed and derived from `background_color`. Auto (`pwas.theme_auto`, migration
 `@media (prefers-color-scheme: dark)`, with `color-scheme: light dark`; the
 constructor preview follows the browser's own preference the same way.
 
+**Header toggle.** `pwas.show_header` (migration 00038, default on) shows or
+hides the top bar — brand mark, "Apps" title, search and help icons. The app
+header block (icon, name, developer, install) is unaffected. A create request
+that omits the field gets "on".
+
 ## In-app WebView bounce (§28/§73)
 
 With the PWA's `bounceInAppWebview` on, a request whose user agent

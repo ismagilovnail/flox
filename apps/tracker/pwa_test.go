@@ -275,7 +275,7 @@ func TestRenderPwaPageAllFormFields(t *testing.T) {
 		Developer: "DEVX", Description: "DESCX", Screenshots: []string{"https://cdn.example/s1.png"},
 		WhatsNew: "WNX", Version: "VERX", Category: "CATX", InteractiveElements: "INTX", ContainsAds: true, InAppPurchases: true,
 		UpdatedDate: "2026-08-21", Rating: 4.3, RatingCount: 777, DownloadsLabel: "DLX", SizeMB: 38, AgeRating: "AGEX",
-		RatingStars5: 61, RatingStars4: 22, RatingStars3: 7, RatingStars2: 5, RatingStars1: 3,
+		RatingStars5: 61, RatingStars4: 22, RatingStars3: 7, RatingStars2: 5, RatingStars1: 3, ShowHeader: true,
 	}
 	for _, lang := range []string{"ru", "en"} {
 		for _, test := range []bool{false, true} {
@@ -326,6 +326,23 @@ func TestRenderPwaPageThemeModes(t *testing.T) {
 		k := strings.LastIndex(b, "--bg:#18181b")
 		if i < 0 || j < i || k < j || !strings.Contains(b, `content="light dark"`) {
 			t.Fatalf("auto page (bg %s) lacks light base + dark media palette", bg)
+		}
+	}
+}
+
+// TestRenderPwaPageShowHeader: the top bar (brand mark, title, search) is
+// rendered only while the PWA's show_header toggle is on.
+func TestRenderPwaPageShowHeader(t *testing.T) {
+	for _, show := range []bool{true, false} {
+		out, err := renderPwaPage(routingstore.PwaPage{Name: "X", ShowHeader: show}, false, "en")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := strings.Contains(string(out), `class="topbar"`); got != show {
+			t.Fatalf("show_header=%v: top bar present = %v", show, got)
+		}
+		if !strings.Contains(string(out), `id="head"`) {
+			t.Fatalf("show_header=%v: app header must stay", show)
 		}
 	}
 }
