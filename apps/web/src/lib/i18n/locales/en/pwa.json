@@ -249,6 +249,7 @@
     "textPlaceholder": "Enter the comment text",
     "reply": "Developer response",
     "replyPlaceholder": "Enter the company's reply (optional)",
-    "edit": "Edit"
+    "edit": "Edit",
+    "livePreview": "Live preview"
   }
 }

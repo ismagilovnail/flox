@@ -31,7 +31,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import type { PwaStatus } from "@/lib/api/pwa";
+import type { PwaComment, PwaStatus } from "@/lib/api/pwa";
 import { PwaCommentsEditor } from "@/features/pwa/pwa-comments-editor";
 import { commentStats, setKey } from "@/features/pwa/pwa-comments";
 import { PwaPreviewCard } from "@/features/pwa/pwa-preview-card";
@@ -281,7 +281,6 @@ export function PwaForm({
   // The preview shows the comment set being edited; its rating, count and
   // star bars come from those comments when there are any.
   const setComments = allComments.filter((c) => setKey(c) === activeSet);
-  const stats = commentStats(setComments);
   const [commentsOpen, setCommentsOpen] = useState(false);
   const [previewDir, setPreviewDir] = useState<"ltr" | "rtl">("ltr");
   const [pickingIcon, setPickingIcon] = useState(false);
@@ -292,6 +291,52 @@ export function PwaForm({
   const backgroundTheme = manifest.themeAuto
     ? "auto"
     : matchPreset(PWA_BACKGROUND_THEMES, manifest.backgroundColor);
+
+  /** The phone preview for a given comment list: its rating, count and star
+   * bars come from those comments when there are any. Also used inside the
+   * comments modal (with the draft comment included). */
+  function renderPreview(shown: PwaComment[], focusReviews = false) {
+    const stats = commentStats(shown);
+    return (
+      <PwaPreviewCard
+              t={t}
+              name={manifest.name}
+              developer={manifest.developer}
+              iconUrl={manifest.iconUrl}
+              accentColor={manifest.themeColor}
+              backgroundColor={manifest.backgroundColor}
+              themeAuto={manifest.themeAuto}
+              showHeader={manifest.showHeader}
+              showBottomNav={manifest.showBottomNav}
+              headerTitle={manifest.headerTitle}
+              headerLogoUrl={manifest.headerLogoUrl}
+              description={manifest.description}
+              rating={stats?.rating ?? manifest.rating}
+              ratingCount={stats?.count ?? manifest.ratingCount}
+              comments={shown}
+          focusReviews={focusReviews}
+              downloadsLabel={manifest.downloadsLabel}
+              sizeMb={manifest.sizeMb}
+              screenshots={(manifest.screenshots ?? [])
+                .map((s) => s?.url)
+                .filter((u): u is string => !!u)}
+              whatsNew={manifest.whatsNew}
+              ratingStars5={stats?.stars[5] ?? manifest.ratingStars5}
+              ratingStars4={stats?.stars[4] ?? manifest.ratingStars4}
+              ratingStars3={stats?.stars[3] ?? manifest.ratingStars3}
+              ratingStars2={stats?.stars[2] ?? manifest.ratingStars2}
+              ratingStars1={stats?.stars[1] ?? manifest.ratingStars1}
+              version={manifest.version}
+              ageRating={manifest.ageRating}
+              category={manifest.category}
+              interactiveElements={manifest.interactiveElements}
+              containsAds={manifest.containsAds}
+              inAppPurchases={manifest.inAppPurchases}
+              updatedDate={manifest.updatedDate}
+              dir={previewDir}
+            />
+    );
+  }
 
   function handleAccentChange(value: string) {
     const preset = PWA_ACCENT_COLORS.find((p) => p.value === value);
@@ -1006,6 +1051,7 @@ export function PwaForm({
               onActiveSetChange={setActiveSet}
               open={commentsOpen}
               onOpenChange={setCommentsOpen}
+              renderPreview={(shown) => renderPreview(shown, true)}
             />
           )}
         />
@@ -1038,42 +1084,7 @@ export function PwaForm({
             </div>
           </CardHeader>
           <CardContent>
-            <PwaPreviewCard
-              t={t}
-              name={manifest.name}
-              developer={manifest.developer}
-              iconUrl={manifest.iconUrl}
-              accentColor={manifest.themeColor}
-              backgroundColor={manifest.backgroundColor}
-              themeAuto={manifest.themeAuto}
-              showHeader={manifest.showHeader}
-              showBottomNav={manifest.showBottomNav}
-              headerTitle={manifest.headerTitle}
-              headerLogoUrl={manifest.headerLogoUrl}
-              description={manifest.description}
-              rating={stats?.rating ?? manifest.rating}
-              ratingCount={stats?.count ?? manifest.ratingCount}
-              comments={setComments}
-              downloadsLabel={manifest.downloadsLabel}
-              sizeMb={manifest.sizeMb}
-              screenshots={(manifest.screenshots ?? [])
-                .map((s) => s?.url)
-                .filter((u): u is string => !!u)}
-              whatsNew={manifest.whatsNew}
-              ratingStars5={stats?.stars[5] ?? manifest.ratingStars5}
-              ratingStars4={stats?.stars[4] ?? manifest.ratingStars4}
-              ratingStars3={stats?.stars[3] ?? manifest.ratingStars3}
-              ratingStars2={stats?.stars[2] ?? manifest.ratingStars2}
-              ratingStars1={stats?.stars[1] ?? manifest.ratingStars1}
-              version={manifest.version}
-              ageRating={manifest.ageRating}
-              category={manifest.category}
-              interactiveElements={manifest.interactiveElements}
-              containsAds={manifest.containsAds}
-              inAppPurchases={manifest.inAppPurchases}
-              updatedDate={manifest.updatedDate}
-              dir={previewDir}
-            />
+            {renderPreview(setComments)}
           </CardContent>
         </Card>
       </div>

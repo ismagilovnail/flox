@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useRef, useState, type ReactNode } from "react";
 import { DownloadIcon, PlusIcon, StarIcon, Trash2Icon, UploadIcon, XIcon } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
@@ -32,6 +32,7 @@ export function PwaCommentsEditor({
   onActiveSetChange,
   open,
   onOpenChange,
+  renderPreview,
 }: {
   value: PwaComment[];
   onChange: (next: PwaComment[]) => void;
@@ -40,6 +41,8 @@ export function PwaCommentsEditor({
   /** The modal's state lives in the form: its header button opens it too. */
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  /** The live phone preview for a comment list (the PWA form's own). */
+  renderPreview: (comments: PwaComment[]) => ReactNode;
 }) {
   const { t, i18n } = useTranslation("pwa");
   const locale = i18n.language;
@@ -130,12 +133,12 @@ export function PwaCommentsEditor({
   return (
     <>
       <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-5xl">
+        <DialogContent className="max-h-[92vh] overflow-y-auto sm:max-w-[1400px]">
           <DialogHeader>
             <DialogTitle>{t("comments.title")}</DialogTitle>
             <DialogDescription>{t("comments.modalHint")}</DialogDescription>
           </DialogHeader>
-          <div className="grid gap-6 lg:grid-cols-[340px_1fr]">
+          <div className="grid gap-6 lg:grid-cols-[340px_minmax(0,1fr)_400px]">
         <div className="flex flex-col gap-2">
           <Label>{t("comments.setsLabel")}</Label>
           <div className="flex flex-wrap gap-2">
@@ -293,6 +296,12 @@ export function PwaCommentsEditor({
             )}
           </div>
         )}
+            <div className="hidden lg:block">
+              <div className="sticky top-0 flex flex-col gap-2">
+                <Label>{t("comments.livePreview")}</Label>
+                {renderPreview(inSet)}
+              </div>
+            </div>
           </div>
         </DialogContent>
       </Dialog>
@@ -305,6 +314,13 @@ export function PwaCommentsEditor({
           initial={dialog.comment ?? EMPTY_COMMENT_DRAFT}
           editing={!!dialog.comment}
           onSave={saveComment}
+          renderPreview={(draft) => {
+            const entry = { geo: activeSet.split("-")[0], lang: activeSet.split("-")[1], ...draft };
+            const showDraft = draft.author.trim() !== "" || draft.text.trim() !== "";
+            const rest = inSet.filter((c) => c !== dialog.comment);
+            const at = dialog.comment ? inSet.indexOf(dialog.comment) : rest.length;
+            return renderPreview(showDraft ? [...rest.slice(0, at), entry, ...rest.slice(at)] : rest);
+          }}
         />
       )}
     </>

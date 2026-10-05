@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { CheckIcon, CornerDownRightIcon, ImagesIcon, StarIcon, ThumbsUpIcon, XIcon } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
@@ -29,6 +29,7 @@ export function PwaCommentDialog({
   initial,
   editing,
   onSave,
+  renderPreview,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -36,6 +37,8 @@ export function PwaCommentDialog({
   initial: CommentDraft;
   editing: boolean;
   onSave: (draft: CommentDraft) => void;
+  /** Live phone preview with this draft included. */
+  renderPreview: (draft: CommentDraft) => ReactNode;
 }) {
   const { t } = useTranslation("pwa");
   const [draft, setDraft] = useState<CommentDraft>(initial);
@@ -45,7 +48,7 @@ export function PwaCommentDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
+      <DialogContent className="max-h-[92vh] overflow-y-auto sm:max-w-[1100px]">
         <DialogHeader>
           <DialogTitle>{editing ? t("comments.editTitle") : t("comments.newTitle")}</DialogTitle>
         </DialogHeader>
@@ -53,6 +56,8 @@ export function PwaCommentDialog({
           {t("comments.willBeAdded")} <span className="rounded bg-muted px-1.5 py-0.5 tabular-nums">{setLabel}</span>
         </p>
 
+        <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_400px]">
+          <div className="flex flex-col gap-4">
         <div className="grid gap-4 sm:grid-cols-[120px_1fr]">
           <div className="relative w-fit">
             <button
@@ -129,6 +134,12 @@ export function PwaCommentDialog({
           </Label>
           <Textarea id="pwa-comment-reply" rows={2} maxLength={TEXT_MAX} placeholder={t("comments.replyPlaceholder")} value={draft.reply} onChange={(e) => patch({ reply: e.target.value })} />
           <span className="text-right text-xs text-muted-foreground tabular-nums">{draft.reply.length} / {TEXT_MAX}</span>
+        </div>
+
+          </div>
+          <div className="hidden lg:block">
+            <div className="sticky top-0">{renderPreview(draft)}</div>
+          </div>
         </div>
 
         <DialogFooter>

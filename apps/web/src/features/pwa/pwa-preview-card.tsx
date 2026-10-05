@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useSyncExternalStore, type CSSProperties } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore, type CSSProperties } from "react";
 import {
   ArrowRightIcon,
   BookOpenIcon,
@@ -384,6 +384,7 @@ export function PwaPreviewCard({
   inAppPurchases,
   updatedDate,
   dir = "ltr",
+  focusReviews = false,
   className,
 }: {
   t: TFunction;
@@ -455,8 +456,21 @@ export function PwaPreviewCard({
    * text" toggle) — no machine translation, matching the user's explicit
    * "our own code, not their Google Translate widget" instruction. */
   dir?: "ltr" | "rtl";
+  /** Scrolls the phone's own viewport to the ratings and reviews block (on
+   * mount and whenever the number of comments changes) — for the comments
+   * editor, where that block is what's being worked on. */
+  focusReviews?: boolean;
   className?: string;
 }) {
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const reviewsRef = useRef<HTMLDivElement>(null);
+  const commentCount = comments?.length ?? 0;
+  useEffect(() => {
+    const box = scrollRef.current;
+    const target = reviewsRef.current;
+    if (!focusReviews || !box || !target) return;
+    box.scrollTop += target.getBoundingClientRect().top - box.getBoundingClientRect().top - 56;
+  }, [focusReviews, commentCount]);
   const accent = /^#[0-9a-fA-F]{6}$/.test(accentColor ?? "") ? accentColor! : REF_PRIMARY;
   const prefersDark = usePrefersDark();
   const dark = themeAuto ? prefersDark : isDarkColor(backgroundColor);
@@ -580,7 +594,7 @@ export function PwaPreviewCard({
         ...themeVars,
       }}
     >
-      <div className="flex max-h-[70vh] flex-col overflow-y-auto">
+      <div ref={scrollRef} className="flex max-h-[70vh] flex-col overflow-y-auto">
         {showHeader && (
           <div
             className="sticky top-0 z-10 flex items-center justify-between border-b bg-[var(--pv-bg)] px-4 py-3"
@@ -831,6 +845,7 @@ export function PwaPreviewCard({
         </div>
 
         <div
+          ref={reviewsRef}
           className="flex flex-col gap-1 border-t px-4 py-5"
           style={{ borderColor: "var(--pv-border)" }}
         >

@@ -37,6 +37,15 @@ the first language. Names come from `Intl.DisplayNames` in the UI language.
 Other pairs still work through CSV import (the API accepts any two-letter
 codes). tsc, eslint clean; checked live on /pwa/new.
 
+## [Between phases] — live phone preview while editing comments
+
+The comments modal gets a third column with the phone preview (the form's own
+`PwaPreviewCard`, via a shared `renderPreview`), scrolled to the ratings and
+reviews block (`focusReviews`) and showing the active set. The new/edit
+comment dialog has the same preview with the draft included, updating as you
+type; rating, count and star bars come from the comments shown. tsc, eslint
+clean; checked live (typed a draft, it appeared in the phone with 5.0).
+
 ## [Between phases] — pointer cursor on buttons (app-wide)
 
 Tailwind's preflight leaves buttons with the arrow cursor. One base-layer rule
