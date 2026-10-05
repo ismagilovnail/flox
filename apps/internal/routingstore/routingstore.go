@@ -111,9 +111,10 @@ type PwaPage struct {
 	Screenshots        []string
 	BounceInAppWebview bool
 	Status             string
-	// Listing facts the install page shows as plain text. Deliberately no
-	// rating, review count, downloads or age rating: those are operator-typed
-	// social proof and never reach visitors.
+	// Listing facts. The visitor page shows only the plain-text ones; the
+	// operator-typed numbers (rating, reviews, downloads, size, age) are read
+	// for the store-style template, which the tracker renders only on the
+	// constructor's signed test links (see apps/tracker/pwa.go).
 	WhatsNew            string
 	Version             string
 	Category            string
@@ -121,6 +122,17 @@ type PwaPage struct {
 	ContainsAds         bool
 	InAppPurchases      bool
 	UpdatedDate         string // YYYY-MM-DD, empty when unset
+
+	Rating         float64
+	RatingCount    int
+	DownloadsLabel string
+	SizeMB         float64
+	AgeRating      string
+	RatingStars5   float64
+	RatingStars4   float64
+	RatingStars3   float64
+	RatingStars2   float64
+	RatingStars1   float64
 }
 
 // FlowLanding is the small, per-flow part of a landing the tracker needs
@@ -454,13 +466,19 @@ func (s *Store) LoadPwaPage(ctx context.Context, orgID, pwaID string) (PwaPage, 
 		SELECT name, short_name, theme_color, background_color, icon_url, developer, description,
 		       screenshots, bounce_in_app_webview, status,
 		       whats_new, version, category, interactive_elements, contains_ads, in_app_purchases,
-		       COALESCE(to_char(updated_date, 'YYYY-MM-DD'), '')
+		       COALESCE(to_char(updated_date, 'YYYY-MM-DD'), ''),
+		       COALESCE(rating, 0)::float8, COALESCE(rating_count, 0), COALESCE(downloads_label, ''),
+		       COALESCE(size_mb, 0)::float8, age_rating,
+		       COALESCE(rating_stars_5, 0)::float8, COALESCE(rating_stars_4, 0)::float8, COALESCE(rating_stars_3, 0)::float8,
+		       COALESCE(rating_stars_2, 0)::float8, COALESCE(rating_stars_1, 0)::float8
 		FROM pwas
 		WHERE id = $1 AND organization_id = $2`,
 		pwaID, orgID,
 	).Scan(&p.Name, &p.ShortName, &p.ThemeColor, &p.BackgroundColor, &p.IconURL, &p.Developer, &p.Description,
 		&p.Screenshots, &p.BounceInAppWebview, &p.Status,
-		&p.WhatsNew, &p.Version, &p.Category, &p.InteractiveElements, &p.ContainsAds, &p.InAppPurchases, &p.UpdatedDate)
+		&p.WhatsNew, &p.Version, &p.Category, &p.InteractiveElements, &p.ContainsAds, &p.InAppPurchases, &p.UpdatedDate,
+		&p.Rating, &p.RatingCount, &p.DownloadsLabel, &p.SizeMB, &p.AgeRating,
+		&p.RatingStars5, &p.RatingStars4, &p.RatingStars3, &p.RatingStars2, &p.RatingStars1)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return PwaPage{}, ErrNotFound
 	}

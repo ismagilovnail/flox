@@ -5,6 +5,17 @@ per-phase, matching `CLAUDE.md`'s phase protocol. The one exception is
 [Between phases], below: spec amendments and the code changes that follow from
 them land between phases and would otherwise be invisible here.
 
+## [Between phases] — Store-style PWA page for constructor test links
+
+Signed test links now render the full editor card (`templates/pwa_store.html`);
+visitors still get the stats-free page. Detail: `docs/pwa-serving.md`.
+
+- `PwaPage`/`LoadPwaPage` also load rating, rating_count, downloads_label,
+  size_mb, age_rating and the star distribution.
+- `renderPwaPage` returns an error; a failing template redirects the visitor
+  to the destination. Header label is "Apps", matching the editor.
+- Tests: `TestRenderPwaStoreTemplateOnlyForTest` (numbers only on test links).
+
 ## [Between phases] — PWA install page laid out like the constructor card
 
 The visitor page at `/pwa/{token}/` now follows the editor preview's layout

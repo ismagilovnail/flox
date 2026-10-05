@@ -144,7 +144,15 @@ func (h *Handler) pwaPage(w http.ResponseWriter, r *http.Request) {
 
 	h.recordClaimsEvent(r, event.PwaView, c)
 	outcome = outcomePwa
-	writeHTML(w, renderPwaPage(page, c.Test, pageLang(r)))
+	body, err := renderPwaPage(page, c.Test, pageLang(r))
+	if err != nil {
+		// A broken template must not strand the visitor on half a page.
+		h.logger.Error("rendering pwa page", "error", err, "pwa_id", c.PwaID)
+		outcome = outcomeRedirected
+		http.Redirect(w, r, c.Destination, http.StatusFound)
+		return
+	}
+	writeHTML(w, body)
 }
 
 func (h *Handler) pwaManifest(w http.ResponseWriter, r *http.Request) {
@@ -356,12 +364,72 @@ var pwaPageSource string
 
 var pwaPageTemplate = template.Must(template.New("pwa").Parse(pwaPageSource))
 
+var pwaStoreCopy = map[string]map[string]string{
+	"ru": {
+		"adFree": "Без рекламы и платного контента", "noData": "Пока нет оценок", "reviews": "отзывов",
+		"downloadsLabel": "Скачиваний", "size": "Размер", "share": "Поделиться", "wishlist": "В список желаний",
+		"availableOnDevices": "Это приложение доступно на всех ваших устройствах",
+		"dataSafetyTitle":    "Безопасность данных",
+		"dataSafetyText":     "Безопасность начинается с понимания того, как разработчики собирают и передают ваши данные. Меры обеспечения конфиденциальности и безопасности данных могут зависеть от того, как вы используете приложение, а также от вашего региона и возраста. Эта информация предоставлена разработчиком и может меняться.",
+		"reviewsTitle":       "Оценки и отзывы", "reviewsVerified": "Оценки и отзывы проверены",
+		"footerStore": "Приложения", "footerGiftCards": "Подарочные карты", "footerRedeemCode": "Использовать код",
+		"footerFamilyLibrary": "Семейная библиотека", "footerKidsFamilyTitle": "Детям и семье",
+		"footerParentGuide": "Руководство для родителей", "footerTerms": "Условия использования",
+		"footerPrivacy": "Конфиденциальность", "footerDevelopers": "Разработчики",
+		"navGames": "Игры", "navApps": "Приложения", "navBooks": "Книги", "navKids": "Детям",
+		"containsAds": "Есть реклама", "inAppPurchases": "Покупки в приложении",
+		"version": "Текущая версия", "category": "Категория", "ageRating": "Возраст",
+		"interactiveElements": "Интерактивные элементы", "developer": "Разработчик",
+		"dSize": "Размер", "dDownloads": "Скачивания", "dAge": "Возраст",
+	},
+	"en": {
+		"adFree": "No ads or paid content", "noData": "No rating yet", "reviews": "reviews",
+		"downloadsLabel": "Downloads", "size": "Size", "share": "Share", "wishlist": "Wishlist",
+		"availableOnDevices": "This app is available on all your devices",
+		"dataSafetyTitle":    "Data safety",
+		"dataSafetyText":     "Safety starts with understanding how developers collect and share your data. Data privacy and security practices may vary based on your use, region, and age. The developer provided this information and may update it over time.",
+		"reviewsTitle":       "Ratings and reviews", "reviewsVerified": "Ratings and reviews are verified",
+		"footerStore": "Apps", "footerGiftCards": "Gift cards", "footerRedeemCode": "Redeem code",
+		"footerFamilyLibrary": "Family library", "footerKidsFamilyTitle": "Kids & family",
+		"footerParentGuide": "Parent guide", "footerTerms": "Terms of Service",
+		"footerPrivacy": "Privacy", "footerDevelopers": "Developers",
+		"navGames": "Games", "navApps": "Apps", "navBooks": "Books", "navKids": "Kids",
+		"containsAds": "Contains ads", "inAppPurchases": "In-app purchases",
+		"version": "Current version", "category": "Category", "ageRating": "Age",
+		"interactiveElements": "Interactive elements", "developer": "Developer",
+		"dSize": "Size", "dDownloads": "Downloads", "dAge": "Age",
+	},
+}
+
+// The store-style template (templates/pwa_store.html) imitates a store
+// listing with operator-typed rating, reviews, downloads and size. It is
+// only ever rendered for the constructor's signed test links — the
+// operator's own preview, never for visitors from tracked traffic.
+//
+//go:embed templates/pwa_store.html
+var pwaStoreSource string
+
+var pwaStoreTemplate = template.Must(template.New("pwa_store").Funcs(template.FuncMap{
+	"stars": func() []int { return []int{1, 2, 3, 4, 5} },
+	// fill is how much of star i (1..5) a rating covers, as a percentage.
+	"fill": func(rating float64, i int) int {
+		v := rating - float64(i-1)
+		switch {
+		case v >= 1:
+			return 100
+		case v <= 0:
+			return 0
+		}
+		return int(v * 100)
+	},
+}).Parse(pwaStoreSource))
+
 type pwaDetail struct {
 	Label, Value string
 	Notes        []string
 }
 
-func renderPwaPage(p routingstore.PwaPage, test bool, lang string) []byte {
+func renderPwaPage(p routingstore.PwaPage, test bool, lang string) ([]byte, error) {
 	short := p.ShortName
 	if short == "" {
 		short = p.Name
@@ -396,15 +464,45 @@ func renderPwaPage(p routingstore.PwaPage, test bool, lang string) []byte {
 		pageBg = "#18181b"
 	}
 	jsCopy := map[string]string{"pleaseWait": cp["pleaseWait"]}
+	tpl := pwaPageTemplate
+	if test {
+		// Operator's own preview: the store-style template and its extra copy.
+		tpl = pwaStoreTemplate
+		// pwaCopy is shared between requests: extend a clone, never the map.
+		merged := make(map[string]string, len(cp)+len(pwaStoreCopy[lang]))
+		for k, v := range cp {
+			merged[k] = v
+		}
+		for k, v := range pwaStoreCopy[lang] {
+			if _, ok := merged[k]; !ok {
+				merged[k] = v
+			}
+		}
+		cp = merged
+		details = details[:0]
+		add(cp["dUpdated"], p.UpdatedDate)
+		if p.SizeMB > 0 {
+			add(cp["dSize"], strconv.FormatFloat(p.SizeMB, 'f', -1, 64)+" MB")
+		}
+		add(cp["dDownloads"], p.DownloadsLabel)
+		add(cp["dVersion"], p.Version)
+		add(cp["dAge"], p.AgeRating)
+		add(cp["dDeveloper"], p.Developer, notes...)
+		add(cp["dCategory"], p.Category)
+		add(cp["dInteractive"], p.InteractiveElements)
+	}
 	var b strings.Builder
-	_ = pwaPageTemplate.Execute(&b, map[string]any{
+	err := tpl.Execute(&b, map[string]any{
 		"Lang": lang, "Copy": cp, "JSCopy": jsCopy, "Page": p, "Test": test, "Short": short,
 		"Theme": cssColor(p.ThemeColor, "#00A173"), "Bg": template.CSS(pageBg),
 		"Text": template.CSS(scheme[0]), "Muted": template.CSS(scheme[1]), "Subtle": template.CSS(scheme[2]),
 		"Border": template.CSS(scheme[3]), "Chip": template.CSS(scheme[4]),
 		"Notes": strings.Join(notes, " · "), "Details": details,
 	})
-	return []byte(b.String())
+	if err != nil {
+		return nil, err
+	}
+	return []byte(b.String()), nil
 }
 
 // isDarkColor is the editor preview's perceived-brightness check

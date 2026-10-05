@@ -77,15 +77,21 @@ elements, ads / in-app-purchase notes, updated date. The note line under the
 developer appears only when ads/purchases are set — the card's "no ads or
 paid content" fallback is an assertion, so it is not carried over.
 
-**What it deliberately does not show:** the operator-typed numbers and
-badges — rating, stars and star distribution, review count, downloads,
-size, age rating, "reviews verified"/verified-developer badge — and the
-store chrome around the card (store logo, bottom nav, footer links,
-"data safety" boilerplate, "available on all devices"). A page that
-presents operator-entered social proof inside a store look-alike deceives
-the people installing. The editor card itself is unchanged and stays an
-admin-only preview. `routingstore.PwaPage` does not even load those
-columns.
+**Two templates.** Visitors get `templates/pwa.html`, which deliberately does
+not show the operator-typed numbers and badges (rating, stars and
+distribution, review count, downloads, size, age rating, verified badge) nor
+the store chrome (bottom nav, footer links, "data safety" boilerplate,
+"available on all devices"): operator-entered social proof inside a store
+look-alike deceives the people installing.
+
+The constructor's signed test links (`c.Test`) render
+`templates/pwa_store.html` instead — the full editor card (header labelled
+"Apps", rating block and star distribution, downloads, size, Share/Wishlist,
+screenshots, About + details sheet, Data safety, ratings and reviews,
+What's new, footer, bottom nav) so the operator sees exactly the editor
+preview on a real page. `PwaPage` loads the numeric columns for it; tracked
+traffic never reaches that template. A template execution error redirects the
+visitor to the destination rather than serving half a page.
 
 ## In-app WebView bounce (§28/§73)
 

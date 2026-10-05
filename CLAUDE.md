@@ -19,19 +19,14 @@ referenced below as §N).
 ## CURRENT STATE — UPDATE THIS EVERY PHASE
 
 ```
-CURRENT PHASE : PWA INSTALL PAGE LAID OUT LIKE THE CONSTRUCTOR CARD
-STATUS        : done. /pwa/{token}/ now mirrors the editor preview (header,
-                accent/dark theme, screenshots, About + details sheet,
-                What's new, ring-around-icon install sequence). By decision
-                it shows NO rating/stars/reviews/downloads/size/age/verified
-                badge and no store logo/nav/footer (operator-typed social
-                proof in a store look-alike deceives installers) — user
-                agreed ("без блоков с цифрами"). PwaPage loads the extra
-                text fields only. VERIFIED: full go test with all deps
-                green; live in Chrome (installing state, sheet, dark).
+CURRENT PHASE : STORE-STYLE PWA PAGE FOR CONSTRUCTOR TEST LINKS
+STATUS        : done. Signed test links render templates/pwa_store.html (full
+                editor card, header "Apps"); visitors keep the stats-free
+                templates/pwa.html. Render errors redirect to destination.
+                VERIFIED: go test ./tracker ./internal/routingstore green;
+                full-env run and live Chrome check not repeated this step.
                 Detail: docs/pwa-serving.md.
-LAST COMMIT   : this phase's commit — feat(tracker): editor-style PWA page.
-                Before it: 1a5557d feat(tracker): serve PWA install pages.
+LAST COMMIT   : this phase's commit — feat(tracker): store-style PWA test page.
 UNCOMMITTED   : user's own label rename in apps/web pwa-preview-card.tsx +
                 en/ru pwa.json (Google Play → Apps) — not part of this phase.
 NEXT          : postlanding stage serving (+ postlanding dimension) —

@@ -250,7 +250,11 @@ func TestRenderPwaPageNoListingStats(t *testing.T) {
 		ContainsAds: true, InAppPurchases: true, UpdatedDate: "2026-08-21",
 	}
 	for _, lang := range []string{"ru", "en"} {
-		body := string(renderPwaPage(p, false, lang))
+		out, err := renderPwaPage(p, false, lang)
+		if err != nil {
+			t.Fatalf("%s render: %v", lang, err)
+		}
+		body := string(out)
 		for _, want := range []string{"Lucky App", "Lucky Dev", "Spin daily.", "New wheel", "2.4.1", "2026-08-21", "--bg:#18181b", "--accent:#16a34a"} {
 			if !strings.Contains(body, want) {
 				t.Fatalf("%s page lacks %q", lang, want)
@@ -263,10 +267,47 @@ func TestRenderPwaPageNoListingStats(t *testing.T) {
 		}
 	}
 	// No optional fields: no empty sections or sheet.
-	bare := string(renderPwaPage(routingstore.PwaPage{Name: "X"}, false, "en"))
+	bareOut, err := renderPwaPage(routingstore.PwaPage{Name: "X"}, false, "en")
+	if err != nil {
+		t.Fatalf("bare render: %v", err)
+	}
+	bare := string(bareOut)
 	for _, banned := range []string{`id="sheet"`, "What's new", "Updated on", `class="shots"`} {
 		if strings.Contains(bare, banned) {
 			t.Fatalf("bare page contains %q", banned)
+		}
+	}
+}
+
+// TestRenderPwaStoreTemplateOnlyForTest: the store-style template (rating,
+// reviews, downloads, store chrome) renders fully for the operator's test
+// link and never for a visitor render of the same PWA.
+func TestRenderPwaStoreTemplateOnlyForTest(t *testing.T) {
+	p := routingstore.PwaPage{
+		Name: "Lucky App", ThemeColor: "#16a34a", BackgroundColor: "#ffffff", IconURL: "https://cdn.example/i.png",
+		Developer: "Lucky Dev", Description: "Spin daily.", WhatsNew: "New wheel", Version: "2.4.1",
+		Rating: 4.5, RatingCount: 1200, DownloadsLabel: "1M+", SizeMB: 38, AgeRating: "12+", RatingStars5: 80,
+		Screenshots: []string{"https://cdn.example/s1.png"},
+	}
+	for _, lang := range []string{"ru", "en"} {
+		test, err := renderPwaPage(p, true, lang)
+		if err != nil {
+			t.Fatalf("%s test render: %v", lang, err)
+		}
+		tb := string(test)
+		for _, want := range []string{`class="topbar"`, "4.5", "1200", "1M&#43;", "width:80%", `class="bottom-nav"`, "</html>"} {
+			if !strings.Contains(tb, want) {
+				t.Fatalf("%s test page lacks %q", lang, want)
+			}
+		}
+		visitor, err := renderPwaPage(p, false, lang)
+		if err != nil {
+			t.Fatalf("%s visitor render: %v", lang, err)
+		}
+		for _, banned := range []string{`class="topbar"`, "1200", "1M+", "bottom-nav"} {
+			if strings.Contains(string(visitor), banned) {
+				t.Fatalf("%s visitor page contains %q", lang, banned)
+			}
 		}
 	}
 }
