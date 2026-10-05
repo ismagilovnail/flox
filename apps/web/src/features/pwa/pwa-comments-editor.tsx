@@ -31,11 +31,16 @@ export function PwaCommentsEditor({
   onChange,
   activeSet,
   onActiveSetChange,
+  open,
+  onOpenChange,
 }: {
   value: PwaComment[];
   onChange: (next: PwaComment[]) => void;
   activeSet: string;
   onActiveSetChange: (key: string) => void;
+  /** The modal's state lives in the form: its header button opens it too. */
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
 }) {
   const { t, i18n } = useTranslation("pwa");
   const locale = i18n.language;
@@ -46,7 +51,6 @@ export function PwaCommentsEditor({
   // null = dialog closed; { comment: null } = a new comment; else editing.
   const [dialog, setDialog] = useState<{ comment: PwaComment | null; key: number } | null>(null);
   const [geoOpen, setGeoOpen] = useState(false);
-  const [open, setOpen] = useState(false);
 
   const sets = Array.from(new Set([...value.map(setKey), ...extraSets]));
   const inSet = value.filter((c) => setKey(c) === activeSet);
@@ -130,7 +134,7 @@ export function PwaCommentsEditor({
         <CardTitle>{t("comments.title")}</CardTitle>
         <CardDescription>{t("comments.hint")}</CardDescription>
         <CardAction>
-          <Button type="button" onClick={() => setOpen(true)}>
+          <Button type="button" variant="outline" onClick={() => onOpenChange(true)}>
             {t("comments.manage")}
           </Button>
         </CardAction>
@@ -148,7 +152,7 @@ export function PwaCommentsEditor({
           </div>
         )}
       </CardContent>
-      <Dialog open={open} onOpenChange={setOpen}>
+      <Dialog open={open} onOpenChange={onOpenChange}>
         <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-5xl">
           <DialogHeader>
             <DialogTitle>{t("comments.title")}</DialogTitle>

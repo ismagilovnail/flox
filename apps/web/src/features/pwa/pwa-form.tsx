@@ -31,7 +31,6 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { Mono } from "@/components/ui/typography";
 import type { PwaStatus } from "@/lib/api/pwa";
 import { PwaCommentsEditor } from "@/features/pwa/pwa-comments-editor";
 import { commentStats, setKey } from "@/features/pwa/pwa-comments";
@@ -284,6 +283,7 @@ export function PwaForm({
   // star bars come from those comments when there are any.
   const setComments = allComments.filter((c) => setKey(c) === activeSet);
   const stats = commentStats(setComments);
+  const [commentsOpen, setCommentsOpen] = useState(false);
   const [previewDir, setPreviewDir] = useState<"ltr" | "rtl">("ltr");
   const [pickingIcon, setPickingIcon] = useState(false);
   const [pickingHeaderLogo, setPickingHeaderLogo] = useState(false);
@@ -324,6 +324,9 @@ export function PwaForm({
             </CardDescription>
             <CardAction className="flex flex-wrap items-center justify-end gap-2">
               {headerActions}
+              <Button type="button" variant="outline" onClick={() => setCommentsOpen(true)}>
+                {t("comments.manage", { ns: "pwa" })}
+              </Button>
               <Button type="button" variant="outline" asChild>
                 <Link href="/pwa">{t("actions.cancel", { ns: "common" })}</Link>
               </Button>
@@ -988,35 +991,6 @@ export function PwaForm({
                 onPick={(file) => screenshotArray.append({ url: file.url })}
               />
             </div>
-
-            <Separator />
-
-            <div className="grid gap-1.5">
-              <Label>{t("form.manifestPreviewLabel", { ns: "pwa" })}</Label>
-              <pre className="overflow-x-auto rounded-md bg-muted p-2.5 text-xs">
-                <Mono>
-                  {JSON.stringify(
-                    {
-                      name: manifest.name || "",
-                      short_name: manifest.shortName || "",
-                      theme_color: manifest.themeColor || "",
-                      background_color: manifest.backgroundColor || "",
-                      start_url: manifest.startUrl || "",
-                      display: "standalone",
-                      icons: [
-                        {
-                          src: manifest.iconUrl || "",
-                          sizes: "512x512",
-                          type: "image/png",
-                        },
-                      ],
-                    },
-                    null,
-                    2,
-                  )}
-                </Mono>
-              </pre>
-            </div>
           </CardContent>
         </Card>
         <Controller
@@ -1028,6 +1002,8 @@ export function PwaForm({
               onChange={field.onChange}
               activeSet={activeSet}
               onActiveSetChange={setActiveSet}
+              open={commentsOpen}
+              onOpenChange={setCommentsOpen}
             />
           )}
         />

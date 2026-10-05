@@ -61,7 +61,6 @@
     "bounceLabel": "Bounce in-app WebView traffic",
     "bounceHint": "Sends FB/IG/TikTok/Telegram in-app browser traffic to the device's external browser (Android intent / iOS Safari scheme) so the install prompt can fire. Provider-neutral technical requirement, not moderator detection (§73).",
     "bounceAria": "Bounce in-app WebView traffic",
-    "manifestPreviewLabel": "Manifest preview",
     "listingSectionLabel": "App listing",
     "listingSectionHint": "Optional — feeds the live preview on the right. Leave blank to show \"—\" rather than a made-up rating/size.",
     "developerLabel": "Developer",
