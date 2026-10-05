@@ -218,6 +218,7 @@ func (s *Service) Duplicate(ctx context.Context, orgID, id string) (Pwa, error) 
 		ShortName:           source.ShortName,
 		ThemeColor:          source.ThemeColor,
 		BackgroundColor:     source.BackgroundColor,
+		ThemeAuto:           source.ThemeAuto,
 		IconURL:             source.IconURL,
 		StartURL:            source.StartURL,
 		BounceInAppWebview:  source.BounceInAppWebview,

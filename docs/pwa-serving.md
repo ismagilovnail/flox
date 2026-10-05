@@ -88,6 +88,12 @@ operator's: visitors see the full card. Earlier versions withheld the numbers
 from visitors.) A template execution error redirects the visitor to the
 destination rather than serving half a page.
 
+**Theme.** The PWA's "Тема" setting is light, dark or auto. Light/dark are
+fixed and derived from `background_color`. Auto (`pwas.theme_auto`, migration
+00037) renders the light palette as the base and swaps in the dark one under
+`@media (prefers-color-scheme: dark)`, with `color-scheme: light dark`; the
+constructor preview follows the browser's own preference the same way.
+
 ## In-app WebView bounce (§28/§73)
 
 With the PWA's `bounceInAppWebview` on, a request whose user agent

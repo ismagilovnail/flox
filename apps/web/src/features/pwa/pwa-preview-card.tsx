@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, type CSSProperties } from "react";
+import { useEffect, useState, useSyncExternalStore, type CSSProperties } from "react";
 import {
   ArrowRightIcon,
   BookOpenIcon,
@@ -39,6 +39,21 @@ const STAR_ROWS = [5, 4, 3, 2, 1] as const;
  * the mockup's own light/dark theme against the operator's chosen
  * `background_color`, not to pick a single text color the way an
  * earlier, now-removed widget once did. */
+function subscribePrefersDark(onChange: () => void) {
+  const mq = window.matchMedia("(prefers-color-scheme: dark)");
+  mq.addEventListener("change", onChange);
+  return () => mq.removeEventListener("change", onChange);
+}
+
+/** The browser's own light/dark preference; light on the server. */
+function usePrefersDark(): boolean {
+  return useSyncExternalStore(
+    subscribePrefersDark,
+    () => window.matchMedia("(prefers-color-scheme: dark)").matches,
+    () => false,
+  );
+}
+
 function isDarkColor(hex?: string): boolean {
   if (!hex || !/^#[0-9a-fA-F]{6}$/.test(hex)) return false;
   const r = parseInt(hex.slice(1, 3), 16);
@@ -56,8 +71,8 @@ function withAlpha(hex: string, alpha: number): string {
   return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 }
 
-/** The real multicolor Google Play triangle mark from the reference markup — an inline vector, not a fetched asset. */
-function GooglePlayGlyph() {
+/** The multicolor triangle mark from the reference markup — an inline vector, not a fetched asset. */
+function AppsGlyph() {
   return (
     <svg
       className="size-6"
@@ -206,7 +221,7 @@ function ScreenshotsCarousel({ screenshots, t }: { screenshots: string[]; t: TFu
                 alt={t("preview.screenshotAlt", { ns: "pwa", n: i + 1 })}
                 loading="lazy"
                 // h-full w-auto (not a fixed aspect-ratio box): matches
-                // the real Google Play gallery's own technique — verified
+                // the reference gallery's own technique — verified
                 // live against play.google.com, whose screenshot cards
                 // share one fixed height while each image's width follows
                 // its own natural aspect ratio (177px-wide portraits next
@@ -244,15 +259,15 @@ function StarBar({ n, pct, accent }: { n: number; pct?: number; accent: string }
 const INSTALL_DURATION_MS = 1800;
 
 /**
- * The real Android/Play Store install affordance is a ring drawn around
+ * The real Android store install affordance is a ring drawn around
  * the APP ICON, not inside the Install button (confirmed against a real
- * Play Store screenshot the user provided: while installing, the button
+ * store screenshot the user provided: while installing, the button
  * disappears entirely, a circular progress ring wraps the icon, and the
  * developer line is replaced with "Please wait…" — reproduced exactly
  * below, not guessed at). No real install happens anywhere in this
  * preview card (there is no app to install — this mockup only ever
  * renders form values); this is a deliberate FLOX-specific UI convenience
- * so an operator can see the same interaction Google Play's own listing
+ * so an operator can see the same interaction the reference listing
  * page shows, not a claim of real installation capability. Driven by a
  * CSS transition rather than a JS progress loop: the ring starts fully
  * "empty" (dashoffset = circumference) and a double-rAF flip to
@@ -325,7 +340,7 @@ function InstallProgressRing({
  * light webpage even inside a dark host UI) — instead it follows
  * `backgroundColor` (manifest `background_color`, pwa-form.tsx's "Тема"
  * dropdown), same deliberate-convenience reasoning as `accentColor`
- * below: a real Google Play listing is always light, never driven by an
+ * below: a real store listing is always light, never driven by an
  * app's own declared background — this is FLOX's own preview affordance,
  * not a claim about real store behavior. Every data field renders
  * exactly what the operator entered in PwaForm; nothing here is a
@@ -334,7 +349,7 @@ function InstallProgressRing({
  * a fake placeholder value, and an unset icon renders no icon at all
  * rather than an invented letter avatar (the reference behaves the same
  * way). Footer links and the bottom nav bar are pure decoration (match
- * the real Google Play chrome, go nowhere) — not backed by any field.
+ * the real store chrome, go nowhere) — not backed by any field.
  */
 export function PwaPreviewCard({
   t,
@@ -348,6 +363,7 @@ export function PwaPreviewCard({
   sizeMb,
   accentColor,
   backgroundColor,
+  themeAuto,
   screenshots,
   whatsNew,
   ratingStars5,
@@ -378,7 +394,7 @@ export function PwaPreviewCard({
    * схема" dropdown) — used as this preview's own accent (install
    * button, verified badge, rating star/bars, active-nav highlight),
    * replacing what was the reference's own fixed brand green
-   * everywhere. Real Google Play never does this (a listing always uses
+   * everywhere. The real store never does this (a listing always uses
    * Google's own branding, not an app's declared color) — this is a
    * deliberate FLOX-specific convenience so an operator can preview
    * their own brand accent, not a claim about how the real store
@@ -391,11 +407,13 @@ export function PwaPreviewCard({
    * theme (background/text/border/hover colors throughout, incl. the
    * "About this app" sheet) based on the color's own perceived
    * brightness. Same deliberate-convenience reasoning as `accentColor`:
-   * a real Google Play listing is always light regardless of an app's
+   * a real store listing is always light regardless of an app's
    * declared background, so this is FLOX's own preview affordance, not
    * a claim about how the real store renders. Falls back to light when
    * unset/invalid. */
   backgroundColor?: string;
+  /** Follow the browser's own light/dark preference instead of `backgroundColor`. */
+  themeAuto?: boolean;
   screenshots?: string[];
   whatsNew?: string;
   ratingStars5?: number;
@@ -426,7 +444,8 @@ export function PwaPreviewCard({
   className?: string;
 }) {
   const accent = /^#[0-9a-fA-F]{6}$/.test(accentColor ?? "") ? accentColor! : REF_PRIMARY;
-  const dark = isDarkColor(backgroundColor);
+  const prefersDark = usePrefersDark();
+  const dark = themeAuto ? prefersDark : isDarkColor(backgroundColor);
   const themeVars = {
     "--pv-bg": dark ? "#18181b" : "#ffffff",
     "--pv-text": dark ? "#f4f4f5" : "#0f172a",
@@ -475,7 +494,7 @@ export function PwaPreviewCard({
   const [aboutOpen, setAboutOpen] = useState(false);
   // "idle" -> "installing" (button hides; the icon gets a progress ring
   // and the developer line reads "Please wait…", for INSTALL_DURATION_MS
-  // — matches the real Play Store's own install affordance, not a
+  // — matches the real store's own install affordance, not a
   // guess) -> "installed" ("Open" label). Clicking "Open" resets back to
   // "idle" rather than doing nothing, so the simulation can be replayed
   // while designing a listing instead of only ever running once per page
@@ -553,8 +572,8 @@ export function PwaPreviewCard({
           style={{ borderColor: "var(--pv-border)" }}
         >
           <div className="flex items-center gap-2 text-lg font-medium text-[var(--pv-text)]">
-            <GooglePlayGlyph />
-            Google Play
+            <AppsGlyph />
+            Apps
           </div>
           <div className="flex items-center gap-4 text-[var(--pv-text)]">
             <SearchIcon className="size-6" />
@@ -579,7 +598,7 @@ export function PwaPreviewCard({
                     the ring surrounds it with a clean gap, rather than being
                     drawn over a rounded square (which would cut through the
                     artwork and leave the corners poking outside the ring).
-                    That's how the real Play Store renders it — confirmed
+                    That's how the real store renders it — confirmed
                     against the user's own screenshot of a live install. */}
                 <div
                   className={cn(

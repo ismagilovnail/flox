@@ -5,6 +5,15 @@ per-phase, matching `CLAUDE.md`'s phase protocol. The one exception is
 [Between phases], below: spec amendments and the code changes that follow from
 them land between phases and would otherwise be invisible here.
 
+## [Between phases] — PWA auto theme
+
+New "Авто (по устройству)" option in the constructor's Тема dropdown: the
+install page follows the visitor's prefers-color-scheme. `pwas.theme_auto`
+(migration 00037, default false — existing PWAs unchanged) through
+create/update/duplicate, `PwaPage`, the form and the preview card.
+Tests: `TestRenderPwaPageThemeModes`; full-env go test, tsc and eslint clean.
+Not added, by decision: a reviews block with operator-typed reviewers.
+
 ## [Between phases] — One store-style PWA page for visitors and test links
 
 By the operator's decision `templates/pwa.html` is now the full editor card

@@ -40,7 +40,8 @@
     "backgroundThemeLabel": "Theme",
     "backgroundTheme": {
       "light": "Light",
-      "dark": "Dark"
+      "dark": "Dark",
+      "auto": "Auto (follow device)"
     },
     "iconUrlLabel": "Icon",
     "iconUrlChoose": "Choose image",
@@ -50,7 +51,7 @@
     "bounceHint": "Sends FB/IG/TikTok/Telegram in-app browser traffic to the device's external browser (Android intent / iOS Safari scheme) so the install prompt can fire. Provider-neutral technical requirement, not moderator detection (§73).",
     "bounceAria": "Bounce in-app WebView traffic",
     "manifestPreviewLabel": "Manifest preview",
-    "listingSectionLabel": "Store listing",
+    "listingSectionLabel": "App listing",
     "listingSectionHint": "Optional — feeds the live preview on the right. Leave blank to show \"—\" rather than a made-up rating/size.",
     "developerLabel": "Developer",
     "developerPlaceholder": "Acme Inc.",
@@ -135,7 +136,7 @@
     "reviewsVerified": "Ratings and reviews are verified",
     "whatsNewTitle": "What's new",
     "footer": {
-      "store": "Store",
+      "store": "Apps",
       "giftCards": "Gift cards",
       "redeemCode": "Redeem code",
       "familyLibrary": "Family library",

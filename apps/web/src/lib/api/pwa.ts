@@ -10,6 +10,8 @@ export type Pwa = {
   shortName: string;
   themeColor: string;
   backgroundColor: string;
+  /** Follow the visitor's device light/dark theme on the install page. */
+  themeAuto: boolean;
   iconUrl: string;
   startUrl: string;
   bounceInAppWebview: boolean;
@@ -57,6 +59,8 @@ export type CreatePwaInput = {
   shortName: string;
   themeColor: string;
   backgroundColor: string;
+  /** Follow the visitor's device light/dark theme on the install page. */
+  themeAuto: boolean;
   iconUrl: string;
   startUrl: string;
   bounceInAppWebview: boolean;

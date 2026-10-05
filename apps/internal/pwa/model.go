@@ -33,8 +33,10 @@ type Pwa struct {
 	ShortName       string `json:"shortName"`
 	ThemeColor      string `json:"themeColor"`
 	BackgroundColor string `json:"backgroundColor"`
-	IconURL         string `json:"iconUrl"`
-	StartURL        string `json:"startUrl"`
+	// ThemeAuto: the install page follows the visitor's device theme.
+	ThemeAuto bool   `json:"themeAuto"`
+	IconURL   string `json:"iconUrl"`
+	StartURL  string `json:"startUrl"`
 	// BounceInAppWebview is the §73-required, provider-neutral capability:
 	// bounce in-app WebView traffic (FB/IG/TikTok/Telegram) to the
 	// external browser so the install prompt can fire. Not vendor
@@ -92,6 +94,7 @@ type CreateInput struct {
 	ShortName           string
 	ThemeColor          string
 	BackgroundColor     string
+	ThemeAuto           bool
 	IconURL             string
 	StartURL            string
 	BounceInAppWebview  bool
@@ -131,6 +134,7 @@ type UpdateInput struct {
 	ShortName           *string
 	ThemeColor          *string
 	BackgroundColor     *string
+	ThemeAuto           *bool
 	IconURL             *string
 	StartURL            *string
 	BounceInAppWebview  *bool

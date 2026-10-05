@@ -7,6 +7,7 @@
   <title>{{.Page.Name}}</title>
 
   <meta name="theme-color" content="{{.Theme}}">
+  {{if .Auto}}<meta name="color-scheme" content="light dark">{{end}}
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="{{.Page.IconURL}}">
   <link rel="apple-touch-icon" href="{{.Page.IconURL}}">
@@ -24,6 +25,19 @@
       --border:{{.Border}};
       --chip:{{.Chip}};
     }
+
+    {{if .Auto}}
+    @media (prefers-color-scheme: dark){
+      :root{
+        --bg:{{.DarkBg}};
+        --text:{{.DarkText}};
+        --muted:{{.DarkMuted}};
+        --subtle:{{.DarkSubtle}};
+        --border:{{.DarkBorder}};
+        --chip:{{.DarkChip}};
+      }
+    }
+    {{end}}
 
     *{
       box-sizing:border-box;

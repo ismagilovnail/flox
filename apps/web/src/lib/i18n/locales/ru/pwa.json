@@ -40,7 +40,8 @@
     "backgroundThemeLabel": "Тема",
     "backgroundTheme": {
       "light": "Светлая",
-      "dark": "Тёмная"
+      "dark": "Тёмная",
+      "auto": "Авто (по устройству)"
     },
     "iconUrlLabel": "Иконка",
     "iconUrlChoose": "Выбрать изображение",
@@ -50,7 +51,7 @@
     "bounceHint": "Отправляет трафик из встроенного браузера FB/IG/TikTok/Telegram во внешний браузер устройства (Android intent / iOS Safari scheme), чтобы сработало предложение установки. Технически необходимо для всех платформ, а не определение модераторов (§73).",
     "bounceAria": "Обход трафика из in-app WebView",
     "manifestPreviewLabel": "Превью манифеста",
-    "listingSectionLabel": "Карточка в сторе",
+    "listingSectionLabel": "Карточка приложения",
     "listingSectionHint": "Необязательно — влияет на живое превью справа. Оставьте пустым, чтобы показывался «—», а не выдуманный рейтинг/размер.",
     "developerLabel": "Разработчик",
     "developerPlaceholder": "ООО «Ромашка»",
@@ -137,7 +138,7 @@
     "reviewsVerified": "Оценки и отзывы проверены",
     "whatsNewTitle": "Что нового",
     "footer": {
-      "store": "Магазин",
+      "store": "Приложения",
       "giftCards": "Подарочные карты",
       "redeemCode": "Использовать код",
       "familyLibrary": "Семейная библиотека",

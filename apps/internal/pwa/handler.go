@@ -77,6 +77,7 @@ type createRequest struct {
 	ShortName           string   `json:"shortName"`
 	ThemeColor          string   `json:"themeColor"`
 	BackgroundColor     string   `json:"backgroundColor"`
+	ThemeAuto           bool     `json:"themeAuto"`
 	IconURL             string   `json:"iconUrl"`
 	StartURL            string   `json:"startUrl"`
 	BounceInAppWebview  bool     `json:"bounceInAppWebview"`
@@ -116,6 +117,7 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 		ShortName:           req.ShortName,
 		ThemeColor:          req.ThemeColor,
 		BackgroundColor:     req.BackgroundColor,
+		ThemeAuto:           req.ThemeAuto,
 		IconURL:             req.IconURL,
 		StartURL:            req.StartURL,
 		BounceInAppWebview:  req.BounceInAppWebview,
@@ -152,6 +154,7 @@ type updateRequest struct {
 	ShortName           *string   `json:"shortName"`
 	ThemeColor          *string   `json:"themeColor"`
 	BackgroundColor     *string   `json:"backgroundColor"`
+	ThemeAuto           *bool     `json:"themeAuto"`
 	IconURL             *string   `json:"iconUrl"`
 	StartURL            *string   `json:"startUrl"`
 	BounceInAppWebview  *bool     `json:"bounceInAppWebview"`
@@ -192,6 +195,7 @@ func (h *Handler) update(w http.ResponseWriter, r *http.Request) {
 		ShortName:           req.ShortName,
 		ThemeColor:          req.ThemeColor,
 		BackgroundColor:     req.BackgroundColor,
+		ThemeAuto:           req.ThemeAuto,
 		IconURL:             req.IconURL,
 		StartURL:            req.StartURL,
 		BounceInAppWebview:  req.BounceInAppWebview,

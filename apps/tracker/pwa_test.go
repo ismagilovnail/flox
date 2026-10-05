@@ -297,3 +297,35 @@ func TestRenderPwaPageAllFormFields(t *testing.T) {
 		}
 	}
 }
+
+// TestRenderPwaPageThemeModes: fixed light/dark come from the background
+// color; auto starts light and flips on the visitor's prefers-color-scheme.
+func TestRenderPwaPageThemeModes(t *testing.T) {
+	base := routingstore.PwaPage{Name: "X", ThemeColor: "#16a34a"}
+	render := func(bg string, auto bool) string {
+		p := base
+		p.BackgroundColor, p.ThemeAuto = bg, auto
+		out, err := renderPwaPage(p, false, "en")
+		if err != nil {
+			t.Fatal(err)
+		}
+		return string(out)
+	}
+	if b := render("#ffffff", false); !strings.Contains(b, "--bg:#ffffff") || strings.Contains(b, "prefers-color-scheme") {
+		t.Fatal("fixed light page must be light with no media query")
+	}
+	if b := render("#0a0a0a", false); !strings.Contains(b, "--bg:#18181b") || strings.Contains(b, "prefers-color-scheme") {
+		t.Fatal("fixed dark page must be dark with no media query")
+	}
+	// Auto ignores the background color for the base palette: light first,
+	// dark only inside the media query.
+	for _, bg := range []string{"#ffffff", "#0a0a0a"} {
+		b := render(bg, true)
+		i := strings.Index(b, "--bg:#ffffff")
+		j := strings.Index(b, "prefers-color-scheme: dark")
+		k := strings.LastIndex(b, "--bg:#18181b")
+		if i < 0 || j < i || k < j || !strings.Contains(b, `content="light dark"`) {
+			t.Fatalf("auto page (bg %s) lacks light base + dark media palette", bg)
+		}
+	}
+}

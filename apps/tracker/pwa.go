@@ -462,14 +462,22 @@ func renderPwaPage(p routingstore.PwaPage, test bool, lang string) ([]byte, erro
 	add(cp["dInteractive"], p.InteractiveElements)
 	// The editor's card flips light/dark from the PWA's background color.
 	bg := cssColor(p.BackgroundColor, "#ffffff")
-	scheme := map[bool][5]string{
+	schemes := map[bool][5]string{
 		false: {"#0f172a", "#475569", "#334155", "#dadce0", "#f1f5f9"},
 		true:  {"#f4f4f5", "#a1a1aa", "#d4d4d8", "#3f3f46", "#27272a"},
-	}[isDarkColor(string(bg))]
+	}
+	dark := isDarkColor(string(bg))
+	if p.ThemeAuto {
+		// Auto: light is the base palette, dark comes from the visitor's
+		// prefers-color-scheme (see the template's media query).
+		dark = false
+	}
+	scheme := schemes[dark]
 	pageBg := "#ffffff"
-	if isDarkColor(string(bg)) {
+	if dark {
 		pageBg = "#18181b"
 	}
+	darkScheme := schemes[true]
 	jsCopy := map[string]string{"pleaseWait": cp["pleaseWait"]}
 	var b strings.Builder
 	err := pwaPageTemplate.Execute(&b, map[string]any{
@@ -478,6 +486,9 @@ func renderPwaPage(p routingstore.PwaPage, test bool, lang string) ([]byte, erro
 		"Text": template.CSS(scheme[0]), "Muted": template.CSS(scheme[1]), "Subtle": template.CSS(scheme[2]),
 		"Border": template.CSS(scheme[3]), "Chip": template.CSS(scheme[4]),
 		"Notes": strings.Join(notes, " · "), "Details": details,
+		"Auto": p.ThemeAuto, "DarkBg": template.CSS("#18181b"),
+		"DarkText": template.CSS(darkScheme[0]), "DarkMuted": template.CSS(darkScheme[1]), "DarkSubtle": template.CSS(darkScheme[2]),
+		"DarkBorder": template.CSS(darkScheme[3]), "DarkChip": template.CSS(darkScheme[4]),
 	})
 	if err != nil {
 		return nil, err

@@ -105,6 +105,7 @@ export function buildPwaFormSchema(t: TFunction) {
       .max(20),
     themeColor: hexColor,
     backgroundColor: hexColor,
+    themeAuto: z.boolean(),
     iconUrl: z.url(t("form.validation.iconUrlInvalid", { ns: "pwa" })),
     startUrl: z
       .string()
@@ -218,6 +219,7 @@ export function PwaForm({
       shortName: "",
       themeColor: "#16a34a",
       backgroundColor: "#ffffff",
+      themeAuto: false,
       iconUrl: "",
       startUrl: "/install",
       bounceInAppWebview: true,
@@ -251,7 +253,10 @@ export function PwaForm({
   const [pickingIcon, setPickingIcon] = useState(false);
   const [pickingScreenshot, setPickingScreenshot] = useState(false);
   const accentScheme = matchPreset(PWA_ACCENT_COLORS, manifest.themeColor);
-  const backgroundTheme = matchPreset(PWA_BACKGROUND_THEMES, manifest.backgroundColor);
+  // "auto" is not a color: it is its own flag, shown as a third dropdown option.
+  const backgroundTheme = manifest.themeAuto
+    ? "auto"
+    : matchPreset(PWA_BACKGROUND_THEMES, manifest.backgroundColor);
 
   function handleAccentChange(value: string) {
     const preset = PWA_ACCENT_COLORS.find((p) => p.value === value);
@@ -259,6 +264,11 @@ export function PwaForm({
   }
 
   function handleBackgroundThemeChange(value: string) {
+    if (value === "auto") {
+      form.setValue("themeAuto", true, { shouldValidate: true, shouldDirty: true });
+      return;
+    }
+    form.setValue("themeAuto", false, { shouldValidate: true, shouldDirty: true });
     const preset = PWA_BACKGROUND_THEMES.find((p) => p.value === value);
     if (preset) form.setValue("backgroundColor", preset.color, { shouldValidate: true, shouldDirty: true });
   }
@@ -347,6 +357,13 @@ export function PwaForm({
                         {t(`form.backgroundTheme.${p.value}`, { ns: "pwa" })}
                       </SelectItem>
                     ))}
+                    <SelectItem value="auto">
+                      <span
+                        className="size-3 rounded-full border border-black/10"
+                        style={{ background: "linear-gradient(90deg, #ffffff 50%, #0a0a0a 50%)" }}
+                      />
+                      {t("form.backgroundTheme.auto", { ns: "pwa" })}
+                    </SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -880,6 +897,7 @@ export function PwaForm({
               iconUrl={manifest.iconUrl}
               accentColor={manifest.themeColor}
               backgroundColor={manifest.backgroundColor}
+              themeAuto={manifest.themeAuto}
               description={manifest.description}
               rating={manifest.rating}
               ratingCount={manifest.ratingCount}

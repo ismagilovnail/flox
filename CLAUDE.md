@@ -19,17 +19,17 @@ referenced below as §N).
 ## CURRENT STATE — UPDATE THIS EVERY PHASE
 
 ```
-CURRENT PHASE : ONE STORE-STYLE PWA PAGE FOR VISITORS AND TEST LINKS
-STATUS        : done. templates/pwa.html is the full editor card (ratings,
-                reviews, downloads, nav) for every render, by the operator's
-                decision (supersedes "no numbers"); pwa_store.html removed.
-                VERIFIED: full-env go test green; tracker container healthy.
-                Open: user reports test page misses some form params —
-                DB row of "Тест PWA" was empty, save path reads clean; ask
-                which fields after a real save. Detail: docs/pwa-serving.md.
-LAST COMMIT   : this phase's commit — feat(tracker): one store-style PWA page.
-UNCOMMITTED   : user's own label rename in apps/web pwa-preview-card.tsx +
-                en/ru pwa.json (Google Play → Apps) — not part of this phase.
+CURRENT PHASE : PWA AUTO THEME
+STATUS        : done. Тема dropdown gains "Авто"; pwas.theme_auto (00037),
+                tracker emits light base + prefers-color-scheme dark palette.
+                VERIFIED: full-env go test green, tsc + eslint clean, API
+                rebuilt and migrated. Not checked live in Chrome. Also from
+                this session: pwa.html is the full store-style card for all
+                visitors (operator decision); fake-reviews block declined.
+                Open: user says test page misses some form params — DB row
+                was empty; ask which fields after a real save.
+LAST COMMIT   : this phase's commit — feat(pwa): auto theme.
+UNCOMMITTED   : none expected.
 NEXT          : postlanding stage serving (+ postlanding dimension) —
                 already requested by the user; confirm details first.
                 Then: network dimension; Top Offers card; PWA types
