@@ -37,6 +37,11 @@ the first language. Names come from `Intl.DisplayNames` in the UI language.
 Other pairs still work through CSV import (the API accepts any two-letter
 codes). tsc, eslint clean; checked live on /pwa/new.
 
+## [Between phases] — comments modal: CSV format hint and preview caption removed
+
+The "CSV: geo,lang,…" line and the "Превью в реальном времени" caption are gone
+from the modal (the preview itself stays). tsc, eslint clean.
+
 ## [Between phases] — live phone preview while editing comments
 
 The comments modal gets a third column with the phone preview (the form's own

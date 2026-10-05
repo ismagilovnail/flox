@@ -216,7 +216,6 @@
     "add": "Comment",
     "importCsv": "Import CSV",
     "exportCsv": "Export CSV",
-    "csvFormat": "CSV: geo,lang,author,rating,text,likes,date,reply,avatar",
     "author": "Username",
     "rating": "Rating",
     "text": "Comment text",
@@ -249,7 +248,6 @@
     "textPlaceholder": "Enter the comment text",
     "reply": "Developer response",
     "replyPlaceholder": "Enter the company's reply (optional)",
-    "edit": "Edit",
-    "livePreview": "Live preview"
+    "edit": "Edit"
   }
 }

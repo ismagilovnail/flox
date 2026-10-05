@@ -218,7 +218,6 @@
     "add": "Комментарий",
     "importCsv": "Импорт CSV",
     "exportCsv": "Экспорт CSV",
-    "csvFormat": "CSV: geo,lang,author,rating,text,likes,date,reply,avatar",
     "author": "Имя пользователя",
     "rating": "Рейтинг",
     "text": "Текст комментария",
@@ -251,7 +250,6 @@
     "textPlaceholder": "Введите текст комментария",
     "reply": "Ответ разработчика",
     "replyPlaceholder": "Введите ответ компании (необязательно)",
-    "edit": "Изменить",
-    "livePreview": "Превью в реальном времени"
+    "edit": "Изменить"
   }
 }

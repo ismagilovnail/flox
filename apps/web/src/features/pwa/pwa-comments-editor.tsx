@@ -245,7 +245,6 @@ export function PwaCommentsEditor({
                   if (f) void importCsv(f);
                 }}
               />
-              <span className="ml-auto text-xs text-muted-foreground">{t("comments.csvFormat")}</span>
             </div>
 
             <div className="flex items-center justify-between rounded-md border px-3 py-2">
@@ -298,7 +297,6 @@ export function PwaCommentsEditor({
         )}
             <div className="hidden lg:block">
               <div className="sticky top-0 flex flex-col gap-2">
-                <Label>{t("comments.livePreview")}</Label>
                 {renderPreview(inSet)}
               </div>
             </div>
