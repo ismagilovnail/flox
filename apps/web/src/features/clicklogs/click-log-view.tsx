@@ -44,6 +44,8 @@ export function ClickLogView() {
           emptyDescription={t("view.emptyDescription")}
           initialColumnVisibility={CLICK_LOG_INITIAL_COLUMN_VISIBILITY}
           pageSize={20}
+          enableColumnReorder
+          persistKey="click-log"
         />
       )}
     </div>

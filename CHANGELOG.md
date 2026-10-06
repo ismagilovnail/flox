@@ -5,6 +5,13 @@ per-phase, matching `CLAUDE.md`'s phase protocol. The one exception is
 [Between phases], below: spec amendments and the code changes that follow from
 them land between phases and would otherwise be invisible here.
 
+## [Between phases] — click log remembers its columns and can be reordered
+
+The click log table now uses `DataTable`'s `persistKey` ("click-log") and
+`enableColumnReorder`: hidden columns, their drag-and-drop order and widths survive a
+reload (per browser). Without a stored choice the table keeps its default (the
+`CLICK_LOG_INITIAL_COLUMN_VISIBILITY` set of hidden columns).
+
 ## [Between phases] — filter audit: end-to-end matrices, ASN normalization, queue batch fix
 
 Two end-to-end tests (`apps/e2e/filters_test.go`, throwaway organization, real API +
