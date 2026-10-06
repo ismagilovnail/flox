@@ -87,6 +87,18 @@ groups:
           summary: "apps/tracker cannot write events to Postgres"
           description: "flox_events_queue_write_retries_total has been increasing for 2m — apps/tracker keeps retrying event writes into event_queue. Events wait in its in-memory buffer; once it fills they are dropped (EventLossDetected). Check Postgres reachability from the tracker."
 
+      - alert: QueueBatchesDeadLettered
+        # pgqueue.Fail: ClickHouse rejected a batch 5 times. The rows are
+        # kept in Postgres (status 'dead') but are missing from reports
+        # until an operator fixes the cause and puts them back
+        # (docs/analytics-pipeline.md, "Backoff and dead-letter").
+        expr: increase(flox_queue_dead_lettered_total[15m]) > 0
+        labels:
+          severity: critical
+        annotations:
+          summary: "ClickHouse keeps rejecting event batches; they were dead-lettered"
+          description: "flox_queue_dead_lettered_total increased — events are parked in Postgres (status = 'dead', see last_error) and missing from analytics. Fix the cause, then requeue them as documented."
+
       - alert: EventQueueBacklogGrowing
         # Phase 31's own load test never saw this gauge exceed a handful
         # of rows even at 6,000 req/s sustained (docs/performance.md) — a

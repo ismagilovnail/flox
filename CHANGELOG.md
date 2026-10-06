@@ -5,6 +5,32 @@ per-phase, matching `CLAUDE.md`'s phase protocol. The one exception is
 [Between phases], below: spec amendments and the code changes that follow from
 them land between phases and would otherwise be invisible here.
 
+## [Between phases] — rejected ClickHouse batches are dead-lettered, outages back off
+
+Technical audit, finding Q2. A batch ClickHouse rejected was retried every 10 s forever, and a
+ClickHouse outage was hit at the same fixed pace.
+
+- Migration 00052: `event_queue`/`postback_attempt_queue` get `attempts`, `last_error`,
+  `dead_at` and a `dead` status. `pgqueue.Fail` replaces the flushers' requeue: next try after
+  10 s doubling to a 10 min cap; a batch the server rejected 5 times goes to `dead`, whole,
+  with its `batch_id` — never claimed again on its own, and putting it back reuses its D2
+  dedup tokens.
+- `chstore.Rejected`: over HTTP, clickhouse-go returns server exceptions as plain errors
+  (`[HTTP 500] … Code: 16. DB::Exception …`), so the classifier reads the code; overload and
+  timeout codes (MEMORY_LIMIT_EXCEEDED, TOO_MANY_PARTS, TIMEOUT_EXCEEDED, …) and every
+  network error count as transient and never dead-letter.
+- Metric `flox_queue_dead_lettered_total{queue}`, alert `QueueBatchesDeadLettered`, and the
+  requeue runbook in `docs/analytics-pipeline.md`. The fixed-delay constants and their
+  "nothing here should ever give up" comments are gone.
+- Not split: a poison batch is parked whole rather than bisected to find the bad row —
+  splitting changes the batch's rows and would break the dedup tokens of the tables that
+  already took it.
+
+Tests: classifier table plus a real `NO_SUCH_COLUMN` rejection from ClickHouse; `pgqueue.Fail`
+on a private table — 12 transient failures back off 10 s → 10 min and stay queued, a rejected
+batch dies exactly on the 5th attempt with `last_error`/`dead_at`, and is never claimed again;
+the flusher passes `rejected` only for a server rejection. Migration up → down → up.
+
 ## [Between phases] — postbacks find their click and status by index
 
 Technical audit, findings CH1 and DB1 (P1). Both lookups on the postback path were linear in

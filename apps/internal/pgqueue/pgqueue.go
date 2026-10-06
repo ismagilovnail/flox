@@ -11,6 +11,7 @@ package pgqueue
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -148,4 +149,51 @@ func queryStrings(ctx context.Context, tx pgx.Tx, sql string, args ...any) ([]st
 		out = append(out, s)
 	}
 	return out, rs.Err()
+}
+
+// Backoff and dead-lettering of failed batches (audit 2026-10-06, Q2).
+const (
+	// MaxRejectedAttempts is how many times a batch the ClickHouse server
+	// rejected is tried before it is dead-lettered.
+	MaxRejectedAttempts = 5
+	retryBase           = 10 * time.Second
+	retryCap            = 10 * time.Minute
+)
+
+// Fail records a failed attempt for a claimed batch: attempts+1, next try
+// after 10 s doubling per attempt (capped at 10 min), last_error kept. A
+// batch the server rejected (rejected=true) for the MaxRejectedAttempts-th
+// time goes to 'dead' instead — kept whole, never retried automatically.
+// Transient failures never dead-letter. Reports whether the batch died.
+func Fail(ctx context.Context, db *pgxpool.Pool, table string, ids []string, rejected bool, lastError string) (bool, error) {
+	if len(ids) == 0 {
+		return false, nil
+	}
+	if len(lastError) > 2000 {
+		lastError = lastError[:2000]
+	}
+	rows, err := db.Query(ctx, `
+		UPDATE `+table+`
+		SET attempts = attempts + 1,
+		    claimed_at = NULL,
+		    last_error = $4,
+		    status = CASE WHEN $2 AND attempts + 1 >= $3 THEN 'dead' ELSE 'queued' END,
+		    dead_at = CASE WHEN $2 AND attempts + 1 >= $3 THEN now() END,
+		    next_attempt_at = now() + least($5::interval * power(2, least(attempts, 20)), $6::interval)
+		WHERE id = ANY($1)
+		RETURNING status`,
+		ids, rejected, MaxRejectedAttempts, lastError, retryBase, retryCap)
+	if err != nil {
+		return false, fmt.Errorf("pgqueue: recording failed attempt on %s: %w", table, err)
+	}
+	defer rows.Close()
+	dead := false
+	for rows.Next() {
+		var status string
+		if err := rows.Scan(&status); err != nil {
+			return false, err
+		}
+		dead = dead || status == "dead"
+	}
+	return dead, rows.Err()
 }

@@ -52,4 +52,10 @@ type Consumer interface {
 	// next_attempt_at — used when a ClickHouse batch insert fails, so the
 	// whole batch is retried together rather than row by row.
 	Requeue(ctx context.Context, ids []string, next time.Time) error
+
+	// Fail records a failed ClickHouse insert for a claimed batch: it is
+	// retried with backoff, or — when the server rejected it
+	// (chstore.Rejected) too many times — dead-lettered. Reports whether it
+	// was (pgqueue.Fail).
+	Fail(ctx context.Context, ids []string, rejected bool, lastError string) (dead bool, err error)
 }

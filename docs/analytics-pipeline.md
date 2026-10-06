@@ -122,6 +122,33 @@ row (`direction='incoming'`), and the outgoing delivery it triggers
 produces its own `postback_events` row (`direction='outgoing'`) after
 actually hitting the network's URL.
 
+### Backoff and dead-letter (audit 2026-10-06, Q2)
+
+A failed ClickHouse insert is retried after 10 s, doubling per attempt up to
+10 min (`pgqueue.Fail`, columns `attempts`/`last_error`, migration 00052).
+`chstore.Rejected` tells a server-side rejection (`Code: N.
+DB::Exception`, other than overload/timeout codes) from everything else; a
+batch rejected `pgqueue.MaxRejectedAttempts` (5) times moves to `dead` —
+kept whole, with its `batch_id` and `last_error`, never claimed again on its
+own. Network errors, timeouts and transient server errors never
+dead-letter: an outage only backs off.
+
+Dead rows are not lost, but they are not in the reports either
+(`flox_queue_dead_lettered_total`, alert `QueueBatchesDeadLettered`). After
+fixing the cause (read `last_error`), put them back whole — the same
+`batch_id` keeps their deduplication tokens, so tables that already took the
+batch skip it:
+
+```sql
+SELECT batch_id, count(*), max(attempts), min(last_error) FROM event_queue WHERE status = 'dead' GROUP BY batch_id;
+UPDATE event_queue SET status = 'queued', attempts = 0, dead_at = NULL, next_attempt_at = now() WHERE status = 'dead';
+-- same for postback_attempt_queue
+```
+
+The tokens are remembered for the last 100,000 blocks per table
+(schema/012); a batch put back much later than that can insert duplicates
+into the tables that had already accepted it.
+
 ## `click_lookup`: clicks by id (audit 2026-10-06, CH1)
 
 A `ReplacingMergeTree` copy of `SOURCE_CLICK` rows with only the columns

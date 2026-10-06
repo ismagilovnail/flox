@@ -7,6 +7,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
@@ -33,7 +34,8 @@ func queueTable(t *testing.T) (*pgxpool.Pool, string) {
 		  id text PRIMARY KEY, payload jsonb NOT NULL DEFAULT '{}',
 		  status text NOT NULL DEFAULT 'queued',
 		  next_attempt_at timestamptz NOT NULL DEFAULT now(),
-		  claimed_at timestamptz, batch_id text)`); err != nil {
+		  claimed_at timestamptz, batch_id text,
+		  attempts integer NOT NULL DEFAULT 0, last_error text NOT NULL DEFAULT '', dead_at timestamptz)`); err != nil {
 		t.Fatalf("creating %s: %v", table, err)
 	}
 	t.Cleanup(func() { _, _ = pool.Exec(context.Background(), `DROP TABLE `+table) })
@@ -145,6 +147,71 @@ func TestConcurrentClaimsNeverSplitABatch(t *testing.T) {
 		sort.Strings(rows)
 		if strings.Join(rows, ",") != strings.Join(want[batchID], ",") {
 			t.Fatalf("batch %s claimed as %v, want exactly %v (split or mixed)", batchID, rows, want[batchID])
+		}
+	}
+}
+
+// Audit 2026-10-06, Q2: an outage backs off but never dead-letters; a
+// batch the server keeps rejecting is set aside after MaxRejectedAttempts.
+func TestFailBacksOffAndDeadLettersOnlyRejections(t *testing.T) {
+	pool, table := queueTable(t)
+	ctx := context.Background()
+
+	state := func(id string) (status string, attempts int, wait time.Duration, lastError string, dead bool) {
+		var next time.Time
+		var deadAt *time.Time
+		if err := pool.QueryRow(ctx, `SELECT status, attempts, next_attempt_at, last_error, dead_at FROM `+table+` WHERE id = $1`, id).
+			Scan(&status, &attempts, &next, &lastError, &deadAt); err != nil {
+			t.Fatalf("reading row: %v", err)
+		}
+		return status, attempts, time.Until(next), lastError, deadAt != nil
+	}
+
+	enqueue(t, pool, table, 2)
+	var transient, rejected string
+	if err := pool.QueryRow(ctx, `SELECT min(id), max(id) FROM `+table).Scan(&transient, &rejected); err != nil {
+		t.Fatalf("ids: %v", err)
+	}
+
+	for i := 1; i <= 12; i++ {
+		dead, err := pgqueue.Fail(ctx, pool, table, []string{transient}, false, "connection refused")
+		if err != nil || dead {
+			t.Fatalf("transient attempt %d: dead=%v err=%v, want retried", i, dead, err)
+		}
+		_, _, wait, _, _ := state(transient)
+		if want := min(10*time.Second<<(i-1), 10*time.Minute); wait > want+time.Second || wait < want-5*time.Second {
+			t.Fatalf("transient attempt %d: next try in %s, want about %s", i, wait.Round(time.Second), want)
+		}
+	}
+	if status, attempts, _, _, _ := state(transient); status != "queued" || attempts != 12 {
+		t.Fatalf("after 12 transient failures: %s/%d, want still queued", status, attempts)
+	}
+
+	for i := 1; i <= pgqueue.MaxRejectedAttempts; i++ {
+		dead, err := pgqueue.Fail(ctx, pool, table, []string{rejected}, true, "Code: 53. DB::Exception: Type mismatch")
+		if err != nil {
+			t.Fatalf("rejected attempt %d: %v", i, err)
+		}
+		if want := i == pgqueue.MaxRejectedAttempts; dead != want {
+			t.Fatalf("rejected attempt %d: dead=%v, want %v", i, dead, want)
+		}
+	}
+	status, _, _, lastError, deadAt := state(rejected)
+	if status != "dead" || !deadAt || lastError != "Code: 53. DB::Exception: Type mismatch" {
+		t.Fatalf("rejected batch: status=%s dead_at=%v last_error=%q, want dead with its error kept", status, deadAt, lastError)
+	}
+
+	// A dead batch is never claimed again on its own.
+	if _, err := pool.Exec(ctx, `UPDATE `+table+` SET next_attempt_at = now() - interval '1 hour'`); err != nil {
+		t.Fatalf("making everything due: %v", err)
+	}
+	_, rows, err := pgqueue.ClaimBatch(ctx, pool, table, 10)
+	if err != nil {
+		t.Fatalf("ClaimBatch: %v", err)
+	}
+	for _, r := range rows {
+		if r.ID == rejected {
+			t.Fatal("a dead-lettered batch was claimed")
 		}
 	}
 }

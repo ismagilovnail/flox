@@ -10,13 +10,9 @@ import (
 	"github.com/ismagilovnail/flox/apps/internal/metrics"
 )
 
-// flushRetryDelay is how long a failed ClickHouse batch waits before the
-// next attempt. Fixed, not exponential: unlike internal/postback's outgoing
-// deliveries (money-adjacent, dead-lettered after MaxAttempts), a delayed
-// analytics batch has no per-item deadline — retrying the same batch every
-// flushRetryDelay until ClickHouse recovers is simpler and sufficient, and
-// nothing here should ever give up and drop events permanently.
-const flushRetryDelay = 10 * time.Second
+// A failed batch is retried with exponential backoff and, when the
+// ClickHouse server keeps rejecting it, dead-lettered — see pgqueue.Fail
+// (audit 2026-10-06, Q2).
 
 // insertTimeout / cleanupTimeout bound a claimed batch's work once it is
 // detached from the poll loop's context (see RunOnce).
@@ -89,10 +85,21 @@ func (f *Flusher) RunOnce(ctx context.Context, limit int) (int, error) {
 	defer cancelCleanup()
 
 	if insertErr != nil {
-		f.logger.Error("clickhouse batch insert failed, requeueing", "error", insertErr, "count", len(claimed))
-		if reqErr := f.consumer.Requeue(cleanupCtx, ids, time.Now().UTC().Add(flushRetryDelay)); reqErr != nil {
-			f.logger.Error("requeueing failed event batch", "error", reqErr)
+		// Backoff on every failure; dead-letter only what the ClickHouse
+		// server itself keeps rejecting (audit 2026-10-06, Q2).
+		rejected := chstore.Rejected(insertErr)
+		dead, failErr := f.consumer.Fail(cleanupCtx, ids, rejected, insertErr.Error())
+		switch {
+		case failErr != nil:
+			f.logger.Error("recording failed event batch", "error", failErr, "insert_error", insertErr)
+		case dead:
+			metrics.QueueDeadLetteredTotal.WithLabelValues("event_queue").Add(float64(len(claimed)))
+			f.logger.Error("clickhouse keeps rejecting an event batch, dead-lettered",
+				"error", insertErr, "count", len(claimed), "batch_id", claimed[0].BatchID)
+			return len(claimed), nil
 		}
+		f.logger.Error("clickhouse batch insert failed, retrying later",
+			"error", insertErr, "rejected", rejected, "count", len(claimed), "batch_id", claimed[0].BatchID)
 		metrics.EventsRequeuedTotal.Add(float64(len(claimed)))
 		return len(claimed), nil
 	}

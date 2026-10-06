@@ -151,6 +151,15 @@ var (
 		Help:      "apps/tracker routing cache flushes on configuration change.",
 	})
 
+	// QueueDeadLetteredTotal counts rows moved to 'dead' because ClickHouse
+	// kept rejecting their batch (pgqueue.Fail). Not lost — kept in
+	// Postgres to be put back once the cause is fixed — but not in reports.
+	QueueDeadLetteredTotal = promauto.NewCounterVec(prometheus.CounterOpts{
+		Namespace: namespace,
+		Name:      "queue_dead_lettered_total",
+		Help:      "Queue rows dead-lettered after ClickHouse repeatedly rejected their batch, by queue.",
+	}, []string{"queue"})
+
 	PostbackDeliveriesTotal = promauto.NewCounterVec(prometheus.CounterOpts{
 		Namespace: namespace,
 		Name:      "postback_deliveries_total",

@@ -6,12 +6,12 @@ import (
 	"time"
 
 	"github.com/ismagilovnail/flox/apps/internal/chstore"
+	"github.com/ismagilovnail/flox/apps/internal/metrics"
 )
 
-// flushRetryDelay mirrors internal/eventqueue's: a failed ClickHouse batch
-// retries on a fixed delay, unbounded — this is a secondary audit log, not
-// a money-correctness path, so there is no dead-letter state here either.
-const flushRetryDelay = 10 * time.Second
+// A failed batch is retried with exponential backoff and, when the
+// ClickHouse server keeps rejecting it, dead-lettered — see pgqueue.Fail
+// (audit 2026-10-06, Q2).
 
 // insertTimeout / cleanupTimeout bound a claimed batch's work once it is
 // detached from the poll loop's context — same reasoning as
@@ -69,9 +69,19 @@ func (f *Flusher) RunOnce(ctx context.Context, limit int) (int, error) {
 	defer cancelCleanup()
 
 	if err := insertErr; err != nil {
-		f.logger.Error("clickhouse postback_events batch insert failed, requeueing", "error", err, "count", len(claimed))
-		if reqErr := f.consumer.Requeue(cleanupCtx, ids, time.Now().UTC().Add(flushRetryDelay)); reqErr != nil {
-			f.logger.Error("requeueing failed postback attempt batch", "error", reqErr)
+		// Backoff and dead-lettering as in eventqueue.Flusher.RunOnce.
+		rejected := chstore.Rejected(err)
+		dead, failErr := f.consumer.Fail(cleanupCtx, ids, rejected, err.Error())
+		switch {
+		case failErr != nil:
+			f.logger.Error("recording failed postback attempt batch", "error", failErr, "insert_error", err)
+		case dead:
+			metrics.QueueDeadLetteredTotal.WithLabelValues("postback_attempt_queue").Add(float64(len(claimed)))
+			f.logger.Error("clickhouse keeps rejecting a postback_events batch, dead-lettered",
+				"error", err, "count", len(claimed), "batch_id", claimed[0].BatchID)
+		default:
+			f.logger.Error("clickhouse postback_events batch insert failed, retrying later",
+				"error", err, "rejected", rejected, "count", len(claimed))
 		}
 		return len(claimed), nil
 	}

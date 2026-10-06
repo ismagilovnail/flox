@@ -21,6 +21,13 @@ func (c ctxConsumer) Delete(ctx context.Context, ids []string) error {
 	return c.fakeConsumer.Delete(ctx, ids)
 }
 
+func (c ctxConsumer) Fail(ctx context.Context, ids []string, rejected bool, lastError string) (bool, error) {
+	if err := ctx.Err(); err != nil {
+		return false, err
+	}
+	return c.fakeConsumer.Fail(ctx, ids, rejected, lastError)
+}
+
 func (c ctxConsumer) Requeue(ctx context.Context, ids []string, next time.Time) error {
 	if err := ctx.Err(); err != nil {
 		return err

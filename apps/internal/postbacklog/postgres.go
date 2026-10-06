@@ -101,3 +101,7 @@ func (q *PostgresQueue) ReapStuck(ctx context.Context, olderThan time.Duration) 
 	}
 	return tag.RowsAffected(), nil
 }
+
+func (q *PostgresQueue) Fail(ctx context.Context, ids []string, rejected bool, lastError string) (bool, error) {
+	return pgqueue.Fail(ctx, q.db, "postback_attempt_queue", ids, rejected, lastError)
+}

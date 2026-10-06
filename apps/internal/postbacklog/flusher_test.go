@@ -144,3 +144,9 @@ func TestFlusherEmptyClaimIsNoop(t *testing.T) {
 		t.Fatal("InsertPostbackAttempts must not be called when nothing was claimed")
 	}
 }
+
+// Fail returns the batch to pending, like Requeue; dead-lettering itself is
+// pgqueue's (tested there).
+func (c *fakeConsumer) Fail(ctx context.Context, ids []string, _ bool, _ string) (bool, error) {
+	return false, c.Requeue(ctx, ids, time.Time{})
+}

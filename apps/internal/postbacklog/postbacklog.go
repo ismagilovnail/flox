@@ -43,4 +43,7 @@ type Consumer interface {
 	ClaimDue(ctx context.Context, limit int) ([]QueuedAttempt, error)
 	Delete(ctx context.Context, ids []string) error
 	Requeue(ctx context.Context, ids []string, next time.Time) error
+
+	// Fail: same contract as eventqueue.Consumer.Fail.
+	Fail(ctx context.Context, ids []string, rejected bool, lastError string) (dead bool, err error)
 }

@@ -556,7 +556,8 @@ WHERE status='processing' AND claimed_at < now() - interval '5 minutes';
 // run(): wg.Wait() для всех PollLoop перед выходом (graceful drain ≤ 25s).
 ```
 
-**Q2 [HIGH]. Нет dead-letter для «ядовитых» событий** в `event_queue`.
+**Q2 [HIGH]. Нет dead-letter для «ядовитых» событий** (**статус: исправлено**
+— backoff + `dead` только для отказов сервера ClickHouse, без дробления батча) в `event_queue`.
 Если CH отвергает батч из-за одной плохой строки (тип, размер), весь батч
 ретраится каждые 10 с бесконечно, и очередь за ним встаёт (ORDER BY
 `next_attempt_at`). **Исправление:** `attempt_count`; после N неудач делить
