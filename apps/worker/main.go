@@ -40,6 +40,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
@@ -60,6 +61,7 @@ import (
 	"github.com/ismagilovnail/flox/apps/internal/conversion"
 	"github.com/ismagilovnail/flox/apps/internal/cost"
 	"github.com/ismagilovnail/flox/apps/internal/costsync"
+	"github.com/ismagilovnail/flox/apps/internal/errtrack"
 	"github.com/ismagilovnail/flox/apps/internal/eventqueue"
 	"github.com/ismagilovnail/flox/apps/internal/fx"
 	"github.com/ismagilovnail/flox/apps/internal/fx/ecb"
@@ -143,6 +145,20 @@ func run() error {
 	}
 
 	logger := logging.New(cfg.LogLevel)
+
+	// Error tracking (internal/errtrack): ERROR log records and panics go to
+	// the tracker named by SENTRY_DSN; a no-op without it.
+	env := cfg.SentryEnvironment
+	if env == "" {
+		env = cfg.Env
+	}
+	reporter, err := errtrack.New(errtrack.Config{DSN: cfg.SentryDSN, Environment: env, Service: "worker"})
+	if err != nil {
+		logger.Error("error tracker configuration failed", "error", err)
+		return err
+	}
+	defer reporter.Flush(2 * time.Second)
+	logger = slog.New(errtrack.Handler(logger.Handler(), reporter))
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
@@ -294,7 +310,7 @@ func run() error {
 		loops.Add(1)
 		go func() {
 			defer loops.Done()
-			fn()
+			errtrack.Go(reporter, "worker loop", fn) // reports a panic, then crashes as before
 		}()
 	}
 

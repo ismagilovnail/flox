@@ -28,6 +28,7 @@ import (
 	"github.com/ismagilovnail/flox/apps/internal/clientip"
 	"github.com/ismagilovnail/flox/apps/internal/config"
 	"github.com/ismagilovnail/flox/apps/internal/conversion"
+	"github.com/ismagilovnail/flox/apps/internal/errtrack"
 	"github.com/ismagilovnail/flox/apps/internal/eventbuf"
 	"github.com/ismagilovnail/flox/apps/internal/eventqueue"
 	"github.com/ismagilovnail/flox/apps/internal/landinglink"
@@ -58,6 +59,20 @@ func run() error {
 	}
 
 	logger := logging.New(cfg.LogLevel)
+
+	// Error tracking (internal/errtrack): ERROR log records and panics go to
+	// the tracker named by SENTRY_DSN; a no-op without it.
+	env := cfg.SentryEnvironment
+	if env == "" {
+		env = cfg.Env
+	}
+	reporter, err := errtrack.New(errtrack.Config{DSN: cfg.SentryDSN, Environment: env, Service: "tracker"})
+	if err != nil {
+		logger.Error("error tracker configuration failed", "error", err)
+		return err
+	}
+	defer reporter.Flush(2 * time.Second)
+	logger = slog.New(errtrack.Handler(logger.Handler(), reporter))
 
 	// See apps/api/main.go's identical construction — same TRUSTED_PROXIES
 	// value, same reasoning (security audit finding #2). apps/tracker's
@@ -231,7 +246,7 @@ func run() error {
 	// event, not a log line).
 	r.Use(middleware.RequestID)
 	r.Use(echoRequestID)
-	r.Use(middleware.Recoverer)
+	r.Use(errtrack.Middleware(reporter, logger))
 	r.Get("/health", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(`{"status":"ok"}`))

@@ -167,8 +167,14 @@ alone can only serve one path.
 | `flox_reconciliation_mismatched_buckets{kind}`, `flox_reconciliation_runs_total{outcome}`, `flox_reconciliation_last_success_timestamp_seconds` | worker (`internal/reconcile`, hourly) | Postgres postbacks vs ClickHouse conversion_events per (org, day, status) |
 
 Alerts for them are in `infra/alerts.yml` (`flox.infra`, `flox.postbacks`,
-`flox.fx`, `flox.events`). Still missing from the audit's list: error
-tracking (Sentry or similar).
+`flox.fx`, `flox.events`).
+
+**Error tracking** (`internal/errtrack`, `SENTRY_DSN`): every ERROR log
+record of api/tracker/worker — through a wrapping slog handler, so no call
+site has to opt in — plus panics in HTTP handlers (replacing chi's
+Recoverer, still answering 500) and in worker loops (reported and flushed,
+then the process crashes as before). Tagged `service`; Sentry protocol, so
+Sentry or a self-hosted compatible tracker. Off without a DSN.
 
 ## Dev-stack: Prometheus in `infra/docker-compose.dev.yml`
 

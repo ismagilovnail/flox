@@ -4,6 +4,7 @@ package main
 import (
 	"context"
 	"errors"
+	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
@@ -40,6 +41,7 @@ import (
 	"github.com/ismagilovnail/flox/apps/internal/domain"
 	domaincloudflare "github.com/ismagilovnail/flox/apps/internal/domain/cloudflare"
 	domainnamecheap "github.com/ismagilovnail/flox/apps/internal/domain/namecheap"
+	"github.com/ismagilovnail/flox/apps/internal/errtrack"
 	"github.com/ismagilovnail/flox/apps/internal/eventmapping"
 	"github.com/ismagilovnail/flox/apps/internal/httpserver"
 	integrationsengine "github.com/ismagilovnail/flox/apps/internal/integrations"
@@ -89,6 +91,20 @@ func run() error {
 	}
 
 	logger := logging.New(cfg.LogLevel)
+
+	// Error tracking (internal/errtrack): ERROR log records and panics go to
+	// the tracker named by SENTRY_DSN; a no-op without it.
+	env := cfg.SentryEnvironment
+	if env == "" {
+		env = cfg.Env
+	}
+	reporter, err := errtrack.New(errtrack.Config{DSN: cfg.SentryDSN, Environment: env, Service: "api"})
+	if err != nil {
+		logger.Error("error tracker configuration failed", "error", err)
+		return err
+	}
+	defer reporter.Flush(2 * time.Second)
+	logger = slog.New(errtrack.Handler(logger.Handler(), reporter))
 
 	// clientIP resolves the real client address behind TRUSTED_PROXIES,
 	// replacing every previously-unconditional X-Forwarded-For read
@@ -292,7 +308,8 @@ func run() error {
 		}
 		return "ip:" + clientIP.String(r)
 	}
-	srv := httpserver.New(logger, cfg.OTelServiceName, db, ch, cfg.AppURL, limiter, generalLimitKey, identify)
+	srv := httpserver.New(logger, cfg.OTelServiceName, db, ch, cfg.AppURL, limiter, generalLimitKey, identify,
+		httpserver.WithRecoverer(errtrack.Middleware(reporter, logger)))
 
 	// §52 RBAC. Until the 2026-09-06 audit, RequirePermission gated only
 	// /team, /security and the four features whose own phases wired it

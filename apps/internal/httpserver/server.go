@@ -67,13 +67,30 @@ type Server struct {
 // organization instead of by client IP — see PeekIdentity's own doc
 // comment for why this ordering matters and what it fixes (ROADMAP.md:
 // "General rate limit stays IP-keyed").
-func New(logger *slog.Logger, serviceName string, db Pinger, ch Pinger, appURL string, limiter *ratelimit.Limiter, generalLimitKey func(r *http.Request) string, identify func(http.Handler) http.Handler) *Server {
+// Option adjusts New.
+type Option func(*options)
+
+type options struct {
+	recoverer func(http.Handler) http.Handler
+}
+
+// WithRecoverer replaces chi's Recoverer — apps/api passes errtrack's, which
+// also reports the panic to the error tracker.
+func WithRecoverer(mw func(http.Handler) http.Handler) Option {
+	return func(o *options) { o.recoverer = mw }
+}
+
+func New(logger *slog.Logger, serviceName string, db Pinger, ch Pinger, appURL string, limiter *ratelimit.Limiter, generalLimitKey func(r *http.Request) string, identify func(http.Handler) http.Handler, opts ...Option) *Server {
+	o := options{recoverer: middleware.Recoverer}
+	for _, opt := range opts {
+		opt(&o)
+	}
 	r := chi.NewRouter()
 
 	r.Use(middleware.RequestID)
 	r.Use(responseRequestID)
 	r.Use(requestLogger(logger))
-	r.Use(middleware.Recoverer)
+	r.Use(o.recoverer)
 	r.Use(middleware.Timeout(30 * time.Second))
 	r.Use(cors.Handler(cors.Options{
 		AllowedOrigins:   []string{appURL},

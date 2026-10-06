@@ -40,16 +40,18 @@ STATUS        : P0 code items + P1 (RL1/A1/RL4, CH1/DB1, Q2, metrics) done: Q1 q
                 reconciliation (internal/reconcile) with alerts; stable event
                 ids (event_queue idempotent, ClickHouse event_id); the
                 reconciliation repairs ClickHouse event by event (also USD
-                history); `make reconcile` for any range.
+                history); `make reconcile` for any range; error tracking
+                (internal/errtrack, SENTRY_DSN).
                 Technical audit is docs/audit-tech-2026-10-06.md; the user asked
                 to fix it step by step and allowed wiping the dev database when
                 a step needs it.
-LAST COMMIT   : feat(reconcile): repair ClickHouse conversions from Postgres.
+LAST COMMIT   : feat(errtrack): report errors and panics to a Sentry-protocol tracker.
 UNCOMMITTED   : none expected. Dev DB wiped and refilled by `make fixtures`
                 (accounts in README; password flox-demo-2026).
 NEXT          : P0 code items done. CI (DO1) is the user's own decision — do
                 not set it up. Confirm the next slice with the user. Open
-                follow-ups: error tracking (Sentry).
+                follow-ups: none from the technical audit. Next: the marketer
+                audit (docs/audit-marketer-2026-10-06.md) — confirm scope.
                 Marketer audit items (docs/audit-marketer-2026-10-06.md) are
                 still open behind them. Run go test with the full env line AND
                 check e2e did not skip on the auth rate limit (memory:

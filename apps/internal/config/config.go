@@ -72,6 +72,11 @@ type Config struct {
 	// plain text (migration 00018) — this key never touches it.
 	AdAccountEncryptionKey string
 
+	// SentryDSN enables error tracking (internal/errtrack) — any tracker
+	// that speaks the Sentry protocol. Empty: off. SentryEnvironment labels
+	// events; it defaults to Env.
+	SentryDSN, SentryEnvironment string
+
 	// FXProvider is where apps/worker pulls reference FX rates from
 	// (internal/fx): "ecb" (default) or "none" — offline dev, or rates
 	// loaded into fx_rates by other means.
@@ -191,6 +196,8 @@ func load(portVar, portDefault, defaultServiceName string) (Config, error) {
 		AdAccountEncryptionKey:   getEnv("ADACCOUNT_ENCRYPTION_KEY", ""),
 		LandingLinkKey:           getEnv("LANDING_LINK_KEY", ""),
 		FXProvider:               getEnv("FX_PROVIDER", "ecb"),
+		SentryDSN:                getEnv("SENTRY_DSN", ""),
+		SentryEnvironment:        getEnv("SENTRY_ENVIRONMENT", ""),
 		TrackerPublicURL:         getEnv("TRACKER_PUBLIC_URL", ""),
 		TrackerDNSTarget:         getEnv("TRACKER_DNS_TARGET", ""),
 

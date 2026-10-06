@@ -5,6 +5,33 @@ per-phase, matching `CLAUDE.md`'s phase protocol. The one exception is
 [Between phases], below: spec amendments and the code changes that follow from
 them land between phases and would otherwise be invisible here.
 
+## [Between phases] — error tracking
+
+Technical audit §14: no error tracker — a panic was one log line among millions.
+`internal/errtrack` (behind `Reporter`, CLAUDE.md #11) speaks the Sentry protocol (Sentry, or a
+self-hosted compatible tracker such as GlitchTip) via `getsentry/sentry-go`, enabled by
+`SENTRY_DSN` (+ `SENTRY_ENVIRONMENT`, default `NODE_ENV`); a no-op without it.
+
+- Every ERROR log record from api, tracker and worker is reported with its attributes, through
+  a wrapping slog handler — no call site changes; info/warn are not.
+- Panics: in HTTP handlers (`errtrack.Middleware` replaces chi's Recoverer in the tracker and,
+  via the new `httpserver.WithRecoverer` option, in the API — still 500) and in worker loops
+  (`errtrack.Go`: reported, flushed, then re-panicked so the process still crashes).
+- Asynchronous (SDK queue), no visitor IPs/headers attached (`SendDefaultPII: false`). A
+  malformed DSN fails the binary at boot.
+- `DisableTelemetryBuffer: true`: with sentry-go 0.49's new telemetry buffer, an event queued
+  right before `Flush` was lost while `Flush` reported success (reproduced in the tests:
+  roughly one test in each run received nothing) — exactly the report-then-crash path. With
+  the classic transport, 10/10 runs under `-race` pass.
+
+Tests against a fake Sentry endpoint (`httptest`): an ERROR record arrives with message, error,
+its attributes and the `service`/`environment` tags, info/warn do not; a panicking handler
+answers 500 and its report carries the path and a stack pointing at the panic; `Go` reports
+before re-panicking; without a DSN the log handler is returned unchanged. All three dev services
+start without a DSN as before (health ok, tracker ready, no errors). Not verified against a real
+Sentry account. (While writing the tests: a "info must not be reported" check matched
+`go_numroutines` in the SDK's runtime context — the test now uses unique markers.)
+
 ## [Between phases] — the reconciliation repairs what it finds (and USD history)
 
 The hourly reconciliation now fixes ClickHouse from Postgres, event by event, instead of only

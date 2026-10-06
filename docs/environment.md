@@ -136,6 +136,18 @@ needs no configuration at all.
 `ecb` needs no key and outbound HTTPS to `www.ecb.europa.eu` from
 `apps/worker`. See `docs/fx.md`.
 
+### Error tracking
+
+| Variable | Dev value | Staging/production |
+|---|---|---|
+| `SENTRY_DSN` | empty (off) | The DSN of a tracker that speaks the Sentry protocol — Sentry, or self-hosted GlitchTip and similar. Read by api, tracker and worker. |
+| `SENTRY_ENVIRONMENT` | empty (= `NODE_ENV`) | Label for the events, e.g. `production`. |
+
+With a DSN, every ERROR log record (with its attributes) and every panic in
+an HTTP handler or a worker loop is sent, asynchronously; visitor IPs and
+headers are not attached. A malformed DSN fails the binary at boot.
+`internal/errtrack`.
+
 ### Domain/DNS providers, Facebook/TikTok ad accounts
 
 All blank in `.env.example` on purpose — every one of these is a real

@@ -759,6 +759,7 @@ error tracking** — см. `docs/observability.md`)
 | Redirect p50/p95/p99 по outcome, CPU, RSS, GC pause, goroutines | Частично есть через Go collector |
 
 Error tracking (Sentry или аналог) не подключён. Паники тонут в логах.
+**Статус: исправлено** (`internal/errtrack`, `SENTRY_DSN`; Sentry-протокол).
 
 ---
 
