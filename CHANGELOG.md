@@ -12,7 +12,8 @@ the report builder and organization settings. A "Россия" group (Калин
 Москва, Самара, Екатеринбург, Омск, Красноярск, Новосибирск, Иркутск, Якутск,
 Владивосток, Магадан, Камчатка) with city names and a right-aligned UTC offset,
 then "Весь мир" (UTC, London, Berlin, Dubai, Singapore, New York, Chicago, Los
-Angeles). City names are in the `analytics` i18n namespace (ru/en); a zone
+Angeles). The list opens below the trigger (`position="popper"`) and always
+from the top, not scrolled to the selected zone. City names are in the `analytics` i18n namespace (ru/en); a zone
 outside the list stays selectable under its IANA id. The API now embeds
 `time/tzdata`: the alpine runtime image ships no zone database, so
 `time.LoadLocation` for any zone but UTC would have returned "unknown timezone"

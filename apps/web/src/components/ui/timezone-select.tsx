@@ -47,7 +47,23 @@ export function TimezoneSelect({
       <SelectTrigger id={id} className={className} size="sm">
         <SelectValue />
       </SelectTrigger>
-      <SelectContent className="max-h-80 min-w-64">
+      <SelectContent
+        position="popper"
+        align="start"
+        className="max-h-80 min-w-64"
+        // Radix scrolls the selected item into view on open; this list should
+        // always open from the top (the Russian zones), not mid-list.
+        ref={(el) => {
+          if (!el) return
+          const toTop = () => {
+            el.scrollTop = 0
+            el.querySelector<HTMLElement>("[data-radix-select-viewport]")?.scrollTo({ top: 0 })
+          }
+          // Radix does its own scroll-into-view a frame or two after mounting.
+          requestAnimationFrame(() => requestAnimationFrame(toTop))
+          setTimeout(toTop, 60)
+        }}
+      >
         {custom && (
           <>
             <SelectItem value={custom}>
