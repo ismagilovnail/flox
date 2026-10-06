@@ -5,6 +5,12 @@ per-phase, matching `CLAUDE.md`'s phase protocol. The one exception is
 [Between phases], below: spec amendments and the code changes that follow from
 them land between phases and would otherwise be invisible here.
 
+## [Between phases] — marketer audit report
+
+`docs/audit-marketer-2026-10-06.md`: a prioritized audit of the platform from a media
+buyer's side (4 P0, 6 P1, 3 P2 findings, what was verified and what was not). Findings
+only; nothing in the code was changed for it.
+
 ## [Between phases] — creating a network, offer or traffic source returns to the list
 
 After "create" the new-network / new-offer / new-traffic-source pages go to the
