@@ -5,6 +5,29 @@ per-phase, matching `CLAUDE.md`'s phase protocol. The one exception is
 [Between phases], below: spec amendments and the code changes that follow from
 them land between phases and would otherwise be invisible here.
 
+## [Between phases] — postback revenue is validated
+
+Technical audit, finding S3. `revenue` went through `strconv.ParseFloat`, which accepts
+`NaN`, `Inf` and negatives: one `NaN` payout would make every ClickHouse revenue sum it
+touched `NaN`, and a value past `numeric(14,4)` failed the insert with a 500 that the
+network retries forever. `conversion.ParseRevenue`/`CheckRevenue` now require a finite
+amount in `[0, 1e9]`; the tracker answers 400 with the reason (never retried) before
+recording anything, and `Service.Record` repeats the check for replays (logged as `error`).
+Negative amounts are refused — §45 expresses a reversal as `CPA_DECLINE`, not a negative
+payout. Dev data checked first: no NaN/Inf/negative revenue in `postbacks` or
+`conversion_events`.
+
+Tests: `ParseRevenue` table (NaN/Inf/-Inf/negative/1e10/1e400/garbage/empty refused,
+0 and 1e9 accepted), service rejects non-finite revenue without emitting an event or a
+success, handler returns 400 before reaching the service. Live check on the running
+tracker with a throwaway org (removed): NaN/-5/1e10 → 400 with the reason, 12.5 → passes
+through to mapping. Full-env `go test ./...` green (`eventqueue`'s
+`TestEnqueueClaimAndDelete` flaked once while e2e filled the shared queue — known, passes
+alone); `apps/e2e` all four PASS after clearing the dev auth rate-limit keys.
+
+While checking §45 for negative amounts: it requires chargebacks to reverse revenue
+(ACCEPT then DECLINE). Reports do not — audit T4/AN3 is now a confirmed spec gap, queued.
+
 ## [Between phases] — a conversion commits with its event and its postback
 
 Technical audit, findings D1 (P0) and D3 (P1). A successful incoming postback used to make

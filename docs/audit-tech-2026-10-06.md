@@ -178,8 +178,9 @@ routing engine, auth-модель, структуру пакетов.
 - Обратная сторона: `CPA_DECLINE`/`CPA_TRASH` после `CPA_ACCEPT` выручку не
   уменьшает. Отчёт суммирует `usd_value` по `type IN ('CPA_ACCEPT','CPA_REDEP')`
   (`chstore/report.go:556`). Если сеть делает chargeback, Revenue и ROI
-  завышены. **NEEDS VERIFICATION:** проверить по спецификации §45, должна ли
-  отмена вычитаться.
+  завышены. **Подтверждено спецификацией:** §45 требует «chargeback (ACCEPT
+  then DECLINE → recorded, revenue reversed)», то есть это расхождение со
+  спецификацией, а не открытый вопрос.
 
 **T5 [MEDIUM]. Sticky cookie без подписи.**
 
@@ -441,7 +442,7 @@ type entry struct { link TrackingLink; cfg CampaignRouting; loadedAt time.Time }
   `X-Frame-Options`/`frame-ancestors`, HSTS (`apps/web/next.config.ts`,
   `httpserver`). Админку можно встроить во фрейм (clickjacking на
   деструктивные действия).
-- **S3 [MEDIUM].** `revenue` парсится через `strconv.ParseFloat`, который
+- **S3 [MEDIUM]** (**статус: исправлено**, `conversion.ParseRevenue`). `revenue` парсится через `strconv.ParseFloat`, который
   принимает `NaN`, `Inf` и отрицательные значения (`tracker/postback.go`).
   Один `revenue=NaN` от сети (или от любого, кто знает URL с секретом)
   превращает `sum()` в CH в NaN за весь период: колонка Revenue в отчётах

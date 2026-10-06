@@ -62,6 +62,18 @@ The postback attempt audit log (`AttemptLogger`) stays outside the
 transaction — it is a secondary record for the logs screen, and the
 Postgres ledger row is the source of truth.
 
+## Revenue must be a sane amount
+
+`revenue` must be a finite number in `[0, conversion.MaxRevenue]` (1e9).
+`strconv.ParseFloat` alone accepts `NaN` and `Inf`; one `NaN` payout made
+every ClickHouse revenue sum it touched `NaN`, and a value past
+`postbacks.revenue numeric(14,4)` failed the insert with a 500 the network
+retried forever (audit 2026-10-06, S3). The tracker answers **400** —
+never retried — before anything is recorded; `Service.Record` repeats the
+check for other callers (postback replay) and logs those as `error`. A
+negative amount is refused too: a reversal is a `CPA_DECLINE` status
+(§45), not a negative payout.
+
 ## Why OrganizationID comes from the URL, not the body
 
 Same rule as attribution (CLAUDE.md #5, §36-TENANCY), applied to a caller

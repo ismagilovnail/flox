@@ -27,6 +27,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math"
 	"strconv"
 	"strings"
 	"time"
@@ -323,6 +324,13 @@ func (s *Service) Record(ctx context.Context, p Postback) (Result, error) {
 	if rawStatus == "" {
 		return s.logError(ctx, p, "", "", "missing status")
 	}
+	// The HTTP handler already answers 400 for these; this guards every other
+	// caller (postback replay) so a bad amount never reaches the ledger.
+	if p.Revenue != nil {
+		if err := CheckRevenue(*p.Revenue); err != nil {
+			return s.logError(ctx, p, clickID, "", err.Error())
+		}
+	}
 
 	status, err := s.mapper.MapStatus(ctx, p.OrganizationID, p.NetworkID, rawStatus)
 	if errors.Is(err, ErrUnmapped) {
@@ -408,6 +416,44 @@ func (s *Service) Record(ctx context.Context, p Postback) (Result, error) {
 	s.logAttempt(ctx, p, clickID, status, eventRef, rec.Kind, message)
 
 	return Result{ID: rec.ID, Kind: rec.Kind, Status: status, Attribution: attr, Message: message}, nil
+}
+
+// MaxRevenue bounds one conversion's payout. postbacks.revenue is
+// numeric(14,4) (just under 1e10); anything near that is a broken macro, not
+// a sale.
+const MaxRevenue = 1e9
+
+// ErrInvalidRevenue is returned by ParseRevenue/CheckRevenue.
+var ErrInvalidRevenue = errors.New("conversion: invalid revenue")
+
+// ParseRevenue parses a postback's revenue parameter and applies
+// CheckRevenue. strconv.ParseFloat alone accepts "NaN" and "Inf": one NaN
+// payout turned every ClickHouse revenue sum it touched into NaN, and a value
+// past numeric(14,4) failed the insert with a 500 the network retried forever
+// (audit 2026-10-06, S3).
+func ParseRevenue(raw string) (float64, error) {
+	v, err := strconv.ParseFloat(strings.TrimSpace(raw), 64)
+	if err != nil {
+		return 0, fmt.Errorf("%w: %q is not a number", ErrInvalidRevenue, raw)
+	}
+	if err := CheckRevenue(v); err != nil {
+		return 0, err
+	}
+	return v, nil
+}
+
+// CheckRevenue accepts a finite payout in [0, MaxRevenue]. A reversal is a
+// CPA_DECLINE status (§45), never a negative amount.
+func CheckRevenue(v float64) error {
+	switch {
+	case math.IsNaN(v) || math.IsInf(v, 0):
+		return fmt.Errorf("%w: must be a finite number", ErrInvalidRevenue)
+	case v < 0:
+		return fmt.Errorf("%w: must not be negative (a reversal is a decline status)", ErrInvalidRevenue)
+	case v > MaxRevenue:
+		return fmt.Errorf("%w: above the %.0f limit", ErrInvalidRevenue, MaxRevenue)
+	}
+	return nil
 }
 
 // progressionRefusal is the message of a postback refused by the §45

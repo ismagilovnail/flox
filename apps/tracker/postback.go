@@ -8,7 +8,7 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
-	"strconv"
+	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -102,9 +102,11 @@ func (h *PostbackHandler) handle(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if raw := r.FormValue("revenue"); raw != "" {
-		v, err := strconv.ParseFloat(raw, 64)
+		v, err := conversion.ParseRevenue(raw)
 		if err != nil {
-			writeJSON(w, http.StatusBadRequest, postbackResponse{Result: "error", Message: "invalid revenue"})
+			// 400, not 500: the same request will never become valid, so
+			// the network must not retry it.
+			writeJSON(w, http.StatusBadRequest, postbackResponse{Result: "error", Message: strings.TrimPrefix(err.Error(), "conversion: ")})
 			return
 		}
 		p.Revenue = &v
