@@ -113,6 +113,39 @@ groups:
           summary: "Postgres event_queue backlog is growing"
           description: "flox_event_queue_depth has been above 10,000 for 10m — apps/worker's flush loop is falling behind. Events are not yet lost (still durable in Postgres) but analytics/attribution are increasingly stale until this drains."
 
+  - name: flox.infra
+    rules:
+      - alert: QueueStalled
+        # flox_queue_oldest_due_age_seconds catches a small queue that stopped
+        # draining, which a depth threshold would not.
+        expr: max by (queue) (flox_queue_oldest_due_age_seconds) > 300
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "A worker queue has a row waiting over 5 minutes past due"
+          description: "{{ $labels.queue }}: the oldest due row has waited over 5 minutes. apps/worker is down, stuck, or its target (ClickHouse, a partner endpoint) keeps failing."
+
+      - alert: PostgresPoolSaturated
+        expr: |
+          sum by (service) (rate(flox_pg_pool_acquires_total{kind="empty"}[5m]))
+            / sum by (service) (rate(flox_pg_pool_acquires_total{kind="all"}[5m])) > 0.5
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Most Postgres acquires wait for a free connection"
+          description: "{{ $labels.service }}: over half of pool acquires found no idle connection for 10m. Raise pool_max_conns in DATABASE_URL (docs/deployment.md) or find the slow queries holding connections."
+
+      - alert: RedisFailing
+        expr: sum by (op) (rate(flox_redis_errors_total[5m])) > 0
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Redis calls are failing; falling back"
+          description: "{{ $labels.op }}: Redis errors for 10m. Conversions read Postgres directly (slower), and rate limits fail open — /auth brute-force protection is off until Redis is back."
+
   - name: flox.fx
     rules:
       - alert: FXRatesStale
@@ -137,6 +170,31 @@ groups:
 
   - name: flox.postbacks
     rules:
+      - alert: PostbackIngestFailing
+        # 500s tell the network to retry, so nothing is lost yet — but a
+        # sustained rate means conversions are piling up at the networks.
+        expr: sum(rate(flox_postback_incoming_total{result="internal_error"}[5m])) > 0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Incoming postbacks are failing with internal errors"
+          description: "apps/tracker has answered incoming postbacks with 500 for 5m (Postgres or ClickHouse trouble on the record path). Networks retry, but conversions are delayed until it clears."
+
+      - alert: AttributionUnknownClickHigh
+        # Some unknown clicks are normal (bad ids, stale tests). A large
+        # share means clicks are not reaching click_lookup in time or a
+        # network echoes the wrong parameter.
+        expr: |
+          sum(rate(flox_attribution_outcomes_total{outcome="unknown_click"}[30m]))
+            / sum(rate(flox_attribution_outcomes_total[30m])) > 0.2
+        for: 30m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Over 20% of conversions match no click"
+          description: "flox_attribution_outcomes_total{outcome=unknown_click} is above 20% of all conversions for 30m. Check the worker's event flush lag (flox_queue_oldest_due_age_seconds) and the networks' postback URL templates."
+
       - alert: PostbackDeliveryDeadLetterRateHigh
         # "dead" = apps/internal/postback exhausted MaxAttempts —
         # genuinely, permanently lost per docs/observability.md's own

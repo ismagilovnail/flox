@@ -15,6 +15,7 @@ import (
 
 	"github.com/ismagilovnail/flox/apps/internal/conversion"
 	"github.com/ismagilovnail/flox/apps/internal/idgen"
+	"github.com/ismagilovnail/flox/apps/internal/metrics"
 )
 
 // PostbackHandler is Phase 23's conversion engine endpoint (§45):
@@ -48,6 +49,13 @@ type postbackResponse struct {
 }
 
 func (h *PostbackHandler) handle(w http.ResponseWriter, r *http.Request) {
+	start := time.Now()
+	rw := &postbackResultWriter{ResponseWriter: w, result: "internal_error"}
+	w = rw
+	defer func() {
+		metrics.PostbackIncomingLatencySeconds.Observe(time.Since(start).Seconds())
+		metrics.PostbackIncomingTotal.WithLabelValues(rw.result).Inc()
+	}()
 	ctx := r.Context()
 	networkID := chi.URLParam(r, "networkId")
 
@@ -144,7 +152,35 @@ func validPostbackSecret(provided, storedHash string) bool {
 	return subtle.ConstantTimeCompare([]byte(providedHash), []byte(storedHash)) == 1
 }
 
+// postbackResultWriter remembers the result label of the response written,
+// for postback_incoming_total — from the status code before the engine ran,
+// from the engine's own result after.
+type postbackResultWriter struct {
+	http.ResponseWriter
+	result string
+}
+
+func (w *postbackResultWriter) label(status int, body postbackResponse) {
+	switch {
+	case status == http.StatusOK:
+		w.result = body.Result
+	case status == http.StatusNotFound:
+		w.result = "unknown_network"
+	case status == http.StatusUnauthorized:
+		w.result = "unauthorized"
+	case status == http.StatusBadRequest:
+		w.result = "bad_request"
+	default:
+		w.result = "internal_error"
+	}
+}
+
 func writeJSON(w http.ResponseWriter, status int, v any) {
+	if rw, ok := w.(*postbackResultWriter); ok {
+		if body, ok := v.(postbackResponse); ok {
+			rw.label(status, body)
+		}
+	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(v)

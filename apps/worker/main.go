@@ -69,6 +69,7 @@ import (
 	"github.com/ismagilovnail/flox/apps/internal/postbacklog"
 	"github.com/ismagilovnail/flox/apps/internal/postgres"
 	"github.com/ismagilovnail/flox/apps/internal/queuereaper"
+	"github.com/ismagilovnail/flox/apps/internal/queuestats"
 	"github.com/ismagilovnail/flox/apps/internal/telemetry"
 	"github.com/ismagilovnail/flox/apps/internal/urlsafety"
 )
@@ -159,6 +160,7 @@ func run() error {
 		return err
 	}
 	defer db.Close()
+	metrics.RegisterPgxPool(db, "worker")
 
 	ch, err := chconn.NewConn(ctx, cfg.ClickHouse)
 	if err != nil {
@@ -304,6 +306,9 @@ func run() error {
 
 	logger.Info("event queue depth poller starting", "interval", queueDepthPollInterval)
 	start(func() { eventqueue.PollDepth(ctx, eventQueue, metrics.EventQueueDepth, queueDepthPollInterval, logger) })
+	// Per-queue open rows and the age of the oldest due row (audit
+	// 2026-10-06, §14) — depth alone misses a small stalled queue.
+	start(func() { queuestats.Poll(ctx, db, queueDepthPollInterval, logger) })
 
 	if fxProvider != nil {
 		fxSyncer := fx.NewSyncer(fxProvider, fx.NewStore(db), logger)

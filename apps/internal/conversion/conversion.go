@@ -37,6 +37,7 @@ import (
 	"github.com/ismagilovnail/flox/apps/internal/attribution"
 	"github.com/ismagilovnail/flox/apps/internal/event"
 	"github.com/ismagilovnail/flox/apps/internal/macro"
+	"github.com/ismagilovnail/flox/apps/internal/metrics"
 )
 
 // Postback is the inbound claim, already stripped of HTTP concerns.
@@ -364,6 +365,7 @@ func (s *Service) Record(ctx context.Context, p Postback) (Result, error) {
 	if err != nil {
 		return Result{}, fmt.Errorf("conversion: attributing: %w", err)
 	}
+	metrics.AttributionOutcomesTotal.WithLabelValues(string(attr.Outcome)).Inc()
 
 	usdValue, revenue := s.convertRevenue(ctx, p)
 

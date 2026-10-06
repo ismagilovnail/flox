@@ -160,6 +160,68 @@ var (
 		Help:      "Queue rows dead-lettered after ClickHouse repeatedly rejected their batch, by queue.",
 	}, []string{"queue"})
 
+	// PostbackIncomingTotal counts incoming network postbacks (apps/tracker
+	// /postback/{networkId}) by result: the conversion engine's own
+	// (success, duplicate, ignored, error) or a request refused before it
+	// (unknown_network, unauthorized, bad_request, internal_error).
+	PostbackIncomingTotal = promauto.NewCounterVec(prometheus.CounterOpts{
+		Namespace: namespace,
+		Name:      "postback_incoming_total",
+		Help:      "Incoming network postbacks, by result.",
+	}, []string{"result"})
+
+	PostbackIncomingLatencySeconds = promauto.NewHistogram(prometheus.HistogramOpts{
+		Namespace: namespace,
+		Name:      "postback_incoming_latency_seconds",
+		Help:      "Incoming postback handling latency (mapping, attribution, the record transaction).",
+		Buckets:   []float64{.005, .01, .025, .05, .1, .25, .5, 1, 2.5, 5},
+	})
+
+	// AttributionOutcomesTotal counts how conversions were attributed
+	// (attribution.Outcome: attributed, unknown_click, ambiguous, …). A
+	// rising unknown_click share means clicks are not reaching ClickHouse
+	// in time, or networks send ids FLOX never issued.
+	AttributionOutcomesTotal = promauto.NewCounterVec(prometheus.CounterOpts{
+		Namespace: namespace,
+		Name:      "attribution_outcomes_total",
+		Help:      "Conversion attribution outcomes.",
+	}, []string{"outcome"})
+
+	// QueueOldestDueAgeSeconds is how long the oldest due row of each
+	// worker queue has been waiting past its due time — catches a stalled
+	// queue that is too small for a depth alert.
+	QueueOldestDueAgeSeconds = promauto.NewGaugeVec(prometheus.GaugeOpts{
+		Namespace: namespace,
+		Name:      "queue_oldest_due_age_seconds",
+		Help:      "Seconds the oldest due row of a worker queue has waited past its due time (0 when none is due).",
+	}, []string{"queue"})
+
+	// QueueRows counts a worker queue's open rows by status (queued,
+	// retrying, processing, dead — never the kept success rows).
+	QueueRows = promauto.NewGaugeVec(prometheus.GaugeOpts{
+		Namespace: namespace,
+		Name:      "queue_rows",
+		Help:      "Open rows of a worker queue, by status.",
+	}, []string{"queue", "status"})
+
+	// FXRateMissingTotal counts conversions and cost entries stored without
+	// a USD value because no rate was on file. No currency label: the code
+	// comes from the postback request and would be unbounded.
+	FXRateMissingTotal = promauto.NewCounter(prometheus.CounterOpts{
+		Namespace: namespace,
+		Name:      "fx_rate_missing_total",
+		Help:      "Amounts stored without a USD value because no FX rate was on file.",
+	})
+
+	// RedisErrorsTotal counts Redis calls that failed and fell through
+	// (Redis is cache and rate limits only, so failures are survivable —
+	// but silent without this). op: conversion_last_status, ratelimit.
+	RedisErrorsTotal = promauto.NewCounterVec(prometheus.CounterOpts{
+		Namespace: namespace,
+		Name:      "redis_errors_total",
+		Help:      "Failed Redis calls that fell back to the durable path, by operation.",
+	}, []string{"op"})
+
 	PostbackDeliveriesTotal = promauto.NewCounterVec(prometheus.CounterOpts{
 		Namespace: namespace,
 		Name:      "postback_deliveries_total",

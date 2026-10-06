@@ -740,7 +740,8 @@ POST /postback/{networkId}
   latency;
 - `infra/alerts.yml` с 8 разумными алертами, включая `EventLossDetected`.
 
-**Не хватает (минимальный набор):**
+**Не хватает (минимальный набор):** (**статус: добавлено всё, кроме сверки PG↔CH и
+error tracking** — см. `docs/observability.md`)
 
 | Метрика | Зачем |
 |---|---|

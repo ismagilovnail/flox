@@ -29,6 +29,7 @@ import (
 	"github.com/redis/go-redis/v9"
 
 	"github.com/ismagilovnail/flox/apps/internal/apierror"
+	"github.com/ismagilovnail/flox/apps/internal/metrics"
 )
 
 type Limiter struct {
@@ -77,6 +78,7 @@ func (l *Limiter) Middleware(keyPrefix string, keyFunc func(r *http.Request) str
 			key := "ratelimit:" + keyPrefix + ":" + keyFunc(r)
 			allowed, err := l.Allow(r.Context(), key, limit, window)
 			if err != nil {
+				metrics.RedisErrorsTotal.WithLabelValues("ratelimit").Inc()
 				l.logger.Warn("rate limit check failed, allowing request", "error", err, "key_prefix", keyPrefix)
 				next.ServeHTTP(w, r)
 				return

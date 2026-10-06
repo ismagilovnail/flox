@@ -48,6 +48,7 @@ import (
 	"github.com/ismagilovnail/flox/apps/internal/logging"
 	"github.com/ismagilovnail/flox/apps/internal/ltv"
 	"github.com/ismagilovnail/flox/apps/internal/mailer"
+	"github.com/ismagilovnail/flox/apps/internal/metrics"
 	"github.com/ismagilovnail/flox/apps/internal/network"
 	"github.com/ismagilovnail/flox/apps/internal/offer"
 	"github.com/ismagilovnail/flox/apps/internal/offercap"
@@ -123,6 +124,7 @@ func run() error {
 		return err
 	}
 	defer db.Close()
+	metrics.RegisterPgxPool(db, "api")
 
 	// ClickHouse is best-effort at startup, matching the tracker/worker's
 	// own "a dependency the redirect/queue path never touches must not

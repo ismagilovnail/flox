@@ -93,6 +93,7 @@ func run() error {
 		return err
 	}
 	defer db.Close()
+	metrics.RegisterPgxPool(db, "tracker")
 
 	// §43's durable queue (apps/worker's ClickHouse consumer, Phase 25)
 	// replaces the structured-log stand-in this used through Phase 24 —

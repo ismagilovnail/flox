@@ -9,6 +9,7 @@ import (
 	"github.com/redis/go-redis/v9"
 
 	"github.com/ismagilovnail/flox/apps/internal/event"
+	"github.com/ismagilovnail/flox/apps/internal/metrics"
 )
 
 // lastStatusTTL is long on purpose: §45 notes networks re-send postbacks
@@ -50,6 +51,7 @@ func (s *RedisStore) LastStatus(ctx context.Context, organizationID, clickID str
 		return event.Type(val), true, nil
 	}
 	if !errors.Is(err, redis.Nil) {
+		metrics.RedisErrorsTotal.WithLabelValues("conversion_last_status").Inc()
 		s.logger.Warn("redis unavailable for progression check, falling through to durable store",
 			"error", err, "organization_id", organizationID, "click_id", clickID)
 	}
@@ -63,6 +65,7 @@ func (s *RedisStore) LastStatus(ctx context.Context, organizationID, clickID str
 		// CACHE only, postback dedup") — a failed Set here just means the
 		// next lookup pays the same Postgres round trip again.
 		if setErr := s.rdb.Set(ctx, key, string(status), lastStatusTTL).Err(); setErr != nil {
+			metrics.RedisErrorsTotal.WithLabelValues("conversion_last_status").Inc()
 			s.logger.Warn("redis unavailable, could not cache last status",
 				"error", setErr, "organization_id", organizationID, "click_id", clickID)
 		}
@@ -78,6 +81,7 @@ func (s *RedisStore) Record(ctx context.Context, e Entry) (Recorded, error) {
 	if rec.Kind == ResultSuccess {
 		key := lastStatusKey(e.OrganizationID, e.ClickID)
 		if setErr := s.rdb.Set(ctx, key, string(e.Status), lastStatusTTL).Err(); setErr != nil {
+			metrics.RedisErrorsTotal.WithLabelValues("conversion_last_status").Inc()
 			s.logger.Warn("redis unavailable, could not cache newly recorded status",
 				"error", setErr, "organization_id", e.OrganizationID, "click_id", e.ClickID)
 		}

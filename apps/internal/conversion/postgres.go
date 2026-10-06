@@ -15,6 +15,7 @@ import (
 	"github.com/ismagilovnail/flox/apps/internal/eventqueue"
 	"github.com/ismagilovnail/flox/apps/internal/fx"
 	"github.com/ismagilovnail/flox/apps/internal/idgen"
+	"github.com/ismagilovnail/flox/apps/internal/metrics"
 )
 
 // PostgresStore is the durable ledger: the postbacks table, exactly as
@@ -339,6 +340,7 @@ func (f *PostgresFX) ToUSD(ctx context.Context, currency string, amount float64,
 		// No rate on file for this currency/date. Not an error: the caller
 		// stores the conversion with its original currency/amount and a
 		// nil USD value rather than inventing a rate (CLAUDE.md #7).
+		metrics.FXRateMissingTotal.Inc()
 		return 0, false, nil
 	}
 	if err != nil {
