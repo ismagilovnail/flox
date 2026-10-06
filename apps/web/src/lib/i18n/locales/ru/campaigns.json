@@ -22,13 +22,6 @@
     "overviewTab": "Обзор",
     "costTab": "Расходы",
     "simulatorTab": "Симулятор",
-    "settingsTab": "Настройки",
-    "dangerZoneTitle": "Опасная зона",
-    "dangerZoneDescription": "Архивные кампании немедленно прекращают маршрутизацию трафика.",
-    "alreadyArchived": "Эта кампания в архиве.",
-    "archiveButton": "Отправить кампанию в архив",
-    "archiveConfirmTitle": "Отправить «{{name}}» в архив?",
-    "archiveConfirmDescription": "Архивные кампании прекращают маршрутизацию трафика и скрываются из активного списка.",
     "saveChanges": "Сохранить изменения"
   },
   "form": {

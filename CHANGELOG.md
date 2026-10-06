@@ -5,6 +5,13 @@ per-phase, matching `CLAUDE.md`'s phase protocol. The one exception is
 [Between phases], below: spec amendments and the code changes that follow from
 them land between phases and would otherwise be invisible here.
 
+## [Between phases] — campaign page: "Настройки" tab removed
+
+The tab held only a "danger zone" archive button, duplicating the "Архивировать"
+button (and its confirmation dialog) in the page header. The tab, its own dialog
+and the seven unused `detail.*` strings are gone; the page now has Обзор, Расходы
+and Симулятор.
+
 ## [Between phases] — no search box on a campaign's tracking links
 
 `DataTable` gets `enableSearch` (default true, so every other table keeps its

@@ -22,13 +22,6 @@
     "overviewTab": "Overview",
     "costTab": "Cost",
     "simulatorTab": "Simulator",
-    "settingsTab": "Settings",
-    "dangerZoneTitle": "Danger zone",
-    "dangerZoneDescription": "Archived campaigns stop routing traffic immediately.",
-    "alreadyArchived": "This campaign is archived.",
-    "archiveButton": "Archive campaign",
-    "archiveConfirmTitle": "Archive \"{{name}}\"?",
-    "archiveConfirmDescription": "Archived campaigns stop routing traffic and are hidden from the active list.",
     "saveChanges": "Save changes"
   },
   "form": {
