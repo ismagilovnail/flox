@@ -5,6 +5,40 @@ per-phase, matching `CLAUDE.md`'s phase protocol. The one exception is
 [Between phases], below: spec amendments and the code changes that follow from
 them land between phases and would otherwise be invisible here.
 
+## [Between phases] — queue tests no longer race the dev worker
+
+Three queue test files claimed rows from the real `event_queue` / `postback_attempt_queue` /
+`postback_deliveries`, which the dev-stack worker polls and which other packages' tests fill
+during a full run; they flaked whenever they lost a row (seen repeatedly in this audit's
+runs, more often after D2's retry-first claim). The three queue stores now keep their table
+name in a field (production code always uses the real table; the in-transaction outbox
+writes stay on the real tables), tests build them through `export_test.go` constructors over
+`testpg.PrivateTable` — a per-test `CREATE TABLE … (LIKE … INCLUDING ALL)` copy (columns,
+CHECKs, indexes; no foreign keys, so the orphan-organization test stays on the real table).
+Verified: the queue packages 5× in a row while `apps/e2e` ran concurrently — no failures;
+full-env `go test ./...` with e2e twice, exit 0 both times.
+
+## [Between phases] — the metrics the audit found missing
+
+Technical audit §14. Added (details and alert names in `docs/observability.md`):
+incoming postbacks by result plus latency (tracker), attribution outcomes, per-queue open
+rows and oldest-due age for all three worker queues (`internal/queuestats`), Postgres pool
+statistics for api/tracker/worker (`metrics.RegisterPgxPool`), amounts stored without an FX
+rate (no currency label — it comes from requests), and Redis fall-backs. Alerts:
+`PostbackIngestFailing`, `AttributionUnknownClickHigh`, `QueueStalled`,
+`PostgresPoolSaturated`, `RedisFailing` (18 rules, `promtool` OK). Not done: Sentry-style error
+tracking, and the Postgres-vs-ClickHouse conversion reconciliation.
+
+Tests: postback results counted for refusals before the engine (`bad_request`,
+`unauthorized`, `unknown_network`); `queuestats` counts statuses and the oldest due age on a
+private table (a future row and a dead row do not count toward the age); the pool collector
+emits its 8 series and counts one acquire after a ping. Live on the dev stack: all three
+services expose `flox_pg_pool_*`; the worker publishes `flox_queue_rows` /
+`flox_queue_oldest_due_age_seconds`; a click plus a postback with a good and a bad secret
+produced `postback_incoming_total{result="success"}` and `{result="unauthorized"}`, the
+latency histogram and `attribution_outcomes_total{outcome="attributed"}`. Adds
+`github.com/kylelemons/godebug` as an indirect dependency (prometheus `testutil`).
+
 ## [Between phases] — rejected ClickHouse batches are dead-lettered, outages back off
 
 Technical audit, finding Q2. A batch ClickHouse rejected was retried every 10 s forever, and a

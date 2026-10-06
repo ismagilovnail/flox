@@ -22,9 +22,14 @@ import (
 // (migration 00015).
 type PostgresQueue struct {
 	db *pgxpool.Pool
+	// table is event_queue; tests point it at a private copy so the
+	// dev-stack worker polling the real queue cannot take their rows.
+	table string
 }
 
-func NewPostgresQueue(db *pgxpool.Pool) *PostgresQueue { return &PostgresQueue{db: db} }
+func NewPostgresQueue(db *pgxpool.Pool) *PostgresQueue {
+	return &PostgresQueue{db: db, table: "event_queue"}
+}
 
 var (
 	_ Producer = (*PostgresQueue)(nil)
@@ -104,7 +109,7 @@ func permanent(err error) bool {
 }
 
 func (q *PostgresQueue) enqueue(ctx context.Context, events []event.Event) error {
-	return insert(ctx, q.db, events)
+	return insert(ctx, q.db, q.table, events)
 }
 
 // InsertTx enqueues events inside the caller's transaction — the outbox half
@@ -112,7 +117,7 @@ func (q *PostgresQueue) enqueue(ctx context.Context, events []event.Event) error
 // records a conversion and its CPA event in one transaction, so one is never
 // committed without the other).
 func InsertTx(ctx context.Context, tx pgx.Tx, events []event.Event) error {
-	return insert(ctx, tx, events)
+	return insert(ctx, tx, "event_queue", events)
 }
 
 // batchSender is the part of *pgxpool.Pool and pgx.Tx insert needs.
@@ -120,7 +125,7 @@ type batchSender interface {
 	SendBatch(ctx context.Context, b *pgx.Batch) pgx.BatchResults
 }
 
-func insert(ctx context.Context, db batchSender, events []event.Event) error {
+func insert(ctx context.Context, db batchSender, table string, events []event.Event) error {
 	if len(events) == 0 {
 		return nil
 	}
@@ -131,7 +136,7 @@ func insert(ctx context.Context, db batchSender, events []event.Event) error {
 			return fmt.Errorf("%w: %w", errUnencodable, err)
 		}
 		batch.Queue(
-			`INSERT INTO event_queue (id, organization_id, type, payload) VALUES ($1, $2, $3, $4)`,
+			`INSERT INTO `+table+` (id, organization_id, type, payload) VALUES ($1, $2, $3, $4)`,
 			idgen.New(), e.OrganizationID, string(e.Type), payload,
 		)
 	}
@@ -147,7 +152,7 @@ func insert(ctx context.Context, db batchSender, events []event.Event) error {
 }
 
 func (q *PostgresQueue) ClaimDue(ctx context.Context, limit int) ([]QueuedEvent, error) {
-	batchID, rows, err := pgqueue.ClaimBatch(ctx, q.db, "event_queue", limit)
+	batchID, rows, err := pgqueue.ClaimBatch(ctx, q.db, q.table, limit)
 	if err != nil {
 		return nil, fmt.Errorf("eventqueue: %w", err)
 	}
@@ -166,7 +171,7 @@ func (q *PostgresQueue) Delete(ctx context.Context, ids []string) error {
 	if len(ids) == 0 {
 		return nil
 	}
-	if _, err := q.db.Exec(ctx, `DELETE FROM event_queue WHERE id = ANY($1)`, ids); err != nil {
+	if _, err := q.db.Exec(ctx, `DELETE FROM `+q.table+` WHERE id = ANY($1)`, ids); err != nil {
 		return fmt.Errorf("eventqueue: deleting delivered events: %w", err)
 	}
 	return nil
@@ -177,7 +182,7 @@ func (q *PostgresQueue) Requeue(ctx context.Context, ids []string, next time.Tim
 		return nil
 	}
 	if _, err := q.db.Exec(ctx,
-		`UPDATE event_queue SET status = 'queued', claimed_at = NULL, next_attempt_at = $2 WHERE id = ANY($1)`,
+		`UPDATE `+q.table+` SET status = 'queued', claimed_at = NULL, next_attempt_at = $2 WHERE id = ANY($1)`,
 		ids, next,
 	); err != nil {
 		return fmt.Errorf("eventqueue: requeueing events: %w", err)
@@ -193,7 +198,7 @@ func (q *PostgresQueue) Requeue(ctx context.Context, ids []string, next time.Tim
 // slow ClickHouse insert.
 func (q *PostgresQueue) Depth(ctx context.Context) (int, error) {
 	var n int
-	if err := q.db.QueryRow(ctx, `SELECT count(*) FROM event_queue WHERE status IN ('queued', 'processing')`).Scan(&n); err != nil {
+	if err := q.db.QueryRow(ctx, `SELECT count(*) FROM `+q.table+` WHERE status IN ('queued', 'processing')`).Scan(&n); err != nil {
 		return 0, fmt.Errorf("eventqueue: counting queue depth: %w", err)
 	}
 	return n, nil
@@ -203,7 +208,7 @@ func (q *PostgresQueue) Depth(ctx context.Context) (int, error) {
 // belong to a worker that died mid-batch and go back to the queue, due now.
 func (q *PostgresQueue) ReapStuck(ctx context.Context, olderThan time.Duration) (int64, error) {
 	tag, err := q.db.Exec(ctx, `
-		UPDATE event_queue
+		UPDATE `+q.table+`
 		SET status = 'queued', claimed_at = NULL, next_attempt_at = now()
 		WHERE status = 'processing' AND claimed_at < now() - $1::interval`,
 		olderThan,
@@ -215,5 +220,5 @@ func (q *PostgresQueue) ReapStuck(ctx context.Context, olderThan time.Duration) 
 }
 
 func (q *PostgresQueue) Fail(ctx context.Context, ids []string, rejected bool, lastError string) (bool, error) {
-	return pgqueue.Fail(ctx, q.db, "event_queue", ids, rejected, lastError)
+	return pgqueue.Fail(ctx, q.db, q.table, ids, rejected, lastError)
 }

@@ -18,14 +18,19 @@ import (
 // 00014).
 type PostgresStore struct {
 	db *pgxpool.Pool
+	// table is postback_deliveries; tests use a private copy so the
+	// dev-stack worker polling the real one cannot take their rows.
+	table string
 }
 
-func NewPostgresStore(db *pgxpool.Pool) *PostgresStore { return &PostgresStore{db: db} }
+func NewPostgresStore(db *pgxpool.Pool) *PostgresStore {
+	return &PostgresStore{db: db, table: "postback_deliveries"}
+}
 
 var _ Store = (*PostgresStore)(nil)
 
 func (s *PostgresStore) Enqueue(ctx context.Context, in EnqueueInput) (string, error) {
-	return insertDelivery(ctx, s.db, in)
+	return insertDelivery(ctx, s.db, s.table, in)
 }
 
 // InsertTx queues a delivery inside the transaction that records its source
@@ -35,7 +40,7 @@ func (s *PostgresStore) Enqueue(ctx context.Context, in EnqueueInput) (string, e
 // its retry came back as a duplicate — the delivery was lost for good
 // (audit 2026-10-06, D1).
 func (s *PostgresStore) InsertTx(ctx context.Context, tx pgx.Tx, req conversion.DeliveryRequest) error {
-	_, err := insertDelivery(ctx, tx, EnqueueInput{
+	_, err := insertDelivery(ctx, tx, "postback_deliveries", EnqueueInput{
 		OrganizationID:   req.OrganizationID,
 		NetworkID:        req.NetworkID,
 		SourcePostbackID: req.SourcePostbackID,
@@ -52,10 +57,10 @@ type execer interface {
 	Exec(ctx context.Context, sql string, args ...any) (pgconn.CommandTag, error)
 }
 
-func insertDelivery(ctx context.Context, db execer, in EnqueueInput) (string, error) {
+func insertDelivery(ctx context.Context, db execer, table string, in EnqueueInput) (string, error) {
 	id := idgen.New()
 	_, err := db.Exec(ctx, `
-		INSERT INTO postback_deliveries (id, organization_id, network_id, source_postback_id, click_id, status, url)
+		INSERT INTO `+table+` (id, organization_id, network_id, source_postback_id, click_id, status, url)
 		VALUES ($1, $2, $3, $4, $5, $6, $7)`,
 		id, in.OrganizationID, in.NetworkID, in.SourcePostbackID, in.ClickID, string(in.Status), in.URL,
 	)
@@ -73,13 +78,13 @@ func insertDelivery(ctx context.Context, db execer, in EnqueueInput) (string, er
 func (s *PostgresStore) ClaimDue(ctx context.Context, limit int) ([]Delivery, error) {
 	rows, err := s.db.Query(ctx, `
 		WITH due AS (
-			SELECT id FROM postback_deliveries
+			SELECT id FROM `+s.table+`
 			WHERE delivery_status IN ('queued', 'retrying') AND next_attempt_at <= now()
 			ORDER BY next_attempt_at
 			LIMIT $1
 			FOR UPDATE SKIP LOCKED
 		)
-		UPDATE postback_deliveries pd
+		UPDATE `+s.table+` pd
 		SET delivery_status = 'processing', attempt_count = attempt_count + 1, claimed_at = now()
 		FROM due
 		WHERE pd.id = due.id
@@ -109,7 +114,7 @@ func (s *PostgresStore) ClaimDue(ctx context.Context, limit int) ([]Delivery, er
 
 func (s *PostgresStore) MarkSuccess(ctx context.Context, id string, responseStatusCode int) error {
 	_, err := s.db.Exec(ctx, `
-		UPDATE postback_deliveries
+		UPDATE `+s.table+`
 		SET delivery_status = 'success', response_status_code = $2, message = ''
 		WHERE id = $1`,
 		id, nullableInt(responseStatusCode),
@@ -122,7 +127,7 @@ func (s *PostgresStore) MarkSuccess(ctx context.Context, id string, responseStat
 
 func (s *PostgresStore) MarkRetrying(ctx context.Context, id string, responseStatusCode int, message string, nextAttemptAt time.Time) error {
 	_, err := s.db.Exec(ctx, `
-		UPDATE postback_deliveries
+		UPDATE `+s.table+`
 		SET delivery_status = 'retrying', response_status_code = $2, message = $3, next_attempt_at = $4
 		WHERE id = $1`,
 		id, nullableInt(responseStatusCode), message, nextAttemptAt,
@@ -135,7 +140,7 @@ func (s *PostgresStore) MarkRetrying(ctx context.Context, id string, responseSta
 
 func (s *PostgresStore) MarkDead(ctx context.Context, id string, responseStatusCode int, message string) error {
 	_, err := s.db.Exec(ctx, `
-		UPDATE postback_deliveries
+		UPDATE `+s.table+`
 		SET delivery_status = 'dead', response_status_code = $2, message = $3
 		WHERE id = $1`,
 		id, nullableInt(responseStatusCode), message,
@@ -155,7 +160,7 @@ func (s *PostgresStore) Release(ctx context.Context, ids []string) error {
 		return nil
 	}
 	_, err := s.db.Exec(ctx, `
-		UPDATE postback_deliveries
+		UPDATE `+s.table+`
 		SET attempt_count = attempt_count - 1,
 		    delivery_status = CASE WHEN attempt_count - 1 > 0 THEN 'retrying' ELSE 'queued' END,
 		    claimed_at = NULL, next_attempt_at = now()
@@ -174,7 +179,7 @@ func (s *PostgresStore) Release(ctx context.Context, ids []string) error {
 // which a lost conversion would be worse than.
 func (s *PostgresStore) ReapStuck(ctx context.Context, olderThan time.Duration) (int64, error) {
 	tag, err := s.db.Exec(ctx, `
-		UPDATE postback_deliveries
+		UPDATE `+s.table+`
 		SET delivery_status = 'retrying', claimed_at = NULL, next_attempt_at = now(),
 		    message = 'claim abandoned by a stopped worker; retrying'
 		WHERE delivery_status = 'processing' AND claimed_at < now() - $1::interval`,

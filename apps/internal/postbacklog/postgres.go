@@ -19,13 +19,15 @@ import (
 type PostgresQueue struct {
 	db     *pgxpool.Pool
 	logger *slog.Logger
+	// table is postback_attempt_queue; tests use a private copy.
+	table string
 }
 
 // NewPostgresQueue builds a Producer/Consumer. logger is used only by the
 // Producer half (EnqueueAttempt has no error return, so a failed insert can
 // only be logged, never propagated) — see the package doc for why.
 func NewPostgresQueue(db *pgxpool.Pool, logger *slog.Logger) *PostgresQueue {
-	return &PostgresQueue{db: db, logger: logger}
+	return &PostgresQueue{db: db, logger: logger, table: "postback_attempt_queue"}
 }
 
 var (
@@ -40,7 +42,7 @@ func (q *PostgresQueue) EnqueueAttempt(ctx context.Context, attempt chstore.Post
 		return
 	}
 	if _, err := q.db.Exec(ctx,
-		`INSERT INTO postback_attempt_queue (id, organization_id, payload) VALUES ($1, $2, $3)`,
+		`INSERT INTO `+q.table+` (id, organization_id, payload) VALUES ($1, $2, $3)`,
 		idgen.New(), attempt.OrganizationID, payload,
 	); err != nil {
 		q.logger.Error("postbacklog: enqueueing attempt", "error", err,
@@ -49,7 +51,7 @@ func (q *PostgresQueue) EnqueueAttempt(ctx context.Context, attempt chstore.Post
 }
 
 func (q *PostgresQueue) ClaimDue(ctx context.Context, limit int) ([]QueuedAttempt, error) {
-	batchID, rows, err := pgqueue.ClaimBatch(ctx, q.db, "postback_attempt_queue", limit)
+	batchID, rows, err := pgqueue.ClaimBatch(ctx, q.db, q.table, limit)
 	if err != nil {
 		return nil, fmt.Errorf("postbacklog: %w", err)
 	}
@@ -68,7 +70,7 @@ func (q *PostgresQueue) Delete(ctx context.Context, ids []string) error {
 	if len(ids) == 0 {
 		return nil
 	}
-	if _, err := q.db.Exec(ctx, `DELETE FROM postback_attempt_queue WHERE id = ANY($1)`, ids); err != nil {
+	if _, err := q.db.Exec(ctx, `DELETE FROM `+q.table+` WHERE id = ANY($1)`, ids); err != nil {
 		return fmt.Errorf("postbacklog: deleting flushed attempts: %w", err)
 	}
 	return nil
@@ -79,7 +81,7 @@ func (q *PostgresQueue) Requeue(ctx context.Context, ids []string, next time.Tim
 		return nil
 	}
 	if _, err := q.db.Exec(ctx,
-		`UPDATE postback_attempt_queue SET status = 'queued', claimed_at = NULL, next_attempt_at = $2 WHERE id = ANY($1)`,
+		`UPDATE `+q.table+` SET status = 'queued', claimed_at = NULL, next_attempt_at = $2 WHERE id = ANY($1)`,
 		ids, next,
 	); err != nil {
 		return fmt.Errorf("postbacklog: requeueing attempts: %w", err)
@@ -91,7 +93,7 @@ func (q *PostgresQueue) Requeue(ctx context.Context, ids []string, next time.Tim
 // eventqueue.PostgresQueue.ReapStuck.
 func (q *PostgresQueue) ReapStuck(ctx context.Context, olderThan time.Duration) (int64, error) {
 	tag, err := q.db.Exec(ctx, `
-		UPDATE postback_attempt_queue
+		UPDATE `+q.table+`
 		SET status = 'queued', claimed_at = NULL, next_attempt_at = now()
 		WHERE status = 'processing' AND claimed_at < now() - $1::interval`,
 		olderThan,
@@ -103,5 +105,5 @@ func (q *PostgresQueue) ReapStuck(ctx context.Context, olderThan time.Duration) 
 }
 
 func (q *PostgresQueue) Fail(ctx context.Context, ids []string, rejected bool, lastError string) (bool, error) {
-	return pgqueue.Fail(ctx, q.db, "postback_attempt_queue", ids, rejected, lastError)
+	return pgqueue.Fail(ctx, q.db, q.table, ids, rejected, lastError)
 }

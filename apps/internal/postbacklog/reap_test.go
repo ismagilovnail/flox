@@ -9,18 +9,20 @@ import (
 
 	"github.com/ismagilovnail/flox/apps/internal/idgen"
 	"github.com/ismagilovnail/flox/apps/internal/postbacklog"
+	"github.com/ismagilovnail/flox/apps/internal/testpg"
 )
 
 func TestPostgresQueueReapStuck(t *testing.T) {
 	pool := mustPool(t)
 	ctx := context.Background()
 	orgID := seedOrg(t, ctx, pool)
-	q := postbacklog.NewPostgresQueue(pool, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	table := testpg.PrivateTable(t, pool, "postback_attempt_queue")
+	q := postbacklog.NewPostgresQueueOnTable(pool, slog.New(slog.NewTextHandler(io.Discard, nil)), table)
 
 	// Seeded straight into 'processing' — see eventqueue's reap test.
 	clickID := idgen.New()
 	if _, err := pool.Exec(ctx, `
-		INSERT INTO postback_attempt_queue (id, organization_id, payload, status, claimed_at)
+		INSERT INTO `+table+` (id, organization_id, payload, status, claimed_at)
 		VALUES ($1, $2, jsonb_build_object('ClickID', $3::text), 'processing', now() - interval '10 minutes')`,
 		idgen.New(), orgID, clickID,
 	); err != nil {
@@ -33,12 +35,12 @@ func TestPostgresQueueReapStuck(t *testing.T) {
 	var status string
 	var claimedAt *time.Time
 	if err := pool.QueryRow(ctx,
-		`SELECT status, claimed_at FROM postback_attempt_queue WHERE payload->>'ClickID' = $1`, clickID,
+		`SELECT status, claimed_at FROM `+table+` WHERE payload->>'ClickID' = $1`, clickID,
 	).Scan(&status, &claimedAt); err != nil {
 		t.Fatalf("reading row: %v", err)
 	}
 	if status != "queued" || claimedAt != nil {
 		t.Fatalf("status=%s claimed_at=%v, want queued/nil", status, claimedAt)
 	}
-	_, _ = pool.Exec(ctx, `DELETE FROM postback_attempt_queue WHERE payload->>'ClickID' = $1`, clickID)
+	_, _ = pool.Exec(ctx, `DELETE FROM `+table+` WHERE payload->>'ClickID' = $1`, clickID)
 }

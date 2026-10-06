@@ -13,6 +13,7 @@ import (
 	"github.com/ismagilovnail/flox/apps/internal/eventbuf"
 	"github.com/ismagilovnail/flox/apps/internal/eventqueue"
 	"github.com/ismagilovnail/flox/apps/internal/idgen"
+	"github.com/ismagilovnail/flox/apps/internal/testpg"
 )
 
 func TestEnqueueClaimAndDelete(t *testing.T) {
@@ -20,7 +21,8 @@ func TestEnqueueClaimAndDelete(t *testing.T) {
 	ctx := context.Background()
 	orgID := seedOrg(t, ctx, pool)
 
-	q := eventqueue.NewPostgresQueue(pool)
+	table := testpg.PrivateTable(t, pool, "event_queue")
+	q := eventqueue.NewPostgresQueueOnTable(pool, table)
 	clickID := idgen.New()
 	events := []event.Event{
 		{Type: event.SourceClick, OrganizationID: orgID, ClickID: clickID, EventAt: time.Now().UTC()},
@@ -77,7 +79,7 @@ func TestEnqueueClaimAndDelete(t *testing.T) {
 	}
 
 	var count int
-	if err := pool.QueryRow(ctx, `SELECT count(*) FROM event_queue WHERE payload->>'clickId' = $1`, clickID).Scan(&count); err != nil {
+	if err := pool.QueryRow(ctx, `SELECT count(*) FROM `+table+` WHERE payload->>'clickId' = $1`, clickID).Scan(&count); err != nil {
 		t.Fatalf("counting remaining rows: %v", err)
 	}
 	if count != 0 {
@@ -89,7 +91,8 @@ func TestRequeuePutsRowsBackAsDueAtNextAttemptAt(t *testing.T) {
 	pool := mustPool(t)
 	ctx := context.Background()
 	orgID := seedOrg(t, ctx, pool)
-	q := eventqueue.NewPostgresQueue(pool)
+	table := testpg.PrivateTable(t, pool, "event_queue")
+	q := eventqueue.NewPostgresQueueOnTable(pool, table)
 	clickID := idgen.New()
 
 	if err := q.EnqueueBatch(ctx, []event.Event{{Type: event.SourceClick, OrganizationID: orgID, ClickID: clickID}}); err != nil {
@@ -147,7 +150,8 @@ func TestDepthReflectsQueuedAndProcessingNotDeleted(t *testing.T) {
 	pool := mustPool(t)
 	ctx := context.Background()
 	orgID := seedOrg(t, ctx, pool)
-	q := eventqueue.NewPostgresQueue(pool)
+	table := testpg.PrivateTable(t, pool, "event_queue")
+	q := eventqueue.NewPostgresQueueOnTable(pool, table)
 
 	before, err := q.Depth(ctx)
 	if err != nil {

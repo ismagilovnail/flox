@@ -13,6 +13,7 @@ import (
 	"github.com/ismagilovnail/flox/apps/internal/chstore"
 	"github.com/ismagilovnail/flox/apps/internal/idgen"
 	"github.com/ismagilovnail/flox/apps/internal/postbacklog"
+	"github.com/ismagilovnail/flox/apps/internal/testpg"
 )
 
 func TestPostgresQueueEnqueueClaimAndDelete(t *testing.T) {
@@ -20,7 +21,8 @@ func TestPostgresQueueEnqueueClaimAndDelete(t *testing.T) {
 	ctx := context.Background()
 	orgID := seedOrg(t, ctx, pool)
 
-	q := postbacklog.NewPostgresQueue(pool, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	table := testpg.PrivateTable(t, pool, "postback_attempt_queue")
+	q := postbacklog.NewPostgresQueueOnTable(pool, slog.New(slog.NewTextHandler(io.Discard, nil)), table)
 	clickID := idgen.New()
 	q.EnqueueAttempt(ctx, chstore.PostbackAttempt{OrganizationID: orgID, Direction: "incoming", ClickID: clickID, Result: "success"})
 	q.EnqueueAttempt(ctx, chstore.PostbackAttempt{OrganizationID: orgID, Direction: "outgoing", ClickID: clickID, Result: "success"})
@@ -59,7 +61,7 @@ func TestPostgresQueueEnqueueClaimAndDelete(t *testing.T) {
 	}
 
 	var count int
-	if err := pool.QueryRow(ctx, `SELECT count(*) FROM postback_attempt_queue WHERE payload->>'ClickID' = $1`, clickID).Scan(&count); err != nil {
+	if err := pool.QueryRow(ctx, `SELECT count(*) FROM `+table+` WHERE payload->>'ClickID' = $1`, clickID).Scan(&count); err != nil {
 		t.Fatalf("counting remaining rows: %v", err)
 	}
 	if count != 0 {
@@ -71,7 +73,8 @@ func TestPostgresQueueRequeue(t *testing.T) {
 	pool := mustPool(t)
 	ctx := context.Background()
 	orgID := seedOrg(t, ctx, pool)
-	q := postbacklog.NewPostgresQueue(pool, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	table := testpg.PrivateTable(t, pool, "postback_attempt_queue")
+	q := postbacklog.NewPostgresQueueOnTable(pool, slog.New(slog.NewTextHandler(io.Discard, nil)), table)
 	clickID := idgen.New()
 
 	q.EnqueueAttempt(ctx, chstore.PostbackAttempt{OrganizationID: orgID, Direction: "incoming", ClickID: clickID})

@@ -11,6 +11,7 @@ import (
 	"github.com/ismagilovnail/flox/apps/internal/event"
 	"github.com/ismagilovnail/flox/apps/internal/idgen"
 	"github.com/ismagilovnail/flox/apps/internal/postback"
+	"github.com/ismagilovnail/flox/apps/internal/testpg"
 )
 
 func TestPostgresStoreEnqueueAndClaim(t *testing.T) {
@@ -20,7 +21,8 @@ func TestPostgresStoreEnqueueAndClaim(t *testing.T) {
 	networkID := seedNetwork(t, ctx, pool, orgID)
 	sourceID := seedPostback(t, ctx, pool, orgID, networkID, "click-1", "CPA_ACCEPT")
 
-	store := postback.NewPostgresStore(pool)
+	table := testpg.PrivateTable(t, pool, "postback_deliveries")
+	store := postback.NewPostgresStoreOnTable(pool, table)
 	id, err := store.Enqueue(ctx, postback.EnqueueInput{
 		OrganizationID: orgID, NetworkID: networkID, SourcePostbackID: sourceID,
 		ClickID: "click-1", Status: event.CpaAccept, URL: "https://net.example/pb?click_id=click-1",
@@ -47,7 +49,7 @@ func TestPostgresStoreEnqueueAndClaim(t *testing.T) {
 		t.Fatalf("AttemptCount = %d, want 1 (ClaimDue increments)", d.AttemptCount)
 	}
 	var claimedAt *time.Time
-	if err := pool.QueryRow(ctx, `SELECT claimed_at FROM postback_deliveries WHERE id = $1`, id).Scan(&claimedAt); err != nil {
+	if err := pool.QueryRow(ctx, `SELECT claimed_at FROM `+table+` WHERE id = $1`, id).Scan(&claimedAt); err != nil {
 		t.Fatalf("reading claimed_at: %v", err)
 	}
 	if claimedAt == nil {
@@ -71,7 +73,8 @@ func TestPostgresStoreMarkRetryingIsDueAtNextAttemptAt(t *testing.T) {
 	networkID := seedNetwork(t, ctx, pool, orgID)
 	sourceID := seedPostback(t, ctx, pool, orgID, networkID, "click-2", "CPA_ACCEPT")
 
-	store := postback.NewPostgresStore(pool)
+	table := testpg.PrivateTable(t, pool, "postback_deliveries")
+	store := postback.NewPostgresStoreOnTable(pool, table)
 	id, err := store.Enqueue(ctx, postback.EnqueueInput{
 		OrganizationID: orgID, NetworkID: networkID, SourcePostbackID: sourceID,
 		ClickID: "click-2", Status: event.CpaAccept, URL: "https://net.example/pb",
@@ -117,7 +120,8 @@ func TestPostgresStoreMarkSuccessAndDead(t *testing.T) {
 	ctx := context.Background()
 	orgID := seedOrg(t, ctx, pool)
 	networkID := seedNetwork(t, ctx, pool, orgID)
-	store := postback.NewPostgresStore(pool)
+	table := testpg.PrivateTable(t, pool, "postback_deliveries")
+	store := postback.NewPostgresStoreOnTable(pool, table)
 
 	src1 := seedPostback(t, ctx, pool, orgID, networkID, "click-3", "CPA_ACCEPT")
 	id1, _ := store.Enqueue(ctx, postback.EnqueueInput{OrganizationID: orgID, NetworkID: networkID, SourcePostbackID: src1, ClickID: "click-3", Status: event.CpaAccept, URL: "https://net.example/pb"})
@@ -145,8 +149,8 @@ func TestPostgresStoreMarkSuccessAndDead(t *testing.T) {
 	}
 
 	var deliveryStatus1, deliveryStatus2 string
-	pool.QueryRow(ctx, `SELECT delivery_status FROM postback_deliveries WHERE id = $1`, id1).Scan(&deliveryStatus1)
-	pool.QueryRow(ctx, `SELECT delivery_status FROM postback_deliveries WHERE id = $1`, id2).Scan(&deliveryStatus2)
+	pool.QueryRow(ctx, `SELECT delivery_status FROM `+table+` WHERE id = $1`, id1).Scan(&deliveryStatus1)
+	pool.QueryRow(ctx, `SELECT delivery_status FROM `+table+` WHERE id = $1`, id2).Scan(&deliveryStatus2)
 	if deliveryStatus1 != "success" {
 		t.Fatalf("delivery 1 status = %q, want success", deliveryStatus1)
 	}
@@ -160,7 +164,8 @@ func TestPostgresStoreClaimRespectsLimit(t *testing.T) {
 	ctx := context.Background()
 	orgID := seedOrg(t, ctx, pool)
 	networkID := seedNetwork(t, ctx, pool, orgID)
-	store := postback.NewPostgresStore(pool)
+	table := testpg.PrivateTable(t, pool, "postback_deliveries")
+	store := postback.NewPostgresStoreOnTable(pool, table)
 
 	for i := 0; i < 5; i++ {
 		clickID := "click-limit-" + idgen.New()
