@@ -108,6 +108,15 @@ session.
 | `offer` report dimension: `RouteResult.OfferID` (only when the click really went to the offer), `offer_id` on events (`chstore/schema/009`), through landing links and attribution; offers list "View statistics" fixed to pass the id | done |
 | `landing` report dimension: `landing_id` column on click/tracking/conversion events, set by the tracker and carried through attribution; names instead of ids in the report UI (`docs/analytics-report-api.md`) | done |
 | Tracker serves landings: internal pages rendered on `/t/`, signed `/lc/` click-through, first real `LAND_VIEW`/`LAND_CLICK` events; external landings redirect to their URL (`docs/landings.md`, "Serving visitors") | done (phase B) |
+| Analytics: real `source` dimension; report presets keep filters, column order and widths; unsaved report edits survive a reload; PWA install / registration / purchase / repurchase metrics with step rates and cost per step; hidden columns saved with presets (`00047`) | done |
+| Organization timezone is the default for analytics and the overview (`timezone` on `/analytics/dashboard` and `/breakdown`); Russian timezones in the picker; tzdata embedded in the API | done |
+| Unique clicks count visitors (campaign + IP + User-Agent), not `click_id`s | done |
+| Stream-set filter list: country and language dropdowns, language matches by subtag, ASN normalized; `region`/`city`/`proxy`/`connection_type` dropped from the list; end-to-end filter matrices (`apps/e2e/filters_test.go`) | done |
+| Directory tables, Click Log and Overview remember columns and can reorder them; creating a network/offer/traffic source returns to the list; campaign statistics links | done |
+| Tracking link builder with Facebook/TikTok macro presets (`lib/tracking-link-params.ts`) | done |
+| Conversions list: offer, flow, tags, payout/currency, status history, hidden `utm_*`/`sub1`–`sub10`/USD/txn id columns | done |
+| Marketer audit (`docs/audit-marketer-2026-10-06.md`) — findings only; #2 (timezone), #8 (link builder), #9 (conversions list) since closed | done |
+| Dev compose subnet pinned to `10.99.0.0/24` (docker's auto-pick `192.168.0.0/20` shadowed the host LAN and broke host → container traffic) | done |
 
 ## Known open gaps
 
@@ -116,6 +125,14 @@ scoped phase; none blocks anything that ships today.
 
 | Gap | Where |
 |---|---|
+| Offer daily cap (`cap`) is stored and shown but never enforced by routing/tracker (audit #1, P0) | `internal/offer`, `internal/routing`, `apps/tracker` — or remove the field |
+| Bot / filtered traffic is not visible in analytics (audit #3, P0) | `is_bot` is stored on events but not a report dimension/metric |
+| Domains: SSL never issued (`SSLIssued`), links on `http` (audit #4, P0) | `apps/internal/domain` |
+| Menu stubs "Not built yet": Push, Reports, LTV / Cohorts (audit #5) — the LTV engine exists (`docs/ltv-cohorts.md`), only its UI is missing | `apps/web/src/app/(app)/{push,reports,ltv-cohorts}` |
+| Alerts (spend threshold, ROI < 0, offer paused / cap hit, SSL expiry) (audit #10) | only infra Prometheus alerts exist |
+| Overview: Top Offers card and previous-period comparison (audit #11) — `offer` dimension is now backed, so unblocked | `features/dashboard/dashboard-view.tsx` |
+| New funnel metrics are not in the default analytics column set, and the Custom Metrics registry lacks them (audit #12) | `features/analytics/registry.ts`, custom metrics registry |
+| Brave is indistinguishable from Chrome by User-Agent (audit #13) | platform limit, not fixable |
 | `cloudflare_registrar` has no adapter, though Cloudflare works as a DNS provider | `apps/internal/domain/model.go` |
 | SMS/email 2FA as an alternative delivery channel (TOTP only today) | `apps/internal/totp` |
 | Seven feature areas are English-only in an EN/RU app | `content-gallery`, `custom-metrics`, `domains`, `referral`, `settings`, `tags`, `team` |

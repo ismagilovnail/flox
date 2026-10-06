@@ -19,21 +19,20 @@ referenced below as §N).
 ## CURRENT STATE — UPDATE THIS EVERY PHASE
 
 ```
-CURRENT PHASE : ANALYTICS FUNNEL METRICS + HIDDEN COLUMNS
-STATUS        : done. Metrics pwaInstalls/registrations/purchases/repurchases,
-                step rates and cost per step (§50); hidden columns saved with
-                presets (hidden_columns, 00047). VERIFIED: full-env go test,
-                tsc + eslint, browser (column appears; hide -> save preset ->
-                reload keeps it). Gaps: Custom Metrics registry lacks the new
-                metrics; unsaved column edits still reset on reload.
-LAST COMMIT   : feat(analytics): funnel metrics + hidden columns in presets.
-UNCOMMITTED   : none expected.
-NEXT          : postlanding stage serving (+ postlanding dimension) —
-                already requested by the user; confirm details first.
-                Then: network dimension; Top Offers card; PWA types
-                external/ios_app + landing asPwa (need URL fields); push
-                from installed PWAs; analytics "Линия" single-day line
-                (pre-existing). Run go test with the full env line
+CURRENT PHASE : MARKETER AUDIT FOLLOW-UPS (between phases)
+STATUS        : done. Last features: conversions list (offer/flow/history),
+                tracking link builder, org-timezone default, funnel metrics +
+                hidden columns in presets. Dev compose subnet pinned to
+                10.99.0.0/24 (old auto-subnet collided with the host LAN).
+                ROADMAP re-synced with the tree on 2026-10-06.
+LAST COMMIT   : fix(infra): pin dev compose subnet to 10.99.0.0/24.
+UNCOMMITTED   : ROADMAP.md, CLAUDE.md (this sync).
+NEXT          : open audit items (docs/audit-marketer-2026-10-06.md), P0
+                first: #1 offer daily cap, #3 bots in analytics, #4 domain
+                SSL; then #5 menu stubs (LTV UI), #10 alerts, #11 Top Offers.
+                Also pending: postlanding stage serving, network dimension,
+                PWA external/ios_app types. Confirm scope with the user
+                before starting. Run go test with the full env line
                 (memory: flox-full-test-env).
 ```
 
