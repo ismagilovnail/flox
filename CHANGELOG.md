@@ -12,8 +12,10 @@ the report builder and organization settings. A "Россия" group (Калин
 Москва, Самара, Екатеринбург, Омск, Красноярск, Новосибирск, Иркутск, Якутск,
 Владивосток, Магадан, Камчатка) with city names and a right-aligned UTC offset,
 then "Весь мир" (UTC, London, Berlin, Dubai, Singapore, New York, Chicago, Los
-Angeles). The list opens below the trigger (`position="popper"`) and always
-from the top, not scrolled to the selected zone. City names are in the `analytics` i18n namespace (ru/en); a zone
+Angeles). The list opens below the trigger (`position="popper"`), with no max-height of
+its own: all ~20 rows fit on a normal screen, so Radix has nothing to scroll to
+the selected zone and there is no jump (an earlier scroll-reset workaround
+flickered and was removed). City names are in the `analytics` i18n namespace (ru/en); a zone
 outside the list stays selectable under its IANA id. The API now embeds
 `time/tzdata`: the alpine runtime image ships no zone database, so
 `time.LoadLocation` for any zone but UTC would have returned "unknown timezone"

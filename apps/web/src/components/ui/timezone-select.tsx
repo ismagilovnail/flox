@@ -47,28 +47,11 @@ export function TimezoneSelect({
       <SelectTrigger id={id} className={className} size="sm">
         <SelectValue />
       </SelectTrigger>
-      <SelectContent
-        position="popper"
-        align="start"
-        className="max-h-80 min-w-64"
-        // Radix scrolls the selected item into view on open (and offers no way to
-        // turn that off); this list should always open from the top (the Russian
-        // zones). Keep it invisible until it has been scrolled back, so the jump
-        // is never painted.
-        ref={(el) => {
-          if (!el) return
-          el.style.visibility = "hidden"
-          const toTop = () => {
-            el.scrollTop = 0
-            el.querySelector<HTMLElement>("[data-radix-select-viewport]")?.scrollTo({ top: 0 })
-          }
-          requestAnimationFrame(() => requestAnimationFrame(toTop))
-          setTimeout(() => {
-            toTop()
-            el.style.visibility = ""
-          }, 60)
-        }}
-      >
+      {/* No max-height of its own: the whole list (about 20 rows) fits below the
+          trigger on a normal screen, so Radix has nothing to scroll to the
+          selected item and the list opens without a jump. On a short screen it
+          falls back to the available height and scrolls. */}
+      <SelectContent position="popper" align="start" className="min-w-64">
         {custom && (
           <>
             <SelectItem value={custom}>
