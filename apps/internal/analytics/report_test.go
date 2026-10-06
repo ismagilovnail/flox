@@ -200,6 +200,32 @@ func TestReportNullsConversionMetricsForUnsupportedDimension(t *testing.T) {
 	}
 }
 
+func TestReportNullsConversionMetricsForUnsupportedFilter(t *testing.T) {
+	// Filtering by os has the same no-column problem as grouping by it:
+	// ReportConversions must not be called (it would fail the whole report
+	// and the timeseries with a 500) and conversion metrics come back nil.
+	repo := &reportFakeRepo{
+		clicks: []chstore.ClickAgg{{Key: dimKey(chstore.DimCampaign, "camp-a"), Clicks: 20, UniqueClicks: 18}},
+	}
+	svc := analytics.NewService(repo, nil)
+
+	rows, err := svc.Report(context.Background(), "org-1", analytics.ReportInput{
+		Dims:    []chstore.ReportDimension{chstore.DimCampaign},
+		Filters: []chstore.ReportFilter{{Dimension: chstore.DimOS, Value: "linux"}},
+		From:    time.Now().AddDate(0, 0, -7),
+		To:      time.Now(),
+	})
+	if err != nil {
+		t.Fatalf("Report: %v", err)
+	}
+	if repo.lastConvQuery != nil {
+		t.Fatal("ReportConversions was called with a filter conversion_events can't apply")
+	}
+	if len(rows) != 1 || rows[0].Metrics.Conversions != nil || rows[0].Metrics.Revenue != nil {
+		t.Fatalf("rows = %+v, want one row with nil conversions/revenue", rows)
+	}
+}
+
 func TestReportNullsCostMetricsWhenGroupingIsFinerThanCampaign(t *testing.T) {
 	// Grouping by country: cost_entries has no country breakdown, so
 	// Cost/Profit/ROI/ROAS/CPC/CPA must all be nil even though revenue

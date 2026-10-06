@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Mono } from "@/components/ui/typography";
 import { RelativeTime } from "@/components/ui/relative-time";
 import type { Pwa, PwaStatus } from "@/lib/api/pwa";
+import { PWA_ACCENT_COLORS, matchPreset } from "@/features/pwa/pwa-form";
 import { PwaRowActions } from "@/features/pwa/pwa-row-actions";
 import { TagBadgeList } from "@/features/tags/tag-badge-list";
 
@@ -31,15 +32,22 @@ export function pwaColumns(t: TFunction): ColumnDef<typeof dataTableFeatures, Pw
     {
       id: "theme",
       header: t("columns.theme", { ns: "pwa" }),
-      cell: ({ row }) => (
-        <div className="flex items-center gap-1.5">
-          <span
-            className="size-3.5 rounded-full ring-1 ring-border"
-            style={{ backgroundColor: row.original.themeColor }}
-          />
-          <Mono className="text-xs">{row.original.themeColor}</Mono>
-        </div>
-      ),
+      cell: ({ row }) => {
+        const scheme = matchPreset(PWA_ACCENT_COLORS, row.original.themeColor);
+        return (
+          <div className="flex items-center gap-1.5">
+            <span
+              className="size-3 rounded-full border border-black/10"
+              style={{ background: row.original.themeColor }}
+            />
+            {scheme ? (
+              <span className="text-sm">{t(`form.colorScheme.${scheme}`, { ns: "pwa" })}</span>
+            ) : (
+              <Mono className="text-xs">{row.original.themeColor}</Mono>
+            )}
+          </div>
+        );
+      },
     },
     {
       accessorKey: "bounceInAppWebview",

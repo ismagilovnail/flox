@@ -48,6 +48,7 @@ export function ReportTable({
       return {
         id: m,
         header: metricLabel(t, m),
+        meta: { hint: t(`metricHints.${m}`, { defaultValue: "" }) || undefined },
         accessorFn: (row) => row.metrics[m],
         cell: ({ getValue }) => <Mono>{formatMetric(getValue() as number | null, meta.format)}</Mono>,
       };
@@ -66,6 +67,7 @@ export function ReportTable({
       data={rows}
       searchPlaceholder={t("table.searchPlaceholder")}
       exportFilename="analytics-report"
+      enableColumnReorder
       emptyTitle={t("table.emptyTitle")}
       emptyDescription={t("table.emptyDescription")}
       pageSize={10}

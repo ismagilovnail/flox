@@ -262,7 +262,7 @@ func (s *Service) groupedReport(ctx context.Context, organizationID string, dims
 		return nil, fmt.Errorf("analytics: querying land-view report: %w", err)
 	}
 
-	convSupported := chstore.SupportedByConversions(dims)
+	convSupported := chstore.SupportedByConversions(dims) && chstore.FiltersSupportedByConversions(q.Filters)
 	var convAggs []chstore.ConversionAgg
 	if convSupported {
 		convAggs, err = s.repo.ReportConversions(ctx, q)

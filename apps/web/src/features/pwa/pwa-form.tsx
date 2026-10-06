@@ -59,7 +59,7 @@ function numberOrUndefined(v: string): number | undefined {
  * match either preset list (legacy data, or set through some other
  * client) simply shows no dropdown selection until the operator picks
  * one — its real value is untouched until then. */
-const PWA_ACCENT_COLORS = [
+export const PWA_ACCENT_COLORS = [
   { value: "green", color: "#16a34a" },
   { value: "blue", color: "#2563eb" },
   { value: "blueModern", color: "#0ea5e9" },
@@ -71,7 +71,7 @@ const PWA_BACKGROUND_THEMES = [
   { value: "dark", color: "#0a0a0a" },
 ] as const;
 
-function matchPreset<T extends { value: string; color: string }>(presets: readonly T[], hex?: string): string {
+export function matchPreset<T extends { value: string; color: string }>(presets: readonly T[], hex?: string): string {
   return presets.find((p) => p.color.toLowerCase() === (hex ?? "").toLowerCase())?.value ?? "";
 }
 
@@ -391,6 +391,9 @@ export function PwaForm({
                   {...register("name")}
                   aria-invalid={!!errors.name}
                 />
+                <p className="text-xs text-muted-foreground">
+                  {t("form.nameHint", { ns: "pwa" })}
+                </p>
                 {errors.name && (
                   <p className="text-xs text-danger">{errors.name.message}</p>
                 )}
@@ -405,6 +408,9 @@ export function PwaForm({
                   {...register("shortName")}
                   aria-invalid={!!errors.shortName}
                 />
+                <p className="text-xs text-muted-foreground">
+                  {t("form.shortNameHint", { ns: "pwa" })}
+                </p>
                 {errors.shortName && (
                   <p className="text-xs text-danger">
                     {errors.shortName.message}

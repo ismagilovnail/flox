@@ -43,7 +43,7 @@ export function AnalyticsView() {
   const defaultTo = React.useMemo(() => new Date(), []);
   const defaultFrom = React.useMemo(() => {
     const d = new Date(defaultTo);
-    d.setUTCDate(d.getUTCDate() - 29);
+    d.setUTCDate(d.getUTCDate() - 6);
     return d;
   }, [defaultTo]);
 
@@ -58,7 +58,7 @@ export function AnalyticsView() {
       dateRange: { from: defaultFrom, to: defaultTo },
       timezone: "UTC",
       dimensions: ["campaign"],
-      metrics: ["clicks", "conversions", "revenue", "cvr"],
+      metrics: ["clicks", "conversions", "cvr", "cost", "revenue", "profit", "roi", "epc", "cpa"],
       filters,
       groupBy: "campaign",
       sort: { key: "revenue", dir: "desc" },

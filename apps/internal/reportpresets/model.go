@@ -86,13 +86,13 @@ type UpdateInput struct {
 // first time an org has zero report presets — matching the mock's own
 // seed data (lib/mock/report-presets.ts's "Campaign Overview (default)")
 // so a real org's first-ever preset list looks the same as it did against
-// the mock. Days: 30 is the frontend's own default relative window.
+// the mock. The metric set is the classic affiliate-media-buyer table (traffic, CR, cost, revenue, profit, ROI, EPC, CPA) over the last 7 days.
 var defaultPresetSeed = ReportPreset{
 	Name:       "Campaign Overview (default)",
 	Dimensions: []string{"campaign"},
-	Metrics:    []string{"clicks", "conversions", "revenue", "roi"},
+	Metrics:    []string{"clicks", "conversions", "cvr", "cost", "revenue", "profit", "roi", "epc", "cpa"},
 	GroupBy:    "campaign",
-	Period:     Period{Type: PeriodRelative, Days: intPtr(30)},
+	Period:     Period{Type: PeriodRelative, Days: intPtr(7)},
 	Timezone:   "UTC",
 }
 

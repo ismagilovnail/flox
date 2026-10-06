@@ -28,8 +28,10 @@
     "description": "Эти поля — настоящий Web App Manifest (§28): превью ниже показывает, что установится на устройство.",
     "nameLabel": "Название",
     "namePlaceholder": "Sweeps PWA",
+    "nameHint": "Полное название: показывается на странице установки и на заставке при запуске.",
     "shortNameLabel": "Короткое имя",
     "shortNamePlaceholder": "Sweeps",
+    "shortNameHint": "Отображается на телефоне под иконкой приложения. Лучше до 12 символов.",
     "colorSchemeLabel": "Цветовая схема",
     "colorScheme": {
       "green": "Зелёная",

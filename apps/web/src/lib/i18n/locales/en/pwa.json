@@ -28,8 +28,10 @@
     "description": "These fields are the real Web App Manifest (§28) — the preview below is what installs on the device.",
     "nameLabel": "Name",
     "namePlaceholder": "Sweeps PWA",
+    "nameHint": "Full name: shown on the install page and on the launch splash screen.",
     "shortNameLabel": "Short name",
     "shortNamePlaceholder": "Sweeps",
+    "shortNameHint": "Shown on the phone under the app icon. Keep it to 12 characters or less.",
     "colorSchemeLabel": "Color scheme",
     "colorScheme": {
       "green": "Green",

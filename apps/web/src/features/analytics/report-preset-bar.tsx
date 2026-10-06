@@ -29,10 +29,6 @@ import {
 import { dateRangeToPeriod, periodToDateRange, type ReportPreset } from "@/lib/report-presets";
 import type { ReportControlsState } from "@/features/analytics/report-controls";
 
-/** Fixed "now" — matches the constant used throughout analytics-view.tsx so
- * applying a relative period is deterministic against a fixture-seeded org. */
-const TODAY = new Date("2026-08-11T00:00:00Z");
-
 export function ReportPresetBar({
   state,
   onApply,
@@ -56,7 +52,7 @@ export function ReportPresetBar({
       metrics: preset.metrics,
       groupBy: preset.groupBy,
       timezone: preset.timezone,
-      dateRange: periodToDateRange(preset.period, TODAY),
+      dateRange: periodToDateRange(preset.period, new Date()),
     });
     toast(t("presets.toast.applied"), { description: preset.name });
   }
@@ -75,7 +71,7 @@ export function ReportPresetBar({
       metrics: state.metrics,
       groupBy: state.groupBy,
       timezone: state.timezone,
-      period: dateRangeToPeriod(state.dateRange, TODAY),
+      period: dateRangeToPeriod(state.dateRange, new Date()),
     };
     if (dialogTarget) {
       updatePreset.mutate(

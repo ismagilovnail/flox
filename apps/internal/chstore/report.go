@@ -124,6 +124,19 @@ func ValidDimension(d ReportDimension) bool {
 	return ok
 }
 
+// FiltersSupportedByConversions is SupportedByConversions for filter
+// dimensions: filtering by os/browser/language has the same no-column
+// problem as grouping by them, so conversion-derived metrics are
+// unanswerable (null) rather than the whole report failing.
+func FiltersSupportedByConversions(filters []ReportFilter) bool {
+	for _, f := range filters {
+		if _, ok := reportConversionColumns[f.Dimension]; !ok {
+			return false
+		}
+	}
+	return true
+}
+
 // SupportedByConversions reports whether every dimension in dims has a
 // column on conversion_events — see reportConversionColumns' own comment.
 func SupportedByConversions(dims []ReportDimension) bool {

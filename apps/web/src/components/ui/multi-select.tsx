@@ -25,6 +25,7 @@ function MultiSelect({
   label,
   className,
   disabled = false,
+  max,
 }: {
   options: MultiSelectOption[];
   selected: string[];
@@ -32,18 +33,23 @@ function MultiSelect({
   label: string;
   className?: string;
   disabled?: boolean;
+  /** Upper bound on selected values: at the limit, unchecked options are disabled. */
+  max?: number;
 }) {
   const { t } = useTranslation("common");
   const [open, setOpen] = React.useState(false);
 
   function toggle(value: string) {
     if (disabled) return;
+    if (max !== undefined && !selected.includes(value) && selected.length >= max) return;
     onChange(
       selected.includes(value)
         ? selected.filter((v) => v !== value)
         : [...selected, value],
     );
   }
+
+  const atMax = max !== undefined && selected.length >= max;
 
   const summary =
     selected.length === 0
@@ -80,6 +86,7 @@ function MultiSelect({
                   <CommandItem
                     key={option.value}
                     value={option.label}
+                    disabled={atMax && !checked}
                     onSelect={() => toggle(option.value)}
                   >
                     <span
@@ -96,6 +103,11 @@ function MultiSelect({
               })}
             </CommandGroup>
           </CommandList>
+          {max !== undefined && (
+            <p className="border-t border-border px-3 py-2 text-xs text-muted-foreground">
+              {t("multiSelect.maxHint", { selected: selected.length, max })}
+            </p>
+          )}
         </Command>
       </PopoverContent>
     </Popover>

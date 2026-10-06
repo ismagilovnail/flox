@@ -21,6 +21,9 @@ export type DimensionKey =
   | "offer"
   | "network";
 
+/** Mirrors maxReportDims in apps/internal/analytics/report.go — the API rejects more. */
+export const MAX_REPORT_DIMENSIONS = 4;
+
 export const DIMENSIONS: { key: DimensionKey; label: string }[] = [
   { key: "campaign", label: "Campaign" },
   { key: "source", label: "Source" },

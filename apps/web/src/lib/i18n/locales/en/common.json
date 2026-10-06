@@ -21,6 +21,7 @@
     "emptyTitle": "No results",
     "columns": "Columns",
     "exportCsv": "Export CSV",
+    "reorderColumnAria": "Drag to reorder columns",
     "resizeColumnAria": "Resize column",
     "selected_one": "{{count}} selected",
     "selected_other": "{{count}} selected",
@@ -53,6 +54,7 @@
     "ru": "Русский"
   },
   "multiSelect": {
+    "maxHint": "{{selected}} of {{max}} selected (maximum)",
     "none": "None",
     "searchPlaceholder": "Search {{label}}..."
   },

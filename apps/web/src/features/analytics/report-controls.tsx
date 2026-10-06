@@ -25,7 +25,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { DIMENSIONS, METRICS, TIMEZONES, dimensionLabel as dimensionLabelFor, metricLabel as metricLabelFor, type DimensionKey, type MetricKey } from "@/features/analytics/registry";
+import { DIMENSIONS, MAX_REPORT_DIMENSIONS, METRICS, TIMEZONES, dimensionLabel as dimensionLabelFor, metricLabel as metricLabelFor, type DimensionKey, type MetricKey } from "@/features/analytics/registry";
 import type { FilterCondition } from "@/features/analytics/aggregate";
 import { dimensionValues } from "@/lib/mock/analytics";
 import { useDimensionValues } from "@/hooks/use-analytics-report";
@@ -189,6 +189,7 @@ export function ReportControls({
           label={t("controls.dimensionsLabel")}
           options={DIMENSIONS.map((d) => ({ value: d.key, label: dimensionLabelFor(t, d.key) }))}
           selected={state.dimensions}
+          max={MAX_REPORT_DIMENSIONS}
           onChange={(values) => {
             const dimensions = values as DimensionKey[];
             onChange({

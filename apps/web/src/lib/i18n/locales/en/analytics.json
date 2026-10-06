@@ -94,6 +94,21 @@
     "cpa": "CPA",
     "epc": "EPC"
   },
+  "metricHints": {
+    "clicks": "All clicks on the campaign, including repeat clicks from the same visitor.",
+    "uniqueClicks": "Clicks from unique visitors — repeat visits by the same person are not counted.",
+    "conversions": "Number of conversions (target actions) tied to clicks.",
+    "revenue": "Revenue from conversions in USD at the rate on the event date.",
+    "cost": "Traffic spend in USD. Taken from manually entered cost; shown as “—” when there is none.",
+    "profit": "Profit = revenue − cost.",
+    "roi": "ROI = (revenue − cost) ÷ cost × 100%. How many percent of the spend came back on top of it.",
+    "roas": "ROAS = revenue ÷ cost. Dollars of revenue per 1 dollar of spend.",
+    "ctr": "CTR = landing views ÷ clicks × 100%. The share of clicks that reached a landing view.",
+    "cvr": "CVR (conversion rate) — the share of clicks that ended in a conversion: conversions ÷ clicks × 100%.",
+    "cpc": "CPC = cost ÷ clicks. Average price of one click.",
+    "cpa": "CPA = cost ÷ conversions. Average price of one conversion.",
+    "epc": "EPC = revenue ÷ clicks. Average revenue per click."
+  },
   "funnelSteps": {
     "SOURCE_CLICK": "Source Click",
     "LAND_VIEW": "Landing View",

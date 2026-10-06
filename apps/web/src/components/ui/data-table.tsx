@@ -3,6 +3,7 @@
 import * as React from "react"
 import {
   columnVisibilityFeature,
+  columnOrderingFeature,
   columnFilteringFeature,
   columnResizingFeature,
   columnSizingFeature,
@@ -27,6 +28,8 @@ import {
   ArrowUpIcon,
   ArrowUpDownIcon,
   ChevronLeftIcon,
+  CircleHelpIcon,
+  GripVerticalIcon,
   ChevronRightIcon,
   DownloadIcon,
   SearchIcon,
@@ -37,6 +40,7 @@ import { cn } from "@/lib/utils"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { EmptyState } from "@/components/ui/empty-state"
 import {
   DropdownMenu,
@@ -56,6 +60,7 @@ export const dataTableFeatures = tableFeatures({
   filteredRowModel: createFilteredRowModel(),
   filterFns: { includesString: filterFn_includesString },
   columnVisibilityFeature,
+  columnOrderingFeature,
   rowSelectionFeature,
   columnSizingFeature,
   columnResizingFeature,
@@ -104,6 +109,17 @@ function csvCell(value: unknown): string {
  * large sets" (UX floor) is handled by pagination rather than DOM windowing
  * — scannable rows stay bounded per page instead of an unbounded live list.
  */
+/** Optional column explanation (`columnDef.meta.hint`) shown as a tooltip on the header. */
+function HeaderHint({ hint, children }: { hint?: string; children: React.ReactElement }) {
+  if (!hint) return children
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>{children}</TooltipTrigger>
+      <TooltipContent className="max-w-64">{hint}</TooltipContent>
+    </Tooltip>
+  )
+}
+
 function DataTable<TData extends Record<string, unknown>>({
   columns,
   data,
@@ -118,6 +134,7 @@ function DataTable<TData extends Record<string, unknown>>({
   bulkActions,
   initialColumnVisibility,
   exportFilename,
+  enableColumnReorder = false,
 }: {
   columns: ColumnDef<typeof dataTableFeatures, TData>[]
   data: TData[]
@@ -138,6 +155,8 @@ function DataTable<TData extends Record<string, unknown>>({
   initialColumnVisibility?: Record<string, boolean>
   /** Base filename (without .csv) for the Export CSV button. Falls back to a generic name when omitted — every existing call site keeps working unchanged. */
   exportFilename?: string
+  /** Opt-in: header labels can be dragged to reorder columns. Omitted keeps the fixed order, as before. */
+  enableColumnReorder?: boolean
 }) {
   const { t } = useTranslation("common")
   const [sorting, setSorting] = React.useState<
@@ -151,6 +170,10 @@ function DataTable<TData extends Record<string, unknown>>({
     pageIndex: 0,
     pageSize,
   })
+  const [columnOrder, setColumnOrder] = React.useState<string[]>([])
+  const [resizingColumnId, setResizingColumnId] = React.useState<string | null>(null)
+  const [dragColumnId, setDragColumnId] = React.useState<string | null>(null)
+  const [dropColumnId, setDropColumnId] = React.useState<string | null>(null)
   const [rowSelection, setRowSelection] = React.useState<RowSelectionState>({})
   // Empty by default means every column renders at its natural, auto-layout
   // width exactly as before this feature existed — a width only ever gets
@@ -171,18 +194,68 @@ function DataTable<TData extends Record<string, unknown>>({
     features: dataTableFeatures,
     columns: tableColumns,
     data,
-    state: { sorting, globalFilter, columnVisibility, pagination, rowSelection, columnSizing },
+    state: { sorting, globalFilter, columnVisibility, pagination, rowSelection, columnSizing, columnOrder },
     onSortingChange: setSorting,
     onGlobalFilterChange: setGlobalFilter,
     onColumnVisibilityChange: setColumnVisibility,
     onPaginationChange: setPagination,
     onRowSelectionChange: setRowSelection,
     onColumnSizingChange: setColumnSizing,
+    onColumnOrderChange: setColumnOrder,
     enableColumnResizing: true,
     columnResizeMode: "onChange",
     getRowId: getRowId as ((row: TData) => string) | undefined,
     globalFilterFn: "includesString",
   })
+
+  function moveColumn(fromId: string, toId: string) {
+    if (fromId === toId) return
+    const ids = table.getAllLeafColumns().map((c) => c.id)
+    const from = ids.indexOf(fromId)
+    const to = ids.indexOf(toId)
+    if (from < 0 || to < 0) return
+    ids.splice(to, 0, ids.splice(from, 1)[0])
+    setColumnOrder(ids)
+  }
+
+  /** Own resize handler instead of header.getResizeHandler(): TanStack measures the
+   * start size from the column def (150 by default), not the rendered width, so a
+   * column that auto-layout made wider snapped to ~150px on the first pixel dragged. */
+  function startColumnResize(
+    e: React.MouseEvent<HTMLElement> | React.TouchEvent<HTMLElement>,
+    columnId: string,
+  ) {
+    const th = e.currentTarget.parentElement
+    if (!th) return
+    const isTouch = "touches" in e
+    const startX = isTouch ? e.touches[0].clientX : e.clientX
+    const startWidth = th.getBoundingClientRect().width
+    const resize = (clientX: number) =>
+      setColumnSizing((prev) => ({ ...prev, [columnId]: Math.max(48, Math.round(startWidth + clientX - startX)) }))
+    setResizingColumnId(columnId)
+    if (isTouch) {
+      const onMove = (ev: TouchEvent) => resize(ev.touches[0].clientX)
+      const onEnd = () => {
+        document.removeEventListener("touchmove", onMove)
+        document.removeEventListener("touchend", onEnd)
+        document.removeEventListener("touchcancel", onEnd)
+        setResizingColumnId(null)
+      }
+      document.addEventListener("touchmove", onMove)
+      document.addEventListener("touchend", onEnd)
+      document.addEventListener("touchcancel", onEnd)
+      return
+    }
+    e.preventDefault()
+    const onMove = (ev: MouseEvent) => resize(ev.clientX)
+    const onUp = () => {
+      document.removeEventListener("mousemove", onMove)
+      document.removeEventListener("mouseup", onUp)
+      setResizingColumnId(null)
+    }
+    document.addEventListener("mousemove", onMove)
+    document.addEventListener("mouseup", onUp)
+  }
 
   const rows = table.getRowModel().rows
   const selectedRows = enableRowSelection ? table.getSelectedRowModel().rows.map((r) => r.original) : []
@@ -300,16 +373,67 @@ function DataTable<TData extends Record<string, unknown>>({
                   return (
                     <th
                       key={header.id}
-                      className="relative h-9 px-3 text-left align-middle text-xs font-medium text-muted-foreground"
+                      className={cn(
+                        "relative h-9 px-3 text-left align-middle text-xs font-medium text-muted-foreground",
+                        enableColumnReorder && dropColumnId === header.column.id && dragColumnId !== header.column.id && "bg-primary/10",
+                      )}
+                      onDragOver={
+                        enableColumnReorder && dragColumnId
+                          ? (e) => {
+                              e.preventDefault()
+                              setDropColumnId(header.column.id)
+                            }
+                          : undefined
+                      }
+                      onDrop={
+                        enableColumnReorder && dragColumnId
+                          ? (e) => {
+                              e.preventDefault()
+                              moveColumn(dragColumnId, header.column.id)
+                              setDragColumnId(null)
+                              setDropColumnId(null)
+                            }
+                          : undefined
+                      }
                       style={resized ? { width: header.getSize(), minWidth: header.getSize(), maxWidth: header.getSize() } : undefined}
                     >
                       {header.isPlaceholder ? null : header.column.getCanSort() ? (
+                        <HeaderHint hint={(header.column.columnDef.meta as { hint?: string } | undefined)?.hint}>
                         <button
                           type="button"
                           onClick={header.column.getToggleSortingHandler()}
-                          className="inline-flex max-w-full items-center gap-1 truncate hover:text-foreground"
+                          draggable={enableColumnReorder && header.column.id !== SELECT_COLUMN_ID}
+                          onDragStart={(e) => {
+                            e.dataTransfer.effectAllowed = "move"
+                            setDragColumnId(header.column.id)
+                          }}
+                          onDragEnd={() => {
+                            setDragColumnId(null)
+                            setDropColumnId(null)
+                          }}
+                          title={
+                            enableColumnReorder &&
+                            header.column.id !== SELECT_COLUMN_ID &&
+                            !(header.column.columnDef.meta as { hint?: string } | undefined)?.hint
+                              ? t("dataTable.reorderColumnAria")
+                              : undefined
+                          }
+                          className={cn(
+                            "inline-flex max-w-full items-center gap-1 truncate hover:text-foreground",
+                            enableColumnReorder && "cursor-grab active:cursor-grabbing",
+                            dragColumnId === header.column.id && "opacity-50",
+                          )}
                         >
+                          {enableColumnReorder && header.column.id !== SELECT_COLUMN_ID && (
+                            <GripVerticalIcon
+                              className="-ml-1.5 size-3 shrink-0 opacity-40"
+                              aria-hidden
+                            />
+                          )}
                           <table.FlexRender header={header} />
+                          {(header.column.columnDef.meta as { hint?: string } | undefined)?.hint && (
+                            <CircleHelpIcon className="size-3 shrink-0 opacity-60" />
+                          )}
                           {sortDir === "asc" ? (
                             <ArrowUpIcon className="size-3 shrink-0" />
                           ) : sortDir === "desc" ? (
@@ -318,20 +442,22 @@ function DataTable<TData extends Record<string, unknown>>({
                             <ArrowUpDownIcon className="size-3 shrink-0 opacity-40" />
                           )}
                         </button>
+                        </HeaderHint>
                       ) : (
                         <table.FlexRender header={header} />
                       )}
                       {header.column.getCanResize() && (
                         <div
-                          onMouseDown={header.getResizeHandler()}
-                          onTouchStart={header.getResizeHandler()}
+                          onMouseDown={(e) => startColumnResize(e, header.column.id)}
+                          onTouchStart={(e) => startColumnResize(e, header.column.id)}
                           onClick={(e) => e.stopPropagation()}
                           role="separator"
                           aria-orientation="vertical"
                           aria-label={t("dataTable.resizeColumnAria")}
+                          title={t("dataTable.resizeColumnAria")}
                           className={cn(
-                            "absolute right-0 top-0 h-full w-1.5 -translate-x-1/2 cursor-col-resize touch-none select-none hover:bg-primary/50",
-                            header.column.getIsResizing() && "bg-primary",
+                            "group/resize absolute right-0 top-0 h-full w-1.5 -translate-x-1/2 cursor-col-resize touch-none select-none after:absolute after:inset-y-2 after:left-1/2 after:w-px after:-translate-x-1/2 after:bg-border after:content-[''] hover:bg-primary/50 hover:after:bg-transparent",
+                            resizingColumnId === header.column.id && "bg-primary",
                           )}
                         />
                       )}
