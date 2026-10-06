@@ -5,6 +5,16 @@ per-phase, matching `CLAUDE.md`'s phase protocol. The one exception is
 [Between phases], below: spec amendments and the code changes that follow from
 them land between phases and would otherwise be invisible here.
 
+## [Between phases] — Overview tables remember their columns; header hints
+
+`DataTable` gets an opt-in `persistKey`: the table's own column visibility, order
+and widths are kept in this browser (`flox.table.<key>`, read through
+`useSyncExternalStore`, so the server render and the first client render agree);
+a part the owner controls (the analytics report) is left alone. The three
+"Топ" tables on the Overview use `dashboard.top-<entity>`, one setting per table.
+The same tables' column headers now carry a "?" hint (`meta.hint`, ru/en in the
+`dashboard` namespace): what the table lists, clicks, CVR, revenue, ROI.
+
 ## [Between phases] — unsaved report edits survive a reload
 
 Choosing a timezone (or hiding a column, reordering, changing metrics, filters,

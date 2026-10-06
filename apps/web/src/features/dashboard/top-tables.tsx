@@ -15,28 +15,32 @@ const NAME_HEADER_KEY: Record<Entity, string> = {
   flows: "flowHeader",
 };
 
-function columns(t: TFunction, nameHeader: string): ColumnDef<typeof dataTableFeatures, PerformanceRow>[] {
+function columns(t: TFunction, nameHeader: string, nameHint: string): ColumnDef<typeof dataTableFeatures, PerformanceRow>[] {
   return [
-    { accessorKey: "name", header: nameHeader },
+    { accessorKey: "name", header: nameHeader, meta: { hint: nameHint } },
     {
       accessorKey: "clicks",
       header: t("topTables.clicksHeader", { ns: "dashboard" }),
+      meta: { hint: t("topTables.clicksHint", { ns: "dashboard" }) },
       cell: ({ getValue }) => <Mono>{formatInt(getValue() as number)}</Mono>,
     },
     {
       accessorKey: "cvr",
       header: t("topTables.cvrHeader", { ns: "dashboard" }),
+      meta: { hint: t("topTables.cvrHint", { ns: "dashboard" }) },
       cell: ({ getValue }) => <Mono>{((getValue() as number) * 100).toFixed(2)}%</Mono>,
     },
     {
       accessorKey: "revenue",
       header: t("topTables.revenueHeader", { ns: "dashboard" }),
+      meta: { hint: t("topTables.revenueHint", { ns: "dashboard" }) },
       cell: ({ getValue }) => <Mono>{formatUsd(getValue() as number)}</Mono>,
     },
     {
       id: "roi",
       accessorKey: "roi",
       header: t("topTables.roiHeader", { ns: "dashboard" }),
+      meta: { hint: t("topTables.roiHint", { ns: "dashboard" }) },
       cell: ({ row }) => {
         const roi = row.original.roi;
         return (
@@ -57,12 +61,13 @@ export function TopTable({ entity, rows }: { entity: Entity; rows: PerformanceRo
     <div className="flex flex-col gap-2">
       <h3 className="text-sm font-semibold text-foreground">{t(`topTables.${entity}Title`)}</h3>
       <DataTable
-        columns={columns(t, nameHeader)}
+        columns={columns(t, nameHeader, t(`topTables.${entity}Hint`))}
         data={rows}
         searchPlaceholder={t(`topTables.${entity}SearchPlaceholder`)}
         emptyTitle={t(`topTables.${entity}EmptyTitle`)}
         pageSize={5}
         exportFilename={`top-${entity}`}
+        persistKey={`dashboard.top-${entity}`}
       />
     </div>
   );

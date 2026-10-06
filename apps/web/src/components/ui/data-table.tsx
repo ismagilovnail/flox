@@ -120,6 +120,63 @@ function HeaderHint({ hint, children }: { hint?: string; children: React.ReactEl
   )
 }
 
+type PersistedTable = {
+  visibility?: Record<string, boolean>
+  order?: string[]
+  sizing?: Record<string, number>
+}
+
+const persistedStorageKey = (key: string) => `flox.table.${key}`
+
+function readPersisted(key: string): PersistedTable {
+  try {
+    const raw = window.localStorage.getItem(persistedStorageKey(key))
+    return raw ? (JSON.parse(raw) as PersistedTable) : {}
+  } catch {
+    return {}
+  }
+}
+
+const EMPTY_PERSISTED: PersistedTable = {}
+const subscribePersisted = (onChange: () => void) => {
+  window.addEventListener("storage", onChange)
+  return () => window.removeEventListener("storage", onChange)
+}
+
+/** The stored choices for `key`. Empty on the server and on the first client
+ * render (so hydration agrees), then what this browser remembers. */
+function usePersistedTable(key: string | undefined): PersistedTable {
+  const raw = React.useSyncExternalStore(
+    subscribePersisted,
+    () => {
+      if (!key) return null
+      try {
+        return window.localStorage.getItem(persistedStorageKey(key))
+      } catch {
+        return null
+      }
+    },
+    () => null,
+  )
+  return React.useMemo(() => {
+    if (!raw) return EMPTY_PERSISTED
+    try {
+      return JSON.parse(raw) as PersistedTable
+    } catch {
+      return EMPTY_PERSISTED
+    }
+  }, [raw])
+}
+
+/** Merges `patch` into what is stored for `key`; storage errors (private window) are ignored. */
+function writePersisted(key: string, patch: PersistedTable) {
+  try {
+    window.localStorage.setItem(persistedStorageKey(key), JSON.stringify({ ...readPersisted(key), ...patch }))
+  } catch {
+    // the choice just won't survive a reload
+  }
+}
+
 function DataTable<TData extends Record<string, unknown>>({
   columns,
   data,
@@ -141,6 +198,7 @@ function DataTable<TData extends Record<string, unknown>>({
   onColumnSizingChange,
   columnVisibility: controlledColumnVisibility,
   onColumnVisibilityChange,
+  persistKey,
 }: {
   columns: ColumnDef<typeof dataTableFeatures, TData>[]
   data: TData[]
@@ -172,6 +230,8 @@ function DataTable<TData extends Record<string, unknown>>({
   /** Controlled visibility (id -> shown); absent = the table keeps it itself. */
   columnVisibility?: Record<string, boolean>
   onColumnVisibilityChange?: (visibility: Record<string, boolean>) => void
+  /** Opt-in: remembers the table's own column visibility, order and widths in this browser under this key (ignored for the parts the owner controls). */
+  persistKey?: string
 }) {
   const { t } = useTranslation("common")
   const [sorting, setSorting] = React.useState<
@@ -181,24 +241,27 @@ function DataTable<TData extends Record<string, unknown>>({
   const [internalColumnVisibility, setInternalColumnVisibility] = React.useState<
     Record<string, boolean>
   >(initialColumnVisibility ?? {})
-  const columnVisibility = controlledColumnVisibility ?? internalColumnVisibility
+  const persisted = usePersistedTable(persistKey)
+  const columnVisibility = controlledColumnVisibility ?? persisted.visibility ?? internalColumnVisibility
   const setColumnVisibility = (
     next: Record<string, boolean> | ((old: Record<string, boolean>) => Record<string, boolean>),
   ) => {
     const resolved = typeof next === "function" ? next(columnVisibility) : next
     setInternalColumnVisibility(resolved)
     onColumnVisibilityChange?.(resolved)
+    if (persistKey && !controlledColumnVisibility) writePersisted(persistKey, { visibility: resolved })
   }
   const [pagination, setPagination] = React.useState({
     pageIndex: 0,
     pageSize,
   })
   const [internalColumnOrder, setInternalColumnOrder] = React.useState<string[]>([])
-  const columnOrder = controlledColumnOrder ?? internalColumnOrder
+  const columnOrder = controlledColumnOrder ?? persisted.order ?? internalColumnOrder
   const setColumnOrder = (next: string[] | ((old: string[]) => string[])) => {
     const resolved = typeof next === "function" ? next(columnOrder) : next
     setInternalColumnOrder(resolved)
     onColumnOrderChange?.(resolved)
+    if (persistKey && !controlledColumnOrder) writePersisted(persistKey, { order: resolved })
   }
   const [resizingColumnId, setResizingColumnId] = React.useState<string | null>(null)
   const [dragColumnId, setDragColumnId] = React.useState<string | null>(null)
@@ -210,11 +273,12 @@ function DataTable<TData extends Record<string, unknown>>({
   // (below), so tables nobody resizes look and behave identically to
   // before, with zero visual change across the app.
   const [internalColumnSizing, setInternalColumnSizing] = React.useState<ColumnSizingState>({})
-  const columnSizing = controlledColumnSizing ?? internalColumnSizing
+  const columnSizing = controlledColumnSizing ?? persisted.sizing ?? internalColumnSizing
   const setColumnSizing = (next: ColumnSizingState | ((old: ColumnSizingState) => ColumnSizingState)) => {
     const resolved = typeof next === "function" ? next(columnSizing) : next
     setInternalColumnSizing(resolved)
     onColumnSizingChange?.(resolved)
+    if (persistKey && !controlledColumnSizing) writePersisted(persistKey, { sizing: resolved })
   }
 
   const tableColumns = React.useMemo(
