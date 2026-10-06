@@ -163,6 +163,11 @@ type metricValuesResponse struct {
 	CostPerInstall  *float64 `json:"costPerInstall"`
 	CostPerReg      *float64 `json:"costPerReg"`
 	CostPerPurchase *float64 `json:"costPerPurchase"`
+
+	Blocked     uint64   `json:"blocked"`
+	Bots        uint64   `json:"bots"`
+	BlockedRate *float64 `json:"blockedRate"`
+	BotRate     *float64 `json:"botRate"`
 }
 
 func metricValuesToResponse(m MetricValues) metricValuesResponse {
@@ -173,6 +178,7 @@ func metricValuesToResponse(m MetricValues) metricValuesResponse {
 		PwaInstalls: m.PwaInstalls, Registrations: m.Registrations, Purchases: m.Purchases, Repurchases: m.Repurchases,
 		ClickToInstall: m.ClickToInstall, InstallToReg: m.InstallToReg, RegToPurchase: m.RegToPurchase,
 		CostPerInstall: m.CostPerInstall, CostPerReg: m.CostPerReg, CostPerPurchase: m.CostPerPurchase,
+		Blocked: m.Blocked, Bots: m.Bots, BlockedRate: m.BlockedRate, BotRate: m.BotRate,
 	}
 }
 

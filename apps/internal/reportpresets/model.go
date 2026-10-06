@@ -31,7 +31,7 @@ type Period struct {
 }
 
 // validMetrics mirrors features/analytics/registry.ts's MetricKey union
-// exactly — 23 entries. No Go-side metrics registry exists to import (the
+// exactly — 27 entries. No Go-side metrics registry exists to import (the
 // real /analytics/report endpoint always returns every metric; there's
 // nothing server-side to validate a client-selected metric list against),
 // so this is a deliberate, small, doc-commented duplicate — same tradeoff
@@ -43,6 +43,7 @@ var validMetrics = map[string]bool{
 	"pwaInstalls": true, "registrations": true, "purchases": true, "repurchases": true,
 	"clickToInstall": true, "installToReg": true, "regToPurchase": true,
 	"costPerInstall": true, "costPerReg": true, "costPerPurchase": true,
+	"blocked": true, "bots": true, "blockedRate": true, "botRate": true,
 }
 
 // maxDimensions matches maxReportDims in apps/internal/analytics/report.go

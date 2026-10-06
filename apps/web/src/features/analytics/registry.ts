@@ -89,7 +89,11 @@ export type MetricKey =
   | "regToPurchase"
   | "costPerInstall"
   | "costPerReg"
-  | "costPerPurchase";
+  | "costPerPurchase"
+  | "blocked"
+  | "bots"
+  | "blockedRate"
+  | "botRate";
 
 export type MetricFormat = "int" | "currency" | "percent" | "ratio";
 
@@ -118,6 +122,10 @@ export const METRICS: { key: MetricKey; label: string; format: MetricFormat }[] 
   { key: "costPerInstall", label: "Cost per install", format: "currency" },
   { key: "costPerReg", label: "Cost per registration", format: "currency" },
   { key: "costPerPurchase", label: "Cost per purchase", format: "currency" },
+  { key: "blocked", label: "Blocked", format: "int" },
+  { key: "bots", label: "Bots", format: "int" },
+  { key: "blockedRate", label: "Blocked rate", format: "percent" },
+  { key: "botRate", label: "Bot rate", format: "percent" },
 ];
 
 export function metricLabel(t: TFunction, key: MetricKey): string {

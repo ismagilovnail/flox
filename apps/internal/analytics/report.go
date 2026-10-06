@@ -109,6 +109,16 @@ type MetricValues struct {
 	CostPerInstall  *float64
 	CostPerReg      *float64
 	CostPerPurchase *float64
+
+	// Traffic quality (audit #3). Blocked is SOURCE_FILTER — clicks no
+	// destination took; Bots is every click the classifier flagged is_bot,
+	// including bots that were still redirected to a fallback. The rates are
+	// shares of ALL traffic that reached the tracker (Clicks + Blocked), in
+	// percent; nil when there was none.
+	Blocked     uint64
+	Bots        uint64
+	BlockedRate *float64
+	BotRate     *float64
 }
 
 // ReportRow is one output row of Report/Timeseries/Breakdown/Dashboard —
@@ -384,6 +394,7 @@ func (s *Service) groupedReport(ctx context.Context, organizationID string, dims
 	for _, a := range clickAggs {
 		acc := get(a.Key)
 		acc.clicks = a.Clicks
+		acc.blocked, acc.bots = a.Blocked, a.Bots
 		acc.uniqueClicks = a.UniqueClicks
 	}
 	for _, a := range landAggs {
@@ -593,6 +604,7 @@ type rowAccumulator struct {
 	dimValues map[chstore.ReportDimension]string
 
 	clicks, uniqueClicks, landViews uint64
+	blocked, bots                   uint64
 	conversions                     *uint64
 	revenueUSD                      *float64
 	pwaInstalls                     uint64
@@ -613,7 +625,12 @@ func deriveMetrics(acc *rowAccumulator) MetricValues {
 		Registrations: acc.registrations,
 		Purchases:     acc.purchases,
 		Repurchases:   acc.repurchases,
+		Blocked:       acc.blocked,
+		Bots:          acc.bots,
 	}
+
+	m.BlockedRate = percentOf(acc.blocked, acc.clicks+acc.blocked)
+	m.BotRate = percentOf(acc.bots, acc.clicks+acc.blocked)
 
 	m.ClickToInstall = percentOf(acc.pwaInstalls, acc.clicks)
 	if acc.registrations != nil {
@@ -827,6 +844,14 @@ func metricFloat(m MetricValues, key string) (float64, bool) {
 		return ptrOrNegInf(m.CostPerReg), true
 	case "costperpurchase":
 		return ptrOrNegInf(m.CostPerPurchase), true
+	case "blocked":
+		return float64(m.Blocked), true
+	case "bots":
+		return float64(m.Bots), true
+	case "blockedrate":
+		return ptrOrNegInf(m.BlockedRate), true
+	case "botrate":
+		return ptrOrNegInf(m.BotRate), true
 	default:
 		return 0, false
 	}

@@ -106,7 +106,11 @@
     "regToPurchase": "Reg. → purchase",
     "costPerInstall": "Cost per install",
     "costPerReg": "Cost per registration",
-    "costPerPurchase": "Cost per purchase"
+    "costPerPurchase": "Cost per purchase",
+    "blocked": "Blocked",
+    "bots": "Bots",
+    "blockedRate": "Blocked rate",
+    "botRate": "Bot rate"
   },
   "metricHints": {
     "clicks": "All clicks on the campaign, including repeat clicks from the same visitor.",
@@ -131,7 +135,11 @@
     "regToPurchase": "Purchases ÷ registrations × 100%. \"—\" when there are no registrations.",
     "costPerInstall": "Cost ÷ PWA installs. \"—\" without cost or without installs.",
     "costPerReg": "Cost ÷ registrations. \"—\" without cost or without registrations.",
-    "costPerPurchase": "Cost ÷ purchases. \"—\" without cost or without purchases."
+    "costPerPurchase": "Cost ÷ purchases. \"—\" without cost or without purchases.",
+    "blocked": "Clicks that matched no destination (no flow and no fallback) and were not redirected — SOURCE_FILTER events. They are not counted in Clicks.",
+    "bots": "Clicks flagged as bots by the classifier, including bots that were still sent to a fallback.",
+    "blockedRate": "Blocked ÷ (clicks + blocked) × 100%. \"—\" when there was no traffic.",
+    "botRate": "Bots ÷ (clicks + blocked) × 100%. \"—\" when there was no traffic."
   },
   "funnelSteps": {
     "SOURCE_CLICK": "Source Click",

@@ -25,11 +25,12 @@ STATUS        : done. Last features: conversions list (offer/flow/history),
                 hidden columns in presets. Dev compose subnet pinned to
                 10.99.0.0/24 (old auto-subnet collided with the host LAN).
                 ROADMAP re-synced with the tree on 2026-10-06.
-LAST COMMIT   : feat(routing): offer daily cap.
-UNCOMMITTED   : none expected. Offer cap verified: full-env go test, e2e
-                TestOfferDailyCap. No UI for it yet.
+LAST COMMIT   : feat(analytics): blocked traffic and bots metrics.
+UNCOMMITTED   : none expected. Verified: full-env go test, tsc, eslint, API on a
+                throwaway org. NOT verified in a browser (extension offline):
+                Overview tiles + report columns. Offer cap has no UI yet.
 NEXT          : open audit items (docs/audit-marketer-2026-10-06.md), P0
-                first: #3 bots in analytics, #4 domain SSL; offer-cap UI badge; then #5 menu stubs (LTV UI), #10 alerts, #11 Top Offers.
+                first: #4 domain SSL; offer-cap UI badge; then #5 menu stubs (LTV UI), #10 alerts, #11 Top Offers.
                 Also pending: postlanding stage serving, network dimension,
                 PWA external/ios_app types. Confirm scope with the user
                 before starting. Run go test with the full env line

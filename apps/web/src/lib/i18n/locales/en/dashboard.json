@@ -10,7 +10,11 @@
     "clicks": "Clicks",
     "conversions": "Conversions",
     "cvr": "CVR",
-    "cpa": "CPA"
+    "cpa": "CPA",
+    "blocked": "Blocked",
+    "blockedRate": "Blocked share",
+    "bots": "Bots",
+    "botRate": "Bot share"
   },
   "charts": {
     "revenue": "Revenue",

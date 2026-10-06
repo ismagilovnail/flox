@@ -296,3 +296,22 @@ Every metrics object also carries: `pwaInstalls` (PWA_INSTALL count),
 `null` when the requested dimensions can't be answered from conversion_events;
 rates and costs are `null` when the denominator is 0 or no cost is on file.
 `conversions` and `revenue` still count CPA_ACCEPT + CPA_REDEP only.
+
+## Blocked traffic and bots
+
+Every metrics object also carries `blocked`, `bots` (counts) and `blockedRate`,
+`botRate` (percent, `null` when no traffic reached the tracker).
+
+- `blocked` = `SOURCE_FILTER` rows: clicks that matched no destination (no flow,
+  no stream-set or campaign fallback), so there was no redirect. They are **not**
+  part of `clicks`/`uniqueClicks`.
+- `bots` = rows the classifier flagged `is_bot`, over `SOURCE_CLICK` and
+  `SOURCE_FILTER` — a bot sent to a fallback URL still counts as a click *and* a bot.
+- `blockedRate = blocked / (clicks + blocked)`, `botRate = bots / (clicks + blocked)`.
+
+A group made only of blocked clicks (e.g. a country that is filtered out entirely)
+now appears as a row with `clicks: 0`. These metrics follow the click dimensions
+(`campaign`, `country`, `device`, … `offer`, `pwa`); the empty `flow`/`stream_set`/
+`landing` bucket is where blocked clicks land, since they never reached one. The
+Overview shows four tiles: Blocked, Blocked share, Bots, Bot share.
+

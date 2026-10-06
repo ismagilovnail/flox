@@ -955,3 +955,44 @@ func TestReportClicksUniqueIsPerVisitorNotPerClickID(t *testing.T) {
 		t.Fatalf("Clicks/UniqueClicks = %d/%d, want 6/5", aggs[0].Clicks, aggs[0].UniqueClicks)
 	}
 }
+
+func TestReportClicksCountsBlockedAndBotsWithoutTouchingClicks(t *testing.T) {
+	conn := mustConn(t)
+	store := chstore.NewEventStore(conn)
+	ctx := context.Background()
+	orgID, otherOrg, campaignID := idgen.New(), idgen.New(), idgen.New()
+	day := time.Date(2026, 8, 21, 0, 0, 0, 0, time.UTC)
+
+	at := func(h int) time.Time { return day.Add(time.Duration(h) * time.Hour) }
+	events := []event.Event{
+		{Type: event.SourceClick, EventAt: at(1), OrganizationID: orgID, CampaignID: campaignID, ClickID: idgen.New(), Country: "US"},
+		{Type: event.SourceClick, EventAt: at(2), OrganizationID: orgID, CampaignID: campaignID, ClickID: idgen.New(), Country: "US", IsBot: true}, // bot, still redirected
+		{Type: event.SourceFilter, EventAt: at(3), OrganizationID: orgID, CampaignID: campaignID, ClickID: idgen.New(), Country: "US", IsBot: true},
+		{Type: event.SourceFilter, EventAt: at(4), OrganizationID: orgID, CampaignID: campaignID, ClickID: idgen.New(), Country: "DE"}, // blocked by geo, not a bot
+		// another organization's traffic must never leak in
+		{Type: event.SourceFilter, EventAt: at(3), OrganizationID: otherOrg, CampaignID: campaignID, ClickID: idgen.New(), Country: "US", IsBot: true},
+	}
+	if err := store.InsertBatch(ctx, events); err != nil {
+		t.Fatalf("InsertBatch: %v", err)
+	}
+
+	aggs, err := store.ReportClicks(ctx, chstore.ReportQuery{
+		OrganizationID: orgID, From: day, To: day.Add(24 * time.Hour),
+		Dims: []chstore.ReportDimension{chstore.DimCountry},
+	})
+	if err != nil {
+		t.Fatalf("ReportClicks: %v", err)
+	}
+	got := map[string]chstore.ClickAgg{}
+	for _, a := range aggs {
+		got[a.Key.DimValues[chstore.DimCountry]] = a
+	}
+	us, de := got["US"], got["DE"]
+	if us.Clicks != 2 || us.Blocked != 1 || us.Bots != 2 {
+		t.Fatalf("US = clicks %d blocked %d bots %d, want 2/1/2", us.Clicks, us.Blocked, us.Bots)
+	}
+	// A country with only blocked traffic still appears, with 0 clicks.
+	if de.Clicks != 0 || de.Blocked != 1 || de.Bots != 0 {
+		t.Fatalf("DE = clicks %d blocked %d bots %d, want 0/1/0", de.Clicks, de.Blocked, de.Bots)
+	}
+}

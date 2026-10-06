@@ -5,6 +5,23 @@ per-phase, matching `CLAUDE.md`'s phase protocol. The one exception is
 [Between phases], below: spec amendments and the code changes that follow from
 them land between phases and would otherwise be invisible here.
 
+## [Between phases] — blocked traffic and bots in analytics
+
+Audit finding #3 (P0): `SOURCE_FILTER` clicks (no destination — nothing redirected) and bot
+flags were stored but invisible, so clicks in the ad cabinet could not be reconciled with the
+tracker (in the dev data: 1116 blocked vs 4634 counted clicks). New metrics `blocked`, `bots`,
+`blockedRate`, `botRate` in every report/timeseries/breakdown row and on the Overview (four
+tiles, up-is-bad, compared with the previous period); selectable columns in the report
+builder with hints (EN/RU), accepted in saved presets. One ClickHouse query (`countIf`),
+`Clicks`/`UniqueClicks` unchanged; rates are shares of everything that reached the tracker
+(`clicks + blocked`) and `null` — "—" — with no traffic. A group with only blocked clicks now
+shows up with 0 clicks. Tests: service unit tests, ClickHouse test (blocked-only bucket,
+bot among redirected clicks, cross-org isolation). Verified: full-env `go test` (`eventqueue`
+flakes against the live worker, passes alone), tsc + eslint, API against a throwaway org
+(40 / 10 / 8 / 20% / 16% exactly as seeded; org removed afterwards). **Not verified in the
+browser** — the Chrome extension was not connected. Not done: bots as a report
+dimension/filter, a bots-only exclusion toggle, default-column placement (audit #12).
+
 ## [Between phases] — offer daily cap is enforced
 
 Audit finding #1 (P0): the offer's "Daily cap" was stored and shown but never read.

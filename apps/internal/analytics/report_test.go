@@ -704,3 +704,39 @@ func TestDashboardCutsDaysInTheRequestedTimezone(t *testing.T) {
 		t.Fatal("unknown timezone succeeded, want a validation error")
 	}
 }
+
+func TestReportBlockedAndBotMetrics(t *testing.T) {
+	k := dimKey(chstore.DimCampaign, "camp-a")
+	// 90 redirected clicks, 10 blocked: 100 reached the tracker. 5 of them
+	// bots (some redirected to a fallback, some blocked).
+	repo := &reportFakeRepo{clicks: []chstore.ClickAgg{{Key: k, Clicks: 90, UniqueClicks: 80, Blocked: 10, Bots: 5}}}
+	rows, err := analytics.NewService(repo, nil).Report(context.Background(), "org-1", analytics.ReportInput{
+		Dims: []chstore.ReportDimension{chstore.DimCampaign},
+		From: time.Date(2026, 8, 1, 0, 0, 0, 0, time.UTC), To: time.Date(2026, 8, 7, 0, 0, 0, 0, time.UTC),
+	})
+	if err != nil || len(rows) != 1 {
+		t.Fatalf("Report: %v rows=%d", err, len(rows))
+	}
+	m := rows[0].Metrics
+	if m.Blocked != 10 || m.Bots != 5 || m.Clicks != 90 {
+		t.Fatalf("counts = clicks %d blocked %d bots %d, want 90/10/5", m.Clicks, m.Blocked, m.Bots)
+	}
+	if m.BlockedRate == nil || *m.BlockedRate != 10 || m.BotRate == nil || *m.BotRate != 5 {
+		t.Fatalf("rates = %v / %v, want 10 / 5 (share of the 100 that reached the tracker)", m.BlockedRate, m.BotRate)
+	}
+}
+
+func TestReportBlockedRatesAreNullWithoutTraffic(t *testing.T) {
+	k := dimKey(chstore.DimCampaign, "camp-a")
+	repo := &reportFakeRepo{clicks: []chstore.ClickAgg{{Key: k}}}
+	rows, err := analytics.NewService(repo, nil).Report(context.Background(), "org-1", analytics.ReportInput{
+		Dims: []chstore.ReportDimension{chstore.DimCampaign},
+		From: time.Date(2026, 8, 1, 0, 0, 0, 0, time.UTC), To: time.Date(2026, 8, 7, 0, 0, 0, 0, time.UTC),
+	})
+	if err != nil || len(rows) != 1 {
+		t.Fatalf("Report: %v rows=%d", err, len(rows))
+	}
+	if m := rows[0].Metrics; m.BlockedRate != nil || m.BotRate != nil || m.Blocked != 0 {
+		t.Fatalf("no traffic: rates must be nil, never 0 / NaN; got %v %v", m.BlockedRate, m.BotRate)
+	}
+}

@@ -59,6 +59,34 @@ export function KpiGrid({
           ? trendProps(current.cpa, previous.cpa)
           : {})}
       />
+      <StatCard
+        label={t("kpi.blocked")}
+        value={formatInt(current.blocked)}
+        direction="up-is-bad"
+        {...trendProps(current.blocked, previous.blocked)}
+      />
+      <StatCard
+        label={t("kpi.blockedRate")}
+        value={current.blockedRate === null ? "—" : `${current.blockedRate.toFixed(2)}%`}
+        direction="up-is-bad"
+        {...(current.blockedRate !== null && previous.blockedRate !== null
+          ? trendProps(current.blockedRate, previous.blockedRate)
+          : {})}
+      />
+      <StatCard
+        label={t("kpi.bots")}
+        value={formatInt(current.bots)}
+        direction="up-is-bad"
+        {...trendProps(current.bots, previous.bots)}
+      />
+      <StatCard
+        label={t("kpi.botRate")}
+        value={current.botRate === null ? "—" : `${current.botRate.toFixed(2)}%`}
+        direction="up-is-bad"
+        {...(current.botRate !== null && previous.botRate !== null
+          ? trendProps(current.botRate, previous.botRate)
+          : {})}
+      />
     </div>
   );
 }

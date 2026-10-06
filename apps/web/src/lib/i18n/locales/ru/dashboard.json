@@ -10,7 +10,11 @@
     "clicks": "Клики",
     "conversions": "Конверсии",
     "cvr": "CVR",
-    "cpa": "CPA"
+    "cpa": "CPA",
+    "blocked": "Заблокировано",
+    "blockedRate": "Доля заблокированного",
+    "bots": "Боты",
+    "botRate": "Доля ботов"
   },
   "charts": {
     "revenue": "Доход",

@@ -23,6 +23,12 @@ export type PeriodMetrics = {
   conversions: number;
   cvr: number;
   cpa: number | null;
+  /** Clicks no destination took (SOURCE_FILTER) and clicks flagged as bots; the
+   * rates are null when there was no traffic at all — "—", never 0. */
+  blocked: number;
+  bots: number;
+  blockedRate: number | null;
+  botRate: number | null;
 };
 
 /** Maps apps/internal/analytics's §50 metrics registry row (Phase 35) onto
@@ -41,6 +47,10 @@ export function metricsFromApi(m: Record<MetricKey, number | null>): PeriodMetri
     conversions: m.conversions ?? 0,
     cvr: (m.cvr ?? 0) / 100,
     cpa: m.cpa,
+    blocked: m.blocked ?? 0,
+    bots: m.bots ?? 0,
+    blockedRate: m.blockedRate,
+    botRate: m.botRate,
   };
 }
 

@@ -217,6 +217,13 @@ type ClickAgg struct {
 	Key          ReportKey
 	Clicks       uint64
 	UniqueClicks uint64
+	// Blocked counts SOURCE_FILTER rows: clicks that matched no destination
+	// at all (no flow, no fallback) and were therefore never redirected.
+	Blocked uint64
+	// Bots counts rows the classifier flagged is_bot, over both SOURCE_CLICK
+	// and SOURCE_FILTER — a bot that fell through to a fallback URL is a bot
+	// even though it still counts as a click.
+	Bots uint64
 }
 
 type LandAgg struct {
@@ -291,15 +298,18 @@ func scanKey(dims []ReportDimension, values []string, day *time.Time) ReportKey 
 }
 
 // ReportClicks answers "how many SOURCE_CLICK rows, and how many distinct
-// visitors among them" for q's date range/dims/filters. A visitor is the
+// visitors among them" for q's date range/dims/filters, plus how many
+// SOURCE_FILTER rows (Blocked) and is_bot rows (Bots) fall in the same slice. A visitor is the
 // campaign + IP + user agent triple — the same fingerprint the tracker hashes
 // to pick a flow (apps/tracker visitKey) — NOT the click_id: a click_id is
 // minted per click (it is the postback attribution key) and is only reused by
 // stickyFlowKeepClickId, so counting it made every click "unique" by default.
 // A click with neither IP nor user agent has no fingerprint and falls back to
-// its click_id. SOURCE_FILTER is excluded — matches the one place this
-// codebase already computes a real "Clicks" number today,
-// campaign-detail-view.tsx's own `.filter((c) => c.type === "SOURCE_CLICK")`.
+// its click_id. SOURCE_FILTER is not part of Clicks/UniqueClicks — matches the
+// one place this codebase already computes a real "Clicks" number today,
+// campaign-detail-view.tsx's own `.filter((c) => c.type === "SOURCE_CLICK")` —
+// it is reported separately as Blocked so filtered traffic stays visible
+// (§43). A group that only has blocked rows therefore appears with 0 clicks.
 func (s *EventStore) ReportClicks(ctx context.Context, q ReportQuery) ([]ClickAgg, error) {
 	selectCols, ok := buildGroupBy(reportClickColumns, q.Dims)
 	if !ok {
@@ -314,9 +324,12 @@ func (s *EventStore) ReportClicks(ctx context.Context, q ReportQuery) ([]ClickAg
 	selectExpr, groupByExpr := selectAndGroupByExprs(selectCols, q.ByDay, q.Timezone)
 
 	query := fmt.Sprintf(`
-		SELECT %scount() AS clicks, uniqExact(if(ip = '' AND user_agent = '', click_id, concat(campaign_id, '|', ip, '|', user_agent))) AS unique_clicks
+		SELECT %scountIf(type = 'SOURCE_CLICK') AS clicks,
+		       uniqExactIf(if(ip = '' AND user_agent = '', click_id, concat(campaign_id, '|', ip, '|', user_agent)), type = 'SOURCE_CLICK') AS unique_clicks,
+		       countIf(type = 'SOURCE_FILTER') AS blocked,
+		       countIf(is_bot = 1) AS bots
 		FROM click_events
-		WHERE organization_id = ? AND event_at >= ? AND event_at < ? AND type = 'SOURCE_CLICK'%s
+		WHERE organization_id = ? AND event_at >= ? AND event_at < ? AND type IN ('SOURCE_CLICK', 'SOURCE_FILTER')%s
 		%s`,
 		selectExpr, filterClause, groupByExpr,
 	)
@@ -330,12 +343,12 @@ func (s *EventStore) ReportClicks(ctx context.Context, q ReportQuery) ([]ClickAg
 	var out []ClickAgg
 	for rows.Next() {
 		dimVals, day, dest := scanDest(q.Dims, q.ByDay)
-		var clicks, unique uint64
-		dest = append(dest, &clicks, &unique)
+		var clicks, unique, blocked, bots uint64
+		dest = append(dest, &clicks, &unique, &blocked, &bots)
 		if err := rows.Scan(dest...); err != nil {
 			return nil, fmt.Errorf("chstore: scanning click report row: %w", err)
 		}
-		out = append(out, ClickAgg{Key: scanKey(q.Dims, deref(dimVals), day), Clicks: clicks, UniqueClicks: unique})
+		out = append(out, ClickAgg{Key: scanKey(q.Dims, deref(dimVals), day), Clicks: clicks, UniqueClicks: unique, Blocked: blocked, Bots: bots})
 	}
 	return out, rows.Err()
 }
