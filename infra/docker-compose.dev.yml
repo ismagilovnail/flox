@@ -337,6 +337,14 @@ services:
       timeout: 5s
       retries: 10
 
+# Pinned subnet: docker's auto-pick landed on 192.168.0.0/20, which shadows
+# common home/office LANs (192.168.0.0/24) and breaks host -> container traffic.
+networks:
+  default:
+    ipam:
+      config:
+        - subnet: 10.99.0.0/24
+
 volumes:
   postgres_data:
   clickhouse_data:
