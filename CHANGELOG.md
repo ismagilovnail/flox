@@ -5,6 +5,19 @@ per-phase, matching `CLAUDE.md`'s phase protocol. The one exception is
 [Between phases], below: spec amendments and the code changes that follow from
 them land between phases and would otherwise be invisible here.
 
+## [Between phases] — Russian timezones in the timezone dropdown
+
+`lib/timezones.ts` + `components/ui/timezone-select.tsx`: one dropdown shared by
+the report builder and organization settings. A "Россия" group (Калининград,
+Москва, Самара, Екатеринбург, Омск, Красноярск, Новосибирск, Иркутск, Якутск,
+Владивосток, Магадан, Камчатка) with city names and a right-aligned UTC offset,
+then "Весь мир" (UTC, London, Berlin, Dubai, Singapore, New York, Chicago, Los
+Angeles). City names are in the `analytics` i18n namespace (ru/en); a zone
+outside the list stays selectable under its IANA id. The API now embeds
+`time/tzdata`: the alpine runtime image ships no zone database, so
+`time.LoadLocation` for any zone but UTC would have returned "unknown timezone"
+there (the dev image only worked through GOROOT's zoneinfo).
+
 ## [Between phases] — PWA / registration / purchase metrics; hidden columns are saved with presets
 
 Metrics (§50 CPA FUNNEL): `pwaInstalls` (PWA_INSTALL, from `tracking_events`),

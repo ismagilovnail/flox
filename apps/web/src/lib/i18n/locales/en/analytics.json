@@ -151,5 +151,33 @@
     "noFlow": "No flow",
     "noStreamSet": "No stream set",
     "noCountry": "Unknown"
+  },
+  "timezones": {
+    "groups": {
+      "russia": "Russia",
+      "world": "World"
+    },
+    "names": {
+      "Europe/Kaliningrad": "Kaliningrad",
+      "Europe/Moscow": "Moscow",
+      "Europe/Samara": "Samara",
+      "Asia/Yekaterinburg": "Yekaterinburg",
+      "Asia/Omsk": "Omsk",
+      "Asia/Krasnoyarsk": "Krasnoyarsk",
+      "Asia/Novosibirsk": "Novosibirsk",
+      "Asia/Irkutsk": "Irkutsk",
+      "Asia/Yakutsk": "Yakutsk",
+      "Asia/Vladivostok": "Vladivostok",
+      "Asia/Magadan": "Magadan",
+      "Asia/Kamchatka": "Kamchatka",
+      "UTC": "UTC",
+      "Europe/London": "London",
+      "Europe/Berlin": "Berlin",
+      "Asia/Dubai": "Dubai",
+      "Asia/Singapore": "Singapore",
+      "America/New_York": "New York",
+      "America/Chicago": "Chicago",
+      "America/Los_Angeles": "Los Angeles"
+    }
   }
 }

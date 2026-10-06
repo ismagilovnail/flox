@@ -25,8 +25,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { FILTER_DIMENSIONS, MAX_REPORT_DIMENSIONS, REPORT_DIMENSIONS, METRICS, TIMEZONES, dimensionLabel as dimensionLabelFor, metricLabel as metricLabelFor, type DimensionKey, type MetricKey } from "@/features/analytics/registry";
+import { FILTER_DIMENSIONS, MAX_REPORT_DIMENSIONS, REPORT_DIMENSIONS, METRICS, dimensionLabel as dimensionLabelFor, metricLabel as metricLabelFor, type DimensionKey, type MetricKey } from "@/features/analytics/registry";
 import type { FilterCondition } from "@/features/analytics/aggregate";
+import { TimezoneSelect } from "@/components/ui/timezone-select";
 import { useDimensionValues } from "@/hooks/use-analytics-report";
 import { useDimensionValueLabel } from "@/features/analytics/use-dimension-value-label";
 
@@ -173,18 +174,7 @@ export function ReportControls({
           onChange={(dateRange) => onChange({ dateRange })}
         />
 
-        <Select value={state.timezone} onValueChange={(timezone) => onChange({ timezone })}>
-          <SelectTrigger className="w-44" size="sm">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {TIMEZONES.map((tz) => (
-              <SelectItem key={tz} value={tz}>
-                {tz}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        <TimezoneSelect value={state.timezone} onValueChange={(timezone) => onChange({ timezone })} className="w-52" />
 
         <MultiSelect
           label={t("controls.dimensionsLabel")}

@@ -9,6 +9,9 @@ import (
 	"os/signal"
 	"syscall"
 	"time"
+	// Embedded zone database: the alpine runtime image ships none, and report
+	// timezones (Europe/Moscow, ...) are validated with time.LoadLocation.
+	_ "time/tzdata"
 
 	"github.com/ClickHouse/clickhouse-go/v2/lib/driver"
 	"github.com/go-chi/chi/v5"

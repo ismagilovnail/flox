@@ -151,5 +151,33 @@
     "noFlow": "Без потока",
     "noStreamSet": "Без набора",
     "noCountry": "Не определена"
+  },
+  "timezones": {
+    "groups": {
+      "russia": "Россия",
+      "world": "Весь мир"
+    },
+    "names": {
+      "Europe/Kaliningrad": "Калининград",
+      "Europe/Moscow": "Москва",
+      "Europe/Samara": "Самара",
+      "Asia/Yekaterinburg": "Екатеринбург",
+      "Asia/Omsk": "Омск",
+      "Asia/Krasnoyarsk": "Красноярск",
+      "Asia/Novosibirsk": "Новосибирск",
+      "Asia/Irkutsk": "Иркутск",
+      "Asia/Yakutsk": "Якутск",
+      "Asia/Vladivostok": "Владивосток",
+      "Asia/Magadan": "Магадан",
+      "Asia/Kamchatka": "Камчатка",
+      "UTC": "UTC",
+      "Europe/London": "Лондон",
+      "Europe/Berlin": "Берлин",
+      "Asia/Dubai": "Дубай",
+      "Asia/Singapore": "Сингапур",
+      "America/New_York": "Нью-Йорк",
+      "America/Chicago": "Чикаго",
+      "America/Los_Angeles": "Лос-Анджелес"
+    }
   }
 }

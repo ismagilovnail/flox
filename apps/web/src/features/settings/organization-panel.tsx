@@ -14,7 +14,7 @@ import { LoadingState } from "@/components/ui/loading-state";
 import { ErrorState } from "@/components/ui/error-state";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useOrganization, useUpdateOrganization } from "@/hooks/use-organization";
-import { TIMEZONES } from "@/lib/organization";
+import { TimezoneSelect } from "@/components/ui/timezone-select";
 import { CURRENCIES } from "@/lib/countries";
 
 // Plain non-empty strings, not a z.enum against the curated
@@ -58,7 +58,6 @@ function OrganizationForm({ org }: { org: OrganizationValues }) {
   // (a real org set via some other path, or just a currency/timezone
   // this UI hasn't added to its own dropdown yet) — always keep it
   // selectable rather than silently falling back to nothing.
-  const timezoneOptions = TIMEZONES.includes(org.timezone) ? TIMEZONES : [org.timezone, ...TIMEZONES];
   const currencyOptions = CURRENCIES.includes(org.currency) ? CURRENCIES : [org.currency, ...CURRENCIES];
 
   return (
@@ -75,18 +74,7 @@ function OrganizationForm({ org }: { org: OrganizationValues }) {
           control={control}
           name="timezone"
           render={({ field }) => (
-            <Select value={field.value} onValueChange={field.onChange}>
-              <SelectTrigger id="org-timezone" className="w-full">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {timezoneOptions.map((tz) => (
-                  <SelectItem key={tz} value={tz}>
-                    {tz}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <TimezoneSelect id="org-timezone" value={field.value} onValueChange={field.onChange} className="w-full" />
           )}
         />
       </div>

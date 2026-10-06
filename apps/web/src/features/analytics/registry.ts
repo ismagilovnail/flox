@@ -124,15 +124,6 @@ export function metricLabel(t: TFunction, key: MetricKey): string {
   return t(`metrics.${key}`, { ns: "analytics" });
 }
 
-export const TIMEZONES = [
-  "UTC",
-  "America/New_York",
-  "America/Los_Angeles",
-  "Europe/London",
-  "Europe/Berlin",
-  "Asia/Dubai",
-  "Asia/Singapore",
-];
 
 export function formatMetric(value: number | null, format: MetricFormat): string {
   if (value === null) return "—";

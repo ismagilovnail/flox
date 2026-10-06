@@ -17,13 +17,4 @@ export type OrganizationSettings = {
   currency: string;
 };
 
-export const TIMEZONES = [
-  "UTC",
-  "America/New_York",
-  "America/Los_Angeles",
-  "America/Chicago",
-  "Europe/London",
-  "Europe/Berlin",
-  "Asia/Dubai",
-  "Asia/Singapore",
-];
+export { TIMEZONE_IDS as TIMEZONES } from "@/lib/timezones";
