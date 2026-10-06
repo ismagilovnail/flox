@@ -5,6 +5,39 @@ per-phase, matching `CLAUDE.md`'s phase protocol. The one exception is
 [Between phases], below: spec amendments and the code changes that follow from
 them land between phases and would otherwise be invisible here.
 
+## [Between phases] — postbacks find their click and status by index
+
+Technical audit, findings CH1 and DB1 (P1). Both lookups on the postback path were linear in
+the organization's history.
+
+- **CH1.** `ClickResolver.ByClickID` filtered `click_events`, sorted by
+  `(organization_id, event_at, …)` — a postback does not know its click's time, so every
+  conversion read every granule of the organization. Schema/013 adds `click_lookup`
+  (`ReplacingMergeTree`, `ORDER BY (organization_id, click_id, event_at)`, only the columns
+  attribution needs) filled by `click_lookup_mv`, plus `chstore_backfills`. `apps/worker`
+  copies existing clicks once, in the background (`chstore.Backfill`); until that is recorded
+  a lookup miss falls back to the old scan, after it a miss is final. A bloom-filter skip index
+  was rejected: it still checks a filter per granule of the organization (~12k granules for
+  100M clicks).
+- **DB1.** `postbacks` had no index for `lastStatus`/`FindSuccessID` (the partial dedup key
+  cannot serve them: they do not repeat its `NOT network_accepts_duplicates` predicate).
+  Migration 00051: `CREATE INDEX CONCURRENTLY postbacks (organization_id, click_id,
+  created_at DESC) WHERE result = 'success'`, outside a transaction so a live database keeps
+  accepting postbacks while it builds.
+
+Measured on the dev stack with throwaway organizations (removed afterwards): 2M clicks — the
+lookup read 1,879,301 rows / 40.8 MB from `click_events` vs 32,768 rows / 1.2 MB from
+`click_lookup`; 300k postbacks — `lastStatus` was a parallel seq scan of all rows in 20 ms
+without the index, an index scan in 0.064 ms with it. Tests: the existing resolver tests now
+run through `click_lookup`; new — a click present only in `click_events` is found while the
+backfill is pending and not found (no scan) once it is recorded; a backfill runs once across
+three calls. Live: the dev worker recorded `click_lookup_v1` on start. Migration 00051 up →
+down → up. Full-env `go test ./...` with e2e green (`TestFullFunnel` attributes through the
+live tracker).
+
+Not done: `ByExternalClickID` (used only when a postback has no click id) still scans
+`click_events` through its bloom index.
+
 ## [Between phases] — clicks no longer need Postgres
 
 Technical audit, findings RL1/A1 (P1) and RL4. Every click ran six sequential Postgres

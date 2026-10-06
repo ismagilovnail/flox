@@ -241,6 +241,7 @@ X-Forwarded-For только от `TRUSTED_PROXIES`, 302 вместо 301, 404 �
 ### Postgres
 
 **DB1 [HIGH]. У `postbacks` нет индекса под горячие запросы.**
+**Статус: исправлено** (миграция 00051, `CREATE INDEX CONCURRENTLY`).
 
 - **Где:** `conversion/postgres.go: LastStatus`, `FindSuccessID`.
 - Запрос: `WHERE organization_id=$1 AND click_id=$2 AND result='success'
@@ -299,7 +300,7 @@ up/down, триггеры `updated_at`.
 ### ClickHouse
 
 **CH1 [HIGH]. Point lookup по `click_id` — это full-scan данных
-организации.**
+организации.** **Статус: исправлено** (`click_lookup` + MV + разовый бэкфилл).
 
 - **Где:** `chstore/attribution.go: ByClickID`.
 - `ORDER BY (organization_id, event_at, campaign_id, click_id)`, в WHERE нет

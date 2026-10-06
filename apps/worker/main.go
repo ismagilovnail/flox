@@ -171,6 +171,21 @@ func run() error {
 		return err
 	}
 	chEvents := chstore.NewEventStore(ch)
+	// One-time copies of existing data into tables added by later schema
+	// files (click_lookup, audit 2026-10-06 CH1). In the background: copying
+	// a large history must not delay event flushing, and until it is done
+	// attribution falls back to the old scan. Interrupted, it reruns on the
+	// next start.
+	go func() {
+		start := time.Now()
+		if err := chstore.Backfill(ctx, ch); err != nil {
+			if ctx.Err() == nil {
+				logger.Error("clickhouse backfill failed, will retry on next start", "error", err)
+			}
+			return
+		}
+		logger.Info("clickhouse backfills done", "took", time.Since(start))
+	}()
 
 	// Same "fail loudly at boot" bar as apps/api's own required-secret
 	// parses — a misconfigured/missing key must never silently run the

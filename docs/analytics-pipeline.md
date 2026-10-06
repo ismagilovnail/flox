@@ -122,6 +122,18 @@ row (`direction='incoming'`), and the outgoing delivery it triggers
 produces its own `postback_events` row (`direction='outgoing'`) after
 actually hitting the network's URL.
 
+## `click_lookup`: clicks by id (audit 2026-10-06, CH1)
+
+A `ReplacingMergeTree` copy of `SOURCE_CLICK` rows with only the columns
+attribution needs, `ORDER BY (organization_id, click_id, event_at)`,
+filled by `click_lookup_mv` (schema/013). Attribution reads it instead of
+`click_events`. History that predates the table is copied once by
+`apps/worker` at startup (`chstore.Backfill`, recorded in
+`chstore_backfills`, in the background); exact duplicates of a racing
+backfill collapse on merge, and queries take the earliest row anyway.
+Schema files still run on every start — one-time data copies go through
+`chstore.Backfill`, never into a schema file.
+
 ## Materialized views: per-campaign+day, per-GEO+day
 
 §48 names both patterns explicitly. Three views exist:

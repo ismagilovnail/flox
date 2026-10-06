@@ -20,7 +20,7 @@ referenced below as §N).
 
 ```
 CURRENT PHASE : TECH AUDIT FOLLOW-UPS (between phases)
-STATUS        : P0 code items + RL1/A1/RL4 done: Q1 queue claims never abandoned;
+STATUS        : P0 code items + RL1/A1/RL4 + CH1/DB1 done: Q1 queue claims never abandoned;
                 D1+D3 conversion + CPA event + outgoing postback in one tx under
                 a per-click lock; S3 postback revenue validated; RL3 tracker
                 exits 0 on SIGTERM; AN1 ECB FX rates + USD repair in Postgres;
@@ -29,19 +29,21 @@ STATUS        : P0 code items + RL1/A1/RL4 done: Q1 queue claims never abandoned
                 RL2 tracker retries failed event writes with backoff;
                 RL1/A1+RL4 tracker serves routing from an in-memory cache
                 (LISTEN/NOTIFY flush) with /ready — clicks survive Postgres
-                outages. Edits now apply ms after commit, not synchronously.
+                outages. Edits now apply ms after commit, not synchronously;
+                CH1+DB1 postbacks find click (click_lookup) and status
+                (postbacks index) without scanning the org's history.
                 Technical audit is docs/audit-tech-2026-10-06.md; the user asked
                 to fix it step by step and allowed wiping the dev database when
                 a step needs it.
-LAST COMMIT   : feat(tracker): serve routing from memory.
+LAST COMMIT   : perf(attribution): look up clicks and statuses by index.
 UNCOMMITTED   : none expected. Dev DB wiped and refilled by `make fixtures`
                 (accounts in README; password flox-demo-2026).
 NEXT          : P0 code items done. CI (DO1) is the user's own decision — do
                 not set it up. Confirm the next slice with the user. Open:
                 isolate the queue tests from the live dev worker (eventqueue
                 TestEnqueueClaimAndDelete, postback
-                TestPostgresStoreClaimRespectsLimit); audit P1 (CH1 click
-                lookup, DB1 postbacks index, Q2 dead-letter, metrics);
+                TestPostgresStoreClaimRespectsLimit); audit P1 (Q2
+                dead-letter, metrics);
                 follow-ups: USD
                 repair of pre-sync conversions in ClickHouse (docs/fx.md);
                 T4/AN3 §45 chargeback (ACCEPT→DECLINE) must reverse revenue;

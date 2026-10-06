@@ -2,7 +2,9 @@ package chstore
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"sync/atomic"
 	"time"
 
 	"github.com/ClickHouse/clickhouse-go/v2/lib/driver"
@@ -28,12 +30,23 @@ import (
 // than silently accepted.
 type ClickResolver struct {
 	conn driver.Conn
+	// lookupBackfill names the backfill that completes click_lookup.
+	lookupBackfill string
+
+	// lookupReady is set once click_lookup's backfill is recorded; until
+	// then a miss there falls back to scanning click_events, so clicks from
+	// before the table existed still attribute. Checked at most every
+	// lookupCheckEvery while false.
+	lookupReady   atomic.Bool
+	lookupChecked atomic.Int64 // unix nanos of the last check
 }
+
+const lookupCheckEvery = 30 * time.Second
 
 // NewClickResolver builds a resolver over the same connection EventStore
 // writes through.
 func NewClickResolver(conn driver.Conn) *ClickResolver {
-	return &ClickResolver{conn: conn}
+	return &ClickResolver{conn: conn, lookupBackfill: clickLookupBackfill}
 }
 
 var _ attribution.ClickResolver = (*ClickResolver)(nil)
@@ -78,14 +91,28 @@ func scanClick(r driver.Rows, organizationID string) (attribution.Click, error) 
 // resolves to the ORIGINAL click that started that journey, matching what
 // "the click this conversion belongs to" means.
 func (r *ClickResolver) ByClickID(ctx context.Context, organizationID, clickID string) (attribution.Click, error) {
-	res, err := r.conn.Query(ctx, `
+	// click_lookup is sorted by (organization_id, click_id): one granule per
+	// partition, instead of every granule of the organization in
+	// click_events (audit 2026-10-06, CH1).
+	click, err := r.queryOne(ctx, `
+		SELECT `+clickColumns+`
+		FROM click_lookup
+		WHERE organization_id = ? AND click_id = ?
+		ORDER BY event_at ASC
+		LIMIT 1`, organizationID, clickID)
+	if !errors.Is(err, attribution.ErrClickNotFound) || r.ready(ctx) {
+		return click, err
+	}
+	return r.queryOne(ctx, `
 		SELECT `+clickColumns+`
 		FROM click_events
 		WHERE organization_id = ? AND click_id = ? AND type = ?
 		ORDER BY event_at ASC
-		LIMIT 1`,
-		organizationID, clickID, string(event.SourceClick),
-	)
+		LIMIT 1`, organizationID, clickID, string(event.SourceClick))
+}
+
+func (r *ClickResolver) queryOne(ctx context.Context, query string, args ...any) (attribution.Click, error) {
+	res, err := r.conn.Query(ctx, query, args...)
 	if err != nil {
 		return attribution.Click{}, fmt.Errorf("chstore: querying click by click_id: %w", err)
 	}
@@ -97,17 +124,31 @@ func (r *ClickResolver) ByClickID(ctx context.Context, organizationID, clickID s
 		}
 		return attribution.Click{}, attribution.ErrClickNotFound
 	}
-	click, err := scanClick(res, organizationID)
+	click, err := scanClick(res, args[0].(string))
 	if err != nil {
 		return attribution.Click{}, fmt.Errorf("chstore: scanning click: %w", err)
 	}
 	return click, nil
 }
 
-// maxExternalClickMatches bounds a pathological external_click_id shared by
-// an unbounded number of clicks. attribution.go treats "more than one
-// match" as ambiguous regardless of the exact count, so capping changes
-// nothing about the outcome — only guards against an unbounded scan.
+// ready reports whether click_lookup is complete (its backfill recorded).
+// A failed check counts as not ready: the fallback is slower, never wrong.
+func (r *ClickResolver) ready(ctx context.Context) bool {
+	if r.lookupReady.Load() {
+		return true
+	}
+	now := time.Now().UnixNano()
+	if last := r.lookupChecked.Load(); now-last < int64(lookupCheckEvery) && last != 0 {
+		return false
+	}
+	r.lookupChecked.Store(now)
+	done, err := backfillDone(ctx, r.conn, r.lookupBackfill)
+	if err == nil && done {
+		r.lookupReady.Store(true)
+	}
+	return done
+}
+
 const maxExternalClickMatches = 100
 
 // ByExternalClickID implements attribution.ClickResolver.

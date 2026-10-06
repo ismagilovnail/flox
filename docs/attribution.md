@@ -128,6 +128,17 @@ Rather than pretend otherwise — by quietly adding a clicks table to Postgres
 that §7 says does not belong there — the stand-in is honest and explicitly
 replaceable.
 
+**Since the 2026-10-06 audit (CH1):** `ByClickID` reads `click_lookup`, a
+copy of every `SOURCE_CLICK` sorted by `(organization_id, click_id)`, filled
+by a materialized view and once-backfilled by `apps/worker`
+(`chstore.Backfill`). `click_events` is sorted by `event_at`, which a
+postback does not know, so the old query read the organization's whole
+history on every conversion (2M clicks: 1.88M rows read vs 32k). Until the
+backfill is recorded in `chstore_backfills`, a miss in `click_lookup` falls
+back to the old `click_events` scan, so pre-existing clicks still attribute;
+after it, a miss is final. `ByExternalClickID` still scans `click_events`
+(bloom-filter index) — it is only used when a postback carries no click id.
+
 **Landed in Phase 26:** `chstore.ClickResolver`, querying `click_events`
 (§48's real analytical schema). `apps/tracker/main.go` wires it in place of
 `MemoryResolver` — nothing in `internal/attribution` itself changed, exactly
