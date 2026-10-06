@@ -118,7 +118,7 @@ session.
 | Marketer audit (`docs/audit-marketer-2026-10-06.md`) — findings only; #2 (timezone), #8 (link builder), #9 (conversions list) since closed | done |
 | Dev compose subnet pinned to `10.99.0.0/24` (docker's auto-pick `192.168.0.0/20` shadowed the host LAN and broke host → container traffic) | done |
 | Offer daily cap enforced in routing (`internal/offercap`, org-timezone day, capped offers leave the flow draw; audit #1) — UI badge/alerts still open | done |
-| Blocked traffic and bots in analytics: `blocked`/`bots`/`blockedRate`/`botRate` metrics + four Overview tiles (audit #3) — browser pass pending | done |
+| Blocked traffic and bots in analytics: `blocked`/`bots`/`blockedRate`/`botRate` metrics + four Overview tiles (audit #3) | done |
 
 ## Known open gaps
 

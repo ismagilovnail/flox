@@ -18,8 +18,10 @@ builder with hints (EN/RU), accepted in saved presets. One ClickHouse query (`co
 shows up with 0 clicks. Tests: service unit tests, ClickHouse test (blocked-only bucket,
 bot among redirected clicks, cross-org isolation). Verified: full-env `go test` (`eventqueue`
 flakes against the live worker, passes alone), tsc + eslint, API against a throwaway org
-(40 / 10 / 8 / 20% / 16% exactly as seeded; org removed afterwards). **Not verified in the
-browser** — the Chrome extension was not connected. Not done: bots as a report
+(40 / 10 / 8 / 20% / 16% exactly as seeded; org removed afterwards). Browser pass done afterwards
+(real session): Overview shows the four tiles (Blocked 0, Blocked share 0.00%, Bots 1, Bot share
+5.56% for 18 clicks), the report's metric picker finds both new metrics and the Blocked column
+renders in the table. Not done: bots as a report
 dimension/filter, a bots-only exclusion toggle, default-column placement (audit #12).
 
 ## [Between phases] — offer daily cap is enforced
