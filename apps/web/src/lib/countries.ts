@@ -38,3 +38,34 @@ export const COUNTRIES: CountryOption[] = [
 ];
 
 export const CURRENCIES = ["USD", "EUR", "GBP", "CAD", "AUD", "SEK", "PLN", "BRL"];
+
+/** Every ISO-3166-1 alpha-2 code. Names are not stored: `countryOptions` asks the
+ * browser (Intl.DisplayNames) for them in the interface language. */
+export const ALL_COUNTRY_CODES: string[] = (
+  "AD AE AF AG AI AL AM AO AQ AR AS AT AU AW AX AZ BA BB BD BE BF BG BH BI BJ BL BM BN BO BQ BR BS BT BV BW BY BZ CA CC CD CF CG CH CI CK CL CM CN CO CR CU CV CW CX CY CZ DE DJ DK DM DO DZ EC EE EG EH ER ES ET FI FJ FK FM FO FR GA GB GD GE GF GG GH GI GL GM GN GP GQ GR GS GT GU GW GY HK HM HN HR HT HU ID IE IL IM IN IO IQ IR IS IT JE JM JO JP KE KG KH KI KM KN KP KR KW KY KZ LA LB LC LI LK LR LS LT LU LV LY MA MC MD ME MF MG MH MK ML MM MN MO MP MQ MR MS MT MU MV MW MX MY MZ NA NC NE NF NG NI NL NO NP NR NU NZ OM PA PE PF PG PH PK PL PM PN PR PS PT PW PY QA RE RO RS RU RW SA SB SC SD SE SG SH SI SJ SK SL SM SN SO SR SS ST SV SX SY SZ TC TD TF TG TH TJ TK TL TM TN TO TR TT TV TW TZ UA UG UM US UY UZ VA VC VE VG VI VN VU WF WS YE YT ZA ZM ZW"
+).split(" ");
+
+/** Markets that go first in a country picker: the CIS ones this team trades,
+ * then the common CPA/CPL markets from COUNTRIES. */
+const PINNED_CODES = ["RU", "UA", "KZ", "BY", "UZ", "AZ", "AM", "GE", "MD", ...COUNTRIES.map((c) => c.code)];
+
+/** All countries as picker options ({ value: "RU", label: "RU — Россия" }):
+ * pinned markets first, the rest alphabetical by localized name. */
+export function countryOptions(language: string): { value: string; label: string }[] {
+  let names: Intl.DisplayNames | null = null;
+  try {
+    names = new Intl.DisplayNames([language], { type: "region" });
+  } catch {
+    // runtime without Intl.DisplayNames: fall back to bare codes
+  }
+  const name = (code: string) => {
+    try {
+      return names?.of(code) ?? code;
+    } catch {
+      return code;
+    }
+  };
+  const pinned = PINNED_CODES.filter((c, i) => PINNED_CODES.indexOf(c) === i && ALL_COUNTRY_CODES.includes(c));
+  const rest = ALL_COUNTRY_CODES.filter((c) => !pinned.includes(c)).sort((a, b) => name(a).localeCompare(name(b), language));
+  return [...pinned, ...rest].map((code) => ({ value: code, label: `${code} — ${name(code)}` }));
+}

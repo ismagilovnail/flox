@@ -25,11 +25,39 @@
       "between": "between"
     },
     "vocab": {
-      "device": { "mobile": "Mobile", "desktop": "Desktop", "tablet": "Tablet" },
-      "platform": { "ios": "iOS", "android": "Android", "windows": "Windows", "macos": "macOS", "linux": "Linux" },
-      "os": { "ios": "iOS", "android": "Android", "windows": "Windows", "macos": "macOS", "linux": "Linux" },
-      "browser": { "chrome": "Chrome", "safari": "Safari", "firefox": "Firefox", "edge": "Edge", "samsung_internet": "Samsung Internet", "other": "Other" },
-      "connection_type": { "wifi": "Wi-Fi", "cellular": "Cellular", "ethernet": "Ethernet", "unknown": "Unknown" }
+      "device": {
+        "mobile": "Mobile",
+        "desktop": "Desktop",
+        "tablet": "Tablet"
+      },
+      "platform": {
+        "ios": "iOS",
+        "android": "Android",
+        "windows": "Windows",
+        "macos": "macOS",
+        "linux": "Linux"
+      },
+      "os": {
+        "ios": "iOS",
+        "android": "Android",
+        "windows": "Windows",
+        "macos": "macOS",
+        "linux": "Linux"
+      },
+      "browser": {
+        "chrome": "Chrome",
+        "safari": "Safari",
+        "firefox": "Firefox",
+        "edge": "Edge",
+        "samsung_internet": "Samsung Internet",
+        "other": "Other"
+      },
+      "connection_type": {
+        "wifi": "Wi-Fi",
+        "cellular": "Cellular",
+        "ethernet": "Ethernet",
+        "unknown": "Unknown"
+      }
     },
     "booleanNo": "No",
     "booleanYes": "Yes",
@@ -42,7 +70,9 @@
     "regexPlaceholder": "^utm_.*_2026$",
     "countryPlaceholder": "US, GB",
     "valuePlaceholder": "value",
-    "removeConditionAria": "Remove condition"
+    "removeConditionAria": "Remove condition",
+    "countryLabel": "Country",
+    "countrySearchPlaceholder": "Search country..."
   },
   "filterPicker": {
     "title": "Configure set filters",

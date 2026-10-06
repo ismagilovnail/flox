@@ -25,11 +25,39 @@
       "between": "между"
     },
     "vocab": {
-      "device": { "mobile": "Мобильный", "desktop": "Десктоп", "tablet": "Планшет" },
-      "platform": { "ios": "iOS", "android": "Android", "windows": "Windows", "macos": "macOS", "linux": "Linux" },
-      "os": { "ios": "iOS", "android": "Android", "windows": "Windows", "macos": "macOS", "linux": "Linux" },
-      "browser": { "chrome": "Chrome", "safari": "Safari", "firefox": "Firefox", "edge": "Edge", "samsung_internet": "Samsung Internet", "other": "Другой" },
-      "connection_type": { "wifi": "Wi-Fi", "cellular": "Сотовая связь", "ethernet": "Ethernet", "unknown": "Неизвестно" }
+      "device": {
+        "mobile": "Мобильный",
+        "desktop": "Десктоп",
+        "tablet": "Планшет"
+      },
+      "platform": {
+        "ios": "iOS",
+        "android": "Android",
+        "windows": "Windows",
+        "macos": "macOS",
+        "linux": "Linux"
+      },
+      "os": {
+        "ios": "iOS",
+        "android": "Android",
+        "windows": "Windows",
+        "macos": "macOS",
+        "linux": "Linux"
+      },
+      "browser": {
+        "chrome": "Chrome",
+        "safari": "Safari",
+        "firefox": "Firefox",
+        "edge": "Edge",
+        "samsung_internet": "Samsung Internet",
+        "other": "Другой"
+      },
+      "connection_type": {
+        "wifi": "Wi-Fi",
+        "cellular": "Сотовая связь",
+        "ethernet": "Ethernet",
+        "unknown": "Неизвестно"
+      }
     },
     "booleanNo": "Нет",
     "booleanYes": "Да",
@@ -42,7 +70,9 @@
     "regexPlaceholder": "^utm_.*_2026$",
     "countryPlaceholder": "US, GB",
     "valuePlaceholder": "значение",
-    "removeConditionAria": "Удалить условие"
+    "removeConditionAria": "Удалить условие",
+    "countryLabel": "Страна",
+    "countrySearchPlaceholder": "Поиск страны..."
   },
   "filterPicker": {
     "title": "Настроить фильтры набора",

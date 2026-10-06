@@ -1,5 +1,6 @@
 "use client";
 
+import * as React from "react";
 import { XIcon } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import type { TFunction } from "i18next";
@@ -7,6 +8,8 @@ import type { TFunction } from "i18next";
 import { IconButton } from "@/components/ui/icon-button";
 import { Input } from "@/components/ui/input";
 import { MultiSelect } from "@/components/ui/multi-select";
+import { SearchableSelect } from "@/components/ui/searchable-select";
+import { countryOptions } from "@/lib/countries";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   BOOLEAN_FLAG_FIELDS,
@@ -34,12 +37,15 @@ function ValueInput({
   condition,
   onChange,
   t,
+  language,
 }: {
   condition: FilterCondition;
   onChange: (patch: Partial<FilterCondition>) => void;
   t: TFunction;
+  language: string;
 }) {
   const { field, operator, value, valueTo } = condition;
+  const countries = React.useMemo(() => (field === "country" ? countryOptions(language) : []), [field, language]);
 
   if (OPERATORS_WITHOUT_VALUE.includes(operator)) {
     return (
@@ -66,6 +72,33 @@ function ValueInput({
           className="h-7 w-20"
         />
       </div>
+    );
+  }
+
+  // Country: a searchable list of every ISO country for the exact-match
+  // operators (one country for IS / IS NOT, several for IN / NOT IN). The
+  // pattern operators (CONTAINS, MATCHES, ...) keep the free-text input below.
+  if (field === "country" && MULTI_VALUE_OPERATORS.includes(operator)) {
+    return (
+      <MultiSelect
+        label={t("filters.countryLabel", { ns: "streamSets" })}
+        options={countries}
+        selected={value.split(",").map((v) => v.trim().toUpperCase()).filter(Boolean)}
+        onChange={(values) => onChange({ value: values.join(", ") })}
+        className="h-7 w-56"
+      />
+    );
+  }
+  if (field === "country" && (operator === "IS" || operator === "IS_NOT")) {
+    return (
+      <SearchableSelect
+        options={countries}
+        value={value.trim().toUpperCase()}
+        onChange={(v) => onChange({ value: v })}
+        placeholder={t("filters.selectPlaceholder", { ns: "streamSets" })}
+        searchPlaceholder={t("filters.countrySearchPlaceholder", { ns: "streamSets" })}
+        className="h-7 w-56"
+      />
     );
   }
 
@@ -160,7 +193,7 @@ export function FilterConditionEditor({
   onChange: (patch: Partial<FilterCondition>) => void;
   onRemove: () => void;
 }) {
-  const { t } = useTranslation(["streamSets", "common"]);
+  const { t, i18n } = useTranslation(["streamSets", "common"]);
   const validationError =
     condition.operator === "MATCHES" && condition.value
       ? checkRE2Compatible(condition.value, t)
@@ -205,7 +238,7 @@ export function FilterConditionEditor({
           </SelectContent>
         </Select>
 
-        <ValueInput condition={condition} onChange={onChange} t={t} />
+        <ValueInput condition={condition} onChange={onChange} t={t} language={i18n.language} />
 
         <IconButton aria-label={t("filters.removeConditionAria", { ns: "streamSets" })} size="icon-sm" onClick={onRemove}>
           <XIcon className="size-3.5" />

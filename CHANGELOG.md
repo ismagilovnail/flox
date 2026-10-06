@@ -5,6 +5,17 @@ per-phase, matching `CLAUDE.md`'s phase protocol. The one exception is
 [Between phases], below: spec amendments and the code changes that follow from
 them land between phases and would otherwise be invisible here.
 
+## [Between phases] — country dropdown in stream-set filters
+
+The `country` condition of a stream set's filters used to be a free-text box of ISO
+codes. For the exact-match operators it is now a searchable list of all 249 ISO-3166
+countries ("RU — Россия", names from `Intl.DisplayNames` in the interface language;
+CIS markets and the common CPA markets pinned first): one country for IS / IS NOT
+(new `SearchableSelect`, the single-value sibling of `MultiSelect`), several for
+IN / NOT IN. The pattern operators (CONTAINS, STARTS WITH, MATCHES, ...) keep the
+text input. The stored value is unchanged (comma-separated codes), so existing
+filters keep working.
+
 ## [Between phases] — "Уникальные клики" count visitors, not click_ids
 
 Two visits through one link showed 2 clicks and 2 uniques. The metric was
