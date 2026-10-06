@@ -58,7 +58,7 @@ func (s *EventStore) insertClickEvents(ctx context.Context, events []event.Event
 	if len(events) == 0 {
 		return nil
 	}
-	batch, err := s.conn.PrepareBatch(ctx, "INSERT INTO click_events")
+	batch, err := s.conn.PrepareBatch(dedupContext(ctx, "click_events"), "INSERT INTO click_events")
 	if err != nil {
 		return fmt.Errorf("chstore: preparing click_events batch: %w", err)
 	}
@@ -86,7 +86,7 @@ func (s *EventStore) insertTrackingEvents(ctx context.Context, events []event.Ev
 	if len(events) == 0 {
 		return nil
 	}
-	batch, err := s.conn.PrepareBatch(ctx, "INSERT INTO tracking_events")
+	batch, err := s.conn.PrepareBatch(dedupContext(ctx, "tracking_events"), "INSERT INTO tracking_events")
 	if err != nil {
 		return fmt.Errorf("chstore: preparing tracking_events batch: %w", err)
 	}
@@ -114,7 +114,7 @@ func (s *EventStore) insertConversionEvents(ctx context.Context, events []event.
 	if len(events) == 0 {
 		return nil
 	}
-	batch, err := s.conn.PrepareBatch(ctx, "INSERT INTO conversion_events")
+	batch, err := s.conn.PrepareBatch(dedupContext(ctx, "conversion_events"), "INSERT INTO conversion_events")
 	if err != nil {
 		return fmt.Errorf("chstore: preparing conversion_events batch: %w", err)
 	}

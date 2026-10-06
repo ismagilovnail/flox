@@ -61,6 +61,7 @@ func (f *Flusher) RunOnce(ctx context.Context, limit int) (int, error) {
 	// A claimed batch finishes even if ctx is cancelled mid-flight (audit
 	// 2026-10-06, Q1) — see eventqueue.Flusher.RunOnce.
 	insertCtx, cancelInsert := detached(ctx, insertTimeout)
+	insertCtx = chstore.WithBatchID(insertCtx, claimed[0].BatchID) // idempotent retry, see eventqueue
 	insertErr := f.ch.InsertPostbackAttempts(insertCtx, attempts)
 	cancelInsert()
 

@@ -837,6 +837,8 @@ Error tracking (Sentry или аналог) не подключён. Паник�
   `INSERT event_queue` + `INSERT postback_deliveries` (§11).
 
 **D2 [HIGH]. Нет идемпотентности записи в CH.**
+**Статус: исправлено** (стабильный `batch_id` + `insert_deduplication_token`,
+дедупликация распространяется на MV; см. `docs/analytics-pipeline.md`).
 
 - **Где:** `chstore.EventStore.InsertBatch`: три последовательных insert'а
   (clicks → tracking → conversions). Ошибка во втором ведёт к `Requeue`

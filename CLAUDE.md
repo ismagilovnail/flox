@@ -20,24 +20,23 @@ referenced below as §N).
 
 ```
 CURRENT PHASE : TECH AUDIT FOLLOW-UPS (between phases)
-STATUS        : steps 1–5 of the P0 list done: Q1 queue claims never abandoned;
+STATUS        : steps 1–6 of the P0 list done: Q1 queue claims never abandoned;
                 D1+D3 conversion + CPA event + outgoing postback in one tx under
                 a per-click lock; S3 postback revenue validated; RL3 tracker
-                exits 0 on SIGTERM; AN1 FX rates synced from the ECB by the
-                worker, USD repaired in Postgres (ClickHouse history: with D2).
+                exits 0 on SIGTERM; AN1 ECB FX rates + USD repair in Postgres;
+                D2 retried ClickHouse inserts deduplicated by batch token.
                 Technical audit is docs/audit-tech-2026-10-06.md; the user asked
                 to fix it step by step and allowed wiping the dev database when
                 a step needs it.
-LAST COMMIT   : feat(fx): sync reference rates from the ECB.
+LAST COMMIT   : fix(worker): deduplicate retried ClickHouse inserts.
 UNCOMMITTED   : none expected. Verified: full-env go test, e2e all PASS, live
-                EUR postback stored with USD in PG and CH.
-NEXT          : D2 idempotent ClickHouse inserts + rebuild of derived analytics
-                from Postgres (also repairs pre-sync conversions' USD in CH; may
-                wipe dev CH) → RL2 eventbuf retry → DO1 CI (isolate the queue
-                tests from the live dev worker: eventqueue
-                TestEnqueueClaimAndDelete, postback
-                TestPostgresStoreClaimRespectsLimit). Then T4/AN3: §45 requires a
-                chargeback (ACCEPT→DECLINE) to reverse revenue; reports don't.
+                worker inserts carry dedup tokens.
+NEXT          : RL2 eventbuf retry (tracker drops a batch on a Postgres blip) →
+                DO1 CI (isolate the queue tests from the live dev worker:
+                eventqueue TestEnqueueClaimAndDelete, postback
+                TestPostgresStoreClaimRespectsLimit). Then open follow-ups: USD
+                repair of pre-sync conversions in ClickHouse (docs/fx.md);
+                T4/AN3 §45 chargeback (ACCEPT→DECLINE) must reverse revenue.
                 Marketer audit items (docs/audit-marketer-2026-10-06.md) are
                 still open behind them. Run go test with the full env line AND
                 check e2e did not skip on the auth rate limit (memory:

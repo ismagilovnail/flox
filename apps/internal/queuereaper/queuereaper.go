@@ -11,8 +11,10 @@
 // finishes or requeues its batch itself (see the flushers and
 // postback.Deliverer). Anything still claimed after StuckAfter is far past
 // any real batch's duration and is handed out again. That can re-deliver a
-// batch whose work actually completed just before the crash — at-least-once
-// is the deliberate trade over losing it.
+// batch whose work actually completed just before the crash: for the
+// ClickHouse queues the retried insert is a no-op (same batch id, same
+// deduplication token — internal/pgqueue, chstore.WithBatchID); a reaped
+// outgoing postback may reach the partner twice.
 package queuereaper
 
 import (

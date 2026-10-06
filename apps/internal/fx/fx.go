@@ -117,9 +117,8 @@ type Repaired struct {
 // publishes stay NULL — "no rate" is never turned into zero.
 //
 // Only Postgres is repaired. The ClickHouse copy of a conversion keeps
-// has_usd_value = 0 until the analytics store is rebuilt from Postgres
-// (audit 2026-10-06, D2); costs are read from Postgres only, so ROI is
-// correct as soon as this runs.
+// has_usd_value = 0 (repairing it is an open follow-up, docs/fx.md); costs
+// are read from Postgres only, so ROI is correct as soon as this runs.
 func (s *Store) RepairUSD(ctx context.Context) (Repaired, error) {
 	var out Repaired
 	tag, err := s.db.Exec(ctx, `

@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/ismagilovnail/flox/apps/internal/chstore"
 	"github.com/ismagilovnail/flox/apps/internal/event"
 	"github.com/ismagilovnail/flox/apps/internal/metrics"
 )
@@ -76,6 +77,9 @@ func (f *Flusher) RunOnce(ctx context.Context, limit int) (int, error) {
 	// the rows 'processing' forever on every deploy (audit 2026-10-06, Q1).
 	// PollLoop stops claiming new batches; this one completes or goes back.
 	insertCtx, cancelInsert := detached(ctx, insertTimeout)
+	// The batch's id makes the insert idempotent: a retry of a batch that
+	// partly or fully landed adds nothing (audit 2026-10-06, D2).
+	insertCtx = chstore.WithBatchID(insertCtx, claimed[0].BatchID)
 	insertStart := time.Now()
 	insertErr := f.ch.InsertBatch(insertCtx, events)
 	cancelInsert()

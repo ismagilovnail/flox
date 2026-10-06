@@ -5,6 +5,46 @@ per-phase, matching `CLAUDE.md`'s phase protocol. The one exception is
 [Between phases], below: spec amendments and the code changes that follow from
 them land between phases and would otherwise be invisible here.
 
+## [Between phases] — retried ClickHouse inserts never duplicate
+
+Technical audit, finding D2 (P0). A retried batch was inserted into ClickHouse again: after a
+partial failure (`click_events` landed, a later table failed → the whole batch requeued),
+after an insert that timed out but had committed, and after a reap. Raw tables are plain
+`MergeTree` and the daily aggregates/LTV are materialized views fired per insert, so clicks,
+conversions and revenue were counted twice.
+
+- Postgres (migration 00049): `event_queue`/`postback_attempt_queue` get `batch_id`.
+  `internal/pgqueue.ClaimBatch` claims a whole due retry batch first (advisory lock per batch,
+  so two workers never split one), otherwise up to the limit of fresh rows under a new id.
+  `Requeue` and the reaper keep the id, so a retry carries exactly the rows of its first
+  attempt — never mixed with new ones (one token over different rows would make ClickHouse
+  drop the new rows).
+- ClickHouse (schema/012): `non_replicated_deduplication_window = 100000` on every table the
+  worker writes and on every view target. `chstore.WithBatchID` sends each table's block
+  with `insert_deduplication_token = <batch_id>:<table>` and
+  `deduplicate_blocks_in_dependent_materialized_views = 1`; both flushers pass their batch.
+- No engine change, so the dev ClickHouse did not need wiping.
+- Caveat, documented: with the window on, an insert without a token is deduplicated by
+  content hash (and the views still count it) — every writer must pass a batch id.
+
+Tests: ClickHouse — a partial first attempt then two full retries leave exactly one copy in
+`click_events`, `conversion_events`, both click aggregates, the conversion aggregate
+(revenue 10, not 20) and `ltv_events`, while the same rows under a new batch id are inserted;
+`postback_events` retried 3× → 1 row. Mutation-checked: without the views setting the
+aggregates double (revenue 20, LTV 2); without the token everything doubles.
+`internal/pgqueue` on a private table (no interference from the dev worker): a requeued
+batch is reclaimed whole and unmixed while new rows wait; 8 concurrent workers retrying 20
+batches each get whole batches. That test also passes with the advisory lock removed —
+Postgres row locks already make a second claimer find the rows taken; the lock makes it
+independent of scan order and lets a worker skip instead of wait. Live: the dev worker's
+inserts carry `<batch_id>:click_events` tokens in `system.query_log` (untokened ones all
+predate its reload). Migration up → down → up. Full-env `go test ./...` green except the
+known `eventqueue.TestEnqueueClaimAndDelete` shared-queue flake (3/3 alone); `apps/e2e`
+all four PASS.
+
+Not done here: repairing the USD value of ClickHouse copies of conversions recorded before
+the first FX sync (`docs/fx.md`) — a separate follow-up.
+
 ## [Between phases] — FX rates are synced from the ECB
 
 Technical audit, finding AN1 (P0 for any non-USD money). `fx_rates` existed and was read

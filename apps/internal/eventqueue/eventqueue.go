@@ -19,8 +19,11 @@ import (
 
 // QueuedEvent is one row claimed from the queue.
 type QueuedEvent struct {
-	ID    string
-	Event event.Event
+	ID string
+	// BatchID is shared by every row claimed together and kept across
+	// retries; the ClickHouse insert is deduplicated by it (pgqueue).
+	BatchID string
+	Event   event.Event
 }
 
 // Producer is what apps/tracker's event writer needs — see Sink (sink.go),
@@ -35,9 +38,10 @@ type Producer interface {
 
 // Consumer is what apps/worker's flush loop needs.
 type Consumer interface {
-	// ClaimDue atomically claims up to limit due rows (FOR UPDATE SKIP
-	// LOCKED), marking them 'processing' so a second worker replica can't
-	// also claim them.
+	// ClaimDue atomically claims one batch — a whole earlier batch that is
+	// due for retry, or up to limit fresh rows (FOR UPDATE SKIP LOCKED) —
+	// marking it 'processing' so a second worker replica can't also claim
+	// it. Every returned row carries the same BatchID.
 	ClaimDue(ctx context.Context, limit int) ([]QueuedEvent, error)
 
 	// Delete permanently removes rows once their batch is durably in

@@ -26,7 +26,10 @@ import (
 
 // QueuedAttempt is one row claimed from the queue.
 type QueuedAttempt struct {
-	ID      string
+	ID string
+	// BatchID is shared by every row claimed together and kept across
+	// retries; the ClickHouse insert is deduplicated by it (pgqueue).
+	BatchID string
 	Attempt chstore.PostbackAttempt
 }
 

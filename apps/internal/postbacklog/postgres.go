@@ -11,6 +11,7 @@ import (
 
 	"github.com/ismagilovnail/flox/apps/internal/chstore"
 	"github.com/ismagilovnail/flox/apps/internal/idgen"
+	"github.com/ismagilovnail/flox/apps/internal/pgqueue"
 )
 
 // PostgresQueue implements both Producer and Consumer against
@@ -48,41 +49,17 @@ func (q *PostgresQueue) EnqueueAttempt(ctx context.Context, attempt chstore.Post
 }
 
 func (q *PostgresQueue) ClaimDue(ctx context.Context, limit int) ([]QueuedAttempt, error) {
-	rows, err := q.db.Query(ctx, `
-		WITH due AS (
-			SELECT id FROM postback_attempt_queue
-			WHERE status = 'queued' AND next_attempt_at <= now()
-			ORDER BY next_attempt_at
-			LIMIT $1
-			FOR UPDATE SKIP LOCKED
-		)
-		UPDATE postback_attempt_queue paq
-		SET status = 'processing', claimed_at = now()
-		FROM due
-		WHERE paq.id = due.id
-		RETURNING paq.id, paq.payload`,
-		limit,
-	)
+	batchID, rows, err := pgqueue.ClaimBatch(ctx, q.db, "postback_attempt_queue", limit)
 	if err != nil {
-		return nil, fmt.Errorf("postbacklog: claiming due attempts: %w", err)
+		return nil, fmt.Errorf("postbacklog: %w", err)
 	}
-	defer rows.Close()
-
-	var out []QueuedAttempt
-	for rows.Next() {
-		var id string
-		var payload []byte
-		if err := rows.Scan(&id, &payload); err != nil {
-			return nil, fmt.Errorf("postbacklog: scanning claimed attempt: %w", err)
-		}
+	out := make([]QueuedAttempt, 0, len(rows))
+	for _, r := range rows {
 		var a chstore.PostbackAttempt
-		if err := json.Unmarshal(payload, &a); err != nil {
-			return nil, fmt.Errorf("postbacklog: unmarshaling attempt %s: %w", id, err)
+		if err := json.Unmarshal(r.Payload, &a); err != nil {
+			return nil, fmt.Errorf("postbacklog: unmarshaling attempt %s: %w", r.ID, err)
 		}
-		out = append(out, QueuedAttempt{ID: id, Attempt: a})
-	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("postbacklog: reading claimed attempts: %w", err)
+		out = append(out, QueuedAttempt{ID: r.ID, BatchID: batchID, Attempt: a})
 	}
 	return out, nil
 }

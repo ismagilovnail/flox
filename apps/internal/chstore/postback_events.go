@@ -97,7 +97,7 @@ func (s *EventStore) InsertPostbackAttempts(ctx context.Context, attempts []Post
 		return nil
 	}
 
-	batch, err := s.conn.PrepareBatch(ctx, "INSERT INTO postback_events")
+	batch, err := s.conn.PrepareBatch(dedupContext(ctx, "postback_events"), "INSERT INTO postback_events")
 	if err != nil {
 		return fmt.Errorf("chstore: preparing postback_events batch: %w", err)
 	}

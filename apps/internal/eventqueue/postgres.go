@@ -12,6 +12,7 @@ import (
 
 	"github.com/ismagilovnail/flox/apps/internal/event"
 	"github.com/ismagilovnail/flox/apps/internal/idgen"
+	"github.com/ismagilovnail/flox/apps/internal/pgqueue"
 )
 
 // PostgresQueue implements both Producer and Consumer against event_queue
@@ -107,41 +108,17 @@ func insert(ctx context.Context, db batchSender, events []event.Event) error {
 }
 
 func (q *PostgresQueue) ClaimDue(ctx context.Context, limit int) ([]QueuedEvent, error) {
-	rows, err := q.db.Query(ctx, `
-		WITH due AS (
-			SELECT id FROM event_queue
-			WHERE status = 'queued' AND next_attempt_at <= now()
-			ORDER BY next_attempt_at
-			LIMIT $1
-			FOR UPDATE SKIP LOCKED
-		)
-		UPDATE event_queue eq
-		SET status = 'processing', claimed_at = now()
-		FROM due
-		WHERE eq.id = due.id
-		RETURNING eq.id, eq.payload`,
-		limit,
-	)
+	batchID, rows, err := pgqueue.ClaimBatch(ctx, q.db, "event_queue", limit)
 	if err != nil {
-		return nil, fmt.Errorf("eventqueue: claiming due events: %w", err)
+		return nil, fmt.Errorf("eventqueue: %w", err)
 	}
-	defer rows.Close()
-
-	var out []QueuedEvent
-	for rows.Next() {
-		var id string
-		var payload []byte
-		if err := rows.Scan(&id, &payload); err != nil {
-			return nil, fmt.Errorf("eventqueue: scanning claimed event: %w", err)
-		}
+	out := make([]QueuedEvent, 0, len(rows))
+	for _, r := range rows {
 		var e event.Event
-		if err := json.Unmarshal(payload, &e); err != nil {
-			return nil, fmt.Errorf("eventqueue: unmarshaling event %s: %w", id, err)
+		if err := json.Unmarshal(r.Payload, &e); err != nil {
+			return nil, fmt.Errorf("eventqueue: unmarshaling event %s: %w", r.ID, err)
 		}
-		out = append(out, QueuedEvent{ID: id, Event: e})
-	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("eventqueue: reading claimed events: %w", err)
+		out = append(out, QueuedEvent{ID: r.ID, BatchID: batchID, Event: e})
 	}
 	return out, nil
 }

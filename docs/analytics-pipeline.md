@@ -179,9 +179,36 @@ A claim flips rows to `processing` and stamps `claimed_at` (migration
 - **The reaper is the backstop** (`internal/queuereaper`): every minute,
   and once at startup, each queue returns rows claimed more than 5 minutes
   ago to `queued`. It covers SIGKILL/OOM/a lost node. A reaped batch may
-  already have reached ClickHouse just before the crash, so it can be
-  inserted twice — at-least-once is chosen over loss; making the insert
-  itself idempotent is a separate audit item (D2).
+  already have reached ClickHouse just before the crash; its retry is a
+  no-op thanks to the batch token below.
+
+### Retries never duplicate (audit 2026-10-06, D2)
+
+Before, a retried batch was inserted again: after a partial failure
+(`click_events` landed, `tracking_events` failed → whole batch requeued),
+after an insert that timed out but had committed, or after a reap. Raw
+tables are plain `MergeTree` and the daily aggregates/LTV are
+materialized views fired on every insert, so clicks, conversions and
+revenue were counted twice.
+
+Now every claim is one batch with a `batch_id` (`internal/pgqueue`,
+migration 00049) that `Requeue` and the reaper keep, and a retry claims
+exactly that batch again, never mixed with fresh rows. The worker inserts
+it with `insert_deduplication_token = <batch_id>:<table>` and
+`deduplicate_blocks_in_dependent_materialized_views = 1`
+(`chstore.WithBatchID`); with `non_replicated_deduplication_window =
+100000` on every written table and view target (schema/012), ClickHouse
+skips a block whose token it has seen — in the views too. The same rows
+under a different batch id are new data and are inserted.
+
+The window holds the last 100,000 block tokens per table: ~25 minutes at
+10k events/s, longer than the slowest retry (the 5-minute reaper). Above
+that rate, raise it.
+
+Caveat: with the window on, an insert **without** a token is deduplicated
+by a hash of its content — a byte-identical second block is dropped from
+the table while the views still count it. Every writer must pass a batch
+id.
 
 `postback_attempt_queue` follows the same rules. `flox_queue_reaped_total{queue}`
 counts every reaped row — any increase means a worker died mid-batch.
