@@ -180,7 +180,9 @@ func run() error {
 	// since the redirect path (this binary's actual latency budget) never
 	// touches Redis at all. conversion.PostgresStore alone is already
 	// correct — the cache only saves a round trip.
-	var convStore conversion.Store = conversion.NewPostgresStore(db)
+	// The store records a conversion together with its CPA event and its
+	// outgoing postback in one transaction (audit 2026-10-06, D1).
+	var convStore conversion.Store = conversion.NewPostgresStore(db).WithDeliveries(postback.NewPostgresStore(db))
 	if cfg.RedisURL != "" {
 		redisCtx, cancelRedis := context.WithTimeout(ctx, 5*time.Second)
 		rdb, err := rediscache.NewClient(redisCtx, cfg.RedisURL)
@@ -195,7 +197,6 @@ func run() error {
 		logger.Warn("REDIS_URL not set, conversion progression checks will read Postgres directly")
 	}
 
-	deliveries := postback.NewEnqueuer(postback.NewPostgresStore(db), logger)
 	attemptLog := postbacklog.NewConversionAttemptLogger(postbacklog.NewPostgresQueue(db, logger))
 
 	postbackHandler := &PostbackHandler{
@@ -205,8 +206,6 @@ func run() error {
 			convStore,
 			conversion.NewPostgresFX(db),
 			attributionSvc,
-			events,
-			deliveries,
 			attemptLog,
 		),
 		logger: logger,

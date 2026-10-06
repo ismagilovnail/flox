@@ -97,11 +97,16 @@ device/subs are similarly only filled in when the conversion is attributed
 gets delivered (§44's "do not invent attribution" doesn't mean "don't
 notify"), just with those tokens left as literal text in the URL.
 
-## Enqueue failures are best-effort, on purpose
+## A delivery is queued in the conversion's own transaction
 
-`conversion.DeliveryEnqueuer.Enqueue` has no error return. A conversion that
-`internal/conversion` already durably recorded must not be reported back to
-the network as failed just because queuing its *outgoing* notification hit
-a database blip — the incoming postback truly succeeded. A missed enqueue is
-recoverable the same way a dead-lettered delivery is: Phase 13's "Resend
-postback" action, independent of this request's own success.
+The delivery row is written by `postback.PostgresStore.InsertTx` (the
+`conversion.DeliveryWriter` interface) inside the transaction that records
+the incoming conversion — together with the conversion's CPA event
+(`docs/conversion.md`). Either all three commit, or none does and the
+network gets a 500 and retries.
+
+This used to be best-effort: a failed enqueue was only logged after the
+network had already been told "success", and its retry was answered
+"duplicate" — so the outgoing postback was lost for good, with nothing
+pointing at it (audit 2026-10-06, D1). "Resend postback" is still there for
+dead-lettered deliveries.

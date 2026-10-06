@@ -5,8 +5,11 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/ismagilovnail/flox/apps/internal/conversion"
 	"github.com/ismagilovnail/flox/apps/internal/event"
 	"github.com/ismagilovnail/flox/apps/internal/idgen"
 )
@@ -22,8 +25,36 @@ func NewPostgresStore(db *pgxpool.Pool) *PostgresStore { return &PostgresStore{d
 var _ Store = (*PostgresStore)(nil)
 
 func (s *PostgresStore) Enqueue(ctx context.Context, in EnqueueInput) (string, error) {
+	return insertDelivery(ctx, s.db, in)
+}
+
+// InsertTx queues a delivery inside the transaction that records its source
+// conversion (conversion.DeliveryWriter): the conversion and its outgoing
+// postback commit together or not at all. Before this a failed insert here
+// was only logged, after the network had already been told "success", and
+// its retry came back as a duplicate — the delivery was lost for good
+// (audit 2026-10-06, D1).
+func (s *PostgresStore) InsertTx(ctx context.Context, tx pgx.Tx, req conversion.DeliveryRequest) error {
+	_, err := insertDelivery(ctx, tx, EnqueueInput{
+		OrganizationID:   req.OrganizationID,
+		NetworkID:        req.NetworkID,
+		SourcePostbackID: req.SourcePostbackID,
+		ClickID:          req.ClickID,
+		Status:           req.Status,
+		URL:              req.URL,
+	})
+	return err
+}
+
+var _ conversion.DeliveryWriter = (*PostgresStore)(nil)
+
+type execer interface {
+	Exec(ctx context.Context, sql string, args ...any) (pgconn.CommandTag, error)
+}
+
+func insertDelivery(ctx context.Context, db execer, in EnqueueInput) (string, error) {
 	id := idgen.New()
-	_, err := s.db.Exec(ctx, `
+	_, err := db.Exec(ctx, `
 		INSERT INTO postback_deliveries (id, organization_id, network_id, source_postback_id, click_id, status, url)
 		VALUES ($1, $2, $3, $4, $5, $6, $7)`,
 		id, in.OrganizationID, in.NetworkID, in.SourcePostbackID, in.ClickID, string(in.Status), in.URL,

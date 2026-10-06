@@ -64,6 +64,26 @@ func (q *PostgresQueue) EnqueueBatch(ctx context.Context, events []event.Event) 
 }
 
 func (q *PostgresQueue) enqueue(ctx context.Context, events []event.Event) error {
+	return insert(ctx, q.db, events)
+}
+
+// InsertTx enqueues events inside the caller's transaction — the outbox half
+// of a write that must land together with its own row (internal/conversion
+// records a conversion and its CPA event in one transaction, so one is never
+// committed without the other).
+func InsertTx(ctx context.Context, tx pgx.Tx, events []event.Event) error {
+	return insert(ctx, tx, events)
+}
+
+// batchSender is the part of *pgxpool.Pool and pgx.Tx insert needs.
+type batchSender interface {
+	SendBatch(ctx context.Context, b *pgx.Batch) pgx.BatchResults
+}
+
+func insert(ctx context.Context, db batchSender, events []event.Event) error {
+	if len(events) == 0 {
+		return nil
+	}
 	batch := &pgx.Batch{}
 	for _, e := range events {
 		payload, err := json.Marshal(e)
@@ -76,7 +96,7 @@ func (q *PostgresQueue) enqueue(ctx context.Context, events []event.Event) error
 		)
 	}
 
-	br := q.db.SendBatch(ctx, batch)
+	br := db.SendBatch(ctx, batch)
 	defer br.Close()
 	for range events {
 		if _, err := br.Exec(); err != nil {

@@ -142,14 +142,12 @@ redeposit, and matching on the wrong one would replay the wrong
 delivery.
 
 `postback.ReplayEnqueuer` adapts `postbacklogs.ReplayInput` →
-`postback.EnqueueInput`, the same decoupled-interface-per-consumer
-pattern `postback.Enqueuer` (→ `conversion.DeliveryEnqueuer`) already
-uses — `postbacklogs` never imports `postback`'s own delivery-lifecycle
-types. Unlike `Enqueuer.Enqueue` (best-effort, called from inside
-`Record` where a queuing failure must never be reported back to the
-network as a conversion failure), `ReplayEnqueuer.Enqueue`'s error goes
-straight back to the HTTP caller — replaying IS the entire point of that
-request.
+`postback.EnqueueInput`, a decoupled interface per consumer —
+`postbacklogs` never imports `postback`'s own delivery-lifecycle types.
+`ReplayEnqueuer.Enqueue`'s error goes straight back to the HTTP caller —
+replaying IS the entire point of that request. (A first delivery is queued
+inside the conversion's own transaction instead, see
+`docs/postback-delivery.md`.)
 
 `POST /postback-logs/replay-outgoing` takes the exact fields a
 `PostbackLog` row already carries client-side (`networkId`, `clickId`,

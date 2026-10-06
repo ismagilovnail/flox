@@ -70,19 +70,19 @@ func (s *RedisStore) LastStatus(ctx context.Context, organizationID, clickID str
 	return status, ok, nil
 }
 
-func (s *RedisStore) Record(ctx context.Context, e Entry) (string, ResultKind, error) {
-	id, actual, err := s.inner.Record(ctx, e)
+func (s *RedisStore) Record(ctx context.Context, e Entry) (Recorded, error) {
+	rec, err := s.inner.Record(ctx, e)
 	if err != nil {
-		return "", "", err
+		return Recorded{}, err
 	}
-	if actual == ResultSuccess {
+	if rec.Kind == ResultSuccess {
 		key := lastStatusKey(e.OrganizationID, e.ClickID)
 		if setErr := s.rdb.Set(ctx, key, string(e.Status), lastStatusTTL).Err(); setErr != nil {
 			s.logger.Warn("redis unavailable, could not cache newly recorded status",
 				"error", setErr, "organization_id", e.OrganizationID, "click_id", e.ClickID)
 		}
 	}
-	return id, actual, nil
+	return rec, nil
 }
 
 func lastStatusKey(organizationID, clickID string) string {

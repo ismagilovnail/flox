@@ -5,6 +5,8 @@
 // Like internal/attribution, this package is pure orchestration — no HTTP,
 // no database driver, no clock of its own. It reads and writes through
 // Store, Mapper, NetworkLookup and FXConverter, which the caller supplies.
+// (DeliveryWriter is the one interface that names pgx.Tx: it runs inside the
+// Postgres store's own transaction.)
 //
 // The two money-correctness rules this package exists to enforce (CLAUDE.md
 // non-negotiable #3):
@@ -28,6 +30,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/jackc/pgx/v5"
 
 	"github.com/ismagilovnail/flox/apps/internal/attribution"
 	"github.com/ismagilovnail/flox/apps/internal/event"
@@ -158,8 +162,26 @@ type Entry struct {
 	TimeToConversionMS *int64
 
 	// Kind is the INTENDED outcome. ResultSuccess is arbitrated by the
-	// dedup unique constraint (Store may downgrade it to ResultDuplicate);
-	// ResultIgnored/ResultError are recorded exactly as given.
+	// dedup unique constraint (Store may downgrade it to ResultDuplicate)
+	// and by the progression rule, re-checked under the click's lock (Store
+	// may downgrade it to ResultIgnored); ResultIgnored/ResultError are
+	// recorded exactly as given.
+	Kind    ResultKind
+	Message string
+
+	// Event and Delivery are the side effects of a ResultSuccess entry — the
+	// CPA event for ClickHouse and the outgoing postback, nil when the
+	// network has none. Store writes them in the same transaction as the
+	// row, and only if the row lands as ResultSuccess: a recorded conversion
+	// without its event, or its delivery, can no longer happen (audit
+	// 2026-10-06, D1). Delivery.SourcePostbackID is filled in by Store.
+	Event    *event.Event
+	Delivery *DeliveryRequest
+}
+
+// Recorded is what Store.Record actually wrote.
+type Recorded struct {
+	ID      string
 	Kind    ResultKind
 	Message string
 }
@@ -176,12 +198,14 @@ type Store interface {
 
 	// Record persists e and returns the outcome that actually happened,
 	// which for e.Kind == ResultSuccess may be downgraded to
-	// ResultDuplicate by the dedup constraint. Always durable and
-	// idempotent-safe: a caller that retries after a network error may
-	// call it again without risking a double-count, because the dedup
-	// constraint (or, for Ignored/Error, the caller's own re-derivation of
-	// the same Entry) makes the retry either a no-op or a repeat log line.
-	Record(ctx context.Context, e Entry) (id string, actual ResultKind, err error)
+	// ResultDuplicate by the dedup constraint or to ResultIgnored by the
+	// progression rule. A success is written with its Event and Delivery
+	// atomically; an error means nothing was written. Idempotent-safe: a
+	// caller that retries after an error may call it again without risking
+	// a double-count, because the dedup constraint (or, for Ignored/Error,
+	// the caller's own re-derivation of the same Entry) makes the retry
+	// either a no-op or a repeat log line.
+	Record(ctx context.Context, e Entry) (Recorded, error)
 }
 
 // FXConverter normalizes revenue to USD using the rate on the event's own
@@ -194,16 +218,8 @@ type FXConverter interface {
 	ToUSD(ctx context.Context, currency string, amount float64, at time.Time) (usd float64, ok bool, err error)
 }
 
-// EventSink is the narrow slice of eventbuf.Writer this package needs —
-// just enough to emit the recorded CPA event without importing eventbuf's
-// concrete type (and to make Service testable without a real writer).
-type EventSink interface {
-	Enqueue(e event.Event) bool
-}
-
-// DeliveryRequest is what Service asks the outgoing postback engine
-// (internal/postback, Phase 24/§46) to queue after a conversion is
-// successfully recorded.
+// DeliveryRequest is the outgoing postback (internal/postback, Phase 24/§46)
+// a successfully recorded conversion queues.
 type DeliveryRequest struct {
 	OrganizationID string
 	NetworkID      string
@@ -217,16 +233,11 @@ type DeliveryRequest struct {
 	URL string
 }
 
-// DeliveryEnqueuer is the narrow slice of internal/postback this package
-// needs — just enough to queue a delivery without this package depending on
-// the delivery engine's own retry/backoff machinery, the same pattern as
-// EventSink. Enqueue is best-effort by contract (no error return): a
-// conversion that is already durably recorded must not be re-reported as
-// failed to the network just because queuing its outgoing notification
-// stumbled — that notification has its own "Resend postback" recovery path
-// (Phase 13 UI) independent of this request succeeding.
-type DeliveryEnqueuer interface {
-	Enqueue(ctx context.Context, req DeliveryRequest)
+// DeliveryWriter queues an outgoing postback inside the transaction that
+// records its source conversion — implemented by internal/postback, which
+// owns the delivery queue, so this package never imports it.
+type DeliveryWriter interface {
+	InsertTx(ctx context.Context, tx pgx.Tx, req DeliveryRequest) error
 }
 
 // AttemptRecord is what Service reports to the postback attempt audit log
@@ -248,8 +259,8 @@ type AttemptRecord struct {
 }
 
 // AttemptLogger is the narrow slice of internal/postbacklog this package
-// needs — same decoupled-interface, no-error-return pattern as
-// DeliveryEnqueuer: an already-processed postback (whatever its outcome)
+// needs — a decoupled interface with no error return: an already-processed
+// postback (whatever its outcome)
 // must never be reported differently to the network just because this
 // secondary audit log's queue insert stumbled.
 type AttemptLogger interface {
@@ -267,13 +278,11 @@ type Service struct {
 	store       Store
 	fx          FXConverter
 	attribution attribution.AttributionService
-	events      EventSink
-	deliveries  DeliveryEnqueuer
 	attempts    AttemptLogger
 }
 
-func NewService(mapper Mapper, store Store, fx FXConverter, attr attribution.AttributionService, events EventSink, deliveries DeliveryEnqueuer, attempts AttemptLogger) *Service {
-	return &Service{mapper: mapper, store: store, fx: fx, attribution: attr, events: events, deliveries: deliveries, attempts: attempts}
+func NewService(mapper Mapper, store Store, fx FXConverter, attr attribution.AttributionService, attempts AttemptLogger) *Service {
+	return &Service{mapper: mapper, store: store, fx: fx, attribution: attr, attempts: attempts}
 }
 
 // logAttempt reports one outcome to the postback attempt audit log. Called
@@ -299,8 +308,8 @@ func (s *Service) logAttempt(ctx context.Context, p Postback, clickID string, st
 }
 
 // Record runs one postback through mapping, the progression check,
-// attribution, FX normalization and the dedup ledger, emitting a CPA event
-// on success. It never returns an error for a postback it understood and
+// attribution, FX normalization and the dedup ledger; on success the CPA
+// event and the outgoing postback are committed with the ledger row. It never returns an error for a postback it understood and
 // handled (unmapped status, missing fields, progression refusal are all
 // ResultKind values, not errors) — err is reserved for infrastructure
 // failure, where the honest answer is "retry me," not a fabricated result.
@@ -326,13 +335,15 @@ func (s *Service) Record(ctx context.Context, p Postback) (Result, error) {
 
 	eventRef := eventRefFor(status, p.NetworkTxnID)
 
+	// Fast path, possibly from the Redis cache: skips attribution for an
+	// obvious replay. Store re-checks under the click's lock, which is what
+	// actually decides when two postbacks for one click race.
 	last, hasLast, err := s.store.LastStatus(ctx, p.OrganizationID, clickID)
 	if err != nil {
 		return Result{}, fmt.Errorf("conversion: checking progression: %w", err)
 	}
 	if refusesProgression(last, hasLast, status) {
-		return s.logIgnored(ctx, p, clickID, status, eventRef,
-			fmt.Sprintf("refusing to move click %q from %s back to CPA_HOLD (§45 status progression)", clickID, last))
+		return s.logIgnored(ctx, p, clickID, status, eventRef, progressionRefusal(clickID, last))
 	}
 
 	attr, err := s.attribution.AttributeConversion(ctx, attribution.Conversion{
@@ -373,29 +384,36 @@ func (s *Service) Record(ctx context.Context, p Postback) (Result, error) {
 		Kind:               ResultSuccess,
 		Message:            attr.Reason,
 	}
+	ev := buildEvent(p, attr, status, eventRef, revenue, usdValue)
+	entry.Event = &ev
+	if url := strings.TrimSpace(p.PostbackURL); url != "" {
+		entry.Delivery = &DeliveryRequest{
+			OrganizationID: p.OrganizationID,
+			NetworkID:      p.NetworkID,
+			ClickID:        clickID,
+			Status:         status,
+			URL:            macro.Resolve(url, deliveryMacroValues(p, attr, status, revenue)),
+		}
+	}
 
-	id, actual, err := s.store.Record(ctx, entry)
+	rec, err := s.store.Record(ctx, entry)
 	if err != nil {
 		return Result{}, fmt.Errorf("conversion: recording: %w", err)
 	}
-
-	s.logAttempt(ctx, p, clickID, status, eventRef, actual, entry.Message)
-
-	result := Result{ID: id, Kind: actual, Status: status, Attribution: attr, Message: entry.Message}
-	if actual == ResultSuccess {
-		s.events.Enqueue(buildEvent(p, attr, status, eventRef, revenue, usdValue))
-		if url := strings.TrimSpace(p.PostbackURL); url != "" {
-			s.deliveries.Enqueue(ctx, DeliveryRequest{
-				OrganizationID:   p.OrganizationID,
-				NetworkID:        p.NetworkID,
-				SourcePostbackID: id,
-				ClickID:          clickID,
-				Status:           status,
-				URL:              macro.Resolve(url, deliveryMacroValues(p, attr, status, revenue)),
-			})
-		}
+	message := entry.Message
+	if rec.Kind == ResultIgnored {
+		message = rec.Message
 	}
-	return result, nil
+
+	s.logAttempt(ctx, p, clickID, status, eventRef, rec.Kind, message)
+
+	return Result{ID: rec.ID, Kind: rec.Kind, Status: status, Attribution: attr, Message: message}, nil
+}
+
+// progressionRefusal is the message of a postback refused by the §45
+// progression rule — shared by Service's fast path and Store's locked check.
+func progressionRefusal(clickID string, last event.Type) string {
+	return fmt.Sprintf("refusing to move click %q from %s back to CPA_HOLD (§45 status progression)", clickID, last)
 }
 
 // deliveryMacroValues builds the macro.Values an outgoing postback URL is
@@ -453,12 +471,12 @@ func (s *Service) logError(ctx context.Context, p Postback, clickID string, stat
 		Kind:             ResultError,
 		Message:          message,
 	}
-	id, _, err := s.store.Record(ctx, entry)
+	rec, err := s.store.Record(ctx, entry)
 	if err != nil {
 		return Result{}, fmt.Errorf("conversion: logging error: %w", err)
 	}
 	s.logAttempt(ctx, p, clickID, status, "", ResultError, message)
-	return Result{ID: id, Kind: ResultError, Status: status, Message: message}, nil
+	return Result{ID: rec.ID, Kind: ResultError, Status: status, Message: message}, nil
 }
 
 func (s *Service) logIgnored(ctx context.Context, p Postback, clickID string, status event.Type, eventRef, message string) (Result, error) {
@@ -476,12 +494,12 @@ func (s *Service) logIgnored(ctx context.Context, p Postback, clickID string, st
 		Kind:             ResultIgnored,
 		Message:          message,
 	}
-	id, _, err := s.store.Record(ctx, entry)
+	rec, err := s.store.Record(ctx, entry)
 	if err != nil {
 		return Result{}, fmt.Errorf("conversion: logging ignored: %w", err)
 	}
 	s.logAttempt(ctx, p, clickID, status, eventRef, ResultIgnored, message)
-	return Result{ID: id, Kind: ResultIgnored, Status: status, Message: message}, nil
+	return Result{ID: rec.ID, Kind: ResultIgnored, Status: status, Message: message}, nil
 }
 
 func buildEvent(p Postback, attr attribution.Attribution, status event.Type, eventRef string, revenue, usdValue *float64) event.Event {

@@ -823,6 +823,7 @@ Error tracking (Sentry или аналог) не подключён. Паник�
 **Проблемы:**
 
 **D1 [CRITICAL]. Нет транзакционного outbox.**
+**Статус: исправлено** (одна транзакция `postbacks` + `event_queue` + `postback_deliveries`).
 
 - **Где:** `conversion.Service.Record` → `s.events.Enqueue(...)` (in-memory,
   droppable) и `s.deliveries.Enqueue` (ошибка проглатывается).
@@ -854,6 +855,7 @@ ALTER TABLE click_events ADD COLUMN event_id String;
   batch_id||table` и `non_replicated_deduplication_window` на таблицах.
 
 **D3 [MEDIUM]. Гонка progression** (§11).
+**Статус: исправлено** (advisory lock + `clock_timestamp()`; R1 закрыт этим же).
 
 **D4 [HIGH]. Валюта** (AN1).
 

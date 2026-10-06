@@ -8,9 +8,11 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/ismagilovnail/flox/apps/internal/event"
+	"github.com/ismagilovnail/flox/apps/internal/eventqueue"
 	"github.com/ismagilovnail/flox/apps/internal/idgen"
 )
 
@@ -19,9 +21,19 @@ import (
 // cache in front of it (redis.go).
 type PostgresStore struct {
 	db *pgxpool.Pool
+	// deliveries queues a success's outgoing postback in the same
+	// transaction; nil for read-only users of the store, which then refuse
+	// to record an entry that carries one.
+	deliveries DeliveryWriter
 }
 
 func NewPostgresStore(db *pgxpool.Pool) *PostgresStore { return &PostgresStore{db: db} }
+
+// WithDeliveries returns the store set up to record conversions with their
+// outgoing postbacks (internal/postback.PostgresStore).
+func (s *PostgresStore) WithDeliveries(w DeliveryWriter) *PostgresStore {
+	return &PostgresStore{db: s.db, deliveries: w}
+}
 
 var _ Store = (*PostgresStore)(nil)
 
@@ -32,8 +44,18 @@ var _ Store = (*PostgresStore)(nil)
 // applied status change, so they must never influence the progression
 // check.
 func (s *PostgresStore) LastStatus(ctx context.Context, organizationID, clickID string) (event.Type, bool, error) {
+	return lastStatus(ctx, s.db, organizationID, clickID)
+}
+
+// querier is the part of *pgxpool.Pool and pgx.Tx this file needs.
+type querier interface {
+	Exec(ctx context.Context, sql string, args ...any) (pgconn.CommandTag, error)
+	QueryRow(ctx context.Context, sql string, args ...any) pgx.Row
+}
+
+func lastStatus(ctx context.Context, q querier, organizationID, clickID string) (event.Type, bool, error) {
 	var status string
-	err := s.db.QueryRow(ctx, `
+	err := q.QueryRow(ctx, `
 		SELECT status FROM postbacks
 		WHERE organization_id = $1 AND click_id = $2 AND result = 'success'
 		ORDER BY created_at DESC
@@ -50,19 +72,6 @@ func (s *PostgresStore) LastStatus(ctx context.Context, organizationID, clickID 
 	return event.Type(status), true, nil
 }
 
-// FindSuccessID resolves the postbacks row a successful incoming attempt
-// was recorded as, given the exact dedup key (organization_id, click_id,
-// status, event_ref) plus network_id — the id apps/internal/postback's
-// delivery queue needs as source_postback_id (a NOT NULL FK, migration
-// 00014). Record already has this id in-process at enqueue time (see its
-// own doc comment); this method exists for the one case that doesn't —
-// re-enqueuing a delivery for an attempt Record finished long ago
-// (apps/internal/postbacklogs' outgoing replay).
-//
-// eventRef is "" for every status except CPA_REDEP (§45) — a legitimate
-// value, not an omitted filter, since a CPA_REDEP click can have more than
-// one successful row (one per redeposit, each with its own event_ref) and
-// matching on the wrong one would replay the wrong delivery.
 func (s *PostgresStore) FindSuccessID(ctx context.Context, organizationID, networkID, clickID, status, eventRef string) (string, bool, error) {
 	var id string
 	err := s.db.QueryRow(ctx, `
@@ -104,26 +113,72 @@ const insertColumns = `
 // gets written with result = 'duplicate', which cannot itself conflict
 // (the index only guards 'success' rows), so the attempt is still visible
 // for replay (§45) even when it wasn't applied.
-func (s *PostgresStore) Record(ctx context.Context, e Entry) (id string, actual ResultKind, err error) {
-	id = idgen.New()
-
+//
+// A success is one transaction: click lock, progression re-check, the row,
+// and its outbox (CPA event + outgoing postback) — see recordSuccess.
+func (s *PostgresStore) Record(ctx context.Context, e Entry) (Recorded, error) {
 	if e.Kind != ResultSuccess {
-		if _, err := s.db.Exec(ctx, `INSERT INTO postbacks (`+insertColumns+`)
-			VALUES ($1,$2,$3,$4,$5,'incoming',$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)`,
-			id, e.OrganizationID, e.NetworkID, e.ClickID, string(e.Status), string(e.Kind),
-			e.AcceptDuplicates, e.EventRef, e.NetworkTxnID, e.RawStatus,
-			e.Revenue, e.Currency, e.USDValue, e.AttributionOutcome,
-			e.AttributedClickID, e.AttributionMethod, e.TimeToConversionMS, e.Message,
-		); err != nil {
-			return "", "", fmt.Errorf("conversion: recording %s: %w", e.Kind, err)
+		id, err := insertEntry(ctx, s.db, e, e.Kind, e.Message)
+		if err != nil {
+			return Recorded{}, fmt.Errorf("conversion: recording %s: %w", e.Kind, err)
 		}
-		return id, e.Kind, nil
+		return Recorded{ID: id, Kind: e.Kind, Message: e.Message}, nil
+	}
+	if e.Delivery != nil && s.deliveries == nil {
+		// A misconfigured store must fail loudly, not record a conversion
+		// whose outgoing postback silently never exists.
+		return Recorded{}, errors.New("conversion: entry carries an outgoing delivery but the store has no DeliveryWriter")
 	}
 
+	tx, err := s.db.Begin(ctx)
+	if err != nil {
+		return Recorded{}, fmt.Errorf("conversion: beginning record tx: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	rec, err := s.recordSuccess(ctx, tx, e)
+	if err != nil {
+		return Recorded{}, err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return Recorded{}, fmt.Errorf("conversion: committing record tx: %w", err)
+	}
+	return rec, nil
+}
+
+// recordSuccess runs inside Record's transaction. Every postback for one
+// click is serialized by a transaction-scoped advisory lock, so the
+// progression check and the insert are one step: before this, a CPA_HOLD
+// replay racing a CPA_ACCEPT could both pass the check and the HOLD land
+// last (audit 2026-10-06, D3). The lock key is per (organization, click),
+// so unrelated conversions never wait on each other.
+func (s *PostgresStore) recordSuccess(ctx context.Context, tx pgx.Tx, e Entry) (Recorded, error) {
+	if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1, 0))`,
+		e.OrganizationID+":"+e.ClickID); err != nil {
+		return Recorded{}, fmt.Errorf("conversion: locking click: %w", err)
+	}
+
+	last, hasLast, err := lastStatus(ctx, tx, e.OrganizationID, e.ClickID)
+	if err != nil {
+		return Recorded{}, err
+	}
+	if refusesProgression(last, hasLast, e.Status) {
+		msg := progressionRefusal(e.ClickID, last)
+		id, err := insertEntry(ctx, tx, e, ResultIgnored, msg)
+		if err != nil {
+			return Recorded{}, fmt.Errorf("conversion: recording ignored: %w", err)
+		}
+		return Recorded{ID: id, Kind: ResultIgnored, Message: msg}, nil
+	}
+
+	// created_at is the moment of the write, not the column default now()
+	// (the transaction's START): LastStatus orders by it, and a transaction
+	// that began first but got the lock second must still sort last.
+	id := idgen.New()
 	var returnedID string
-	err = s.db.QueryRow(ctx, `
-		INSERT INTO postbacks (`+insertColumns+`)
-		VALUES ($1,$2,$3,$4,$5,'incoming','success',$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)
+	err = tx.QueryRow(ctx, `
+		INSERT INTO postbacks (`+insertColumns+`, created_at)
+		VALUES ($1,$2,$3,$4,$5,'incoming','success',$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17, clock_timestamp())
 		ON CONFLICT (organization_id, click_id, status, event_ref)
 			WHERE NOT network_accepts_duplicates AND result = 'success'
 		DO NOTHING
@@ -135,23 +190,46 @@ func (s *PostgresStore) Record(ctx context.Context, e Entry) (id string, actual 
 	).Scan(&returnedID)
 
 	if errors.Is(err, pgx.ErrNoRows) {
-		dupID := idgen.New()
-		if _, dupErr := s.db.Exec(ctx, `INSERT INTO postbacks (`+insertColumns+`)
-			VALUES ($1,$2,$3,$4,$5,'incoming','duplicate',$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)`,
-			dupID, e.OrganizationID, e.NetworkID, e.ClickID, string(e.Status),
-			e.AcceptDuplicates, e.EventRef, e.NetworkTxnID, e.RawStatus,
-			e.Revenue, e.Currency, e.USDValue, e.AttributionOutcome,
-			e.AttributedClickID, e.AttributionMethod, e.TimeToConversionMS,
-			"dedup key (click_id, status, event_ref) already recorded",
-		); dupErr != nil {
-			return "", "", fmt.Errorf("conversion: logging duplicate: %w", dupErr)
+		const msg = "dedup key (click_id, status, event_ref) already recorded"
+		dupID, err := insertEntry(ctx, tx, e, ResultDuplicate, msg)
+		if err != nil {
+			return Recorded{}, fmt.Errorf("conversion: logging duplicate: %w", err)
 		}
-		return dupID, ResultDuplicate, nil
+		return Recorded{ID: dupID, Kind: ResultDuplicate, Message: msg}, nil
 	}
 	if err != nil {
-		return "", "", fmt.Errorf("conversion: recording success: %w", err)
+		return Recorded{}, fmt.Errorf("conversion: recording success: %w", err)
 	}
-	return returnedID, ResultSuccess, nil
+
+	// The outbox: the CPA event and the outgoing postback commit with the
+	// row or not at all (audit 2026-10-06, D1).
+	if e.Event != nil {
+		if err := eventqueue.InsertTx(ctx, tx, []event.Event{*e.Event}); err != nil {
+			return Recorded{}, fmt.Errorf("conversion: queueing cpa event: %w", err)
+		}
+	}
+	if e.Delivery != nil {
+		req := *e.Delivery
+		req.SourcePostbackID = returnedID
+		if err := s.deliveries.InsertTx(ctx, tx, req); err != nil {
+			return Recorded{}, fmt.Errorf("conversion: queueing outgoing postback: %w", err)
+		}
+	}
+	return Recorded{ID: returnedID, Kind: ResultSuccess, Message: e.Message}, nil
+}
+
+// insertEntry writes one non-success ledger row (error/ignored/duplicate)
+// with the given result and message.
+func insertEntry(ctx context.Context, q querier, e Entry, kind ResultKind, message string) (string, error) {
+	id := idgen.New()
+	_, err := q.Exec(ctx, `INSERT INTO postbacks (`+insertColumns+`)
+		VALUES ($1,$2,$3,$4,$5,'incoming',$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)`,
+		id, e.OrganizationID, e.NetworkID, e.ClickID, string(e.Status), string(kind),
+		e.AcceptDuplicates, e.EventRef, e.NetworkTxnID, e.RawStatus,
+		e.Revenue, e.Currency, e.USDValue, e.AttributionOutcome,
+		e.AttributedClickID, e.AttributionMethod, e.TimeToConversionMS, message,
+	)
+	return id, err
 }
 
 // PostgresNetworkLookup resolves {networkId} from the postback URL

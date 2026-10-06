@@ -89,8 +89,8 @@ closes that gap for real, not just with a schema:
 - **Incoming** (`internal/conversion.Service`): every exit point of
   `Record` — the main success/duplicate path, `logError`, `logIgnored` —
   now also calls `s.logAttempt(...)`, reporting every outcome (success,
-  duplicate, ignored, error) via the new `AttemptLogger` interface. Same
-  decoupled, no-error-return contract as `EventSink`/`DeliveryEnqueuer`: an
+  duplicate, ignored, error) via the new `AttemptLogger` interface, with a
+  decoupled, no-error-return contract: an
   already-processed postback must never be reported differently to the
   network just because this secondary audit log's queue insert stumbled.
 - **Outgoing** (`internal/postback.Deliverer`): every dispatch outcome

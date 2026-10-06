@@ -20,20 +20,19 @@ referenced below as §N).
 
 ```
 CURRENT PHASE : TECH AUDIT FOLLOW-UPS (between phases)
-STATUS        : step 1 of the P0 list done — queue claims are never abandoned
-                (Q1: claimed_at + reaper + shutdown drain). Technical audit is
+STATUS        : steps 1–2 of the P0 list done: Q1 queue claims never abandoned;
+                D1+D3 a conversion commits with its CPA event and outgoing
+                postback in one tx, under a per-click lock. Technical audit is
                 docs/audit-tech-2026-10-06.md; the user asked to fix it step by
                 step and allowed wiping the dev database when a step needs it.
-LAST COMMIT   : fix(worker): never abandon queue claims.
-UNCOMMITTED   : none expected. Verified: full-env go test, migration up/down/up,
-                live reaper on the dev worker, SIGTERM drain on the binary.
-NEXT          : P0 order agreed with the user: D1 conversion outbox (postbacks
-                + event_queue + postback_deliveries in one tx) → S3 revenue
-                validation → RL3 double eventbuf.Close panic → AN1 FX rates →
-                D2 idempotent ClickHouse inserts (may wipe dev CH) → RL2
-                eventbuf retry → DO1 CI. Marketer audit items
+LAST COMMIT   : fix(conversion): record a conversion with its event and postback.
+UNCOMMITTED   : none expected. Verified: full-env go test, e2e TestFullFunnel.
+NEXT          : S3 revenue validation → RL3 double eventbuf.Close panic → AN1
+                FX rates → D2 idempotent ClickHouse inserts (may wipe dev CH)
+                → RL2 eventbuf retry → DO1 CI. Marketer audit items
                 (docs/audit-marketer-2026-10-06.md) are still open behind them.
-                Run go test with the full env line (memory: flox-full-test-env).
+                Run go test with the full env line AND check e2e did not skip
+                on the auth rate limit (memory: flox-full-test-env).
 ```
 
 > At the end of every phase: update the four lines above, add a CHANGELOG entry,

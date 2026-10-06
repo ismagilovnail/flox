@@ -32,10 +32,35 @@ raw click_id/status/revenue/currency/txn_id  │
                              FXConverter.ToUSD (never invents a rate)
                                               │
                                               ▼
-                          Store.Record (Postgres, atomic dedup insert)
-                                              │
-                        ResultSuccess → EventSink.Enqueue(CPA_* event)
+                          Store.Record (Postgres, ONE transaction):
+                            lock (org, click_id) → progression re-check →
+                            dedup insert → on success: CPA_* event into
+                            event_queue + outgoing delivery
 ```
+
+### One transaction per conversion (audit 2026-10-06, D1/D3)
+
+`PostgresStore.Record` writes a success, its CPA event (`event_queue`, the
+outbox the worker flushes to ClickHouse) and its outgoing postback
+(`postback_deliveries`) in one transaction. Before, the event went through
+the tracker's in-memory buffer (dropped when full or when Postgres
+blipped) and the delivery was best-effort; the ledger said "success", the
+reports never saw it, and a retry from the network came back "duplicate".
+Now any failure rolls everything back and the network gets a 500.
+
+The progression rule runs twice: a fast pre-check (possibly from Redis)
+that skips attribution for obvious replays, and the deciding one inside the
+transaction under `pg_advisory_xact_lock(hashtextextended(org:click_id))`.
+Without the lock, a CPA_HOLD replay racing a CPA_ACCEPT could pass the check
+on both sides and land last. The success row's `created_at` is
+`clock_timestamp()`, not the column default `now()` (the transaction's
+start): a transaction that began first but took the lock second must still
+sort last for `LastStatus`. `TestConcurrentHoldAndAcceptNeverEndOnHold`
+fails without either part.
+
+The postback attempt audit log (`AttemptLogger`) stays outside the
+transaction — it is a secondary record for the logs screen, and the
+Postgres ledger row is the source of truth.
 
 ## Why OrganizationID comes from the URL, not the body
 

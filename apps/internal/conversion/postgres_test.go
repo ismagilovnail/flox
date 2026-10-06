@@ -28,14 +28,14 @@ func TestPostgresStoreDedupAndProgression(t *testing.T) {
 	clickID := idgen.New()
 
 	success := func(status event.Type, eventRef string) conversion.ResultKind {
-		_, kind, err := store.Record(ctx, conversion.Entry{
+		rec, err := store.Record(ctx, conversion.Entry{
 			OrganizationID: orgID, NetworkID: networkID, ClickID: clickID,
 			Status: status, EventRef: eventRef, Kind: conversion.ResultSuccess,
 		})
 		if err != nil {
 			t.Fatalf("Record(%s, %q): %v", status, eventRef, err)
 		}
-		return kind
+		return rec.Kind
 	}
 
 	if kind := success(event.CpaHold, ""); kind != conversion.ResultSuccess {
@@ -77,20 +77,21 @@ func TestPostgresStoreFindSuccessID(t *testing.T) {
 	store := conversion.NewPostgresStore(pool)
 	clickID := idgen.New()
 
-	if _, _, err := store.Record(ctx, conversion.Entry{
+	if _, err := store.Record(ctx, conversion.Entry{
 		OrganizationID: orgID, NetworkID: networkID, ClickID: clickID,
 		Status: event.CpaRedep, EventRef: "txn-1", Kind: conversion.ResultSuccess,
 	}); err != nil {
 		t.Fatalf("Record txn-1: %v", err)
 	}
-	id2, _, err := store.Record(ctx, conversion.Entry{
+	rec, err := store.Record(ctx, conversion.Entry{
 		OrganizationID: orgID, NetworkID: networkID, ClickID: clickID,
 		Status: event.CpaRedep, EventRef: "txn-2", Kind: conversion.ResultSuccess,
 	})
 	if err != nil {
 		t.Fatalf("Record txn-2: %v", err)
 	}
-	if _, _, err := store.Record(ctx, conversion.Entry{
+	id2 := rec.ID
+	if _, err := store.Record(ctx, conversion.Entry{
 		OrganizationID: orgID, NetworkID: networkID, ClickID: clickID,
 		Status: event.Type(""), Kind: conversion.ResultError, Message: "no event mapping",
 	}); err != nil {
@@ -133,14 +134,14 @@ func TestPostgresStoreAcceptDuplicatesBypassesDedupNotProgression(t *testing.T) 
 	clickID := idgen.New()
 
 	record := func(status event.Type) (string, conversion.ResultKind) {
-		id, kind, err := store.Record(ctx, conversion.Entry{
+		rec, err := store.Record(ctx, conversion.Entry{
 			OrganizationID: orgID, NetworkID: networkID, ClickID: clickID,
 			Status: status, AcceptDuplicates: true, Kind: conversion.ResultSuccess,
 		})
 		if err != nil {
 			t.Fatalf("Record(%s): %v", status, err)
 		}
-		return id, kind
+		return rec.ID, rec.Kind
 	}
 
 	id1, kind1 := record(event.CpaHold)
@@ -162,7 +163,7 @@ func TestPostgresStoreTenantIsolation(t *testing.T) {
 	clickID := idgen.New()
 
 	store := conversion.NewPostgresStore(pool)
-	if _, _, err := store.Record(ctx, conversion.Entry{
+	if _, err := store.Record(ctx, conversion.Entry{
 		OrganizationID: orgA, NetworkID: networkA, ClickID: clickID,
 		Status: event.CpaHold, Kind: conversion.ResultSuccess,
 	}); err != nil {

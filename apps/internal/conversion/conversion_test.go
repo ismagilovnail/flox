@@ -37,18 +37,21 @@ func (m *fakeMapper) MapStatus(_ context.Context, _, networkID, rawStatus string
 }
 
 // fakeStore is an in-memory Store standing in for PostgresStore, enforcing
-// the exact same dedup-key and "one success per key" semantics so the
-// service-level tests exercise the real contract, not a stub that always
-// says yes.
+// the exact same dedup-key, progression and "one success per key" semantics
+// so the service-level tests exercise the real contract, not a stub that
+// always says yes. Like PostgresStore's outbox, it emits a success's Event
+// and Delivery only when the entry actually lands as a success.
 type fakeStore struct {
-	mu      sync.Mutex
-	success map[string]event.Type // click id -> current status, success rows only
-	dedup   map[string]bool       // dedup key -> seen (only for !AcceptDuplicates)
-	records []conversion.Entry
+	mu         sync.Mutex
+	success    map[string]event.Type // click id -> current status, success rows only
+	dedup      map[string]bool       // dedup key -> seen (only for !AcceptDuplicates)
+	records    []conversion.Entry
+	events     *fakeEvents
+	deliveries *fakeDeliveries
 }
 
-func newFakeStore() *fakeStore {
-	return &fakeStore{success: map[string]event.Type{}, dedup: map[string]bool{}}
+func newFakeStore(events *fakeEvents, deliveries *fakeDeliveries) *fakeStore {
+	return &fakeStore{success: map[string]event.Type{}, dedup: map[string]bool{}, events: events, deliveries: deliveries}
 }
 
 func (s *fakeStore) LastStatus(_ context.Context, organizationID, clickID string) (event.Type, bool, error) {
@@ -58,24 +61,35 @@ func (s *fakeStore) LastStatus(_ context.Context, organizationID, clickID string
 	return status, ok, nil
 }
 
-func (s *fakeStore) Record(_ context.Context, e conversion.Entry) (string, conversion.ResultKind, error) {
+func (s *fakeStore) Record(_ context.Context, e conversion.Entry) (conversion.Recorded, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.records = append(s.records, e)
 
 	if e.Kind != conversion.ResultSuccess {
-		return "id", e.Kind, nil
+		return conversion.Recorded{ID: "id", Kind: e.Kind, Message: e.Message}, nil
+	}
+	if last, ok := s.success[e.OrganizationID+"|"+e.ClickID]; ok && last != event.CpaHold && e.Status == event.CpaHold {
+		return conversion.Recorded{ID: "id", Kind: conversion.ResultIgnored, Message: "refused under lock"}, nil
 	}
 
 	key := e.OrganizationID + "|" + e.ClickID + "|" + string(e.Status) + "|" + e.EventRef
 	if !e.AcceptDuplicates && s.dedup[key] {
-		return "id", conversion.ResultDuplicate, nil
+		return conversion.Recorded{ID: "id", Kind: conversion.ResultDuplicate}, nil
 	}
 	if !e.AcceptDuplicates {
 		s.dedup[key] = true
 	}
 	s.success[e.OrganizationID+"|"+e.ClickID] = e.Status
-	return "id", conversion.ResultSuccess, nil
+	if e.Event != nil && s.events != nil {
+		s.events.Enqueue(*e.Event)
+	}
+	if e.Delivery != nil && s.deliveries != nil {
+		req := *e.Delivery
+		req.SourcePostbackID = "id"
+		s.deliveries.Enqueue(req)
+	}
+	return conversion.Recorded{ID: "id", Kind: conversion.ResultSuccess, Message: e.Message}, nil
 }
 
 // fakeFX always converts at a fixed rate, or refuses currencies it wasn't
@@ -95,7 +109,7 @@ func (f *fakeFX) ToUSD(_ context.Context, currency string, amount float64, _ tim
 	return amount * rate, true, nil
 }
 
-// fakeEvents collects whatever the service emitted.
+// fakeEvents collects the CPA events fakeStore's outbox emitted.
 type fakeEvents struct {
 	mu     sync.Mutex
 	events []event.Event
@@ -120,13 +134,13 @@ func (e *fakeEvents) last() event.Event {
 	return e.events[len(e.events)-1]
 }
 
-// fakeDeliveries collects whatever DeliveryRequests Service queued.
+// fakeDeliveries collects the deliveries fakeStore's outbox queued.
 type fakeDeliveries struct {
 	mu   sync.Mutex
 	reqs []conversion.DeliveryRequest
 }
 
-func (d *fakeDeliveries) Enqueue(_ context.Context, req conversion.DeliveryRequest) {
+func (d *fakeDeliveries) Enqueue(req conversion.DeliveryRequest) {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	d.reqs = append(d.reqs, req)
@@ -188,14 +202,14 @@ func (a *fakeAttribution) AttributeConversion(_ context.Context, c attribution.C
 
 func newHarness() (*conversion.Service, *fakeMapper, *fakeStore, *fakeEvents, *fakeDeliveries) {
 	mapper := newFakeMapper()
-	store := newFakeStore()
 	events := &fakeEvents{}
 	deliveries := &fakeDeliveries{}
+	store := newFakeStore(events, deliveries)
 	attr := &fakeAttribution{
 		outcome: attribution.OutcomeAttributed,
 		click:   attribution.Click{ClickID: "click-1", OrganizationID: orgA, FlowID: "flow-1", LandingID: "landing-1", OfferID: "offer-1", PwaID: "pwa-1", TrafficSourceID: "source-1", OccurredAt: time.Date(2026, 8, 20, 10, 0, 0, 0, time.UTC)},
 	}
-	svc := conversion.NewService(mapper, store, &fakeFX{rates: map[string]float64{"EUR": 1.1}}, attr, events, deliveries, &fakeAttempts{})
+	svc := conversion.NewService(mapper, store, &fakeFX{rates: map[string]float64{"EUR": 1.1}}, attr, &fakeAttempts{})
 	return svc, mapper, store, events, deliveries
 }
 
@@ -420,10 +434,10 @@ func TestProgressionAllowsEverythingElse(t *testing.T) {
 func TestUnattributedConversionIsStillRecorded(t *testing.T) {
 	mapper := newFakeMapper()
 	mapper.set("net-1", "sale", event.CpaAccept)
-	store := newFakeStore()
 	events := &fakeEvents{}
+	store := newFakeStore(events, nil)
 	attr := &fakeAttribution{outcome: attribution.OutcomeUnknownClick}
-	svc := conversion.NewService(mapper, store, &fakeFX{}, attr, events, &fakeDeliveries{}, &fakeAttempts{})
+	svc := conversion.NewService(mapper, store, &fakeFX{}, attr, &fakeAttempts{})
 
 	result, err := svc.Record(ctx(), postback("net-1", "click-missing", "sale"))
 	if err != nil {
@@ -443,11 +457,11 @@ func TestUnattributedConversionIsStillRecorded(t *testing.T) {
 func TestAttributionFailureSurfacesAsError(t *testing.T) {
 	mapper := newFakeMapper()
 	mapper.set("net-1", "sale", event.CpaAccept)
-	store := newFakeStore()
 	events := &fakeEvents{}
+	store := newFakeStore(events, nil)
 	boom := errors.New("resolver unavailable")
 	attr := &fakeAttribution{err: boom}
-	svc := conversion.NewService(mapper, store, &fakeFX{}, attr, events, &fakeDeliveries{}, &fakeAttempts{})
+	svc := conversion.NewService(mapper, store, &fakeFX{}, attr, &fakeAttempts{})
 
 	_, err := svc.Record(ctx(), postback("net-1", "click-1", "sale"))
 	if err == nil {
@@ -461,10 +475,10 @@ func TestAttributionFailureSurfacesAsError(t *testing.T) {
 func TestFXMissingRateStoresConversionWithoutUSDValue(t *testing.T) {
 	mapper := newFakeMapper()
 	mapper.set("net-1", "sale", event.CpaAccept)
-	store := newFakeStore()
 	events := &fakeEvents{}
+	store := newFakeStore(events, nil)
 	attr := &fakeAttribution{outcome: attribution.OutcomeUnknownClick}
-	svc := conversion.NewService(mapper, store, &fakeFX{}, attr, events, &fakeDeliveries{}, &fakeAttempts{}) // no rates configured
+	svc := conversion.NewService(mapper, store, &fakeFX{}, attr, &fakeAttempts{}) // no rates configured
 
 	p := postback("net-1", "click-1", "sale")
 	revenue := 100.0
@@ -614,11 +628,11 @@ func TestAttemptLoggedForEveryOutcome(t *testing.T) {
 	mapper := newFakeMapper()
 	mapper.set("net-1", "reg", event.CpaHold)
 	mapper.set("net-1", "sale", event.CpaAccept)
-	store := newFakeStore()
 	events := &fakeEvents{}
+	store := newFakeStore(events, nil)
 	attempts := &fakeAttempts{}
 	attr := &fakeAttribution{outcome: attribution.OutcomeUnknownClick}
-	svc := conversion.NewService(mapper, store, &fakeFX{}, attr, events, &fakeDeliveries{}, attempts)
+	svc := conversion.NewService(mapper, store, &fakeFX{}, attr, attempts)
 
 	// success
 	if _, err := svc.Record(ctx(), postback("net-1", "click-1", "reg")); err != nil {
@@ -650,5 +664,42 @@ func TestAttemptLoggedForEveryOutcome(t *testing.T) {
 	if kinds[conversion.ResultSuccess] != 2 || kinds[conversion.ResultDuplicate] != 1 ||
 		kinds[conversion.ResultIgnored] != 1 || kinds[conversion.ResultError] != 1 {
 		t.Fatalf("attempt outcomes = %+v, want 2 success, 1 duplicate, 1 ignored, 1 error", kinds)
+	}
+}
+
+// racingStore reports no prior status on the fast path but refuses under its
+// lock — the shape of a CPA_HOLD replay that lost a race to a CPA_ACCEPT
+// (audit 2026-10-06, D3). The store's decision is the one that counts.
+type racingStore struct{ *fakeStore }
+
+func (racingStore) LastStatus(context.Context, string, string) (event.Type, bool, error) {
+	return "", false, nil
+}
+
+func (s racingStore) Record(ctx context.Context, e conversion.Entry) (conversion.Recorded, error) {
+	if e.Kind == conversion.ResultSuccess {
+		return conversion.Recorded{ID: "id", Kind: conversion.ResultIgnored, Message: "refused under lock"}, nil
+	}
+	return s.fakeStore.Record(ctx, e)
+}
+
+func TestStoreRefusalUnderLockWins(t *testing.T) {
+	events, deliveries := &fakeEvents{}, &fakeDeliveries{}
+	mapper := newFakeMapper()
+	mapper.set("net-1", "lead", event.CpaHold)
+	svc := conversion.NewService(mapper, racingStore{newFakeStore(events, deliveries)}, &fakeFX{},
+		&fakeAttribution{outcome: attribution.OutcomeUnknownClick}, &fakeAttempts{})
+
+	p := postback("net-1", "click-1", "lead")
+	p.PostbackURL = "https://net.example/pb?click_id={click_id}"
+	result, err := svc.Record(ctx(), p)
+	if err != nil {
+		t.Fatalf("Record: %v", err)
+	}
+	if result.Kind != conversion.ResultIgnored || result.Message != "refused under lock" {
+		t.Fatalf("result = %+v, want ignored with the store's message", result)
+	}
+	if events.count() != 0 || deliveries.count() != 0 {
+		t.Fatalf("side effects of a refused postback: events=%d deliveries=%d, want 0/0", events.count(), deliveries.count())
 	}
 }

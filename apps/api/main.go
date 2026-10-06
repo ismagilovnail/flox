@@ -40,9 +40,7 @@ import (
 	"github.com/ismagilovnail/flox/apps/internal/domain"
 	domaincloudflare "github.com/ismagilovnail/flox/apps/internal/domain/cloudflare"
 	domainnamecheap "github.com/ismagilovnail/flox/apps/internal/domain/namecheap"
-	"github.com/ismagilovnail/flox/apps/internal/eventbuf"
 	"github.com/ismagilovnail/flox/apps/internal/eventmapping"
-	"github.com/ismagilovnail/flox/apps/internal/eventqueue"
 	"github.com/ismagilovnail/flox/apps/internal/httpserver"
 	integrationsengine "github.com/ismagilovnail/flox/apps/internal/integrations"
 	"github.com/ismagilovnail/flox/apps/internal/landing"
@@ -584,13 +582,12 @@ func run() error {
 		// tracker, which must start even with ClickHouse down —
 		// chConn is guaranteed live here; no attribution.NewMemoryResolver
 		// fallback is needed on this path.
-		convEvents := eventbuf.New(eventqueue.NewSink(eventqueue.NewPostgresQueue(db)), logger, eventbuf.Config{})
-		defer convEvents.Close()
-
+		//
 		// Reuses rdb (connected once, near the top of run(), so
 		// apps/internal/ratelimit can also use it) rather than opening a
 		// second Redis connection.
-		var convStore conversion.Store = conversion.NewPostgresStore(db)
+		postbackStore := postback.NewPostgresStore(db)
+		var convStore conversion.Store = conversion.NewPostgresStore(db).WithDeliveries(postbackStore)
 		if rdb != nil {
 			convStore = conversion.NewRedisStore(convStore, rdb, logger)
 		} else {
@@ -598,8 +595,6 @@ func run() error {
 		}
 
 		attributionSvc := attribution.NewService(chstore.NewClickResolver(chConn))
-		postbackStore := postback.NewPostgresStore(db)
-		deliveries := postback.NewEnqueuer(postbackStore, logger)
 		attemptLog := postbacklog.NewConversionAttemptLogger(postbacklog.NewPostgresQueue(db, logger))
 
 		convSvc := conversion.NewService(
@@ -607,8 +602,6 @@ func run() error {
 			convStore,
 			conversion.NewPostgresFX(db),
 			attributionSvc,
-			convEvents,
-			deliveries,
 			attemptLog,
 		)
 

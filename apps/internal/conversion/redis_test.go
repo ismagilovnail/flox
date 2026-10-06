@@ -55,7 +55,7 @@ func TestRedisStoreReadsThroughToPostgresOnMiss(t *testing.T) {
 		t.Fatalf("LastStatus for an unknown click: ok=%v err=%v, want false nil", ok, err)
 	}
 
-	if _, _, err := store.Record(ctx, conversion.Entry{
+	if _, err := store.Record(ctx, conversion.Entry{
 		OrganizationID: orgID, NetworkID: networkID, ClickID: clickID,
 		Status: event.CpaHold, Kind: conversion.ResultSuccess,
 	}); err != nil {
@@ -75,7 +75,7 @@ func TestRedisStoreReadsThroughToPostgresOnMiss(t *testing.T) {
 	// Bypass the now-warm cache key by using a second click that only
 	// Postgres knows about.
 	clickID2 := idgen.New()
-	if _, _, err := pg.Record(ctx, conversion.Entry{
+	if _, err := pg.Record(ctx, conversion.Entry{
 		OrganizationID: orgID, NetworkID: networkID, ClickID: clickID2,
 		Status: event.CpaAccept, Kind: conversion.ResultSuccess,
 	}); err != nil {
@@ -101,7 +101,7 @@ func TestRedisStoreFallsThroughWhenRedisUnavailable(t *testing.T) {
 	clickID := idgen.New()
 
 	pg := conversion.NewPostgresStore(pool)
-	if _, _, err := pg.Record(ctx, conversion.Entry{
+	if _, err := pg.Record(ctx, conversion.Entry{
 		OrganizationID: orgID, NetworkID: networkID, ClickID: clickID,
 		Status: event.CpaHold, Kind: conversion.ResultSuccess,
 	}); err != nil {
@@ -119,11 +119,11 @@ func TestRedisStoreFallsThroughWhenRedisUnavailable(t *testing.T) {
 	// Recording must also still succeed — the cache-repopulate step after
 	// a successful write is best-effort and must not fail the request.
 	clickID2 := idgen.New()
-	id, kind, err := broken.Record(ctx, conversion.Entry{
+	rec, err := broken.Record(ctx, conversion.Entry{
 		OrganizationID: orgID, NetworkID: networkID, ClickID: clickID2,
 		Status: event.CpaHold, Kind: conversion.ResultSuccess,
 	})
-	if err != nil || kind != conversion.ResultSuccess || id == "" {
-		t.Fatalf("Record with Redis down: id=%q kind=%q err=%v, want a real id, success, nil", id, kind, err)
+	if err != nil || rec.Kind != conversion.ResultSuccess || rec.ID == "" {
+		t.Fatalf("Record with Redis down: id=%q kind=%q err=%v, want a real id, success, nil", rec.ID, rec.Kind, err)
 	}
 }

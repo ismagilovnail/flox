@@ -5,6 +5,39 @@ per-phase, matching `CLAUDE.md`'s phase protocol. The one exception is
 [Between phases], below: spec amendments and the code changes that follow from
 them land between phases and would otherwise be invisible here.
 
+## [Between phases] — a conversion commits with its event and its postback
+
+Technical audit, findings D1 (P0) and D3 (P1). A successful incoming postback used to make
+three independent writes: the `postbacks` row, the CPA event through the tracker's in-memory
+buffer (dropped when full or when Postgres blipped), and the outgoing delivery (failure only
+logged, network already told "success"). Any gap left a conversion recorded but missing from
+reports, or never forwarded to the traffic source, and the network's retry came back
+"duplicate". Separately, the progression check and the insert were not atomic, so a CPA_HOLD
+replay racing a CPA_ACCEPT could land last.
+
+Now `conversion.PostgresStore.Record` writes a success in one transaction: a
+`pg_advisory_xact_lock` on (org, click_id), the progression re-check, the dedup insert, then
+the CPA event into `event_queue` (`eventqueue.InsertTx`) and the delivery into
+`postback_deliveries` (`postback.PostgresStore.InsertTx` via `conversion.DeliveryWriter`).
+Any failure rolls everything back → 500 → the network retries. The success row's
+`created_at` is `clock_timestamp()` so `LastStatus` follows the lock order, not transaction
+start. `Service` lost `EventSink`/`DeliveryEnqueuer`; `postback.Enqueuer` is removed; the
+API no longer runs its own event buffer for replays. The service keeps a fast pre-check
+(Redis-cached) to skip attribution for obvious replays; the store's locked check decides —
+which also makes a stale Redis status harmless (audit R1). A store without a
+`DeliveryWriter` refuses to record an entry that carries a delivery.
+
+Tests: Postgres tests for the outbox (event visible inside the record's transaction,
+delivery points at the recorded row, a duplicate writes neither), full rollback when the
+delivery insert fails and a clean retry after, refusal without a writer, and 40 rounds of
+concurrent HOLD+ACCEPT ending on ACCEPT — mutation-checked: it fails within 1–26 rounds
+without the lock, and also without `clock_timestamp()`. Service test: a refusal under the
+lock wins over the fast path and emits nothing. Full-env `go test ./...` green; `apps/e2e`
+run separately and passing (`TestFullFunnel`: HOLD/ACCEPT/REDEP recorded, attributed,
+deliveries queued, ACCEPT revenue in ClickHouse aggregates) after clearing the dev auth
+rate-limit keys — the e2e tests had been skipping on a 429 while the suite still said `ok`,
+so step 1's "full suite green" did not include them.
+
 ## [Between phases] — queue claims are never abandoned
 
 Technical audit (`docs/audit-tech-2026-10-06.md`), finding Q1 (P0): the worker's three

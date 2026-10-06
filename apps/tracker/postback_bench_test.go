@@ -14,7 +14,6 @@ import (
 
 	"github.com/ismagilovnail/flox/apps/internal/attribution"
 	"github.com/ismagilovnail/flox/apps/internal/conversion"
-	"github.com/ismagilovnail/flox/apps/internal/eventbuf"
 	"github.com/ismagilovnail/flox/apps/internal/eventmapping"
 	"github.com/ismagilovnail/flox/apps/internal/network"
 	"github.com/ismagilovnail/flox/apps/internal/postback"
@@ -53,10 +52,6 @@ func BenchmarkPostback(b *testing.B) {
 		b.Fatalf("seeding event mapping: %v", err)
 	}
 
-	events := eventbuf.New(eventbuf.DiscardSink{}, slog.New(slog.NewTextHandler(io.Discard, nil)), eventbuf.Config{})
-	b.Cleanup(events.Close)
-
-	deliveries := postback.NewEnqueuer(postback.NewPostgresStore(pool), slog.New(slog.NewTextHandler(io.Discard, nil)))
 	attemptLog := postbacklog.NewConversionAttemptLogger(postbacklog.NewPostgresQueue(pool, slog.New(slog.NewTextHandler(io.Discard, nil))))
 	attributionSvc := attribution.NewService(attribution.NewMemoryResolver())
 
@@ -64,11 +59,9 @@ func BenchmarkPostback(b *testing.B) {
 		networks: conversion.NewPostgresNetworkLookup(pool),
 		service: conversion.NewService(
 			conversion.NewPostgresMapper(pool),
-			conversion.NewPostgresStore(pool),
+			conversion.NewPostgresStore(pool).WithDeliveries(postback.NewPostgresStore(pool)),
 			conversion.NewPostgresFX(pool),
 			attributionSvc,
-			events,
-			deliveries,
 			attemptLog,
 		),
 		logger: slog.New(slog.NewTextHandler(io.Discard, nil)),
