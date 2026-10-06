@@ -91,6 +91,8 @@ export function NetworkList() {
         emptyTitle={t("list.emptyTitle", { ns: "networks" })}
         emptyDescription={t("list.emptyDescription", { ns: "networks" })}
         pageSize={10}
+        enableColumnReorder
+        persistKey="networks"
         filters={<TagFilterControl selected={tagFilter} onChange={setTagFilter} />}
         enableRowSelection
         getRowId={(row) => row.id}

@@ -71,6 +71,8 @@ export function FlowList() {
         emptyTitle={t("list.emptyTitle")}
         emptyDescription={t("list.emptyDescription")}
         pageSize={20}
+        enableColumnReorder
+        persistKey="flows"
       />
     </div>
   );

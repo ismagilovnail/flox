@@ -311,7 +311,8 @@ function DataTable<TData extends Record<string, unknown>>({
   })
 
   function moveColumn(fromId: string, toId: string) {
-    if (fromId === toId) return
+    // The selection checkbox column stays first: nothing is dropped onto it.
+    if (fromId === toId || toId === SELECT_COLUMN_ID) return
     const ids = table.getAllLeafColumns().map((c) => c.id)
     const from = ids.indexOf(fromId)
     const to = ids.indexOf(toId)

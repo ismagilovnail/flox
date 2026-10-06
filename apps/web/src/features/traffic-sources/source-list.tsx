@@ -80,6 +80,8 @@ export function SourceList() {
         emptyTitle={t("list.emptyTitle", { ns: "trafficSources" })}
         emptyDescription={t("list.emptyDescription", { ns: "trafficSources" })}
         pageSize={10}
+        enableColumnReorder
+        persistKey="traffic-sources"
         filters={<TagFilterControl selected={tagFilter} onChange={setTagFilter} />}
         enableRowSelection
         getRowId={(row) => row.id}

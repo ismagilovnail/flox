@@ -89,6 +89,8 @@ export function CampaignList() {
         emptyTitle={t("list.emptyTitle", { ns: "campaigns" })}
         emptyDescription={t("list.emptyDescription", { ns: "campaigns" })}
         pageSize={10}
+        enableColumnReorder
+        persistKey="campaigns"
         filters={<TagFilterControl selected={tagFilter} onChange={setTagFilter} />}
         enableRowSelection
         getRowId={(row) => row.id}

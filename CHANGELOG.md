@@ -5,6 +5,14 @@ per-phase, matching `CLAUDE.md`'s phase protocol. The one exception is
 [Between phases], below: spec amendments and the code changes that follow from
 them land between phases and would otherwise be invisible here.
 
+## [Between phases] — campaigns, flows, offers, networks and traffic sources remember their columns
+
+The five directory tables (campaigns, flows, offers, networks, traffic sources) use
+`DataTable`'s `persistKey` and `enableColumnReorder`, like the click log: hidden
+columns, drag-and-drop order and widths survive a reload (per browser, one entry per
+table under `flox.table.<name>`). `DataTable.moveColumn` also refuses to drop a column
+onto the row-selection checkbox, which stays first.
+
 ## [Between phases] — click log remembers its columns and can be reordered
 
 The click log table now uses `DataTable`'s `persistKey` ("click-log") and

@@ -109,6 +109,8 @@ export function OfferList() {
             : t("list.emptyDescription", { ns: "offers" })
         }
         pageSize={10}
+        enableColumnReorder
+        persistKey="offers"
         filters={<TagFilterControl selected={tagFilter} onChange={setTagFilter} />}
         enableRowSelection
         getRowId={(row) => row.id}
