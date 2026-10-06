@@ -9,8 +9,9 @@ them land between phases and would otherwise be invisible here.
 
 Campaigns get the same drill-in the other directories have: an icon button in each
 campaigns-table row and a labelled button in the campaign page header open
-`/analytics?dim=campaign&val=<id>&tab=line` (the report pre-filtered to that
-campaign). `campaign` is added to `viewStatisticsHref`'s dimensions and to the
+`/analytics?dim=campaign&val=<id>` (the report pre-filtered to that campaign,
+on the table tab: `viewStatisticsHref` no longer forces the line tab for any
+directory; `?tab=line` is still understood). `campaign` is added to `viewStatisticsHref`'s dimensions and to the
 analytics view's deep-link allowlist.
 
 ## [Between phases] — Overview tables remember their columns; header hints

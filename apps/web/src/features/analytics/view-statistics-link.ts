@@ -2,6 +2,6 @@
  * a navigation + pre-filter, not a client-side recomputation. AnalyticsView
  * reads these same param names on mount. */
 export function viewStatisticsHref(dimension: "campaign" | "offer" | "source" | "stream_set" | "flow" | "landing" | "pwa", value: string): string {
-  const params = new URLSearchParams({ dim: dimension, val: value, tab: "line" });
+  const params = new URLSearchParams({ dim: dimension, val: value });
   return `/analytics?${params.toString()}`;
 }
