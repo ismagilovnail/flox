@@ -12,8 +12,14 @@
     "campaign": "Кампания",
     "network": "Сеть",
     "status": "Статус",
-    "revenue": "Доход",
-    "eventTime": "Время события"
+    "revenue": "Выплата",
+    "eventTime": "Время события",
+    "offer": "Оффер",
+    "flow": "Поток",
+    "history": "История статусов",
+    "currency": "Валюта",
+    "usdValue": "USD",
+    "networkTxnId": "Txn ID сети"
   },
   "status": {
     "hold": "ХОЛД",

@@ -49,25 +49,50 @@ export type EventType =
   | "TG_START"
   | CpaStatus;
 
+export type StatusStep = { type: CpaStatus; eventAt: string };
+
+/** The utm_* / sub1–sub10 keys a conversion row carries (omitted when empty). */
+export const CONVERSION_TAG_KEYS = [
+  "utmSource",
+  "utmMedium",
+  "utmCampaign",
+  "utmContent",
+  "utmTerm",
+  "sub1",
+  "sub2",
+  "sub3",
+  "sub4",
+  "sub5",
+  "sub6",
+  "sub7",
+  "sub8",
+  "sub9",
+  "sub10",
+] as const;
+export type ConversionTagKey = (typeof CONVERSION_TAG_KEYS)[number];
+
 /** One CPA_* row for the Conversions list. A click_id can appear more than
  * once (HOLD, then ACCEPT, then REDEP, ...) — real status history, not
- * duplicate rows to dedupe client-side. No offerId/campaign-name/
- * network-name: conversion_events carries no offer_id at all (only
- * flow_id, which would need a separate Postgres join to resolve an offer —
- * out of this phase's scope), and names are resolved client-side from the
- * real useCampaigns()/useNetworks() hooks, same pattern the list view
- * already used for its old mock id→name maps. */
+ * duplicate rows to dedupe client-side; `history` is that whole chain for the
+ * row's click_id. Campaign/network/flow/offer names are resolved client-side
+ * from the real useCampaigns()/useNetworks()/useFlows()/useOffers() hooks.
+ * offerId comes from the click's SOURCE_CLICK (conversion_events has none), so
+ * it is absent for a redirect flow or a fallback. */
 export type Conversion = {
   eventAt: string;
   type: CpaStatus;
   campaignId: string;
   clickId: string;
   networkId: string;
+  flowId?: string;
+  offerId?: string;
   revenue: number;
   currency: string;
   usdValue: number;
   hasUsdValue: boolean;
-};
+  networkTxnId?: string;
+  history: StatusStep[];
+} & Partial<Record<ConversionTagKey, string>>;
 
 export type ListConversionsResult = {
   conversions: Conversion[];

@@ -12,8 +12,14 @@
     "campaign": "Campaign",
     "network": "Network",
     "status": "Status",
-    "revenue": "Revenue",
-    "eventTime": "Event time"
+    "revenue": "Payout",
+    "eventTime": "Event time",
+    "offer": "Offer",
+    "flow": "Flow",
+    "history": "Status history",
+    "currency": "Currency",
+    "usdValue": "USD",
+    "networkTxnId": "Network txn ID"
   },
   "status": {
     "hold": "HOLD",

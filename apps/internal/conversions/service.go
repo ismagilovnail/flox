@@ -28,6 +28,8 @@ type Repository interface {
 	CountConversions(ctx context.Context, organizationID string, from, to time.Time) (int, error)
 	ConversionsByClickID(ctx context.Context, organizationID, clickID string) ([]chstore.ConversionEvent, error)
 	FunnelByClickID(ctx context.Context, organizationID, clickID string) ([]chstore.FunnelEvent, error)
+	StatusHistoryByClickIDs(ctx context.Context, organizationID string, clickIDs []string) ([]chstore.StatusStep, error)
+	OffersByClickIDs(ctx context.Context, organizationID string, clickIDs []string) (map[string]string, error)
 }
 
 type Service struct {
@@ -74,14 +76,51 @@ func (s *Service) List(ctx context.Context, organizationID string, from, to time
 		return ListResult{}, err
 	}
 
+	clickIDs := uniqueClickIDs(rows)
+	steps, err := s.repo.StatusHistoryByClickIDs(ctx, organizationID, clickIDs)
+	if err != nil {
+		return ListResult{}, err
+	}
+	history := make(map[string][]StatusStep, len(clickIDs))
+	for _, st := range steps {
+		history[st.ClickID] = append(history[st.ClickID], StatusStep{Type: st.Type, EventAt: st.EventAt})
+	}
+	offers, err := s.repo.OffersByClickIDs(ctx, organizationID, clickIDs)
+	if err != nil {
+		return ListResult{}, err
+	}
+
 	conversions := make([]Conversion, len(rows))
 	for i, r := range rows {
+		h := history[r.ClickID]
+		if h == nil {
+			h = []StatusStep{}
+		}
 		conversions[i] = Conversion{
 			EventAt: r.EventAt, Type: r.Type, CampaignID: r.CampaignID, ClickID: r.ClickID, NetworkID: r.NetworkID,
+			FlowID: r.FlowID, OfferID: offers[r.ClickID],
 			Revenue: r.Revenue, Currency: r.Currency, USDValue: r.USDValue, HasUSDValue: r.HasUSDValue,
+			NetworkTxnID: r.NetworkTxnID,
+			UTMSource:    r.UTMSource, UTMMedium: r.UTMMedium, UTMCampaign: r.UTMCampaign, UTMContent: r.UTMContent, UTMTerm: r.UTMTerm,
+			Sub1: r.Subs[0], Sub2: r.Subs[1], Sub3: r.Subs[2], Sub4: r.Subs[3], Sub5: r.Subs[4],
+			Sub6: r.Subs[5], Sub7: r.Subs[6], Sub8: r.Subs[7], Sub9: r.Subs[8], Sub10: r.Subs[9],
+			History: h,
 		}
 	}
 	return ListResult{Conversions: conversions, Total: total}, nil
+}
+
+func uniqueClickIDs(rows []chstore.ConversionEvent) []string {
+	seen := make(map[string]struct{}, len(rows))
+	out := make([]string, 0, len(rows))
+	for _, r := range rows {
+		if _, ok := seen[r.ClickID]; ok {
+			continue
+		}
+		seen[r.ClickID] = struct{}{}
+		out = append(out, r.ClickID)
+	}
+	return out
 }
 
 // Timeline merges a click_id's funnel events (click_events + tracking_events)

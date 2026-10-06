@@ -5,6 +5,21 @@ per-phase, matching `CLAUDE.md`'s phase protocol. The one exception is
 [Between phases], below: spec amendments and the code changes that follow from
 them land between phases and would otherwise be invisible here.
 
+## [Between phases] — conversions list: offer, flow, tags, payout, status history
+
+The Conversions list gained: **Offer** and **Flow** (names resolved client-side), a
+**Status history** column (every CPA status the click_id reached, oldest first, with dates:
+hold → accept → redep), **Payout** and **Currency** as separate columns, and hidden-by-default
+**USD**, **Network txn ID**, `utm_*` and `sub1`–`sub10` (turned on via "Columns"; columns are
+remembered and reorderable). `GET /conversions` rows carry `flowId`, `offerId`,
+`networkTxnId`, the utm/sub fields and `history`. `conversion_events` has no `offer_id`, so
+the offer is read from the click's `click_events` row (absent for a redirect flow or a
+fallback). Both new batched ClickHouse reads (`StatusHistoryByClickIDs`, `OffersByClickIDs`)
+filter on `organization_id`; tests cover cross-org isolation. USD shows "—" when no FX rate
+was on file. Not done: inline row expansion (the history is shown as a chain in its column
+instead; the detail page keeps the full timeline). Verified in the browser with temporary
+rows (removed afterwards) and with the full-env `go test ./...`.
+
 ## [Between phases] — tracking link builder with Facebook/TikTok macros
 
 Each tracking link on the campaign page has a "With parameters" menu: copy for Facebook

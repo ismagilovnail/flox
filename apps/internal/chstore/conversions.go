@@ -12,22 +12,33 @@ import (
 
 // ConversionEvent is one CPA_* row from conversion_events — the subset of
 // columns the browser-facing Conversions list/detail API
-// (apps/internal/conversions) needs. Every other conversion_events column
-// (geo/device/utm/subs/attribution) stays unread here since neither view
-// uses it.
+// (apps/internal/conversions) needs. Geo/device/attribution columns stay
+// unread here since neither view uses them. There is no offer_id: the table
+// doesn't carry one (only click_events/tracking_events do) — see
+// OffersByClickIDs.
 type ConversionEvent struct {
-	EventAt     time.Time
-	Type        event.Type
-	CampaignID  string
-	ClickID     string
-	NetworkID   string
-	Revenue     float64
-	Currency    string
-	USDValue    float64
-	HasUSDValue bool
+	EventAt      time.Time
+	Type         event.Type
+	CampaignID   string
+	ClickID      string
+	NetworkID    string
+	FlowID       string
+	Revenue      float64
+	Currency     string
+	USDValue     float64
+	HasUSDValue  bool
+	NetworkTxnID string
+	UTMSource    string
+	UTMMedium    string
+	UTMCampaign  string
+	UTMContent   string
+	UTMTerm      string
+	Subs         [10]string
 }
 
-const conversionEventColumns = `event_at, type, campaign_id, click_id, network_id, revenue, currency, usd_value, has_usd_value`
+const conversionEventColumns = `event_at, type, campaign_id, click_id, network_id, flow_id, revenue, currency, usd_value, has_usd_value, network_txn_id,
+	utm_source, utm_medium, utm_campaign, utm_content, utm_term,
+	sub1, sub2, sub3, sub4, sub5, sub6, sub7, sub8, sub9, sub10`
 
 func scanConversionEvent(r driver.Rows) (ConversionEvent, error) {
 	var (
@@ -35,7 +46,11 @@ func scanConversionEvent(r driver.Rows) (ConversionEvent, error) {
 		typ    string
 		hasUSD uint8
 	)
-	if err := r.Scan(&c.EventAt, &typ, &c.CampaignID, &c.ClickID, &c.NetworkID, &c.Revenue, &c.Currency, &c.USDValue, &hasUSD); err != nil {
+	if err := r.Scan(
+		&c.EventAt, &typ, &c.CampaignID, &c.ClickID, &c.NetworkID, &c.FlowID, &c.Revenue, &c.Currency, &c.USDValue, &hasUSD, &c.NetworkTxnID,
+		&c.UTMSource, &c.UTMMedium, &c.UTMCampaign, &c.UTMContent, &c.UTMTerm,
+		&c.Subs[0], &c.Subs[1], &c.Subs[2], &c.Subs[3], &c.Subs[4], &c.Subs[5], &c.Subs[6], &c.Subs[7], &c.Subs[8], &c.Subs[9],
+	); err != nil {
 		return ConversionEvent{}, err
 	}
 	c.Type = event.Type(typ)
@@ -166,6 +181,87 @@ func (s *EventStore) FunnelByClickID(ctx context.Context, organizationID, clickI
 		}(); err != nil {
 			return nil, err
 		}
+	}
+	return out, nil
+}
+
+// StatusStep is one CPA_* status a click_id reached, for the list's
+// hold → accept → redep history.
+type StatusStep struct {
+	ClickID string
+	Type    event.Type
+	EventAt time.Time
+}
+
+// StatusHistoryByClickIDs reads every CPA_* status recorded for the given
+// click_ids, oldest first. The caller passes the page's own click_ids (at
+// most one list page), so this stays a bounded point lookup on the
+// click_id bloom index.
+func (s *EventStore) StatusHistoryByClickIDs(ctx context.Context, organizationID string, clickIDs []string) ([]StatusStep, error) {
+	if len(clickIDs) == 0 {
+		return nil, nil
+	}
+	rows, err := s.conn.Query(ctx, `
+		SELECT click_id, type, event_at
+		FROM conversion_events
+		WHERE organization_id = ? AND click_id IN ?
+		ORDER BY event_at ASC`,
+		organizationID, clickIDs,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("chstore: querying status history: %w", err)
+	}
+	defer rows.Close()
+
+	var out []StatusStep
+	for rows.Next() {
+		var (
+			st  StatusStep
+			typ string
+		)
+		if err := rows.Scan(&st.ClickID, &typ, &st.EventAt); err != nil {
+			return nil, fmt.Errorf("chstore: scanning status history: %w", err)
+		}
+		st.Type = event.Type(typ)
+		out = append(out, st)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("chstore: reading status history: %w", err)
+	}
+	return out, nil
+}
+
+// OffersByClickIDs maps click_id → the offer that click was sent to.
+// conversion_events has no offer_id, so it is read from click_events (the
+// SOURCE_CLICK row carries it; empty for a redirect flow or an inactive
+// offer that fell through to a fallback). A click_id with no offer is
+// simply absent from the map.
+func (s *EventStore) OffersByClickIDs(ctx context.Context, organizationID string, clickIDs []string) (map[string]string, error) {
+	out := map[string]string{}
+	if len(clickIDs) == 0 {
+		return out, nil
+	}
+	rows, err := s.conn.Query(ctx, `
+		SELECT click_id, argMax(offer_id, event_at)
+		FROM click_events
+		WHERE organization_id = ? AND click_id IN ? AND offer_id != ''
+		GROUP BY click_id`,
+		organizationID, clickIDs,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("chstore: querying offers by click_id: %w", err)
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var clickID, offerID string
+		if err := rows.Scan(&clickID, &offerID); err != nil {
+			return nil, fmt.Errorf("chstore: scanning offers by click_id: %w", err)
+		}
+		out[clickID] = offerID
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("chstore: reading offers by click_id: %w", err)
 	}
 	return out, nil
 }

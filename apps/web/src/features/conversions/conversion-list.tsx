@@ -9,13 +9,17 @@ import { ErrorState } from "@/components/ui/error-state";
 import { useConversions } from "@/hooks/use-conversions";
 import { useCampaigns } from "@/hooks/use-campaigns";
 import { useNetworks } from "@/hooks/use-networks";
-import { conversionColumns } from "@/features/conversions/conversion-columns";
+import { useFlows } from "@/hooks/use-flows";
+import { useOffers } from "@/hooks/use-offers";
+import { conversionColumns, CONVERSION_HIDDEN_BY_DEFAULT } from "@/features/conversions/conversion-columns";
 
 export function ConversionList() {
   const { t } = useTranslation("conversions");
   const conversionsQuery = useConversions();
   const campaignsQuery = useCampaigns();
   const networksQuery = useNetworks();
+  const flowsQuery = useFlows();
+  const offersQuery = useOffers();
 
   const campaignNameById = React.useMemo(
     () => Object.fromEntries((campaignsQuery.data?.campaigns ?? []).map((c) => [c.id, c.name])),
@@ -26,9 +30,18 @@ export function ConversionList() {
     [networksQuery.data],
   );
 
+  const flowNameById = React.useMemo(
+    () => Object.fromEntries((flowsQuery.data?.flows ?? []).map((f) => [f.id, f.name])),
+    [flowsQuery.data],
+  );
+  const offerNameById = React.useMemo(
+    () => Object.fromEntries((offersQuery.data?.offers ?? []).map((o) => [o.id, o.name])),
+    [offersQuery.data],
+  );
+
   const columns = React.useMemo(
-    () => conversionColumns(t, campaignNameById, networkNameById),
-    [t, campaignNameById, networkNameById],
+    () => conversionColumns(t, campaignNameById, networkNameById, flowNameById, offerNameById),
+    [t, campaignNameById, networkNameById, flowNameById, offerNameById],
   );
 
   if (conversionsQuery.isPending) {
@@ -66,6 +79,9 @@ export function ConversionList() {
         emptyTitle={t("list.emptyTitle")}
         emptyDescription={t("list.emptyDescription")}
         pageSize={15}
+        initialColumnVisibility={CONVERSION_HIDDEN_BY_DEFAULT}
+        enableColumnReorder
+        persistKey="conversions"
       />
     </div>
   );

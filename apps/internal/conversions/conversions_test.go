@@ -19,6 +19,10 @@ type fakeRepo struct {
 	conversionsByOrg   map[string][]chstore.ConversionEvent
 	funnelByClick      map[string][]chstore.FunnelEvent
 	conversionsByClick map[string][]chstore.ConversionEvent
+	// statusByOrg/offersByOrg are keyed by organization first: like the real
+	// queries, a click_id in another org must never leak into a result.
+	statusByOrg map[string][]chstore.StatusStep
+	offersByOrg map[string]map[string]string
 }
 
 func (f *fakeRepo) ListConversions(_ context.Context, orgID string, from, to time.Time, limit, offset int) ([]chstore.ConversionEvent, error) {
@@ -53,6 +57,70 @@ func (f *fakeRepo) ConversionsByClickID(_ context.Context, orgID, clickID string
 
 func (f *fakeRepo) FunnelByClickID(_ context.Context, orgID, clickID string) ([]chstore.FunnelEvent, error) {
 	return f.funnelByClick[clickID], nil
+}
+
+func (f *fakeRepo) StatusHistoryByClickIDs(_ context.Context, orgID string, clickIDs []string) ([]chstore.StatusStep, error) {
+	want := map[string]bool{}
+	for _, id := range clickIDs {
+		want[id] = true
+	}
+	var out []chstore.StatusStep
+	for _, st := range f.statusByOrg[orgID] {
+		if want[st.ClickID] {
+			out = append(out, st)
+		}
+	}
+	return out, nil
+}
+
+func (f *fakeRepo) OffersByClickIDs(_ context.Context, orgID string, clickIDs []string) (map[string]string, error) {
+	out := map[string]string{}
+	for _, id := range clickIDs {
+		if o, ok := f.offersByOrg[orgID][id]; ok {
+			out[id] = o
+		}
+	}
+	return out, nil
+}
+
+func TestListEnrichesRowsWithFlowOfferSubsAndStatusHistory(t *testing.T) {
+	t0 := time.Date(2026, 10, 1, 10, 0, 0, 0, time.UTC)
+	row := chstore.ConversionEvent{
+		EventAt: t0.Add(48 * time.Hour), Type: event.CpaAccept, ClickID: "c1", CampaignID: "camp", NetworkID: "net",
+		FlowID: "flow-1", Revenue: 12.5, Currency: "EUR", NetworkTxnID: "txn-9", UTMSource: "facebook",
+	}
+	row.Subs[0], row.Subs[9] = "creative-7", "last"
+	repo := &fakeRepo{
+		conversionsByOrg: map[string][]chstore.ConversionEvent{"org1": {row, {EventAt: t0, Type: event.CpaHold, ClickID: "c2"}}},
+		statusByOrg: map[string][]chstore.StatusStep{"org1": {
+			{ClickID: "c1", Type: event.CpaHold, EventAt: t0},
+			{ClickID: "c1", Type: event.CpaAccept, EventAt: t0.Add(48 * time.Hour)},
+			// another organization's step for the same click id must not show up
+		}, "org2": {{ClickID: "c1", Type: event.CpaTrash, EventAt: t0}}},
+		offersByOrg: map[string]map[string]string{"org1": {"c1": "offer-3"}, "org2": {"c1": "offer-evil"}},
+	}
+	svc := conversions.NewService(repo)
+
+	res, err := svc.List(context.Background(), "org1", t0.AddDate(0, 0, -1), t0.AddDate(0, 0, 5), 0, 0)
+	if err != nil {
+		t.Fatalf("List: %v", err)
+	}
+	byClick := map[string]conversions.Conversion{}
+	for _, c := range res.Conversions {
+		byClick[c.ClickID] = c
+	}
+	c1 := byClick["c1"]
+	if c1.FlowID != "flow-1" || c1.OfferID != "offer-3" || c1.NetworkTxnID != "txn-9" || c1.UTMSource != "facebook" ||
+		c1.Sub1 != "creative-7" || c1.Sub10 != "last" || c1.Currency != "EUR" {
+		t.Fatalf("c1 = %+v, want flow/offer/txn/utm/subs filled", c1)
+	}
+	if len(c1.History) != 2 || c1.History[0].Type != event.CpaHold || c1.History[1].Type != event.CpaAccept {
+		t.Fatalf("c1.History = %+v, want HOLD then ACCEPT and nothing from org2", c1.History)
+	}
+	c2 := byClick["c2"]
+	if c2.OfferID != "" || c2.History == nil || len(c2.History) != 0 {
+		t.Fatalf("c2 = %+v, want no offer and an empty (non-nil) history", c2)
+	}
 }
 
 func TestListValidatesDateRangeAndClampsLimit(t *testing.T) {
