@@ -5,6 +5,38 @@ per-phase, matching `CLAUDE.md`'s phase protocol. The one exception is
 [Between phases], below: spec amendments and the code changes that follow from
 them land between phases and would otherwise be invisible here.
 
+## [Between phases] — the reconciliation repairs what it finds (and USD history)
+
+The hourly reconciliation now fixes ClickHouse from Postgres, event by event, instead of only
+reporting — which also closes "USD history in ClickHouse" (conversions stored before their FX
+rate existed): once `fx.RepairUSD` fills Postgres, the bucket's USD sum differs and the event
+is rewritten.
+
+- `reconcile.Repair`: in each differing bucket, a conversion missing from ClickHouse is
+  re-emitted; one with several copies or a different USD value is deleted and re-emitted once;
+  an event Postgres never recorded is deleted; rows without an event id are reported as
+  unmatched and left alone. Deletes also remove their `ltv_events` rows; the affected
+  `conversion_events_daily_campaign` rows are recomputed (`insert_deduplicate = 0`, else the
+  schema/012 window could drop a recomputed block identical to an earlier one). Capped at
+  1,000 events per run; `flox_reconciliation_repaired_events_total{action}`. On by default in
+  the worker (`Reconciler.ReportOnly()` turns it off).
+- `conversion.EventFor` rebuilds a stored conversion's event from its `postbacks` row
+  (`StoredSuccesses`) and its attributed click from `click_lookup`, through the same builder
+  as the record path — `buildEvent` now delegates to a shared `newEvent`, and the reversal is
+  applied by one `applyReversal` for both.
+- `make reconcile FROM=… TO=… [REPORT_ONLY=1]` (`apps/cmd/reconcile`): the same over any range,
+  one UTC day at a time.
+
+Tests: the rebuilt event equals the one the live `Service.Record` queued, field by field,
+for an accept and a chargeback (attribution, reversal, id). On real Postgres + ClickHouse: a
+missing accept (re-emitted with its click's campaign), a duplicated redeposit, a hold whose USD
+arrived late, an orphan event and a pre-id row → 3 re-emitted, 3 deleted, 1 unmatched;
+afterwards only the pre-id bucket differs, and `conversion_events`, `ltv_events` and the daily
+aggregate all sum to 40 USD. Live: a 10-day-old EUR conversion without USD in both stores
+showed 0 differences; after setting its USD in Postgres, `make reconcile REPORT_ONLY=1` listed
+the bucket (112.69 vs 0.00), and `make reconcile` rewrote the event (1 copy, 112.69 USD).
+Known limit: the daily rebuild is not atomic with live traffic (documented).
+
 ## [Between phases] — every event has a stable id
 
 Closes the last duplicate window RL2 left open (a write retried after its commit had in

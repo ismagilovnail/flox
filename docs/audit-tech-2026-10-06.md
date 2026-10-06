@@ -686,8 +686,8 @@ POST /postback/{networkId}
 
 Нужен ночной job сверки: `count/sum` из `postbacks WHERE result='success'`
 против `conversion_events` по `(org, day)`. При расхождении — алерт и
-переэмит. **Статус: сверка и алерт сделаны** (`internal/reconcile`, ежечасно);
-автоматического переэмита нет.
+переэмит. **Статус: сделано** — ежечасная сверка с ремонтом по `event_id`
+(`internal/reconcile`), `make reconcile` для произвольного диапазона.
 
 ---
 

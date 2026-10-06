@@ -231,6 +231,14 @@ var (
 		Help:      "Buckets where Postgres and ClickHouse conversions differ, by kind (count|usd), as of the last run.",
 	}, []string{"kind"})
 
+	// ReconciliationRepairedTotal counts ClickHouse conversion events the
+	// reconciliation rewrote from Postgres, by action (reemitted, deleted).
+	ReconciliationRepairedTotal = promauto.NewCounterVec(prometheus.CounterOpts{
+		Namespace: namespace,
+		Name:      "reconciliation_repaired_events_total",
+		Help:      "ClickHouse conversion events rewritten from Postgres by the reconciliation, by action.",
+	}, []string{"action"})
+
 	ReconciliationRunsTotal = promauto.NewCounterVec(prometheus.CounterOpts{
 		Namespace: namespace,
 		Name:      "reconciliation_runs_total",

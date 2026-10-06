@@ -10,8 +10,8 @@
 // its usd_value, a decline its reversal negated (conversion.PostgresStore).
 // Rows are bucketed on postbacks.event_at — the analytics event's own time —
 // so both sides agree on the day. The newest Settle is left out: those
-// events may still be on their way. Detection only: differences are
-// published (metrics, log) for an operator; nothing is rewritten.
+// events may still be on their way. Differences are published (metrics,
+// log) and, unless ReportOnly, repaired event by event (Repair).
 package reconcile
 
 import (
@@ -25,6 +25,8 @@ import (
 	"github.com/ClickHouse/clickhouse-go/v2/lib/driver"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/ismagilovnail/flox/apps/internal/chstore"
+	"github.com/ismagilovnail/flox/apps/internal/conversion"
 	"github.com/ismagilovnail/flox/apps/internal/metrics"
 )
 
@@ -61,10 +63,29 @@ type Reconciler struct {
 	ch     driver.Conn
 	logger *slog.Logger
 	now    func() time.Time
+
+	conversions *conversion.PostgresStore
+	events      *chstore.EventStore
+	clicks      *chstore.ClickResolver
+	// repair: RunOnce also repairs what it finds (Repair); off, it only
+	// reports.
+	repair bool
 }
 
 func New(pg *pgxpool.Pool, ch driver.Conn, logger *slog.Logger) *Reconciler {
-	return &Reconciler{pg: pg, ch: ch, logger: logger, now: time.Now}
+	return &Reconciler{
+		pg: pg, ch: ch, logger: logger, now: time.Now,
+		conversions: conversion.NewPostgresStore(pg),
+		events:      chstore.NewEventStore(ch),
+		clicks:      chstore.NewClickResolver(ch),
+		repair:      true,
+	}
+}
+
+// ReportOnly turns automatic repair off.
+func (r *Reconciler) ReportOnly() *Reconciler {
+	r.repair = false
+	return r
 }
 
 // Compare returns every bucket in [from, to) where the stores disagree, in
@@ -187,6 +208,15 @@ func (r *Reconciler) RunOnce(ctx context.Context, w Window) ([]Mismatch, error) 
 				"postgres_count", m.Postgres.Count, "clickhouse_count", m.ClickHouse.Count,
 				"postgres_usd", m.Postgres.USD, "clickhouse_usd", m.ClickHouse.USD)
 		}
+	}
+	if r.repair && len(mismatches) > 0 {
+		repaired, err := r.Repair(ctx, mismatches, from, to)
+		if err != nil {
+			metrics.ReconciliationRunsTotal.WithLabelValues("error").Inc()
+			return mismatches, fmt.Errorf("reconcile: repairing: %w", err)
+		}
+		r.logger.Info("postgres/clickhouse repair done", "reemitted", repaired.Reemitted, "deleted", repaired.Deleted,
+			"unmatched", repaired.Unmatched, "skipped", repaired.Skipped)
 	}
 	metrics.ReconciliationMismatchedBuckets.WithLabelValues("count").Set(float64(counts))
 	metrics.ReconciliationMismatchedBuckets.WithLabelValues("usd").Set(float64(usd))

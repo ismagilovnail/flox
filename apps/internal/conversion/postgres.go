@@ -236,17 +236,9 @@ func (s *PostgresStore) recordSuccess(ctx context.Context, tx pgx.Tx, e Entry) (
 		// The conversion's event is identified by its postbacks row, so
 		// the reconciliation can match and repair it row by row.
 		ev.ID = returnedID
-		if e.Reversal != nil {
-			// The decline books the accept's payout back, on the decline's
-			// own date (closed periods keep what they showed).
-			ev.Currency = e.Reversal.Currency
-			if e.Reversal.Revenue != nil {
-				ev.Revenue = -*e.Reversal.Revenue
-			}
-			if e.Reversal.USDValue != nil {
-				ev.USDValue, ev.HasUSDValue = -*e.Reversal.USDValue, true
-			}
-		}
+		// The decline books the accept's payout back, on the decline's own
+		// date (closed periods keep what they showed).
+		applyReversal(&ev, e.Reversal)
 		if err := eventqueue.InsertTx(ctx, tx, []event.Event{ev}); err != nil {
 			return Recorded{}, fmt.Errorf("conversion: queueing cpa event: %w", err)
 		}
@@ -427,4 +419,43 @@ func describeAmount(amount *float64, currency string) string {
 		return " (none recorded)"
 	}
 	return fmt.Sprintf(" %s %s", strconv.FormatFloat(*amount, 'f', -1, 64), currency)
+}
+
+// StoredSuccesses reads the recorded incoming successes of one organization
+// and status with event_at in [from, to) — what internal/reconcile rebuilds
+// ClickHouse events from.
+func (s *PostgresStore) StoredSuccesses(ctx context.Context, organizationID string, status event.Type, from, to time.Time) ([]StoredConversion, error) {
+	rows, err := s.db.Query(ctx, `
+		SELECT id, organization_id, network_id, click_id, status, event_ref, network_txn_id,
+		       revenue::float8, currency, usd_value::float8,
+		       reversal_revenue::float8, reversal_currency, reversal_usd_value::float8,
+		       attribution_outcome, attribution_method, attributed_click_id, time_to_conversion_ms, event_at
+		FROM postbacks
+		WHERE organization_id = $1 AND status = $2 AND result = 'success' AND direction = 'incoming'
+		  AND event_at >= $3 AND event_at < $4`,
+		organizationID, string(status), from, to)
+	if err != nil {
+		return nil, fmt.Errorf("conversion: reading stored successes: %w", err)
+	}
+	defer rows.Close()
+	var out []StoredConversion
+	for rows.Next() {
+		var (
+			c                  StoredConversion
+			st                 string
+			revRevenue, revUSD *float64
+			revCurrency        string
+		)
+		if err := rows.Scan(&c.ID, &c.OrganizationID, &c.NetworkID, &c.ClickID, &st, &c.EventRef, &c.NetworkTxnID,
+			&c.Revenue, &c.Currency, &c.USDValue, &revRevenue, &revCurrency, &revUSD,
+			&c.AttributionOutcome, &c.AttributionMethod, &c.AttributedClickID, &c.TimeToConversionMS, &c.EventAt); err != nil {
+			return nil, fmt.Errorf("conversion: scanning stored success: %w", err)
+		}
+		c.Status = event.Type(st)
+		if revRevenue != nil || revUSD != nil {
+			c.Reversal = &Reversal{Revenue: revRevenue, Currency: revCurrency, USDValue: revUSD}
+		}
+		out = append(out, c)
+	}
+	return out, rows.Err()
 }

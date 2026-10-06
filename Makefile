@@ -33,7 +33,7 @@ DATABASE_URL ?= postgres://flox:flox@localhost:5432/flox?sslmode=disable
         up down restart status build \
         logs infra-logs api-logs tracker-logs worker-logs web-logs \
         api-restart tracker-restart worker-restart web-restart \
-        migrate-up migrate-down migrate-status dev-reset fixtures \
+        migrate-up migrate-down migrate-status dev-reset fixtures reconcile \
         test-stack-up test-stack-down test-stack-restart test-stack-logs \
         fmt vet test lint check clean
 
@@ -139,6 +139,10 @@ dev-reset: ## DESTRUCTIVE: wipe all dev data (make dev-reset CONFIRM=yes)
 
 fixtures: ## Create dev accounts + demo data in an empty database (apps/cmd/devfixtures)
 	cd $(GO_DIR) && go run ./cmd/devfixtures
+
+reconcile: ## Compare+repair ClickHouse conversions vs Postgres: make reconcile FROM=YYYY-MM-DD TO=YYYY-MM-DD [REPORT_ONLY=1]
+	@if [ -z "$(FROM)" ] || [ -z "$(TO)" ]; then echo "usage: make reconcile FROM=YYYY-MM-DD TO=YYYY-MM-DD [REPORT_ONLY=1]"; exit 1; fi
+	cd $(GO_DIR) && go run ./cmd/reconcile -from $(FROM) -to $(TO) $(if $(REPORT_ONLY),-report-only,)
 
 # --- Full containerized stack (infra/docker-compose.test.yml) --------------
 # Production-target build of all 8 §61 services (no hot reload) — its own

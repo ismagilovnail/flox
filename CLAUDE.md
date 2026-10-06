@@ -38,19 +38,18 @@ STATUS        : P0 code items + P1 (RL1/A1/RL4, CH1/DB1, Q2, metrics) done: Q1 q
                 T4/AN3 a chargeback reverses the FTD payout on the decline's
                 date (reports + LTV); hourly Postgres↔ClickHouse conversion
                 reconciliation (internal/reconcile) with alerts; stable event
-                ids (event_queue idempotent, ClickHouse event_id).
+                ids (event_queue idempotent, ClickHouse event_id); the
+                reconciliation repairs ClickHouse event by event (also USD
+                history); `make reconcile` for any range.
                 Technical audit is docs/audit-tech-2026-10-06.md; the user asked
                 to fix it step by step and allowed wiping the dev database when
                 a step needs it.
-LAST COMMIT   : feat(events): give every event a stable id.
+LAST COMMIT   : feat(reconcile): repair ClickHouse conversions from Postgres.
 UNCOMMITTED   : none expected. Dev DB wiped and refilled by `make fixtures`
                 (accounts in README; password flox-demo-2026).
 NEXT          : P0 code items done. CI (DO1) is the user's own decision — do
                 not set it up. Confirm the next slice with the user. Open
-                follow-ups: re-emitting events the reconciliation finds
-                missing, error tracking (Sentry); USD
-                repair of pre-sync conversions in ClickHouse (docs/fx.md);
-                (stable event id done).
+                follow-ups: error tracking (Sentry).
                 Marketer audit items (docs/audit-marketer-2026-10-06.md) are
                 still open behind them. Run go test with the full env line AND
                 check e2e did not skip on the auth rate limit (memory:

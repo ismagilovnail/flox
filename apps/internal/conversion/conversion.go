@@ -576,16 +576,43 @@ func (s *Service) logIgnored(ctx context.Context, p Postback, clickID string, st
 }
 
 func buildEvent(p Postback, attr attribution.Attribution, status event.Type, eventRef string, revenue, usdValue *float64) event.Event {
-	ev := event.Event{
-		Type:           status,
-		EventAt:        p.OccurredAt,
+	return newEvent(eventInput{
 		OrganizationID: p.OrganizationID,
 		ClickID:        strings.TrimSpace(p.ClickID),
 		NetworkID:      p.NetworkID,
+		Status:         status,
+		EventRef:       eventRef,
+		NetworkTxnID:   strings.TrimSpace(p.NetworkTxnID),
+		Currency:       strings.TrimSpace(p.Currency),
+		Revenue:        revenue,
+		USDValue:       usdValue,
+		At:             p.OccurredAt,
+	}, attr)
+}
 
-		Currency:     strings.TrimSpace(p.Currency),
-		EventRef:     eventRef,
-		NetworkTxnID: strings.TrimSpace(p.NetworkTxnID),
+// eventInput is what a CPA event is built from — a live postback (buildEvent)
+// or a stored one (EventFor): one builder, so a repaired event is exactly
+// the one the record path would have queued.
+type eventInput struct {
+	OrganizationID, ClickID, NetworkID string
+	Status                             event.Type
+	EventRef, NetworkTxnID, Currency   string
+	Revenue, USDValue                  *float64
+	At                                 time.Time
+}
+
+func newEvent(in eventInput, attr attribution.Attribution) event.Event {
+	status, revenue, usdValue := in.Status, in.Revenue, in.USDValue
+	ev := event.Event{
+		Type:           status,
+		EventAt:        in.At,
+		OrganizationID: in.OrganizationID,
+		ClickID:        in.ClickID,
+		NetworkID:      in.NetworkID,
+
+		Currency:     in.Currency,
+		EventRef:     in.EventRef,
+		NetworkTxnID: in.NetworkTxnID,
 
 		AttributionOutcome: string(attr.Outcome),
 		AttributionMethod:  string(attr.Method),
@@ -661,4 +688,68 @@ func eventRefFor(status event.Type, networkTxnID string) string {
 // already been decided once.
 func refusesProgression(last event.Type, hasLast bool, next event.Type) bool {
 	return hasLast && next == event.CpaHold && last != event.CpaHold
+}
+
+// applyReversal books a decline's reversal on its event: the accept's
+// payout, negated, in the accept's currency (conversion.PostgresStore and
+// EventFor).
+func applyReversal(ev *event.Event, r *Reversal) {
+	if r == nil {
+		return
+	}
+	ev.Currency = r.Currency
+	if r.Revenue != nil {
+		ev.Revenue = -*r.Revenue
+	}
+	if r.USDValue != nil {
+		ev.USDValue, ev.HasUSDValue = -*r.USDValue, true
+	}
+}
+
+// StoredConversion is a recorded success row as Postgres keeps it
+// (PostgresStore.StoredSuccesses) — enough to rebuild its CPA event.
+type StoredConversion struct {
+	ID, OrganizationID, NetworkID, ClickID string
+	Status                                 event.Type
+	EventRef, NetworkTxnID, Currency       string
+	Revenue, USDValue                      *float64
+	Reversal                               *Reversal
+	AttributionOutcome, AttributionMethod  string
+	AttributedClickID                      string
+	TimeToConversionMS                     *int64
+	EventAt                                time.Time
+}
+
+// EventFor rebuilds the CPA event a stored conversion queued when it was
+// recorded — same builder, same reversal rule, same id (its postbacks row) —
+// for the reconciliation to put back what ClickHouse lost or garbled.
+// click is the attributed click (nil when there was none or it is gone).
+func EventFor(c StoredConversion, click *attribution.Click) event.Event {
+	attr := attribution.Attribution{
+		Outcome: attribution.Outcome(c.AttributionOutcome),
+		Method:  attribution.Method(c.AttributionMethod),
+	}
+	if c.TimeToConversionMS != nil {
+		attr.TimeToConversion = time.Duration(*c.TimeToConversionMS) * time.Millisecond
+	}
+	if click != nil {
+		attr.Click = *click
+	} else if attr.Outcome.Attributed() {
+		attr.Outcome = attribution.OutcomeUnknownClick // dimensions cannot be restored
+	}
+	ev := newEvent(eventInput{
+		OrganizationID: c.OrganizationID,
+		ClickID:        c.ClickID,
+		NetworkID:      c.NetworkID,
+		Status:         c.Status,
+		EventRef:       c.EventRef,
+		NetworkTxnID:   c.NetworkTxnID,
+		Currency:       c.Currency,
+		Revenue:        c.Revenue,
+		USDValue:       c.USDValue,
+		At:             c.EventAt,
+	}, attr)
+	applyReversal(&ev, c.Reversal)
+	ev.ID = c.ID
+	return ev
 }

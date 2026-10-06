@@ -45,11 +45,11 @@ arrived before the first sync, or while the provider was down).
 Costs are read from Postgres only, so ROI is right as soon as the repair
 runs. **The ClickHouse copy of a conversion (`conversion_events`, and the
 `ltv_events` / `conversion_events_daily_campaign` views built from it) is
-not repaired** — it keeps `has_usd_value = 0`. Fixing it means rewriting
-those rows and rebuilding the affected days of the views built from them;
-that is a separate, still open follow-up. With rates synced continuously
-this only affects conversions recorded before the first sync or during a
-provider outage longer than 7 days.
+not repaired by this step** — it keeps `has_usd_value = 0` until the
+reconciliation sees the bucket's USD sum differ and rewrites the event from
+Postgres (`docs/analytics-pipeline.md`, "Reconciliation"). The worker does
+that for the last 3 days every hour; for older days run
+`make reconcile FROM=… TO=…` once the rates are in.
 
 ## Monitoring
 

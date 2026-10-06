@@ -169,12 +169,39 @@ query uses `created_at`).
 
 Each differing bucket is logged as "conversions differ between postgres and
 clickhouse" (at most 20 per run) and counted in
-`flox_reconciliation_mismatched_buckets{kind=count|usd}`; alerts
-`ConversionsDiverge` (two runs in a row) and `ReconciliationNotRunning`.
-Detection only — a missing or duplicated event is not rewritten. Usual
-causes, in order: a dead-lettered batch (`flox_queue_rows{status="dead"}`,
-see "Backoff and dead-letter"), a queue backlog older than 30 minutes, a
-retried event write whose commit had landed (RL2's remaining window).
+`flox_reconciliation_mismatched_buckets{kind=count|usd}` (as found, before
+repair); alerts `ConversionsDiverge` (two runs in a row — i.e. repair is not
+fixing it) and `ReconciliationNotRunning`. Usual causes: a dead-lettered
+batch (`flox_queue_rows{status="dead"}`), a queue backlog older than 30
+minutes, a retried event write whose commit had landed, an FX rate that
+arrived after the conversion.
+
+### Repair
+
+Every event has a stable id (`event.Event.ID`; a conversion's is its
+`postbacks` row id, stored as `event_id` in `conversion_events` and
+`ltv_events`). For each differing bucket `reconcile.Repair` compares event by
+event: a conversion missing from ClickHouse is re-emitted; one with several
+copies or a different USD value has every copy deleted and is re-emitted
+once; an event Postgres never recorded is deleted. The event is rebuilt by
+`conversion.EventFor` from the `postbacks` row and the attributed click
+(`click_lookup`) — the same builder the record path uses, verified field by
+field (`TestEventForRebuildsTheQueuedEvent`). Deleted events take their
+`ltv_events` rows with them; the affected rows of
+`conversion_events_daily_campaign` are recomputed from the corrected
+events (`insert_deduplicate = 0`, or the window from schema/012 could drop a
+recomputed block identical to an earlier one). At most 1,000 events per run
+(`MaxRepairsPerRun`); `flox_reconciliation_repaired_events_total{action}`.
+
+Not repairable: rows written before event ids existed (`event_id = ''`) —
+reported as unmatched, left alone. The daily rebuild is not atomic with live
+traffic: a conversion of the same campaign and day inserted between its
+delete and re-insert is counted twice there (repairs only touch days at
+least 30 minutes old; the next run reports it).
+
+Outside the 3-day window: `make reconcile FROM=YYYY-MM-DD TO=YYYY-MM-DD
+[REPORT_ONLY=1]` (`apps/cmd/reconcile`, same env as the worker), one UTC day
+at a time.
 
 ## `click_lookup`: clicks by id (audit 2026-10-06, CH1)
 
