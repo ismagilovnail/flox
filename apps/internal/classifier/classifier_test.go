@@ -79,7 +79,7 @@ func TestClassify_WiresProvidersAndUAIntoRoutingAttributes(t *testing.T) {
 		routing.FieldOSVersion:      "17.4",
 		routing.FieldBrowser:        "safari",
 		routing.FieldBrowserVersion: "17.4",
-		routing.FieldLanguage:       "en-US",
+		routing.FieldLanguage:       "en",
 		routing.FieldBot:            "0",
 		routing.FieldProxy:          "0",
 		routing.FieldASN:            "AS15169",
@@ -107,5 +107,26 @@ func TestClassify_DefaultsWhenNoProvidersInjected(t *testing.T) {
 	}
 	if attrs[routing.FieldBot] != "1" {
 		t.Errorf("want bot=1 for curl via HeuristicBotDetector, got %q", attrs[routing.FieldBot])
+	}
+}
+
+func TestClassify_LanguageIsTheLowercaseLanguageSubtag(t *testing.T) {
+	c := classifier.New(nil, nil, nil)
+	for in, want := range map[string]string{
+		"en-US,en;q=0.9,de;q=0.8": "en",
+		"ru-RU,ru;q=0.9":          "ru",
+		"UK":                      "uk",
+		"pt_BR":                   "pt",
+		"zh-Hant-TW;q=0.7":        "zh",
+		"  de  ":                  "de",
+		"":                        "",
+	} {
+		attrs, err := c.Classify(context.Background(), classifier.Input{IP: net.ParseIP("8.8.8.8"), AcceptLanguage: in})
+		if err != nil {
+			t.Fatalf("Classify(%q): %v", in, err)
+		}
+		if got := attrs[routing.FieldLanguage]; got != want {
+			t.Errorf("language for Accept-Language %q = %q, want %q", in, got, want)
+		}
 	}
 }

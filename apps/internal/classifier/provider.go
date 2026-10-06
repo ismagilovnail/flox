@@ -7,7 +7,7 @@
 // CLAUDE.md non-negotiable #11 — "no vendor lock-in"); User-Agent parsing
 // into the small fixed vocabulary the frontend and routing.FilterField
 // already use (mobile/desktop/tablet, ios/android/windows/macos/linux,
-// chrome/safari/firefox/edge/samsung_internet/other) is done locally with
+// chrome/safari/firefox/edge/opera/yandex/vivaldi/uc_browser/samsung_internet/huawei_browser/mi_browser/duckduckgo/ie/other) is done locally with
 // Go's stdlib regexp (RE2 only, CLAUDE.md non-negotiable #8) — no external
 // UA-parsing dependency, since the target vocabulary is already this
 // small and fixed.

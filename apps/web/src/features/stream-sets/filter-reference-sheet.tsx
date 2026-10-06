@@ -138,9 +138,9 @@ export function FilterReferenceSheet({ open, onOpenChange }: { open: boolean; on
             <FieldEntry id="os">Операционная система: ios, android, windows, macos, linux.</FieldEntry>
             <FieldEntry id="os_version">Версия ОС, свободный текст.</FieldEntry>
             <FieldEntry id="platform">Платформа устройства (тот же словарь, что и os).</FieldEntry>
-            <FieldEntry id="browser">Браузер: chrome, safari, firefox, edge, samsung_internet, other.</FieldEntry>
+            <FieldEntry id="browser">Браузер: chrome, safari, firefox, edge, opera, yandex, vivaldi, uc_browser, samsung_internet, huawei_browser, mi_browser, duckduckgo, ie, other. Brave по User-Agent неотличим от Chrome и считается как chrome.</FieldEntry>
             <FieldEntry id="browser_version">Версия браузера, свободный текст.</FieldEntry>
-            <FieldEntry id="language">Язык браузера (Accept-Language), например RU, EN, UK.</FieldEntry>
+            <FieldEntry id="language">Основной язык браузера (Accept-Language) в виде кода: ru, en, uk. Регион отбрасывается: ru-RU это ru.</FieldEntry>
           </Section>
 
           <Section title="Параметры отслеживания">

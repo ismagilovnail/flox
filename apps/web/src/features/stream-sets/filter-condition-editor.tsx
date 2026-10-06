@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input";
 import { MultiSelect } from "@/components/ui/multi-select";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { countryOptions } from "@/lib/countries";
+import { languageOptions } from "@/lib/languages";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   BOOLEAN_FLAG_FIELDS,
@@ -45,7 +46,12 @@ function ValueInput({
   language: string;
 }) {
   const { field, operator, value, valueTo } = condition;
-  const countries = React.useMemo(() => (field === "country" ? countryOptions(language) : []), [field, language]);
+  // Country and language: a searchable list instead of free text.
+  const listOptions = React.useMemo(
+    () => (field === "country" ? countryOptions(language) : field === "language" ? languageOptions(language) : []),
+    [field, language],
+  );
+  const hasList = field === "country" || field === "language";
 
   if (OPERATORS_WITHOUT_VALUE.includes(operator)) {
     return (
@@ -75,28 +81,31 @@ function ValueInput({
     );
   }
 
-  // Country: a searchable list of every ISO country for the exact-match
-  // operators (one country for IS / IS NOT, several for IN / NOT IN). The
-  // pattern operators (CONTAINS, MATCHES, ...) keep the free-text input below.
-  if (field === "country" && MULTI_VALUE_OPERATORS.includes(operator)) {
+  // Country / language: a searchable list of every ISO country or language
+  // for the exact-match operators (one for IS / IS NOT, several for IN /
+  // NOT IN). The pattern operators (CONTAINS, MATCHES, ...) keep the
+  // free-text input below. Values are stored in the form routing compares
+  // them in: upper-case country codes, lower-case language codes.
+  const normalize = (v: string) => (field === "country" ? v.trim().toUpperCase() : v.trim().toLowerCase());
+  if (hasList && MULTI_VALUE_OPERATORS.includes(operator)) {
     return (
       <MultiSelect
-        label={t("filters.countryLabel", { ns: "streamSets" })}
-        options={countries}
-        selected={value.split(",").map((v) => v.trim().toUpperCase()).filter(Boolean)}
+        label={t(field === "country" ? "filters.countryLabel" : "filters.languageLabel", { ns: "streamSets" })}
+        options={listOptions}
+        selected={value.split(",").map(normalize).filter(Boolean)}
         onChange={(values) => onChange({ value: values.join(", ") })}
         className="h-7 w-56"
       />
     );
   }
-  if (field === "country" && (operator === "IS" || operator === "IS_NOT")) {
+  if (hasList && (operator === "IS" || operator === "IS_NOT")) {
     return (
       <SearchableSelect
-        options={countries}
-        value={value.trim().toUpperCase()}
+        options={listOptions}
+        value={normalize(value)}
         onChange={(v) => onChange({ value: v })}
         placeholder={t("filters.selectPlaceholder", { ns: "streamSets" })}
-        searchPlaceholder={t("filters.countrySearchPlaceholder", { ns: "streamSets" })}
+        searchPlaceholder={t(field === "country" ? "filters.countrySearchPlaceholder" : "filters.languageSearchPlaceholder", { ns: "streamSets" })}
         className="h-7 w-56"
       />
     );

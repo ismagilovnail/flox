@@ -5,6 +5,29 @@ per-phase, matching `CLAUDE.md`'s phase protocol. The one exception is
 [Between phases], below: spec amendments and the code changes that follow from
 them land between phases and would otherwise be invisible here.
 
+## [Between phases] — language dropdown, more browsers, `language` now matches
+
+Language dropdown: the `language` condition of a stream-set filter is a searchable
+list of ISO 639-1 languages ("RU — русский", names from `Intl.DisplayNames`, CIS and
+major traffic languages first), single for IS / IS NOT and multiple for IN / NOT IN,
+like the country list (`lib/languages.ts`).
+
+Behaviour fix behind it: the classifier stored the whole first Accept-Language tag
+("ru-RU", "en-US") while routing compares literally, so "language IS ru" matched no
+real browser. `primaryLanguage` now reduces it to the lowercase language subtag
+("ru-RU" -> "ru"), as the filter docs always said (RU, EN, UK). Consequences: a
+filter that was written against a full tag ("en-US") stops matching, and the
+`language` analytics/click-log value is "en" instead of "en-US" for new events
+(old events keep what they were stored with).
+
+More browsers: the classifier and the `browser` filter list now know Opera, Yandex
+Browser, Vivaldi, UC Browser, Huawei Browser, Mi Browser, DuckDuckGo and Internet
+Explorer next to Chrome, Safari, Firefox, Edge and Samsung Internet (all of the new
+ones carry a `Chrome/` token, so they are matched before Chrome). Brave sends a
+Chrome-identical User-Agent and cannot be told apart: it counts as chrome. Tests:
+`TestClassify_LanguageIsTheLowercaseLanguageSubtag` and a user-agent case per new
+browser.
+
 ## [Between phases] — `region` and `city` removed from the stream-set filter list
 
 The filter builder no longer offers `region` or `city` (nor does the filter

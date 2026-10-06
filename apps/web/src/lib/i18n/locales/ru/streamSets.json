@@ -49,7 +49,15 @@
         "safari": "Safari",
         "firefox": "Firefox",
         "edge": "Edge",
+        "opera": "Opera",
+        "yandex": "Yandex Browser",
+        "vivaldi": "Vivaldi",
+        "uc_browser": "UC Browser",
         "samsung_internet": "Samsung Internet",
+        "huawei_browser": "Huawei Browser",
+        "mi_browser": "Mi Browser",
+        "duckduckgo": "DuckDuckGo",
+        "ie": "Internet Explorer",
         "other": "Другой"
       },
       "connection_type": {
@@ -72,7 +80,9 @@
     "valuePlaceholder": "значение",
     "removeConditionAria": "Удалить условие",
     "countryLabel": "Страна",
-    "countrySearchPlaceholder": "Поиск страны..."
+    "countrySearchPlaceholder": "Поиск страны...",
+    "languageLabel": "Язык",
+    "languageSearchPlaceholder": "Поиск языка..."
   },
   "filterPicker": {
     "title": "Настроить фильтры набора",

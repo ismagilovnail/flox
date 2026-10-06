@@ -19,7 +19,7 @@ type UAResult struct {
 	Platform       string // "ios" | "android" | "windows" | "macos" | "linux"
 	OS             string // same vocabulary/value as Platform — the frontend treats them as one vocabulary
 	OSVersion      string
-	Browser        string // "chrome" | "safari" | "firefox" | "edge" | "samsung_internet" | "other"
+	Browser        string // "chrome" | "safari" | "firefox" | "edge" | "opera" | "yandex" | "vivaldi" | "uc_browser" | "samsung_internet" | "huawei_browser" | "mi_browser" | "duckduckgo" | "ie" | "other"
 	BrowserVersion string
 }
 
@@ -31,6 +31,14 @@ var (
 
 	reEdgeVersion    = regexp.MustCompile(`Edg(?:A|iOS)?/([\d.]+)`)
 	reSamsungVersion = regexp.MustCompile(`SamsungBrowser/([\d.]+)`)
+	reOperaVersion   = regexp.MustCompile(`(?:OPR|OPT|OPiOS)/([\d.]+)`)
+	reYandexVersion  = regexp.MustCompile(`YaBrowser/([\d.]+)`)
+	reVivaldiVersion = regexp.MustCompile(`Vivaldi/([\d.]+)`)
+	reUCVersion      = regexp.MustCompile(`UCBrowser/([\d.]+)`)
+	reHuaweiVersion  = regexp.MustCompile(`HuaweiBrowser/([\d.]+)`)
+	reMiVersion      = regexp.MustCompile(`MiuiBrowser/([\d.]+)`)
+	reDDGVersion     = regexp.MustCompile(`(?:DuckDuckGo|Ddg)/([\d.]+)`)
+	reIEVersion      = regexp.MustCompile(`(?:MSIE |rv:)([\d.]+)`)
 	reChromeVersion  = regexp.MustCompile(`Chrome/([\d.]+)`)
 	reFirefoxVersion = regexp.MustCompile(`Firefox/([\d.]+)`)
 	reSafariVersion  = regexp.MustCompile(`Version/([\d.]+)`) // Safari doesn't version itself in "Safari/", it uses "Version/"
@@ -103,22 +111,40 @@ func classifyOSVersion(ua string) string {
 	return ""
 }
 
-// classifyBrowser checks Edge and Samsung Internet before Chrome, and
-// Chrome before Safari, because all three embed "Chrome/" and/or
-// "Safari/" tokens in their own User-Agent strings (they're Chromium- or
-// WebKit-based) — order is the whole trick here.
+// classifyBrowser checks every browser that embeds "Chrome/" and/or
+// "Safari/" in its own User-Agent string (Edge, Opera, Yandex, Vivaldi, UC,
+// Samsung, Huawei, Mi, DuckDuckGo are Chromium- or WebKit-based) before
+// Chrome, and Chrome before Safari — order is the whole trick here. Brave is
+// deliberately absent: its User-Agent is identical to Chrome's, so it cannot
+// be told apart and is counted as Chrome rather than guessed.
 func classifyBrowser(ua string) string {
 	switch {
 	case strings.Contains(ua, "Edg/"), strings.Contains(ua, "EdgA/"), strings.Contains(ua, "EdgiOS/"):
 		return "edge"
+	case strings.Contains(ua, "OPR/"), strings.Contains(ua, "OPT/"), strings.Contains(ua, "OPiOS/"):
+		return "opera"
+	case strings.Contains(ua, "YaBrowser/"):
+		return "yandex"
+	case strings.Contains(ua, "Vivaldi/"):
+		return "vivaldi"
+	case strings.Contains(ua, "UCBrowser/"):
+		return "uc_browser"
 	case strings.Contains(ua, "SamsungBrowser/"):
 		return "samsung_internet"
+	case strings.Contains(ua, "HuaweiBrowser/"):
+		return "huawei_browser"
+	case strings.Contains(ua, "MiuiBrowser/"):
+		return "mi_browser"
+	case strings.Contains(ua, "DuckDuckGo/"), strings.Contains(ua, "Ddg/"):
+		return "duckduckgo"
 	case strings.Contains(ua, "Chrome/"), strings.Contains(ua, "CriOS/"):
 		return "chrome"
 	case strings.Contains(ua, "Firefox/"), strings.Contains(ua, "FxiOS/"):
 		return "firefox"
 	case strings.Contains(ua, "Safari/"):
 		return "safari"
+	case strings.Contains(ua, "MSIE "), strings.Contains(ua, "Trident/"):
+		return "ie"
 	case ua == "":
 		return ""
 	default:
@@ -136,6 +162,22 @@ func classifyBrowserVersion(ua string) string {
 		if m := reSamsungVersion.FindStringSubmatch(ua); m != nil {
 			return m[1]
 		}
+	case "opera":
+		return firstGroup(reOperaVersion, ua)
+	case "yandex":
+		return firstGroup(reYandexVersion, ua)
+	case "vivaldi":
+		return firstGroup(reVivaldiVersion, ua)
+	case "uc_browser":
+		return firstGroup(reUCVersion, ua)
+	case "huawei_browser":
+		return firstGroup(reHuaweiVersion, ua)
+	case "mi_browser":
+		return firstGroup(reMiVersion, ua)
+	case "duckduckgo":
+		return firstGroup(reDDGVersion, ua)
+	case "ie":
+		return firstGroup(reIEVersion, ua)
 	case "chrome":
 		if m := reChromeVersion.FindStringSubmatch(ua); m != nil {
 			return m[1]
@@ -148,6 +190,14 @@ func classifyBrowserVersion(ua string) string {
 		if m := reSafariVersion.FindStringSubmatch(ua); m != nil {
 			return m[1]
 		}
+	}
+	return ""
+}
+
+// firstGroup is the first capture group of re in ua, or "" when it doesn't match.
+func firstGroup(re *regexp.Regexp, ua string) string {
+	if m := re.FindStringSubmatch(ua); m != nil {
+		return m[1]
 	}
 	return ""
 }
