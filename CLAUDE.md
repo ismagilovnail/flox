@@ -33,9 +33,13 @@ STATUS        : steps 1–8 of the P0 list done: Q1 queue claims never abandoned
 LAST COMMIT   : fix(eventbuf): retry failed event writes.
 UNCOMMITTED   : none expected. Dev DB wiped and refilled by `make fixtures`
                 (accounts in README; password flox-demo-2026).
-NEXT          : DO1 CI (isolate the queue tests from the live dev worker:
-                eventqueue TestEnqueueClaimAndDelete, postback
-                TestPostgresStoreClaimRespectsLimit). Then open follow-ups: USD
+NEXT          : P0 code items done. CI (DO1) is the user's own decision — do
+                not set it up. Confirm the next slice with the user. Open:
+                isolate the queue tests from the live dev worker (eventqueue
+                TestEnqueueClaimAndDelete, postback
+                TestPostgresStoreClaimRespectsLimit); audit P1 (config cache
+                RL1/A1, CH1 click lookup, DB1 postbacks index, RL4 tracker
+                readiness, Q2 dead-letter, metrics); follow-ups: USD
                 repair of pre-sync conversions in ClickHouse (docs/fx.md);
                 T4/AN3 §45 chargeback (ACCEPT→DECLINE) must reverse revenue;
                 stable per-event id so a retried write whose commit actually
