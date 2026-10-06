@@ -5,6 +5,11 @@ per-phase, matching `CLAUDE.md`'s phase protocol. The one exception is
 [Between phases], below: spec amendments and the code changes that follow from
 them land between phases and would otherwise be invisible here.
 
+## [Between phases] — no search box on a campaign's tracking links
+
+`DataTable` gets `enableSearch` (default true, so every other table keeps its
+search); the tracking-links table on the campaign page turns it off.
+
 ## [Between phases] — "Статистика кампании" link
 
 Campaigns get the same drill-in the other directories have: an icon button in each

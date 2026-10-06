@@ -181,6 +181,7 @@ function DataTable<TData extends Record<string, unknown>>({
   columns,
   data,
   searchPlaceholder,
+  enableSearch = true,
   emptyTitle,
   emptyDescription,
   pageSize = 20,
@@ -203,6 +204,8 @@ function DataTable<TData extends Record<string, unknown>>({
   columns: ColumnDef<typeof dataTableFeatures, TData>[]
   data: TData[]
   searchPlaceholder?: string
+  /** Set false to drop the search box (a short list where searching adds nothing). Every other table keeps it. */
+  enableSearch?: boolean
   emptyTitle?: string
   emptyDescription?: string
   pageSize?: number
@@ -409,15 +412,17 @@ function DataTable<TData extends Record<string, unknown>>({
 
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex flex-wrap items-center gap-2">
-          <div className="relative w-64">
-            <SearchIcon className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              value={globalFilter}
-              onChange={(e) => setGlobalFilter(e.target.value)}
-              placeholder={searchPlaceholder ?? t("dataTable.searchPlaceholder")}
-              className="h-8 pl-8"
-            />
-          </div>
+          {enableSearch && (
+            <div className="relative w-64">
+              <SearchIcon className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                value={globalFilter}
+                onChange={(e) => setGlobalFilter(e.target.value)}
+                placeholder={searchPlaceholder ?? t("dataTable.searchPlaceholder")}
+                className="h-8 pl-8"
+              />
+            </div>
+          )}
           {filters}
         </div>
         <div className="flex items-center gap-2">
