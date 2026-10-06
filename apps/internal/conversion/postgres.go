@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -173,14 +174,30 @@ func (s *PostgresStore) recordSuccess(ctx context.Context, tx pgx.Tx, e Entry) (
 		return Recorded{ID: id, Kind: ResultIgnored, Message: msg}, nil
 	}
 
+	if reversesAccept(e.Status) {
+		rev, ok, err := acceptToReverse(ctx, tx, e.OrganizationID, e.ClickID)
+		if err != nil {
+			return Recorded{}, err
+		}
+		if ok {
+			e.Reversal = &rev
+			e.Message = strings.TrimSpace(e.Message + "; reverses the CPA_ACCEPT payout" + describeAmount(rev.Revenue, rev.Currency))
+		}
+	}
+	var revRevenue, revUSD *float64
+	revCurrency := ""
+	if e.Reversal != nil {
+		revRevenue, revUSD, revCurrency = e.Reversal.Revenue, e.Reversal.USDValue, e.Reversal.Currency
+	}
+
 	// created_at is the moment of the write, not the column default now()
 	// (the transaction's START): LastStatus orders by it, and a transaction
 	// that began first but got the lock second must still sort last.
 	id := idgen.New()
 	var returnedID string
 	err = tx.QueryRow(ctx, `
-		INSERT INTO postbacks (`+insertColumns+`, created_at)
-		VALUES ($1,$2,$3,$4,$5,'incoming','success',$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17, clock_timestamp())
+		INSERT INTO postbacks (`+insertColumns+`, created_at, reversal_revenue, reversal_currency, reversal_usd_value)
+		VALUES ($1,$2,$3,$4,$5,'incoming','success',$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17, clock_timestamp(), $18, $19, $20)
 		ON CONFLICT (organization_id, click_id, status, event_ref)
 			WHERE NOT network_accepts_duplicates AND result = 'success'
 		DO NOTHING
@@ -189,6 +206,7 @@ func (s *PostgresStore) recordSuccess(ctx context.Context, tx pgx.Tx, e Entry) (
 		e.AcceptDuplicates, e.EventRef, e.NetworkTxnID, e.RawStatus,
 		e.Revenue, e.Currency, e.USDValue, e.AttributionOutcome,
 		e.AttributedClickID, e.AttributionMethod, e.TimeToConversionMS, e.Message,
+		revRevenue, revCurrency, revUSD,
 	).Scan(&returnedID)
 
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -206,7 +224,19 @@ func (s *PostgresStore) recordSuccess(ctx context.Context, tx pgx.Tx, e Entry) (
 	// The outbox: the CPA event and the outgoing postback commit with the
 	// row or not at all (audit 2026-10-06, D1).
 	if e.Event != nil {
-		if err := eventqueue.InsertTx(ctx, tx, []event.Event{*e.Event}); err != nil {
+		ev := *e.Event
+		if e.Reversal != nil {
+			// The decline books the accept's payout back, on the decline's
+			// own date (closed periods keep what they showed).
+			ev.Currency = e.Reversal.Currency
+			if e.Reversal.Revenue != nil {
+				ev.Revenue = -*e.Reversal.Revenue
+			}
+			if e.Reversal.USDValue != nil {
+				ev.USDValue, ev.HasUSDValue = -*e.Reversal.USDValue, true
+			}
+		}
+		if err := eventqueue.InsertTx(ctx, tx, []event.Event{ev}); err != nil {
 			return Recorded{}, fmt.Errorf("conversion: queueing cpa event: %w", err)
 		}
 	}
@@ -347,4 +377,43 @@ func (f *PostgresFX) ToUSD(ctx context.Context, currency string, amount float64,
 		return 0, false, fmt.Errorf("conversion: querying fx rate: %w", err)
 	}
 	return amount * rate, true, nil
+}
+
+// acceptToReverse finds the payout a decline takes back: the click's latest
+// decision among CPA_ACCEPT / CPA_DECLINE / CPA_TRASH must be an accept —
+// one already declined has nothing left to reverse. Runs under the click's
+// lock (recordSuccess).
+func acceptToReverse(ctx context.Context, q querier, organizationID, clickID string) (Reversal, bool, error) {
+	var (
+		status   string
+		rev      Reversal
+		revenue  *float64
+		usdValue *float64
+	)
+	err := q.QueryRow(ctx, `
+		SELECT status, revenue::float8, currency, usd_value::float8 FROM postbacks
+		WHERE organization_id = $1 AND click_id = $2 AND result = 'success'
+		  AND status IN ('CPA_ACCEPT', 'CPA_DECLINE', 'CPA_TRASH')
+		ORDER BY created_at DESC
+		LIMIT 1`,
+		organizationID, clickID,
+	).Scan(&status, &revenue, &rev.Currency, &usdValue)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return Reversal{}, false, nil
+	}
+	if err != nil {
+		return Reversal{}, false, fmt.Errorf("conversion: finding the accept to reverse: %w", err)
+	}
+	if event.Type(status) != event.CpaAccept {
+		return Reversal{}, false, nil
+	}
+	rev.Revenue, rev.USDValue = revenue, usdValue
+	return rev, true, nil
+}
+
+func describeAmount(amount *float64, currency string) string {
+	if amount == nil {
+		return " (none recorded)"
+	}
+	return fmt.Sprintf(" %s %s", strconv.FormatFloat(*amount, 'f', -1, 64), currency)
 }

@@ -295,7 +295,11 @@ Every metrics object also carries: `pwaInstalls` (PWA_INSTALL count),
 `costPerInstall`, `costPerReg`, `costPerPurchase` (USD). The CPA counts are
 `null` when the requested dimensions can't be answered from conversion_events;
 rates and costs are `null` when the denominator is 0 or no cost is on file.
-`conversions` and `revenue` still count CPA_ACCEPT + CPA_REDEP only.
+`conversions` counts CPA_ACCEPT + CPA_REDEP. `revenue` is CPA_ACCEPT +
+CPA_REDEP **net of chargebacks**: a CPA_DECLINE/CPA_TRASH that reversed an
+accepted FTD carries that payout negated and is summed in, on the decline's
+own date (so a past day keeps the revenue it showed; the decline's day can
+be negative). See `docs/conversion.md`, "Chargebacks".
 
 ## Blocked traffic and bots
 

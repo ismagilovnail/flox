@@ -195,7 +195,8 @@ routing engine, auth-модель, структуру пакетов.
   (`chstore/report.go:556`). Если сеть делает chargeback, Revenue и ROI
   завышены. **Подтверждено спецификацией:** §45 требует «chargeback (ACCEPT
   then DECLINE → recorded, revenue reversed)», то есть это расхождение со
-  спецификацией, а не открытый вопрос.
+  спецификацией, а не открытый вопрос. **Статус: исправлено** — сторно
+  выплаты FTD днём отмены (`docs/conversion.md`, «Chargebacks»).
 
 **T5 [MEDIUM]. Sticky cookie без подписи.**
 

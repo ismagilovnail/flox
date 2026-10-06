@@ -48,7 +48,7 @@
     "flowsHint": "A flow is the variant a click was routed to inside the campaign's stream sets. When several flows share a name, the campaign is shown in brackets.",
     "clicksHint": "All clicks in the period, including repeat clicks from the same visitor.",
     "cvrHint": "CVR = conversions ÷ clicks × 100%. The share of clicks that ended in a conversion.",
-    "revenueHint": "Revenue from conversions in USD at the rate on the event date.",
+    "revenueHint": "Revenue from conversions in USD at the rate on the event date, net of chargebacks: a declined FTD is subtracted on the day of the decline.",
     "roiHint": "ROI = (revenue − cost) ÷ cost × 100%. \"—\" when no cost is entered."
   }
 }

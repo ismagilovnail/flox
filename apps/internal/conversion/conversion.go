@@ -179,6 +179,28 @@ type Entry struct {
 	// 2026-10-06, D1). Delivery.SourcePostbackID is filled in by Store.
 	Event    *event.Event
 	Delivery *DeliveryRequest
+
+	// Reversal is filled in by Store, under the click's lock: a CPA_DECLINE
+	// or CPA_TRASH recorded while the click stands accepted reverses that
+	// CPA_ACCEPT's payout (§45; audit 2026-10-06, T4/AN3).
+	Reversal *Reversal
+}
+
+// Reversal is the CPA_ACCEPT payout a decline takes back: the accept's own
+// amount and currency, and its USD value at the accept's rate, so the two
+// net to exactly zero. Revenue/USDValue are nil when the accept carried
+// none.
+type Reversal struct {
+	Revenue  *float64
+	Currency string
+	USDValue *float64
+}
+
+// reversesAccept reports whether a status, recorded after a CPA_ACCEPT,
+// takes the accept's payout back. Redeposits are separate deposits and are
+// never reversed by it.
+func reversesAccept(status event.Type) bool {
+	return status == event.CpaDecline || status == event.CpaTrash
 }
 
 // Recorded is what Store.Record actually wrote.
@@ -411,7 +433,9 @@ func (s *Service) Record(ctx context.Context, p Postback) (Result, error) {
 		return Result{}, fmt.Errorf("conversion: recording: %w", err)
 	}
 	message := entry.Message
-	if rec.Kind == ResultIgnored {
+	if rec.Kind == ResultIgnored || rec.Kind == ResultSuccess {
+		// Store's word: a refusal under the lock, or a note that this
+		// decline reversed an accept's payout.
 		message = rec.Message
 	}
 
@@ -567,12 +591,19 @@ func buildEvent(p Postback, attr attribution.Attribution, status event.Type, eve
 		AttributionMethod:  string(attr.Method),
 		TimeToConversionMS: attr.TimeToConversion.Milliseconds(),
 	}
-	if revenue != nil {
-		ev.Revenue = *revenue
-	}
-	if usdValue != nil {
-		ev.USDValue = *usdValue
-		ev.HasUSDValue = true
+	if reversesAccept(status) {
+		// A decline's analytics revenue is only ever the reversal Store
+		// puts here — never what the network sent with it, which reports
+		// would otherwise add to revenue now that they net declines in.
+		ev.Currency = ""
+	} else {
+		if revenue != nil {
+			ev.Revenue = *revenue
+		}
+		if usdValue != nil {
+			ev.USDValue = *usdValue
+			ev.HasUSDValue = true
+		}
 	}
 	if attr.Outcome.Attributed() {
 		click := attr.Click

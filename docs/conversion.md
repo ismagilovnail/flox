@@ -62,6 +62,35 @@ The postback attempt audit log (`AttemptLogger`) stays outside the
 transaction — it is a secondary record for the logs screen, and the
 Postgres ledger row is the source of truth.
 
+## Chargebacks (§45; audit 2026-10-06, T4/AN3)
+
+"ACCEPT then DECLINE → recorded, revenue reversed." A CPA_DECLINE or
+CPA_TRASH recorded while the click stands accepted — its latest decision
+among ACCEPT/DECLINE/TRASH is an ACCEPT — reverses **that accept's payout
+only** (the FTD); redeposits are separate deposits with their own txn ids,
+and a decline carries none to point at one. The check runs in the record
+transaction under the click's lock, so the decline and the accept it
+reverses are seen consistently.
+
+- Postgres: the decline row keeps `revenue`/`currency` exactly as the
+  network sent them, and records what it reversed in `reversal_revenue`,
+  `reversal_currency`, `reversal_usd_value` (the accept's own amount, and
+  its USD value at the accept's rate, so the two net to zero; migration
+  00053). The row's message says "reverses the CPA_ACCEPT payout …".
+- ClickHouse: the decline's event carries the reversal negated as its
+  revenue — and never the amount the network sent with it, because reports
+  now sum declines. A decline that reversed nothing carries 0.
+- Booked on the decline's own date: closed days keep what they showed (the
+  same principle as never moving back to CPA_HOLD); the decline's day can
+  show negative revenue. Conversion counts do not change.
+- Reports and LTV net it in (`ltv_events_mv_v2` copies declines; LTV adds
+  them to revenue and the window of their date, not to deposit counts).
+- A repeated decline is a duplicate (dedup key) and reverses nothing twice.
+  DECLINE then ACCEPT records the accept as usual. ACCEPT → DECLINE →
+  ACCEPT does **not** restore the revenue: the second ACCEPT has the same
+  dedup key `(click_id, CPA_ACCEPT, "")` as the first and is recorded as a
+  duplicate (CLAUDE.md #3). Re-approvals after a chargeback stay reversed.
+
 ## Revenue must be a sane amount
 
 `revenue` must be a finite number in `[0, conversion.MaxRevenue]` (1e9).

@@ -34,11 +34,13 @@ STATUS        : P0 code items + P1 (RL1/A1/RL4, CH1/DB1, Q2, metrics) done: Q1 q
                 (postbacks index) without scanning the org's history;
                 Q2 backoff + dead-letter of rejected CH batches; the audit's
                 missing metrics + alerts; queue tests isolated from the dev
-                worker (testpg.PrivateTable) — full suite reliably green.
+                worker (testpg.PrivateTable) — full suite reliably green;
+                T4/AN3 a chargeback reverses the FTD payout on the decline's
+                date (reports + LTV).
                 Technical audit is docs/audit-tech-2026-10-06.md; the user asked
                 to fix it step by step and allowed wiping the dev database when
                 a step needs it.
-LAST COMMIT   : test: isolate queue tests from the dev worker.
+LAST COMMIT   : feat(conversion): reverse the FTD payout on a chargeback.
 UNCOMMITTED   : none expected. Dev DB wiped and refilled by `make fixtures`
                 (accounts in README; password flox-demo-2026).
 NEXT          : P0 code items done. CI (DO1) is the user's own decision — do
@@ -46,7 +48,6 @@ NEXT          : P0 code items done. CI (DO1) is the user's own decision — do
                 follow-ups: Postgres↔ClickHouse conversion reconciliation,
                 error tracking (Sentry); USD
                 repair of pre-sync conversions in ClickHouse (docs/fx.md);
-                T4/AN3 §45 chargeback (ACCEPT→DECLINE) must reverse revenue;
                 stable per-event id so a retried write whose commit actually
                 landed is not inserted twice (CHANGELOG, RL2).
                 Marketer audit items (docs/audit-marketer-2026-10-06.md) are

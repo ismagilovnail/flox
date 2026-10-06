@@ -317,3 +317,24 @@ func TestEmptyInputProducesNoCohorts(t *testing.T) {
 		t.Fatalf("cohorts = %d, want 0", len(got))
 	}
 }
+
+// Audit 2026-10-06, T4/AN3: a chargeback (a decline carrying the accept's
+// payout, negated) nets out of LTV in the window of its own date, and is
+// not a deposit.
+func TestChargebackNetsOutOfLTV(t *testing.T) {
+	h := history("c1",
+		deposit(0, event.CpaAccept, 25),
+		deposit(2, event.CpaRedep, 10),
+		deposit(3, event.CpaDecline, -25),
+	)
+	c := ltv.ComputeFTDCohorts([]chstore.ClickHistory{h}, ltv.PeriodDay, at(200))[0]
+	if got := c.Windows[ltv.WindowD0].RevenueUSD; got != 25 {
+		t.Errorf("d0 revenue = %v, want 25 (the FTD's day keeps it)", got)
+	}
+	if got := c.Windows[ltv.WindowD1_7].RevenueUSD; got != -15 {
+		t.Errorf("d1_7 revenue = %v, want -15 (redeposit 10, chargeback -25)", got)
+	}
+	if c.LTVTotalUSD != 10 || c.TotalDeposits != 2 || c.TotalDepositRevenueUSD != 10 {
+		t.Fatalf("total=%v deposits=%d depositRevenue=%v, want 10, 2, 10", c.LTVTotalUSD, c.TotalDeposits, c.TotalDepositRevenueUSD)
+	}
+}

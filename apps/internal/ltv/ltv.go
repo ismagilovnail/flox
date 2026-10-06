@@ -215,6 +215,11 @@ func (a *accumulator) addClick(anchorDate time.Time, deposits []chstore.Deposit)
 			if d.EventAt.After(lastRedep) {
 				lastRedep = d.EventAt
 			}
+		case event.CpaDecline, event.CpaTrash:
+			// A chargeback: it carries the reversed accept's payout,
+			// negated (0 when it reversed nothing), and nets it out of the
+			// revenue — in the window of the decline's own date. Not a
+			// deposit (audit 2026-10-06, T4/AN3).
 		default:
 			continue // CPA_HOLD never contributes to deposit sums/windows
 		}
@@ -223,7 +228,9 @@ func (a *accumulator) addClick(anchorDate time.Time, deposits []chstore.Deposit)
 		if d.HasUSDValue {
 			usd = d.USDValue
 		}
-		a.depositCount++
+		if d.Type == event.CpaAccept || d.Type == event.CpaRedep {
+			a.depositCount++
+		}
 		a.depositRevenue += usd
 
 		offset := daysBetween(anchorDate, d.EventAt)

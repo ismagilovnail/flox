@@ -5,6 +5,41 @@ per-phase, matching `CLAUDE.md`'s phase protocol. The one exception is
 [Between phases], below: spec amendments and the code changes that follow from
 them land between phases and would otherwise be invisible here.
 
+## [Between phases] — a chargeback reverses the FTD's revenue
+
+Technical audit, finding T4/AN3 — §45: "chargeback (ACCEPT then DECLINE → recorded, revenue
+reversed)". Reports summed revenue over CPA_ACCEPT + CPA_REDEP only and ignored declines, so a
+charged-back FTD stayed in Revenue/ROI forever. Decided with the user: a decline reverses the
+**FTD payout only** (redeposits stay), booked **on the decline's own date** (closed days keep
+what they showed).
+
+- `conversion.PostgresStore`: a CPA_DECLINE/CPA_TRASH recorded while the click's latest
+  decision is a CPA_ACCEPT (checked in the record transaction, under the click lock) reverses
+  that accept: migration 00053 adds `reversal_revenue`/`reversal_currency`/
+  `reversal_usd_value` to `postbacks` (the accept's amount and its USD value at the accept's
+  rate); the decline's outbox event carries them negated. The network's own revenue on a
+  decline stays in `postbacks.revenue` but never reaches analytics.
+- Reports: revenue sums CPA_ACCEPT, CPA_REDEP, CPA_DECLINE, CPA_TRASH; counts unchanged.
+- LTV: `ltv_events_mv` is replaced by `ltv_events_mv_v2` (also copies declines), dropped in
+  the same schema file so no start ever feeds `ltv_events` from both; `ltv` adds declines to
+  revenue and to the window of their date, not to deposit counts.
+- Revenue hints (EN/RU) now say "net of chargebacks".
+- Known limit, documented: ACCEPT → DECLINE → ACCEPT does not restore the revenue — the
+  second ACCEPT has the first's dedup key and is a duplicate (CLAUDE.md #3, not changed).
+
+Tests: Postgres — ACCEPT 25 EUR + a 10 EUR redeposit + DECLINE reverses exactly 25 EUR /
+27.5 USD (not the redeposit) and the decline event carries −25; a re-sent decline is a
+duplicate; TRASH after it reverses nothing and carries 0; DECLINE then ACCEPT records +25 with
+no reversal. Service — the 40 EUR a network sends with a decline never reaches the event.
+ClickHouse — ACCEPT 25 + REDEP 10 + DECLINE −25 reports 10 for the period, 35 on the FTD day,
+−25 on the decline day, conversions unchanged, and the decline reaches `ltv_events`. LTV —
+the chargeback nets out in its own window, deposits stay 2. Live through the dev stack: a
+click, `ftd` 25 USD and `rejected` (with the network's revenue=25) → the API report shows
+revenue 0, 1 conversion, 1 purchase; Postgres keeps revenue 25 as sent and reversal 25. Migration
+00053 up → down → up. Full-env `go test ./...` with e2e: exit 0; `tsc`, `eslint` clean.
+(The first test run failed on the test's own probe — `json.Unmarshal` into a reused struct
+kept the previous event's revenue, since zero fields are omitted; fixed in the test.)
+
 ## [Between phases] — queue tests no longer race the dev worker
 
 Three queue test files claimed rows from the real `event_queue` / `postback_attempt_queue` /

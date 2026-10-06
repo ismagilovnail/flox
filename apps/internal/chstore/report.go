@@ -10,6 +10,15 @@ import (
 	"github.com/ClickHouse/clickhouse-go/v2/lib/driver"
 )
 
+// Revenue nets chargebacks (§45; audit 2026-10-06, T4/AN3): a CPA_DECLINE or
+// CPA_TRASH that reversed an accept carries the accept's payout negated
+// (conversion.PostgresStore), booked on the decline's own date; any other
+// decline carries 0. Conversion counts are unchanged — only revenue nets.
+const (
+	revenueTypes   = "('CPA_ACCEPT', 'CPA_REDEP', 'CPA_DECLINE', 'CPA_TRASH')"
+	reportCPATypes = "('CPA_HOLD', 'CPA_ACCEPT', 'CPA_REDEP', 'CPA_DECLINE', 'CPA_TRASH')"
+)
+
 // ReportDimension is a whitelisted group-by dimension the multi-dimension
 // report builder (Phase 35) can request — never an arbitrary client
 // string reaching a query verbatim; every method in this file rejects
@@ -468,12 +477,12 @@ func (s *EventStore) ReportConversions(ctx context.Context, q ReportQuery) ([]Co
 
 	query := fmt.Sprintf(`
 		SELECT %scountIf(type IN ('CPA_ACCEPT', 'CPA_REDEP')) AS conversions,
-			sumIf(usd_value * has_usd_value, type IN ('CPA_ACCEPT', 'CPA_REDEP')) AS revenue_usd,
+			sumIf(usd_value * has_usd_value, type IN `+revenueTypes+`) AS revenue_usd,
 			countIf(type = 'CPA_HOLD') AS registrations,
 			countIf(type = 'CPA_ACCEPT') AS purchases,
 			countIf(type = 'CPA_REDEP') AS repurchases
 		FROM conversion_events
-		WHERE organization_id = ? AND event_at >= ? AND event_at < ? AND type IN ('CPA_HOLD', 'CPA_ACCEPT', 'CPA_REDEP')%s
+		WHERE organization_id = ? AND event_at >= ? AND event_at < ? AND type IN `+reportCPATypes+`%s
 		%s`,
 		selectExpr, filterClause, groupByExpr,
 	)
@@ -529,7 +538,7 @@ func (s *EventStore) reportConversionsJoined(ctx context.Context, q ReportQuery)
 		selectCols = append(selectCols, col)
 	}
 
-	const convTypes = "('CPA_HOLD', 'CPA_ACCEPT', 'CPA_REDEP')"
+	const convTypes = reportCPATypes
 	// Args in placeholder order: click subquery (org, inner org/from/to), then outer WHERE.
 	args := []any{q.OrganizationID, q.OrganizationID, q.From, q.To, q.OrganizationID, q.From, q.To}
 	var filterClause strings.Builder
@@ -555,7 +564,7 @@ func (s *EventStore) reportConversionsJoined(ctx context.Context, q ReportQuery)
 
 	query := fmt.Sprintf(`
 		SELECT %scountIf(c.type IN ('CPA_ACCEPT', 'CPA_REDEP')) AS conversions,
-			sumIf(c.usd_value * c.has_usd_value, c.type IN ('CPA_ACCEPT', 'CPA_REDEP')) AS revenue_usd,
+			sumIf(c.usd_value * c.has_usd_value, c.type IN `+revenueTypes+`) AS revenue_usd,
 			countIf(c.type = 'CPA_HOLD') AS registrations,
 			countIf(c.type = 'CPA_ACCEPT') AS purchases,
 			countIf(c.type = 'CPA_REDEP') AS repurchases
