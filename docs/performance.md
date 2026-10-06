@@ -76,12 +76,15 @@ to a human unit alongside):
 before a single request even runs concurrently. The two Postgres round
 trips (`LoadRoutingConfig` + `ResolveTrackingLink`, ~0.49 ms combined) are
 essentially the entire cost — routing and classification together are
-under 5 µs, three orders of magnitude smaller. There is currently no cache
-in front of `routingstore.Store` (CLAUDE.md's routing invariant doesn't
-require one, and non-negotiable #9 only forbids blocking on *analytics
-queries or outbound partner calls*, not a config read) — measurement here
-is the reason one wasn't added anyway: the cost it would remove is
-already negligible against the budget.
+under 5 µs, three orders of magnitude smaller. At the time there was no
+cache in front of `routingstore.Store`: measured on loopback, the cost was
+negligible against the budget. The 2026-10-06 technical audit (RL1/A1) added
+one anyway (`internal/routingcache`) — not for speed on loopback, but because
+those six sequential queries made Postgres a single point of failure for
+every click and had no deadline: a slow database stalled every redirect,
+a down one 502'd them all. Live check after the change: with Postgres paused
+for 40 s, cached clicks were answered in under 1 ms; an unknown link failed
+after the 1 s load timeout instead of hanging.
 
 ### Load test
 

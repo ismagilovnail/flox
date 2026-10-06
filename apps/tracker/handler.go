@@ -19,6 +19,7 @@ import (
 	"github.com/ismagilovnail/flox/apps/internal/metrics"
 	"github.com/ismagilovnail/flox/apps/internal/offercap"
 	"github.com/ismagilovnail/flox/apps/internal/routing"
+	"github.com/ismagilovnail/flox/apps/internal/routingcache"
 	"github.com/ismagilovnail/flox/apps/internal/routingstore"
 	"github.com/ismagilovnail/flox/apps/internal/storage"
 )
@@ -30,7 +31,9 @@ import (
 // Nothing on this path performs an analytics query or waits on event
 // persistence (§41, CLAUDE.md non-negotiable #9).
 type Handler struct {
-	store      *routingstore.Store
+	// store is internal/routingcache in production (clicks served from
+	// memory, Postgres off the hot path); tests use routingstore directly.
+	store      routingcache.Store
 	classifier *classifier.Classifier
 	engine     routing.Router
 	events     *eventbuf.Writer

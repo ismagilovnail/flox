@@ -36,6 +36,7 @@ import (
 	"net/http/cookiejar"
 	"net/url"
 	"os"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -950,5 +951,45 @@ func pollUntil(t *testing.T, timeout, interval time.Duration, fn func() bool) bo
 			return false
 		}
 		time.Sleep(interval)
+	}
+}
+
+// trackerRoutingFlushes reads apps/tracker's routing cache flush counter
+// (internal/routingcache, flox_routing_cache_invalidations_total).
+//
+// The tracker serves routing from memory and applies an edit when Postgres'
+// NOTIFY for it arrives — milliseconds after the commit, not synchronously
+// with the API response. A test that edits the routing and clicks right
+// away records this before the edit and calls waitForTrackerRoutingFlush
+// after it: a flush after the edit returned guarantees the next click loads
+// the post-edit configuration (nothing else clicks this test's campaign in
+// between to re-cache the old one).
+func (s *scenario) trackerRoutingFlushes() float64 {
+	s.t.Helper()
+	resp, err := http.Get(s.trackerBase + "/metrics")
+	if err != nil {
+		s.t.Fatalf("reading tracker metrics: %v", err)
+	}
+	defer resp.Body.Close()
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		s.t.Fatalf("reading tracker metrics: %v", err)
+	}
+	for _, line := range strings.Split(string(body), "\n") {
+		if v, ok := strings.CutPrefix(line, "flox_routing_cache_invalidations_total "); ok {
+			n, err := strconv.ParseFloat(strings.TrimSpace(v), 64)
+			if err != nil {
+				s.t.Fatalf("parsing %q: %v", line, err)
+			}
+			return n
+		}
+	}
+	return 0 // not flushed yet since start
+}
+
+func (s *scenario) waitForTrackerRoutingFlush(before float64) {
+	s.t.Helper()
+	if !pollUntil(s.t, 5*time.Second, 5*time.Millisecond, func() bool { return s.trackerRoutingFlushes() > before }) {
+		s.t.Fatalf("the tracker did not flush its routing cache within 5s of an edit — is its LISTEN connection up?")
 	}
 }

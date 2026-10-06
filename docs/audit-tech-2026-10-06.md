@@ -699,7 +699,8 @@ POST /postback/{networkId}
 
 **Отдельные проблемы:**
 
-- **RL1 [HIGH].** У tracker'а нет per-request deadline и
+- **RL1 [HIGH]** (**статус: исправлено** вместе с A1 — `internal/routingcache`,
+  LISTEN/NOTIFY, дедлайн загрузки 1 с). У tracker'а нет per-request deadline и
   `statement_timeout`. **Исправление:** `context.WithTimeout(r.Context(),
   300ms)` на чтение конфига, `statement_timeout=500ms` в DSN tracker'а и
   stale-on-error кэш (§5).
@@ -717,7 +718,7 @@ POST /postback/{networkId}
   паникует. Данные к этому моменту уже сброшены, но **каждый штатный стоп
   завершается паникой и exit code 2**. Это шум в алертах и маскировка
   настоящих падений. **Исправление:** `sync.Once` в `Close`.
-- **RL4 [MEDIUM].** Tracker `/health` не проверяет зависимости, readiness
+- **RL4 [MEDIUM]** (**статус: исправлено**, tracker `/ready`). Tracker `/health` не проверяет зависимости, readiness
   нет. **Исправление:** `/ready` с проверкой «PG ping ≤ 200 мс ИЛИ кэш
   конфигурации прогрет».
 - **RL5 [LOW].** У `http.Server` tracker'а и API нет

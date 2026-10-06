@@ -36,6 +36,18 @@ groups:
           summary: "apps/tracker p95 redirect latency exceeds the 50ms budget"
           description: "p95 tracking latency has been above 50ms for 5m — CLAUDE.md non-negotiable #9's hot-path budget is broken. Check for a slow routingstore query, ClickHouse/Postgres contention, or a co-located CPU-bound process."
 
+      - alert: TrackerServingStaleRouting
+        # internal/routingcache keeps serving the last known routing while
+        # Postgres fails — clicks still work, but edits made meanwhile are
+        # not applied and campaigns not yet cached return 502.
+        expr: sum(rate(flox_routing_cache_requests_total{result=~"refresh_error|stale_on_error|error"}[5m])) > 0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "apps/tracker is serving cached routing because Postgres reads fail"
+          description: "Routing cache refreshes/loads have been failing for 5m. Clicks for already-cached campaigns are served from memory; uncached ones fail. Check Postgres reachability from apps/tracker."
+
       - alert: TrackingServiceDown
         expr: up{job="flox-tracker"} == 0
         for: 1m

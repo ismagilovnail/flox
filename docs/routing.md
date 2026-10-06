@@ -224,3 +224,36 @@ implementation to keep in sync.
 All 18 cases pass or are explicitly documented as out of this package's
 scope (`t.Skip` with the reasoning inline, not silently absent). Verified
 stable across repeated runs and under `go test -race`.
+
+## Serving routing from memory (audit 2026-10-06, RL1/A1)
+
+`apps/tracker` reads tracking links, campaign routing configs, internal
+landing pages and PWA pages through `internal/routingcache`, an in-memory
+cache over `routingstore` (the API's routing simulator still reads
+`routingstore` directly — it must show what is in the database now). The
+routing decision itself is untouched — the cache only holds its input
+(CLAUDE.md #1).
+
+| Situation | Behavior |
+|---|---|
+| fresh entry (< TTL, 30 s) | served from memory |
+| stale entry | served at once; one background refresh |
+| miss | loaded with a 1 s deadline; concurrent misses share one query |
+| Postgres failing | the last known answer is served for as long as it fails; a stale entry retries its refresh every 5 s, not per click |
+| unknown link | "not found" remembered for 10 s, at most 10,000 per table |
+| any routing edit | the whole cache is flushed at once |
+
+Edits reach every tracker through Postgres: statement-level triggers on
+`domains`, `tracking_links`, `campaigns`, `stream_sets`, `filter_groups`,
+`filter_conditions`, `flows`, `offers`, `offer_links`, `landings` and `pwas`
+(migration 00050) `NOTIFY flox_routing_changed`, and each tracker's listener
+(a dedicated connection) flushes on it — and after every reconnect, for
+edits it may have missed. If the listener is down, staleness is bounded by
+the TTL. A load that started before an edit never stores or shares its
+result after the flush. PWA comments (constructor test view only) are not
+cached.
+
+Metrics: `flox_routing_cache_requests_total{table,result}` (`hit`,
+`stale`, `miss`, `stale_on_error`, `error`, `refresh_error`) and
+`flox_routing_cache_invalidations_total`; alert
+`TrackerServingStaleRouting`.

@@ -91,14 +91,24 @@ pings Postgres and, when connected, ClickHouse — use that for readiness
 specifically (traffic should wait for working store connections) and
 plain `/health` for liveness (should the process itself be restarted).
 
+`apps/tracker` has its own `GET /ready`: `200 ready` when Postgres answers,
+`200 degraded` when it does not but routing is cached (the tracker keeps
+serving every campaign it has seen — `internal/routingcache`), `503` when
+it can serve nothing yet (Postgres down, cache cold) or while it is
+shutting down. Point the load balancer's readiness at it; keep `/health`
+for liveness.
+
 ## Scaling
 
 - **`apps/tracker`** is the one service CLAUDE.md non-negotiable #9
   explicitly calls out to keep fast and stateless — horizontally scale
   this first and most aggressively under real click volume. Nothing about
-  it holds in-process state that matters across replicas (routing config
-  loads fresh per request via `routingstore`; sticky truth is the visitor's
-  own cookie, CLAUDE.md #4).
+  it holds in-process state that matters across replicas: routing config
+  is an in-memory cache (`internal/routingcache`, flushed on every edit via
+  Postgres LISTEN/NOTIFY — migration 00050, so each replica needs one extra
+  Postgres connection for the listener); sticky truth is the visitor's own
+  cookie, CLAUDE.md #4. A new replica starts cold and loads each campaign
+  on its first click.
 - **`apps/api`** is stateless per-request (sessions live in Postgres, not
   in-process) — scales horizontally with no special coordination.
 - **`apps/worker`** runs poll loops that claim batches with `FOR UPDATE

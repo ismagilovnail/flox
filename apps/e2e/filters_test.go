@@ -203,7 +203,9 @@ func TestFilterMatrix(t *testing.T) {
 
 	run := func(c filterCase) {
 		t.Helper()
+		flushes := s.trackerRoutingFlushes()
 		s.doAPI(s.apiRequest(http.MethodPatch, "/campaigns/"+s.campaignID+"/stream-sets/"+set.ID, map[string]any{"rootFilter": c.tree}), http.StatusOK, nil)
+		s.waitForTrackerRoutingFlush(flushes)
 		got := click(c.v)
 		wantURL := fallbackURL
 		if c.want {

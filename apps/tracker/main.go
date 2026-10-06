@@ -13,6 +13,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -38,6 +39,7 @@ import (
 	"github.com/ismagilovnail/flox/apps/internal/postgres"
 	"github.com/ismagilovnail/flox/apps/internal/rediscache"
 	"github.com/ismagilovnail/flox/apps/internal/routing"
+	"github.com/ismagilovnail/flox/apps/internal/routingcache"
 	"github.com/ismagilovnail/flox/apps/internal/routingstore"
 	"github.com/ismagilovnail/flox/apps/internal/storage"
 	"github.com/ismagilovnail/flox/apps/internal/telemetry"
@@ -126,8 +128,14 @@ func run() error {
 		}
 	}
 
+	// Routing reads come from memory (audit 2026-10-06, RL1/A1): Postgres
+	// slow or down no longer stalls or fails clicks for campaigns already
+	// seen, and every edit flushes the cache through LISTEN/NOTIFY.
+	routes := routingcache.New(routingstore.New(db), routingcache.Config{}, logger)
+	go routes.Listen(ctx, cfg.DatabaseURL)
+
 	handler := &Handler{
-		store:      routingstore.New(db),
+		store:      routes,
 		classifier: classifier.New(geoProvider, asnProvider, nil),
 		engine:     &routing.Engine{},
 		events:     events,
@@ -227,6 +235,32 @@ func run() error {
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(`{"status":"ok"}`))
 	})
+	// Readiness, unlike /health: can this instance serve clicks? Yes when
+	// Postgres answers, or when routing is cached (it then serves every
+	// campaign it has seen through an outage). No while shutting down, so
+	// a load balancer stops sending new clicks before the listener closes.
+	var draining atomic.Bool
+	r.Get("/ready", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if draining.Load() {
+			w.WriteHeader(http.StatusServiceUnavailable)
+			_, _ = w.Write([]byte(`{"status":"draining"}`))
+			return
+		}
+		pingCtx, cancel := context.WithTimeout(r.Context(), 300*time.Millisecond)
+		defer cancel()
+		dbErr := db.Ping(pingCtx)
+		if dbErr != nil && !routes.Warm() {
+			w.WriteHeader(http.StatusServiceUnavailable)
+			_, _ = w.Write([]byte(`{"status":"unavailable","reason":"postgres unreachable and routing cache empty"}`))
+			return
+		}
+		if dbErr != nil {
+			_, _ = w.Write([]byte(`{"status":"degraded","reason":"postgres unreachable, serving cached routing"}`))
+			return
+		}
+		_, _ = w.Write([]byte(`{"status":"ready"}`))
+	})
 	r.Handle("/metrics", metrics.Handler())
 	handler.Register(r)
 	postbackHandler.Register(r)
@@ -246,6 +280,7 @@ func run() error {
 
 	<-ctx.Done()
 	logger.Info("shutting down")
+	draining.Store(true)
 
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()

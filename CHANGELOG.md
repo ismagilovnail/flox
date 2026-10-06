@@ -5,6 +5,46 @@ per-phase, matching `CLAUDE.md`'s phase protocol. The one exception is
 [Between phases], below: spec amendments and the code changes that follow from
 them land between phases and would otherwise be invisible here.
 
+## [Between phases] — clicks no longer need Postgres
+
+Technical audit, findings RL1/A1 (P1) and RL4. Every click ran six sequential Postgres
+queries with no deadline: a slow database stalled every redirect and a down one turned every
+click into a 502. The tracker's `/health` always said "ok".
+
+- `internal/routingcache`: an in-memory cache over `routingstore` for tracking links, campaign
+  routing configs, internal landing pages and PWA pages (PWA comments, test view only, stay
+  uncached). Fresh entries (30 s TTL) come from memory; stale ones are served at once while
+  one background refresh runs; misses load with a 1 s deadline and concurrent misses share
+  one query (singleflight); while Postgres fails the last known answer keeps being served,
+  with a failed refresh retried every 5 s instead of per click; "not found" is remembered
+  10 s, capped at 10,000 per table. The routing decision is untouched — only its input is
+  cached (CLAUDE.md #1). The API's routing simulator still reads Postgres directly.
+- Migration 00050: statement-level triggers on the 11 routing tables `NOTIFY
+  flox_routing_changed`; the tracker's listener (own connection, reconnects with backoff)
+  flushes the whole cache on each notification and after every reconnect. A load started
+  before a flush never stores or shares its result afterwards (generation in the
+  singleflight key).
+- Tracker `GET /ready`: `ready` / `degraded` (Postgres down, routing cached) / `503` (nothing
+  to serve, or shutting down). Metrics `flox_routing_cache_requests_total{table,result}`,
+  `flox_routing_cache_invalidations_total`; alert `TrackerServingStaleRouting`.
+- Behavior change: an edit reaches the tracker milliseconds after its commit (when the
+  NOTIFY arrives), not synchronously with the API response. `apps/e2e`'s filter matrix
+  edits and clicks back to back; it now waits for the tracker's flush counter to move after
+  each edit (it failed once under full-suite load before that).
+
+Tests: cache unit tests with a fake store and clock — fresh hit, stale served while
+refreshing, last known value through an outage with one refresh per RetryAfterError, miss
+during an outage is an error, not-found cached briefly and capped, 50 concurrent misses → one
+load, a pre-edit load finishing after an invalidation neither stores nor is joined
+(mutation-checked: without the generation in the flight key the new read joins the old
+load). Tracker integration tests on Postgres: a seen link keeps redirecting with the store
+"down" while an unseen one gets 502; with a 1 h TTL an `UPDATE flows` is served within
+milliseconds via NOTIFY — and the test fails with migration 00050 rolled back. Live on the
+dev stack: with Postgres paused for 40 s, demo-link clicks answered in under 1 ms (fresh and
+past TTL), `/ready` reported `degraded`, an unknown link failed after 1 s; an offer edit
+through the API showed in the very next click. Migration up → down → up. Full-env
+`go test ./...` (with e2e) green twice in a row; the dev DB was reset and refilled after.
+
 ## [Between phases] — the tracker retries failed event writes
 
 Technical audit, finding RL2 (P0). `eventbuf.Writer` dropped a whole batch the moment its sink

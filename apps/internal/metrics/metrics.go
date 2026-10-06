@@ -133,6 +133,24 @@ var (
 		Help:      "Age of the newest FX rate on file, refreshed after each sync.",
 	})
 
+	// RoutingCacheRequestsTotal counts apps/tracker's routing cache reads
+	// (internal/routingcache), by table and result: hit, stale (served while
+	// refreshing), miss (loaded from Postgres), stale_on_error, error,
+	// refresh_error.
+	RoutingCacheRequestsTotal = promauto.NewCounterVec(prometheus.CounterOpts{
+		Namespace: namespace,
+		Name:      "routing_cache_requests_total",
+		Help:      "apps/tracker routing cache reads, by table and result.",
+	}, []string{"table", "result"})
+
+	// RoutingCacheInvalidationsTotal counts full cache flushes (a routing
+	// table changed, or the change listener reconnected).
+	RoutingCacheInvalidationsTotal = promauto.NewCounter(prometheus.CounterOpts{
+		Namespace: namespace,
+		Name:      "routing_cache_invalidations_total",
+		Help:      "apps/tracker routing cache flushes on configuration change.",
+	})
+
 	PostbackDeliveriesTotal = promauto.NewCounterVec(prometheus.CounterOpts{
 		Namespace: namespace,
 		Name:      "postback_deliveries_total",
