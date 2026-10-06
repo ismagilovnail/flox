@@ -467,3 +467,50 @@ func TestPresetColumnWidthsRoundTripUpdateAndClear(t *testing.T) {
 		}
 	}
 }
+
+func TestPresetHiddenColumnsRoundTripUpdateAndClear(t *testing.T) {
+	pool := mustPool(t)
+	ctx := context.Background()
+	orgID, userID := seedOrgAndUser(t, ctx, pool)
+	svc := reportpresets.NewService(reportpresets.NewRepository(pool))
+
+	plain, err := svc.Create(ctx, orgID, userID, validInput("All shown"))
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	if plain.HiddenColumns == nil || len(plain.HiddenColumns) != 0 {
+		t.Fatalf("HiddenColumns = %#v, want an empty non-nil slice (serialized as [], not null)", plain.HiddenColumns)
+	}
+
+	in := validInput("Trimmed")
+	in.HiddenColumns = []string{"uniqueClicks", "cm_abc"}
+	created, err := svc.Create(ctx, orgID, userID, in)
+	if err != nil {
+		t.Fatalf("Create (hidden): %v", err)
+	}
+	if len(created.HiddenColumns) != 2 || created.HiddenColumns[0] != "uniqueClicks" {
+		t.Fatalf("created hidden = %v", created.HiddenColumns)
+	}
+
+	renamed := "Renamed"
+	got, err := svc.Update(ctx, orgID, created.ID, reportpresets.UpdateInput{Name: &renamed})
+	if err != nil || len(got.HiddenColumns) != 2 {
+		t.Fatalf("a rename must keep the hidden columns: %v, %v", got.HiddenColumns, err)
+	}
+
+	got, err = svc.Update(ctx, orgID, created.ID, reportpresets.UpdateInput{HiddenColumns: []string{"cpa"}})
+	if err != nil || len(got.HiddenColumns) != 1 || got.HiddenColumns[0] != "cpa" {
+		t.Fatalf("Update (replace) = %v, %v", got.HiddenColumns, err)
+	}
+
+	got, err = svc.Update(ctx, orgID, created.ID, reportpresets.UpdateInput{HiddenColumns: []string{}})
+	if err != nil || len(got.HiddenColumns) != 0 {
+		t.Fatalf("Update (reset) = %v, %v, want every column shown", got.HiddenColumns, err)
+	}
+
+	bad := validInput("Bad hidden")
+	bad.HiddenColumns = []string{""}
+	if _, err := svc.Create(ctx, orgID, userID, bad); err == nil {
+		t.Fatal("empty hidden column id: Create succeeded, want a validation error")
+	}
+}

@@ -25,7 +25,7 @@ func NewRepository(db *pgxpool.Pool) *Repository { return &Repository{db: db} }
 // pwa.updated_date already established, since a report period boundary is
 // a date, not a moment.
 const presetColumns = `
-	id, organization_id, name, dimensions, metrics, filters, column_order, column_widths, group_by,
+	id, organization_id, name, dimensions, metrics, filters, column_order, column_widths, hidden_columns, group_by,
 	period_type, period_days, to_char(period_from, 'YYYY-MM-DD'), to_char(period_to, 'YYYY-MM-DD'),
 	timezone, is_default, created_by_user_id, created_at, updated_at`
 
@@ -33,7 +33,7 @@ func scanPreset(row pgx.Row) (ReportPreset, error) {
 	var p ReportPreset
 	var periodFrom, periodTo *string
 	err := row.Scan(
-		&p.ID, &p.OrganizationID, &p.Name, &p.Dimensions, &p.Metrics, &p.Filters, &p.ColumnOrder, &p.ColumnWidths, &p.GroupBy,
+		&p.ID, &p.OrganizationID, &p.Name, &p.Dimensions, &p.Metrics, &p.Filters, &p.ColumnOrder, &p.ColumnWidths, &p.HiddenColumns, &p.GroupBy,
 		&p.Period.Type, &p.Period.Days, &periodFrom, &periodTo,
 		&p.Timezone, &p.IsDefault, &p.CreatedByID, &p.CreatedAt, &p.UpdatedAt,
 	)
@@ -44,6 +44,9 @@ func scanPreset(row pgx.Row) (ReportPreset, error) {
 	}
 	if p.ColumnOrder == nil {
 		p.ColumnOrder = []string{}
+	}
+	if p.HiddenColumns == nil {
+		p.HiddenColumns = []string{}
 	}
 	if p.ColumnWidths == nil {
 		p.ColumnWidths = map[string]int{}
@@ -117,12 +120,12 @@ func (r *Repository) Get(ctx context.Context, orgID, id string) (ReportPreset, e
 func (r *Repository) Create(ctx context.Context, orgID, createdByUserID string, in CreateInput) (ReportPreset, error) {
 	row := r.db.QueryRow(ctx, `
 		INSERT INTO report_presets
-			(id, organization_id, name, dimensions, metrics, filters, column_order, column_widths, group_by, period_type, period_days, period_from, period_to, timezone, is_default, created_by_user_id)
-		VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7, $8::jsonb, $9, $10, $11, $12, $13, $14, false, $15)
+			(id, organization_id, name, dimensions, metrics, filters, column_order, column_widths, group_by, period_type, period_days, period_from, period_to, timezone, is_default, created_by_user_id, hidden_columns)
+		VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7, $8::jsonb, $9, $10, $11, $12, $13, $14, false, $15, $16)
 		RETURNING `+presetColumns,
 		idgen.New(), orgID, in.Name, in.Dimensions, in.Metrics, filtersJSON(in.Filters), nonNil(in.ColumnOrder), widthsJSON(in.ColumnWidths), in.GroupBy,
 		in.Period.Type, in.Period.Days, in.Period.From, in.Period.To,
-		in.Timezone, createdByUserID,
+		in.Timezone, createdByUserID, nonNil(in.HiddenColumns),
 	)
 	return scanPreset(row)
 }
@@ -172,6 +175,9 @@ func (r *Repository) Update(ctx context.Context, orgID, id string, in UpdateInpu
 	}
 	if in.ColumnWidths != nil {
 		sets = append(sets, "column_widths = "+arg(widthsJSON(in.ColumnWidths))+"::jsonb")
+	}
+	if in.HiddenColumns != nil {
+		sets = append(sets, "hidden_columns = "+arg(in.HiddenColumns))
 	}
 	if in.GroupBy != nil {
 		sets = append(sets, "group_by = "+arg(*in.GroupBy))

@@ -40,6 +40,8 @@ export type ReportControlsState = {
   columnOrder: string[];
   /** Dragged table column widths in px by column id; {} is natural widths. Saved with presets. */
   columnWidths: Record<string, number>;
+  /** Ids of the columns hidden in the table; [] shows every column. Saved with presets. */
+  hiddenColumns: string[];
   groupBy: DimensionKey;
   sort: { key: string; dir: "asc" | "desc" };
   compare: boolean;

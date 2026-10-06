@@ -228,6 +228,19 @@ type ConversionAgg struct {
 	Key         ReportKey
 	Conversions uint64
 	RevenueUSD  float64
+	// Registrations / Purchases / Repurchases are the per-status counts of
+	// CPA_HOLD / CPA_ACCEPT / CPA_REDEP (§50 cpa_hold, cpa_accept,
+	// cpa_redep). Conversions stays accept+redep and Revenue is summed over
+	// those two only: a HOLD is not yet confirmed money.
+	Registrations uint64
+	Purchases     uint64
+	Repurchases   uint64
+}
+
+// InstallAgg is the PWA_INSTALL count of one group.
+type InstallAgg struct {
+	Key         ReportKey
+	PwaInstalls uint64
 }
 
 // buildGroupBy resolves q.Dims against cols, returning the SELECT
@@ -370,6 +383,48 @@ func (s *EventStore) ReportLandViews(ctx context.Context, q ReportQuery) ([]Land
 	return out, rows.Err()
 }
 
+// ReportPwaInstalls answers "how many PWA_INSTALL rows" for q — the
+// pwaInstalls metric. Same table and dimensions as ReportLandViews.
+func (s *EventStore) ReportPwaInstalls(ctx context.Context, q ReportQuery) ([]InstallAgg, error) {
+	selectCols, ok := buildGroupBy(reportClickColumns, q.Dims)
+	if !ok {
+		return nil, fmt.Errorf("chstore: unsupported dimension in pwa-install report")
+	}
+	args := []any{q.OrganizationID, q.From, q.To}
+	filterClause, args, ok := buildFilterClause(reportClickColumns, q.Filters, args)
+	if !ok {
+		return nil, fmt.Errorf("chstore: unsupported filter dimension in pwa-install report")
+	}
+
+	selectExpr, groupByExpr := selectAndGroupByExprs(selectCols, q.ByDay, q.Timezone)
+
+	query := fmt.Sprintf(`
+		SELECT %scount() AS pwa_installs
+		FROM tracking_events
+		WHERE organization_id = ? AND event_at >= ? AND event_at < ? AND type = 'PWA_INSTALL'%s
+		%s`,
+		selectExpr, filterClause, groupByExpr,
+	)
+
+	rows, err := s.conn.Query(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("chstore: querying pwa-install report: %w", err)
+	}
+	defer rows.Close()
+
+	var out []InstallAgg
+	for rows.Next() {
+		dimVals, day, dest := scanDest(q.Dims, q.ByDay)
+		var installs uint64
+		dest = append(dest, &installs)
+		if err := rows.Scan(dest...); err != nil {
+			return nil, fmt.Errorf("chstore: scanning pwa-install report row: %w", err)
+		}
+		out = append(out, InstallAgg{Key: scanKey(q.Dims, deref(dimVals), day), PwaInstalls: installs})
+	}
+	return out, rows.Err()
+}
+
 // ReportConversions answers "how many CPA_ACCEPT+CPA_REDEP rows, and how
 // much USD revenue" for q — total_deposits per docs/FLOX-master-prompt-v3.md
 // §50 ("total_deposits = cpa_accept + cpa_redep"), the same definition
@@ -399,9 +454,13 @@ func (s *EventStore) ReportConversions(ctx context.Context, q ReportQuery) ([]Co
 	selectExpr, groupByExpr := selectAndGroupByExprs(selectCols, q.ByDay, q.Timezone)
 
 	query := fmt.Sprintf(`
-		SELECT %scount() AS conversions, sum(usd_value * has_usd_value) AS revenue_usd
+		SELECT %scountIf(type IN ('CPA_ACCEPT', 'CPA_REDEP')) AS conversions,
+			sumIf(usd_value * has_usd_value, type IN ('CPA_ACCEPT', 'CPA_REDEP')) AS revenue_usd,
+			countIf(type = 'CPA_HOLD') AS registrations,
+			countIf(type = 'CPA_ACCEPT') AS purchases,
+			countIf(type = 'CPA_REDEP') AS repurchases
 		FROM conversion_events
-		WHERE organization_id = ? AND event_at >= ? AND event_at < ? AND type IN ('CPA_ACCEPT', 'CPA_REDEP')%s
+		WHERE organization_id = ? AND event_at >= ? AND event_at < ? AND type IN ('CPA_HOLD', 'CPA_ACCEPT', 'CPA_REDEP')%s
 		%s`,
 		selectExpr, filterClause, groupByExpr,
 	)
@@ -415,13 +474,16 @@ func (s *EventStore) ReportConversions(ctx context.Context, q ReportQuery) ([]Co
 	var out []ConversionAgg
 	for rows.Next() {
 		dimVals, day, dest := scanDest(q.Dims, q.ByDay)
-		var conversions uint64
+		var conversions, registrations, purchases, repurchases uint64
 		var revenueUSD float64
-		dest = append(dest, &conversions, &revenueUSD)
+		dest = append(dest, &conversions, &revenueUSD, &registrations, &purchases, &repurchases)
 		if err := rows.Scan(dest...); err != nil {
 			return nil, fmt.Errorf("chstore: scanning conversion report row: %w", err)
 		}
-		out = append(out, ConversionAgg{Key: scanKey(q.Dims, deref(dimVals), day), Conversions: conversions, RevenueUSD: revenueUSD})
+		out = append(out, ConversionAgg{
+			Key: scanKey(q.Dims, deref(dimVals), day), Conversions: conversions, RevenueUSD: revenueUSD,
+			Registrations: registrations, Purchases: purchases, Repurchases: repurchases,
+		})
 	}
 	return out, rows.Err()
 }
@@ -454,7 +516,7 @@ func (s *EventStore) reportConversionsJoined(ctx context.Context, q ReportQuery)
 		selectCols = append(selectCols, col)
 	}
 
-	const convTypes = "('CPA_ACCEPT', 'CPA_REDEP')"
+	const convTypes = "('CPA_HOLD', 'CPA_ACCEPT', 'CPA_REDEP')"
 	// Args in placeholder order: click subquery (org, inner org/from/to), then outer WHERE.
 	args := []any{q.OrganizationID, q.OrganizationID, q.From, q.To, q.OrganizationID, q.From, q.To}
 	var filterClause strings.Builder
@@ -479,7 +541,11 @@ func (s *EventStore) reportConversionsJoined(ctx context.Context, q ReportQuery)
 	}
 
 	query := fmt.Sprintf(`
-		SELECT %scount() AS conversions, sum(c.usd_value * c.has_usd_value) AS revenue_usd
+		SELECT %scountIf(c.type IN ('CPA_ACCEPT', 'CPA_REDEP')) AS conversions,
+			sumIf(c.usd_value * c.has_usd_value, c.type IN ('CPA_ACCEPT', 'CPA_REDEP')) AS revenue_usd,
+			countIf(c.type = 'CPA_HOLD') AS registrations,
+			countIf(c.type = 'CPA_ACCEPT') AS purchases,
+			countIf(c.type = 'CPA_REDEP') AS repurchases
 		FROM conversion_events AS c
 		LEFT JOIN (
 			SELECT click_id, any(os) AS os, any(browser) AS browser, any(language) AS language
@@ -504,13 +570,16 @@ func (s *EventStore) reportConversionsJoined(ctx context.Context, q ReportQuery)
 	var out []ConversionAgg
 	for rows.Next() {
 		dimVals, day, dest := scanDest(q.Dims, q.ByDay)
-		var conversions uint64
+		var conversions, registrations, purchases, repurchases uint64
 		var revenueUSD float64
-		dest = append(dest, &conversions, &revenueUSD)
+		dest = append(dest, &conversions, &revenueUSD, &registrations, &purchases, &repurchases)
 		if err := rows.Scan(dest...); err != nil {
 			return nil, fmt.Errorf("chstore: scanning joined conversion report row: %w", err)
 		}
-		out = append(out, ConversionAgg{Key: scanKey(q.Dims, deref(dimVals), day), Conversions: conversions, RevenueUSD: revenueUSD})
+		out = append(out, ConversionAgg{
+			Key: scanKey(q.Dims, deref(dimVals), day), Conversions: conversions, RevenueUSD: revenueUSD,
+			Registrations: registrations, Purchases: purchases, Repurchases: repurchases,
+		})
 	}
 	return out, rows.Err()
 }

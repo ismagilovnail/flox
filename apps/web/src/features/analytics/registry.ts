@@ -79,7 +79,17 @@ export type MetricKey =
   | "cvr"
   | "cpc"
   | "cpa"
-  | "epc";
+  | "epc"
+  | "pwaInstalls"
+  | "registrations"
+  | "purchases"
+  | "repurchases"
+  | "clickToInstall"
+  | "installToReg"
+  | "regToPurchase"
+  | "costPerInstall"
+  | "costPerReg"
+  | "costPerPurchase";
 
 export type MetricFormat = "int" | "currency" | "percent" | "ratio";
 
@@ -98,6 +108,16 @@ export const METRICS: { key: MetricKey; label: string; format: MetricFormat }[] 
   { key: "cpc", label: "CPC", format: "currency" },
   { key: "cpa", label: "CPA", format: "currency" },
   { key: "epc", label: "EPC", format: "currency" },
+  { key: "pwaInstalls", label: "PWA installs", format: "int" },
+  { key: "registrations", label: "Registrations", format: "int" },
+  { key: "purchases", label: "Purchases", format: "int" },
+  { key: "repurchases", label: "Repurchases", format: "int" },
+  { key: "clickToInstall", label: "Click → install", format: "percent" },
+  { key: "installToReg", label: "Install → reg.", format: "percent" },
+  { key: "regToPurchase", label: "Reg. → purchase", format: "percent" },
+  { key: "costPerInstall", label: "Cost per install", format: "currency" },
+  { key: "costPerReg", label: "Cost per registration", format: "currency" },
+  { key: "costPerPurchase", label: "Cost per purchase", format: "currency" },
 ];
 
 export function metricLabel(t: TFunction, key: MetricKey): string {

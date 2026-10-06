@@ -62,6 +62,7 @@ export function AnalyticsView() {
       filters,
       columnOrder: [],
       columnWidths: {},
+      hiddenColumns: [],
       groupBy: "campaign",
       sort: { key: "revenue", dir: "desc" },
       compare: false,
@@ -164,6 +165,8 @@ export function AnalyticsView() {
               onColumnOrderChange={(columnOrder) => onChange({ columnOrder })}
               columnSizing={state.columnWidths}
               onColumnSizingChange={(columnWidths) => onChange({ columnWidths })}
+              hiddenColumns={state.hiddenColumns}
+              onHiddenColumnsChange={(hiddenColumns) => onChange({ hiddenColumns })}
             />
           )}
         </TabsContent>

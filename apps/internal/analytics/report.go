@@ -89,6 +89,26 @@ type MetricValues struct {
 	CPC          *float64
 	CPA          *float64
 	EPC          float64
+
+	// PWA / CPA funnel counters (§50 CPA FUNNEL). PwaInstalls comes from
+	// tracking_events and is always answerable; the three CPA counts are nil
+	// exactly when Conversions is (conversion_events can't answer the
+	// requested dimensions). Purchases = CPA_ACCEPT (the first purchase,
+	// FTD), Repurchases = CPA_REDEP, Registrations = CPA_HOLD.
+	PwaInstalls   uint64
+	Registrations *uint64
+	Purchases     *uint64
+	Repurchases   *uint64
+
+	// Step rates in percent and cost per step. Nil when the denominator is
+	// zero (or, for costs, when there is no cost on file) — never a
+	// fabricated 0 and never an error (CLAUDE.md #6, #12).
+	ClickToInstall  *float64
+	InstallToReg    *float64
+	RegToPurchase   *float64
+	CostPerInstall  *float64
+	CostPerReg      *float64
+	CostPerPurchase *float64
 }
 
 // ReportRow is one output row of Report/Timeseries/Breakdown/Dashboard —
@@ -329,6 +349,11 @@ func (s *Service) groupedReport(ctx context.Context, organizationID string, dims
 		return nil, fmt.Errorf("analytics: querying land-view report: %w", err)
 	}
 
+	installAggs, err := s.repo.ReportPwaInstalls(ctx, q)
+	if err != nil {
+		return nil, fmt.Errorf("analytics: querying pwa-install report: %w", err)
+	}
+
 	convSupported := chstore.SupportedByConversions(dims) && chstore.FiltersSupportedByConversions(q.Filters)
 	var convAggs []chstore.ConversionAgg
 	if convSupported {
@@ -360,6 +385,10 @@ func (s *Service) groupedReport(ctx context.Context, organizationID string, dims
 		acc := get(a.Key)
 		acc.landViews = a.LandViews
 	}
+	for _, a := range installAggs {
+		acc := get(a.Key)
+		acc.pwaInstalls = a.PwaInstalls
+	}
 	if convSupported {
 		// Default every row seen so far (from clicks/land) to a real zero
 		// — a group with clicks but genuinely no conversions must render
@@ -370,6 +399,8 @@ func (s *Service) groupedReport(ctx context.Context, organizationID string, dims
 		for _, acc := range merged {
 			zero, zeroF := uint64(0), 0.0
 			acc.conversions, acc.revenueUSD = &zero, &zeroF
+			z1, z2, z3 := uint64(0), uint64(0), uint64(0)
+			acc.registrations, acc.purchases, acc.repurchases = &z1, &z2, &z3
 		}
 		for _, a := range convAggs {
 			// get() here can legitimately create a new row: a click and
@@ -381,6 +412,8 @@ func (s *Service) groupedReport(ctx context.Context, organizationID string, dims
 			conversions, revenue := a.Conversions, a.RevenueUSD
 			acc.conversions = &conversions
 			acc.revenueUSD = &revenue
+			registrations, purchases, repurchases := a.Registrations, a.Purchases, a.Repurchases
+			acc.registrations, acc.purchases, acc.repurchases = &registrations, &purchases, &repurchases
 		}
 	}
 
@@ -557,6 +590,9 @@ type rowAccumulator struct {
 	clicks, uniqueClicks, landViews uint64
 	conversions                     *uint64
 	revenueUSD                      *float64
+	pwaInstalls                     uint64
+	registrations, purchases        *uint64
+	repurchases                     *uint64
 	costUSD                         *float64
 }
 
@@ -565,9 +601,21 @@ type rowAccumulator struct {
 // function's own doc comment for why nothing here may drift from it.
 func deriveMetrics(acc *rowAccumulator) MetricValues {
 	m := MetricValues{
-		Clicks:       acc.clicks,
-		UniqueClicks: acc.uniqueClicks,
-		Conversions:  acc.conversions,
+		Clicks:        acc.clicks,
+		UniqueClicks:  acc.uniqueClicks,
+		Conversions:   acc.conversions,
+		PwaInstalls:   acc.pwaInstalls,
+		Registrations: acc.registrations,
+		Purchases:     acc.purchases,
+		Repurchases:   acc.repurchases,
+	}
+
+	m.ClickToInstall = percentOf(acc.pwaInstalls, acc.clicks)
+	if acc.registrations != nil {
+		m.InstallToReg = percentOf(*acc.registrations, acc.pwaInstalls)
+		if acc.purchases != nil {
+			m.RegToPurchase = percentOf(*acc.purchases, *acc.registrations)
+		}
 	}
 
 	if acc.clicks > 0 {
@@ -611,9 +659,36 @@ func deriveMetrics(acc *rowAccumulator) MetricValues {
 			cpa := costVal / float64(*acc.conversions)
 			m.CPA = &cpa
 		}
+		if costVal > 0 {
+			m.CostPerInstall = perUnit(costVal, acc.pwaInstalls)
+			if acc.registrations != nil {
+				m.CostPerReg = perUnit(costVal, *acc.registrations)
+			}
+			if acc.purchases != nil {
+				m.CostPerPurchase = perUnit(costVal, *acc.purchases)
+			}
+		}
 	}
 
 	return m
+}
+
+// percentOf is num/den in percent, nil when den is zero.
+func percentOf(num, den uint64) *float64 {
+	if den == 0 {
+		return nil
+	}
+	v := float64(num) / float64(den) * 100
+	return &v
+}
+
+// perUnit is cost/count, nil when count is zero.
+func perUnit(cost float64, count uint64) *float64 {
+	if count == 0 {
+		return nil
+	}
+	v := cost / float64(count)
+	return &v
 }
 
 // rowKeyString is groupedReport's merge key: day (if present) plus every
@@ -727,12 +802,39 @@ func metricFloat(m MetricValues, key string) (float64, bool) {
 		return ptrOrNegInf(m.CPA), true
 	case "epc":
 		return m.EPC, true
+	case "pwainstalls":
+		return float64(m.PwaInstalls), true
+	case "registrations":
+		return u64OrNegInf(m.Registrations), true
+	case "purchases":
+		return u64OrNegInf(m.Purchases), true
+	case "repurchases":
+		return u64OrNegInf(m.Repurchases), true
+	case "clicktoinstall":
+		return ptrOrNegInf(m.ClickToInstall), true
+	case "installtoreg":
+		return ptrOrNegInf(m.InstallToReg), true
+	case "regtopurchase":
+		return ptrOrNegInf(m.RegToPurchase), true
+	case "costperinstall":
+		return ptrOrNegInf(m.CostPerInstall), true
+	case "costperreg":
+		return ptrOrNegInf(m.CostPerReg), true
+	case "costperpurchase":
+		return ptrOrNegInf(m.CostPerPurchase), true
 	default:
 		return 0, false
 	}
 }
 
 const negInf = -1 << 62
+
+func u64OrNegInf(p *uint64) float64 {
+	if p == nil {
+		return negInf
+	}
+	return float64(*p)
+}
 
 func ptrOrNegInf(p *float64) float64 {
 	if p == nil {

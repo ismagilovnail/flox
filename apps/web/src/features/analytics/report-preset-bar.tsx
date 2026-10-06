@@ -83,6 +83,7 @@ function matchesPreset(state: ReportControlsState, preset: ReportPreset): boolea
     sameFilters(state.filters, preset.filters ?? []) &&
     same(state.columnOrder ?? [], preset.columnOrder ?? []) &&
     sameWidths(state.columnWidths ?? {}, preset.columnWidths ?? {}) &&
+    same([...(state.hiddenColumns ?? [])].sort(), [...(preset.hiddenColumns ?? [])].sort()) &&
     sameRange(state.dateRange, periodToDateRange(preset.period, new Date()))
   );
 }
@@ -118,6 +119,7 @@ export function ReportPresetBar({
       filters: preset.filters ?? [],
       columnOrder: preset.columnOrder ?? [],
       columnWidths: preset.columnWidths ?? {},
+      hiddenColumns: preset.hiddenColumns ?? [],
       groupBy: preset.groupBy,
       timezone: preset.timezone,
       dateRange: periodToDateRange(preset.period, new Date()),
@@ -155,6 +157,7 @@ export function ReportPresetBar({
       filters: state.filters,
       columnOrder: state.columnOrder ?? [],
       columnWidths: state.columnWidths ?? {},
+      hiddenColumns: state.hiddenColumns ?? [],
       groupBy: state.groupBy,
       timezone: state.timezone,
       period: dateRangeToPeriod(state.dateRange, new Date()),

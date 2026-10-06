@@ -152,6 +152,17 @@ type metricValuesResponse struct {
 	CPC          *float64 `json:"cpc"`
 	CPA          *float64 `json:"cpa"`
 	EPC          float64  `json:"epc"`
+
+	PwaInstalls     uint64   `json:"pwaInstalls"`
+	Registrations   *uint64  `json:"registrations"`
+	Purchases       *uint64  `json:"purchases"`
+	Repurchases     *uint64  `json:"repurchases"`
+	ClickToInstall  *float64 `json:"clickToInstall"`
+	InstallToReg    *float64 `json:"installToReg"`
+	RegToPurchase   *float64 `json:"regToPurchase"`
+	CostPerInstall  *float64 `json:"costPerInstall"`
+	CostPerReg      *float64 `json:"costPerReg"`
+	CostPerPurchase *float64 `json:"costPerPurchase"`
 }
 
 func metricValuesToResponse(m MetricValues) metricValuesResponse {
@@ -159,6 +170,9 @@ func metricValuesToResponse(m MetricValues) metricValuesResponse {
 		Clicks: m.Clicks, UniqueClicks: m.UniqueClicks, Conversions: m.Conversions,
 		Revenue: m.Revenue, Cost: m.Cost, Profit: m.Profit, ROI: m.ROI, ROAS: m.ROAS,
 		CTR: m.CTR, CVR: m.CVR, CPC: m.CPC, CPA: m.CPA, EPC: m.EPC,
+		PwaInstalls: m.PwaInstalls, Registrations: m.Registrations, Purchases: m.Purchases, Repurchases: m.Repurchases,
+		ClickToInstall: m.ClickToInstall, InstallToReg: m.InstallToReg, RegToPurchase: m.RegToPurchase,
+		CostPerInstall: m.CostPerInstall, CostPerReg: m.CostPerReg, CostPerPurchase: m.CostPerPurchase,
 	}
 }
 

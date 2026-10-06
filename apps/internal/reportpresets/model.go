@@ -31,7 +31,7 @@ type Period struct {
 }
 
 // validMetrics mirrors features/analytics/registry.ts's MetricKey union
-// exactly — 13 entries. No Go-side metrics registry exists to import (the
+// exactly — 23 entries. No Go-side metrics registry exists to import (the
 // real /analytics/report endpoint always returns every metric; there's
 // nothing server-side to validate a client-selected metric list against),
 // so this is a deliberate, small, doc-commented duplicate — same tradeoff
@@ -40,6 +40,9 @@ var validMetrics = map[string]bool{
 	"clicks": true, "uniqueClicks": true, "conversions": true, "revenue": true,
 	"cost": true, "profit": true, "roi": true, "roas": true, "ctr": true,
 	"cvr": true, "cpc": true, "cpa": true, "epc": true,
+	"pwaInstalls": true, "registrations": true, "purchases": true, "repurchases": true,
+	"clickToInstall": true, "installToReg": true, "regToPurchase": true,
+	"costPerInstall": true, "costPerReg": true, "costPerPurchase": true,
 }
 
 // maxDimensions matches maxReportDims in apps/internal/analytics/report.go
@@ -73,6 +76,7 @@ type ReportPreset struct {
 	Filters        []Filter       `json:"filters"`
 	ColumnOrder    []string       `json:"columnOrder"`
 	ColumnWidths   map[string]int `json:"columnWidths"`
+	HiddenColumns  []string       `json:"hiddenColumns"`
 	GroupBy        string         `json:"groupBy"`
 	Period         Period         `json:"period"`
 	Timezone       string         `json:"timezone"`
@@ -94,9 +98,11 @@ type CreateInput struct {
 	ColumnOrder []string
 	// ColumnWidths is the dragged column widths in px by column id; empty means natural widths.
 	ColumnWidths map[string]int
-	GroupBy      string
-	Period       Period
-	Timezone     string
+	// HiddenColumns is the ids of the columns hidden in the table; empty means all shown.
+	HiddenColumns []string
+	GroupBy       string
+	Period        Period
+	Timezone      string
 }
 
 type UpdateInput struct {
@@ -109,9 +115,11 @@ type UpdateInput struct {
 	ColumnOrder []string
 	// ColumnWidths: nil leaves them as they are; an empty non-nil map resets to natural widths.
 	ColumnWidths map[string]int
-	GroupBy      *string
-	Period       *Period
-	Timezone     *string
+	// HiddenColumns: nil leaves them as they are; an empty non-nil slice shows every column.
+	HiddenColumns []string
+	GroupBy       *string
+	Period        *Period
+	Timezone      *string
 }
 
 // defaultPresetSeed is what Repository.EnsureDefault creates the very

@@ -139,6 +139,8 @@ function DataTable<TData extends Record<string, unknown>>({
   onColumnOrderChange,
   columnSizing: controlledColumnSizing,
   onColumnSizingChange,
+  columnVisibility: controlledColumnVisibility,
+  onColumnVisibilityChange,
 }: {
   columns: ColumnDef<typeof dataTableFeatures, TData>[]
   data: TData[]
@@ -167,15 +169,26 @@ function DataTable<TData extends Record<string, unknown>>({
   /** Controlled column widths in px by column id ({} = natural widths): lets the owner persist them, e.g. in a saved report preset. Omitted, the table keeps its own. */
   columnSizing?: Record<string, number>
   onColumnSizingChange?: (sizing: Record<string, number>) => void
+  /** Controlled visibility (id -> shown); absent = the table keeps it itself. */
+  columnVisibility?: Record<string, boolean>
+  onColumnVisibilityChange?: (visibility: Record<string, boolean>) => void
 }) {
   const { t } = useTranslation("common")
   const [sorting, setSorting] = React.useState<
     { id: string; desc: boolean }[]
   >([])
   const [globalFilter, setGlobalFilter] = React.useState("")
-  const [columnVisibility, setColumnVisibility] = React.useState<
+  const [internalColumnVisibility, setInternalColumnVisibility] = React.useState<
     Record<string, boolean>
   >(initialColumnVisibility ?? {})
+  const columnVisibility = controlledColumnVisibility ?? internalColumnVisibility
+  const setColumnVisibility = (
+    next: Record<string, boolean> | ((old: Record<string, boolean>) => Record<string, boolean>),
+  ) => {
+    const resolved = typeof next === "function" ? next(columnVisibility) : next
+    setInternalColumnVisibility(resolved)
+    onColumnVisibilityChange?.(resolved)
+  }
   const [pagination, setPagination] = React.useState({
     pageIndex: 0,
     pageSize,

@@ -35,6 +35,10 @@ func (r *fakeRepo) ReportLandViews(_ context.Context, _ chstore.ReportQuery) ([]
 	return nil, nil
 }
 
+func (r *fakeRepo) ReportPwaInstalls(_ context.Context, _ chstore.ReportQuery) ([]chstore.InstallAgg, error) {
+	return nil, nil
+}
+
 func (r *fakeRepo) ReportConversions(_ context.Context, _ chstore.ReportQuery) ([]chstore.ConversionAgg, error) {
 	return nil, nil
 }

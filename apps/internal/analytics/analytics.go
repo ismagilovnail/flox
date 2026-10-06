@@ -28,6 +28,7 @@ type Repository interface {
 	DailyCampaignRevenue(ctx context.Context, organizationID, campaignID string, from, to time.Time) ([]chstore.DailyRevenue, error)
 	ReportClicks(ctx context.Context, q chstore.ReportQuery) ([]chstore.ClickAgg, error)
 	ReportLandViews(ctx context.Context, q chstore.ReportQuery) ([]chstore.LandAgg, error)
+	ReportPwaInstalls(ctx context.Context, q chstore.ReportQuery) ([]chstore.InstallAgg, error)
 	ReportConversions(ctx context.Context, q chstore.ReportQuery) ([]chstore.ConversionAgg, error)
 	FunnelCounts(ctx context.Context, organizationID string, from, to time.Time, filters []chstore.ReportFilter) (map[string]uint64, error)
 	DistinctValues(ctx context.Context, organizationID string, dim chstore.ReportDimension, from, to time.Time, limit int) ([]string, error)

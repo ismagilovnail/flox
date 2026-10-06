@@ -286,3 +286,13 @@ render real data with no console errors; a published custom metric
 (`Margin per Click`) correctly evaluates to "—" against a null-cost row
 instead of throwing or showing a fabricated number. `tsc --noEmit`/
 `eslint`/`next typegen` clean on `apps/web`.
+
+## PWA / CPA funnel metrics
+
+Every metrics object also carries: `pwaInstalls` (PWA_INSTALL count),
+`registrations` (CPA_HOLD), `purchases` (CPA_ACCEPT), `repurchases` (CPA_REDEP),
+`clickToInstall`, `installToReg`, `regToPurchase` (percent) and
+`costPerInstall`, `costPerReg`, `costPerPurchase` (USD). The CPA counts are
+`null` when the requested dimensions can't be answered from conversion_events;
+rates and costs are `null` when the denominator is 0 or no cost is on file.
+`conversions` and `revenue` still count CPA_ACCEPT + CPA_REDEP only.

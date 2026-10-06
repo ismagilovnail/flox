@@ -18,6 +18,8 @@ export function ReportTable({
   onColumnOrderChange,
   columnSizing,
   onColumnSizingChange,
+  hiddenColumns,
+  onHiddenColumnsChange,
 }: {
   rows: ReportRow[];
   dimensions: DimensionKey[];
@@ -31,6 +33,8 @@ export function ReportTable({
   /** Dragged column widths in px by column id; {} is natural widths. Lives in the report state so a preset can save it. */
   columnSizing?: Record<string, number>;
   onColumnSizingChange?: (sizing: Record<string, number>) => void;
+  hiddenColumns?: string[];
+  onHiddenColumnsChange?: (hidden: string[]) => void;
 }) {
   const { t } = useTranslation("analytics");
   const valueLabel = useDimensionValueLabel();
@@ -81,6 +85,15 @@ export function ReportTable({
       columnOrder={columnOrder}
       columnSizing={columnSizing}
       onColumnSizingChange={onColumnSizingChange}
+      columnVisibility={hiddenColumns ? Object.fromEntries(hiddenColumns.map((id) => [id, false])) : undefined}
+      onColumnVisibilityChange={(visibility) =>
+        onHiddenColumnsChange?.(
+          Object.entries(visibility)
+            .filter(([, shown]) => !shown)
+            .map(([id]) => id)
+            .sort(),
+        )
+      }
       onColumnOrderChange={(order) => {
         // Dragged back to the natural arrangement = no custom order at all, so
         // the preset isn't shown as modified for a change that changed nothing.

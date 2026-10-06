@@ -5,6 +5,32 @@ per-phase, matching `CLAUDE.md`'s phase protocol. The one exception is
 [Between phases], below: spec amendments and the code changes that follow from
 them land between phases and would otherwise be invisible here.
 
+## [Between phases] — PWA / registration / purchase metrics; hidden columns are saved with presets
+
+Metrics (§50 CPA FUNNEL): `pwaInstalls` (PWA_INSTALL, from `tracking_events`),
+`registrations` (CPA_HOLD), `purchases` (CPA_ACCEPT, the first purchase / FTD),
+`repurchases` (CPA_REDEP); step rates `clickToInstall`, `installToReg`,
+`regToPurchase` (percent) and costs `costPerInstall`, `costPerReg`,
+`costPerPurchase`. Rates and costs are `null` (shown "—") when the denominator
+is zero or no cost is on file — never 0 (CLAUDE.md #6). The three CPA counts are
+`null` when conversion_events can't answer the requested dimensions, like
+`conversions`. `conversions`/`revenue` are unchanged (accept + redep only): the
+conversion queries now also read CPA_HOLD, so a group with only a registration
+is a row with 0 conversions. New `EventStore.ReportPwaInstalls`, per-status
+counters on `ConversionAgg`, 10 keys in `validMetrics` and the registry.
+Custom Metrics' registry does not know the new metrics yet.
+
+Hidden table columns: the report's column visibility was DataTable-internal, so
+a reload forgot it. It is now part of the report state and of presets
+(`report_presets.hidden_columns text[]`, migration 00047, `hiddenColumns` on the
+API: omitted on update = unchanged, `[]` = show all). Like order and widths it is
+restored when the preset is applied; unsaved edits still need "Сохранить
+изменения". Tests: `TestReportPwaAndCpaFunnelMetrics`,
+`TestReportFunnelMetricsAreNullNotZeroWhenUndefined`,
+`TestReportPwaInstallsCountsAndIsTenantScoped`,
+`TestReportConversionsCountsRedepsSeparately`,
+`TestPresetHiddenColumnsRoundTripUpdateAndClear`.
+
 ## [Between phases] — funnel, bar, line and Overview charts no longer flicker / vanish on hover
 
 Cause: series were filled with `oklch(...)` colours, and on hover zrender animates

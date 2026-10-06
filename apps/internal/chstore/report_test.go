@@ -175,8 +175,10 @@ func TestReportConversionsGroupsByStreamSetPreservesEmptyBucket(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ReportConversions (by stream_set): %v", err)
 	}
-	if len(aggs) != 2 {
-		t.Fatalf("ReportConversions (by stream_set) = %d rows, want 2 (stream-set-a, \"\") — CPA_HOLD excluded", len(aggs))
+	// stream-set-b only has a CPA_HOLD: it is a row now (one registration),
+	// but with zero conversions and zero revenue.
+	if len(aggs) != 3 {
+		t.Fatalf("ReportConversions (by stream_set) = %d rows, want 3 (stream-set-a, stream-set-b, \"\")", len(aggs))
 	}
 	byStreamSet := map[string]chstore.ConversionAgg{}
 	for _, a := range aggs {
@@ -184,6 +186,9 @@ func TestReportConversionsGroupsByStreamSetPreservesEmptyBucket(t *testing.T) {
 	}
 	if byStreamSet["stream-set-a"].Conversions != 1 || byStreamSet["stream-set-a"].RevenueUSD != 25.5 {
 		t.Fatalf("stream-set-a row = %+v, want Conversions=1 RevenueUSD=25.5", byStreamSet["stream-set-a"])
+	}
+	if got := byStreamSet["stream-set-b"]; got.Conversions != 0 || got.RevenueUSD != 0 || got.Registrations != 1 {
+		t.Fatalf("stream-set-b row = %+v, want Conversions=0 RevenueUSD=0 Registrations=1 (HOLD only)", got)
 	}
 	if got, ok := byStreamSet[""]; !ok || got.Conversions != 1 || got.RevenueUSD != 10 {
 		t.Fatalf(`"" row (unattributed) = %+v (present=%v), want Conversions=1 RevenueUSD=10`, got, ok)
@@ -237,6 +242,67 @@ func TestReportConversionsExcludesHoldAndTrash(t *testing.T) {
 	}
 	if aggs[0].RevenueUSD != 25.5 {
 		t.Fatalf("RevenueUSD = %v, want 25.5 (CPA_HOLD's HasUSDValue=false must contribute 0)", aggs[0].RevenueUSD)
+	}
+	// ...but the per-status counters still see the HOLD (a registration).
+	if aggs[0].Registrations != 1 || aggs[0].Purchases != 1 || aggs[0].Repurchases != 0 {
+		t.Fatalf("Registrations/Purchases/Repurchases = %d/%d/%d, want 1/1/0", aggs[0].Registrations, aggs[0].Purchases, aggs[0].Repurchases)
+	}
+}
+
+func TestReportPwaInstallsCountsAndIsTenantScoped(t *testing.T) {
+	conn := mustConn(t)
+	store := chstore.NewEventStore(conn)
+	ctx := context.Background()
+	orgID, otherOrg, campaignID := idgen.New(), idgen.New(), idgen.New()
+	day := time.Date(2026, 8, 21, 0, 0, 0, 0, time.UTC)
+	if err := store.InsertBatch(ctx, []event.Event{
+		{Type: event.PwaInstall, EventAt: day.Add(time.Hour), OrganizationID: orgID, CampaignID: campaignID, ClickID: idgen.New(), Country: "US"},
+		{Type: event.PwaInstall, EventAt: day.Add(2 * time.Hour), OrganizationID: orgID, CampaignID: campaignID, ClickID: idgen.New(), Country: "DE"},
+		{Type: event.PwaView, EventAt: day.Add(2 * time.Hour), OrganizationID: orgID, CampaignID: campaignID, ClickID: idgen.New(), Country: "DE"},
+		{Type: event.PwaInstall, EventAt: day.Add(3 * time.Hour), OrganizationID: otherOrg, CampaignID: campaignID, ClickID: idgen.New(), Country: "US"},
+	}); err != nil {
+		t.Fatalf("seeding installs: %v", err)
+	}
+	aggs, err := store.ReportPwaInstalls(ctx, chstore.ReportQuery{
+		OrganizationID: orgID, Dims: []chstore.ReportDimension{chstore.DimCountry}, From: day, To: day.Add(24 * time.Hour),
+	})
+	if err != nil {
+		t.Fatalf("ReportPwaInstalls: %v", err)
+	}
+	got := map[string]uint64{}
+	for _, a := range aggs {
+		got[a.Key.DimValues[chstore.DimCountry]] = a.PwaInstalls
+	}
+	if len(got) != 2 || got["US"] != 1 || got["DE"] != 1 {
+		t.Fatalf("installs by country = %v, want US=1 DE=1 (PWA_VIEW and other org excluded)", got)
+	}
+}
+
+func TestReportConversionsCountsRedepsSeparately(t *testing.T) {
+	conn := mustConn(t)
+	store := chstore.NewEventStore(conn)
+	ctx := context.Background()
+	orgID, campaignID, click := idgen.New(), idgen.New(), idgen.New()
+	day := time.Date(2026, 8, 21, 0, 0, 0, 0, time.UTC)
+	if err := store.InsertBatch(ctx, []event.Event{
+		{Type: event.SourceClick, EventAt: day, OrganizationID: orgID, CampaignID: campaignID, ClickID: click, OS: "linux"},
+		{Type: event.CpaHold, EventAt: day.Add(time.Hour), OrganizationID: orgID, CampaignID: campaignID, ClickID: click},
+		{Type: event.CpaAccept, EventAt: day.Add(2 * time.Hour), OrganizationID: orgID, CampaignID: campaignID, ClickID: click, USDValue: 10, HasUSDValue: true},
+		{Type: event.CpaRedep, EventAt: day.Add(3 * time.Hour), OrganizationID: orgID, CampaignID: campaignID, ClickID: click, USDValue: 5, HasUSDValue: true, EventRef: "t1"},
+		{Type: event.CpaRedep, EventAt: day.Add(4 * time.Hour), OrganizationID: orgID, CampaignID: campaignID, ClickID: click, USDValue: 5, HasUSDValue: true, EventRef: "t2"},
+	}); err != nil {
+		t.Fatalf("seeding: %v", err)
+	}
+	// Plain and click-joined (by OS) paths must agree.
+	for name, dims := range map[string][]chstore.ReportDimension{"plain": nil, "joined": {chstore.DimOS}} {
+		aggs, err := store.ReportConversions(ctx, chstore.ReportQuery{OrganizationID: orgID, Dims: dims, From: day, To: day.Add(24 * time.Hour)})
+		if err != nil || len(aggs) != 1 {
+			t.Fatalf("%s: ReportConversions = %+v, %v", name, aggs, err)
+		}
+		a := aggs[0]
+		if a.Registrations != 1 || a.Purchases != 1 || a.Repurchases != 2 || a.Conversions != 3 || a.RevenueUSD != 20 {
+			t.Fatalf("%s: got %+v, want reg=1 purchases=1 redeps=2 conversions=3 revenue=20", name, a)
+		}
 	}
 }
 

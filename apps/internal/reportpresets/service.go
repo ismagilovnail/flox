@@ -40,7 +40,7 @@ func (s *Service) Get(ctx context.Context, orgID, id string) (ReportPreset, erro
 }
 
 func (s *Service) Create(ctx context.Context, orgID, createdByUserID string, in CreateInput) (ReportPreset, error) {
-	if err := validateMutable(in.Name, in.Dimensions, in.Metrics, in.Filters, in.ColumnOrder, in.ColumnWidths, in.GroupBy, &in.Period, in.Timezone); err != nil {
+	if err := validateMutable(in.Name, in.Dimensions, in.Metrics, in.Filters, in.ColumnOrder, in.ColumnWidths, in.HiddenColumns, in.GroupBy, &in.Period, in.Timezone); err != nil {
 		return ReportPreset{}, err
 	}
 	return s.repo.Create(ctx, orgID, createdByUserID, in)
@@ -82,6 +82,10 @@ func (s *Service) Update(ctx context.Context, orgID, id string, in UpdateInput) 
 	if in.ColumnWidths != nil {
 		columnWidths = in.ColumnWidths
 	}
+	hiddenColumns := existing.HiddenColumns
+	if in.HiddenColumns != nil {
+		hiddenColumns = in.HiddenColumns
+	}
 	groupBy := existing.GroupBy
 	if in.GroupBy != nil {
 		groupBy = *in.GroupBy
@@ -94,7 +98,7 @@ func (s *Service) Update(ctx context.Context, orgID, id string, in UpdateInput) 
 	if in.Timezone != nil {
 		timezone = *in.Timezone
 	}
-	if err := validateMutable(name, dims, metrics, filters, columnOrder, columnWidths, groupBy, &period, timezone); err != nil {
+	if err := validateMutable(name, dims, metrics, filters, columnOrder, columnWidths, hiddenColumns, groupBy, &period, timezone); err != nil {
 		return ReportPreset{}, err
 	}
 
@@ -112,7 +116,7 @@ func (s *Service) Delete(ctx context.Context, orgID, id string) error {
 	return s.repo.Delete(ctx, orgID, id)
 }
 
-func validateMutable(name string, dimensions, metrics []string, filters []Filter, columnOrder []string, columnWidths map[string]int, groupBy string, period *Period, timezone string) error {
+func validateMutable(name string, dimensions, metrics []string, filters []Filter, columnOrder []string, columnWidths map[string]int, hiddenColumns []string, groupBy string, period *Period, timezone string) error {
 	name = strings.TrimSpace(name)
 	if len(name) < nameMinLen || len(name) > nameMaxLen {
 		return apierror.Validation("name must be 1-80 characters", map[string]string{"name": "invalid length"})
@@ -151,6 +155,15 @@ func validateMutable(name string, dimensions, metrics []string, filters []Filter
 	for _, id := range columnOrder {
 		if id == "" || len(id) > maxColumnIDLen {
 			return apierror.Validation("invalid column id in the order", map[string]string{"columnOrder": id})
+		}
+	}
+
+	if len(hiddenColumns) > maxColumnOrder {
+		return apierror.Validation("too many hidden columns", map[string]string{"hiddenColumns": "too many"})
+	}
+	for _, id := range hiddenColumns {
+		if id == "" || len(id) > maxColumnIDLen {
+			return apierror.Validation("invalid hidden column id", map[string]string{"hiddenColumns": id})
 		}
 	}
 

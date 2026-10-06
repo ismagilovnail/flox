@@ -72,6 +72,8 @@ export type ReportPreset = {
   columnOrder: string[];
   /** Dragged table column widths in px by column id; {} is natural widths. */
   columnWidths: Record<string, number>;
+  /** Ids of the columns hidden in the table; [] shows every column. */
+  hiddenColumns: string[];
   groupBy: DimensionKey;
   period: ReportPeriod;
   timezone: string;
@@ -91,6 +93,7 @@ export type ReportPresetInput = {
   filters: FilterCondition[];
   columnOrder: string[];
   columnWidths: Record<string, number>;
+  hiddenColumns: string[];
   groupBy: DimensionKey;
   period: ReportPeriod;
   timezone: string;

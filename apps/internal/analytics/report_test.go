@@ -17,11 +17,12 @@ import (
 // internal/chstore/report_test.go; what belongs here is
 // report.go's own merge/derive/sort logic, which needs none of that.
 type reportFakeRepo struct {
-	clicks []chstore.ClickAgg
-	land   []chstore.LandAgg
-	conv   []chstore.ConversionAgg
-	funnel map[string]uint64
-	values []string
+	clicks   []chstore.ClickAgg
+	land     []chstore.LandAgg
+	conv     []chstore.ConversionAgg
+	installs []chstore.InstallAgg
+	funnel   map[string]uint64
+	values   []string
 
 	lastConvQuery  *chstore.ReportQuery // nil unless ReportConversions was actually called
 	lastClickQuery *chstore.ReportQuery
@@ -46,6 +47,9 @@ func (r *reportFakeRepo) ReportClicks(_ context.Context, q chstore.ReportQuery) 
 }
 func (r *reportFakeRepo) ReportLandViews(context.Context, chstore.ReportQuery) ([]chstore.LandAgg, error) {
 	return r.land, nil
+}
+func (r *reportFakeRepo) ReportPwaInstalls(context.Context, chstore.ReportQuery) ([]chstore.InstallAgg, error) {
+	return r.installs, nil
 }
 func (r *reportFakeRepo) ReportConversions(_ context.Context, q chstore.ReportQuery) ([]chstore.ConversionAgg, error) {
 	r.lastConvQuery = &q
@@ -148,6 +152,65 @@ func TestReportComputesEveryMetricWhenCostIsAvailable(t *testing.T) {
 	}
 	if m.EPC != 5 {
 		t.Fatalf("EPC = %v, want 5 (500/100)", m.EPC)
+	}
+}
+
+func TestReportPwaAndCpaFunnelMetrics(t *testing.T) {
+	k := dimKey(chstore.DimCampaign, "camp-a")
+	repo := &reportFakeRepo{
+		clicks:   []chstore.ClickAgg{{Key: k, Clicks: 100, UniqueClicks: 100}},
+		installs: []chstore.InstallAgg{{Key: k, PwaInstalls: 40}},
+		conv:     []chstore.ConversionAgg{{Key: k, Conversions: 8, RevenueUSD: 400, Registrations: 20, Purchases: 6, Repurchases: 2}},
+	}
+	svc := analytics.NewService(repo, &fakeCost{byCampaign: []cost.CampaignSpend{{CampaignID: "camp-a", AmountUSD: 200, AllConverted: true}}})
+	rows, err := svc.Report(context.Background(), "org-1", analytics.ReportInput{
+		Dims: []chstore.ReportDimension{chstore.DimCampaign},
+		From: time.Date(2026, 8, 1, 0, 0, 0, 0, time.UTC), To: time.Date(2026, 8, 7, 0, 0, 0, 0, time.UTC),
+	})
+	if err != nil || len(rows) != 1 {
+		t.Fatalf("Report: %v rows=%d", err, len(rows))
+	}
+	m := rows[0].Metrics
+	eq := func(name string, got *float64, want float64) {
+		t.Helper()
+		if got == nil || *got != want {
+			t.Fatalf("%s = %v, want %v", name, got, want)
+		}
+	}
+	if m.PwaInstalls != 40 || *m.Registrations != 20 || *m.Purchases != 6 || *m.Repurchases != 2 {
+		t.Fatalf("counts = %d/%v/%v/%v, want 40/20/6/2", m.PwaInstalls, m.Registrations, m.Purchases, m.Repurchases)
+	}
+	eq("ClickToInstall", m.ClickToInstall, 40)
+	eq("InstallToReg", m.InstallToReg, 50)
+	eq("RegToPurchase", m.RegToPurchase, 30)
+	eq("CostPerInstall", m.CostPerInstall, 5)
+	eq("CostPerReg", m.CostPerReg, 10)
+	eq("CostPerPurchase", m.CostPerPurchase, 200.0/6)
+}
+
+func TestReportFunnelMetricsAreNullNotZeroWhenUndefined(t *testing.T) {
+	k := dimKey(chstore.DimCampaign, "camp-a")
+	// Clicks but no installs/registrations/purchases, and no cost on file.
+	repo := &reportFakeRepo{clicks: []chstore.ClickAgg{{Key: k, Clicks: 10, UniqueClicks: 10}}}
+	rows, err := analytics.NewService(repo, nil).Report(context.Background(), "org-1", analytics.ReportInput{
+		Dims: []chstore.ReportDimension{chstore.DimCampaign},
+		From: time.Date(2026, 8, 1, 0, 0, 0, 0, time.UTC), To: time.Date(2026, 8, 7, 0, 0, 0, 0, time.UTC),
+	})
+	if err != nil || len(rows) != 1 {
+		t.Fatalf("Report: %v rows=%d", err, len(rows))
+	}
+	m := rows[0].Metrics
+	if m.PwaInstalls != 0 || m.Registrations == nil || *m.Registrations != 0 {
+		t.Fatalf("zero counts must be real zeros, got installs=%d regs=%v", m.PwaInstalls, m.Registrations)
+	}
+	if m.ClickToInstall == nil || *m.ClickToInstall != 0 {
+		t.Fatalf("ClickToInstall = %v, want a real 0 (10 clicks, 0 installs)", m.ClickToInstall)
+	}
+	if m.InstallToReg != nil || m.RegToPurchase != nil {
+		t.Fatalf("rates over a zero denominator must be nil, got %v / %v", m.InstallToReg, m.RegToPurchase)
+	}
+	if m.CostPerInstall != nil || m.CostPerReg != nil || m.CostPerPurchase != nil {
+		t.Fatal("cost per step without cost on file must be nil")
 	}
 }
 
