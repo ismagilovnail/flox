@@ -46,10 +46,13 @@ export const PLATFORM_PRESETS: Record<LinkPlatform, LinkParams> = {
   },
 };
 
-/** Which preset a traffic source's `type` maps to; null = no preset for it. */
+/** Which preset a traffic source's `type` maps to; null = no preset for it.
+ * `type` is a free string server-side (the UI writes "Facebook", older rows
+ * hold "facebook"), so the match ignores case and surrounding spaces. */
 export function platformForSourceType(type: string | undefined): LinkPlatform | null {
-  if (type === "Facebook") return "facebook";
-  if (type === "TikTok") return "tiktok";
+  const normalized = type?.trim().toLowerCase();
+  if (normalized === "facebook") return "facebook";
+  if (normalized === "tiktok") return "tiktok";
   return null;
 }
 

@@ -74,7 +74,7 @@ export function TrackingLinkBuilder({
             {t("trackingLinks.builder.copyMenu")}
           </Button>
         </DropdownMenuTrigger>
-        <DropdownMenuContent align="end">
+        <DropdownMenuContent align="start" className="min-w-56">
           {platforms.map((p) => (
             <DropdownMenuItem
               key={p}

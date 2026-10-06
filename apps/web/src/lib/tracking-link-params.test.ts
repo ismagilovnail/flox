@@ -37,6 +37,8 @@ describe("platformForSourceType", () => {
   it("maps Facebook/TikTok and nothing else", () => {
     expect(platformForSourceType("Facebook")).toBe("facebook");
     expect(platformForSourceType("TikTok")).toBe("tiktok");
+    expect(platformForSourceType("facebook")).toBe("facebook");
+    expect(platformForSourceType(" TIKTOK ")).toBe("tiktok");
     expect(platformForSourceType("Google")).toBeNull();
     expect(platformForSourceType(undefined)).toBeNull();
   });

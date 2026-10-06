@@ -14,7 +14,11 @@ live preview of the final URL. The presets (`lib/tracking-link-params.ts`) map t
 platforms' own macros (`{{campaign.id}}`, `{{adset.id}}`, `__AID__`, `__CALLBACK_PARAM__`…)
 into the keys the tracker already reads (`apps/tracker/params.go`); macros are never
 percent-encoded, other values are. Presets live in code, not per traffic source. Unit tests
-for the URL assembly; not verified in a browser.
+for the URL assembly. Verified in the browser (dev compose `web`): menu, builder prefilled
+from the source type, Facebook/TikTok presets, encoding of a hand-typed value, copy toast.
+That pass found that a traffic source's `type` is a free string (older rows hold
+`facebook`), so the source-type match ignores case; the copy menu was also widened.
+The clipboard's content itself was not read back.
 
 ## [Between phases] — organization timezone is the default for analytics and the overview
 
