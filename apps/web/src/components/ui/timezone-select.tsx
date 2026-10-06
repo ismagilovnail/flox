@@ -51,17 +51,22 @@ export function TimezoneSelect({
         position="popper"
         align="start"
         className="max-h-80 min-w-64"
-        // Radix scrolls the selected item into view on open; this list should
-        // always open from the top (the Russian zones), not mid-list.
+        // Radix scrolls the selected item into view on open (and offers no way to
+        // turn that off); this list should always open from the top (the Russian
+        // zones). Keep it invisible until it has been scrolled back, so the jump
+        // is never painted.
         ref={(el) => {
           if (!el) return
+          el.style.visibility = "hidden"
           const toTop = () => {
             el.scrollTop = 0
             el.querySelector<HTMLElement>("[data-radix-select-viewport]")?.scrollTo({ top: 0 })
           }
-          // Radix does its own scroll-into-view a frame or two after mounting.
           requestAnimationFrame(() => requestAnimationFrame(toTop))
-          setTimeout(toTop, 60)
+          setTimeout(() => {
+            toTop()
+            el.style.visibility = ""
+          }, 60)
         }}
       >
         {custom && (
