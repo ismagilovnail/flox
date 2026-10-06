@@ -46,19 +46,40 @@ var validMetrics = map[string]bool{
 // — a preset that can't ever produce a valid report isn't useful to save.
 const maxDimensions = 4
 
+// Filter is one saved "dimension = value" condition, AND-combined with the
+// others — the report builder's FilterCondition.
+type Filter struct {
+	Dimension string `json:"dimension"`
+	Value     string `json:"value"`
+}
+
+// maxFilters / maxFilterValueLen bound what one preset may carry — a guard,
+// not a spec number: a handful of conditions is a report, dozens is a bug.
+const (
+	maxFilters        = 10
+	maxFilterValueLen = 200
+	maxColumnOrder    = 60 // dimensions (4) + metrics (13) + custom metrics, with room to spare
+	maxColumnIDLen    = 64
+	minColumnWidth    = 48 // the UI never lets a column get narrower
+	maxColumnWidth    = 2000
+)
+
 type ReportPreset struct {
-	ID             string    `json:"id"`
-	OrganizationID string    `json:"organizationId"`
-	Name           string    `json:"name"`
-	Dimensions     []string  `json:"dimensions"`
-	Metrics        []string  `json:"metrics"`
-	GroupBy        string    `json:"groupBy"`
-	Period         Period    `json:"period"`
-	Timezone       string    `json:"timezone"`
-	IsDefault      bool      `json:"isDefault"`
-	CreatedByID    *string   `json:"createdByUserId,omitempty"`
-	CreatedAt      time.Time `json:"createdAt"`
-	UpdatedAt      time.Time `json:"updatedAt"`
+	ID             string         `json:"id"`
+	OrganizationID string         `json:"organizationId"`
+	Name           string         `json:"name"`
+	Dimensions     []string       `json:"dimensions"`
+	Metrics        []string       `json:"metrics"`
+	Filters        []Filter       `json:"filters"`
+	ColumnOrder    []string       `json:"columnOrder"`
+	ColumnWidths   map[string]int `json:"columnWidths"`
+	GroupBy        string         `json:"groupBy"`
+	Period         Period         `json:"period"`
+	Timezone       string         `json:"timezone"`
+	IsDefault      bool           `json:"isDefault"`
+	CreatedByID    *string        `json:"createdByUserId,omitempty"`
+	CreatedAt      time.Time      `json:"createdAt"`
+	UpdatedAt      time.Time      `json:"updatedAt"`
 }
 
 // CreateInput and UpdateInput never carry IsDefault — the default preset is
@@ -68,18 +89,29 @@ type CreateInput struct {
 	Name       string
 	Dimensions []string
 	Metrics    []string
-	GroupBy    string
-	Period     Period
-	Timezone   string
+	Filters    []Filter
+	// ColumnOrder is the dragged column order; empty means the natural order.
+	ColumnOrder []string
+	// ColumnWidths is the dragged column widths in px by column id; empty means natural widths.
+	ColumnWidths map[string]int
+	GroupBy      string
+	Period       Period
+	Timezone     string
 }
 
 type UpdateInput struct {
 	Name       *string
 	Dimensions []string
 	Metrics    []string
-	GroupBy    *string
-	Period     *Period
-	Timezone   *string
+	// Filters: nil leaves them as they are; an empty non-nil slice clears them.
+	Filters []Filter
+	// ColumnOrder: nil leaves it as it is; an empty non-nil slice resets to the natural order.
+	ColumnOrder []string
+	// ColumnWidths: nil leaves them as they are; an empty non-nil map resets to natural widths.
+	ColumnWidths map[string]int
+	GroupBy      *string
+	Period       *Period
+	Timezone     *string
 }
 
 // defaultPresetSeed is what Repository.EnsureDefault creates the very

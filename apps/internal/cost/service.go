@@ -124,6 +124,21 @@ func (s *Service) SpendByCampaign(ctx context.Context, orgID string, from, to ti
 	return s.repo.SpendByCampaign(ctx, orgID, from, to)
 }
 
+// CampaignSpendByDay and SourceSpendByDay back report rows grouped by day
+// together with campaign or source.
+func (s *Service) CampaignSpendByDay(ctx context.Context, orgID string, from, to time.Time) ([]CampaignDaySpend, error) {
+	return s.repo.CampaignSpendByDay(ctx, orgID, from, to)
+}
+
+func (s *Service) SourceSpendByDay(ctx context.Context, orgID string, from, to time.Time) ([]SourceDaySpend, error) {
+	return s.repo.SourceSpendByDay(ctx, orgID, from, to)
+}
+
+// SpendBySource is SpendByCampaign rolled up to each campaign's traffic source.
+func (s *Service) SpendBySource(ctx context.Context, orgID string, from, to time.Time) ([]SourceSpend, error) {
+	return s.repo.SpendBySource(ctx, orgID, from, to)
+}
+
 func (s *Service) DailySpendForOrg(ctx context.Context, orgID string, from, to time.Time) ([]DailySpend, error) {
 	return s.repo.DailySpendForOrg(ctx, orgID, from, to)
 }

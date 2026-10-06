@@ -36,6 +36,9 @@ type TrackingLink struct {
 	OrganizationID string
 	CampaignID     string
 	CampaignStatus string
+	// TrafficSourceID is the campaign's traffic source, stamped onto every
+	// event of the click for the report builder's `source` dimension.
+	TrafficSourceID string
 }
 
 // ResolveTrackingLink resolves a request's host + slug to a campaign.
@@ -47,7 +50,7 @@ type TrackingLink struct {
 func (s *Store) ResolveTrackingLink(ctx context.Context, host, slug string) (TrackingLink, error) {
 	var link TrackingLink
 	err := s.db.QueryRow(ctx, `
-		SELECT tl.id, tl.organization_id, tl.campaign_id, c.status
+		SELECT tl.id, tl.organization_id, tl.campaign_id, c.status, c.traffic_source_id
 		FROM tracking_links tl
 		JOIN domains   d ON d.id = tl.domain_id
 		JOIN campaigns c ON c.id = tl.campaign_id
@@ -55,7 +58,7 @@ func (s *Store) ResolveTrackingLink(ctx context.Context, host, slug string) (Tra
 		  AND tl.slug = $2
 		  AND tl.status = 'active'`,
 		host, slug,
-	).Scan(&link.TrackingLinkID, &link.OrganizationID, &link.CampaignID, &link.CampaignStatus)
+	).Scan(&link.TrackingLinkID, &link.OrganizationID, &link.CampaignID, &link.CampaignStatus, &link.TrafficSourceID)
 
 	if errors.Is(err, pgx.ErrNoRows) {
 		return TrackingLink{}, ErrNotFound

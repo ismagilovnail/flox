@@ -65,12 +65,15 @@ func (p periodRequest) toPeriod() Period {
 }
 
 type createRequest struct {
-	Name       string        `json:"name"`
-	Dimensions []string      `json:"dimensions"`
-	Metrics    []string      `json:"metrics"`
-	GroupBy    string        `json:"groupBy"`
-	Period     periodRequest `json:"period"`
-	Timezone   string        `json:"timezone"`
+	Name         string         `json:"name"`
+	Dimensions   []string       `json:"dimensions"`
+	Metrics      []string       `json:"metrics"`
+	Filters      []Filter       `json:"filters"`
+	ColumnOrder  []string       `json:"columnOrder"`
+	ColumnWidths map[string]int `json:"columnWidths"`
+	GroupBy      string         `json:"groupBy"`
+	Period       periodRequest  `json:"period"`
+	Timezone     string         `json:"timezone"`
 }
 
 func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
@@ -82,12 +85,15 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	preset, err := h.svc.Create(r.Context(), orgID, userID, CreateInput{
-		Name:       req.Name,
-		Dimensions: req.Dimensions,
-		Metrics:    req.Metrics,
-		GroupBy:    req.GroupBy,
-		Period:     req.Period.toPeriod(),
-		Timezone:   req.Timezone,
+		Name:         req.Name,
+		Dimensions:   req.Dimensions,
+		Metrics:      req.Metrics,
+		Filters:      req.Filters,
+		ColumnOrder:  req.ColumnOrder,
+		ColumnWidths: req.ColumnWidths,
+		GroupBy:      req.GroupBy,
+		Period:       req.Period.toPeriod(),
+		Timezone:     req.Timezone,
 	})
 	if err != nil {
 		apierror.Write(w, h.logger, err)
@@ -97,12 +103,15 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 }
 
 type updateRequest struct {
-	Name       *string        `json:"name"`
-	Dimensions []string       `json:"dimensions"`
-	Metrics    []string       `json:"metrics"`
-	GroupBy    *string        `json:"groupBy"`
-	Period     *periodRequest `json:"period"`
-	Timezone   *string        `json:"timezone"`
+	Name         *string        `json:"name"`
+	Dimensions   []string       `json:"dimensions"`
+	Metrics      []string       `json:"metrics"`
+	Filters      []Filter       `json:"filters"`
+	ColumnOrder  []string       `json:"columnOrder"`
+	ColumnWidths map[string]int `json:"columnWidths"`
+	GroupBy      *string        `json:"groupBy"`
+	Period       *periodRequest `json:"period"`
+	Timezone     *string        `json:"timezone"`
 }
 
 func (h *Handler) update(w http.ResponseWriter, r *http.Request) {
@@ -113,11 +122,14 @@ func (h *Handler) update(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	in := UpdateInput{
-		Name:       req.Name,
-		Dimensions: req.Dimensions,
-		Metrics:    req.Metrics,
-		GroupBy:    req.GroupBy,
-		Timezone:   req.Timezone,
+		Name:         req.Name,
+		Dimensions:   req.Dimensions,
+		Metrics:      req.Metrics,
+		Filters:      req.Filters,
+		ColumnOrder:  req.ColumnOrder,
+		ColumnWidths: req.ColumnWidths,
+		GroupBy:      req.GroupBy,
+		Timezone:     req.Timezone,
 	}
 	if req.Period != nil {
 		p := req.Period.toPeriod()

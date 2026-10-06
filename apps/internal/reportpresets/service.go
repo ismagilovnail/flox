@@ -40,7 +40,7 @@ func (s *Service) Get(ctx context.Context, orgID, id string) (ReportPreset, erro
 }
 
 func (s *Service) Create(ctx context.Context, orgID, createdByUserID string, in CreateInput) (ReportPreset, error) {
-	if err := validateMutable(in.Name, in.Dimensions, in.Metrics, in.GroupBy, &in.Period, in.Timezone); err != nil {
+	if err := validateMutable(in.Name, in.Dimensions, in.Metrics, in.Filters, in.ColumnOrder, in.ColumnWidths, in.GroupBy, &in.Period, in.Timezone); err != nil {
 		return ReportPreset{}, err
 	}
 	return s.repo.Create(ctx, orgID, createdByUserID, in)
@@ -70,6 +70,18 @@ func (s *Service) Update(ctx context.Context, orgID, id string, in UpdateInput) 
 	if in.Metrics != nil {
 		metrics = in.Metrics
 	}
+	filters := existing.Filters
+	if in.Filters != nil {
+		filters = in.Filters
+	}
+	columnOrder := existing.ColumnOrder
+	if in.ColumnOrder != nil {
+		columnOrder = in.ColumnOrder
+	}
+	columnWidths := existing.ColumnWidths
+	if in.ColumnWidths != nil {
+		columnWidths = in.ColumnWidths
+	}
 	groupBy := existing.GroupBy
 	if in.GroupBy != nil {
 		groupBy = *in.GroupBy
@@ -82,7 +94,7 @@ func (s *Service) Update(ctx context.Context, orgID, id string, in UpdateInput) 
 	if in.Timezone != nil {
 		timezone = *in.Timezone
 	}
-	if err := validateMutable(name, dims, metrics, groupBy, &period, timezone); err != nil {
+	if err := validateMutable(name, dims, metrics, filters, columnOrder, columnWidths, groupBy, &period, timezone); err != nil {
 		return ReportPreset{}, err
 	}
 
@@ -100,7 +112,7 @@ func (s *Service) Delete(ctx context.Context, orgID, id string) error {
 	return s.repo.Delete(ctx, orgID, id)
 }
 
-func validateMutable(name string, dimensions, metrics []string, groupBy string, period *Period, timezone string) error {
+func validateMutable(name string, dimensions, metrics []string, filters []Filter, columnOrder []string, columnWidths map[string]int, groupBy string, period *Period, timezone string) error {
 	name = strings.TrimSpace(name)
 	if len(name) < nameMinLen || len(name) > nameMaxLen {
 		return apierror.Validation("name must be 1-80 characters", map[string]string{"name": "invalid length"})
@@ -110,13 +122,45 @@ func validateMutable(name string, dimensions, metrics []string, groupBy string, 
 		return apierror.Validation("choose 1-4 dimensions", map[string]string{"dimensions": "invalid count"})
 	}
 	for _, d := range dimensions {
-		if !chstore.ValidDimension(chstore.ReportDimension(d)) {
+		// "day" is the report builder's per-day pseudo-dimension, not a column.
+		if d != "day" && !chstore.ValidDimension(chstore.ReportDimension(d)) {
 			return apierror.Validation("unknown dimension", map[string]string{"dimensions": d})
 		}
 	}
 
-	if groupBy == "" || !chstore.ValidDimension(chstore.ReportDimension(groupBy)) {
+	if groupBy == "" || (groupBy != "day" && !chstore.ValidDimension(chstore.ReportDimension(groupBy))) {
 		return apierror.Validation("unknown group-by dimension", map[string]string{"groupBy": groupBy})
+	}
+
+	if len(filters) > maxFilters {
+		return apierror.Validation("too many filters", map[string]string{"filters": "too many"})
+	}
+	for _, f := range filters {
+		// "day" is a bucket of time, not a value an event carries: not filterable.
+		if f.Dimension == "day" || !chstore.ValidDimension(chstore.ReportDimension(f.Dimension)) {
+			return apierror.Validation("unknown filter dimension", map[string]string{"filters": f.Dimension})
+		}
+		if len(f.Value) > maxFilterValueLen {
+			return apierror.Validation("filter value too long", map[string]string{"filters": f.Dimension})
+		}
+	}
+
+	if len(columnOrder) > maxColumnOrder {
+		return apierror.Validation("too many columns in the order", map[string]string{"columnOrder": "too many"})
+	}
+	for _, id := range columnOrder {
+		if id == "" || len(id) > maxColumnIDLen {
+			return apierror.Validation("invalid column id in the order", map[string]string{"columnOrder": id})
+		}
+	}
+
+	if len(columnWidths) > maxColumnOrder {
+		return apierror.Validation("too many column widths", map[string]string{"columnWidths": "too many"})
+	}
+	for id, w := range columnWidths {
+		if id == "" || len(id) > maxColumnIDLen || w < minColumnWidth || w > maxColumnWidth {
+			return apierror.Validation("invalid column width", map[string]string{"columnWidths": id})
+		}
 	}
 
 	if len(metrics) == 0 {

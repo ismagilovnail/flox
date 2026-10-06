@@ -67,8 +67,8 @@ value that isn't real.
 
 ## Dimension whitelist: 15 backed (14 of the original 16, plus stream_set)
 
-`chstore.ReportDimension` (15): campaign, source (proxy for campaign — see
-its own doc comment), country, region, city, device, platform, os,
+`chstore.ReportDimension` (15): campaign, source (the traffic source of the click's
+campaign, `traffic_source_id`, schema/011), country, region, city, device, platform, os,
 browser, language, flow, stream_set, landing, offer, pwa.
 
 `pwa` (`DimPwa`, `pwa_id`, `chstore/schema/010_pwa_id.sql`, after
@@ -147,20 +147,75 @@ list); requesting one of the 2 unbacked ones 400s with
 
 Of the 11 backed dimensions, only 8 have a column on `conversion_events`
 (`chstore.reportConversionColumns`) — it carries no `os`/`browser`/
-`language`. A report grouped by any of those three gets real
-clicks/land-views but `null` for every conversion-derived metric
-(conversions, revenue, profit, roi, roas, cpa, epc) — `chstore.
-SupportedByConversions` decides this per-request, `Service.groupedReport`
-enforces it. Joining `click_events`' os/browser/language onto a conversion
-via `click_id` would answer this and is real, deliberately-deferred work
-(a join, not a whitelist entry).
+`language`. Grouping or filtering by those three is answered by joining
+`click_events` onto each conversion via `click_id`
+(`EventStore.reportConversionsJoined`): `any(os/browser/language)` per
+`click_id` (a sticky returning visitor repeats the click row), restricted to
+the click_ids of conversions in the report window but NOT bounded by the
+window itself — a conversion can land days after its click. The join is
+tenant-scoped on both sides. A conversion with no click on record lands in
+the `""` bucket (shown as an empty value, like the other empty buckets).
+Queries without os/browser/language keep the plain single-table path.
+So conversions, revenue, profit, roi, roas, cpa and epc are real numbers
+under these dimensions and filters, not `null`.
+
+## `day`, timezone, funnel filters
+
+- **`day`** is a pseudo-dimension accepted anywhere in `dims` of `POST
+  /analytics/report` (`analytics.DimDay`). It is not a column: `Service.Report`
+  splits it out, sets `ByDay`, and the row comes back with both `day` and the
+  other `dims`. It counts toward the max-4 limit, can be a sort key (`"day"`),
+  and is valid in a saved preset (dimensions and group-by). Per-day cost is
+  attached for no other dimension, `[campaign]` or `[source]`
+  (`attachDailyCost`: `DailySpendForOrg`, `CampaignSpendByDay`,
+  `SourceSpendByDay`); any other combination gets `null` cost, as before.
+- **`timezone`** (IANA name, `""`/`UTC` = UTC) is accepted by `report`,
+  `timeseries` and `funnel`. It moves the day boundary (`toDate(event_at,
+  'tz')`) and the From/To window (local midnights converted to UTC instants),
+  so a report in another zone covers the same local days. Unknown names are a
+  400; the name is also re-checked in `chstore` before it is inlined.
+- **`funnel` takes `filters`.** A step counts a `click_id` only when its
+  SOURCE_CLICK matches every filter (`click_id IN (SELECT ... click_events
+  ...)`), so every stage is answerable with every dimension, including os/
+  browser/language on the conversion steps. The click may predate the window.
+- The report builder no longer offers `postlanding`/`network` (unbacked,
+  they 400) and its filter-value picker no longer falls back to a mock pool.
+
+## `source` is the traffic source, not a campaign proxy
+
+`traffic_source_id` (`click_events`/`tracking_events`/`conversion_events`,
+`chstore/schema/011_traffic_source_id.sql`) is stamped by the tracker from the
+campaign row at click time (`routingstore.TrackingLink.TrafficSourceID`),
+carried onto LAND_CLICK/PWA_* by the signed link claims (`landinglink.Claims.ts`)
+and onto conversions through attribution (`attribution.Click`). So two
+campaigns on one source merge into one `source` row, and the label hook
+(`use-dimension-value-label.ts`) resolves the id straight from the sources
+list. The sources list's "View statistics" link now filters on the id.
+Rows written before 011 have `''` (the "No source" bucket) until backfilled.
+
+### Backfilling traffic_source_id
+
+From Postgres (`campaigns.traffic_source_id`) into ClickHouse, repeatable
+(`traffic_source_id = ''` only touches rows not yet filled):
+
+```sh
+docker exec infra-postgres-1 psql -U flox -d flox -At -F'|' -c \
+  "select traffic_source_id, string_agg(quote_literal(id), ',') from campaigns group by traffic_source_id" |
+while IFS='|' read -r src ids; do for t in click_events tracking_events conversion_events; do
+  echo "ALTER TABLE $t UPDATE traffic_source_id = '$src' WHERE campaign_id IN ($ids) AND traffic_source_id = '' SETTINGS mutations_sync = 1;"
+done; done | docker exec -i infra-clickhouse-1 clickhouse-client --user flox -d flox --multiquery
+```
+
+Events whose campaign no longer exists in Postgres stay `''`.
 
 ## Cost joins only at campaign granularity or coarser
 
 `cost_entries` (Postgres) is campaign+day grained — no country/device/os/…
 breakdown exists to join against. `Service.costEligible` allows a cost
-join only when `dims` is empty, `[campaign]`, or `[source]` (source is the
-same underlying column as campaign). Every other dimension combination —
+join only when `dims` is empty, `[campaign]`, or `[source]`. For `[source]`
+cost is rolled up through the campaign (`cost.SpendBySource`: each entry counts
+toward `campaigns.traffic_source_id`, the same attribution clicks use), not
+through the entry's optional own `traffic_source_id` tag. Every other dimension combination —
 by-country report, by-device breakdown, etc. — returns `cost`/`profit`/
 `roi`/`roas`/`cpc`/`cpa` as `null` for every row, per CLAUDE.md #6: no cost
 data on file must render as "—", never a fabricated 0. `MetricValues`

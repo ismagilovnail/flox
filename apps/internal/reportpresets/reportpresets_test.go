@@ -254,3 +254,216 @@ func TestCrossOrgIsolation(t *testing.T) {
 		t.Fatalf("org B List = %+v, want its own independent default", listB)
 	}
 }
+
+// TestPresetAcceptsTheDayDimension: "day" is the report builder's per-day
+// pseudo-dimension, valid in a preset's dimensions and as its group-by.
+func TestPresetAcceptsTheDayDimension(t *testing.T) {
+	pool := mustPool(t)
+	ctx := context.Background()
+	orgID, userID := seedOrgAndUser(t, ctx, pool)
+	svc := reportpresets.NewService(reportpresets.NewRepository(pool))
+
+	in := validInput("Daily by campaign")
+	in.Dimensions = []string{"campaign", "day"}
+	in.GroupBy = "day"
+	created, err := svc.Create(ctx, orgID, userID, in)
+	if err != nil {
+		t.Fatalf("Create with the day dimension: %v", err)
+	}
+	if len(created.Dimensions) != 2 || created.Dimensions[1] != "day" || created.GroupBy != "day" {
+		t.Fatalf("preset = %+v, want dimensions [campaign day] grouped by day", created)
+	}
+}
+
+// TestPresetFiltersRoundTripUpdateAndClear: filters are saved with the preset,
+// come back on read, survive a rename (nil = unchanged), can be replaced and can
+// be cleared with an empty list; a preset made without any reads back as [].
+func TestPresetFiltersRoundTripUpdateAndClear(t *testing.T) {
+	pool := mustPool(t)
+	ctx := context.Background()
+	orgID, userID := seedOrgAndUser(t, ctx, pool)
+	svc := reportpresets.NewService(reportpresets.NewRepository(pool))
+
+	plain, err := svc.Create(ctx, orgID, userID, validInput("No filters"))
+	if err != nil {
+		t.Fatalf("Create (no filters): %v", err)
+	}
+	if plain.Filters == nil || len(plain.Filters) != 0 {
+		t.Fatalf("Filters = %#v, want an empty non-nil list (serialized as [], not null)", plain.Filters)
+	}
+
+	in := validInput("Facebook, Linux")
+	in.Filters = []reportpresets.Filter{{Dimension: "source", Value: "src-1"}, {Dimension: "os", Value: "linux"}}
+	created, err := svc.Create(ctx, orgID, userID, in)
+	if err != nil {
+		t.Fatalf("Create (filters): %v", err)
+	}
+	if len(created.Filters) != 2 || created.Filters[0].Dimension != "source" || created.Filters[1].Value != "linux" {
+		t.Fatalf("created filters = %+v", created.Filters)
+	}
+
+	renamed := "Renamed"
+	got, err := svc.Update(ctx, orgID, created.ID, reportpresets.UpdateInput{Name: &renamed})
+	if err != nil {
+		t.Fatalf("Update (rename): %v", err)
+	}
+	if len(got.Filters) != 2 {
+		t.Fatalf("a rename dropped the filters: %+v", got.Filters)
+	}
+
+	got, err = svc.Update(ctx, orgID, created.ID, reportpresets.UpdateInput{Filters: []reportpresets.Filter{{Dimension: "country", Value: "US"}}})
+	if err != nil || len(got.Filters) != 1 || got.Filters[0].Dimension != "country" {
+		t.Fatalf("Update (replace) = %+v, %v", got.Filters, err)
+	}
+
+	got, err = svc.Update(ctx, orgID, created.ID, reportpresets.UpdateInput{Filters: []reportpresets.Filter{}})
+	if err != nil || len(got.Filters) != 0 {
+		t.Fatalf("Update (clear) = %+v, %v, want no filters", got.Filters, err)
+	}
+
+	fetched, err := svc.Get(ctx, orgID, created.ID)
+	if err != nil || len(fetched.Filters) != 0 {
+		t.Fatalf("Get after clear = %+v, %v", fetched.Filters, err)
+	}
+}
+
+func TestPresetRejectsInvalidFilters(t *testing.T) {
+	pool := mustPool(t)
+	ctx := context.Background()
+	orgID, userID := seedOrgAndUser(t, ctx, pool)
+	svc := reportpresets.NewService(reportpresets.NewRepository(pool))
+
+	for name, filters := range map[string][]reportpresets.Filter{
+		"unknown dimension": {{Dimension: "nope", Value: "x"}},
+		"day is a bucket":   {{Dimension: "day", Value: "2026-08-01"}},
+		"value too long":    {{Dimension: "os", Value: string(make([]byte, 201))}},
+	} {
+		in := validInput("Bad " + name)
+		in.Filters = filters
+		if _, err := svc.Create(ctx, orgID, userID, in); err == nil {
+			t.Fatalf("%s: Create succeeded, want a validation error", name)
+		}
+	}
+	tooMany := make([]reportpresets.Filter, 11)
+	for i := range tooMany {
+		tooMany[i] = reportpresets.Filter{Dimension: "os", Value: "x"}
+	}
+	in := validInput("Too many")
+	in.Filters = tooMany
+	if _, err := svc.Create(ctx, orgID, userID, in); err == nil {
+		t.Fatal("11 filters: Create succeeded, want a validation error")
+	}
+}
+
+// TestPresetColumnOrderRoundTripUpdateAndClear: the dragged column order is
+// saved with the preset, survives a rename (nil = unchanged), can be replaced
+// and reset with an empty list; a preset made without one reads back as [].
+func TestPresetColumnOrderRoundTripUpdateAndClear(t *testing.T) {
+	pool := mustPool(t)
+	ctx := context.Background()
+	orgID, userID := seedOrgAndUser(t, ctx, pool)
+	svc := reportpresets.NewService(reportpresets.NewRepository(pool))
+
+	plain, err := svc.Create(ctx, orgID, userID, validInput("Natural order"))
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	if plain.ColumnOrder == nil || len(plain.ColumnOrder) != 0 {
+		t.Fatalf("ColumnOrder = %#v, want an empty non-nil list (serialized as [], not null)", plain.ColumnOrder)
+	}
+
+	in := validInput("Dragged")
+	in.ColumnOrder = []string{"revenue", "campaign", "clicks"}
+	created, err := svc.Create(ctx, orgID, userID, in)
+	if err != nil {
+		t.Fatalf("Create (order): %v", err)
+	}
+	if len(created.ColumnOrder) != 3 || created.ColumnOrder[0] != "revenue" || created.ColumnOrder[2] != "clicks" {
+		t.Fatalf("created order = %v", created.ColumnOrder)
+	}
+
+	renamed := "Renamed"
+	got, err := svc.Update(ctx, orgID, created.ID, reportpresets.UpdateInput{Name: &renamed})
+	if err != nil || len(got.ColumnOrder) != 3 {
+		t.Fatalf("a rename must keep the order: %v, %v", got.ColumnOrder, err)
+	}
+
+	got, err = svc.Update(ctx, orgID, created.ID, reportpresets.UpdateInput{ColumnOrder: []string{"clicks", "revenue"}})
+	if err != nil || len(got.ColumnOrder) != 2 || got.ColumnOrder[0] != "clicks" {
+		t.Fatalf("Update (replace) = %v, %v", got.ColumnOrder, err)
+	}
+
+	got, err = svc.Update(ctx, orgID, created.ID, reportpresets.UpdateInput{ColumnOrder: []string{}})
+	if err != nil || len(got.ColumnOrder) != 0 {
+		t.Fatalf("Update (reset) = %v, %v, want the natural order", got.ColumnOrder, err)
+	}
+
+	bad := validInput("Bad order")
+	bad.ColumnOrder = []string{"clicks", ""}
+	if _, err := svc.Create(ctx, orgID, userID, bad); err == nil {
+		t.Fatal("an empty column id was accepted, want a validation error")
+	}
+	bad.ColumnOrder = make([]string, 61)
+	for i := range bad.ColumnOrder {
+		bad.ColumnOrder[i] = "clicks"
+	}
+	if _, err := svc.Create(ctx, orgID, userID, bad); err == nil {
+		t.Fatal("61 columns were accepted, want a validation error")
+	}
+}
+
+// TestPresetColumnWidthsRoundTripUpdateAndClear: dragged column widths are
+// saved with the preset, survive a rename (nil = unchanged), can be replaced and
+// reset with an empty map; a preset made without any reads back as {}.
+func TestPresetColumnWidthsRoundTripUpdateAndClear(t *testing.T) {
+	pool := mustPool(t)
+	ctx := context.Background()
+	orgID, userID := seedOrgAndUser(t, ctx, pool)
+	svc := reportpresets.NewService(reportpresets.NewRepository(pool))
+
+	plain, err := svc.Create(ctx, orgID, userID, validInput("Natural widths"))
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	if plain.ColumnWidths == nil || len(plain.ColumnWidths) != 0 {
+		t.Fatalf("ColumnWidths = %#v, want an empty non-nil map (serialized as {}, not null)", plain.ColumnWidths)
+	}
+
+	in := validInput("Wide")
+	in.ColumnWidths = map[string]int{"campaign": 320, "clicks": 90}
+	created, err := svc.Create(ctx, orgID, userID, in)
+	if err != nil {
+		t.Fatalf("Create (widths): %v", err)
+	}
+	if created.ColumnWidths["campaign"] != 320 || created.ColumnWidths["clicks"] != 90 {
+		t.Fatalf("created widths = %v", created.ColumnWidths)
+	}
+
+	renamed := "Renamed"
+	got, err := svc.Update(ctx, orgID, created.ID, reportpresets.UpdateInput{Name: &renamed})
+	if err != nil || len(got.ColumnWidths) != 2 {
+		t.Fatalf("a rename must keep the widths: %v, %v", got.ColumnWidths, err)
+	}
+
+	got, err = svc.Update(ctx, orgID, created.ID, reportpresets.UpdateInput{ColumnWidths: map[string]int{"revenue": 150}})
+	if err != nil || len(got.ColumnWidths) != 1 || got.ColumnWidths["revenue"] != 150 {
+		t.Fatalf("Update (replace) = %v, %v", got.ColumnWidths, err)
+	}
+
+	got, err = svc.Update(ctx, orgID, created.ID, reportpresets.UpdateInput{ColumnWidths: map[string]int{}})
+	if err != nil || len(got.ColumnWidths) != 0 {
+		t.Fatalf("Update (reset) = %v, %v, want natural widths", got.ColumnWidths, err)
+	}
+
+	for name, widths := range map[string]map[string]int{
+		"too narrow": {"clicks": 10},
+		"too wide":   {"clicks": 5000},
+		"empty id":   {"": 100},
+	} {
+		bad := validInput("Bad " + name)
+		bad.ColumnWidths = widths
+		if _, err := svc.Create(ctx, orgID, userID, bad); err == nil {
+			t.Fatalf("%s: Create succeeded, want a validation error", name)
+		}
+	}
+}

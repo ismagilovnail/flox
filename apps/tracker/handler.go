@@ -243,11 +243,12 @@ func buildEvent(
 	r *http.Request,
 ) event.Event {
 	return event.Event{
-		Type:           event.SourceClick,
-		EventAt:        time.Now().UTC(),
-		OrganizationID: link.OrganizationID,
-		CampaignID:     link.CampaignID,
-		ClickID:        clickID,
+		Type:            event.SourceClick,
+		EventAt:         time.Now().UTC(),
+		OrganizationID:  link.OrganizationID,
+		CampaignID:      link.CampaignID,
+		ClickID:         clickID,
+		TrafficSourceID: link.TrafficSourceID,
 
 		StreamSetID:   result.StreamSetID,
 		FlowID:        result.FlowID,

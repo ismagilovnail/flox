@@ -515,6 +515,7 @@ func buildEvent(p Postback, attr attribution.Attribution, status event.Type, eve
 		ev.LandingID = click.LandingID
 		ev.OfferID = click.OfferID
 		ev.PwaID = click.PwaID
+		ev.TrafficSourceID = click.TrafficSourceID
 		ev.Country = click.Country
 		ev.Region = click.Region
 		ev.City = click.City

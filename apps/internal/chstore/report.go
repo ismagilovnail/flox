@@ -3,6 +3,7 @@ package chstore
 import (
 	"context"
 	"fmt"
+	"regexp"
 	"strings"
 	"time"
 
@@ -28,14 +29,9 @@ type ReportDimension string
 
 const (
 	DimCampaign ReportDimension = "campaign"
-	// DimSource is a proxy for DimCampaign — apps/internal/event.Event has
-	// no traffic_source_id field (nothing threads a click's traffic
-	// source through the event pipeline yet, the same pre-existing gap
-	// documented on schema/001_click_events.sql and macro's {source}
-	// token). campaign_id is the practical stand-in: a campaign has
-	// exactly one traffic_source_id in Postgres. Requesting both
-	// DimCampaign and DimSource in the same report groups by the same
-	// underlying column twice — harmless, just redundant.
+	// DimSource groups by the traffic source of the click's campaign
+	// (traffic_source_id, schema/011). Empty is a real bucket: rows from
+	// before the column existed that were never backfilled.
 	DimSource   ReportDimension = "source"
 	DimCountry  ReportDimension = "country"
 	DimRegion   ReportDimension = "region"
@@ -76,7 +72,7 @@ const (
 // comment on why they're still two tables).
 var reportClickColumns = map[ReportDimension]string{
 	DimCampaign:  "campaign_id",
-	DimSource:    "campaign_id",
+	DimSource:    "traffic_source_id",
 	DimCountry:   "country",
 	DimRegion:    "region",
 	DimCity:      "city",
@@ -94,16 +90,13 @@ var reportClickColumns = map[ReportDimension]string{
 
 // reportConversionColumns is the narrower whitelist for conversion_events
 // (schema/003_conversion_events.sql) — it does not carry os/browser/
-// language at all. A report grouped by any of those three cannot show
-// conversion-derived metrics (conversions, revenue, and everything built
-// from them — profit/roi/roas/cpa/epc): conversion_events has no column
-// to group by, and joining click_events' os/browser/language onto each
-// conversion via click_id is real, deliberately-deferred work (a
-// click_id join, not a whitelist lookup) — see docs/analytics-report-api.md.
-// Service.Report returns null for those metrics rather than guessing.
+// language. Those three (reportConversionViaClickColumns) are answered by
+// joining click_events onto each conversion via click_id, see
+// reportConversionsJoined; every other dimension reads straight off
+// conversion_events with no join.
 var reportConversionColumns = map[ReportDimension]string{
 	DimCampaign:  "campaign_id",
-	DimSource:    "campaign_id",
+	DimSource:    "traffic_source_id",
 	DimCountry:   "country",
 	DimRegion:    "region",
 	DimCity:      "city",
@@ -116,6 +109,16 @@ var reportConversionColumns = map[ReportDimension]string{
 	DimPwa:       "pwa_id",
 }
 
+// reportConversionViaClickColumns are the dimensions conversion_events has
+// no column for: a conversion inherits them from the SOURCE_CLICK that
+// produced it (same click_id). A conversion with no matching click (an
+// unattributed postback, or the click was never flushed) lands in the "" bucket.
+var reportConversionViaClickColumns = map[ReportDimension]string{
+	DimOS:       "os",
+	DimBrowser:  "browser",
+	DimLanguage: "language",
+}
+
 // ValidDimension reports whether d is one of the 15 supported report
 // dimensions — the same check both click- and conversion-side queries can
 // always answer, since reportClickColumns is the wider of the two whitelists.
@@ -124,28 +127,49 @@ func ValidDimension(d ReportDimension) bool {
 	return ok
 }
 
-// FiltersSupportedByConversions is SupportedByConversions for filter
-// dimensions: filtering by os/browser/language has the same no-column
-// problem as grouping by them, so conversion-derived metrics are
-// unanswerable (null) rather than the whole report failing.
-func FiltersSupportedByConversions(filters []ReportFilter) bool {
-	for _, f := range filters {
-		if _, ok := reportConversionColumns[f.Dimension]; !ok {
+// SupportedByConversions reports whether the conversion report can answer
+// every dimension in dims: directly off conversion_events, or through the
+// click_id join for os/browser/language.
+func SupportedByConversions(dims []ReportDimension) bool {
+	for _, d := range dims {
+		if !conversionDimAnswerable(d) {
 			return false
 		}
 	}
 	return true
 }
 
-// SupportedByConversions reports whether every dimension in dims has a
-// column on conversion_events — see reportConversionColumns' own comment.
-func SupportedByConversions(dims []ReportDimension) bool {
-	for _, d := range dims {
-		if _, ok := reportConversionColumns[d]; !ok {
+// FiltersSupportedByConversions is SupportedByConversions for filter dimensions.
+func FiltersSupportedByConversions(filters []ReportFilter) bool {
+	for _, f := range filters {
+		if !conversionDimAnswerable(f.Dimension) {
 			return false
 		}
 	}
 	return true
+}
+
+func conversionDimAnswerable(d ReportDimension) bool {
+	if _, ok := reportConversionColumns[d]; ok {
+		return true
+	}
+	_, ok := reportConversionViaClickColumns[d]
+	return ok
+}
+
+// needsClickJoin reports whether q touches a dimension only click_events has.
+func needsClickJoin(q ReportQuery) bool {
+	for _, d := range q.Dims {
+		if _, ok := reportConversionViaClickColumns[d]; ok {
+			return true
+		}
+	}
+	for _, f := range q.Filters {
+		if _, ok := reportConversionViaClickColumns[f.Dimension]; ok {
+			return true
+		}
+	}
+	return false
 }
 
 // ReportFilter is one equals-condition ("dimension = value"), AND-combined
@@ -168,6 +192,11 @@ type ReportQuery struct {
 	Dims           []ReportDimension
 	ByDay          bool
 	Filters        []ReportFilter
+	// Timezone is the IANA zone ByDay buckets days in ("" = UTC). The caller
+	// (analytics.Service) resolves it with time.LoadLocation and converts
+	// From/To to the matching UTC instants; here it only picks the day
+	// boundary, and is re-checked (safeTimezone) before it is inlined.
+	Timezone string
 	// From/To bound event_at: From inclusive, To EXCLUSIVE — callers pass
 	// the day after the last day they want included (Service.Report and
 	// friends do this once, centrally, rather than every query method
@@ -269,7 +298,7 @@ func (s *EventStore) ReportClicks(ctx context.Context, q ReportQuery) ([]ClickAg
 		return nil, fmt.Errorf("chstore: unsupported filter dimension in click report")
 	}
 
-	selectExpr, groupByExpr := selectAndGroupByExprs(selectCols, q.ByDay)
+	selectExpr, groupByExpr := selectAndGroupByExprs(selectCols, q.ByDay, q.Timezone)
 
 	query := fmt.Sprintf(`
 		SELECT %scount() AS clicks, count(DISTINCT click_id) AS unique_clicks
@@ -312,7 +341,7 @@ func (s *EventStore) ReportLandViews(ctx context.Context, q ReportQuery) ([]Land
 		return nil, fmt.Errorf("chstore: unsupported filter dimension in land-view report")
 	}
 
-	selectExpr, groupByExpr := selectAndGroupByExprs(selectCols, q.ByDay)
+	selectExpr, groupByExpr := selectAndGroupByExprs(selectCols, q.ByDay, q.Timezone)
 
 	query := fmt.Sprintf(`
 		SELECT %scount() AS land_views
@@ -354,6 +383,9 @@ func (s *EventStore) ReportConversions(ctx context.Context, q ReportQuery) ([]Co
 	if !SupportedByConversions(q.Dims) {
 		return nil, fmt.Errorf("chstore: dimension not supported by conversion_events")
 	}
+	if needsClickJoin(q) {
+		return s.reportConversionsJoined(ctx, q)
+	}
 	selectCols, ok := buildGroupBy(reportConversionColumns, q.Dims)
 	if !ok {
 		return nil, fmt.Errorf("chstore: unsupported dimension in conversion report")
@@ -364,7 +396,7 @@ func (s *EventStore) ReportConversions(ctx context.Context, q ReportQuery) ([]Co
 		return nil, fmt.Errorf("chstore: unsupported filter dimension in conversion report")
 	}
 
-	selectExpr, groupByExpr := selectAndGroupByExprs(selectCols, q.ByDay)
+	selectExpr, groupByExpr := selectAndGroupByExprs(selectCols, q.ByDay, q.Timezone)
 
 	query := fmt.Sprintf(`
 		SELECT %scount() AS conversions, sum(usd_value * has_usd_value) AS revenue_usd
@@ -394,6 +426,95 @@ func (s *EventStore) ReportConversions(ctx context.Context, q ReportQuery) ([]Co
 	return out, rows.Err()
 }
 
+// reportConversionsJoined is ReportConversions for a query that groups or
+// filters by os/browser/language. Each conversion is joined to the
+// SOURCE_CLICK carrying its click_id (any() collapses the repeated rows a
+// sticky returning visitor leaves under one click_id). The click side is
+// deliberately NOT bounded by the report's date range — a conversion can
+// land days after its click — but is limited to the click_ids of the
+// conversions in range, so it never scans the org's whole click history.
+// The LEFT JOIN keeps conversions with no matching click (empty values).
+func (s *EventStore) reportConversionsJoined(ctx context.Context, q ReportQuery) ([]ConversionAgg, error) {
+	qualify := func(d ReportDimension) (string, bool) {
+		if col, ok := reportConversionColumns[d]; ok {
+			return "c." + col, true
+		}
+		if col, ok := reportConversionViaClickColumns[d]; ok {
+			return "k." + col, true
+		}
+		return "", false
+	}
+
+	selectCols := make([]string, 0, len(q.Dims)+1)
+	for _, d := range q.Dims {
+		col, ok := qualify(d)
+		if !ok {
+			return nil, fmt.Errorf("chstore: unsupported dimension in conversion report")
+		}
+		selectCols = append(selectCols, col)
+	}
+
+	const convTypes = "('CPA_ACCEPT', 'CPA_REDEP')"
+	// Args in placeholder order: click subquery (org, inner org/from/to), then outer WHERE.
+	args := []any{q.OrganizationID, q.OrganizationID, q.From, q.To, q.OrganizationID, q.From, q.To}
+	var filterClause strings.Builder
+	for _, f := range q.Filters {
+		col, ok := qualify(f.Dimension)
+		if !ok {
+			return nil, fmt.Errorf("chstore: unsupported filter dimension in conversion report")
+		}
+		fmt.Fprintf(&filterClause, " AND %s = ?", col)
+		args = append(args, f.Value)
+	}
+
+	all := make([]string, 0, len(selectCols)+1)
+	if q.ByDay {
+		all = append(all, dayExpr("c.event_at", q.Timezone))
+	}
+	all = append(all, selectCols...)
+	selectExpr, groupByExpr := "", ""
+	if len(all) > 0 {
+		selectExpr = strings.Join(all, ", ") + ", "
+		groupByExpr = "GROUP BY " + strings.Join(all, ", ")
+	}
+
+	query := fmt.Sprintf(`
+		SELECT %scount() AS conversions, sum(c.usd_value * c.has_usd_value) AS revenue_usd
+		FROM conversion_events AS c
+		LEFT JOIN (
+			SELECT click_id, any(os) AS os, any(browser) AS browser, any(language) AS language
+			FROM click_events
+			WHERE organization_id = ? AND type = 'SOURCE_CLICK' AND click_id IN (
+				SELECT click_id FROM conversion_events
+				WHERE organization_id = ? AND event_at >= ? AND event_at < ? AND type IN %s
+			)
+			GROUP BY click_id
+		) AS k ON c.click_id = k.click_id
+		WHERE c.organization_id = ? AND c.event_at >= ? AND c.event_at < ? AND c.type IN %s%s
+		%s`,
+		selectExpr, convTypes, convTypes, filterClause.String(), groupByExpr,
+	)
+
+	rows, err := s.conn.Query(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("chstore: querying joined conversion report: %w", err)
+	}
+	defer rows.Close()
+
+	var out []ConversionAgg
+	for rows.Next() {
+		dimVals, day, dest := scanDest(q.Dims, q.ByDay)
+		var conversions uint64
+		var revenueUSD float64
+		dest = append(dest, &conversions, &revenueUSD)
+		if err := rows.Scan(dest...); err != nil {
+			return nil, fmt.Errorf("chstore: scanning joined conversion report row: %w", err)
+		}
+		out = append(out, ConversionAgg{Key: scanKey(q.Dims, deref(dimVals), day), Conversions: conversions, RevenueUSD: revenueUSD})
+	}
+	return out, rows.Err()
+}
+
 // FunnelCounts answers the §43 funnel — count(DISTINCT click_id) per
 // stage, from whichever of the three event tables actually carries that
 // stage's type. Fully computable with today's schema: unlike the 5
@@ -402,14 +523,30 @@ func (s *EventStore) ReportConversions(ctx context.Context, q ReportQuery) ([]Co
 // organization, or one that hasn't reached PWA_INSTALL yet) is present
 // with 0 rather than silently absent — Service.Funnel zero-fills any
 // FUNNEL_STEPS entry this map doesn't have, for the same reason.
-func (s *EventStore) FunnelCounts(ctx context.Context, organizationID string, from, to time.Time) (map[string]uint64, error) {
+func (s *EventStore) FunnelCounts(ctx context.Context, organizationID string, from, to time.Time, filters []ReportFilter) (map[string]uint64, error) {
 	out := make(map[string]uint64, 8)
+
+	// Filters apply to the visit as a whole: a funnel step counts a click_id
+	// only if its SOURCE_CLICK matches every filter. That makes every stage
+	// answerable with every dimension (click_events carries them all),
+	// including conversions and PWA/landing steps whose own tables lack the
+	// column. The click itself may predate the window (a conversion can land
+	// days later), so the subquery is deliberately not date-bounded.
+	clickFilter, clickArgs, ok := buildFilterClause(reportClickColumns, filters, nil)
+	if !ok {
+		return nil, fmt.Errorf("chstore: unsupported filter dimension in funnel")
+	}
+	visitFilter, visitArgs := "", []any(nil)
+	if len(filters) > 0 {
+		visitFilter = ` AND click_id IN (SELECT click_id FROM click_events WHERE organization_id = ? AND type = 'SOURCE_CLICK'` + clickFilter + `)`
+		visitArgs = append([]any{organizationID}, clickArgs...)
+	}
 
 	clickRows, err := s.conn.Query(ctx, `
 		SELECT type, count(DISTINCT click_id)
 		FROM click_events
-		WHERE organization_id = ? AND event_at >= ? AND event_at < ? AND type = 'SOURCE_CLICK'
-		GROUP BY type`, organizationID, from, to)
+		WHERE organization_id = ? AND event_at >= ? AND event_at < ? AND type = 'SOURCE_CLICK'`+clickFilter+`
+		GROUP BY type`, append([]any{organizationID, from, to}, clickArgs...)...)
 	if err != nil {
 		return nil, fmt.Errorf("chstore: querying funnel click counts: %w", err)
 	}
@@ -421,8 +558,8 @@ func (s *EventStore) FunnelCounts(ctx context.Context, organizationID string, fr
 		SELECT type, count(DISTINCT click_id)
 		FROM tracking_events
 		WHERE organization_id = ? AND event_at >= ? AND event_at < ?
-			AND type IN ('LAND_VIEW', 'LAND_CLICK', 'PWA_VIEW', 'PWA_INSTALL')
-		GROUP BY type`, organizationID, from, to)
+			AND type IN ('LAND_VIEW', 'LAND_CLICK', 'PWA_VIEW', 'PWA_INSTALL')`+visitFilter+`
+		GROUP BY type`, append([]any{organizationID, from, to}, visitArgs...)...)
 	if err != nil {
 		return nil, fmt.Errorf("chstore: querying funnel tracking counts: %w", err)
 	}
@@ -434,8 +571,8 @@ func (s *EventStore) FunnelCounts(ctx context.Context, organizationID string, fr
 		SELECT type, count(DISTINCT click_id)
 		FROM conversion_events
 		WHERE organization_id = ? AND event_at >= ? AND event_at < ?
-			AND type IN ('CPA_HOLD', 'CPA_ACCEPT', 'CPA_REDEP')
-		GROUP BY type`, organizationID, from, to)
+			AND type IN ('CPA_HOLD', 'CPA_ACCEPT', 'CPA_REDEP')`+visitFilter+`
+		GROUP BY type`, append([]any{organizationID, from, to}, visitArgs...)...)
 	if err != nil {
 		return nil, fmt.Errorf("chstore: querying funnel conversion counts: %w", err)
 	}
@@ -519,6 +656,20 @@ func scanFunnelCounts(rows driver.Rows, out map[string]uint64) error {
 	return rows.Err()
 }
 
+// tzPattern is every character a real IANA zone name uses; anything else is
+// refused rather than inlined into SQL.
+var tzPattern = regexp.MustCompile(`^[A-Za-z0-9_+\-/]+$`)
+
+// dayExpr is the `day` column: the UTC date, or the date in tz when one was
+// given. tz is inlined (ClickHouse needs a constant zone in toDate), so an
+// invalid name falls back to UTC instead of reaching the query.
+func dayExpr(col, tz string) string {
+	if tz == "" || tz == "UTC" || !tzPattern.MatchString(tz) {
+		return "toDate(" + col + ") AS day"
+	}
+	return "toDate(" + col + ", '" + tz + "') AS day"
+}
+
 // selectAndGroupByExprs turns a resolved column list (plus whether the
 // day pseudo-dimension is requested) into the two SQL fragments every
 // query method above needs — the leading "col1, col2, " to prepend to
@@ -527,10 +678,10 @@ func scanFunnelCounts(rows driver.Rows, out map[string]uint64) error {
 // clause (empty string when there's nothing to group by, which ClickHouse
 // requires — GROUP BY with an empty list is a syntax error, not "group
 // everything into one row" the way omitting the clause already means).
-func selectAndGroupByExprs(cols []string, byDay bool) (selectExpr, groupByExpr string) {
+func selectAndGroupByExprs(cols []string, byDay bool, tz string) (selectExpr, groupByExpr string) {
 	all := make([]string, 0, len(cols)+1)
 	if byDay {
-		all = append(all, "toDate(event_at) AS day")
+		all = append(all, dayExpr("event_at", tz))
 	}
 	all = append(all, cols...)
 

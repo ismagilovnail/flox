@@ -144,6 +144,105 @@ func TestSpendByCampaignSumsAcrossCampaignsAndSources(t *testing.T) {
 	}
 }
 
+func TestSpendBySourceRollsCampaignsUpToTheirSource(t *testing.T) {
+	pool := mustPool(t)
+	ctx := context.Background()
+	orgID := seedOrg(t, ctx, pool)
+	srcShared := seedTrafficSource(t, ctx, pool, orgID)
+	srcOther := seedTrafficSource(t, ctx, pool, orgID)
+	insertCampaign := func(sourceID string) string {
+		id := idgen.New()
+		if _, err := pool.Exec(ctx,
+			`INSERT INTO campaigns (id, organization_id, traffic_source_id, name, fallback_url) VALUES ($1, $2, $3, $4, $5)`,
+			id, orgID, sourceID, "Test Campaign", "https://example.com/fallback",
+		); err != nil {
+			t.Fatalf("seeding campaign: %v", err)
+		}
+		return id
+	}
+	campA, campB, campC := insertCampaign(srcShared), insertCampaign(srcShared), insertCampaign(srcOther)
+
+	svc := cost.NewService(cost.NewRepository(pool), conversion.NewPostgresFX(pool))
+	day := time.Date(2026, 2, 1, 0, 0, 0, 0, time.UTC)
+	for camp, amount := range map[string]float64{campA: 100, campB: 20, campC: 7} {
+		if _, err := svc.Upsert(ctx, orgID, camp, cost.UpsertInput{EntryDate: day, Amount: amount, Currency: "USD"}); err != nil {
+			t.Fatalf("upsert: %v", err)
+		}
+	}
+
+	spend, err := svc.SpendBySource(ctx, orgID, day, day)
+	if err != nil {
+		t.Fatalf("SpendBySource: %v", err)
+	}
+	bySource := map[string]float64{}
+	for _, s := range spend {
+		bySource[s.TrafficSourceID] = s.AmountUSD
+	}
+	if len(bySource) != 2 || bySource[srcShared] != 120 || bySource[srcOther] != 7 {
+		t.Fatalf("spend by source = %v, want shared=120 (two campaigns summed) other=7", bySource)
+	}
+
+	// Another org's source must never show up.
+	otherOrg := seedOrg(t, ctx, pool)
+	if got, err := svc.SpendBySource(ctx, otherOrg, day, day); err != nil || len(got) != 0 {
+		t.Fatalf("other org spend by source = %v, %v, want empty", got, err)
+	}
+}
+
+func TestSpendByDayPerCampaignAndPerSource(t *testing.T) {
+	pool := mustPool(t)
+	ctx := context.Background()
+	orgID := seedOrg(t, ctx, pool)
+	src := seedTrafficSource(t, ctx, pool, orgID)
+	insertCampaign := func() string {
+		id := idgen.New()
+		if _, err := pool.Exec(ctx,
+			`INSERT INTO campaigns (id, organization_id, traffic_source_id, name, fallback_url) VALUES ($1, $2, $3, $4, $5)`,
+			id, orgID, src, "Test Campaign", "https://example.com/fallback",
+		); err != nil {
+			t.Fatalf("seeding campaign: %v", err)
+		}
+		return id
+	}
+	campA, campB := insertCampaign(), insertCampaign()
+	svc := cost.NewService(cost.NewRepository(pool), conversion.NewPostgresFX(pool))
+	d1 := time.Date(2026, 2, 1, 0, 0, 0, 0, time.UTC)
+	d2 := time.Date(2026, 2, 2, 0, 0, 0, 0, time.UTC)
+	for _, e := range []struct {
+		camp string
+		day  time.Time
+		amt  float64
+	}{{campA, d1, 10}, {campA, d2, 20}, {campB, d1, 5}} {
+		if _, err := svc.Upsert(ctx, orgID, e.camp, cost.UpsertInput{EntryDate: e.day, Amount: e.amt, Currency: "USD"}); err != nil {
+			t.Fatalf("upsert: %v", err)
+		}
+	}
+
+	byCamp, err := svc.CampaignSpendByDay(ctx, orgID, d1, d2)
+	if err != nil {
+		t.Fatalf("CampaignSpendByDay: %v", err)
+	}
+	got := map[string]float64{}
+	for _, r := range byCamp {
+		got[r.CampaignID+"|"+r.Day.Format("2006-01-02")] = r.AmountUSD
+	}
+	if len(got) != 3 || got[campA+"|2026-02-01"] != 10 || got[campA+"|2026-02-02"] != 20 || got[campB+"|2026-02-01"] != 5 {
+		t.Fatalf("campaign/day spend = %v", got)
+	}
+
+	bySrc, err := svc.SourceSpendByDay(ctx, orgID, d1, d2)
+	if err != nil {
+		t.Fatalf("SourceSpendByDay: %v", err)
+	}
+	gotSrc := map[string]float64{}
+	for _, r := range bySrc {
+		gotSrc[r.TrafficSourceID+"|"+r.Day.Format("2006-01-02")] = r.AmountUSD
+	}
+	if len(gotSrc) != 2 || gotSrc[src+"|2026-02-01"] != 15 || gotSrc[src+"|2026-02-02"] != 20 {
+		t.Fatalf("source/day spend = %v, want 15 on day 1 (two campaigns) and 20 on day 2", gotSrc)
+	}
+}
+
 func TestSpendByCampaignEmptyForOrgWithNoEntries(t *testing.T) {
 	pool := mustPool(t)
 	ctx := context.Background()

@@ -149,6 +149,11 @@ type Event struct {
 	// it (apps/tracker/pwa.go) — on SOURCE_CLICK, LAND_*, PWA_* and, via
 	// attribution, conversions.
 	PwaID string `json:"pwaId,omitempty"`
+	// TrafficSourceID is the traffic source of the click's campaign
+	// (apps/tracker, from the campaign row at click time) — on every
+	// click-derived event and, via attribution, conversions. Backs the
+	// report builder's `source` dimension.
+	TrafficSourceID string `json:"trafficSourceId,omitempty"`
 
 	// Classified request attributes.
 	Country        string `json:"country,omitempty"`

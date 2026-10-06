@@ -382,6 +382,38 @@ func TestOfferIDOnEveryLandingEvent(t *testing.T) {
 	}
 }
 
+// TestTrafficSourceIDOnEveryLandingEvent: the campaign's traffic source is
+// stamped on the SOURCE_CLICK and rides the signed link onto LAND_VIEW and
+// LAND_CLICK, so the report builder's `source` dimension merges campaigns on
+// one source.
+func TestTrafficSourceIDOnEveryLandingEvent(t *testing.T) {
+	pool := testPool(t)
+	ctx := context.Background()
+	lnd := internalLanding(landing.StatusActive)
+	fx := seedLandingFixture(t, pool, lnd)
+	var sourceID string
+	if err := pool.QueryRow(ctx, `SELECT traffic_source_id FROM campaigns WHERE organization_id = $1`, fx.orgID).Scan(&sourceID); err != nil || sourceID == "" {
+		t.Fatalf("reading the campaign's traffic source: %q, %v", sourceID, err)
+	}
+
+	h, sink, closeEvents := newLandingHandler(t, pool, true)
+	rec := get(h, fx.host, "/t/go")
+	m := trackURLInPage.FindStringSubmatch(rec.Body.String())
+	if m == nil {
+		t.Fatal("no trackUrl in page")
+	}
+	get(h, fx.host, strings.TrimPrefix(m[1], "http://"+fx.host))
+	closeEvents()
+	if len(sink.events) != 3 {
+		t.Fatalf("want SOURCE_CLICK, LAND_VIEW, LAND_CLICK, got %+v", sink.events)
+	}
+	for _, e := range sink.events {
+		if e.TrafficSourceID != sourceID {
+			t.Fatalf("%s TrafficSourceID = %q, want %q", e.Type, e.TrafficSourceID, sourceID)
+		}
+	}
+}
+
 func assertRedirect(t *testing.T, rec *httptest.ResponseRecorder, want string) {
 	t.Helper()
 	if rec.Code != http.StatusFound || rec.Header().Get("Location") != want {

@@ -106,3 +106,28 @@ type CampaignSpend struct {
 	AmountUSD    float64
 	AllConverted bool
 }
+
+// CampaignDaySpend / SourceDaySpend are the per-day versions of
+// CampaignSpend / SourceSpend, for report rows grouped by day.
+type CampaignDaySpend struct {
+	CampaignID string
+	Day        time.Time
+	AmountUSD  float64
+}
+
+type SourceDaySpend struct {
+	TrafficSourceID string
+	Day             time.Time
+	AmountUSD       float64
+}
+
+// SourceSpend is one traffic source's total spend across a date range: the
+// spend of every campaign currently on that source, summed. The report
+// builder's `source` dimension is the traffic source of the click's
+// campaign, so cost is attributed the same way (via the campaign), not via
+// cost_entries.traffic_source_id, which is an optional per-entry tag.
+type SourceSpend struct {
+	TrafficSourceID string
+	AmountUSD       float64
+	AllConverted    bool
+}

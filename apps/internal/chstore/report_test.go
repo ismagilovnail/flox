@@ -240,19 +240,136 @@ func TestReportConversionsExcludesHoldAndTrash(t *testing.T) {
 	}
 }
 
-func TestReportConversionsRejectsUnsupportedDimension(t *testing.T) {
+// seedOSJoinFixture: two clicks (linux/Chrome, windows/Firefox), the linux
+// one a day BEFORE the report window — a conversion can land days after its
+// click, so the join must not bound clicks by the report range. Plus a
+// conversion whose click was never recorded.
+func seedOSJoinFixture(t *testing.T, ctx context.Context, store *chstore.EventStore, orgID, campaignID string, day time.Time) {
+	t.Helper()
+	linuxClick, winClick := idgen.New(), idgen.New()
+	events := []event.Event{
+		{Type: event.SourceClick, EventAt: day.Add(-20 * time.Hour), OrganizationID: orgID, CampaignID: campaignID, ClickID: linuxClick, OS: "linux", Browser: "Chrome", Language: "en"},
+		{Type: event.SourceClick, EventAt: day.Add(-19 * time.Hour), OrganizationID: orgID, CampaignID: campaignID, ClickID: linuxClick, OS: "linux", Browser: "Chrome", Language: "en"}, // sticky repeat: must not double-count the conversion
+		{Type: event.SourceClick, EventAt: day.Add(1 * time.Hour), OrganizationID: orgID, CampaignID: campaignID, ClickID: winClick, OS: "windows", Browser: "Firefox", Language: "ru"},
+		{Type: event.CpaAccept, EventAt: day.Add(2 * time.Hour), OrganizationID: orgID, CampaignID: campaignID, ClickID: linuxClick, USDValue: 30, HasUSDValue: true},
+		{Type: event.CpaAccept, EventAt: day.Add(3 * time.Hour), OrganizationID: orgID, CampaignID: campaignID, ClickID: winClick, USDValue: 12, HasUSDValue: true},
+		{Type: event.CpaAccept, EventAt: day.Add(4 * time.Hour), OrganizationID: orgID, CampaignID: campaignID, ClickID: idgen.New(), USDValue: 5, HasUSDValue: true}, // no click on record
+	}
+	if err := store.InsertBatch(ctx, events); err != nil {
+		t.Fatalf("seeding os-join fixture: %v", err)
+	}
+}
+
+func TestReportConversionsGroupsByOSViaClickJoin(t *testing.T) {
 	conn := mustConn(t)
 	store := chstore.NewEventStore(conn)
 	ctx := context.Background()
+	orgID, campaignID := idgen.New(), idgen.New()
+	day := time.Date(2026, 8, 22, 0, 0, 0, 0, time.UTC)
+	seedOSJoinFixture(t, ctx, store, orgID, campaignID, day)
 
-	_, err := store.ReportConversions(ctx, chstore.ReportQuery{
-		OrganizationID: idgen.New(),
+	aggs, err := store.ReportConversions(ctx, chstore.ReportQuery{
+		OrganizationID: orgID,
 		Dims:           []chstore.ReportDimension{chstore.DimOS},
-		From:           time.Now().Add(-24 * time.Hour),
-		To:             time.Now(),
+		From:           day,
+		To:             day.Add(24 * time.Hour),
 	})
-	if err == nil {
-		t.Fatal("ReportConversions with DimOS succeeded, want an error — conversion_events has no os column")
+	if err != nil {
+		t.Fatalf("ReportConversions (by os): %v", err)
+	}
+	byOS := map[string]chstore.ConversionAgg{}
+	for _, a := range aggs {
+		byOS[a.Key.DimValues[chstore.DimOS]] = a
+	}
+	if len(byOS) != 3 {
+		t.Fatalf("rows = %+v, want linux, windows and the unattributed \"\" bucket", byOS)
+	}
+	if got := byOS["linux"]; got.Conversions != 1 || got.RevenueUSD != 30 {
+		t.Fatalf("linux = %+v, want 1 conversion / 30 (click is outside the window and sticky-repeated)", got)
+	}
+	if got := byOS["windows"]; got.Conversions != 1 || got.RevenueUSD != 12 {
+		t.Fatalf("windows = %+v, want 1 / 12", got)
+	}
+	if got := byOS[""]; got.Conversions != 1 || got.RevenueUSD != 5 {
+		t.Fatalf(`"" = %+v, want 1 / 5 (no click on record)`, got)
+	}
+}
+
+func TestReportConversionsFiltersByBrowserViaClickJoin(t *testing.T) {
+	conn := mustConn(t)
+	store := chstore.NewEventStore(conn)
+	ctx := context.Background()
+	orgID, campaignID := idgen.New(), idgen.New()
+	day := time.Date(2026, 8, 22, 0, 0, 0, 0, time.UTC)
+	seedOSJoinFixture(t, ctx, store, orgID, campaignID, day)
+
+	aggs, err := store.ReportConversions(ctx, chstore.ReportQuery{
+		OrganizationID: orgID,
+		Dims:           []chstore.ReportDimension{chstore.DimCampaign},
+		Filters:        []chstore.ReportFilter{{Dimension: chstore.DimBrowser, Value: "Firefox"}},
+		From:           day,
+		To:             day.Add(24 * time.Hour),
+	})
+	if err != nil {
+		t.Fatalf("ReportConversions (filter browser): %v", err)
+	}
+	if len(aggs) != 1 || aggs[0].Conversions != 1 || aggs[0].RevenueUSD != 12 {
+		t.Fatalf("aggs = %+v, want one campaign row with 1 conversion / 12", aggs)
+	}
+}
+
+func TestReportConversionsViaClickJoinByDayAndTenantIsolation(t *testing.T) {
+	conn := mustConn(t)
+	store := chstore.NewEventStore(conn)
+	ctx := context.Background()
+	orgA, orgB, campaignID := idgen.New(), idgen.New(), idgen.New()
+	day := time.Date(2026, 8, 22, 0, 0, 0, 0, time.UTC)
+	seedOSJoinFixture(t, ctx, store, orgA, campaignID, day)
+
+	// Org B has a conversion carrying the SAME click_id as one of org A's
+	// clicks — it must neither pick up A's os nor show up in A's report.
+	var clickID string
+	rows, err := conn.Query(ctx, "SELECT click_id FROM click_events WHERE organization_id = ? AND os = 'linux' LIMIT 1", orgA)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rows.Next() {
+		_ = rows.Scan(&clickID)
+	}
+	rows.Close()
+	if clickID == "" {
+		t.Fatal("fixture click not found")
+	}
+	if err := store.InsertBatch(ctx, []event.Event{
+		{Type: event.CpaAccept, EventAt: day.Add(2 * time.Hour), OrganizationID: orgB, CampaignID: campaignID, ClickID: clickID, USDValue: 999, HasUSDValue: true},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	for _, org := range []string{orgA, orgB} {
+		aggs, err := store.ReportConversions(ctx, chstore.ReportQuery{
+			OrganizationID: org,
+			Dims:           []chstore.ReportDimension{chstore.DimOS},
+			ByDay:          true,
+			From:           day,
+			To:             day.Add(24 * time.Hour),
+		})
+		if err != nil {
+			t.Fatalf("ReportConversions (by os, by day) org %s: %v", org, err)
+		}
+		var linux, total float64
+		for _, a := range aggs {
+			total += a.RevenueUSD
+			if a.Key.DimValues[chstore.DimOS] == "linux" {
+				linux += a.RevenueUSD
+			}
+		}
+		if org == orgA && (linux != 30 || total != 47) {
+			t.Fatalf("org A: linux=%v total=%v, want 30 / 47 and no revenue from org B", linux, total)
+		}
+		if org == orgB && (linux != 0 || total != 999) {
+			t.Fatalf("org B: linux=%v total=%v, want 0 / 999 (org A's click must not leak its os)", linux, total)
+		}
 	}
 }
 
@@ -319,7 +436,7 @@ func TestFunnelCountsZeroFillsAndCountsDistinctClickIDs(t *testing.T) {
 	day := time.Date(2026, 8, 21, 0, 0, 0, 0, time.UTC)
 	seedReportFixture(t, ctx, store, orgID, campaignID, day)
 
-	counts, err := store.FunnelCounts(ctx, orgID, day, day.Add(24*time.Hour))
+	counts, err := store.FunnelCounts(ctx, orgID, day, day.Add(24*time.Hour), nil)
 	if err != nil {
 		t.Fatalf("FunnelCounts: %v", err)
 	}
@@ -595,5 +712,149 @@ func TestReportByPwa(t *testing.T) {
 	convs, err := store.ReportConversions(ctx, q)
 	if err != nil || len(convs) != 1 || convs[0].RevenueUSD != 12 {
 		t.Fatalf("conversions by pwa = %+v, %v", convs, err)
+	}
+}
+
+// TestReportBySourceMergesCampaignsOnOneSource covers schema/011's
+// traffic_source_id end to end: two campaigns on the same source collapse
+// into ONE row (clicks and conversions), a campaign on another source stays
+// separate, and rows with no source land in the "" bucket.
+func TestReportBySourceMergesCampaignsOnOneSource(t *testing.T) {
+	conn := mustConn(t)
+	store := chstore.NewEventStore(conn)
+	ctx := context.Background()
+	orgID := idgen.New()
+	campA, campB, campC := idgen.New(), idgen.New(), idgen.New()
+	const srcFB, srcTT = "source-facebook", "source-tiktok"
+	day := time.Date(2026, 8, 23, 0, 0, 0, 0, time.UTC)
+	clickA, clickB, clickC := idgen.New(), idgen.New(), idgen.New()
+
+	if err := store.InsertBatch(ctx, []event.Event{
+		{Type: event.SourceClick, EventAt: day.Add(1 * time.Hour), OrganizationID: orgID, CampaignID: campA, ClickID: clickA, TrafficSourceID: srcFB},
+		{Type: event.SourceClick, EventAt: day.Add(2 * time.Hour), OrganizationID: orgID, CampaignID: campB, ClickID: clickB, TrafficSourceID: srcFB},
+		{Type: event.SourceClick, EventAt: day.Add(3 * time.Hour), OrganizationID: orgID, CampaignID: campC, ClickID: clickC, TrafficSourceID: srcTT},
+		{Type: event.SourceClick, EventAt: day.Add(4 * time.Hour), OrganizationID: orgID, CampaignID: campC, ClickID: idgen.New()}, // pre-011 row, never backfilled
+		{Type: event.CpaAccept, EventAt: day.Add(5 * time.Hour), OrganizationID: orgID, CampaignID: campA, ClickID: clickA, TrafficSourceID: srcFB, USDValue: 10, HasUSDValue: true},
+		{Type: event.CpaAccept, EventAt: day.Add(6 * time.Hour), OrganizationID: orgID, CampaignID: campB, ClickID: clickB, TrafficSourceID: srcFB, USDValue: 15, HasUSDValue: true},
+	}); err != nil {
+		t.Fatalf("seeding: %v", err)
+	}
+
+	q := chstore.ReportQuery{OrganizationID: orgID, Dims: []chstore.ReportDimension{chstore.DimSource}, From: day, To: day.Add(24 * time.Hour)}
+	clicks, err := store.ReportClicks(ctx, q)
+	if err != nil {
+		t.Fatalf("ReportClicks: %v", err)
+	}
+	bySource := map[string]uint64{}
+	for _, c := range clicks {
+		bySource[c.Key.DimValues[chstore.DimSource]] = c.Clicks
+	}
+	if len(bySource) != 3 || bySource[srcFB] != 2 || bySource[srcTT] != 1 || bySource[""] != 1 {
+		t.Fatalf("clicks by source = %v, want facebook=2 (two campaigns merged), tiktok=1, \"\"=1", bySource)
+	}
+
+	convs, err := store.ReportConversions(ctx, q)
+	if err != nil {
+		t.Fatalf("ReportConversions: %v", err)
+	}
+	if len(convs) != 1 || convs[0].Key.DimValues[chstore.DimSource] != srcFB || convs[0].Conversions != 2 || convs[0].RevenueUSD != 25 {
+		t.Fatalf("conversions by source = %+v, want one facebook row with 2 / 25", convs)
+	}
+}
+
+func TestReportClicksByDayCutsDaysInTheRequestedTimezone(t *testing.T) {
+	conn := mustConn(t)
+	store := chstore.NewEventStore(conn)
+	ctx := context.Background()
+	orgID, campaignID := idgen.New(), idgen.New()
+	// 23:30Z and 01:30Z the next UTC day: two UTC days, but both fall on
+	// 11 Aug in Dubai (UTC+4).
+	late := time.Date(2026, 8, 10, 23, 30, 0, 0, time.UTC)
+	early := time.Date(2026, 8, 11, 1, 30, 0, 0, time.UTC)
+	if err := store.InsertBatch(ctx, []event.Event{
+		{Type: event.SourceClick, EventAt: late, OrganizationID: orgID, CampaignID: campaignID, ClickID: idgen.New()},
+		{Type: event.SourceClick, EventAt: early, OrganizationID: orgID, CampaignID: campaignID, ClickID: idgen.New()},
+	}); err != nil {
+		t.Fatalf("seeding: %v", err)
+	}
+	q := chstore.ReportQuery{OrganizationID: orgID, ByDay: true, From: late.Add(-time.Hour), To: early.Add(time.Hour)}
+
+	utc, err := store.ReportClicks(ctx, q)
+	if err != nil {
+		t.Fatalf("ReportClicks (UTC): %v", err)
+	}
+	if len(utc) != 2 {
+		t.Fatalf("UTC days = %d, want 2 (10 Aug and 11 Aug)", len(utc))
+	}
+
+	q.Timezone = "Asia/Dubai"
+	dubai, err := store.ReportClicks(ctx, q)
+	if err != nil {
+		t.Fatalf("ReportClicks (Dubai): %v", err)
+	}
+	if len(dubai) != 1 || dubai[0].Clicks != 2 || dubai[0].Key.Day.Format("2006-01-02") != "2026-08-11" {
+		t.Fatalf("Dubai rows = %+v, want one 11 Aug row with 2 clicks", dubai)
+	}
+
+	q.Timezone = "x'; DROP TABLE click_events; --"
+	if _, err := store.ReportClicks(ctx, q); err != nil {
+		t.Fatalf("an invalid zone name must fall back to UTC, not reach the query: %v", err)
+	}
+}
+
+func TestFunnelCountsAppliesFiltersToEveryStage(t *testing.T) {
+	conn := mustConn(t)
+	store := chstore.NewEventStore(conn)
+	ctx := context.Background()
+	orgID := idgen.New()
+	campA, campB := idgen.New(), idgen.New()
+	day := time.Date(2026, 8, 24, 0, 0, 0, 0, time.UTC)
+	a1, a2, b1 := idgen.New(), idgen.New(), idgen.New()
+	if err := store.InsertBatch(ctx, []event.Event{
+		{Type: event.SourceClick, EventAt: day.Add(1 * time.Hour), OrganizationID: orgID, CampaignID: campA, ClickID: a1, OS: "linux"},
+		{Type: event.SourceClick, EventAt: day.Add(1 * time.Hour), OrganizationID: orgID, CampaignID: campA, ClickID: a2, OS: "windows"},
+		{Type: event.SourceClick, EventAt: day.Add(1 * time.Hour), OrganizationID: orgID, CampaignID: campB, ClickID: b1, OS: "linux"},
+		{Type: event.LandView, EventAt: day.Add(2 * time.Hour), OrganizationID: orgID, CampaignID: campA, ClickID: a1},
+		{Type: event.LandView, EventAt: day.Add(2 * time.Hour), OrganizationID: orgID, CampaignID: campB, ClickID: b1},
+		{Type: event.CpaAccept, EventAt: day.Add(3 * time.Hour), OrganizationID: orgID, CampaignID: campA, ClickID: a1, USDValue: 10, HasUSDValue: true},
+		{Type: event.CpaAccept, EventAt: day.Add(3 * time.Hour), OrganizationID: orgID, CampaignID: campB, ClickID: b1, USDValue: 10, HasUSDValue: true},
+	}); err != nil {
+		t.Fatalf("seeding: %v", err)
+	}
+	from, to := day, day.Add(24*time.Hour)
+
+	all, err := store.FunnelCounts(ctx, orgID, from, to, nil)
+	if err != nil {
+		t.Fatalf("FunnelCounts: %v", err)
+	}
+	if all["SOURCE_CLICK"] != 3 || all["LAND_VIEW"] != 2 || all["CPA_ACCEPT"] != 2 {
+		t.Fatalf("unfiltered funnel = %v, want clicks 3 / land views 2 / accepts 2", all)
+	}
+
+	// Campaign filter reaches the tracking and conversion tables through the click.
+	byCamp, err := store.FunnelCounts(ctx, orgID, from, to, []chstore.ReportFilter{{Dimension: chstore.DimCampaign, Value: campA}})
+	if err != nil {
+		t.Fatalf("FunnelCounts (campaign): %v", err)
+	}
+	if byCamp["SOURCE_CLICK"] != 2 || byCamp["LAND_VIEW"] != 1 || byCamp["CPA_ACCEPT"] != 1 {
+		t.Fatalf("campaign A funnel = %v, want 2 / 1 / 1", byCamp)
+	}
+
+	// os exists only on clicks — the conversion stage must still honour it.
+	byOS, err := store.FunnelCounts(ctx, orgID, from, to, []chstore.ReportFilter{{Dimension: chstore.DimCampaign, Value: campA}, {Dimension: chstore.DimOS, Value: "linux"}})
+	if err != nil {
+		t.Fatalf("FunnelCounts (campaign+os): %v", err)
+	}
+	if byOS["SOURCE_CLICK"] != 1 || byOS["LAND_VIEW"] != 1 || byOS["CPA_ACCEPT"] != 1 {
+		t.Fatalf("campaign A + linux funnel = %v, want 1 / 1 / 1", byOS)
+	}
+
+	// Another org sees none of it.
+	other, err := store.FunnelCounts(ctx, idgen.New(), from, to, []chstore.ReportFilter{{Dimension: chstore.DimCampaign, Value: campA}})
+	if err != nil {
+		t.Fatalf("FunnelCounts (other org): %v", err)
+	}
+	if other["SOURCE_CLICK"] != 0 || other["CPA_ACCEPT"] != 0 {
+		t.Fatalf("other org funnel = %v, want empty", other)
 	}
 }

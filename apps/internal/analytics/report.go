@@ -18,6 +18,51 @@ import (
 // maxRangeDays in analytics.go.
 const maxReportDims = 4
 
+// DimDay is the report builder's "День" pseudo-dimension: not a
+// chstore.ReportDimension (no column to group by — it buckets event_at), but
+// accepted anywhere in ReportInput.Dims. It turns on per-day grouping on top
+// of the other dimensions and counts toward maxReportDims.
+const DimDay chstore.ReportDimension = "day"
+
+// splitDay removes DimDay from dims and reports whether it was there.
+func splitDay(dims []chstore.ReportDimension) (rest []chstore.ReportDimension, hasDay bool) {
+	rest = make([]chstore.ReportDimension, 0, len(dims))
+	for _, d := range dims {
+		if d == DimDay {
+			hasDay = true
+			continue
+		}
+		rest = append(rest, d)
+	}
+	return rest, hasDay
+}
+
+// scope is the timezone a request's days are cut in. The zero value is UTC.
+type scope struct {
+	loc  *time.Location
+	name string
+}
+
+// resolveScope validates an IANA zone name ("" and "UTC" mean UTC).
+func resolveScope(name string) (scope, error) {
+	if name == "" || name == "UTC" {
+		return scope{loc: time.UTC}, nil
+	}
+	loc, err := time.LoadLocation(name)
+	if err != nil {
+		return scope{}, apierror.Validation("unknown timezone", map[string]string{"timezone": name})
+	}
+	return scope{loc: loc, name: name}, nil
+}
+
+// bounds converts the caller's inclusive day range (UTC-midnight dates, see
+// handler.go) into the UTC instants [from 00:00, to+1d 00:00) in sc's zone.
+func (sc scope) bounds(from, to time.Time) (time.Time, time.Time) {
+	f := time.Date(from.Year(), from.Month(), from.Day(), 0, 0, 0, 0, sc.loc).UTC()
+	t := time.Date(to.Year(), to.Month(), to.Day()+1, 0, 0, 0, 0, sc.loc).UTC()
+	return f, t
+}
+
 // MetricValues is the full §50 metrics-registry row every report/
 // timeseries/breakdown/dashboard endpoint returns — ports
 // apps/web/src/features/analytics/aggregate.ts's deriveMetrics 1:1 so the
@@ -26,9 +71,10 @@ const maxReportDims = 4
 // implementation — CLAUDE.md's "no duplicate business logic"). Pointer
 // fields are nil exactly when CLAUDE.md #6 says they must be: no cost
 // data on file (Cost/Profit/ROI/ROAS/CPC/CPA), or the requested
-// dimensions can't be resolved against conversion_events' narrower
-// column set (Conversions/Revenue too, in that case — see
-// chstore.SupportedByConversions).
+// dimensions can't be answered by the conversion report at all
+// (Conversions/Revenue too, in that case — see
+// chstore.SupportedByConversions; os/browser/language are answered through
+// a click_id join, so today that is only a defensive guard).
 type MetricValues struct {
 	Clicks       uint64
 	UniqueClicks uint64
@@ -66,6 +112,10 @@ type ReportInput struct {
 	Filters  []chstore.ReportFilter
 	From, To time.Time
 	Sort     SortSpec
+	// Timezone is the IANA zone days are cut in ("" = UTC); also moves the
+	// From/To day boundaries, so a report in another zone covers the same
+	// local days.
+	Timezone string
 }
 
 // SortSpec sorts the final, fully-derived rows — after merging and
@@ -91,6 +141,9 @@ func (s *Service) validateReportInput(dims []chstore.ReportDimension, filters []
 		return apierror.Validation(fmt.Sprintf("too many dimensions, max %d", maxReportDims), map[string]string{"dimensions": "too many"})
 	}
 	for _, d := range dims {
+		if d == DimDay {
+			continue
+		}
 		if !chstore.ValidDimension(d) {
 			return apierror.Validation("unknown dimension", map[string]string{"dimensions": string(d) + " is not a supported dimension"})
 		}
@@ -114,11 +167,17 @@ func (s *Service) Report(ctx context.Context, organizationID string, in ReportIn
 	}
 	defer observeLatency("report")()
 
-	rows, err := s.groupedReport(ctx, organizationID, in.Dims, false, in.Filters, in.From, in.To)
+	sc, err := resolveScope(in.Timezone)
 	if err != nil {
 		return nil, err
 	}
-	sortRows(rows, in.Dims, in.Sort)
+	dims, byDay := splitDay(in.Dims)
+
+	rows, err := s.groupedReport(ctx, organizationID, dims, byDay, in.Filters, in.From, in.To, sc)
+	if err != nil {
+		return nil, err
+	}
+	sortRows(rows, dims, in.Sort)
 	return rows, nil
 }
 
@@ -131,6 +190,7 @@ func (s *Service) Report(ctx context.Context, organizationID string, in ReportIn
 type TimeseriesInput struct {
 	Filters  []chstore.ReportFilter
 	From, To time.Time
+	Timezone string // IANA zone days are cut in ("" = UTC)
 }
 
 func (s *Service) Timeseries(ctx context.Context, organizationID string, in TimeseriesInput) ([]ReportRow, error) {
@@ -142,7 +202,11 @@ func (s *Service) Timeseries(ctx context.Context, organizationID string, in Time
 	}
 	defer observeLatency("timeseries")()
 
-	rows, err := s.groupedReport(ctx, organizationID, nil, true, in.Filters, in.From, in.To)
+	sc, err := resolveScope(in.Timezone)
+	if err != nil {
+		return nil, err
+	}
+	rows, err := s.groupedReport(ctx, organizationID, nil, true, in.Filters, in.From, in.To, sc)
 	if err != nil {
 		return nil, err
 	}
@@ -171,7 +235,7 @@ func (s *Service) Breakdown(ctx context.Context, organizationID string, in Break
 	}
 	defer observeLatency("breakdown")()
 
-	rows, err := s.groupedReport(ctx, organizationID, dims, false, in.Filters, in.From, in.To)
+	rows, err := s.groupedReport(ctx, organizationID, dims, false, in.Filters, in.From, in.To, scope{loc: time.UTC})
 	if err != nil {
 		return nil, err
 	}
@@ -240,17 +304,20 @@ func (s *Service) DimensionValues(ctx context.Context, organizationID string, in
 // Nothing here sorts or limits; that's each public method's own job,
 // since only they know what "sorted by" and "top-N" mean for their
 // specific request.
-func (s *Service) groupedReport(ctx context.Context, organizationID string, dims []chstore.ReportDimension, byDay bool, filters []chstore.ReportFilter, from, to time.Time) ([]ReportRow, error) {
+func (s *Service) groupedReport(ctx context.Context, organizationID string, dims []chstore.ReportDimension, byDay bool, filters []chstore.ReportFilter, from, to time.Time, sc scope) ([]ReportRow, error) {
+	qFrom, qTo := sc.bounds(from, to)
 	q := chstore.ReportQuery{
 		OrganizationID: organizationID,
 		Dims:           dims,
 		ByDay:          byDay,
 		Filters:        filters,
-		From:           from,
+		Timezone:       sc.name,
 		// To is exclusive (chstore.ReportQuery's own doc) — from/to arrive
-		// here as day-precision UTC midnights (handler.go's own parsing),
-		// so +24h includes the entirety of the last requested day.
-		To: to.Add(24 * time.Hour),
+		// here as day-precision dates (handler.go's own parsing); bounds
+		// turns them into the UTC instants of that zone's local midnights,
+		// so the whole last requested day is included.
+		From: qFrom,
+		To:   qTo,
 	}
 
 	clickAggs, err := s.repo.ReportClicks(ctx, q)
@@ -335,12 +402,10 @@ func (s *Service) groupedReport(ctx context.Context, organizationID string, dims
 	return rows, nil
 }
 
-// costEligible reports whether dims resolves to campaign granularity or
-// coarser — the only shape cost_entries (Postgres, campaign+day grained,
-// no country/device/os/... breakdown) can answer. DimSource is
-// equivalent to DimCampaign here (same underlying column, see
-// chstore.DimSource's own doc) — grouping by it alone is exactly as
-// cost-eligible as grouping by campaign alone.
+// costEligible reports whether dims resolves to campaign or traffic-source
+// granularity (alone) or coarser — the only shapes cost_entries (Postgres,
+// campaign+day grained, rolled up to a source through the campaign) can
+// answer. No country/device/os/... breakdown exists to join against.
 func costEligible(dims []chstore.ReportDimension) bool {
 	if len(dims) == 0 {
 		return true
@@ -356,24 +421,7 @@ func (s *Service) attachCost(ctx context.Context, organizationID string, dims []
 	}
 
 	if byDay {
-		spend, err := s.cost.DailySpendForOrg(ctx, organizationID, from, to)
-		if err != nil {
-			return fmt.Errorf("analytics: querying daily org spend: %w", err)
-		}
-		byDayUSD := make(map[string]float64, len(spend))
-		for _, d := range spend {
-			byDayUSD[d.Day.Format("2006-01-02")] = d.AmountUSD
-		}
-		for _, acc := range merged {
-			if acc.day == nil {
-				continue
-			}
-			if usd, ok := byDayUSD[acc.day.Format("2006-01-02")]; ok {
-				v := usd
-				acc.costUSD = &v
-			}
-		}
-		return nil
+		return s.attachDailyCost(ctx, organizationID, dims, from, to, merged)
 	}
 
 	if len(dims) == 0 {
@@ -398,8 +446,25 @@ func (s *Service) attachCost(ctx context.Context, organizationID string, dims []
 		return nil
 	}
 
-	// dims == [campaign] or [source] — per-campaign cost, keyed by the
-	// same campaign_id value either dimension's column holds.
+	if dims[0] == chstore.DimSource {
+		bySource, err := s.cost.SpendBySource(ctx, organizationID, from, to)
+		if err != nil {
+			return fmt.Errorf("analytics: querying spend by source: %w", err)
+		}
+		bySourceID := make(map[string]float64, len(bySource))
+		for _, c := range bySource {
+			bySourceID[c.TrafficSourceID] = c.AmountUSD
+		}
+		for _, acc := range merged {
+			if usd, ok := bySourceID[acc.dimValues[chstore.DimSource]]; ok {
+				v := usd
+				acc.costUSD = &v
+			}
+		}
+		return nil
+	}
+
+	// dims == [campaign] — per-campaign cost.
 	spend, err := s.cost.SpendByCampaign(ctx, organizationID, from, to)
 	if err != nil {
 		return fmt.Errorf("analytics: querying spend by campaign: %w", err)
@@ -413,6 +478,71 @@ func (s *Service) attachCost(ctx context.Context, organizationID string, dims []
 		if usd, ok := byCampaign[campaignID]; ok {
 			v := usd
 			acc.costUSD = &v
+		}
+	}
+	return nil
+}
+
+// attachDailyCost fills per-day cost: the org's daily total when there is no
+// other dimension, or per (campaign|source, day) when grouped by one of them.
+func (s *Service) attachDailyCost(ctx context.Context, organizationID string, dims []chstore.ReportDimension, from, to time.Time, merged map[string]*rowAccumulator) error {
+	set := func(acc *rowAccumulator, usd float64) {
+		v := usd
+		acc.costUSD = &v
+	}
+	dayKey := func(t time.Time) string { return t.Format("2006-01-02") }
+
+	switch {
+	case len(dims) == 0:
+		spend, err := s.cost.DailySpendForOrg(ctx, organizationID, from, to)
+		if err != nil {
+			return fmt.Errorf("analytics: querying daily org spend: %w", err)
+		}
+		byDayUSD := make(map[string]float64, len(spend))
+		for _, d := range spend {
+			byDayUSD[dayKey(d.Day)] = d.AmountUSD
+		}
+		for _, acc := range merged {
+			if acc.day == nil {
+				continue
+			}
+			if usd, ok := byDayUSD[dayKey(*acc.day)]; ok {
+				set(acc, usd)
+			}
+		}
+	case dims[0] == chstore.DimSource:
+		spend, err := s.cost.SourceSpendByDay(ctx, organizationID, from, to)
+		if err != nil {
+			return fmt.Errorf("analytics: querying daily spend by source: %w", err)
+		}
+		by := make(map[string]float64, len(spend))
+		for _, d := range spend {
+			by[d.TrafficSourceID+"|"+dayKey(d.Day)] = d.AmountUSD
+		}
+		for _, acc := range merged {
+			if acc.day == nil {
+				continue
+			}
+			if usd, ok := by[acc.dimValues[chstore.DimSource]+"|"+dayKey(*acc.day)]; ok {
+				set(acc, usd)
+			}
+		}
+	default: // [campaign]
+		spend, err := s.cost.CampaignSpendByDay(ctx, organizationID, from, to)
+		if err != nil {
+			return fmt.Errorf("analytics: querying daily spend by campaign: %w", err)
+		}
+		by := make(map[string]float64, len(spend))
+		for _, d := range spend {
+			by[d.CampaignID+"|"+dayKey(d.Day)] = d.AmountUSD
+		}
+		for _, acc := range merged {
+			if acc.day == nil {
+				continue
+			}
+			if usd, ok := by[acc.dimValues[chstore.DimCampaign]+"|"+dayKey(*acc.day)]; ok {
+				set(acc, usd)
+			}
 		}
 	}
 	return nil
@@ -529,6 +659,13 @@ func sortRows(rows []ReportRow, dims []chstore.ReportDimension, spec SortSpec) {
 	}
 
 	less := func(i, j int) bool {
+		if key == "day" {
+			di, dj := rows[i].Day, rows[j].Day
+			if di == nil || dj == nil {
+				return false
+			}
+			return dir*sign(float64(di.Unix()-dj.Unix())) < 0
+		}
 		if isDim {
 			return dir*strings.Compare(rows[i].DimValues[dimKey], rows[j].DimValues[dimKey]) < 0
 		}
@@ -623,16 +760,21 @@ var funnelSteps = []string{
 	"CPA_HOLD", "CPA_ACCEPT", "CPA_REDEP",
 }
 
-func (s *Service) Funnel(ctx context.Context, organizationID string, from, to time.Time) ([]FunnelStep, error) {
+func (s *Service) Funnel(ctx context.Context, organizationID string, from, to time.Time, filters []chstore.ReportFilter, timezone string) ([]FunnelStep, error) {
 	if organizationID == "" {
 		return nil, apierror.Validation("missing organization", nil)
 	}
-	if to.Before(from) {
-		return nil, apierror.Validation("to must not be before from", map[string]string{"to": "before from"})
+	if err := s.validateReportInput(nil, filters, from, to); err != nil {
+		return nil, err
+	}
+	sc, err := resolveScope(timezone)
+	if err != nil {
+		return nil, err
 	}
 	defer observeLatency("funnel")()
 
-	counts, err := s.repo.FunnelCounts(ctx, organizationID, from, to.Add(24*time.Hour))
+	qFrom, qTo := sc.bounds(from, to)
+	counts, err := s.repo.FunnelCounts(ctx, organizationID, qFrom, qTo, filters)
 	if err != nil {
 		return nil, fmt.Errorf("analytics: querying funnel counts: %w", err)
 	}
@@ -669,7 +811,7 @@ func (s *Service) Dashboard(ctx context.Context, organizationID string, from, to
 	}
 	defer observeLatency("dashboard")()
 
-	totalsRows, err := s.groupedReport(ctx, organizationID, nil, false, nil, from, to)
+	totalsRows, err := s.groupedReport(ctx, organizationID, nil, false, nil, from, to, scope{loc: time.UTC})
 	if err != nil {
 		return DashboardResult{}, err
 	}
@@ -681,7 +823,7 @@ func (s *Service) Dashboard(ctx context.Context, organizationID string, from, to
 		totals = totalsRows[0].Metrics
 	}
 
-	daily, err := s.groupedReport(ctx, organizationID, nil, true, nil, from, to)
+	daily, err := s.groupedReport(ctx, organizationID, nil, true, nil, from, to, scope{loc: time.UTC})
 	if err != nil {
 		return DashboardResult{}, err
 	}

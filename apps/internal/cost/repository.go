@@ -186,6 +186,84 @@ func (r *Repository) SpendByCampaign(ctx context.Context, orgID string, from, to
 	return out, rows.Err()
 }
 
+// SpendBySource sums amount_usd per traffic source — each cost entry counts
+// toward the source its campaign is on (campaigns.traffic_source_id), the
+// same attribution the report builder's `source` dimension uses for clicks.
+func (r *Repository) SpendBySource(ctx context.Context, orgID string, from, to time.Time) ([]SourceSpend, error) {
+	rows, err := r.db.Query(ctx, `
+		SELECT c.traffic_source_id, COALESCE(SUM(ce.amount_usd), 0), bool_and(ce.amount_usd IS NOT NULL)
+		FROM cost_entries ce
+		JOIN campaigns c ON c.id = ce.campaign_id AND c.organization_id = ce.organization_id
+		WHERE ce.organization_id = $1 AND ce.entry_date >= $2 AND ce.entry_date <= $3
+		GROUP BY c.traffic_source_id`,
+		orgID, from, to,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("querying spend by source: %w", err)
+	}
+	defer rows.Close()
+
+	var out []SourceSpend
+	for rows.Next() {
+		var c SourceSpend
+		if err := rows.Scan(&c.TrafficSourceID, &c.AmountUSD, &c.AllConverted); err != nil {
+			return nil, fmt.Errorf("scanning spend-by-source row: %w", err)
+		}
+		out = append(out, c)
+	}
+	return out, rows.Err()
+}
+
+// CampaignSpendByDay sums amount_usd per (campaign, day).
+func (r *Repository) CampaignSpendByDay(ctx context.Context, orgID string, from, to time.Time) ([]CampaignDaySpend, error) {
+	rows, err := r.db.Query(ctx, `
+		SELECT campaign_id, entry_date, COALESCE(SUM(amount_usd), 0)
+		FROM cost_entries
+		WHERE organization_id = $1 AND entry_date >= $2 AND entry_date <= $3
+		GROUP BY campaign_id, entry_date`,
+		orgID, from, to,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("querying spend by campaign and day: %w", err)
+	}
+	defer rows.Close()
+	var out []CampaignDaySpend
+	for rows.Next() {
+		var c CampaignDaySpend
+		if err := rows.Scan(&c.CampaignID, &c.Day, &c.AmountUSD); err != nil {
+			return nil, fmt.Errorf("scanning spend-by-campaign-day row: %w", err)
+		}
+		out = append(out, c)
+	}
+	return out, rows.Err()
+}
+
+// SourceSpendByDay is SpendBySource per day (each entry counts toward its
+// campaign's traffic source).
+func (r *Repository) SourceSpendByDay(ctx context.Context, orgID string, from, to time.Time) ([]SourceDaySpend, error) {
+	rows, err := r.db.Query(ctx, `
+		SELECT c.traffic_source_id, ce.entry_date, COALESCE(SUM(ce.amount_usd), 0)
+		FROM cost_entries ce
+		JOIN campaigns c ON c.id = ce.campaign_id AND c.organization_id = ce.organization_id
+		WHERE ce.organization_id = $1 AND ce.entry_date >= $2 AND ce.entry_date <= $3
+		GROUP BY c.traffic_source_id, ce.entry_date`,
+		orgID, from, to,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("querying spend by source and day: %w", err)
+	}
+	defer rows.Close()
+	var out []SourceDaySpend
+	for rows.Next() {
+		var c SourceDaySpend
+		if err := rows.Scan(&c.TrafficSourceID, &c.Day, &c.AmountUSD); err != nil {
+			return nil, fmt.Errorf("scanning spend-by-source-day row: %w", err)
+		}
+		out = append(out, c)
+	}
+	return out, rows.Err()
+}
+
 // DailySpendForOrg sums amount_usd per day across every campaign and
 // traffic source for the whole org — the Overview dashboard's Spend
 // chart/KPI, the org-wide counterpart to DailyCampaignSpend.

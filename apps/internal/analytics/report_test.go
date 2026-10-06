@@ -23,7 +23,12 @@ type reportFakeRepo struct {
 	funnel map[string]uint64
 	values []string
 
-	lastConvQuery   *chstore.ReportQuery // nil unless ReportConversions was actually called
+	lastConvQuery  *chstore.ReportQuery // nil unless ReportConversions was actually called
+	lastClickQuery *chstore.ReportQuery
+	lastFunnelArgs struct {
+		from, to time.Time
+		filters  []chstore.ReportFilter
+	}
 	lastValuesDim   chstore.ReportDimension
 	lastValuesTo    time.Time
 	lastValuesLimit int
@@ -35,7 +40,8 @@ func (r *reportFakeRepo) DailyCampaignCounts(context.Context, string, string, ti
 func (r *reportFakeRepo) DailyCampaignRevenue(context.Context, string, string, time.Time, time.Time) ([]chstore.DailyRevenue, error) {
 	return nil, nil
 }
-func (r *reportFakeRepo) ReportClicks(context.Context, chstore.ReportQuery) ([]chstore.ClickAgg, error) {
+func (r *reportFakeRepo) ReportClicks(_ context.Context, q chstore.ReportQuery) ([]chstore.ClickAgg, error) {
+	r.lastClickQuery = &q
 	return r.clicks, nil
 }
 func (r *reportFakeRepo) ReportLandViews(context.Context, chstore.ReportQuery) ([]chstore.LandAgg, error) {
@@ -45,7 +51,8 @@ func (r *reportFakeRepo) ReportConversions(_ context.Context, q chstore.ReportQu
 	r.lastConvQuery = &q
 	return r.conv, nil
 }
-func (r *reportFakeRepo) FunnelCounts(context.Context, string, time.Time, time.Time) (map[string]uint64, error) {
+func (r *reportFakeRepo) FunnelCounts(_ context.Context, _ string, from, to time.Time, filters []chstore.ReportFilter) (map[string]uint64, error) {
+	r.lastFunnelArgs.from, r.lastFunnelArgs.to, r.lastFunnelArgs.filters = from, to, filters
 	return r.funnel, nil
 }
 func (r *reportFakeRepo) DistinctValues(_ context.Context, _ string, dim chstore.ReportDimension, _, to time.Time, limit int) ([]string, error) {
@@ -57,11 +64,24 @@ func (r *reportFakeRepo) DistinctValues(_ context.Context, _ string, dim chstore
 
 type fakeCost struct {
 	byCampaign []cost.CampaignSpend
-	byDay      []cost.DailySpend
+	bySource   []cost.SourceSpend
+
+	campaignDay []cost.CampaignDaySpend
+	sourceDay   []cost.SourceDaySpend
+	byDay       []cost.DailySpend
 }
 
 func (c *fakeCost) SpendByCampaign(context.Context, string, time.Time, time.Time) ([]cost.CampaignSpend, error) {
 	return c.byCampaign, nil
+}
+func (c *fakeCost) CampaignSpendByDay(context.Context, string, time.Time, time.Time) ([]cost.CampaignDaySpend, error) {
+	return c.campaignDay, nil
+}
+func (c *fakeCost) SourceSpendByDay(context.Context, string, time.Time, time.Time) ([]cost.SourceDaySpend, error) {
+	return c.sourceDay, nil
+}
+func (c *fakeCost) SpendBySource(context.Context, string, time.Time, time.Time) ([]cost.SourceSpend, error) {
+	return c.bySource, nil
 }
 func (c *fakeCost) DailySpendForOrg(context.Context, string, time.Time, time.Time) ([]cost.DailySpend, error) {
 	return c.byDay, nil
@@ -165,64 +185,165 @@ func TestReportZeroConversionsIsARealZeroNotNull(t *testing.T) {
 	}
 }
 
-func TestReportNullsConversionMetricsForUnsupportedDimension(t *testing.T) {
-	// DimOS has no column on conversion_events — conversions/revenue (and
-	// everything built from them) must be nil for every row, and
-	// ReportConversions must not even be called.
+func TestReportQueriesConversionsForClickOnlyDimension(t *testing.T) {
+	// DimOS has no column on conversion_events, but the store answers it
+	// through a click_id join — so conversions/revenue are real values, and
+	// ReportConversions IS called (with the os dimension, filter included).
 	repo := &reportFakeRepo{
-		clicks: []chstore.ClickAgg{{Key: dimKey(chstore.DimOS, "iOS 18"), Clicks: 20, UniqueClicks: 18}},
+		clicks: []chstore.ClickAgg{{Key: dimKey(chstore.DimOS, "linux"), Clicks: 20, UniqueClicks: 18}},
+		conv:   []chstore.ConversionAgg{{Key: dimKey(chstore.DimOS, "linux"), Conversions: 4, RevenueUSD: 80}},
 	}
 	svc := analytics.NewService(repo, nil)
 
 	rows, err := svc.Report(context.Background(), "org-1", analytics.ReportInput{
-		Dims: []chstore.ReportDimension{chstore.DimOS},
-		From: time.Now().AddDate(0, 0, -7),
-		To:   time.Now(),
-	})
-	if err != nil {
-		t.Fatalf("Report: %v", err)
-	}
-	if repo.lastConvQuery != nil {
-		t.Fatal("ReportConversions was called for a dimension conversion_events can't group by")
-	}
-	if len(rows) != 1 {
-		t.Fatalf("rows = %d, want 1", len(rows))
-	}
-	m := rows[0].Metrics
-	if m.Conversions != nil {
-		t.Fatalf("Conversions = %v, want nil", *m.Conversions)
-	}
-	if m.Revenue != nil {
-		t.Fatalf("Revenue = %v, want nil", *m.Revenue)
-	}
-	if m.CVR != 0 {
-		t.Fatalf("CVR = %v, want 0 (clicks-only metric, unaffected by the conversion gap)", m.CVR)
-	}
-}
-
-func TestReportNullsConversionMetricsForUnsupportedFilter(t *testing.T) {
-	// Filtering by os has the same no-column problem as grouping by it:
-	// ReportConversions must not be called (it would fail the whole report
-	// and the timeseries with a 500) and conversion metrics come back nil.
-	repo := &reportFakeRepo{
-		clicks: []chstore.ClickAgg{{Key: dimKey(chstore.DimCampaign, "camp-a"), Clicks: 20, UniqueClicks: 18}},
-	}
-	svc := analytics.NewService(repo, nil)
-
-	rows, err := svc.Report(context.Background(), "org-1", analytics.ReportInput{
-		Dims:    []chstore.ReportDimension{chstore.DimCampaign},
-		Filters: []chstore.ReportFilter{{Dimension: chstore.DimOS, Value: "linux"}},
+		Dims:    []chstore.ReportDimension{chstore.DimOS},
+		Filters: []chstore.ReportFilter{{Dimension: chstore.DimBrowser, Value: "Chrome"}},
 		From:    time.Now().AddDate(0, 0, -7),
 		To:      time.Now(),
 	})
 	if err != nil {
 		t.Fatalf("Report: %v", err)
 	}
-	if repo.lastConvQuery != nil {
-		t.Fatal("ReportConversions was called with a filter conversion_events can't apply")
+	if repo.lastConvQuery == nil {
+		t.Fatal("ReportConversions was not called for os/browser, which the click join can answer")
 	}
-	if len(rows) != 1 || rows[0].Metrics.Conversions != nil || rows[0].Metrics.Revenue != nil {
-		t.Fatalf("rows = %+v, want one row with nil conversions/revenue", rows)
+	if len(rows) != 1 {
+		t.Fatalf("rows = %d, want 1", len(rows))
+	}
+	m := rows[0].Metrics
+	if m.Conversions == nil || *m.Conversions != 4 || m.Revenue == nil || *m.Revenue != 80 {
+		t.Fatalf("Conversions/Revenue = %v / %v, want 4 / 80", m.Conversions, m.Revenue)
+	}
+	if m.CVR != 20 {
+		t.Fatalf("CVR = %v, want 20 (4 conversions / 20 clicks)", m.CVR)
+	}
+}
+
+func TestReportCostBySourceSumsTheSourcesCampaigns(t *testing.T) {
+	// Grouped by source, cost is the source's total (all its campaigns),
+	// not any one campaign's.
+	repo := &reportFakeRepo{
+		clicks: []chstore.ClickAgg{{Key: dimKey(chstore.DimSource, "src-fb"), Clicks: 100, UniqueClicks: 90}},
+		conv:   []chstore.ConversionAgg{{Key: dimKey(chstore.DimSource, "src-fb"), Conversions: 5, RevenueUSD: 300}},
+	}
+	costSrc := &fakeCost{
+		byCampaign: []cost.CampaignSpend{{CampaignID: "camp-a", AmountUSD: 60}, {CampaignID: "camp-b", AmountUSD: 40}},
+		bySource:   []cost.SourceSpend{{TrafficSourceID: "src-fb", AmountUSD: 100}},
+	}
+	svc := analytics.NewService(repo, costSrc)
+
+	rows, err := svc.Report(context.Background(), "org-1", analytics.ReportInput{
+		Dims: []chstore.ReportDimension{chstore.DimSource},
+		From: time.Now().AddDate(0, 0, -7),
+		To:   time.Now(),
+	})
+	if err != nil {
+		t.Fatalf("Report: %v", err)
+	}
+	m := rows[0].Metrics
+	if m.Cost == nil || *m.Cost != 100 || m.Profit == nil || *m.Profit != 200 {
+		t.Fatalf("Cost/Profit = %v / %v, want 100 / 200", m.Cost, m.Profit)
+	}
+}
+
+func dayKey(day time.Time, dim chstore.ReportDimension, value string) chstore.ReportKey {
+	d := day
+	return chstore.ReportKey{Day: &d, DimValues: map[chstore.ReportDimension]string{dim: value}}
+}
+
+func TestReportDayDimensionGroupsByDayAndKeepsOtherDims(t *testing.T) {
+	d1 := time.Date(2026, 8, 1, 0, 0, 0, 0, time.UTC)
+	d2 := time.Date(2026, 8, 2, 0, 0, 0, 0, time.UTC)
+	repo := &reportFakeRepo{
+		clicks: []chstore.ClickAgg{
+			{Key: dayKey(d1, chstore.DimCampaign, "camp-a"), Clicks: 10},
+			{Key: dayKey(d2, chstore.DimCampaign, "camp-a"), Clicks: 30},
+		},
+		conv: []chstore.ConversionAgg{{Key: dayKey(d2, chstore.DimCampaign, "camp-a"), Conversions: 3, RevenueUSD: 90}},
+	}
+	costSrc := &fakeCost{campaignDay: []cost.CampaignDaySpend{
+		{CampaignID: "camp-a", Day: d1, AmountUSD: 5},
+		{CampaignID: "camp-a", Day: d2, AmountUSD: 20},
+	}}
+	svc := analytics.NewService(repo, costSrc)
+
+	rows, err := svc.Report(context.Background(), "org-1", analytics.ReportInput{
+		Dims: []chstore.ReportDimension{chstore.DimCampaign, analytics.DimDay},
+		From: d1, To: d2,
+		Sort: analytics.SortSpec{Key: "day", Dir: "desc"},
+	})
+	if err != nil {
+		t.Fatalf("Report: %v", err)
+	}
+	if repo.lastClickQuery == nil || !repo.lastClickQuery.ByDay || len(repo.lastClickQuery.Dims) != 1 || repo.lastClickQuery.Dims[0] != chstore.DimCampaign {
+		t.Fatalf("click query = %+v, want ByDay with only the campaign dimension (day is not a column)", repo.lastClickQuery)
+	}
+	if len(rows) != 2 || rows[0].Day == nil || !rows[0].Day.Equal(d2) || !rows[1].Day.Equal(d1) {
+		t.Fatalf("rows = %+v, want 2 rows sorted by day descending", rows)
+	}
+	if rows[0].DimValues[chstore.DimCampaign] != "camp-a" {
+		t.Fatalf("campaign dim lost on a day row: %+v", rows[0].DimValues)
+	}
+	m0, m1 := rows[0].Metrics, rows[1].Metrics
+	if m0.Cost == nil || *m0.Cost != 20 || m0.Profit == nil || *m0.Profit != 70 {
+		t.Fatalf("day 2 cost/profit = %v / %v, want 20 / 70 (that day's own spend)", m0.Cost, m0.Profit)
+	}
+	if m1.Cost == nil || *m1.Cost != 5 {
+		t.Fatalf("day 1 cost = %v, want 5", m1.Cost)
+	}
+}
+
+func TestReportDayCountsTowardTheDimensionLimit(t *testing.T) {
+	svc := analytics.NewService(&reportFakeRepo{}, nil)
+	_, err := svc.Report(context.Background(), "org-1", analytics.ReportInput{
+		Dims: []chstore.ReportDimension{chstore.DimCampaign, chstore.DimCountry, chstore.DimDevice, chstore.DimOS, analytics.DimDay},
+		From: time.Now().AddDate(0, 0, -1), To: time.Now(),
+	})
+	if err == nil {
+		t.Fatal("5 dimensions (4 + day) succeeded, want the max-4 validation error")
+	}
+}
+
+func TestReportTimezoneMovesDayBoundaries(t *testing.T) {
+	repo := &reportFakeRepo{}
+	svc := analytics.NewService(repo, nil)
+	from := time.Date(2026, 8, 10, 0, 0, 0, 0, time.UTC)
+	_, err := svc.Report(context.Background(), "org-1", analytics.ReportInput{
+		Dims: []chstore.ReportDimension{analytics.DimDay},
+		From: from, To: from, Timezone: "America/New_York",
+	})
+	if err != nil {
+		t.Fatalf("Report: %v", err)
+	}
+	q := repo.lastClickQuery
+	// New York is UTC-4 in August: local 10 Aug 00:00 = 04:00Z, to-exclusive = 11 Aug 04:00Z.
+	if q == nil || q.Timezone != "America/New_York" ||
+		!q.From.Equal(time.Date(2026, 8, 10, 4, 0, 0, 0, time.UTC)) || !q.To.Equal(time.Date(2026, 8, 11, 4, 0, 0, 0, time.UTC)) {
+		t.Fatalf("query = %+v, want New York local-midnight bounds 10 Aug 04:00Z .. 11 Aug 04:00Z", q)
+	}
+
+	if _, err := svc.Report(context.Background(), "org-1", analytics.ReportInput{From: from, To: from, Timezone: "Mars/Olympus"}); err == nil {
+		t.Fatal("unknown timezone succeeded, want a validation error")
+	}
+}
+
+func TestFunnelPassesFiltersAndTimezone(t *testing.T) {
+	repo := &reportFakeRepo{funnel: map[string]uint64{"SOURCE_CLICK": 7}}
+	svc := analytics.NewService(repo, nil)
+	day := time.Date(2026, 8, 10, 0, 0, 0, 0, time.UTC)
+	filters := []chstore.ReportFilter{{Dimension: chstore.DimCampaign, Value: "camp-a"}}
+	steps, err := svc.Funnel(context.Background(), "org-1", day, day, filters, "")
+	if err != nil {
+		t.Fatalf("Funnel: %v", err)
+	}
+	if len(repo.lastFunnelArgs.filters) != 1 || repo.lastFunnelArgs.filters[0].Value != "camp-a" {
+		t.Fatalf("funnel filters = %+v, want the campaign filter to reach the store", repo.lastFunnelArgs.filters)
+	}
+	if !repo.lastFunnelArgs.to.Equal(day.Add(24 * time.Hour)) {
+		t.Fatalf("funnel to = %v, want exclusive end of the last day", repo.lastFunnelArgs.to)
+	}
+	if steps[0].Value != 7 {
+		t.Fatalf("steps[0] = %+v, want 7", steps[0])
 	}
 }
 
@@ -380,7 +501,7 @@ func TestFunnelZeroFillsEveryStage(t *testing.T) {
 	repo := &reportFakeRepo{funnel: map[string]uint64{"SOURCE_CLICK": 100, "CPA_ACCEPT": 3}}
 	svc := analytics.NewService(repo, nil)
 
-	steps, err := svc.Funnel(context.Background(), "org-1", time.Now().AddDate(0, 0, -7), time.Now())
+	steps, err := svc.Funnel(context.Background(), "org-1", time.Now().AddDate(0, 0, -7), time.Now(), nil, "")
 	if err != nil {
 		t.Fatalf("Funnel: %v", err)
 	}

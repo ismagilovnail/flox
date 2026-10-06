@@ -29,7 +29,7 @@ type Repository interface {
 	ReportClicks(ctx context.Context, q chstore.ReportQuery) ([]chstore.ClickAgg, error)
 	ReportLandViews(ctx context.Context, q chstore.ReportQuery) ([]chstore.LandAgg, error)
 	ReportConversions(ctx context.Context, q chstore.ReportQuery) ([]chstore.ConversionAgg, error)
-	FunnelCounts(ctx context.Context, organizationID string, from, to time.Time) (map[string]uint64, error)
+	FunnelCounts(ctx context.Context, organizationID string, from, to time.Time, filters []chstore.ReportFilter) (map[string]uint64, error)
 	DistinctValues(ctx context.Context, organizationID string, dim chstore.ReportDimension, from, to time.Time, limit int) ([]string, error)
 }
 
@@ -48,6 +48,9 @@ type Repository interface {
 // different code path.
 type CostSource interface {
 	SpendByCampaign(ctx context.Context, organizationID string, from, to time.Time) ([]cost.CampaignSpend, error)
+	SpendBySource(ctx context.Context, organizationID string, from, to time.Time) ([]cost.SourceSpend, error)
+	CampaignSpendByDay(ctx context.Context, organizationID string, from, to time.Time) ([]cost.CampaignDaySpend, error)
+	SourceSpendByDay(ctx context.Context, organizationID string, from, to time.Time) ([]cost.SourceDaySpend, error)
 	DailySpendForOrg(ctx context.Context, organizationID string, from, to time.Time) ([]cost.DailySpend, error)
 }
 

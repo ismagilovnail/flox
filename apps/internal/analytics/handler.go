@@ -240,6 +240,7 @@ type reportRequest struct {
 		Key string `json:"key"`
 		Dir string `json:"dir"`
 	} `json:"sort"`
+	Timezone string `json:"timezone"`
 }
 
 // report answers POST /analytics/report — the report builder table's
@@ -258,11 +259,12 @@ func (h *Handler) report(w http.ResponseWriter, r *http.Request) {
 	}
 
 	rows, err := h.svc.Report(r.Context(), orgID, ReportInput{
-		Dims:    parseReportDims(req.Dims),
-		Filters: parseReportFilters(req.Filters),
-		From:    from,
-		To:      to,
-		Sort:    SortSpec{Key: req.Sort.Key, Dir: req.Sort.Dir},
+		Dims:     parseReportDims(req.Dims),
+		Filters:  parseReportFilters(req.Filters),
+		From:     from,
+		To:       to,
+		Sort:     SortSpec{Key: req.Sort.Key, Dir: req.Sort.Dir},
+		Timezone: req.Timezone,
 	})
 	if err != nil {
 		apierror.Write(w, h.logger, err)
@@ -272,9 +274,10 @@ func (h *Handler) report(w http.ResponseWriter, r *http.Request) {
 }
 
 type timeseriesRequest struct {
-	Filters []reportFilterRequest `json:"filters"`
-	From    string                `json:"from"`
-	To      string                `json:"to"`
+	Filters  []reportFilterRequest `json:"filters"`
+	From     string                `json:"from"`
+	To       string                `json:"to"`
+	Timezone string                `json:"timezone"`
 }
 
 // timeseries answers POST /analytics/timeseries — one row per day, every
@@ -294,9 +297,10 @@ func (h *Handler) timeseries(w http.ResponseWriter, r *http.Request) {
 	}
 
 	rows, err := h.svc.Timeseries(r.Context(), orgID, TimeseriesInput{
-		Filters: parseReportFilters(req.Filters),
-		From:    from,
-		To:      to,
+		Filters:  parseReportFilters(req.Filters),
+		From:     from,
+		To:       to,
+		Timezone: req.Timezone,
 	})
 	if err != nil {
 		apierror.Write(w, h.logger, err)
@@ -349,6 +353,13 @@ type rangeRequest struct {
 	To   string `json:"to"`
 }
 
+type funnelRequest struct {
+	Filters  []reportFilterRequest `json:"filters"`
+	From     string                `json:"from"`
+	To       string                `json:"to"`
+	Timezone string                `json:"timezone"`
+}
+
 type funnelStepResponse struct {
 	Step  string `json:"step"`
 	Value uint64 `json:"value"`
@@ -358,7 +369,7 @@ type funnelStepResponse struct {
 // totals for the requested range.
 func (h *Handler) funnel(w http.ResponseWriter, r *http.Request) {
 	orgID, _ := tenant.OrgID(r.Context())
-	var req rangeRequest
+	var req funnelRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		apierror.Write(w, h.logger, apierror.Validation("invalid JSON body", nil))
 		return
@@ -369,7 +380,7 @@ func (h *Handler) funnel(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	steps, err := h.svc.Funnel(r.Context(), orgID, from, to)
+	steps, err := h.svc.Funnel(r.Context(), orgID, from, to, parseReportFilters(req.Filters), req.Timezone)
 	if err != nil {
 		apierror.Write(w, h.logger, err)
 		return

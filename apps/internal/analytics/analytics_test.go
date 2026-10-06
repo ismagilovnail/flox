@@ -39,7 +39,7 @@ func (r *fakeRepo) ReportConversions(_ context.Context, _ chstore.ReportQuery) (
 	return nil, nil
 }
 
-func (r *fakeRepo) FunnelCounts(_ context.Context, _ string, _, _ time.Time) (map[string]uint64, error) {
+func (r *fakeRepo) FunnelCounts(_ context.Context, _ string, _, _ time.Time, _ []chstore.ReportFilter) (map[string]uint64, error) {
 	return nil, nil
 }
 

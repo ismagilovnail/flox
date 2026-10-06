@@ -2,6 +2,7 @@ package reportpresets
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -24,7 +25,7 @@ func NewRepository(db *pgxpool.Pool) *Repository { return &Repository{db: db} }
 // pwa.updated_date already established, since a report period boundary is
 // a date, not a moment.
 const presetColumns = `
-	id, organization_id, name, dimensions, metrics, group_by,
+	id, organization_id, name, dimensions, metrics, filters, column_order, column_widths, group_by,
 	period_type, period_days, to_char(period_from, 'YYYY-MM-DD'), to_char(period_to, 'YYYY-MM-DD'),
 	timezone, is_default, created_by_user_id, created_at, updated_at`
 
@@ -32,13 +33,54 @@ func scanPreset(row pgx.Row) (ReportPreset, error) {
 	var p ReportPreset
 	var periodFrom, periodTo *string
 	err := row.Scan(
-		&p.ID, &p.OrganizationID, &p.Name, &p.Dimensions, &p.Metrics, &p.GroupBy,
+		&p.ID, &p.OrganizationID, &p.Name, &p.Dimensions, &p.Metrics, &p.Filters, &p.ColumnOrder, &p.ColumnWidths, &p.GroupBy,
 		&p.Period.Type, &p.Period.Days, &periodFrom, &periodTo,
 		&p.Timezone, &p.IsDefault, &p.CreatedByID, &p.CreatedAt, &p.UpdatedAt,
 	)
 	p.Period.From = periodFrom
 	p.Period.To = periodTo
+	if p.Filters == nil {
+		p.Filters = []Filter{} // serialize as [], never null
+	}
+	if p.ColumnOrder == nil {
+		p.ColumnOrder = []string{}
+	}
+	if p.ColumnWidths == nil {
+		p.ColumnWidths = map[string]int{}
+	}
 	return p, err
+}
+
+// nonNil keeps a nil slice from being sent as SQL NULL into a NOT NULL array column.
+func nonNil(s []string) []string {
+	if s == nil {
+		return []string{}
+	}
+	return s
+}
+
+// widthsJSON is the jsonb parameter for a preset's column widths: nil is {}.
+func widthsJSON(w map[string]int) string {
+	if len(w) == 0 {
+		return "{}"
+	}
+	b, err := json.Marshal(w) // a map of string to int cannot fail to marshal
+	if err != nil {
+		return "{}"
+	}
+	return string(b)
+}
+
+// filtersJSON is the jsonb parameter for a preset's filters: nil is [].
+func filtersJSON(f []Filter) string {
+	if len(f) == 0 {
+		return "[]"
+	}
+	b, err := json.Marshal(f)
+	if err != nil { // a slice of two strings cannot fail to marshal
+		return "[]"
+	}
+	return string(b)
 }
 
 func (r *Repository) List(ctx context.Context, orgID string) ([]ReportPreset, error) {
@@ -75,10 +117,10 @@ func (r *Repository) Get(ctx context.Context, orgID, id string) (ReportPreset, e
 func (r *Repository) Create(ctx context.Context, orgID, createdByUserID string, in CreateInput) (ReportPreset, error) {
 	row := r.db.QueryRow(ctx, `
 		INSERT INTO report_presets
-			(id, organization_id, name, dimensions, metrics, group_by, period_type, period_days, period_from, period_to, timezone, is_default, created_by_user_id)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, false, $12)
+			(id, organization_id, name, dimensions, metrics, filters, column_order, column_widths, group_by, period_type, period_days, period_from, period_to, timezone, is_default, created_by_user_id)
+		VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7, $8::jsonb, $9, $10, $11, $12, $13, $14, false, $15)
 		RETURNING `+presetColumns,
-		idgen.New(), orgID, in.Name, in.Dimensions, in.Metrics, in.GroupBy,
+		idgen.New(), orgID, in.Name, in.Dimensions, in.Metrics, filtersJSON(in.Filters), nonNil(in.ColumnOrder), widthsJSON(in.ColumnWidths), in.GroupBy,
 		in.Period.Type, in.Period.Days, in.Period.From, in.Period.To,
 		in.Timezone, createdByUserID,
 	)
@@ -121,6 +163,15 @@ func (r *Repository) Update(ctx context.Context, orgID, id string, in UpdateInpu
 	}
 	if in.Metrics != nil {
 		sets = append(sets, "metrics = "+arg(in.Metrics))
+	}
+	if in.Filters != nil {
+		sets = append(sets, "filters = "+arg(filtersJSON(in.Filters))+"::jsonb")
+	}
+	if in.ColumnOrder != nil {
+		sets = append(sets, "column_order = "+arg(in.ColumnOrder))
+	}
+	if in.ColumnWidths != nil {
+		sets = append(sets, "column_widths = "+arg(widthsJSON(in.ColumnWidths))+"::jsonb")
 	}
 	if in.GroupBy != nil {
 		sets = append(sets, "group_by = "+arg(*in.GroupBy))

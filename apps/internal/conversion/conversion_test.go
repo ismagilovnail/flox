@@ -193,7 +193,7 @@ func newHarness() (*conversion.Service, *fakeMapper, *fakeStore, *fakeEvents, *f
 	deliveries := &fakeDeliveries{}
 	attr := &fakeAttribution{
 		outcome: attribution.OutcomeAttributed,
-		click:   attribution.Click{ClickID: "click-1", OrganizationID: orgA, FlowID: "flow-1", LandingID: "landing-1", OfferID: "offer-1", PwaID: "pwa-1", OccurredAt: time.Date(2026, 8, 20, 10, 0, 0, 0, time.UTC)},
+		click:   attribution.Click{ClickID: "click-1", OrganizationID: orgA, FlowID: "flow-1", LandingID: "landing-1", OfferID: "offer-1", PwaID: "pwa-1", TrafficSourceID: "source-1", OccurredAt: time.Date(2026, 8, 20, 10, 0, 0, 0, time.UTC)},
 	}
 	svc := conversion.NewService(mapper, store, &fakeFX{rates: map[string]float64{"EUR": 1.1}}, attr, events, deliveries, &fakeAttempts{})
 	return svc, mapper, store, events, deliveries
@@ -260,8 +260,8 @@ func TestFirstConversionIsRecordedAndEmitted(t *testing.T) {
 	}
 	// The click's routing context rides onto the conversion, so revenue
 	// can be reported by flow and by landing (chstore.DimLanding).
-	if ev := events.last(); ev.FlowID != "flow-1" || ev.LandingID != "landing-1" || ev.OfferID != "offer-1" || ev.PwaID != "pwa-1" {
-		t.Fatalf("conversion lost its click's flow/landing/offer: flow=%q landing=%q offer=%q", ev.FlowID, ev.LandingID, ev.OfferID)
+	if ev := events.last(); ev.FlowID != "flow-1" || ev.LandingID != "landing-1" || ev.OfferID != "offer-1" || ev.PwaID != "pwa-1" || ev.TrafficSourceID != "source-1" {
+		t.Fatalf("conversion lost its click's flow/landing/offer/source: flow=%q landing=%q offer=%q source=%q", ev.FlowID, ev.LandingID, ev.OfferID, ev.TrafficSourceID)
 	}
 }
 

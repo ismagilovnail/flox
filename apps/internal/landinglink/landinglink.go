@@ -47,6 +47,9 @@ type Claims struct {
 	LandingID      string `json:"l"`
 	Destination    string `json:"d"`
 	OfferID        string `json:"of,omitempty"`
+	// TrafficSourceID is the click's campaign's traffic source, carried so
+	// onward events (LAND_CLICK, PWA_*) stay on the same `source` bucket.
+	TrafficSourceID string `json:"ts,omitempty"`
 	// PwaID is the flow's PWA stage (internal type) — set when the visitor
 	// is to be shown that PWA's install page after this step.
 	PwaID string `json:"p,omitempty"`
