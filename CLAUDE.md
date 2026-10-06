@@ -28,10 +28,12 @@ STATUS        : steps 1–6 of the P0 list done: Q1 queue claims never abandoned
                 Technical audit is docs/audit-tech-2026-10-06.md; the user asked
                 to fix it step by step and allowed wiping the dev database when
                 a step needs it.
-LAST COMMIT   : fix(worker): deduplicate retried ClickHouse inserts.
-UNCOMMITTED   : none expected. Verified: full-env go test, e2e all PASS, live
-                worker inserts carry dedup tokens.
-NEXT          : RL2 eventbuf retry (tracker drops a batch on a Postgres blip) →
+LAST COMMIT   : chore(dev): dev-reset and account fixtures.
+UNCOMMITTED   : none expected. Dev DB wiped and refilled by `make fixtures`
+                (accounts in README; password flox-demo-2026).
+NEXT          : T7 (new, CRITICAL): tracker does not substitute macros
+                ({click_id} …) in the offer/redirect URL — networks never get
+                the click id. Then RL2 eventbuf retry (tracker drops a batch on a Postgres blip) →
                 DO1 CI (isolate the queue tests from the live dev worker:
                 eventqueue TestEnqueueClaimAndDelete, postback
                 TestPostgresStoreClaimRespectsLimit). Then open follow-ups: USD

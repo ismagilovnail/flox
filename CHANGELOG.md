@@ -5,6 +5,36 @@ per-phase, matching `CLAUDE.md`'s phase protocol. The one exception is
 [Between phases], below: spec amendments and the code changes that follow from
 them land between phases and would otherwise be invisible here.
 
+## [Between phases] — dev reset and fixtures
+
+The dev databases had accumulated ~3,700 test organizations and ~3,900 users. Two new make
+targets, both limited to `infra/docker-compose.dev.yml`'s own services:
+
+- `make dev-reset CONFIRM=yes` (refuses without it): stops api/tracker/worker, drops and
+  re-migrates the Postgres schema, drops/re-creates the ClickHouse database (the services
+  re-apply its schema on start), flushes Redis, empties the MinIO bucket, restarts.
+- `make fixtures` → `apps/cmd/devfixtures`: through the real services — `Signup` + the
+  emailed verification link for owners, `Invite` + `AcceptInvite` for the other roles — it
+  creates FLOX Demo with one account per role (owner/admin/manager/buyer/analyst/viewer
+  @flox.local) and FLOX Other (`other-owner@flox.local`) as a second tenant, all with
+  password `flox-demo-2026` (`FIXTURES_PASSWORD`). Demo data in FLOX Demo: domain
+  `track.localhost`, a traffic source, a network with `reg/ftd/redep/rejected` mappings and an
+  outgoing URL on the reserved `partner.example` (never resolves), an offer, an active
+  campaign and `/t/demo`. Prints the postback URL with its one-time secret. Refuses to run
+  if either organization already exists; validation errors print their fields.
+- README's "Local development" section rewritten (it still said nothing was scaffolded).
+
+Run on the dev stack: everything wiped (0 orgs/users, ClickHouse tables re-created by the
+services, Redis 0 keys, no service errors), fixtures created. Verified: all 7 accounts log in
+through the API with the right organization and role; a click on
+`http://track.localhost:8081/t/demo` redirects to the offer; a postback for that click is
+`success` and attributed to the campaign in ClickHouse (25 USD); FLOX Other's owner sees 0
+campaigns. That check traffic was then wiped by a final reset + fixtures run.
+
+Found while verifying (audit T7, not fixed here): the tracker redirects to the offer URL
+without substituting macros — `?click_id={click_id}` arrives literally, so a network never
+gets the click id it must echo back in its postback.
+
 ## [Between phases] — retried ClickHouse inserts never duplicate
 
 Technical audit, finding D2 (P0). A retried batch was inserted into ClickHouse again: after a

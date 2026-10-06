@@ -38,17 +38,33 @@ shared-domain-logic strategy.
 
 ## Local development
 
-Not yet available — the frontend (`apps/web`) and backend (`apps/api`,
-`apps/tracker`, `apps/worker`) have not been scaffolded. This section will be
-filled in as each phase lands:
+The whole stack (web, api, tracker, worker, Postgres, ClickHouse, Redis,
+MinIO, MailHog, Prometheus) runs from `infra/docker-compose.dev.yml`;
+api/tracker/worker/web hot-reload. Tooling: Docker, plus Go (`apps/go.mod`)
+and Node.js on the host for `make check` and the dev commands below.
 
-- **Phase 2–15**: frontend on Next.js, run against mock API contracts.
-- **Phase 16+**: Go backend (`apps/api`), PostgreSQL, ClickHouse, Redis.
-- **Phase 33**: `docker-compose.dev.yml` for full local stack (web, api,
-  tracker, worker, postgres, clickhouse, redis, object storage).
+```
+make up                       # start everything
+make dev-reset CONFIRM=yes    # DESTRUCTIVE: wipe Postgres, ClickHouse, Redis, MinIO
+make fixtures                 # dev accounts + a working demo setup
+make help                     # every target
+```
 
-Required tooling once scaffolding lands: Node.js 24.x, Go 1.26.x, Docker.
-Environment variables are documented in [`.env.example`](.env.example).
+`make fixtures` (`apps/cmd/devfixtures`) needs an empty database and goes
+through the real services. It creates:
+
+| Organization | Accounts (password `flox-demo-2026`, override with `FIXTURES_PASSWORD`) |
+|---|---|
+| FLOX Demo | `owner@`, `admin@`, `manager@`, `buyer@`, `analyst@`, `viewer@flox.local` — one per role |
+| FLOX Other | `other-owner@flox.local` — a second tenant for isolation checks |
+
+…and in FLOX Demo a tracking domain `track.localhost`, a traffic source, a
+network with status mappings (`reg`/`ftd`/`redep`/`rejected`), an offer and
+an active campaign behind `http://track.localhost:8081/t/demo`. It prints
+the network's postback URL with its secret — shown only once.
+
+Environment variables are documented in [`.env.example`](.env.example) and
+[`docs/environment.md`](docs/environment.md).
 
 ## Documentation
 

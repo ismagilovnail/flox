@@ -33,7 +33,7 @@ DATABASE_URL ?= postgres://flox:flox@localhost:5432/flox?sslmode=disable
         up down restart status build \
         logs infra-logs api-logs tracker-logs worker-logs web-logs \
         api-restart tracker-restart worker-restart web-restart \
-        migrate-up migrate-down migrate-status \
+        migrate-up migrate-down migrate-status dev-reset fixtures \
         test-stack-up test-stack-down test-stack-restart test-stack-logs \
         fmt vet test lint check clean
 
@@ -117,6 +117,28 @@ migrate-down: ## Roll back one Postgres migration
 
 migrate-status: ## Show Postgres migration status
 	cd $(GO_DIR) && go tool goose -dir api/migrations postgres "$(DATABASE_URL)" status
+
+# --- Dev data reset + fixtures ---------------------------------------------
+# dev-reset wipes EVERY dev store of this compose project: the Postgres
+# schema (then re-migrated), the ClickHouse database (re-created; the Go
+# services apply its schema when they start), Redis, and the MinIO bucket's
+# objects. api/tracker/worker are stopped meanwhile so nothing writes into
+# a half-reset store. It only ever talks to $(COMPOSE)'s own services.
+# Destructive: requires CONFIRM=yes.
+
+dev-reset: ## DESTRUCTIVE: wipe all dev data (make dev-reset CONFIRM=yes)
+	@if [ "$(CONFIRM)" != "yes" ]; then echo "dev-reset wipes ALL dev data (Postgres, ClickHouse, Redis, MinIO). Run: make dev-reset CONFIRM=yes"; exit 1; fi
+	$(COMPOSE) stop api tracker worker
+	$(COMPOSE) exec -T postgres psql -v ON_ERROR_STOP=1 -U flox -d flox -c 'DROP SCHEMA public CASCADE; CREATE SCHEMA public;'
+	cd $(GO_DIR) && go tool goose -dir api/migrations postgres "$(DATABASE_URL)" up
+	$(COMPOSE) exec -T clickhouse clickhouse-client -q 'DROP DATABASE IF EXISTS flox SYNC'
+	$(COMPOSE) exec -T clickhouse clickhouse-client -q 'CREATE DATABASE flox'
+	$(COMPOSE) exec -T redis redis-cli FLUSHALL
+	$(COMPOSE) exec -T minio sh -c 'mc alias set local http://127.0.0.1:9000 "$$MINIO_ROOT_USER" "$$MINIO_ROOT_PASSWORD" >/dev/null && (mc rm --recursive --force local/flox >/dev/null 2>&1 || true)'
+	$(COMPOSE) start api tracker worker
+
+fixtures: ## Create dev accounts + demo data in an empty database (apps/cmd/devfixtures)
+	cd $(GO_DIR) && go run ./cmd/devfixtures
 
 # --- Full containerized stack (infra/docker-compose.test.yml) --------------
 # Production-target build of all 8 §61 services (no hot reload) — its own
