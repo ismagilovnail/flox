@@ -23,13 +23,29 @@ import {
 // i18n.language rather than a second locale concept of its own.
 const DATE_FNS_LOCALES = { en: enUS, ru } as const
 
+// The analytics state holds days as UTC-midnight dates (what toISOString().slice(0, 10)
+// turns into the API's YYYY-MM-DD), while the calendar and the label work in the
+// browser's local time. These two convert at the picker's boundary so the same
+// calendar day comes out in both directions, whatever the browser's offset.
+const toLocalDay = (d: Date) => new Date(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate())
+const toUtcDay = (d: Date) => new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()))
+
+function toLocalRange(range?: DateRange): DateRange | undefined {
+  if (!range) return range
+  return { from: range.from && toLocalDay(range.from), to: range.to && toLocalDay(range.to) }
+}
+
+function toUtcRange(range?: DateRange): DateRange | undefined {
+  if (!range) return range
+  return { from: range.from && toUtcDay(range.from), to: range.to && toUtcDay(range.to) }
+}
+
 // Quick ranges end on "today" in `timezone` (an IANA zone; the browser's own
-// day when omitted), as UTC-midnight dates like the rest of the analytics state.
+// day when omitted).
 function quickRange(days: number, timezone?: string) {
-  const to = timezone ? todayInZone(timezone) : new Date()
+  const to = timezone ? todayInZone(timezone) : toUtcDay(new Date())
   const from = new Date(to)
-  if (timezone) from.setUTCDate(from.getUTCDate() - (days - 1))
-  else from.setDate(from.getDate() - (days - 1))
+  from.setUTCDate(from.getUTCDate() - (days - 1))
   return { from, to }
 }
 
@@ -55,10 +71,11 @@ function DateRangePicker({
     { label: t("dateRangePicker.last30Days"), range: () => quickRange(30, timezone) },
   ]
 
-  const label = value?.from
-    ? value.to && value.to.getTime() !== value.from.getTime()
-      ? `${format(value.from, "MMM d, yyyy", { locale: dateFnsLocale })} – ${format(value.to, "MMM d, yyyy", { locale: dateFnsLocale })}`
-      : format(value.from, "MMM d, yyyy", { locale: dateFnsLocale })
+  const local = toLocalRange(value)
+  const label = local?.from
+    ? local.to && local.to.getTime() !== local.from.getTime()
+      ? `${format(local.from, "MMM d, yyyy", { locale: dateFnsLocale })} – ${format(local.to, "MMM d, yyyy", { locale: dateFnsLocale })}`
+      : format(local.from, "MMM d, yyyy", { locale: dateFnsLocale })
     : t("dateRangePicker.selectRange")
 
   return (
@@ -92,10 +109,10 @@ function DateRangePicker({
           </div>
           <Calendar
             mode="range"
-            selected={value}
-            onSelect={onChange}
+            selected={local}
+            onSelect={(range) => onChange?.(toUtcRange(range))}
             numberOfMonths={2}
-            defaultMonth={value?.from}
+            defaultMonth={local?.from}
             locale={dateFnsLocale}
           />
         </div>
