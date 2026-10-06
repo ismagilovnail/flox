@@ -60,10 +60,11 @@ Chrome-identical User-Agent and cannot be told apart: it counts as chrome. Tests
 `TestClassify_LanguageIsTheLowercaseLanguageSubtag` and a user-agent case per new
 browser.
 
-## [Between phases] — `region` and `city` removed from the stream-set filter list
+## [Between phases] — `region`, `city`, `proxy` and `connection_type` removed from the stream-set filter list
 
-The filter builder no longer offers `region` or `city` (nor does the filter
-reference sheet describe them). The field types and the routing engine's support
+The filter builder no longer offers `region`, `city`, `proxy` or `connection_type`
+(nor does the filter reference sheet describe them). The last two had nothing behind
+them: the classifier always reports proxy "0" and connection_type "unknown". The field types and the routing engine's support
 are untouched, so a stream set that already has such a condition keeps matching as
 before.
 

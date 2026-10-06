@@ -45,7 +45,7 @@ export type FilterField =
  * nothing (see docs/frontend-integration.md). */
 export const FIELD_GROUPS: { label: string; fields: FilterField[] }[] = [
   { label: "Parameters", fields: ["referrer"] },
-  { label: "Geo", fields: ["country", "proxy", "bot", "asn", "connection_type"] },
+  { label: "Geo", fields: ["country", "bot", "asn"] },
   {
     label: "Device",
     fields: ["browser", "browser_version", "os", "os_version", "platform", "device", "language"],
