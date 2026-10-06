@@ -17,6 +17,19 @@ import (
 // nothing here should ever give up and drop events permanently.
 const flushRetryDelay = 10 * time.Second
 
+// insertTimeout / cleanupTimeout bound a claimed batch's work once it is
+// detached from the poll loop's context (see RunOnce).
+const (
+	insertTimeout  = 30 * time.Second
+	cleanupTimeout = 10 * time.Second
+)
+
+// detached returns a context that ignores ctx's cancellation but still has
+// its own deadline.
+func detached(ctx context.Context, timeout time.Duration) (context.Context, context.CancelFunc) {
+	return context.WithTimeout(context.WithoutCancel(ctx), timeout)
+}
+
 // ClickHouseSink is the narrow slice of chstore.EventStore Flusher needs —
 // enough to stay decoupled from ClickHouse's own client type, the same
 // pattern Sink already uses in the other direction (eventbuf -> here).
@@ -58,20 +71,29 @@ func (f *Flusher) RunOnce(ctx context.Context, limit int) (int, error) {
 		ids[i] = c.ID
 	}
 
+	// Once claimed, the batch is finished on a context the shutdown signal
+	// cannot cancel: cancelling the insert and then the requeue with it left
+	// the rows 'processing' forever on every deploy (audit 2026-10-06, Q1).
+	// PollLoop stops claiming new batches; this one completes or goes back.
+	insertCtx, cancelInsert := detached(ctx, insertTimeout)
 	insertStart := time.Now()
-	insertErr := f.ch.InsertBatch(ctx, events)
+	insertErr := f.ch.InsertBatch(insertCtx, events)
+	cancelInsert()
 	metrics.EventProcessingLatencySeconds.Observe(time.Since(insertStart).Seconds())
+
+	cleanupCtx, cancelCleanup := detached(ctx, cleanupTimeout)
+	defer cancelCleanup()
 
 	if insertErr != nil {
 		f.logger.Error("clickhouse batch insert failed, requeueing", "error", insertErr, "count", len(claimed))
-		if reqErr := f.consumer.Requeue(ctx, ids, time.Now().UTC().Add(flushRetryDelay)); reqErr != nil {
+		if reqErr := f.consumer.Requeue(cleanupCtx, ids, time.Now().UTC().Add(flushRetryDelay)); reqErr != nil {
 			f.logger.Error("requeueing failed event batch", "error", reqErr)
 		}
 		metrics.EventsRequeuedTotal.Add(float64(len(claimed)))
 		return len(claimed), nil
 	}
 
-	if err := f.consumer.Delete(ctx, ids); err != nil {
+	if err := f.consumer.Delete(cleanupCtx, ids); err != nil {
 		f.logger.Error("deleting flushed events", "error", err)
 	}
 	metrics.EventsPersistedTotal.Add(float64(len(claimed)))

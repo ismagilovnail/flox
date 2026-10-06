@@ -57,7 +57,7 @@ func (q *PostgresQueue) ClaimDue(ctx context.Context, limit int) ([]QueuedAttemp
 			FOR UPDATE SKIP LOCKED
 		)
 		UPDATE postback_attempt_queue paq
-		SET status = 'processing'
+		SET status = 'processing', claimed_at = now()
 		FROM due
 		WHERE paq.id = due.id
 		RETURNING paq.id, paq.payload`,
@@ -102,10 +102,25 @@ func (q *PostgresQueue) Requeue(ctx context.Context, ids []string, next time.Tim
 		return nil
 	}
 	if _, err := q.db.Exec(ctx,
-		`UPDATE postback_attempt_queue SET status = 'queued', next_attempt_at = $2 WHERE id = ANY($1)`,
+		`UPDATE postback_attempt_queue SET status = 'queued', claimed_at = NULL, next_attempt_at = $2 WHERE id = ANY($1)`,
 		ids, next,
 	); err != nil {
 		return fmt.Errorf("postbacklog: requeueing attempts: %w", err)
 	}
 	return nil
+}
+
+// ReapStuck implements queuereaper.Reaper, same contract as
+// eventqueue.PostgresQueue.ReapStuck.
+func (q *PostgresQueue) ReapStuck(ctx context.Context, olderThan time.Duration) (int64, error) {
+	tag, err := q.db.Exec(ctx, `
+		UPDATE postback_attempt_queue
+		SET status = 'queued', claimed_at = NULL, next_attempt_at = now()
+		WHERE status = 'processing' AND claimed_at < now() - $1::interval`,
+		olderThan,
+	)
+	if err != nil {
+		return 0, fmt.Errorf("postbacklog: reaping stuck claims: %w", err)
+	}
+	return tag.RowsAffected(), nil
 }

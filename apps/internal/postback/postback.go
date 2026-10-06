@@ -102,6 +102,10 @@ type Store interface {
 	// (Postgres FOR UPDATE SKIP LOCKED).
 	ClaimDue(ctx context.Context, limit int) ([]Delivery, error)
 
+	// Release returns claimed deliveries that were never attempted (the
+	// worker is stopping) to the queue, undoing the claim's attempt count.
+	Release(ctx context.Context, ids []string) error
+
 	// MarkSuccess records a successful delivery (a 2xx response).
 	MarkSuccess(ctx context.Context, id string, responseStatusCode int) error
 

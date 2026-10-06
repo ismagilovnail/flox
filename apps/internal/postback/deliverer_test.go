@@ -26,6 +26,7 @@ type fakeStore struct {
 	deliveries map[string]*postback.Delivery
 	claimed    []string // ordered ids, for asserting single-claim behavior
 	marks      []string // "success"/"retrying"/"dead" per call, for counting
+	released   []string // ids handed back unattempted
 }
 
 func newFakeStore(deliveries ...postback.Delivery) *fakeStore {
@@ -61,6 +62,18 @@ func (s *fakeStore) ClaimDue(_ context.Context, limit int) ([]postback.Delivery,
 		s.claimed = append(s.claimed, d.ID)
 	}
 	return out, nil
+}
+
+func (s *fakeStore) Release(_ context.Context, ids []string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.released = append(s.released, ids...)
+	for _, id := range ids {
+		if d, ok := s.deliveries[id]; ok {
+			d.AttemptCount--
+		}
+	}
+	return nil
 }
 
 func (s *fakeStore) MarkSuccess(_ context.Context, id string, code int) error {

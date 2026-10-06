@@ -165,6 +165,27 @@ has no per-item deadline the way a lost conversion does, unlike
 `internal/postback`'s `MaxAttempts`/dead-letter — a deliberately different
 tradeoff, not an inconsistency.
 
+### Claims are never abandoned (audit 2026-10-06, Q1)
+
+A claim flips rows to `processing` and stamps `claimed_at` (migration
+00048). Two things keep a claim from outliving its worker:
+
+- **Shutdown finishes the batch.** Once claimed, the ClickHouse insert
+  (30s cap) and the delete/requeue (10s cap) run on a context SIGTERM
+  cannot cancel; the poll loop just stops claiming new batches, and
+  `apps/worker` waits up to 40s (`shutdownDrainTimeout`) for its loops.
+  Before this, cancelling the insert also cancelled the requeue, and the
+  batch stayed `processing` forever on every deploy.
+- **The reaper is the backstop** (`internal/queuereaper`): every minute,
+  and once at startup, each queue returns rows claimed more than 5 minutes
+  ago to `queued`. It covers SIGKILL/OOM/a lost node. A reaped batch may
+  already have reached ClickHouse just before the crash, so it can be
+  inserted twice — at-least-once is chosen over loss; making the insert
+  itself idempotent is a separate audit item (D2).
+
+`postback_attempt_queue` follows the same rules. `flox_queue_reaped_total{queue}`
+counts every reaped row — any increase means a worker died mid-batch.
+
 ## ClickHouse over HTTP, not native protocol
 
 `infra/docker-compose.dev.yml` exposes only ClickHouse's HTTP interface

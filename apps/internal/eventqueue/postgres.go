@@ -96,7 +96,7 @@ func (q *PostgresQueue) ClaimDue(ctx context.Context, limit int) ([]QueuedEvent,
 			FOR UPDATE SKIP LOCKED
 		)
 		UPDATE event_queue eq
-		SET status = 'processing'
+		SET status = 'processing', claimed_at = now()
 		FROM due
 		WHERE eq.id = due.id
 		RETURNING eq.id, eq.payload`,
@@ -141,7 +141,7 @@ func (q *PostgresQueue) Requeue(ctx context.Context, ids []string, next time.Tim
 		return nil
 	}
 	if _, err := q.db.Exec(ctx,
-		`UPDATE event_queue SET status = 'queued', next_attempt_at = $2 WHERE id = ANY($1)`,
+		`UPDATE event_queue SET status = 'queued', claimed_at = NULL, next_attempt_at = $2 WHERE id = ANY($1)`,
 		ids, next,
 	); err != nil {
 		return fmt.Errorf("eventqueue: requeueing events: %w", err)
@@ -161,4 +161,19 @@ func (q *PostgresQueue) Depth(ctx context.Context) (int, error) {
 		return 0, fmt.Errorf("eventqueue: counting queue depth: %w", err)
 	}
 	return n, nil
+}
+
+// ReapStuck implements queuereaper.Reaper: claims older than olderThan
+// belong to a worker that died mid-batch and go back to the queue, due now.
+func (q *PostgresQueue) ReapStuck(ctx context.Context, olderThan time.Duration) (int64, error) {
+	tag, err := q.db.Exec(ctx, `
+		UPDATE event_queue
+		SET status = 'queued', claimed_at = NULL, next_attempt_at = now()
+		WHERE status = 'processing' AND claimed_at < now() - $1::interval`,
+		olderThan,
+	)
+	if err != nil {
+		return 0, fmt.Errorf("eventqueue: reaping stuck claims: %w", err)
+	}
+	return tag.RowsAffected(), nil
 }

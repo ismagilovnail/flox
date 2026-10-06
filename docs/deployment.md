@@ -105,6 +105,10 @@ plain `/health` for liveness (should the process itself be restarted).
   SKIP LOCKED` (`apps/internal/eventqueue`, `apps/internal/postback`) —
   already safe to run multiple replicas of; they naturally divide the
   queue rather than double-processing it.
+  Give it a termination grace period of **at least 45s**: on SIGTERM it
+  finishes the batch in hand and waits up to 40s for its loops before
+  exiting. Anything cut off harder than that is returned to the queue by
+  the reaper 5 minutes later (`docs/analytics-pipeline.md`).
 - **`apps/web`** is a stateless Next.js server — scales horizontally with
   no special coordination either.
 

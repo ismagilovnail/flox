@@ -48,6 +48,16 @@ UPDATE SKIP LOCKED` inside a CTE, joined to an `UPDATE`, so two worker
 replicas polling at the same instant can never claim the same row — no
 separate locking layer needed.
 
+A claim also stamps `claimed_at`. On shutdown the delivery already in
+flight runs to completion (its HTTP call and bookkeeping are detached from
+the shutdown signal); the ones the worker had not started yet are handed
+back with `Release`, which undoes the claim's `attempt_count` increment.
+Anything a dead worker left `processing` for more than 5 minutes is put
+back as `retrying` by `internal/queuereaper` — keeping its attempt counted,
+since it may have been sent before the crash. The partner can therefore
+receive a delivery twice; a delivery is never silently lost (audit
+2026-10-06, Q1).
+
 ## Method, timeout, backoff
 
 - **HTTP GET only.** `networks.postback_url` is documented as a macro

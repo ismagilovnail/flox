@@ -40,10 +40,38 @@ func (d *Deliverer) RunOnce(ctx context.Context, limit int) (int, error) {
 	if err != nil {
 		return 0, err
 	}
-	for _, del := range deliveries {
-		d.attempt(ctx, del)
+	for i, del := range deliveries {
+		if ctx.Err() != nil {
+			// Stopping: hand the rest of the claim back instead of leaving
+			// it 'processing' (audit 2026-10-06, Q1).
+			d.release(ctx, deliveries[i:])
+			break
+		}
+		// An attempt already started runs to completion on its own
+		// deadline — cancelling it mid-request would lose the outcome of a
+		// postback the partner may already have received.
+		attemptCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), attemptTimeout+bookkeepingTimeout)
+		d.attempt(attemptCtx, del)
+		cancel()
 	}
 	return len(deliveries), nil
+}
+
+// bookkeepingTimeout bounds the store/audit writes that follow an attempt's
+// HTTP call.
+const bookkeepingTimeout = 10 * time.Second
+
+func (d *Deliverer) release(ctx context.Context, rest []Delivery) {
+	ids := make([]string, len(rest))
+	for i, del := range rest {
+		ids[i] = del.ID
+	}
+	releaseCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), bookkeepingTimeout)
+	defer cancel()
+	if err := d.store.Release(releaseCtx, ids); err != nil {
+		// The reaper (internal/queuereaper) picks them up after StuckAfter.
+		d.logger.Error("releasing unattempted deliveries", "error", err, "count", len(ids))
+	}
 }
 
 // PollLoop runs RunOnce until ctx is done. A batch that returned a full

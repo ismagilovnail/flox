@@ -49,7 +49,7 @@ func (s *PostgresStore) ClaimDue(ctx context.Context, limit int) ([]Delivery, er
 			FOR UPDATE SKIP LOCKED
 		)
 		UPDATE postback_deliveries pd
-		SET delivery_status = 'processing', attempt_count = attempt_count + 1
+		SET delivery_status = 'processing', attempt_count = attempt_count + 1, claimed_at = now()
 		FROM due
 		WHERE pd.id = due.id
 		RETURNING pd.id, pd.organization_id, pd.network_id, pd.source_postback_id, pd.click_id, pd.status, pd.url, pd.attempt_count`,
@@ -113,6 +113,46 @@ func (s *PostgresStore) MarkDead(ctx context.Context, id string, responseStatusC
 		return fmt.Errorf("postback: marking delivery dead: %w", err)
 	}
 	return nil
+}
+
+// Release undoes a claim that was never attempted — the worker is stopping
+// and will not get to these rows. The claim's attempt_count increment is
+// taken back, so a delivery is never dead-lettered for attempts it never
+// had; a row that had no earlier attempt goes back to 'queued'.
+func (s *PostgresStore) Release(ctx context.Context, ids []string) error {
+	if len(ids) == 0 {
+		return nil
+	}
+	_, err := s.db.Exec(ctx, `
+		UPDATE postback_deliveries
+		SET attempt_count = attempt_count - 1,
+		    delivery_status = CASE WHEN attempt_count - 1 > 0 THEN 'retrying' ELSE 'queued' END,
+		    claimed_at = NULL, next_attempt_at = now()
+		WHERE id = ANY($1) AND delivery_status = 'processing'`,
+		ids,
+	)
+	if err != nil {
+		return fmt.Errorf("postback: releasing unattempted claims: %w", err)
+	}
+	return nil
+}
+
+// ReapStuck implements queuereaper.Reaper. Unlike Release, a reaped row may
+// well have been sent before its worker died, so its attempt stays counted
+// and it is retried as 'retrying' — at worst the partner receives it twice,
+// which a lost conversion would be worse than.
+func (s *PostgresStore) ReapStuck(ctx context.Context, olderThan time.Duration) (int64, error) {
+	tag, err := s.db.Exec(ctx, `
+		UPDATE postback_deliveries
+		SET delivery_status = 'retrying', claimed_at = NULL, next_attempt_at = now(),
+		    message = 'claim abandoned by a stopped worker; retrying'
+		WHERE delivery_status = 'processing' AND claimed_at < now() - $1::interval`,
+		olderThan,
+	)
+	if err != nil {
+		return 0, fmt.Errorf("postback: reaping stuck claims: %w", err)
+	}
+	return tag.RowsAffected(), nil
 }
 
 // nullableInt maps 0 (no HTTP response at all — timeout, connection

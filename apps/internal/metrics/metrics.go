@@ -107,6 +107,15 @@ var (
 
 	// PostbackDeliveriesTotal: apps/internal/postback.Deliverer — see
 	// this file's own package doc comment for the outcome label values.
+	// QueueReapedTotal counts rows apps/worker's reaper returned to a queue
+	// after their claim was abandoned (internal/queuereaper). Any increase
+	// means a worker died mid-batch; a steady one means it keeps dying.
+	QueueReapedTotal = promauto.NewCounterVec(prometheus.CounterOpts{
+		Namespace: namespace,
+		Name:      "queue_reaped_total",
+		Help:      "Abandoned 'processing' queue rows returned to their queue, by queue.",
+	}, []string{"queue"})
+
 	PostbackDeliveriesTotal = promauto.NewCounterVec(prometheus.CounterOpts{
 		Namespace: namespace,
 		Name:      "postback_deliveries_total",

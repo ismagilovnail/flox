@@ -26,6 +26,10 @@
 //     runs on a time.Ticker (costsync.Scheduler.RunLoop) rather than
 //     PollLoop's claim/idle shape.
 //
+// One internal/queuereaper loop per queue returns claims a dead worker left
+// 'processing'; on SIGTERM the loops above stop claiming, finish the batch in
+// hand, and run() waits for them (audit 2026-10-06, Q1).
+//
 // §53/Phase 29: GET /metrics (Prometheus) joins /health on this binary's
 // bare mux, and a fifth background goroutine (eventqueue.PollDepth)
 // refreshes the event_queue_depth gauge on the same time.Ticker shape as
@@ -38,6 +42,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"sync"
 	"syscall"
 	"time"
 
@@ -60,6 +65,7 @@ import (
 	"github.com/ismagilovnail/flox/apps/internal/postback"
 	"github.com/ismagilovnail/flox/apps/internal/postbacklog"
 	"github.com/ismagilovnail/flox/apps/internal/postgres"
+	"github.com/ismagilovnail/flox/apps/internal/queuereaper"
 	"github.com/ismagilovnail/flox/apps/internal/telemetry"
 	"github.com/ismagilovnail/flox/apps/internal/urlsafety"
 )
@@ -102,6 +108,12 @@ const costSyncInterval = 6 * time.Hour
 // there is no reason to poll faster than anyone will actually look at a
 // dashboard.
 const queueDepthPollInterval = 15 * time.Second
+
+// shutdownDrainTimeout is how long shutdown waits for in-flight batches.
+// Covers a ClickHouse insert (30s cap) but not a full 20-delivery postback
+// batch at its worst; anything cut off is returned by the reaper. The
+// orchestrator's termination grace period must be longer than this.
+const shutdownDrainTimeout = 40 * time.Second
 
 func main() {
 	if err := run(); err != nil {
@@ -195,8 +207,9 @@ func run() error {
 		ExpectContinueTimeout: time.Second,
 	}
 	postbackClient := &http.Client{Transport: otelhttp.NewTransport(safeTransport)}
+	deliveryStore := postback.NewPostgresStore(db)
 	deliverer := postback.NewDeliverer(
-		postback.NewPostgresStore(db),
+		deliveryStore,
 		postbackClient,
 		postbacklog.NewDeliveryAttemptLogger(attemptLogQueue),
 		logger,
@@ -226,25 +239,61 @@ func run() error {
 		}
 	}()
 
+	// Every loop is tracked so shutdown can wait for in-flight batches:
+	// returning from run() while a flusher was mid-insert used to cut its
+	// batch off and leave it 'processing' (audit 2026-10-06, Q1).
+	var loops sync.WaitGroup
+	start := func(fn func()) {
+		loops.Add(1)
+		go func() {
+			defer loops.Done()
+			fn()
+		}()
+	}
+
 	logger.Info("postback delivery poll loop starting", "batch_size", postbackPollBatchSize, "idle", postbackPollIdle)
-	go deliverer.PollLoop(ctx, postbackPollBatchSize, postbackPollIdle)
+	start(func() { deliverer.PollLoop(ctx, postbackPollBatchSize, postbackPollIdle) })
 
 	logger.Info("event flush poll loop starting", "batch_size", eventPollBatchSize, "idle", eventPollIdle)
-	go flusher.PollLoop(ctx, eventPollBatchSize, eventPollIdle)
+	start(func() { flusher.PollLoop(ctx, eventPollBatchSize, eventPollIdle) })
 
 	logger.Info("postback attempt log poll loop starting", "batch_size", attemptLogPollBatchSize, "idle", attemptLogPollIdle)
-	go attemptFlusher.PollLoop(ctx, attemptLogPollBatchSize, attemptLogPollIdle)
+	start(func() { attemptFlusher.PollLoop(ctx, attemptLogPollBatchSize, attemptLogPollIdle) })
 
 	logger.Info("ad spend sync scheduler starting", "interval", costSyncInterval)
-	go costSyncScheduler.RunLoop(ctx, costSyncInterval)
+	start(func() { costSyncScheduler.RunLoop(ctx, costSyncInterval) })
 
 	logger.Info("event queue depth poller starting", "interval", queueDepthPollInterval)
-	go eventqueue.PollDepth(ctx, eventQueue, metrics.EventQueueDepth, queueDepthPollInterval, logger)
+	start(func() { eventqueue.PollDepth(ctx, eventQueue, metrics.EventQueueDepth, queueDepthPollInterval, logger) })
+
+	// Backstop for claims a crashed worker (this one's previous process, or
+	// another replica) never finished — see internal/queuereaper.
+	logger.Info("queue reapers starting", "interval", queuereaper.Interval, "stuck_after", queuereaper.StuckAfter)
+	for name, r := range map[string]queuereaper.Reaper{
+		"event_queue":            eventQueue,
+		"postback_attempt_queue": attemptLogQueue,
+		"postback_deliveries":    deliveryStore,
+	} {
+		start(func() { queuereaper.RunLoop(ctx, name, r, queuereaper.Interval, queuereaper.StuckAfter, logger) })
+	}
 
 	<-ctx.Done()
-	logger.Info("shutting down")
+	logger.Info("shutting down, waiting for in-flight batches")
 
-	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	drained := make(chan struct{})
+	go func() {
+		loops.Wait()
+		close(drained)
+	}()
+	select {
+	case <-drained:
+		logger.Info("all worker loops stopped")
+	case <-time.After(shutdownDrainTimeout):
+		// Whatever is still running is left for the reaper on next start.
+		logger.Warn("worker loops still running after drain timeout, exiting anyway", "timeout", shutdownDrainTimeout)
+	}
+
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	return healthSrv.Shutdown(shutdownCtx)
 }

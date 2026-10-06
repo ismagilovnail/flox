@@ -5,6 +5,37 @@ per-phase, matching `CLAUDE.md`'s phase protocol. The one exception is
 [Between phases], below: spec amendments and the code changes that follow from
 them land between phases and would otherwise be invisible here.
 
+## [Between phases] — queue claims are never abandoned
+
+Technical audit (`docs/audit-tech-2026-10-06.md`), finding Q1 (P0): the worker's three
+Postgres queues (`event_queue`, `postback_attempt_queue`, `postback_deliveries`) claim rows
+by flipping them to `processing`, and nothing ever looked at a `processing` row again. On
+SIGTERM the batch insert was cancelled and the requeue ran on the same cancelled context,
+so a deploy under load left a batch stuck for good: clicks/conversions missing from
+ClickHouse, outgoing postbacks never sent. Now:
+
+- claims stamp `claimed_at` (migration 00048; rows already stuck get `now()` so a worker
+  still on the old binary during a rolling deploy has the full window to finish);
+- a claimed batch finishes on a context shutdown cannot cancel (insert ≤30s, cleanup ≤10s);
+  `Deliverer` completes the attempt in flight and `Release`s the unstarted ones, undoing
+  their `attempt_count` increment;
+- `apps/worker` waits up to 40s for its loops on shutdown (needs a ≥45s grace period, see
+  `docs/deployment.md`);
+- `internal/queuereaper` returns claims older than 5 min every minute and at startup
+  (deliveries come back as `retrying`, attempt kept). New metric
+  `flox_queue_reaped_total{queue}`.
+
+At-least-once by design: a reaped batch can reach ClickHouse twice, and a partner can get a
+delivery twice. Idempotent ClickHouse inserts are the separate audit item D2.
+
+Tests: shutdown-mid-batch unit tests for both flushers and the deliverer (fakes fail on a
+cancelled context, like pgx); Postgres tests for `ReapStuck` on all three queues, `Release`,
+and `claimed_at` stamped by `ClaimDue`. Reap tests seed rows straight into `processing`,
+since the dev-stack worker polls the same tables. Migration up → down → up. Full-env
+`go test ./...` green. Live check: an `event_queue` row abandoned 10 min ago was returned by
+the running worker's reaper at boot and reached `click_events` (test row removed
+afterwards); the worker binary on SIGTERM logged "all worker loops stopped" and exited 0.
+
 ## [Between phases] — blocked traffic and bots in analytics
 
 Audit finding #3 (P0): `SOURCE_FILTER` clicks (no destination — nothing redirected) and bot

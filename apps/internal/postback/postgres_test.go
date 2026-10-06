@@ -46,6 +46,13 @@ func TestPostgresStoreEnqueueAndClaim(t *testing.T) {
 	if d.AttemptCount != 1 {
 		t.Fatalf("AttemptCount = %d, want 1 (ClaimDue increments)", d.AttemptCount)
 	}
+	var claimedAt *time.Time
+	if err := pool.QueryRow(ctx, `SELECT claimed_at FROM postback_deliveries WHERE id = $1`, id).Scan(&claimedAt); err != nil {
+		t.Fatalf("reading claimed_at: %v", err)
+	}
+	if claimedAt == nil {
+		t.Fatal("claimed_at not stamped by ClaimDue — the reaper could never see this claim")
+	}
 
 	// A freshly-claimed (now 'processing') delivery is not due again.
 	claimedAgain, err := store.ClaimDue(ctx, 10)

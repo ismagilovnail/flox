@@ -13,6 +13,18 @@ import (
 // a money-correctness path, so there is no dead-letter state here either.
 const flushRetryDelay = 10 * time.Second
 
+// insertTimeout / cleanupTimeout bound a claimed batch's work once it is
+// detached from the poll loop's context — same reasoning as
+// eventqueue.Flusher.RunOnce.
+const (
+	insertTimeout  = 30 * time.Second
+	cleanupTimeout = 10 * time.Second
+)
+
+func detached(ctx context.Context, timeout time.Duration) (context.Context, context.CancelFunc) {
+	return context.WithTimeout(context.WithoutCancel(ctx), timeout)
+}
+
 // ClickHouseSink is the narrow slice of chstore.EventStore Flusher needs.
 type ClickHouseSink interface {
 	InsertPostbackAttempts(ctx context.Context, attempts []chstore.PostbackAttempt) error
@@ -46,15 +58,24 @@ func (f *Flusher) RunOnce(ctx context.Context, limit int) (int, error) {
 		ids[i] = c.ID
 	}
 
-	if err := f.ch.InsertPostbackAttempts(ctx, attempts); err != nil {
+	// A claimed batch finishes even if ctx is cancelled mid-flight (audit
+	// 2026-10-06, Q1) — see eventqueue.Flusher.RunOnce.
+	insertCtx, cancelInsert := detached(ctx, insertTimeout)
+	insertErr := f.ch.InsertPostbackAttempts(insertCtx, attempts)
+	cancelInsert()
+
+	cleanupCtx, cancelCleanup := detached(ctx, cleanupTimeout)
+	defer cancelCleanup()
+
+	if err := insertErr; err != nil {
 		f.logger.Error("clickhouse postback_events batch insert failed, requeueing", "error", err, "count", len(claimed))
-		if reqErr := f.consumer.Requeue(ctx, ids, time.Now().UTC().Add(flushRetryDelay)); reqErr != nil {
+		if reqErr := f.consumer.Requeue(cleanupCtx, ids, time.Now().UTC().Add(flushRetryDelay)); reqErr != nil {
 			f.logger.Error("requeueing failed postback attempt batch", "error", reqErr)
 		}
 		return len(claimed), nil
 	}
 
-	if err := f.consumer.Delete(ctx, ids); err != nil {
+	if err := f.consumer.Delete(cleanupCtx, ids); err != nil {
 		f.logger.Error("deleting flushed postback attempts", "error", err)
 	}
 	return len(claimed), nil
