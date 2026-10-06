@@ -135,6 +135,10 @@ function DataTable<TData extends Record<string, unknown>>({
   initialColumnVisibility,
   exportFilename,
   enableColumnReorder = false,
+  columnOrder: controlledColumnOrder,
+  onColumnOrderChange,
+  columnSizing: controlledColumnSizing,
+  onColumnSizingChange,
 }: {
   columns: ColumnDef<typeof dataTableFeatures, TData>[]
   data: TData[]
@@ -157,6 +161,12 @@ function DataTable<TData extends Record<string, unknown>>({
   exportFilename?: string
   /** Opt-in: header labels can be dragged to reorder columns. Omitted keeps the fixed order, as before. */
   enableColumnReorder?: boolean
+  /** Controlled column order (column ids): lets the owner persist it, e.g. in a saved report preset. Omitted, the table keeps its own. */
+  columnOrder?: string[]
+  onColumnOrderChange?: (order: string[]) => void
+  /** Controlled column widths in px by column id ({} = natural widths): lets the owner persist them, e.g. in a saved report preset. Omitted, the table keeps its own. */
+  columnSizing?: Record<string, number>
+  onColumnSizingChange?: (sizing: Record<string, number>) => void
 }) {
   const { t } = useTranslation("common")
   const [sorting, setSorting] = React.useState<
@@ -170,7 +180,13 @@ function DataTable<TData extends Record<string, unknown>>({
     pageIndex: 0,
     pageSize,
   })
-  const [columnOrder, setColumnOrder] = React.useState<string[]>([])
+  const [internalColumnOrder, setInternalColumnOrder] = React.useState<string[]>([])
+  const columnOrder = controlledColumnOrder ?? internalColumnOrder
+  const setColumnOrder = (next: string[] | ((old: string[]) => string[])) => {
+    const resolved = typeof next === "function" ? next(columnOrder) : next
+    setInternalColumnOrder(resolved)
+    onColumnOrderChange?.(resolved)
+  }
   const [resizingColumnId, setResizingColumnId] = React.useState<string | null>(null)
   const [dragColumnId, setDragColumnId] = React.useState<string | null>(null)
   const [dropColumnId, setDropColumnId] = React.useState<string | null>(null)
@@ -180,7 +196,13 @@ function DataTable<TData extends Record<string, unknown>>({
   // pinned here once a user actually drags that column's own resize handle
   // (below), so tables nobody resizes look and behave identically to
   // before, with zero visual change across the app.
-  const [columnSizing, setColumnSizing] = React.useState<ColumnSizingState>({})
+  const [internalColumnSizing, setInternalColumnSizing] = React.useState<ColumnSizingState>({})
+  const columnSizing = controlledColumnSizing ?? internalColumnSizing
+  const setColumnSizing = (next: ColumnSizingState | ((old: ColumnSizingState) => ColumnSizingState)) => {
+    const resolved = typeof next === "function" ? next(columnSizing) : next
+    setInternalColumnSizing(resolved)
+    onColumnSizingChange?.(resolved)
+  }
 
   const tableColumns = React.useMemo(
     () =>

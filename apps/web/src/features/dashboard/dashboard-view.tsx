@@ -8,11 +8,11 @@ import { DateRangePicker } from "@/components/ui/date-range-picker";
 import { LineMetricChart } from "@/components/charts/line-metric-chart";
 import { LoadingState } from "@/components/ui/loading-state";
 import { ErrorState } from "@/components/ui/error-state";
-import { CHART_COLORS } from "@/lib/chart-theme";
 import { formatUsd, formatInt } from "@/lib/format";
 import { KpiGrid } from "@/features/dashboard/kpi-grid";
 import { TopTable } from "@/features/dashboard/top-tables";
 import { metricsFromApi, performanceRowFromApi } from "@/features/dashboard/metrics";
+import { useDimensionValueLabel } from "@/features/analytics/use-dimension-value-label";
 import { useDashboardReport } from "@/hooks/use-analytics-report";
 
 function daysBetween(from: Date, to: Date) {
@@ -21,6 +21,7 @@ function daysBetween(from: Date, to: Date) {
 
 export function DashboardView() {
   const { t } = useTranslation("dashboard");
+  const valueLabel = useDimensionValueLabel();
 
   const defaultTo = React.useMemo(() => new Date(), []);
   const defaultFrom = React.useMemo(() => {
@@ -76,25 +77,25 @@ export function DashboardView() {
         <LineMetricChart
           title={t("charts.revenue")}
           points={data.daily.map((p) => ({ date: p.day, value: p.metrics.revenue ?? 0 }))}
-          color={CHART_COLORS.success}
+          color="success"
           valueFormatter={formatUsd}
         />
         <LineMetricChart
           title={t("charts.spend")}
           points={data.daily.map((p) => ({ date: p.day, value: p.metrics.cost ?? 0 }))}
-          color={CHART_COLORS.danger}
+          color="danger"
           valueFormatter={formatUsd}
         />
         <LineMetricChart
           title={t("charts.profit")}
           points={data.daily.map((p) => ({ date: p.day, value: p.metrics.profit ?? 0 }))}
-          color={CHART_COLORS.primary}
+          color="primary"
           valueFormatter={formatUsd}
         />
         <LineMetricChart
           title={t("charts.conversions")}
           points={data.daily.map((p) => ({ date: p.day, value: p.metrics.conversions ?? 0 }))}
-          color={CHART_COLORS.warning}
+          color="warning"
           valueFormatter={formatInt}
         />
       </div>
@@ -103,9 +104,9 @@ export function DashboardView() {
           (DashboardResult's own doc comment); dropped rather than rendered
           against fake data. */}
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-        <TopTable entity="campaigns" rows={data.topCampaigns.map((r) => performanceRowFromApi(r, "campaign"))} />
-        <TopTable entity="countries" rows={data.topCountries.map((r) => performanceRowFromApi(r, "country"))} />
-        <TopTable entity="flows" rows={data.topFlows.map((r) => performanceRowFromApi(r, "flow"))} />
+        <TopTable entity="campaigns" rows={data.topCampaigns.map((r) => performanceRowFromApi(r, "campaign", valueLabel))} />
+        <TopTable entity="countries" rows={data.topCountries.map((r) => performanceRowFromApi(r, "country", valueLabel))} />
+        <TopTable entity="flows" rows={data.topFlows.map((r) => performanceRowFromApi(r, "flow", valueLabel))} />
       </div>
     </div>
   );

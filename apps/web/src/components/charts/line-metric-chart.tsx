@@ -5,13 +5,8 @@ import ReactECharts from "echarts-for-react";
 import { useTheme } from "next-themes";
 
 import { ChartCard } from "@/components/ui/chart-card";
-import { chartBaseOption, type ChartMode } from "@/lib/chart-theme";
+import { chartBaseOption, CHART_RGB, rgba, type ChartMode } from "@/lib/chart-theme";
 import { formatInt } from "@/lib/format";
-
-/** color is a plain "oklch(L C H)" token — inserts an alpha channel for gradient stops. */
-function withAlpha(color: string, alpha: number) {
-  return color.replace(/\)$/, ` / ${alpha})`);
-}
 
 export function LineMetricChart({
   title,
@@ -22,7 +17,8 @@ export function LineMetricChart({
 }: {
   title: string;
   points: { date: string; value: number }[];
-  color: string;
+  /** A CHART_RGB key, not an oklch token: zrender can't parse oklch, and animates a hovered series' colour (see CHART_RGB). */
+  color: keyof typeof CHART_RGB;
   valueFormatter?: (value: number) => string;
   action?: React.ReactNode;
 }) {
@@ -49,7 +45,11 @@ export function LineMetricChart({
           data: points.map((p) => [p.date, p.value]),
           smooth: 0.2,
           symbol: "none",
-          lineStyle: { color, width: 2 },
+          lineStyle: { color: rgba(CHART_RGB[color], 1), width: 2 },
+          itemStyle: { color: rgba(CHART_RGB[color], 1) },
+          // No hover animation: it re-tints the line and gradient towards a
+          // state colour zrender can't compute, which made them blink.
+          emphasis: { disabled: true },
           areaStyle: {
             color: {
               type: "linear",
@@ -58,8 +58,8 @@ export function LineMetricChart({
               x2: 0,
               y2: 1,
               colorStops: [
-                { offset: 0, color: withAlpha(color, 0.25) },
-                { offset: 1, color: withAlpha(color, 0) },
+                { offset: 0, color: rgba(CHART_RGB[color], 0.25) },
+                { offset: 1, color: rgba(CHART_RGB[color], 0) },
               ],
             },
           },

@@ -14,6 +14,10 @@ export function ReportTable({
   dimensions,
   metrics,
   customMetrics = [],
+  columnOrder,
+  onColumnOrderChange,
+  columnSizing,
+  onColumnSizingChange,
 }: {
   rows: ReportRow[];
   dimensions: DimensionKey[];
@@ -21,6 +25,12 @@ export function ReportTable({
   /** Published + active custom metrics targeting the report_builder surface (§30.5) —
    * evaluated live against each row's own metrics, same formula engine everywhere. */
   customMetrics?: CustomMetric[];
+  /** The dragged column order (ids); [] is the natural order. Lives in the report state so a preset can save it. */
+  columnOrder?: string[];
+  onColumnOrderChange?: (order: string[]) => void;
+  /** Dragged column widths in px by column id; {} is natural widths. Lives in the report state so a preset can save it. */
+  columnSizing?: Record<string, number>;
+  onColumnSizingChange?: (sizing: Record<string, number>) => void;
 }) {
   const { t } = useTranslation("analytics");
   const valueLabel = useDimensionValueLabel();
@@ -68,6 +78,16 @@ export function ReportTable({
       searchPlaceholder={t("table.searchPlaceholder")}
       exportFilename="analytics-report"
       enableColumnReorder
+      columnOrder={columnOrder}
+      columnSizing={columnSizing}
+      onColumnSizingChange={onColumnSizingChange}
+      onColumnOrderChange={(order) => {
+        // Dragged back to the natural arrangement = no custom order at all, so
+        // the preset isn't shown as modified for a change that changed nothing.
+        const natural = columns.map((c) => c.id as string)
+        const same = order.length === natural.length && order.every((id, i) => id === natural[i])
+        onColumnOrderChange?.(same ? [] : order)
+      }}
       emptyTitle={t("table.emptyTitle")}
       emptyDescription={t("table.emptyDescription")}
       pageSize={10}

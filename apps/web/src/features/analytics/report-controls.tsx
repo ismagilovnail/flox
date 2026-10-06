@@ -25,9 +25,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { DIMENSIONS, MAX_REPORT_DIMENSIONS, METRICS, TIMEZONES, dimensionLabel as dimensionLabelFor, metricLabel as metricLabelFor, type DimensionKey, type MetricKey } from "@/features/analytics/registry";
+import { FILTER_DIMENSIONS, MAX_REPORT_DIMENSIONS, REPORT_DIMENSIONS, METRICS, TIMEZONES, dimensionLabel as dimensionLabelFor, metricLabel as metricLabelFor, type DimensionKey, type MetricKey } from "@/features/analytics/registry";
 import type { FilterCondition } from "@/features/analytics/aggregate";
-import { dimensionValues } from "@/lib/mock/analytics";
 import { useDimensionValues } from "@/hooks/use-analytics-report";
 import { useDimensionValueLabel } from "@/features/analytics/use-dimension-value-label";
 
@@ -37,6 +36,10 @@ export type ReportControlsState = {
   dimensions: DimensionKey[];
   metrics: MetricKey[];
   filters: FilterCondition[];
+  /** Dragged table column order (ids); [] is the natural order. Saved with presets. */
+  columnOrder: string[];
+  /** Dragged table column widths in px by column id; {} is natural widths. Saved with presets. */
+  columnWidths: Record<string, number>;
   groupBy: DimensionKey;
   sort: { key: string; dir: "asc" | "desc" };
   compare: boolean;
@@ -63,15 +66,11 @@ function AddFilterPopover({
   const [manualValue, setManualValue] = React.useState<string | undefined>(undefined);
   const valueLabel = useDimensionValueLabel();
 
-  // Real values (15 backed dimensions) once loaded; the mock pool covers
-  // both the loading flash and the 2 still-unbacked dimensions, whose
-  // query always rejects (retry: false) — see useDimensionValues' own
-  // doc comment. A successful response wins even when empty (a
-  // brand-new org with zero real events yet): trusting it completely
-  // once it lands is what CLAUDE.md #6's "no fabricated data" bar means
-  // here, the same as it does for cost.
+  // Only real values: while they load (or if the request fails) the picker is
+  // empty and the add button disabled, never offering a made-up value that would
+  // silently filter the report down to nothing.
   const valuesQuery = useDimensionValues(dimension, dateRange.from, dateRange.to, { enabled: open });
-  const values = valuesQuery.isSuccess ? valuesQuery.data : dimensionValues(dimension);
+  const values = valuesQuery.isSuccess ? valuesQuery.data : [];
   const value = manualValue && values.includes(manualValue) ? manualValue : (values[0] ?? "");
 
   return (
@@ -97,7 +96,7 @@ function AddFilterPopover({
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {DIMENSIONS.map((d) => (
+                {FILTER_DIMENSIONS.map((d) => (
                   <SelectItem key={d.key} value={d.key}>
                     {dimensionLabelFor(t, d.key)}
                   </SelectItem>
@@ -187,7 +186,7 @@ export function ReportControls({
 
         <MultiSelect
           label={t("controls.dimensionsLabel")}
-          options={DIMENSIONS.map((d) => ({ value: d.key, label: dimensionLabelFor(t, d.key) }))}
+          options={REPORT_DIMENSIONS.map((d) => ({ value: d.key, label: dimensionLabelFor(t, d.key) }))}
           selected={state.dimensions}
           max={MAX_REPORT_DIMENSIONS}
           onChange={(values) => {

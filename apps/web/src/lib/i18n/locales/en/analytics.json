@@ -7,7 +7,7 @@
   "presets": {
     "label": "Presets:",
     "save": "Save as preset",
-    "saveTooltip": "Saves the current columns, metrics, grouping, period, and timezone.",
+    "saveTooltip": "Saves the current dimensions, metrics, filters, grouping, period and timezone.",
     "updateAria": "Update {{name}} with the current view",
     "deleteAria": "Delete {{name}}",
     "retryAria": "Retry loading presets",
@@ -27,7 +27,10 @@
       "updated": "Preset updated",
       "saved": "Preset saved",
       "deleted": "Preset deleted"
-    }
+    },
+    "saveChanges": "Save changes",
+    "saveChangesTooltip": "Update the \"{{name}}\" preset with the current report: dimensions, metrics, filters, period, timezone.",
+    "modified": "Report changed, preset not saved"
   },
   "controls": {
     "filter": "Filter",
@@ -77,7 +80,8 @@
     "pwa": "PWA",
     "postlanding": "Postlanding",
     "offer": "Offer",
-    "network": "Network"
+    "network": "Network",
+    "day": "Day"
   },
   "metrics": {
     "clicks": "Clicks",
@@ -122,6 +126,10 @@
   "values": {
     "noLanding": "No landing",
     "noOffer": "No offer",
-    "noPwa": "No PWA"
+    "noPwa": "No PWA",
+    "noSource": "No source",
+    "noFlow": "No flow",
+    "noStreamSet": "No stream set",
+    "noCountry": "Unknown"
   }
 }

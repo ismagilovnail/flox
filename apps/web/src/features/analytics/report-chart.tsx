@@ -13,7 +13,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { chartBaseOption, chartBarOption, CHART_COLORS, type ChartMode } from "@/lib/chart-theme";
+import { chartBaseOption, chartBarOption, CHART_RGB, rgba, type ChartMode } from "@/lib/chart-theme";
 import type { ReportRow } from "@/features/analytics/aggregate";
 import type { TimeseriesPoint } from "@/lib/api/analytics";
 import { METRICS, metricLabel, formatMetric, type DimensionKey, type MetricKey } from "@/features/analytics/registry";
@@ -77,14 +77,25 @@ export function ReportLineChart({
       // explanation in lib/chart-theme.ts.
       ...base,
       tooltip: { ...base.tooltip, valueFormatter: (v: number) => formatMetric(v, meta.format) },
+      // Days are categories, not a continuous time axis: with one day of data
+      // a time axis falls back to hourly ticks and says nothing useful.
+      xAxis: { ...base.xAxis, type: "category" as const, data: points.map((p) => p.date), boundaryGap: points.length <= 1 },
       series: [
         {
           type: "line",
-          data: points.map((p) => [p.date, p.value]),
+          data: points.map((p) => p.value),
           smooth: 0.2,
-          symbol: "none",
-          lineStyle: { color: CHART_COLORS.primary, width: 2 },
-          areaStyle: { color: "oklch(0.68 0.16 255 / 0.15)" },
+          // A lone day (or a window with data on one day only) is a single
+          // point, which a line with no symbol draws as nothing at all.
+          symbol: "circle",
+          symbolSize: 6,
+          showSymbol: points.length <= 31,
+          lineStyle: { color: rgba(CHART_RGB.primary, 1), width: 2 },
+          itemStyle: { color: rgba(CHART_RGB.primary, 1) },
+          areaStyle: { color: rgba(CHART_RGB.primary, 0.15) },
+          // No hover animation: it re-tints the line towards a state colour
+          // zrender could not parse (see CHART_RGB); the tooltip has the numbers.
+          emphasis: { disabled: true },
         },
       ],
     };
@@ -142,7 +153,8 @@ export function ReportBarChart({
         {
           type: "bar",
           data: [...bars].reverse().map((b) => b.value ?? 0),
-          itemStyle: { color: CHART_COLORS.primary, borderRadius: [0, 3, 3, 0] },
+          itemStyle: { color: rgba(CHART_RGB.primary, 1), borderRadius: [0, 3, 3, 0] },
+          emphasis: { disabled: true },
           barMaxWidth: 22,
         },
       ],

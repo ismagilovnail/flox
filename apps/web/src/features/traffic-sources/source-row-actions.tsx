@@ -81,7 +81,7 @@ export function SourceRowActions({ source }: { source: TrafficSource }) {
         <Tooltip>
           <TooltipTrigger asChild>
             <IconButton aria-label={t("rowActions.viewStatistics")} size="icon-sm" asChild>
-              <Link href={viewStatisticsHref("source", source.name)}>
+              <Link href={viewStatisticsHref("source", source.id)}>
                 <BarChart3Icon className="size-3.5" />
               </Link>
             </IconButton>

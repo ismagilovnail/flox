@@ -17,27 +17,28 @@ export function useReport(
     from: Date;
     to: Date;
     sort: { key: string; dir: "asc" | "desc" };
+    timezone?: string;
   },
   options?: { enabled?: boolean },
 ) {
   return useQuery({
-    queryKey: ["analytics-report", input.dims, input.filters, iso(input.from), iso(input.to), input.sort],
+    queryKey: ["analytics-report", input.dims, input.filters, iso(input.from), iso(input.to), input.sort, input.timezone],
     queryFn: () => getReport(input),
     enabled: options?.enabled,
   });
 }
 
-export function useTimeseries(input: { filters: FilterCondition[]; from: Date; to: Date }) {
+export function useTimeseries(input: { filters: FilterCondition[]; from: Date; to: Date; timezone?: string }) {
   return useQuery({
-    queryKey: ["analytics-timeseries", input.filters, iso(input.from), iso(input.to)],
+    queryKey: ["analytics-timeseries", input.filters, iso(input.from), iso(input.to), input.timezone],
     queryFn: () => getTimeseries(input),
   });
 }
 
-export function useFunnelReport(from: Date, to: Date) {
+export function useFunnelReport(from: Date, to: Date, filters: FilterCondition[] = [], timezone?: string) {
   return useQuery({
-    queryKey: ["analytics-funnel", iso(from), iso(to)],
-    queryFn: () => getFunnel(from, to),
+    queryKey: ["analytics-funnel", iso(from), iso(to), filters, timezone],
+    queryFn: () => getFunnel(from, to, filters, timezone),
   });
 }
 
@@ -49,12 +50,11 @@ export function useDashboardReport(from: Date, to: Date) {
 }
 
 /**
- * `retry: false` — a rejection here is a deterministic 400 for one of
- * the 2 still-unbacked dimensions (chstore.ValidDimension), not a
- * transient failure retrying would ever fix; the caller (report-
- * controls.tsx) falls back to the mock pool on `isError`, so retrying
- * would only delay that fallback for no benefit. `enabled` lets the
- * caller skip firing this until its popover is actually open.
+ * `retry: false` — a rejection here is a deterministic 400 for an
+ * unbacked dimension (chstore.ValidDimension), not a transient failure
+ * retrying would ever fix; the report builder doesn't offer those, so in
+ * practice it never fires. `enabled` lets the caller skip firing this
+ * until its popover is actually open.
  */
 export function useDimensionValues(dim: DimensionKey, from: Date, to: Date, options?: { enabled?: boolean }) {
   return useQuery({

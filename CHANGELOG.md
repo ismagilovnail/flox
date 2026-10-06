@@ -5,6 +5,134 @@ per-phase, matching `CLAUDE.md`'s phase protocol. The one exception is
 [Between phases], below: spec amendments and the code changes that follow from
 them land between phases and would otherwise be invisible here.
 
+## [Between phases] — funnel, bar, line and Overview charts no longer flicker / vanish on hover
+
+Cause: series were filled with `oklch(...)` colours, and on hover zrender animates
+a series' colour towards its emphasis state; it cannot parse oklch, so the fill
+came back as `none`. Measured: sampling a pixel of the top funnel segment while
+the mouse moved showed it flipping to `0,0,0,0` (16 flips in ~200 frames); the
+bar chart's `fill` went `oklch → none → oklch → none` on three hovers and stayed
+`none` (the bar disappeared). Fix: `CHART_RGB` / `rgba()` in `lib/chart-theme.ts`
+(sRGB twin of `CHART_COLORS.primary`) are used for the series fills in the funnel,
+bar and line charts, and their series have `emphasis.disabled` (the tooltip carries
+the numbers). After it: funnel 0 changes in ~400 frames, bar 0 DOM mutations on
+hover and the fill stays `rgb(76,153,248)`. Also: the funnel is drawn on canvas with
+`silent` labels (a first, insufficient attempt, harmless to keep), and its tooltip
+shows the translated step name instead of the raw `SOURCE_CLICK`. The Overview dashboard's
+`LineMetricChart` (revenue / spend / profit / conversions) had the same oklch line
+and gradient fills: it now takes a `CHART_RGB` key (`primary`, `success`,
+`warning`, `danger` — sRGB twins computed from the oklch tokens) and builds
+`rgba()` line and gradient stops, with `emphasis.disabled`; `CHART_COLORS` is no
+longer used by any chart.
+
+## [Between phases] — column widths are part of the report and of presets
+
+Same gap as column order: dragging a column's width was internal to the table,
+so "Сохранить изменения" never appeared and presets couldn't keep widths. Widths
+are now part of the report state and presets: `report_presets.column_widths`
+(jsonb, migration 00046, existing rows get `{}` = natural widths),
+`columnWidths` on the API (px by column id; omitted on update = unchanged,
+`{}` = reset; 48-2000 px, ≤ 60 entries). `DataTable` accepts a controlled
+`columnSizing`/`onColumnSizingChange`. Test:
+`TestPresetColumnWidthsRoundTripUpdateAndClear`.
+
+## [Between phases] — column order is part of the report and of presets
+
+Dragging a table column didn't count as a change (the order lived inside the
+table), so "Сохранить изменения" never appeared and a preset couldn't remember
+it. The order is now part of the report state and of presets:
+`report_presets.column_order` (text[], migration 00045, existing rows get `{}` =
+natural order), `columnOrder` on the API (omitted on update = unchanged, `[]` =
+reset; ≤ 60 ids of ≤ 64 chars). `DataTable` accepts a controlled
+`columnOrder`/`onColumnOrderChange`; dragging back to the natural arrangement
+stores `[]` so nothing shows as modified. Applying a preset restores its order.
+Column *widths* are still per-view and not saved. Test:
+`TestPresetColumnOrderRoundTripUpdateAndClear`.
+
+## [Between phases] — "Сохранить изменения" on a modified preset
+
+When the chosen preset is your own and the report on screen differs from it
+(dimensions, metrics, filters, grouping, period or timezone), a "Сохранить
+изменения" button appears next to the chips and writes the current report over
+that preset in one click (no dialog; the name stays), and the preset's chip
+turns dashed with a dot until it is saved. The default preset can't be edited,
+so there only "Сохранить как пресет" is offered. Period is now part of the
+"unchanged" check. Frontend only (`report-preset-bar.tsx`), uses the existing
+update endpoint.
+
+## [Between phases] — report presets save their filters
+
+A preset stored dimensions, metrics, grouping, period and timezone but not the
+report's filters, so a preset saved with "Источник = Facebook" came back
+unfiltered. Presets now carry filters: `report_presets.filters` (jsonb,
+migration 00044, existing rows get `[]`), `Filter {dimension, value}` on the
+API (`filters` on create/update/read; omitted on update = unchanged, `[]` =
+clear), validated (known dimension, not `day`, value ≤ 200 chars, ≤ 10
+filters). Applying a preset sets its filters; saving or updating one stores the
+current ones; the "this preset is active" highlight also requires the same
+filters. Tests: `TestPresetFiltersRoundTripUpdateAndClear`,
+`TestPresetRejectsInvalidFilters`.
+
+## [Between phases] — the chosen report preset is remembered
+
+Picking a preset on /analytics is remembered in the browser
+(`flox.analytics.activePreset`, localStorage): after a reload the preset is
+re-applied (silently) and highlighted. A freshly saved or updated preset
+becomes the chosen one; deleting the chosen preset forgets it; a page opened
+from a "View statistics" link (`?dim=`) keeps that link's report. The highlight
+goes away once dimensions, metrics, grouping or timezone are edited, since it is
+then a different report. Per browser — presets themselves stay org-wide.
+
+## [Between phases] — "День" dimension and analytics fixes
+
+New "День" dimension in the report builder: per-day rows combined with any
+other dimension (Кампания + День, Источник + День, ...), per-day cost for
+campaign/source, sortable, saveable in presets. Timezone is now actually
+applied (it was a select that did nothing): days and the From/To window are cut
+in the chosen zone for report, timeseries and funnel. The funnel honours the
+report filters (it ignored them). Fixed: the "Линия" chart drew nothing when the
+window had data on a single day (no symbol for a lone point; axis is now by
+day); the dimension picker and filter picker offered unbacked "Постлендинг"/
+"Сеть" (400 → "Не удалось загрузить отчёт"); the networks list's "View
+statistics" link led to a guaranteed 400 and is removed until a network
+dimension exists; the filter-value picker offered made-up mock values while
+loading. Tests: day grouping / sort / limit / timezone / funnel filters in
+`analytics`, timezone day cut and funnel filters on real ClickHouse in `chstore`,
+per-day spend in `cost`, `day` in presets.
+
+## [Between phases] — `source` is the real traffic source
+
+The `source` dimension no longer proxies campaign: `traffic_source_id`
+(ClickHouse migration `011_traffic_source_id.sql`, 3 tables) is stamped by the
+tracker from the campaign at click time, carried through the signed link
+claims to LAND_CLICK/PWA_*, and onto conversions through attribution. Two
+campaigns on one source now merge into one row. Cost for `[source]` is the sum
+of the source's campaigns (`cost.SpendBySource`). The UI resolves source ids
+directly (with a "No source" bucket) and the sources list's "View statistics"
+link filters on the id. Pre-011 rows are `''` until backfilled — recipe in
+`docs/analytics-report-api.md`, already run on the dev ClickHouse. Tests:
+`TestReportBySourceMergesCampaignsOnOneSource` (real ClickHouse),
+`TestSpendBySourceRollsCampaignsUpToTheirSource`,
+`TestReportCostBySourceSumsTheSourcesCampaigns`,
+`TestTrafficSourceIDOnEveryLandingEvent`, plus attribution/conversion carry-over.
+
+## [Between phases] — conversion metrics under os/browser/language
+
+Reports grouped or filtered by os, browser or language now show real
+conversions, revenue, profit, ROI, EPC and CPA: `ReportConversions` joins
+`click_events` onto each conversion via `click_id` (new
+`reportConversionsJoined`; the click side is not bounded by the report window,
+tenant-scoped on both sides, conversions without a click land in the `""`
+bucket). Before this, an os/browser/language filter 500'd the report and
+timeseries ("unsupported filter dimension in conversion report") and a grouping
+showed "—". Tests: `TestReportConversionsGroupsByOSViaClickJoin`,
+`...FiltersByBrowserViaClickJoin`, `...ViaClickJoinByDayAndTenantIsolation`
+(real ClickHouse), `TestReportQueriesConversionsForClickOnlyDimension`.
+Also in the analytics UI this stretch: dimension picker capped at the API's 4,
+campaign/source names instead of ids, column hints + drag-reorder + width fix,
+media-buyer default preset (migration 00043), preset "today" no longer pinned
+to 2026-08-11.
+
 ## [Between phases] — PWA comments block; save/cancel moved to the top
 
 Constructor form: "Отмена"/"Сохранить" now sit in the top card header next to

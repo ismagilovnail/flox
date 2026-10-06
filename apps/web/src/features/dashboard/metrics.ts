@@ -50,11 +50,16 @@ export function metricsFromApi(m: Record<MetricKey, number | null>): PeriodMetri
  * DimFlow resolve to campaign_id/flow_id (chstore's own whitelist, no name
  * join yet — a real but honest gap, see CHANGELOG's Phase 35 entry rather
  * than a fabricated display name). */
-export function performanceRowFromApi(row: ReportRow, dim: DimensionKey): PerformanceRow {
+export function performanceRowFromApi(
+  row: ReportRow,
+  dim: DimensionKey,
+  /** Display name for the dimension value (campaign/flow names); defaults to the raw value. */
+  label: (dim: DimensionKey, value: string) => string = (_d, v) => v,
+): PerformanceRow {
   const value = row.dims[dim] ?? "";
   return {
     id: value,
-    name: value,
+    name: label(dim, value),
     clicks: row.metrics.clicks ?? 0,
     conversions: row.metrics.conversions ?? 0,
     cvr: (row.metrics.cvr ?? 0) / 100,

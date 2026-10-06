@@ -19,17 +19,16 @@ referenced below as §N).
 ## CURRENT STATE — UPDATE THIS EVERY PHASE
 
 ```
-CURRENT PHASE : PWA COMMENTS BLOCK
-STATUS        : done. Save/Cancel moved to the top card header. "Комментарии"
-                block (sets geo+lang, manual entry, CSV in/out, no generator)
-                saved with the form via GET|PUT /pwas/{id}/comments
-                (pwa_comments, 00041). Tracker shows comments on test links
-                only. VERIFIED: full-env go test green, tsc + eslint clean,
-                migrated, API rebuilt. Gaps: Duplicate skips comments; the
-                add/CSV/save flow not clicked through in the browser.
-                Install page still says "Оценки и отзывы проверены" (existing
-                copy) — flagged to the user.
-LAST COMMIT   : this phase's commit — feat(pwa): comments block.
+CURRENT PHASE : ANALYTICS REPORTS + OVERVIEW FIXES
+STATUS        : done. Report presets keep filters, column order and widths
+                (00044-00046); `source` dimension is the real traffic source
+                (ClickHouse 011_traffic_source_id); funnel/bar/line/Overview
+                charts no longer vanish on hover (oklch -> sRGB); Overview
+                top tables show campaign/flow names. VERIFIED: full-env go
+                test green, tsc + eslint clean, migrated (goose v46), Overview
+                checked in the browser (zero-revenue data only). Gaps: flows
+                re-minted on stream-set save keep raw ids in old history.
+LAST COMMIT   : feat(web) analytics presets/overview, on top of the backend one.
 UNCOMMITTED   : none expected.
 NEXT          : postlanding stage serving (+ postlanding dimension) —
                 already requested by the user; confirm details first.

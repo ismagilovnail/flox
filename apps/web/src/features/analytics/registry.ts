@@ -19,7 +19,8 @@ export type DimensionKey =
   | "pwa"
   | "postlanding"
   | "offer"
-  | "network";
+  | "network"
+  | "day";
 
 /** Mirrors maxReportDims in apps/internal/analytics/report.go — the API rejects more. */
 export const MAX_REPORT_DIMENSIONS = 4;
@@ -42,7 +43,21 @@ export const DIMENSIONS: { key: DimensionKey; label: string }[] = [
   { key: "postlanding", label: "Postlanding" },
   { key: "offer", label: "Offer" },
   { key: "network", label: "Network" },
+  { key: "day", label: "Day" },
 ];
+
+/** Dimensions /analytics/report can't answer yet (no event column — see
+ * chstore.ReportDimension): picking one 400s the whole report, so the report
+ * builder never offers them. `registry.ts` keeps the full list for Custom Metrics. */
+const UNBACKED_DIMENSIONS: DimensionKey[] = ["postlanding", "network"];
+
+/** What the report builder's dimension picker offers: every backed dimension,
+ * plus "day" (per-day rows, bucketed in the report's timezone). */
+export const REPORT_DIMENSIONS = DIMENSIONS.filter((d) => !UNBACKED_DIMENSIONS.includes(d.key));
+
+/** What the filter picker offers: like REPORT_DIMENSIONS without "day" — a day
+ * is a bucket of event time, not a value an event carries. */
+export const FILTER_DIMENSIONS = REPORT_DIMENSIONS.filter((d) => d.key !== "day");
 
 /** `.label` above stays English (relied on as-is by the not-yet-localized
  * Custom Metrics feature) — the report builder's own screens call these

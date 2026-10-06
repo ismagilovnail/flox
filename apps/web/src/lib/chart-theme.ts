@@ -24,6 +24,22 @@ const TOKENS = {
   },
 } as const;
 
+/** sRGB twins of the oklch tokens below, for series fills. zrender animates a
+ * hovered series' colour towards its emphasis state and cannot parse oklch():
+ * the fill came back as "none" and bars/segments blinked or vanished on hover.
+ * Axis/tooltip text colours are never animated, so those keep the oklch tokens. */
+export const CHART_RGB = {
+  primary: "76, 153, 248", // CHART_COLORS.primary
+  success: "91, 190, 98", // CHART_COLORS.success
+  warning: "227, 174, 40", // CHART_COLORS.warning
+  danger: "241, 77, 76", // CHART_COLORS.danger
+};
+
+/** `rgba(...)` from a CHART_RGB entry. */
+export function rgba(rgb: string, alpha: number): string {
+  return `rgba(${rgb}, ${alpha})`;
+}
+
 export const CHART_COLORS = {
   primary: "oklch(0.68 0.16 255)",
   success: "oklch(0.72 0.16 145)",

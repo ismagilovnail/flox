@@ -8,7 +8,7 @@ import type { TFunction } from "i18next";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Mono, Caption } from "@/components/ui/typography";
-import { chartBaseOption, CHART_COLORS, type ChartMode } from "@/lib/chart-theme";
+import { chartBaseOption, CHART_RGB, rgba, type ChartMode } from "@/lib/chart-theme";
 import { formatInt } from "@/lib/format";
 import type { FunnelStepData } from "@/lib/api/analytics";
 
@@ -37,7 +37,7 @@ export function FunnelChart({ steps }: { steps: FunnelStepData[] }) {
         ...base.tooltip,
         trigger: "item" as const,
         formatter: (p: { name: string; value: number }) =>
-          `${p.name}<br/>${formatInt(p.value)} (${((p.value / first) * 100).toFixed(1)}% of ${stepLabel(t, "SOURCE_CLICK")})`,
+          `${stepLabel(t, p.name)}<br/>${formatInt(p.value)} (${((p.value / first) * 100).toFixed(1)}% of ${stepLabel(t, "SOURCE_CLICK")})`,
       },
       series: [
         {
@@ -52,16 +52,22 @@ export function FunnelChart({ steps }: { steps: FunnelStepData[] }) {
           gap: 3,
           label: {
             show: true,
+            // The labels sit on top of the segments: letting them take the mouse
+            // makes hover bounce between the label and the shape under it.
+            silent: true,
             position: "inside" as const,
             color: "#fff",
             fontSize: 11,
             formatter: (p: { name: string }) => stepLabel(t, p.name),
           },
-          itemStyle: { color: CHART_COLORS.primary, borderColor: "transparent" },
+          itemStyle: { color: rgba(CHART_RGB.primary, 1), borderColor: "transparent" },
+          // No hover state: the tooltip carries the numbers, and the state
+          // animation was the thing that made segments blink.
+          emphasis: { disabled: true },
           data: steps.map((s, i) => ({
             name: s.step,
             value: s.value,
-            itemStyle: { color: CHART_COLORS.primary.replace(/\)$/, ` / ${100 - i * 8}%)`) },
+            itemStyle: { color: rgba(CHART_RGB.primary, Number(((100 - i * 8) / 100).toFixed(2))) },
           })),
         },
       ],
@@ -77,8 +83,10 @@ export function FunnelChart({ steps }: { steps: FunnelStepData[] }) {
         <div className="h-96">
           {/* key={mode}: remount on theme change instead of letting zrender
               animate the transition — see line-metric-chart.tsx's comment
-              on the interpolate1DArray crash this avoids. */}
-          <ReactECharts key={mode} option={option} notMerge style={{ height: "100%", width: "100%" }} opts={{ renderer: "svg" }} />
+              on the interpolate1DArray crash this avoids. Canvas, not SVG:
+              the SVG renderer rebuilds the segment <g>s on every hover-state
+              change, which shows as the funnel flickering under the mouse. */}
+          <ReactECharts key={mode} option={option} notMerge style={{ height: "100%", width: "100%" }} opts={{ renderer: "canvas" }} />
         </div>
         <div className="flex flex-col gap-1.5 self-center">
           {steps.map((s, i) => {

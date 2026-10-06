@@ -20,7 +20,7 @@ import { EMPTY_CUSTOM_METRICS, useCustomMetrics } from "@/hooks/use-custom-metri
 
 /** Dimensions "View statistics" (§27.5) is allowed to deep-link a filter for —
  * an allowlist so an arbitrary/malformed URL query can't inject a bogus filter. */
-const VIEW_STATS_DIMENSIONS: DimensionKey[] = ["network", "offer", "source", "stream_set", "flow", "landing", "pwa"];
+const VIEW_STATS_DIMENSIONS: DimensionKey[] = ["offer", "source", "stream_set", "flow", "landing", "pwa"];
 
 function previousRange(range: ReportControlsState["dateRange"]) {
   if (!range?.from) return undefined;
@@ -60,6 +60,8 @@ export function AnalyticsView() {
       dimensions: ["campaign"],
       metrics: ["clicks", "conversions", "cvr", "cost", "revenue", "profit", "roi", "epc", "cpa"],
       filters,
+      columnOrder: [],
+      columnWidths: {},
       groupBy: "campaign",
       sort: { key: "revenue", dir: "desc" },
       compare: false,
@@ -75,24 +77,25 @@ export function AnalyticsView() {
   const from = state.dateRange?.from ?? defaultFrom;
   const to = state.dateRange?.to ?? state.dateRange?.from ?? defaultTo;
 
-  const tableQuery = useReport({ dims: state.dimensions, filters: state.filters, from, to, sort: state.sort });
-  const timeseriesQuery = useTimeseries({ filters: state.filters, from, to });
+  const tableQuery = useReport({ dims: state.dimensions, filters: state.filters, from, to, sort: state.sort, timezone: state.timezone });
+  const timeseriesQuery = useTimeseries({ filters: state.filters, from, to, timezone: state.timezone });
   const barQuery = useReport({
     dims: [state.groupBy],
     filters: state.filters,
     from,
     to,
     sort: { key: "revenue", dir: "desc" },
+    timezone: state.timezone,
   });
-  const funnelQuery = useFunnelReport(from, to);
+  const funnelQuery = useFunnelReport(from, to, state.filters, state.timezone);
 
   const prevRange = previousRange(state.dateRange);
   const compareCurrentQuery = useReport(
-    { dims: [], filters: state.filters, from, to, sort: state.sort },
+    { dims: [], filters: state.filters, from, to, sort: state.sort, timezone: state.timezone },
     { enabled: state.compare },
   );
   const comparePreviousQuery = useReport(
-    { dims: [], filters: state.filters, from: prevRange?.from ?? from, to: prevRange?.to ?? to, sort: state.sort },
+    { dims: [], filters: state.filters, from: prevRange?.from ?? from, to: prevRange?.to ?? to, sort: state.sort, timezone: state.timezone },
     { enabled: state.compare && !!prevRange },
   );
 
@@ -157,6 +160,10 @@ export function AnalyticsView() {
               dimensions={state.dimensions}
               metrics={state.metrics}
               customMetrics={reportBuilderMetrics}
+              columnOrder={state.columnOrder}
+              onColumnOrderChange={(columnOrder) => onChange({ columnOrder })}
+              columnSizing={state.columnWidths}
+              onColumnSizingChange={(columnWidths) => onChange({ columnWidths })}
             />
           )}
         </TabsContent>

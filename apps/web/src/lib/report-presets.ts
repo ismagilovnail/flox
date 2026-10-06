@@ -13,6 +13,7 @@
  */
 
 import type { DimensionKey, MetricKey } from "@/features/analytics/registry";
+import type { FilterCondition } from "@/features/analytics/aggregate";
 
 export type ReportPeriod = { type: "relative"; days: number } | { type: "custom"; from: string; to: string };
 
@@ -65,6 +66,12 @@ export type ReportPreset = {
   name: string;
   dimensions: DimensionKey[];
   metrics: MetricKey[];
+  /** Saved "dimension = value" conditions, AND-combined; applying the preset sets them. */
+  filters: FilterCondition[];
+  /** Dragged table column order (ids); [] is the natural order. */
+  columnOrder: string[];
+  /** Dragged table column widths in px by column id; {} is natural widths. */
+  columnWidths: Record<string, number>;
   groupBy: DimensionKey;
   period: ReportPeriod;
   timezone: string;
@@ -81,6 +88,9 @@ export type ReportPresetInput = {
   name: string;
   dimensions: DimensionKey[];
   metrics: MetricKey[];
+  filters: FilterCondition[];
+  columnOrder: string[];
+  columnWidths: Record<string, number>;
   groupBy: DimensionKey;
   period: ReportPeriod;
   timezone: string;

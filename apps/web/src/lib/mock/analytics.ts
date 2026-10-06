@@ -41,6 +41,7 @@ const POOLS: Record<DimensionKey, string[]> = {
   // "View statistics" (§27.5) drill-in from those list pages lands on non-empty data.
   offer: ["US Sweeps — CPA $12", "UK Nutra Trial", "DE Dating — CPL", "CA Crypto — RevShare"],
   network: ["AffTrust CPA", "AdCombo", "MyLead", "Direct advertiser"],
+  day: [],
 };
 
 export function dimensionValues(key: DimensionKey): string[] {

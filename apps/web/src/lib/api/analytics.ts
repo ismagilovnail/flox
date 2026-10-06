@@ -36,8 +36,12 @@ type ApiMetrics = Record<MetricKey, number | null>;
 type ApiReportRow = { day?: string; dims?: Record<string, string>; metrics: ApiMetrics };
 
 function toReportRow(row: ApiReportRow, dims: DimensionKey[]): ReportRow {
-  const dimValues = (row.dims ?? {}) as Partial<Record<DimensionKey, string>>;
-  const key = row.day ?? (dims.length === 0 ? "__all__" : dims.map((d) => dimValues[d] ?? "").join(" · "));
+  const dimValues = { ...(row.dims ?? {}) } as Partial<Record<DimensionKey, string>>;
+  // "day" is not a column the API groups by: the row carries it as `day`, and
+  // it is folded into dims so the table treats it like any other dimension.
+  if (row.day && dims.includes("day")) dimValues.day = row.day;
+  const key =
+    dims.length === 0 ? (row.day ?? "__all__") : dims.map((d) => dimValues[d] ?? "").join(" · ");
   return { key, dims: dimValues, metrics: row.metrics };
 }
 
@@ -53,6 +57,7 @@ export function getReport(input: {
   from: Date;
   to: Date;
   sort: { key: string; dir: "asc" | "desc" };
+  timezone?: string;
 }): Promise<ReportRow[]> {
   return apiFetch<{ rows: ApiReportRow[] }>("/analytics/report", {
     method: "POST",
@@ -62,6 +67,7 @@ export function getReport(input: {
       from: formatDate(input.from),
       to: formatDate(input.to),
       sort: input.sort,
+      timezone: input.timezone,
     },
   }).then((res) => res.rows.map((r) => toReportRow(r, input.dims)));
 }
@@ -70,6 +76,7 @@ export function getTimeseries(input: {
   filters: FilterCondition[];
   from: Date;
   to: Date;
+  timezone?: string;
 }): Promise<TimeseriesPoint[]> {
   return apiFetch<{ rows: ApiReportRow[] }>("/analytics/timeseries", {
     method: "POST",
@@ -77,16 +84,22 @@ export function getTimeseries(input: {
       filters: toFilterBody(input.filters),
       from: formatDate(input.from),
       to: formatDate(input.to),
+      timezone: input.timezone,
     },
   }).then((res) => res.rows.map((r) => ({ day: r.day!, metrics: r.metrics })));
 }
 
 export type FunnelStepData = { step: string; value: number };
 
-export function getFunnel(from: Date, to: Date): Promise<FunnelStepData[]> {
+export function getFunnel(
+  from: Date,
+  to: Date,
+  filters: FilterCondition[] = [],
+  timezone?: string,
+): Promise<FunnelStepData[]> {
   return apiFetch<{ steps: FunnelStepData[] }>("/analytics/funnel", {
     method: "POST",
-    body: { from: formatDate(from), to: formatDate(to) },
+    body: { from: formatDate(from), to: formatDate(to), filters: toFilterBody(filters), timezone },
   }).then((res) => res.steps);
 }
 
