@@ -42,6 +42,9 @@ import {
 } from "@/hooks/use-tracking-links";
 import type { TrackingLink, TrackingLinkStatus } from "@/lib/api/tracking-links";
 import { slugify } from "@/lib/utils";
+import { TrackingLinkBuilder } from "@/features/campaigns/tracking-link-builder";
+import { platformForSourceType, type LinkPlatform } from "@/lib/tracking-link-params";
+import { useTrafficSource } from "@/hooks/use-traffic-sources";
 
 /** Appends -2, -3, ... until the slug isn't already used by one of this
  * campaign's existing tracking links (slugs aren't globally unique, but
@@ -94,6 +97,7 @@ function columns(
   onToggleStatus: (link: TrackingLink) => void,
   onDeleteRequest: (id: string) => void,
   disabled: boolean,
+  platform: LinkPlatform | null,
 ): ColumnDef<typeof dataTableFeatures, TrackingLink>[] {
   return [
     {
@@ -114,6 +118,7 @@ function columns(
           >
             <CopyIcon className="size-3.5" />
           </IconButton>
+          <TrackingLinkBuilder url={row.original.url} defaultPlatform={platform} />
         </div>
       ),
     },
@@ -175,10 +180,13 @@ function columns(
 export function TrackingLinks({
   campaignId,
   campaignName,
+  trafficSourceId,
   disabled = false,
 }: {
   campaignId: string;
   campaignName: string;
+  /** Picks which ad platform's macros the "copy with parameters" menu lists first. */
+  trafficSourceId: string;
   /** Archived campaigns don't route traffic, so a new link would resolve
    * to nothing — locked instead of letting the operator create one that
    * silently does nothing. */
@@ -187,6 +195,8 @@ export function TrackingLinks({
   const { t } = useTranslation(["campaigns", "common"]);
   const canWrite = usePermission("campaign.write");
   const domainsQuery = useDomains();
+  const sourceQuery = useTrafficSource(trafficSourceId);
+  const platform = platformForSourceType(sourceQuery.data?.type);
   const linksQuery = useTrackingLinks(campaignId);
   const create = useCreateTrackingLink(campaignId);
   const updateStatus = useUpdateTrackingLinkStatus(campaignId);
@@ -374,7 +384,7 @@ export function TrackingLinks({
         />
       ) : (
         <DataTable
-          columns={columns(t, handleToggleStatus, setConfirmDeleteId, disabled || !canWrite)}
+          columns={columns(t, handleToggleStatus, setConfirmDeleteId, disabled || !canWrite, platform)}
           data={linksQuery.data.trackingLinks}
           emptyTitle={t("trackingLinks.emptyTitle")}
           emptyDescription={t("trackingLinks.emptyDescription")}

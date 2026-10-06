@@ -85,6 +85,25 @@
       "updateError": "Couldn't update tracking link",
       "removed": "Tracking link deleted",
       "removeError": "Couldn't delete tracking link"
+    },
+    "builder": {
+      "copyMenu": "With parameters",
+      "copyMenuAria": "Copy link with parameters",
+      "copyFor": "Copy for {{platform}}",
+      "copiedFor": "Link for {{platform}} copied",
+      "configure": "Configure parameters…",
+      "copyError": "Couldn't copy",
+      "title": "Link builder",
+      "description": "utm_* and sub1–sub10 are appended to the link. The platform's macros ({{macros}}) are kept as-is — the platform fills them in itself.",
+      "fillFrom": "Fill from:",
+      "clear": "Clear",
+      "preview": "Resulting link",
+      "close": "Close",
+      "copyLink": "Copy link",
+      "platform": {
+        "facebook": "Facebook",
+        "tiktok": "TikTok"
+      }
     }
   },
   "newCampaign": {

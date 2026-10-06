@@ -5,6 +5,17 @@ per-phase, matching `CLAUDE.md`'s phase protocol. The one exception is
 [Between phases], below: spec amendments and the code changes that follow from
 them land between phases and would otherwise be invisible here.
 
+## [Between phases] — tracking link builder with Facebook/TikTok macros
+
+Each tracking link on the campaign page has a "With parameters" menu: copy for Facebook
+or TikTok (the campaign's traffic source type decides which is listed first), or open the
+builder — editable `utm_*`, `sub1`–`sub10` and `ttclid` fields, a "fill from" preset, and a
+live preview of the final URL. The presets (`lib/tracking-link-params.ts`) map the
+platforms' own macros (`{{campaign.id}}`, `{{adset.id}}`, `__AID__`, `__CALLBACK_PARAM__`…)
+into the keys the tracker already reads (`apps/tracker/params.go`); macros are never
+percent-encoded, other values are. Presets live in code, not per traffic source. Unit tests
+for the URL assembly; not verified in a browser.
+
 ## [Between phases] — organization timezone is the default for analytics and the overview
 
 The timezone from Settings is now the default for the analytics report (instead of a

@@ -94,7 +94,12 @@ export function CampaignDetailView({ id }: { id: string }) {
         </TabsList>
 
         <TabsContent value="overview" className="flex flex-col gap-6">
-          <TrackingLinks campaignId={campaign.id} campaignName={campaign.name} disabled={isArchived} />
+          <TrackingLinks
+            campaignId={campaign.id}
+            campaignName={campaign.name}
+            trafficSourceId={campaign.trafficSourceId}
+            disabled={isArchived}
+          />
           <div className="grid grid-cols-1 gap-6 lg:grid-cols-[360px_1fr] lg:items-start">
             <CampaignForm
               defaultValues={{
