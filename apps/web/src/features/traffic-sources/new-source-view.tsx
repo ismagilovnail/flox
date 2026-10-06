@@ -24,9 +24,9 @@ export function NewSourceView() {
         costIntegration: values.costIntegration,
       },
       {
-        onSuccess: (created) => {
+        onSuccess: () => {
           toast(t("toast.created"), { description: values.name });
-          router.push(`/traffic-sources/${created.id}`);
+          router.push("/traffic-sources");
         },
         onError: (err) => toast.error(t("toast.createError"), { description: err.message }),
       },

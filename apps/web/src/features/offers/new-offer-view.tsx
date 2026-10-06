@@ -71,9 +71,9 @@ export function NewOfferView() {
         links,
       },
       {
-        onSuccess: (created) => {
+        onSuccess: () => {
           toast(t("toast.created"), { description: values.name });
-          router.push(`/offers/${created.id}`);
+          router.push("/offers");
         },
         onError: (err) => toast.error(t("toast.createError"), { description: err.message }),
       },

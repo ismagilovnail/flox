@@ -5,6 +5,13 @@ per-phase, matching `CLAUDE.md`'s phase protocol. The one exception is
 [Between phases], below: spec amendments and the code changes that follow from
 them land between phases and would otherwise be invisible here.
 
+## [Between phases] — creating a network, offer or traffic source returns to the list
+
+After "create" the new-network / new-offer / new-traffic-source pages go to the
+directory list (`/networks`, `/offers`, `/traffic-sources`) instead of the new item's
+detail page. A new network still shows the postback secret first (it is displayed only
+once) and goes to the list when that dialog is closed. Campaigns are unchanged.
+
 ## [Between phases] — campaigns, flows, offers, networks and traffic sources remember their columns
 
 The five directory tables (campaigns, flows, offers, networks, traffic sources) use

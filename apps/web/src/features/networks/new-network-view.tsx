@@ -44,7 +44,7 @@ export function NewNetworkView() {
       <PostbackSecretDialog
         networkId={revealed.networkId}
         secret={revealed.secret}
-        onDone={() => router.push(`/networks/${revealed.networkId}`)}
+        onDone={() => router.push("/networks")}
       />
     );
   }
