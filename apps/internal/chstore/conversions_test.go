@@ -192,3 +192,50 @@ func TestStatusHistoryAndOffersByClickIDsAreOrgScoped(t *testing.T) {
 		t.Fatalf("empty click id list = %v, %v; want nil, nil", steps, err)
 	}
 }
+
+func TestNewConversionsByOfferCountsFirstSeenPerClickAndIsOrgScoped(t *testing.T) {
+	conn := mustConn(t)
+	store := chstore.NewEventStore(conn)
+	ctx := context.Background()
+
+	orgID, otherOrg := idgen.New(), idgen.New()
+	campaignID, networkID, offerID := idgen.New(), idgen.New(), idgen.New()
+	since := time.Date(2026, 8, 22, 0, 0, 0, 0, time.UTC)
+	hold := func(org, click string, at time.Time) event.Event {
+		return event.Event{Type: event.CpaHold, EventAt: at, OrganizationID: org, CampaignID: campaignID, ClickID: click, NetworkID: networkID, OfferID: offerID}
+	}
+	accept := func(org, click string, at time.Time) event.Event {
+		e := hold(org, click, at)
+		e.Type = event.CpaAccept
+		return e
+	}
+	c1, c2, c3, c4 := idgen.New(), idgen.New(), idgen.New(), idgen.New()
+	events := []event.Event{
+		// c1: HOLD then ACCEPT the same day -> one conversion
+		hold(orgID, c1, since.Add(time.Hour)), accept(orgID, c1, since.Add(2*time.Hour)),
+		// c2: HOLD yesterday, ACCEPT today -> not new today
+		hold(orgID, c2, since.Add(-3*time.Hour)), accept(orgID, c2, since.Add(time.Hour)),
+		// c3: direct ACCEPT today -> one conversion
+		accept(orgID, c3, since.Add(3*time.Hour)),
+		// c4: a DECLINE alone is not a conversion
+		{Type: event.CpaDecline, EventAt: since.Add(time.Hour), OrganizationID: orgID, CampaignID: campaignID, ClickID: c4, NetworkID: networkID, OfferID: offerID},
+		// the same offer id in another organization must never be counted
+		hold(otherOrg, idgen.New(), since.Add(time.Hour)), hold(otherOrg, idgen.New(), since.Add(time.Hour)),
+	}
+	if err := store.InsertBatch(ctx, events); err != nil {
+		t.Fatalf("InsertBatch: %v", err)
+	}
+
+	got, err := store.NewConversionsByOffer(ctx, []chstore.OfferConversionTarget{
+		{OrganizationID: orgID, OfferID: offerID, Since: since},
+	})
+	if err != nil {
+		t.Fatalf("NewConversionsByOffer: %v", err)
+	}
+	if n := got[orgID+"/"+offerID]; n != 2 {
+		t.Fatalf("count = %d, want 2 (c1 and c3; got map %v)", n, got)
+	}
+	if _, leaked := got[otherOrg+"/"+offerID]; leaked {
+		t.Fatalf("other organization's conversions leaked: %v", got)
+	}
+}

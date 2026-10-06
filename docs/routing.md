@@ -109,6 +109,36 @@ deliberately does not carry: it only affects whether the caller reuses an
 old `click_id` for attribution, which has no effect on which flow gets
 selected — nothing for the routing decision itself to consume.
 
+## Offer daily cap
+
+`offers.cap` is a **daily conversion cap** (NULL = uncapped). It is enforced
+without touching the redirect path's latency budget:
+
+- `internal/offercap.Monitor` rebuilds a snapshot every 30 s (tracker and API
+  each run one): active offers with a cap come from Postgres, joined to their
+  organization's timezone; new conversions since that zone's midnight come from
+  ClickHouse (`chstore.EventStore.NewConversionsByOffer`). An offer whose count
+  is `>= cap` is *capped*.
+- A conversion is a distinct `click_id` whose **first** `CPA_HOLD` or
+  `CPA_ACCEPT` falls in today (30-day lookback). HOLD→ACCEPT of one click is one
+  conversion, counted on the day it first appeared; DECLINE/TRASH/REDEP never
+  count. The offer is read from `conversion_events.offer_id`.
+- The set goes to the engine as `RequestContext.CappedOffers`. A flow whose
+  destination is a capped offer leaves the draw like a paused flow — the other
+  flows absorb its share, with no re-balancing of weights; when none is left the
+  stream set's / campaign's fallback applies. Explain marks the candidate
+  (`capped`) and the reason says "offers at their daily cap were skipped".
+- A sticky assignment to a capped offer is dropped and re-evaluated (the cap is
+  a hard business limit; the cookie is still the truth for everything else).
+- The routing simulator (API) passes the same snapshot, so a simulation shows
+  what would happen right now.
+
+Failure mode: if a refresh fails the previous snapshot stays (an analytics
+outage neither blocks traffic nor lifts caps); without ClickHouse at startup no
+offer is capped. Overshoot is bounded by what converts within one refresh
+interval plus worker flush lag. Not done: a "limit reached" badge in the offers
+list and the simulator UI's `capped` marker; alerts when a cap is hit.
+
 ## Weighted selection (§38)
 
 The flow draw is **deterministic**, not random. `pickWeighted(flows, visitKey)`

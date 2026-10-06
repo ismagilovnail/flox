@@ -5,6 +5,23 @@ per-phase, matching `CLAUDE.md`'s phase protocol. The one exception is
 [Between phases], below: spec amendments and the code changes that follow from
 them land between phases and would otherwise be invisible here.
 
+## [Between phases] — offer daily cap is enforced
+
+Audit finding #1 (P0): the offer's "Daily cap" was stored and shown but never read.
+Now a capped offer stops receiving traffic once it has `cap` new conversions today
+(organization timezone; a conversion = a click's first HOLD/ACCEPT, so HOLD→ACCEPT counts
+once). Its flows leave the weighted draw like paused ones — other flows (other offers) take
+the traffic, and with none left the stream-set/campaign fallback applies; a sticky visitor
+of a capped offer is re-evaluated. Decision logic stays in `internal/routing`
+(`RequestContext.CappedOffers`, `FlowCandidate.Capped`); `internal/offercap` rebuilds the
+snapshot every 30 s off the hot path (Postgres offers + `chstore.NewConversionsByOffer`,
+org-scoped); tracker and the API's routing simulator both use it. A failed refresh keeps the
+previous snapshot. Tests: routing unit tests, offercap unit tests, ClickHouse test with
+cross-org isolation, and `e2e/TestOfferDailyCap` against the real stack (two offers 50/50,
+cap 1 on one, one postback → all traffic to the other). Full-env `go test ./...` green
+(`eventqueue` flaked once against the live worker, passes alone). Not done: UI badge
+"limit reached" in the offers list, `capped` marker in the simulator UI, alerts.
+
 ## [Between phases] — conversions list: offer, flow, tags, payout, status history
 
 The Conversions list gained: **Offer** and **Flow** (names resolved client-side), a

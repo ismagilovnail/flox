@@ -22,13 +22,28 @@ type explainer interface {
 	Explain(ctx context.Context, req routing.RequestContext) (routing.RouteResult, routing.Explanation, error)
 }
 
+// cappedSource supplies the offers at their daily cap (internal/offercap);
+// the simulator passes it to the engine so a simulated route matches what the
+// tracker would do right now.
+type cappedSource interface {
+	Capped() map[string]struct{}
+}
+
 type Service struct {
 	store  *routingstore.Store
 	router explainer
+	caps   cappedSource
 }
 
 func NewService(store *routingstore.Store, router explainer) *Service {
 	return &Service{store: store, router: router}
+}
+
+// WithCaps makes simulations honor daily offer caps. Without it (nil
+// monitor, ClickHouse down) no offer is ever treated as capped.
+func (s *Service) WithCaps(caps cappedSource) *Service {
+	s.caps = caps
+	return s
 }
 
 // Simulate evaluates the campaign's real routing configuration against a
@@ -49,11 +64,16 @@ func (s *Service) Simulate(ctx context.Context, orgID, campaignID string, attrib
 		attrs[routing.FilterField(k)] = v
 	}
 
+	var capped map[string]struct{}
+	if s.caps != nil {
+		capped = s.caps.Capped()
+	}
 	result, explanation, err := s.router.Explain(ctx, routing.RequestContext{
-		Attributes: attrs,
-		Config:     cr.Config,
-		Sticky:     nil,
-		VisitKey:   deriveVisitKey(attributes),
+		Attributes:   attrs,
+		Config:       cr.Config,
+		Sticky:       nil,
+		VisitKey:     deriveVisitKey(attributes),
+		CappedOffers: capped,
 	})
 	if err != nil {
 		if errors.Is(err, routing.ErrNoVisitKey) {

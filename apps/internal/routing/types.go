@@ -212,6 +212,14 @@ type RequestContext struct {
 	// ErrNoVisitKey rather than guessing. Not consulted at all when a sticky
 	// assignment is honored, since no draw takes place.
 	VisitKey string
+
+	// CappedOffers is the set of offer IDs that reached their daily cap
+	// (internal/offercap computes it). A flow whose destination is one of
+	// them is taken out of the draw before it happens — exactly like a
+	// paused flow — so the others absorb its share and, when none is left,
+	// the stream set's/campaign's fallback applies. A sticky assignment to
+	// such a flow is dropped and re-evaluated. Nil means no caps.
+	CappedOffers map[string]struct{}
 }
 
 // RouteResult is §38's exact spec'd shape — the production hot-path return

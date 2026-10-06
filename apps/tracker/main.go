@@ -32,6 +32,7 @@ import (
 	"github.com/ismagilovnail/flox/apps/internal/landinglink"
 	"github.com/ismagilovnail/flox/apps/internal/logging"
 	"github.com/ismagilovnail/flox/apps/internal/metrics"
+	"github.com/ismagilovnail/flox/apps/internal/offercap"
 	"github.com/ismagilovnail/flox/apps/internal/postback"
 	"github.com/ismagilovnail/flox/apps/internal/postbacklog"
 	"github.com/ismagilovnail/flox/apps/internal/postgres"
@@ -155,6 +156,7 @@ func run() error {
 	// MemoryResolver degrades attribution to "always unattributed" — worse
 	// than real matching, but no worse than every phase before this one.
 	var clickResolver attribution.ClickResolver = attribution.NewMemoryResolver()
+	var offerCaps *offercap.Monitor
 	chConn, chErr := chconn.NewConn(ctx, cfg.ClickHouse)
 	if chErr != nil {
 		logger.Warn("clickhouse unavailable at startup, attribution will not match real clicks", "error", chErr)
@@ -164,7 +166,12 @@ func run() error {
 	} else {
 		defer chConn.Close()
 		clickResolver = chstore.NewClickResolver(chConn)
+		// Daily offer caps: a background snapshot, never a query on the
+		// redirect path. Without ClickHouse no offer is ever capped.
+		offerCaps = offercap.NewMonitor(offercap.NewPostgresSource(db), chstore.NewEventStore(chConn), logger)
+		go offerCaps.Run(ctx)
 	}
+	handler.caps = offerCaps
 	attributionSvc := attribution.NewService(clickResolver)
 
 	// Redis is best-effort at startup, matching §45's "REDIS UNAVAILABLE:

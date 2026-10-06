@@ -16,6 +16,7 @@ import (
 	"github.com/ismagilovnail/flox/apps/internal/idgen"
 	"github.com/ismagilovnail/flox/apps/internal/landinglink"
 	"github.com/ismagilovnail/flox/apps/internal/metrics"
+	"github.com/ismagilovnail/flox/apps/internal/offercap"
 	"github.com/ismagilovnail/flox/apps/internal/routing"
 	"github.com/ismagilovnail/flox/apps/internal/routingstore"
 	"github.com/ismagilovnail/flox/apps/internal/storage"
@@ -40,6 +41,9 @@ type Handler struct {
 	// assets builds a served landing's <base href>; nil means no object
 	// storage configured, pages are served without one.
 	assets *storage.Client
+	// caps is the background snapshot of offers at their daily cap; nil
+	// (no ClickHouse) means no offer is capped.
+	caps *offercap.Monitor
 }
 
 func (h *Handler) Register(r chi.Router) {
@@ -129,10 +133,11 @@ func (h *Handler) track(w http.ResponseWriter, r *http.Request) {
 	sticky := parseStickyCookie(r, link.CampaignID)
 
 	result, err := h.engine.Resolve(ctx, routing.RequestContext{
-		Attributes: attrs,
-		Config:     cfg,
-		Sticky:     sticky.routingState(),
-		VisitKey:   visitKey(link.CampaignID, ip, r.UserAgent()),
+		Attributes:   attrs,
+		Config:       cfg,
+		Sticky:       sticky.routingState(),
+		VisitKey:     visitKey(link.CampaignID, ip, r.UserAgent()),
+		CappedOffers: h.caps.Capped(),
 	})
 	if err != nil {
 		h.logger.Error("resolving route", "error", err, "campaign_id", link.CampaignID)

@@ -52,6 +52,7 @@ import (
 	"github.com/ismagilovnail/flox/apps/internal/mailer"
 	"github.com/ismagilovnail/flox/apps/internal/network"
 	"github.com/ismagilovnail/flox/apps/internal/offer"
+	"github.com/ismagilovnail/flox/apps/internal/offercap"
 	"github.com/ismagilovnail/flox/apps/internal/pixel"
 	"github.com/ismagilovnail/flox/apps/internal/postback"
 	"github.com/ismagilovnail/flox/apps/internal/postbacklog"
@@ -132,6 +133,7 @@ func run() error {
 	// ClickHouse degrades one route group and shows up on /ready — it
 	// doesn't take the whole control-plane API down.
 	var ch driver.Conn
+	var offerCaps *offercap.Monitor
 	chConn, chErr := chconn.NewConn(ctx, cfg.ClickHouse)
 	if chErr != nil {
 		logger.Warn("clickhouse unavailable at startup, /analytics will fail until it recovers", "error", chErr)
@@ -144,6 +146,10 @@ func run() error {
 	} else {
 		defer chConn.Close()
 		ch = chConn
+		// Same snapshot the tracker routes with, so the simulator answers
+		// "what would happen right now" including offers at their daily cap.
+		offerCaps = offercap.NewMonitor(offercap.NewPostgresSource(db), chstore.NewEventStore(chConn), logger)
+		go offerCaps.Run(ctx)
 	}
 
 	// Redis, connected here (rather than down where it was previously only
@@ -530,7 +536,7 @@ func run() error {
 	})
 
 	routingSimulateHandler := routingsimulate.NewHandler(
-		routingsimulate.NewService(routingstore.New(db), &routing.Engine{}), logger,
+		routingsimulate.NewService(routingstore.New(db), &routing.Engine{}).WithCaps(offerCaps), logger,
 	)
 	srv.Mux().Route("/campaigns/{campaignId}/routing/simulate", func(r chi.Router) {
 		r.Use(tenantMiddleware)

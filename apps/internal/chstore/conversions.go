@@ -265,3 +265,89 @@ func (s *EventStore) OffersByClickIDs(ctx context.Context, organizationID string
 	}
 	return out, nil
 }
+
+// OfferConversionTarget is one capped offer whose conversions are counted
+// from Since onwards.
+type OfferConversionTarget struct {
+	OrganizationID string
+	OfferID        string
+	Since          time.Time
+}
+
+// offerCapLookback bounds how far back a click's first HOLD/ACCEPT is looked
+// for. A click whose HOLD is older than this and which is accepted today
+// counts as a new conversion today — a small, accepted overcount that keeps
+// the scan bounded.
+const offerCapLookback = 30 * 24 * time.Hour
+
+// NewConversionsByOffer counts, per target, the distinct clicks whose first
+// CPA_HOLD or CPA_ACCEPT happened at or after the target's Since — i.e. new
+// conversions, so a HOLD today and its ACCEPT tomorrow are one conversion,
+// counted on the day it first appeared. Targets sharing a Since are queried
+// together; every query leads with organization_id. The result is keyed by
+// organizationID + "/" + offerID; offers with none are absent.
+func (s *EventStore) NewConversionsByOffer(ctx context.Context, targets []OfferConversionTarget) (map[string]uint64, error) {
+	out := map[string]uint64{}
+	bySince := map[time.Time][]OfferConversionTarget{}
+	for _, t := range targets {
+		bySince[t.Since.UTC()] = append(bySince[t.Since.UTC()], t)
+	}
+	for since, group := range bySince {
+		orgs := make([]string, 0, len(group))
+		offers := make([]string, 0, len(group))
+		seenOrg, seenOffer := map[string]bool{}, map[string]bool{}
+		for _, t := range group {
+			if !seenOrg[t.OrganizationID] {
+				seenOrg[t.OrganizationID] = true
+				orgs = append(orgs, t.OrganizationID)
+			}
+			if !seenOffer[t.OfferID] {
+				seenOffer[t.OfferID] = true
+				offers = append(offers, t.OfferID)
+			}
+		}
+		rows, err := s.conn.Query(ctx, `
+			SELECT organization_id, offer_id, count()
+			FROM (
+				SELECT organization_id, offer_id, click_id, min(event_at) AS first_at
+				FROM conversion_events
+				WHERE organization_id IN ? AND offer_id IN ?
+				  AND type IN ('CPA_HOLD', 'CPA_ACCEPT')
+				  AND event_at >= ?
+				GROUP BY organization_id, offer_id, click_id
+				HAVING first_at >= ?
+			)
+			GROUP BY organization_id, offer_id`,
+			orgs, offers, since.Add(-offerCapLookback), since,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("chstore: counting new conversions by offer: %w", err)
+		}
+		for rows.Next() {
+			var orgID, offerID string
+			var n uint64
+			if err := rows.Scan(&orgID, &offerID, &n); err != nil {
+				_ = rows.Close()
+				return nil, fmt.Errorf("chstore: scanning new conversions by offer: %w", err)
+			}
+			out[orgID+"/"+offerID] = n
+		}
+		if err := rows.Err(); err != nil {
+			_ = rows.Close()
+			return nil, fmt.Errorf("chstore: reading new conversions by offer: %w", err)
+		}
+		_ = rows.Close()
+	}
+	// The IN lists are a cross product of orgs x offers; drop pairs that are
+	// not real targets (another org's offer id can't collide, but be exact).
+	want := map[string]bool{}
+	for _, t := range targets {
+		want[t.OrganizationID+"/"+t.OfferID] = true
+	}
+	for k := range out {
+		if !want[k] {
+			delete(out, k)
+		}
+	}
+	return out, nil
+}

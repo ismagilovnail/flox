@@ -91,6 +91,10 @@ func (e *Engine) trySticky(req RequestContext) (*RouteResult, string, string) {
 		return nil, "sticky cookie referenced a flow that no longer exists; re-evaluated fresh", ""
 	}
 
+	if offerCapped(req.CappedOffers, flow) {
+		return nil, "sticky flow's offer reached its daily cap; re-evaluated fresh", ""
+	}
+
 	eligible := set.Status == StreamSetActive && flow.Active
 	if !eligible && !cfg.StickyFlowSkipInactive {
 		return nil, "sticky flow is now inactive and stickyFlowSkipInactive is false; re-evaluated fresh", ""
@@ -158,13 +162,21 @@ func (e *Engine) freshEvaluate(req RequestContext, stickyNote string) (RouteResu
 
 	var flowCandidates []FlowCandidate
 	var selectedFlow *Flow
+	cappedNote := ""
 	matchedStreamSetID := ""
 	if matched != nil {
 		matchedStreamSetID = matched.ID
 		var err error
-		flowCandidates, selectedFlow, err = pickWeighted(matched.Flows, req.VisitKey)
+		flows, capped := applyCaps(matched.Flows, req.CappedOffers)
+		flowCandidates, selectedFlow, err = pickWeighted(flows, req.VisitKey)
 		if err != nil {
 			return RouteResult{}, Explanation{}, err
+		}
+		for i := range flowCandidates {
+			flowCandidates[i].Capped = capped[i]
+		}
+		if selectedFlow == nil && anyTrue(capped) {
+			cappedNote = " (offers at their daily cap were skipped)"
 		}
 	}
 
@@ -174,7 +186,7 @@ func (e *Engine) freshEvaluate(req RequestContext, stickyNote string) (RouteResu
 	}
 	destURL, destLabel, offerID := resolveDestination(selectedFlow, streamSetFallback, cfg.FallbackURL)
 
-	reason := buildReason(matched, selectedFlow, destLabel)
+	reason := buildReason(matched, selectedFlow, destLabel) + cappedNote
 
 	streamSetID, flowID := "", ""
 	if matched != nil {
@@ -237,4 +249,41 @@ func resolveDestination(flow *Flow, streamSetFallback, campaignFallback string) 
 		return campaignFallback, "Campaign fallback", ""
 	}
 	return "", "No destination configured", ""
+}
+
+// offerCapped reports whether flow sends traffic to an offer in capped.
+func offerCapped(capped map[string]struct{}, flow *Flow) bool {
+	if len(capped) == 0 || flow.Destination.Kind != DestinationOffer || flow.Destination.OfferID == "" {
+		return false
+	}
+	_, ok := capped[flow.Destination.OfferID]
+	return ok
+}
+
+// applyCaps returns flows with every capped-offer flow switched off, plus a
+// parallel slice marking which ones were. The input is never modified (it
+// belongs to the caller's config).
+func applyCaps(flows []Flow, capped map[string]struct{}) ([]Flow, []bool) {
+	marks := make([]bool, len(flows))
+	if len(capped) == 0 {
+		return flows, marks
+	}
+	out := make([]Flow, len(flows))
+	copy(out, flows)
+	for i := range out {
+		if offerCapped(capped, &out[i]) {
+			out[i].Active = false
+			marks[i] = true
+		}
+	}
+	return out, marks
+}
+
+func anyTrue(v []bool) bool {
+	for _, b := range v {
+		if b {
+			return true
+		}
+	}
+	return false
 }

@@ -62,6 +62,9 @@ type FlowCandidate struct {
 	Weight            int     `json:"weight"`
 	NormalizedPercent float64 `json:"normalizedPercent"`
 	Selected          bool    `json:"selected"`
+	// Capped is true when the flow was left out of the draw because its
+	// offer reached the daily cap.
+	Capped bool `json:"capped,omitempty"`
 }
 
 // Explanation is the full "why" behind a RouteResult — everything §72
