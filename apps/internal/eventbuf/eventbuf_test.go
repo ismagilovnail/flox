@@ -172,3 +172,32 @@ func waitFor(t *testing.T, cond func() bool, what string) {
 	}
 	t.Fatalf("timed out waiting for %s", what)
 }
+
+// Audit 2026-10-06, RL3: apps/tracker closes the writer explicitly and again
+// in a defer; the second close used to panic every clean shutdown.
+func TestCloseIsIdempotent(t *testing.T) {
+	sink := &collectingSink{}
+	w := eventbuf.New(sink, quietLogger(), eventbuf.Config{})
+	w.Enqueue(event.Event{Type: event.SourceClick})
+
+	w.Close()
+	w.Close() // must not panic
+
+	if sink.count() != 1 {
+		t.Fatalf("flushed = %d, want 1 (the first Close drains the buffer)", sink.count())
+	}
+}
+
+// An event offered after Close has nobody left to flush it; it is counted as
+// dropped instead of reported enqueued and silently lost.
+func TestEnqueueAfterCloseIsDropped(t *testing.T) {
+	w := eventbuf.New(&collectingSink{}, quietLogger(), eventbuf.Config{})
+	w.Close()
+
+	if w.Enqueue(event.Event{Type: event.SourceClick}) {
+		t.Fatal("Enqueue after Close reported success")
+	}
+	if s := w.Stats(); s.Dropped != 1 || s.Enqueued != 0 {
+		t.Fatalf("stats = %+v, want 1 dropped, 0 enqueued", s)
+	}
+}

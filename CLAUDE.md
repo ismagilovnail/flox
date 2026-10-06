@@ -20,15 +20,17 @@ referenced below as §N).
 
 ```
 CURRENT PHASE : TECH AUDIT FOLLOW-UPS (between phases)
-STATUS        : steps 1–3 of the P0 list done: Q1 queue claims never abandoned;
+STATUS        : steps 1–4 of the P0 list done: Q1 queue claims never abandoned;
                 D1+D3 conversion + CPA event + outgoing postback in one tx under
-                a per-click lock; S3 postback revenue validated (finite, 0..1e9).
+                a per-click lock; S3 postback revenue validated (finite, 0..1e9);
+                RL3 tracker exits 0 on SIGTERM (idempotent eventbuf.Close).
                 Technical audit is docs/audit-tech-2026-10-06.md; the user asked
                 to fix it step by step and allowed wiping the dev database when
                 a step needs it.
-LAST COMMIT   : fix(tracker): validate postback revenue.
-UNCOMMITTED   : none expected. Verified: full-env go test, e2e all PASS, live 400s.
-NEXT          : RL3 double eventbuf.Close panic → AN1 FX rates → D2 idempotent
+LAST COMMIT   : fix(eventbuf): make Close idempotent.
+UNCOMMITTED   : none expected. Verified: full-env go test, e2e all PASS, binary
+                SIGTERM exit 0.
+NEXT          : AN1 FX rates → D2 idempotent
                 ClickHouse inserts (may wipe dev CH) → RL2 eventbuf retry → DO1
                 CI (fix the eventqueue TestEnqueueClaimAndDelete flake there).
                 Then T4/AN3: §45 requires a chargeback (ACCEPT→DECLINE) to

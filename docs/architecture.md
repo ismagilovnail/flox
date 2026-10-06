@@ -238,7 +238,9 @@ exist.
 stalled sink drops events (counted, and logged — never silent) rather than
 making a user wait on a redirect. A test proves this by wiring a
 permanently-stalled sink to a 4-deep buffer and asserting 1000 `Enqueue`
-calls still return promptly. §43's durable queue and its ClickHouse
+calls still return promptly. `Close` drains the buffer and is safe to
+call more than once; an event offered after it is counted as dropped, not
+accepted into a channel nobody reads. §43's durable queue and its ClickHouse
 consumer arrive with `apps/worker` (Phase 24); until then the sink is an
 honest structured-log writer behind the same `Sink` interface.
 

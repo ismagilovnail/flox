@@ -692,7 +692,7 @@ POST /postback/{networkId}
   переполнило канал. **Исправление:** retry с backoff в пределах ёмкости
   буфера; при длительной недоступности — локальный spill-файл (WAL-like
   append-only), который досылается после восстановления.
-- **RL3 [MEDIUM].** Паника на shutdown tracker'а: `events.Close()`
+- **RL3 [MEDIUM]** (**статус: исправлено**, `sync.Once` в `eventbuf.Close`). Паника на shutdown tracker'а: `events.Close()`
   вызывается явно (`tracker/main.go:258`) и ещё раз через
   `defer events.Close()` (`:96`). `close(w.done)` на закрытом канале
   паникует. Данные к этому моменту уже сброшены, но **каждый штатный стоп

@@ -5,6 +5,21 @@ per-phase, matching `CLAUDE.md`'s phase protocol. The one exception is
 [Between phases], below: spec amendments and the code changes that follow from
 them land between phases and would otherwise be invisible here.
 
+## [Between phases] — tracker shuts down cleanly
+
+Technical audit, finding RL3. `apps/tracker` closes its event writer explicitly (so it can
+log the final stats) and again in a `defer` for early returns; the second `close` of the
+writer's done channel panicked, so every clean stop ended in `panic: close of closed
+channel` and exit code 2 — noise in alerting that would also mask a real crash. The events
+were already flushed by then, nothing was lost. `eventbuf.Writer.Close` is now idempotent
+(`sync.Once`), and an `Enqueue` after `Close` is counted as dropped instead of being
+reported enqueued into a channel nothing drains any more.
+
+Tests: double `Close` drains once and does not panic; `Enqueue` after `Close` returns false
+and counts a drop. Reproduced and verified on the built binary: before, SIGTERM → panic,
+exit 2; after, exit 0 with the "event writer stats" line. Full-env `go test ./...` green,
+`apps/e2e` all four PASS.
+
 ## [Between phases] — postback revenue is validated
 
 Technical audit, finding S3. `revenue` went through `strconv.ParseFloat`, which accepts

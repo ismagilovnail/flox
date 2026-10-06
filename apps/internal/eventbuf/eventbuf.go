@@ -62,9 +62,11 @@ type Writer struct {
 	sink   Sink
 	logger *slog.Logger
 
-	ch   chan event.Event
-	done chan struct{}
-	wg   sync.WaitGroup
+	ch        chan event.Event
+	done      chan struct{}
+	wg        sync.WaitGroup
+	closeOnce sync.Once
+	closed    atomic.Bool
 
 	enqueued atomic.Uint64
 	dropped  atomic.Uint64
@@ -90,6 +92,12 @@ func New(sink Sink, logger *slog.Logger, cfg Config) *Writer {
 // handle — the redirect must not care whether persistence succeeded.
 // Returns false only so tests (and metrics) can observe drops.
 func (w *Writer) Enqueue(e event.Event) bool {
+	if w.closed.Load() {
+		// Nothing drains the channel any more: accepting the event would
+		// count it as enqueued and lose it silently.
+		w.dropped.Add(1)
+		return false
+	}
 	select {
 	case w.ch <- e:
 		w.enqueued.Add(1)
@@ -162,9 +170,15 @@ func (w *Writer) write(batch []event.Event) {
 }
 
 // Close stops accepting new events, drains the buffer, and waits for the
-// final flush. Safe to call once.
+// final flush. Safe to call more than once: apps/tracker closes explicitly
+// before logging its stats and again in a defer for early returns, and the
+// second close of done used to panic every clean shutdown (audit
+// 2026-10-06, RL3).
 func (w *Writer) Close() {
-	close(w.done)
+	w.closeOnce.Do(func() {
+		w.closed.Store(true)
+		close(w.done)
+	})
 	w.wg.Wait()
 }
 
