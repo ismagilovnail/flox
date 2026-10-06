@@ -75,9 +75,13 @@ Prometheus `CounterFunc`s, read at scrape time. `eventbuf`'s internals are
 untouched; there's exactly one source of truth for these four numbers.
 Two of the four are genuine, permanent loss (`events_buffer_dropped_total`
 — the in-memory channel was full; `events_queue_write_failed_total` — the
-batch failed writing into Postgres `event_queue`, and `eventbuf.Writer`
-does not retry a failed sink write, confirmed by reading `write()`
-directly). `apps/worker`'s `events_requeued_total` is *not* loss — a
+events were refused for good by Postgres `event_queue` — e.g. their
+organization was deleted — or were still failing when shutdown's retry
+budget ran out). Any other failed write is retried with backoff
+(audit 2026-10-06, RL2) and counted in `events_queue_write_retries_total`,
+which is not loss: new events wait in the buffer meanwhile, and only once
+it is full do they start to drop. Alert `EventWritesRetrying` fires before
+that happens. `apps/worker`'s `events_requeued_total` is *not* loss — a
 failed ClickHouse insert requeues the whole batch (`eventqueue.Flusher`
 has no dead-letter state; it retries forever until ClickHouse recovers).
 

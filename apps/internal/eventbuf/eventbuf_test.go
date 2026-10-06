@@ -139,16 +139,126 @@ func TestCloseDrainsBufferedEvents(t *testing.T) {
 	}
 }
 
-func TestSinkFailureIsCountedNotFatal(t *testing.T) {
-	w := eventbuf.New(failingSink{}, quietLogger(), eventbuf.Config{BufferSize: 10, BatchSize: 1, FlushInterval: time.Hour})
-	defer w.Close()
-
+// A sink that never recovers is retried until Close, then given up on within
+// ShutdownRetryBudget — counted as failed, never written, never hanging.
+func TestDeadSinkIsGivenUpOnAtShutdown(t *testing.T) {
+	w := eventbuf.New(failingSink{}, quietLogger(), eventbuf.Config{
+		BufferSize: 10, BatchSize: 1, FlushInterval: time.Hour,
+		RetryMin: time.Millisecond, RetryMax: 5 * time.Millisecond, ShutdownRetryBudget: 50 * time.Millisecond,
+	})
 	w.Enqueue(event.Event{Type: event.SourceClick})
-	waitFor(t, func() bool { return w.Stats().Failed == 1 }, "sink failure to be counted")
-
-	if w.Stats().Written != 0 {
-		t.Fatal("a failed write must not count as written")
+	waitFor(t, func() bool { return w.Stats().Retried >= 3 }, "the failing batch to be retried")
+	if w.Stats().Failed != 0 {
+		t.Fatal("a batch still being retried was already counted as failed")
 	}
+
+	start := time.Now()
+	w.Close()
+	if took := time.Since(start); took > time.Second {
+		t.Fatalf("Close took %s with a dead sink, want about the 50ms retry budget", took)
+	}
+	if s := w.Stats(); s.Failed != 1 || s.Written != 0 {
+		t.Fatalf("stats = %+v, want 1 failed, 0 written", s)
+	}
+}
+
+// Audit 2026-10-06, RL2: a sink that fails for a while (a Postgres blip)
+// loses nothing — the batch is retried until it goes through.
+func TestTransientSinkFailureIsRetried(t *testing.T) {
+	sink := &flakySink{failures: 3}
+	w := eventbuf.New(sink, quietLogger(), eventbuf.Config{
+		BatchSize: 2, FlushInterval: time.Hour, RetryMin: time.Millisecond, RetryMax: 5 * time.Millisecond,
+	})
+	w.Enqueue(event.Event{Type: event.SourceClick, ClickID: "a"})
+	w.Enqueue(event.Event{Type: event.SourceClick, ClickID: "b"})
+	waitFor(t, func() bool { return w.Stats().Written == 2 }, "the batch to be written after the sink recovers")
+	w.Close()
+
+	if s := w.Stats(); s.Failed != 0 || s.Retried != 3 {
+		t.Fatalf("stats = %+v, want 0 failed and 3 retries", s)
+	}
+	if got := sink.written(); len(got) != 2 {
+		t.Fatalf("sink received %v, want both events exactly once", got)
+	}
+}
+
+// A SinkError says what to do with each event: written ones are not sent
+// again, refused ones are counted as failed, only Retry is retried.
+func TestSinkErrorRetriesOnlyWhatItSays(t *testing.T) {
+	sink := &partialSink{}
+	w := eventbuf.New(sink, quietLogger(), eventbuf.Config{
+		BatchSize: 3, FlushInterval: time.Hour, RetryMin: time.Millisecond,
+	})
+	for _, id := range []string{"written", "refused", "retried"} {
+		w.Enqueue(event.Event{Type: event.SourceClick, ClickID: id})
+	}
+	waitFor(t, func() bool { return w.Stats().Written == 2 }, "the retried event to be written")
+	w.Close()
+
+	if s := w.Stats(); s.Failed != 1 || s.Written != 2 {
+		t.Fatalf("stats = %+v, want 2 written (one on retry) and 1 failed", s)
+	}
+	if got := sink.calls(); len(got) != 2 || len(got[1]) != 1 || got[1][0] != "retried" {
+		t.Fatalf("sink calls = %v, want the full batch, then only \"retried\"", got)
+	}
+}
+
+type flakySink struct {
+	mu       sync.Mutex
+	failures int
+	got      []string
+}
+
+func (s *flakySink) Write(_ context.Context, batch []event.Event) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.failures > 0 {
+		s.failures--
+		return errBoom
+	}
+	for _, e := range batch {
+		s.got = append(s.got, e.ClickID)
+	}
+	return nil
+}
+
+func (s *flakySink) written() []string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return append([]string(nil), s.got...)
+}
+
+// partialSink writes "written", refuses "refused" for good and asks for
+// "retried" again on its first call; the second call succeeds.
+type partialSink struct {
+	mu  sync.Mutex
+	log [][]string
+}
+
+func (s *partialSink) Write(_ context.Context, batch []event.Event) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	var ids []string
+	for _, e := range batch {
+		ids = append(ids, e.ClickID)
+	}
+	s.log = append(s.log, ids)
+	if len(s.log) > 1 {
+		return nil
+	}
+	var retry []event.Event
+	for _, e := range batch {
+		if e.ClickID == "retried" {
+			retry = append(retry, e)
+		}
+	}
+	return &eventbuf.SinkError{Retry: retry, Dropped: 1, Err: errBoom}
+}
+
+func (s *partialSink) calls() [][]string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return append([][]string(nil), s.log...)
 }
 
 type failingSink struct{}

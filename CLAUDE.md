@@ -20,24 +20,26 @@ referenced below as §N).
 
 ```
 CURRENT PHASE : TECH AUDIT FOLLOW-UPS (between phases)
-STATUS        : steps 1–7 of the P0 list done: Q1 queue claims never abandoned;
+STATUS        : steps 1–8 of the P0 list done: Q1 queue claims never abandoned;
                 D1+D3 conversion + CPA event + outgoing postback in one tx under
                 a per-click lock; S3 postback revenue validated; RL3 tracker
                 exits 0 on SIGTERM; AN1 ECB FX rates + USD repair in Postgres;
                 D2 retried ClickHouse inserts deduplicated by batch token;
-                T7 tracker resolves {click_id} etc. in offer/landing URLs.
+                T7 tracker resolves {click_id} etc. in offer/landing URLs;
+                RL2 tracker retries failed event writes with backoff.
                 Technical audit is docs/audit-tech-2026-10-06.md; the user asked
                 to fix it step by step and allowed wiping the dev database when
                 a step needs it.
-LAST COMMIT   : fix(tracker): resolve macros in offer and landing URLs.
+LAST COMMIT   : fix(eventbuf): retry failed event writes.
 UNCOMMITTED   : none expected. Dev DB wiped and refilled by `make fixtures`
                 (accounts in README; password flox-demo-2026).
-NEXT          : RL2 eventbuf retry (tracker drops a batch on a Postgres blip) →
-                DO1 CI (isolate the queue tests from the live dev worker:
+NEXT          : DO1 CI (isolate the queue tests from the live dev worker:
                 eventqueue TestEnqueueClaimAndDelete, postback
                 TestPostgresStoreClaimRespectsLimit). Then open follow-ups: USD
                 repair of pre-sync conversions in ClickHouse (docs/fx.md);
-                T4/AN3 §45 chargeback (ACCEPT→DECLINE) must reverse revenue.
+                T4/AN3 §45 chargeback (ACCEPT→DECLINE) must reverse revenue;
+                stable per-event id so a retried write whose commit actually
+                landed is not inserted twice (CHANGELOG, RL2).
                 Marketer audit items (docs/audit-marketer-2026-10-06.md) are
                 still open behind them. Run go test with the full env line AND
                 check e2e did not skip on the auth rate limit (memory:

@@ -51,8 +51,9 @@ groups:
         # §43/CLAUDE.md's event model has no tolerance for silent loss —
         # these two counters (docs/observability.md's "Why event_loss is
         # two counters, not one") are each genuine, permanent loss by
-        # construction: a full in-memory buffer, or a batch that failed
-        # writing into Postgres event_queue and is never retried.
+        # construction: a full in-memory buffer, or events refused for
+        # good by event_queue / still failing when shutdown's retry budget
+        # ran out (a failed write is otherwise retried — see below).
         expr: rate(flox_events_buffer_dropped_total[5m]) > 0 or rate(flox_events_queue_write_failed_total[5m]) > 0
         for: 1m
         labels:
@@ -60,6 +61,19 @@ groups:
         annotations:
           summary: "apps/tracker is losing click/conversion events"
           description: "flox_events_buffer_dropped_total or flox_events_queue_write_failed_total is increasing — real, permanent event loss (CLAUDE.md's tracked-events invariant), not a retryable condition. Check apps/tracker's own logs and Postgres health immediately."
+
+      - alert: EventWritesRetrying
+        # A failed write into Postgres event_queue is retried with backoff
+        # (internal/eventbuf); nothing is lost while new events fit in the
+        # 10k buffer. Sustained retries mean the buffer is filling and
+        # EventLossDetected is next.
+        expr: rate(flox_events_queue_write_retries_total[5m]) > 0
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "apps/tracker cannot write events to Postgres"
+          description: "flox_events_queue_write_retries_total has been increasing for 2m — apps/tracker keeps retrying event writes into event_queue. Events wait in its in-memory buffer; once it fills they are dropped (EventLossDetected). Check Postgres reachability from the tracker."
 
       - alert: EventQueueBacklogGrowing
         # Phase 31's own load test never saw this gauge exceed a handful

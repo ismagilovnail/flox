@@ -40,6 +40,12 @@ func RegisterEventBufStats(w *eventbuf.Writer) {
 	promauto.NewCounterFunc(prometheus.CounterOpts{
 		Namespace: namespace,
 		Name:      "events_queue_write_failed_total",
-		Help:      "Batches that failed writing into Postgres event_queue — genuinely lost, never retried.",
+		Help:      "Events lost writing into Postgres event_queue: refused for good (e.g. organization deleted) or still failing when shutdown's retry budget ran out. A failed write is otherwise retried, see events_queue_write_retries_total.",
 	}, func() float64 { return float64(w.Stats().Failed) })
+
+	promauto.NewCounterFunc(prometheus.CounterOpts{
+		Namespace: namespace,
+		Name:      "events_queue_write_retries_total",
+		Help:      "Failed attempts to write a batch into Postgres event_queue that were retried (nothing lost yet; new events wait in the buffer meanwhile).",
+	}, func() float64 { return float64(w.Stats().Retried) })
 }

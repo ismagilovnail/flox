@@ -703,7 +703,9 @@ POST /postback/{networkId}
   `statement_timeout`. **Исправление:** `context.WithTimeout(r.Context(),
   300ms)` на чтение конфига, `statement_timeout=500ms` в DSN tracker'а и
   stale-on-error кэш (§5).
-- **RL2 [HIGH].** eventbuf выбрасывает неудачный батч (`eventbuf.go:155`):
+- **RL2 [HIGH]** (**статус: исправлено** — повторы с backoff, `SinkError`;
+  остаётся окно «коммит прошёл, ответ потерян» → дубль, см. CHANGELOG).
+  eventbuf выбрасывает неудачный батч (`eventbuf.go:155`):
   счётчик `failed` растёт, retry нет. Одна PG-ошибка длиной в секунду (а
   failover managed-PG длится 10–60 с) теряет до 500 событий плюс всё, что
   переполнило канал. **Исправление:** retry с backoff в пределах ёмкости

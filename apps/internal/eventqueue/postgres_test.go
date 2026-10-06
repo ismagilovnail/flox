@@ -2,6 +2,7 @@ package eventqueue_test
 
 import (
 	"context"
+	"errors"
 	"os"
 	"testing"
 	"time"
@@ -9,6 +10,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/ismagilovnail/flox/apps/internal/event"
+	"github.com/ismagilovnail/flox/apps/internal/eventbuf"
 	"github.com/ismagilovnail/flox/apps/internal/eventqueue"
 	"github.com/ismagilovnail/flox/apps/internal/idgen"
 )
@@ -251,6 +253,13 @@ func TestEnqueueBatchOrphanOrganizationDoesNotDropTheRest(t *testing.T) {
 	if err == nil {
 		t.Fatal("EnqueueBatch returned nil, want the orphan organization's error reported")
 	}
+	// Audit 2026-10-06, RL2: the orphan is refused for good and the live
+	// event is written, so nothing is handed back to eventbuf for a retry —
+	// retrying would duplicate the live event and loop forever on the orphan.
+	var se *eventbuf.SinkError
+	if !errors.As(err, &se) || se.Dropped != 1 || len(se.Retry) != 0 {
+		t.Fatalf("err = %#v, want a SinkError dropping 1 event and retrying none", err)
+	}
 
 	claimed, cerr := q.ClaimDue(ctx, 100)
 	if cerr != nil {
@@ -267,5 +276,22 @@ func TestEnqueueBatchOrphanOrganizationDoesNotDropTheRest(t *testing.T) {
 	}
 	if live != 1 || orphan != 0 {
 		t.Fatalf("queued live=%d orphan=%d, want 1 and 0 (the live organization's event must survive)", live, orphan)
+	}
+}
+
+// A transient failure (here: the context is gone) wrote nothing and is a
+// plain error, so eventbuf retries the whole batch.
+func TestEnqueueBatchTransientFailureIsRetryable(t *testing.T) {
+	pool := mustPool(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	orgID := seedOrg(t, context.Background(), pool)
+	cancel()
+
+	err := eventqueue.NewPostgresQueue(pool).EnqueueBatch(ctx, []event.Event{
+		{Type: event.SourceClick, OrganizationID: orgID, ClickID: idgen.New(), EventAt: time.Now().UTC()},
+	})
+	var se *eventbuf.SinkError
+	if err == nil || errors.As(err, &se) {
+		t.Fatalf("err = %#v, want a plain (retry everything) error", err)
 	}
 }

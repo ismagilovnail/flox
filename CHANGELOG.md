@@ -5,6 +5,45 @@ per-phase, matching `CLAUDE.md`'s phase protocol. The one exception is
 [Between phases], below: spec amendments and the code changes that follow from
 them land between phases and would otherwise be invisible here.
 
+## [Between phases] — the tracker retries failed event writes
+
+Technical audit, finding RL2 (P0). `eventbuf.Writer` dropped a whole batch the moment its sink
+(Postgres `event_queue`) returned an error, so a one-second Postgres blip or a failover lost
+every click and conversion event in flight.
+
+- A failed write is now retried with exponential backoff (100 ms → 5 s, `Config.RetryMin/Max`).
+  The flush loop waits meanwhile and new events wait in the 10k buffer; only when an outage
+  outlasts it do they start to drop (counted, as before). Order is kept.
+- `eventbuf.SinkError` lets a sink say what happened to a batch it could not fully write:
+  `Retry` (worth trying again) and `Dropped` (refused for good); the rest was written. A plain
+  error means nothing was written and the whole batch is retried — sinks must write
+  atomically. `eventqueue.EnqueueBatch` classifies errors: a Postgres integrity/data error
+  (SQLSTATE 23/22, e.g. the organization was deleted while the event sat in the buffer) or
+  an unencodable event is permanent; anything else is transient. On a permanent error the
+  batch is split per organization as before, and only transient leftovers are retried, so a
+  deleted organization can no longer make the batch loop forever or duplicate the others.
+- `Close` gives retries `ShutdownRetryBudget` (5 s); every attempt and pause is capped by
+  what is left of it, then the rest counts as failed — a dead Postgres cannot hang shutdown.
+- New `Stats.Retried` / `flox_events_queue_write_retries_total`; alert `EventWritesRetrying`
+  (warning, before `EventLossDetected`). The write_failed metric's help text no longer says
+  "never retried".
+
+Tests: eventbuf — a sink failing 3 times then recovering gets every event exactly once (0
+failed, 3 retries); a `SinkError` retries only its `Retry` events and counts `Dropped` as
+failed; a dead sink is retried until Close and then given up within the budget (Close well
+under a second). eventqueue — a deleted organization in a mixed batch comes back as a
+`SinkError` dropping 1 and retrying none; a transient failure is a plain, retry-everything
+error. Live on the dev stack: 5 clicks, then `docker pause` of Postgres for 14 s (longer than
+the 10 s attempt timeout): the tracker logged "event sink write failed, retrying" (context
+deadline exceeded), and after the unpause all 5 clicks reached ClickHouse, 5 unique, no
+duplicates. A 5 s pause first proved nothing — paused connections hang instead of failing,
+so the first attempt simply waited it out. Full-env `go test ./...` and `apps/e2e` green.
+
+Still open: if Postgres commits a batch but the reply is lost (timeout right after the
+commit), the retry writes those events again as new queue rows — a different ClickHouse
+batch, so D2's dedup does not catch it. Closing it needs a stable per-event id assigned at
+`Enqueue` and `ON CONFLICT DO NOTHING` on it.
+
 ## [Between phases] — offer URLs get the click id
 
 Technical audit, finding T7 (critical, found while verifying the dev fixtures). The tracker

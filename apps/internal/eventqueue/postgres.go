@@ -5,12 +5,15 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/ismagilovnail/flox/apps/internal/event"
+	"github.com/ismagilovnail/flox/apps/internal/eventbuf"
 	"github.com/ismagilovnail/flox/apps/internal/idgen"
 	"github.com/ismagilovnail/flox/apps/internal/pgqueue"
 )
@@ -36,14 +39,19 @@ func (q *PostgresQueue) EnqueueBatch(ctx context.Context, events []event.Event) 
 	if err == nil {
 		return nil
 	}
+	// The batch is one implicit transaction, so on any error nothing was
+	// written. A transient failure (Postgres unreachable, a timeout, a
+	// failover) is returned as is: eventbuf retries the whole batch.
+	if !permanent(err) {
+		return err
+	}
 
-	// The batch is one transaction, so a single bad row rolls back every event
-	// in it. The usual bad row is an event whose organization was deleted while
-	// the event sat in the tracker's buffer (event_queue.organization_id is a
-	// foreign key) — and the buffer mixes organizations, so that one orphan
-	// would also have dropped every other organization's events in the same
-	// batch. Retry per organization: only the failing organization's events are
-	// lost, and the error for them is still returned for the caller to log.
+	// A permanent error comes from one bad row — usually an event whose
+	// organization was deleted while it sat in the tracker's buffer
+	// (event_queue.organization_id is a foreign key). The buffer mixes
+	// organizations, so retry per organization: the others are written, the
+	// failing one is dropped for good instead of being retried forever, and
+	// eventbuf is told exactly which events to retry (audit 2026-10-06, RL2).
 	byOrg := map[string][]event.Event{}
 	var order []string
 	for _, e := range events {
@@ -53,15 +61,46 @@ func (q *PostgresQueue) EnqueueBatch(ctx context.Context, events []event.Event) 
 		byOrg[e.OrganizationID] = append(byOrg[e.OrganizationID], e)
 	}
 	if len(order) < 2 {
-		return err
+		return &eventbuf.SinkError{Dropped: len(events), Err: err}
 	}
+	out := &eventbuf.SinkError{}
 	var errs []error
 	for _, org := range order {
-		if orgErr := q.enqueue(ctx, byOrg[org]); orgErr != nil {
+		orgErr := q.enqueue(ctx, byOrg[org])
+		switch {
+		case orgErr == nil:
+		case permanent(orgErr):
+			out.Dropped += len(byOrg[org])
+			errs = append(errs, orgErr)
+		default:
+			out.Retry = append(out.Retry, byOrg[org]...)
 			errs = append(errs, orgErr)
 		}
 	}
-	return errors.Join(errs...)
+	if len(errs) == 0 {
+		return nil
+	}
+	out.Err = errors.Join(errs...)
+	return out
+}
+
+// errUnencodable marks an event that cannot be serialized — retrying will
+// never help.
+var errUnencodable = errors.New("eventqueue: event cannot be encoded")
+
+// permanent reports whether retrying err can never succeed: an integrity or
+// data error from Postgres (SQLSTATE class 23 or 22), or an event that does
+// not encode. Everything else — connection loss, timeouts, a server
+// restarting — is worth retrying.
+func permanent(err error) bool {
+	if errors.Is(err, errUnencodable) {
+		return true
+	}
+	var pgErr *pgconn.PgError
+	if errors.As(err, &pgErr) {
+		return strings.HasPrefix(pgErr.Code, "23") || strings.HasPrefix(pgErr.Code, "22")
+	}
+	return false
 }
 
 func (q *PostgresQueue) enqueue(ctx context.Context, events []event.Event) error {
@@ -89,7 +128,7 @@ func insert(ctx context.Context, db batchSender, events []event.Event) error {
 	for _, e := range events {
 		payload, err := json.Marshal(e)
 		if err != nil {
-			return fmt.Errorf("eventqueue: marshaling event: %w", err)
+			return fmt.Errorf("%w: %w", errUnencodable, err)
 		}
 		batch.Queue(
 			`INSERT INTO event_queue (id, organization_id, type, payload) VALUES ($1, $2, $3, $4)`,
