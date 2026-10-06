@@ -5,6 +5,21 @@ per-phase, matching `CLAUDE.md`'s phase protocol. The one exception is
 [Between phases], below: spec amendments and the code changes that follow from
 them land between phases and would otherwise be invisible here.
 
+## [Between phases] — "Уникальные клики" count visitors, not click_ids
+
+Two visits through one link showed 2 clicks and 2 uniques. The metric was
+`count(DISTINCT click_id)`, but a click_id is minted per click (it is the postback
+attribution key) and is reused only when a campaign enables
+`stickyFlowKeepClickId`, so by default every click was "unique". A unique click is
+now a distinct visitor: campaign + IP + user agent, the same fingerprint the
+tracker's `visitKey` uses to pick a flow (a click with neither IP nor user agent
+falls back to its click_id). `uniqExact` over that string in
+`EventStore.ReportClicks`; no schema change. Counted within the report's period
+and group, so the same visitor on two different days is one unique per day-row but
+one overall unique per period row. Test:
+`TestReportClicksUniqueIsPerVisitorNotPerClickID`. Not a fraud control: two people
+behind one IP with an identical browser count as one.
+
 ## [Between phases] — campaign page: "Настройки" tab removed
 
 The tab held only a "danger zone" archive button, duplicating the "Архивировать"

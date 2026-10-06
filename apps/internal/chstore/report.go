@@ -291,14 +291,14 @@ func scanKey(dims []ReportDimension, values []string, day *time.Time) ReportKey 
 }
 
 // ReportClicks answers "how many SOURCE_CLICK rows, and how many distinct
-// click_id values among them" for q's date range/dims/filters —
-// count(DISTINCT click_id) is the whole reason "unique clicks" differs
-// from plain "clicks" at all: stickyFlowKeepClickId (§39-STICKY) lets one
-// click_id legitimately appear on more than one click_events row across a
-// returning visitor's journey (docs/attribution.md's own documented
-// reason ByClickID resolves to the earliest occurrence, not the only
-// one). SOURCE_FILTER is excluded — matches the one place this codebase
-// already computes a real "Clicks" number today,
+// visitors among them" for q's date range/dims/filters. A visitor is the
+// campaign + IP + user agent triple — the same fingerprint the tracker hashes
+// to pick a flow (apps/tracker visitKey) — NOT the click_id: a click_id is
+// minted per click (it is the postback attribution key) and is only reused by
+// stickyFlowKeepClickId, so counting it made every click "unique" by default.
+// A click with neither IP nor user agent has no fingerprint and falls back to
+// its click_id. SOURCE_FILTER is excluded — matches the one place this
+// codebase already computes a real "Clicks" number today,
 // campaign-detail-view.tsx's own `.filter((c) => c.type === "SOURCE_CLICK")`.
 func (s *EventStore) ReportClicks(ctx context.Context, q ReportQuery) ([]ClickAgg, error) {
 	selectCols, ok := buildGroupBy(reportClickColumns, q.Dims)
@@ -314,7 +314,7 @@ func (s *EventStore) ReportClicks(ctx context.Context, q ReportQuery) ([]ClickAg
 	selectExpr, groupByExpr := selectAndGroupByExprs(selectCols, q.ByDay, q.Timezone)
 
 	query := fmt.Sprintf(`
-		SELECT %scount() AS clicks, count(DISTINCT click_id) AS unique_clicks
+		SELECT %scount() AS clicks, uniqExact(if(ip = '' AND user_agent = '', click_id, concat(campaign_id, '|', ip, '|', user_agent))) AS unique_clicks
 		FROM click_events
 		WHERE organization_id = ? AND event_at >= ? AND event_at < ? AND type = 'SOURCE_CLICK'%s
 		%s`,

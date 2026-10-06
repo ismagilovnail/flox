@@ -924,3 +924,34 @@ func TestFunnelCountsAppliesFiltersToEveryStage(t *testing.T) {
 		t.Fatalf("other org funnel = %v, want empty", other)
 	}
 }
+
+// Two visits by the same visitor mint two click_ids, but are one unique click;
+// a different IP or user agent is another visitor, and a click with neither
+// falls back to its own click_id.
+func TestReportClicksUniqueIsPerVisitorNotPerClickID(t *testing.T) {
+	conn := mustConn(t)
+	store := chstore.NewEventStore(conn)
+	ctx := context.Background()
+	orgID, campaignID := idgen.New(), idgen.New()
+	day := time.Date(2026, 8, 21, 0, 0, 0, 0, time.UTC)
+	click := func(h int, ip, ua string) event.Event {
+		return event.Event{Type: event.SourceClick, EventAt: day.Add(time.Duration(h) * time.Hour), OrganizationID: orgID, CampaignID: campaignID, ClickID: idgen.New(), IP: ip, UserAgent: ua}
+	}
+	if err := store.InsertBatch(ctx, []event.Event{
+		click(1, "203.0.113.7", "Mozilla/5.0 A"),
+		click(2, "203.0.113.7", "Mozilla/5.0 A"),  // same visitor again
+		click(3, "203.0.113.7", "Mozilla/5.0 B"),  // same IP, other browser
+		click(4, "198.51.100.1", "Mozilla/5.0 A"), // other IP
+		click(5, "", ""),
+		click(6, "", ""), // no fingerprint: each counts on its own
+	}); err != nil {
+		t.Fatalf("seeding: %v", err)
+	}
+	aggs, err := store.ReportClicks(ctx, chstore.ReportQuery{OrganizationID: orgID, From: day, To: day.Add(24 * time.Hour)})
+	if err != nil || len(aggs) != 1 {
+		t.Fatalf("ReportClicks = %+v, %v", aggs, err)
+	}
+	if aggs[0].Clicks != 6 || aggs[0].UniqueClicks != 5 {
+		t.Fatalf("Clicks/UniqueClicks = %d/%d, want 6/5", aggs[0].Clicks, aggs[0].UniqueClicks)
+	}
+}
