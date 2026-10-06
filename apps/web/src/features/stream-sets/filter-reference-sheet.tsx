@@ -127,7 +127,6 @@ export function FilterReferenceSheet({ open, onOpenChange }: { open: boolean; on
 
           <Section title="Геолокация">
             <FieldEntry id="country">Страна по GeoIP, код ISO-3166 alpha-2 (US, GB, DE, UA…).</FieldEntry>
-            <FieldEntry id="city">Город по GeoIP, свободный текст.</FieldEntry>
             <FieldEntry id="proxy">Использование прокси/VPN — да/нет.</FieldEntry>
             <FieldEntry id="bot">Трафик определён как бот/краулер — да/нет. Базовая защита от фрода.</FieldEntry>
             <FieldEntry id="asn">Номер автономной системы провайдера — полезно отсекать дата-центры.</FieldEntry>

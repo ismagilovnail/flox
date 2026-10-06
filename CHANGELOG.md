@@ -5,11 +5,12 @@ per-phase, matching `CLAUDE.md`'s phase protocol. The one exception is
 [Between phases], below: spec amendments and the code changes that follow from
 them land between phases and would otherwise be invisible here.
 
-## [Between phases] — `region` removed from the stream-set filter list
+## [Between phases] — `region` and `city` removed from the stream-set filter list
 
-The filter builder no longer offers `region` (nor does the filter reference sheet
-describe it). The field type and the routing engine's support are untouched, so a
-stream set that already has a region condition keeps matching as before.
+The filter builder no longer offers `region` or `city` (nor does the filter
+reference sheet describe them). The field types and the routing engine's support
+are untouched, so a stream set that already has such a condition keeps matching as
+before.
 
 ## [Between phases] — country dropdown in stream-set filters
 
