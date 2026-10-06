@@ -98,6 +98,9 @@ type scenario struct {
 	domain          string
 	slug            string
 	clickID         string
+	// redirectClickID is the click id the tracker put into the landing URL
+	// ({click_id} macro) — what a real partner receives and echoes back.
+	redirectClickID string
 }
 
 func TestFullFunnel(t *testing.T) {
@@ -479,8 +482,10 @@ func (s *scenario) createStreamSetWithFlowAndFilter() {
 const destinationURL = "https://converted.example.test/dest"
 
 // landingURL is the scenario's external landing — where the click is sent
-// first, since the flow's landing stage is enabled.
-const landingURL = "https://landing.example.test"
+// first, since the flow's landing stage is enabled. Its {click_id} macro is
+// resolved by the tracker (audit 2026-10-06, T7): the postbacks below use
+// the id read from the redirect, exactly as a real partner would.
+const landingURL = "https://landing.example.test/?cid={click_id}"
 
 func (s *scenario) enterCost() {
 	s.t.Helper()
@@ -595,8 +600,13 @@ func (s *scenario) clickAndRoute() {
 		s.t.Fatalf("click: want 302, got %d: %s", resp.StatusCode, string(body))
 	}
 	loc := resp.Header.Get("Location")
-	if loc != landingURL {
+	dest, err := url.Parse(loc)
+	if err != nil || dest.Scheme+"://"+dest.Host+dest.Path != "https://landing.example.test/" {
 		s.t.Fatalf("click: routed to %q, want the configured flow's landing %q — did the bot=0 filter or the flow fail to match?", loc, landingURL)
+	}
+	s.redirectClickID = dest.Query().Get("cid")
+	if s.redirectClickID == "" || strings.Contains(loc, "{click_id}") {
+		s.t.Fatalf("click: landing URL %q does not carry a resolved click id", loc)
 	}
 	s.t.Logf("click routed correctly to %s", loc)
 }
@@ -638,7 +648,11 @@ func (s *scenario) recordEvent() {
 	if landingID != s.landingID {
 		s.t.Fatalf("record event: click carries landing_id %q, want %q", landingID, s.landingID)
 	}
-	s.clickID = clickID
+	if clickID != s.redirectClickID {
+		s.t.Fatalf("record event: the redirect carried click id %q but ClickHouse recorded %q — a partner's postback would not match", s.redirectClickID, clickID)
+	}
+	// From here on the scenario uses the id from the redirect, as a network would.
+	s.clickID = s.redirectClickID
 	s.t.Logf("confirmed click %s durably flushed to ClickHouse (stream set %s, flow %s)", s.clickID, streamSetID, flowID)
 }
 

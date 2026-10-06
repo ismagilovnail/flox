@@ -15,6 +15,7 @@ import (
 	"github.com/ismagilovnail/flox/apps/internal/eventbuf"
 	"github.com/ismagilovnail/flox/apps/internal/idgen"
 	"github.com/ismagilovnail/flox/apps/internal/landinglink"
+	"github.com/ismagilovnail/flox/apps/internal/macro"
 	"github.com/ismagilovnail/flox/apps/internal/metrics"
 	"github.com/ismagilovnail/flox/apps/internal/offercap"
 	"github.com/ismagilovnail/flox/apps/internal/routing"
@@ -148,6 +149,13 @@ func (h *Handler) track(w http.ResponseWriter, r *http.Request) {
 	clickID := clickIDFor(sticky, result, loaded.StickyFlowKeepClickID)
 
 	ev := buildEvent(link, result, attrs, params, clickID, ip, r)
+	// The destination's macros ({click_id}, {sub1}…) are resolved once, here:
+	// the recorded event, and the signed landing/PWA links that carry
+	// ev.Destination onward, all hold the URL the visitor actually reaches.
+	// Before the 2026-10-06 audit (T7) the offer got a literal "{click_id}"
+	// and a network could never send back a postback that matches a click.
+	macros := clickMacros(ev)
+	ev.Destination = macro.ResolveURL(result.Destination, macros)
 
 	if result.Destination == "" {
 		// No flow, no stream-set fallback, no campaign fallback. The click
@@ -194,9 +202,9 @@ func (h *Handler) track(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	target := result.Destination
+	target := ev.Destination
 	if lnd.externalURL != "" {
-		target = lnd.externalURL
+		target = macro.ResolveURL(lnd.externalURL, macros)
 	}
 	outcome = outcomeRedirected
 
@@ -204,6 +212,21 @@ func (h *Handler) track(w http.ResponseWriter, r *http.Request) {
 	// entirely on the next click, losing both the event and any future
 	// routing change.
 	http.Redirect(w, r, target, http.StatusFound)
+}
+
+// clickMacros is what a destination or external landing URL is resolved
+// against at click time. {status}/{revenue}/{currency} belong to a
+// conversion and resolve empty here; {payout}/{source} are not known to
+// the resolver and stay literal (internal/macro).
+func clickMacros(ev event.Event) macro.Values {
+	return macro.Values{
+		ClickID:    ev.ClickID,
+		CampaignID: ev.CampaignID,
+		OfferID:    ev.OfferID,
+		Country:    ev.Country,
+		Device:     ev.Device,
+		Subs:       ev.Subs,
+	}
 }
 
 // visitKey builds the value internal/routing hashes to pick a flow (§38).

@@ -20,20 +20,19 @@ referenced below as §N).
 
 ```
 CURRENT PHASE : TECH AUDIT FOLLOW-UPS (between phases)
-STATUS        : steps 1–6 of the P0 list done: Q1 queue claims never abandoned;
+STATUS        : steps 1–7 of the P0 list done: Q1 queue claims never abandoned;
                 D1+D3 conversion + CPA event + outgoing postback in one tx under
                 a per-click lock; S3 postback revenue validated; RL3 tracker
                 exits 0 on SIGTERM; AN1 ECB FX rates + USD repair in Postgres;
-                D2 retried ClickHouse inserts deduplicated by batch token.
+                D2 retried ClickHouse inserts deduplicated by batch token;
+                T7 tracker resolves {click_id} etc. in offer/landing URLs.
                 Technical audit is docs/audit-tech-2026-10-06.md; the user asked
                 to fix it step by step and allowed wiping the dev database when
                 a step needs it.
-LAST COMMIT   : chore(dev): dev-reset and account fixtures.
+LAST COMMIT   : fix(tracker): resolve macros in offer and landing URLs.
 UNCOMMITTED   : none expected. Dev DB wiped and refilled by `make fixtures`
                 (accounts in README; password flox-demo-2026).
-NEXT          : T7 (new, CRITICAL): tracker does not substitute macros
-                ({click_id} …) in the offer/redirect URL — networks never get
-                the click id. Then RL2 eventbuf retry (tracker drops a batch on a Postgres blip) →
+NEXT          : RL2 eventbuf retry (tracker drops a batch on a Postgres blip) →
                 DO1 CI (isolate the queue tests from the live dev worker:
                 eventqueue TestEnqueueClaimAndDelete, postback
                 TestPostgresStoreClaimRespectsLimit). Then open follow-ups: USD

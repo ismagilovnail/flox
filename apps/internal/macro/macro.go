@@ -5,17 +5,19 @@
 // pixel payloads) rather than inventing a second one; do not fork a new
 // token list here.
 //
-// Phase 24 is the first Go caller (outgoing postback delivery, §46) and
-// only has click/conversion-level data to resolve from — {payout},
-// {offer_id} and {source} are part of the shared token vocabulary (the
-// frontend's token picker still lists them) but nothing populates a Flow's
-// destination offer or a click's traffic source yet, so this resolver
-// simply doesn't recognize those three tokens. They pass through literally,
-// same as a typo would — see Resolve's doc for why that's the right
-// behavior rather than blanking them.
+// Two callers: outgoing postback delivery (§46) and apps/tracker, which
+// resolves a flow's offer/redirect URL and an external landing's URL at
+// click time — before the 2026-10-06 audit (T7) it redirected with the
+// literal "{click_id}", so a network never got the click id it must echo
+// back in its postback. {payout} and {source} are part of the shared token
+// vocabulary (the frontend's token picker lists them) but neither caller
+// has them, so this resolver does not recognize them. They pass through
+// literally, same as a typo would — see Resolve's doc for why that's the
+// right behavior rather than blanking them.
 package macro
 
 import (
+	"net/url"
 	"regexp"
 	"strconv"
 )
@@ -31,6 +33,7 @@ type Values struct {
 	Revenue    string
 	Currency   string
 	CampaignID string
+	OfferID    string
 	Country    string
 	Device     string
 	Subs       [10]string
@@ -46,12 +49,26 @@ var token = regexp.MustCompile(`\{[a-z0-9_]+\}`)
 // resolveMacros' contract on the TypeScript side): a best-effort delivery
 // has to render something even when not every field is known.
 func Resolve(template string, v Values) string {
+	return resolve(template, v, func(s string) string { return s })
+}
+
+// ResolveURL is Resolve for a URL template: every substituted value is
+// query-escaped. Values such as sub1..sub10 come from the click's own query
+// string, so anyone can set them; unescaped, sub1=x%26click_id%3Devil would
+// inject a second click_id (or a '#' cut the URL short) in the URL FLOX
+// sends the visitor or the partner to.
+func ResolveURL(template string, v Values) string {
+	return resolve(template, v, url.QueryEscape)
+}
+
+func resolve(template string, v Values, escape func(string) string) string {
 	fields := map[string]string{
 		"{click_id}":    v.ClickID,
 		"{status}":      v.Status,
 		"{revenue}":     v.Revenue,
 		"{currency}":    v.Currency,
 		"{campaign_id}": v.CampaignID,
+		"{offer_id}":    v.OfferID,
 		"{country}":     v.Country,
 		"{device}":      v.Device,
 	}
@@ -61,7 +78,7 @@ func Resolve(template string, v Values) string {
 
 	return token.ReplaceAllStringFunc(template, func(t string) string {
 		if val, ok := fields[t]; ok {
-			return val
+			return escape(val)
 		}
 		return t
 	})

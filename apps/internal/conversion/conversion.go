@@ -400,7 +400,7 @@ func (s *Service) Record(ctx context.Context, p Postback) (Result, error) {
 			NetworkID:      p.NetworkID,
 			ClickID:        clickID,
 			Status:         status,
-			URL:            macro.Resolve(url, deliveryMacroValues(p, attr, status, revenue)),
+			URL:            macro.ResolveURL(url, deliveryMacroValues(p, attr, status, revenue)),
 		}
 	}
 
@@ -477,6 +477,7 @@ func deliveryMacroValues(p Postback, attr attribution.Attribution, status event.
 	}
 	if attr.Outcome.Attributed() {
 		v.CampaignID = attr.Click.CampaignID
+		v.OfferID = attr.Click.OfferID
 		v.Country = attr.Click.Country
 		v.Device = attr.Click.Device
 		v.Subs = attr.Click.Subs

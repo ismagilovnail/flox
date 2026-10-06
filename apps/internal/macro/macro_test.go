@@ -25,9 +25,9 @@ func TestResolveBlanksRecognizedButEmptyField(t *testing.T) {
 }
 
 func TestResolveLeavesUnrecognizedTokensLiteral(t *testing.T) {
-	got := macro.Resolve("?click_id={click_id}&payout={payout}&offer={offer_id}&typo={bogus_token}",
+	got := macro.Resolve("?click_id={click_id}&payout={payout}&source={source}&typo={bogus_token}",
 		macro.Values{ClickID: "c1"})
-	want := "?click_id=c1&payout={payout}&offer={offer_id}&typo={bogus_token}"
+	want := "?click_id=c1&payout={payout}&source={source}&typo={bogus_token}"
 	if got != want {
 		t.Fatalf("Resolve() = %q, want unrecognized tokens left literal: %q", got, want)
 	}
@@ -47,5 +47,21 @@ func TestResolveAllTenSubs(t *testing.T) {
 func TestResolveNoTemplateTokens(t *testing.T) {
 	if got := macro.Resolve("https://net.example/static", macro.Values{}); got != "https://net.example/static" {
 		t.Fatalf("Resolve() = %q, want the template unchanged", got)
+	}
+}
+
+// Audit 2026-10-06, T7: a URL template's values are query-escaped — sub
+// values come from the click's own query string and must not be able to
+// add parameters, cut the URL short or change its path.
+func TestResolveURLEscapesValues(t *testing.T) {
+	v := macro.Values{ClickID: "01CLICK", OfferID: "01OFFER", Subs: [10]string{"a&click_id=evil#frag", "x y"}}
+	got := macro.ResolveURL("https://offer.example/go?cid={click_id}&o={offer_id}&s1={sub1}&s2={sub2}&p={payout}", v)
+	want := "https://offer.example/go?cid=01CLICK&o=01OFFER&s1=a%26click_id%3Devil%23frag&s2=x+y&p={payout}"
+	if got != want {
+		t.Fatalf("ResolveURL =\n  %s\nwant\n  %s", got, want)
+	}
+	// Resolve itself stays unescaped (payload templates, not URLs).
+	if got := macro.Resolve("{sub1}", v); got != "a&click_id=evil#frag" {
+		t.Fatalf("Resolve = %q, want the raw value", got)
 	}
 }

@@ -5,6 +5,35 @@ per-phase, matching `CLAUDE.md`'s phase protocol. The one exception is
 [Between phases], below: spec amendments and the code changes that follow from
 them land between phases and would otherwise be invisible here.
 
+## [Between phases] — offer URLs get the click id
+
+Technical audit, finding T7 (critical, found while verifying the dev fixtures). The tracker
+redirected to the flow's offer/redirect URL and to an external landing exactly as typed:
+`?click_id={click_id}` reached the partner literally, so no network could send back a
+postback that matches a click. `apps/e2e` never noticed because it read the click id from
+ClickHouse instead of from the redirect.
+
+- `macro.ResolveURL`: `Resolve` with every substituted value query-escaped. `sub1..10` come
+  from the click's own query string, so without escaping `sub1=x&cid=evil` would inject
+  parameters into the partner's URL.
+- `apps/tracker` resolves the destination once per click (`{click_id}`, `{campaign_id}`,
+  `{offer_id}`, `{country}`, `{device}`, `{sub1..10}`; `{payout}`/`{source}` stay literal) and
+  records the resolved URL on the event, so the signed landing/PWA links carry it onward;
+  an external landing's URL is resolved the same way.
+- `{offer_id}` is now a recognized token (also in outgoing postbacks, from the attributed
+  click), and outgoing postback URLs use `ResolveURL` too — the same injection applied there.
+
+Tests: `ResolveURL` escaping (`&`, `#`, space; unknown tokens literal); tracker integration
+tests on Postgres — direct redirect (`cid` equals the recorded click id exactly once, the
+smuggled `cid` stays inside `s1`, `{payout}` literal, recorded destination = resolved URL),
+external landing, and click-through after an internal landing. Mutation-checked: without the
+substitution the redirect and click-through tests fail. `apps/e2e` now uses a landing URL with
+`{click_id}`, takes the id from `Location`, checks it equals the click in ClickHouse and sends
+every postback with it — `TestFullFunnel` passes (HOLD/ACCEPT/REDEP attributed). Full-env
+`go test ./...` green. One e2e run first failed because air had rebuilt the dev tracker from
+the mutated file; it passed on the rebuilt, restored code. The dev DB was reset and refilled
+with fixtures afterwards (tests had added organizations).
+
 ## [Between phases] — dev reset and fixtures
 
 The dev databases had accumulated ~3,700 test organizations and ~3,900 users. Two new make

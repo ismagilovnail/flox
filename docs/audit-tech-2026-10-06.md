@@ -158,6 +158,7 @@ routing engine, auth-модель, структуру пакетов.
 атрибуция может выпасть.** См. D1 (outbox).
 
 **T7 [CRITICAL]. Макросы в URL оффера/редиректа не подставляются**
+**Статус: исправлено** (`macro.ResolveURL` в tracker; e2e берёт `click_id` из редиректа).
 (найдено 2026-10-06 при проверке dev-фикстур, после основного аудита).
 
 - **Где:** `apps/tracker/handler.go: track` — `http.Redirect(w, r, target, …)`

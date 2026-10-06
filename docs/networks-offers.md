@@ -109,6 +109,22 @@ into its own component. `values` still works fine for the two simple
 forms (no array fields), left unchanged; `defaultValues` + remount-via-key
 is the safer default whenever a form has a `useFieldArray`.
 
+## Macros in offer links (audit 2026-10-06, T7)
+
+An offer link, a redirect flow's URL and an external landing's URL are
+resolved by `apps/tracker` at click time with `macro.ResolveURL`:
+`{click_id}`, `{campaign_id}`, `{offer_id}`, `{country}`, `{device}`,
+`{sub1}`…`{sub10}`. `{status}`/`{revenue}`/`{currency}` resolve empty at
+click time; `{payout}` and `{source}` are not known to the resolver and
+stay literal. Values are query-escaped — `sub1..10` come from the click's
+own URL and must not be able to add parameters. The resolved URL is what
+the click event records and what the signed landing/PWA links carry, so
+the click-through after a landing reaches the same URL with the same id.
+
+Before this the tracker redirected with a literal `{click_id}`: a network
+never received the id it has to echo back in its postback. `apps/e2e` now
+takes the click id from the redirect itself, not from ClickHouse.
+
 ## Frontend: a third mock/store pair left untouched
 
 Same situation `lib/mock/campaigns.ts`/`stores/campaigns.ts` was in after
