@@ -8,6 +8,7 @@ import type { DateRange } from "react-day-picker"
 import { useTranslation } from "react-i18next"
 
 import { cn } from "@/lib/utils"
+import { todayInZone } from "@/lib/timezones"
 import { Button } from "@/components/ui/button"
 import { Calendar } from "@/components/ui/calendar"
 import {
@@ -22,18 +23,25 @@ import {
 // i18n.language rather than a second locale concept of its own.
 const DATE_FNS_LOCALES = { en: enUS, ru } as const
 
-function addDays(offset: number) {
-  const d = new Date()
-  d.setDate(d.getDate() + offset)
-  return d
+// Quick ranges end on "today" in `timezone` (an IANA zone; the browser's own
+// day when omitted), as UTC-midnight dates like the rest of the analytics state.
+function quickRange(days: number, timezone?: string) {
+  const to = timezone ? todayInZone(timezone) : new Date()
+  const from = new Date(to)
+  if (timezone) from.setUTCDate(from.getUTCDate() - (days - 1))
+  else from.setDate(from.getDate() - (days - 1))
+  return { from, to }
 }
 
 function DateRangePicker({
   className,
   value,
   onChange,
+  timezone,
 }: {
   className?: string
+  /** IANA zone the quick ranges ("Today", "Last 7 days"…) are anchored to. */
+  timezone?: string
   value?: DateRange
   onChange?: (range: DateRange | undefined) => void
 }) {
@@ -42,9 +50,9 @@ function DateRangePicker({
   const dateFnsLocale = DATE_FNS_LOCALES[i18n.language as keyof typeof DATE_FNS_LOCALES] ?? enUS
 
   const PRESETS = [
-    { label: t("dateRangePicker.today"), range: () => ({ from: new Date(), to: new Date() }) },
-    { label: t("dateRangePicker.last7Days"), range: () => ({ from: addDays(-6), to: new Date() }) },
-    { label: t("dateRangePicker.last30Days"), range: () => ({ from: addDays(-29), to: new Date() }) },
+    { label: t("dateRangePicker.today"), range: () => quickRange(1, timezone) },
+    { label: t("dateRangePicker.last7Days"), range: () => quickRange(7, timezone) },
+    { label: t("dateRangePicker.last30Days"), range: () => quickRange(30, timezone) },
   ]
 
   const label = value?.from

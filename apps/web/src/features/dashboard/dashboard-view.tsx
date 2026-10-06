@@ -80,7 +80,7 @@ function DashboardContent({ timezone }: { timezone: string }) {
     <div className="flex flex-col gap-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-2xl font-semibold tracking-tight">{t("title")}</h1>
-        <DateRangePicker value={range} onChange={setRange} />
+        <DateRangePicker value={range} onChange={setRange} timezone={timezone} />
       </div>
 
       <KpiGrid current={currentMetrics} previous={previousMetrics} />

@@ -172,6 +172,7 @@ export function ReportControls({
         <DateRangePicker
           value={state.dateRange}
           onChange={(dateRange) => onChange({ dateRange })}
+          timezone={state.timezone}
         />
 
         <TimezoneSelect value={state.timezone} onValueChange={(timezone) => onChange({ timezone })} className="w-52" />
