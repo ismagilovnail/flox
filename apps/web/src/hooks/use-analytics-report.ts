@@ -42,10 +42,10 @@ export function useFunnelReport(from: Date, to: Date, filters: FilterCondition[]
   });
 }
 
-export function useDashboardReport(from: Date, to: Date) {
+export function useDashboardReport(from: Date, to: Date, timezone?: string) {
   return useQuery({
-    queryKey: ["dashboard-report", iso(from), iso(to)],
-    queryFn: () => getDashboardReport(from, to),
+    queryKey: ["dashboard-report", iso(from), iso(to), timezone],
+    queryFn: () => getDashboardReport(from, to, timezone),
   });
 }
 

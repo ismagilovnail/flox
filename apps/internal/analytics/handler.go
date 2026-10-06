@@ -330,6 +330,8 @@ type breakdownRequest struct {
 	From    string                `json:"from"`
 	To      string                `json:"to"`
 	Limit   int                   `json:"limit"`
+	// Timezone is the IANA zone days are cut in ("" = UTC).
+	Timezone string `json:"timezone"`
 }
 
 // breakdown answers POST /analytics/breakdown — the bar chart's endpoint
@@ -348,12 +350,13 @@ func (h *Handler) breakdown(w http.ResponseWriter, r *http.Request) {
 	}
 
 	rows, err := h.svc.Breakdown(r.Context(), orgID, BreakdownInput{
-		Dim:     chstore.ReportDimension(req.Dim),
-		Metric:  req.Metric,
-		Filters: parseReportFilters(req.Filters),
-		From:    from,
-		To:      to,
-		Limit:   req.Limit,
+		Dim:      chstore.ReportDimension(req.Dim),
+		Metric:   req.Metric,
+		Filters:  parseReportFilters(req.Filters),
+		From:     from,
+		To:       to,
+		Limit:    req.Limit,
+		Timezone: req.Timezone,
 	})
 	if err != nil {
 		apierror.Write(w, h.logger, err)
@@ -363,8 +366,9 @@ func (h *Handler) breakdown(w http.ResponseWriter, r *http.Request) {
 }
 
 type rangeRequest struct {
-	From string `json:"from"`
-	To   string `json:"to"`
+	From     string `json:"from"`
+	To       string `json:"to"`
+	Timezone string `json:"timezone"`
 }
 
 type funnelRequest struct {
@@ -430,7 +434,7 @@ func (h *Handler) dashboard(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	result, err := h.svc.Dashboard(r.Context(), orgID, from, to)
+	result, err := h.svc.Dashboard(r.Context(), orgID, from, to, req.Timezone)
 	if err != nil {
 		apierror.Write(w, h.logger, err)
 		return

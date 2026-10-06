@@ -27,6 +27,7 @@ import {
   useReportPresets,
   useUpdateReportPreset,
 } from "@/hooks/use-report-presets";
+import { todayInZone } from "@/lib/timezones";
 import { dateRangeToPeriod, periodToDateRange, type ReportPreset } from "@/lib/report-presets";
 import type { FilterCondition } from "@/features/analytics/aggregate";
 import type { ReportControlsState } from "@/features/analytics/report-controls";
@@ -111,7 +112,7 @@ function matchesPreset(state: ReportControlsState, preset: ReportPreset): boolea
     same(state.columnOrder ?? [], preset.columnOrder ?? []) &&
     sameWidths(state.columnWidths ?? {}, preset.columnWidths ?? {}) &&
     same([...(state.hiddenColumns ?? [])].sort(), [...(preset.hiddenColumns ?? [])].sort()) &&
-    sameRange(state.dateRange, periodToDateRange(preset.period, new Date()))
+    sameRange(state.dateRange, periodToDateRange(preset.period, todayInZone(preset.timezone)))
   );
 }
 
@@ -150,7 +151,7 @@ export function ReportPresetBar({
       hiddenColumns: preset.hiddenColumns ?? [],
       groupBy: preset.groupBy,
       timezone: preset.timezone,
-      dateRange: periodToDateRange(preset.period, new Date()),
+      dateRange: periodToDateRange(preset.period, todayInZone(preset.timezone)),
     };
   }
 
@@ -212,7 +213,7 @@ export function ReportPresetBar({
       hiddenColumns: state.hiddenColumns ?? [],
       groupBy: state.groupBy,
       timezone: state.timezone,
-      period: dateRangeToPeriod(state.dateRange, new Date()),
+      period: dateRangeToPeriod(state.dateRange, todayInZone(state.timezone)),
     };
   }
 

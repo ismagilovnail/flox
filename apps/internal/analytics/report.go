@@ -243,6 +243,7 @@ type BreakdownInput struct {
 	Filters  []chstore.ReportFilter
 	From, To time.Time
 	Limit    int
+	Timezone string // IANA zone days are cut in ("" = UTC)
 }
 
 func (s *Service) Breakdown(ctx context.Context, organizationID string, in BreakdownInput) ([]ReportRow, error) {
@@ -255,7 +256,11 @@ func (s *Service) Breakdown(ctx context.Context, organizationID string, in Break
 	}
 	defer observeLatency("breakdown")()
 
-	rows, err := s.groupedReport(ctx, organizationID, dims, false, in.Filters, in.From, in.To, scope{loc: time.UTC})
+	sc, err := resolveScope(in.Timezone)
+	if err != nil {
+		return nil, err
+	}
+	rows, err := s.groupedReport(ctx, organizationID, dims, false, in.Filters, in.From, in.To, sc)
 	if err != nil {
 		return nil, err
 	}
@@ -904,7 +909,8 @@ type DashboardResult struct {
 
 const dashboardTopN = 5
 
-func (s *Service) Dashboard(ctx context.Context, organizationID string, from, to time.Time) (DashboardResult, error) {
+// timezone is the IANA zone days are cut in ("" = UTC).
+func (s *Service) Dashboard(ctx context.Context, organizationID string, from, to time.Time, timezone string) (DashboardResult, error) {
 	if organizationID == "" {
 		return DashboardResult{}, apierror.Validation("missing organization", nil)
 	}
@@ -913,7 +919,11 @@ func (s *Service) Dashboard(ctx context.Context, organizationID string, from, to
 	}
 	defer observeLatency("dashboard")()
 
-	totalsRows, err := s.groupedReport(ctx, organizationID, nil, false, nil, from, to, scope{loc: time.UTC})
+	sc, err := resolveScope(timezone)
+	if err != nil {
+		return DashboardResult{}, err
+	}
+	totalsRows, err := s.groupedReport(ctx, organizationID, nil, false, nil, from, to, sc)
 	if err != nil {
 		return DashboardResult{}, err
 	}
@@ -925,21 +935,21 @@ func (s *Service) Dashboard(ctx context.Context, organizationID string, from, to
 		totals = totalsRows[0].Metrics
 	}
 
-	daily, err := s.groupedReport(ctx, organizationID, nil, true, nil, from, to, scope{loc: time.UTC})
+	daily, err := s.groupedReport(ctx, organizationID, nil, true, nil, from, to, sc)
 	if err != nil {
 		return DashboardResult{}, err
 	}
 	sort.Slice(daily, func(i, j int) bool { return daily[i].Day.Before(*daily[j].Day) })
 
-	topCampaigns, err := s.Breakdown(ctx, organizationID, BreakdownInput{Dim: chstore.DimCampaign, Metric: "revenue", From: from, To: to, Limit: dashboardTopN})
+	topCampaigns, err := s.Breakdown(ctx, organizationID, BreakdownInput{Dim: chstore.DimCampaign, Metric: "revenue", From: from, To: to, Limit: dashboardTopN, Timezone: timezone})
 	if err != nil {
 		return DashboardResult{}, err
 	}
-	topCountries, err := s.Breakdown(ctx, organizationID, BreakdownInput{Dim: chstore.DimCountry, Metric: "revenue", From: from, To: to, Limit: dashboardTopN})
+	topCountries, err := s.Breakdown(ctx, organizationID, BreakdownInput{Dim: chstore.DimCountry, Metric: "revenue", From: from, To: to, Limit: dashboardTopN, Timezone: timezone})
 	if err != nil {
 		return DashboardResult{}, err
 	}
-	topFlows, err := s.Breakdown(ctx, organizationID, BreakdownInput{Dim: chstore.DimFlow, Metric: "revenue", From: from, To: to, Limit: dashboardTopN})
+	topFlows, err := s.Breakdown(ctx, organizationID, BreakdownInput{Dim: chstore.DimFlow, Metric: "revenue", From: from, To: to, Limit: dashboardTopN, Timezone: timezone})
 	if err != nil {
 		return DashboardResult{}, err
 	}

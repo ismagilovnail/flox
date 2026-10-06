@@ -14,16 +14,28 @@ import { TopTable } from "@/features/dashboard/top-tables";
 import { metricsFromApi, performanceRowFromApi } from "@/features/dashboard/metrics";
 import { useDimensionValueLabel } from "@/features/analytics/use-dimension-value-label";
 import { useDashboardReport } from "@/hooks/use-analytics-report";
+import { useOrganization } from "@/hooks/use-organization";
+import { todayInZone } from "@/lib/timezones";
 
 function daysBetween(from: Date, to: Date) {
   return Math.max(Math.round((to.getTime() - from.getTime()) / 86_400_000) + 1, 1);
 }
 
+/** Waits for the organization's timezone: "today" and every day boundary on the
+ * overview are cut in it, and a first fetch in UTC would be thrown away. A failed
+ * settings load falls back to UTC rather than blocking the page. */
 export function DashboardView() {
+  const { t } = useTranslation("dashboard");
+  const org = useOrganization();
+  if (org.isPending) return <LoadingState label={t("loading")} />;
+  return <DashboardContent timezone={org.data?.timezone || "UTC"} />;
+}
+
+function DashboardContent({ timezone }: { timezone: string }) {
   const { t } = useTranslation("dashboard");
   const valueLabel = useDimensionValueLabel();
 
-  const defaultTo = React.useMemo(() => new Date(), []);
+  const defaultTo = React.useMemo(() => todayInZone(timezone), [timezone]);
   const defaultFrom = React.useMemo(() => {
     const d = new Date(defaultTo);
     d.setUTCDate(d.getUTCDate() - 29);
@@ -41,8 +53,8 @@ export function DashboardView() {
   const prevFrom = new Date(prevTo);
   prevFrom.setUTCDate(prevFrom.getUTCDate() - (spanDays - 1));
 
-  const currentQuery = useDashboardReport(from, to);
-  const previousQuery = useDashboardReport(prevFrom, prevTo);
+  const currentQuery = useDashboardReport(from, to, timezone);
+  const previousQuery = useDashboardReport(prevFrom, prevTo, timezone);
 
   if (currentQuery.isPending) {
     return <LoadingState label={t("loading")} />;

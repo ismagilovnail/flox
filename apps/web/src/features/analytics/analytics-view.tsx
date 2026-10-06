@@ -16,6 +16,8 @@ import { FunnelChart } from "@/features/analytics/funnel-chart";
 import type { FilterCondition } from "@/features/analytics/aggregate";
 import { METRICS, metricLabel, formatMetric, type DimensionKey } from "@/features/analytics/registry";
 import { useReport, useTimeseries, useFunnelReport } from "@/hooks/use-analytics-report";
+import { useOrganization } from "@/hooks/use-organization";
+import { todayInZone } from "@/lib/timezones";
 import { EMPTY_CUSTOM_METRICS, useCustomMetrics } from "@/hooks/use-custom-metrics";
 
 /** Dimensions "View statistics" (§27.5) is allowed to deep-link a filter for —
@@ -31,7 +33,17 @@ function previousRange(range: ReportControlsState["dateRange"]) {
   return { from: prevFrom, to: prevTo };
 }
 
+/** The organization's timezone (Settings) is the report's default; the picker in
+ * the controls stays a per-report override. Waits for it so the first fetch isn't
+ * a UTC one that gets thrown away; a failed settings load falls back to UTC. */
 export function AnalyticsView() {
+  const { t } = useTranslation("analytics");
+  const org = useOrganization();
+  if (org.isPending) return <LoadingState label={t("view.loading")} />;
+  return <AnalyticsContent orgTimezone={org.data?.timezone || "UTC"} />;
+}
+
+function AnalyticsContent({ orgTimezone }: { orgTimezone: string }) {
   const { t } = useTranslation("analytics");
   const searchParams = useSearchParams();
   const allCustomMetrics = useCustomMetrics().data?.metrics ?? EMPTY_CUSTOM_METRICS;
@@ -40,7 +52,7 @@ export function AnalyticsView() {
     [allCustomMetrics],
   );
 
-  const defaultTo = React.useMemo(() => new Date(), []);
+  const defaultTo = React.useMemo(() => todayInZone(orgTimezone), [orgTimezone]);
   const defaultFrom = React.useMemo(() => {
     const d = new Date(defaultTo);
     d.setUTCDate(d.getUTCDate() - 6);
@@ -56,7 +68,7 @@ export function AnalyticsView() {
         : [];
     return {
       dateRange: { from: defaultFrom, to: defaultTo },
-      timezone: "UTC",
+      timezone: orgTimezone,
       dimensions: ["campaign"],
       metrics: ["clicks", "conversions", "cvr", "cost", "revenue", "profit", "roi", "epc", "cpa"],
       filters,

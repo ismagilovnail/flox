@@ -127,7 +127,7 @@ export type DashboardReport = {
   topFlows: ReportRow[];
 };
 
-export function getDashboardReport(from: Date, to: Date): Promise<DashboardReport> {
+export function getDashboardReport(from: Date, to: Date, timezone?: string): Promise<DashboardReport> {
   return apiFetch<{
     totals: ApiMetrics;
     daily: ApiReportRow[];
@@ -136,7 +136,7 @@ export function getDashboardReport(from: Date, to: Date): Promise<DashboardRepor
     topFlows: ApiReportRow[];
   }>("/analytics/dashboard", {
     method: "POST",
-    body: { from: formatDate(from), to: formatDate(to) },
+    body: { from: formatDate(from), to: formatDate(to), timezone },
   }).then((res) => ({
     totals: res.totals,
     daily: res.daily.map((d) => ({ day: d.day!, metrics: d.metrics })),

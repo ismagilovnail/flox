@@ -593,7 +593,7 @@ func TestDashboardOmitsTopOffers(t *testing.T) {
 	}
 	svc := analytics.NewService(repo, nil)
 
-	result, err := svc.Dashboard(context.Background(), "org-1", time.Now().AddDate(0, 0, -7), time.Now())
+	result, err := svc.Dashboard(context.Background(), "org-1", time.Now().AddDate(0, 0, -7), time.Now(), "")
 	if err != nil {
 		t.Fatalf("Dashboard: %v", err)
 	}
@@ -610,7 +610,7 @@ func TestDashboardOmitsTopOffers(t *testing.T) {
 func TestDashboardNewOrganizationIsAllZeros(t *testing.T) {
 	svc := analytics.NewService(&reportFakeRepo{}, &fakeCost{})
 
-	result, err := svc.Dashboard(context.Background(), "org-1", time.Now().AddDate(0, 0, -7), time.Now())
+	result, err := svc.Dashboard(context.Background(), "org-1", time.Now().AddDate(0, 0, -7), time.Now(), "")
 	if err != nil {
 		t.Fatalf("Dashboard: %v", err)
 	}
@@ -682,5 +682,25 @@ func TestDimensionValuesRejectsMissingOrganization(t *testing.T) {
 	})
 	if err == nil {
 		t.Fatal("DimensionValues with no organization succeeded, want a validation error")
+	}
+}
+
+func TestDashboardCutsDaysInTheRequestedTimezone(t *testing.T) {
+	repo := &reportFakeRepo{}
+	svc := analytics.NewService(repo, nil)
+	day := time.Date(2026, 8, 10, 0, 0, 0, 0, time.UTC)
+
+	if _, err := svc.Dashboard(context.Background(), "org-1", day, day, "Europe/Moscow"); err != nil {
+		t.Fatalf("Dashboard: %v", err)
+	}
+	q := repo.lastClickQuery
+	// Moscow is UTC+3: local 10 Aug 00:00 = 9 Aug 21:00Z, to-exclusive = 10 Aug 21:00Z.
+	if q == nil || q.Timezone != "Europe/Moscow" ||
+		!q.From.Equal(time.Date(2026, 8, 9, 21, 0, 0, 0, time.UTC)) || !q.To.Equal(time.Date(2026, 8, 10, 21, 0, 0, 0, time.UTC)) {
+		t.Fatalf("query = %+v, want Moscow local-midnight bounds 9 Aug 21:00Z .. 10 Aug 21:00Z", q)
+	}
+
+	if _, err := svc.Dashboard(context.Background(), "org-1", day, day, "Mars/Olympus"); err == nil {
+		t.Fatal("unknown timezone succeeded, want a validation error")
 	}
 }

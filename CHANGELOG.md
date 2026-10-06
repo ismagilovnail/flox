@@ -5,6 +5,17 @@ per-phase, matching `CLAUDE.md`'s phase protocol. The one exception is
 [Between phases], below: spec amendments and the code changes that follow from
 them land between phases and would otherwise be invisible here.
 
+## [Between phases] — organization timezone is the default for analytics and the overview
+
+The timezone from Settings is now the default for the analytics report (instead of a
+hard-coded `UTC`) and for the overview, whose days were always cut in UTC. The picker in
+the report controls stays a per-report override. `POST /analytics/dashboard` and
+`/analytics/breakdown` accept `timezone` (empty = UTC, unknown zone = validation error);
+`Dashboard` passes it to its totals, daily series and top-N. The default period's
+"today" and presets' relative periods are anchored to the zone's calendar day
+(`todayInZone`). Saved presets keep their own explicit timezone, so presets saved before
+this change still say `UTC`. Not verified in a browser.
+
 ## [Between phases] — marketer audit report
 
 `docs/audit-marketer-2026-10-06.md`: a prioritized audit of the platform from a media

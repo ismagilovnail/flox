@@ -55,3 +55,15 @@ export function utcOffsetLabel(timeZone: string, at: Date = new Date()): string 
     return "";
   }
 }
+
+/** The calendar day it is right now in `timeZone`, as a UTC-midnight Date — the
+ * shape the analytics API's day ranges (YYYY-MM-DD via toISOString) expect.
+ * An unknown zone falls back to the UTC day. */
+export function todayInZone(timeZone: string, at: Date = new Date()): Date {
+  try {
+    const ymd = new Intl.DateTimeFormat("en-CA", { timeZone, year: "numeric", month: "2-digit", day: "2-digit" }).format(at);
+    return new Date(`${ymd}T00:00:00Z`);
+  } catch {
+    return new Date(`${at.toISOString().slice(0, 10)}T00:00:00Z`);
+  }
+}
