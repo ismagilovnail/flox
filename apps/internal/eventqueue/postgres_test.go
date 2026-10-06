@@ -233,3 +233,39 @@ func seedOrg(t *testing.T, ctx context.Context, pool *pgxpool.Pool) string {
 	})
 	return id
 }
+
+// A batch mixing a live organization with a deleted one must still persist the
+// live organization's events: the orphan's foreign-key violation may cost only
+// its own events, not everyone else's in the same batch.
+func TestEnqueueBatchOrphanOrganizationDoesNotDropTheRest(t *testing.T) {
+	pool := mustPool(t)
+	ctx := context.Background()
+	orgID := seedOrg(t, ctx, pool)
+
+	q := eventqueue.NewPostgresQueue(pool)
+	liveClick, orphanClick := idgen.New(), idgen.New()
+	err := q.EnqueueBatch(ctx, []event.Event{
+		{Type: event.SourceClick, OrganizationID: idgen.New(), ClickID: orphanClick, EventAt: time.Now().UTC()}, // no such organization
+		{Type: event.SourceClick, OrganizationID: orgID, ClickID: liveClick, EventAt: time.Now().UTC()},
+	})
+	if err == nil {
+		t.Fatal("EnqueueBatch returned nil, want the orphan organization's error reported")
+	}
+
+	claimed, cerr := q.ClaimDue(ctx, 100)
+	if cerr != nil {
+		t.Fatalf("ClaimDue: %v", cerr)
+	}
+	var live, orphan int
+	for _, c := range claimed {
+		switch c.Event.ClickID {
+		case liveClick:
+			live++
+		case orphanClick:
+			orphan++
+		}
+	}
+	if live != 1 || orphan != 0 {
+		t.Fatalf("queued live=%d orphan=%d, want 1 and 0 (the live organization's event must survive)", live, orphan)
+	}
+}

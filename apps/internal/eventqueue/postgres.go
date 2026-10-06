@@ -3,6 +3,7 @@ package eventqueue
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"time"
 
@@ -30,7 +31,39 @@ func (q *PostgresQueue) EnqueueBatch(ctx context.Context, events []event.Event) 
 	if len(events) == 0 {
 		return nil
 	}
+	err := q.enqueue(ctx, events)
+	if err == nil {
+		return nil
+	}
 
+	// The batch is one transaction, so a single bad row rolls back every event
+	// in it. The usual bad row is an event whose organization was deleted while
+	// the event sat in the tracker's buffer (event_queue.organization_id is a
+	// foreign key) — and the buffer mixes organizations, so that one orphan
+	// would also have dropped every other organization's events in the same
+	// batch. Retry per organization: only the failing organization's events are
+	// lost, and the error for them is still returned for the caller to log.
+	byOrg := map[string][]event.Event{}
+	var order []string
+	for _, e := range events {
+		if _, ok := byOrg[e.OrganizationID]; !ok {
+			order = append(order, e.OrganizationID)
+		}
+		byOrg[e.OrganizationID] = append(byOrg[e.OrganizationID], e)
+	}
+	if len(order) < 2 {
+		return err
+	}
+	var errs []error
+	for _, org := range order {
+		if orgErr := q.enqueue(ctx, byOrg[org]); orgErr != nil {
+			errs = append(errs, orgErr)
+		}
+	}
+	return errors.Join(errs...)
+}
+
+func (q *PostgresQueue) enqueue(ctx context.Context, events []event.Event) error {
 	batch := &pgx.Batch{}
 	for _, e := range events {
 		payload, err := json.Marshal(e)

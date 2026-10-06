@@ -5,6 +5,38 @@ per-phase, matching `CLAUDE.md`'s phase protocol. The one exception is
 [Between phases], below: spec amendments and the code changes that follow from
 them land between phases and would otherwise be invisible here.
 
+## [Between phases] — filter audit: end-to-end matrices, ASN normalization, queue batch fix
+
+Two end-to-end tests (`apps/e2e/filters_test.go`, throwaway organization, real API +
+tracker + classifier + GeoIP + worker + ClickHouse):
+
+- `TestFilterMatrix` — ~150 cases: every routable field (country, city, region, asn,
+  device, platform, os, os_version, browser, browser_version, language, bot, proxy,
+  connection_type, referrer, utm_*, sub1..sub10, external_click_id), every operator
+  (IS, IS_NOT, IN, NOT_IN, CONTAINS, NOT_CONTAINS, STARTS_WITH, ENDS_WITH, MATCHES,
+  EXISTS, NOT_EXISTS, GT, GTE, LT, LTE, BETWEEN incl. numeric-not-text comparison),
+  AND / OR / nested groups, and the empty group; each with a matching and a
+  non-matching request, asserting the 302 destination.
+- `TestAnalyticsFilterMatrix` — four distinguishable clicks, then the report endpoint
+  under a filter on each dimension (country, region, city, device, platform, os,
+  browser, language, campaign, source, stream_set, flow, landing/offer/pwa empty
+  buckets) and AND combinations; counts must be exact.
+
+Findings fixed:
+- **ASN**: the classifier reports "AS15169"; a filter typed as "15169" or "as15169"
+  matched nobody. The stream-set API now normalizes ASN values to "AS<digits>" at save
+  time for IS / IS NOT / IN / NOT IN (the routing hot path stays literal).
+- **Event queue**: `EnqueueBatch` is one transaction, so one event of a deleted
+  organization (foreign key) rolled back the whole batch, including other
+  organizations' events buffered with it. It now retries per organization: only the
+  orphan's events are lost, and their error is still returned and logged.
+  Test: `TestEnqueueBatchOrphanOrganizationDoesNotDropTheRest`.
+
+Known limits, not changed (the UI offers them, the classifier cannot produce them):
+`proxy` is always "0" (no IP-reputation vendor), and `connection_type` is always
+"unknown", so "proxy = 1" and "connection_type = wifi / cellular / ethernet" never
+match. Brave is reported as chrome.
+
 ## [Between phases] — language dropdown, more browsers, `language` now matches
 
 Language dropdown: the `language` condition of a stream-set filter is a searchable

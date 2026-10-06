@@ -79,6 +79,7 @@ func (s *Service) Create(ctx context.Context, orgID, campaignID string, in Creat
 	if in.FallbackURL != "" && !isValidURL(in.FallbackURL) {
 		fields["fallbackUrl"] = "must be empty or a valid absolute URL"
 	}
+	normalizeFilterNode(&in.RootFilter)
 	if err := validateFilterNode(in.RootFilter, true); err != "" {
 		fields["rootFilter"] = err
 	}
@@ -138,6 +139,7 @@ func (s *Service) Update(ctx context.Context, orgID, campaignID, id string, in U
 		fields["fallbackUrl"] = "must be empty or a valid absolute URL"
 	}
 	if in.RootFilter != nil {
+		normalizeFilterNode(in.RootFilter)
 		if err := validateFilterNode(*in.RootFilter, true); err != "" {
 			fields["rootFilter"] = err
 		}
@@ -407,6 +409,47 @@ func validateFilterNode(node FilterNode, isRoot bool) string {
 	default:
 		return fmt.Sprintf("unknown filter node type %q", node.Kind)
 	}
+}
+
+// normalizeFilterNode rewrites filter values into the form the classifier
+// produces, once at save time so the routing hot path compares literally. Today
+// that is the ASN: the classifier reports "AS15169", while operators naturally
+// type 15169 or as15169 — without this a filter written that way matches no one.
+func normalizeFilterNode(node *FilterNode) {
+	switch node.Kind {
+	case NodeGroup:
+		for i := range node.Children {
+			normalizeFilterNode(&node.Children[i])
+		}
+	case NodeCondition:
+		if node.Field != routing.FieldASN {
+			return
+		}
+		switch node.Operator {
+		case routing.OpIs, routing.OpIsNot, routing.OpIn, routing.OpNotIn:
+			tokens := strings.Split(node.Value, ",")
+			for i, raw := range tokens {
+				tokens[i] = normalizeASN(raw)
+			}
+			node.Value = strings.Join(tokens, ",")
+		}
+	}
+}
+
+// normalizeASN turns "15169", "as15169" and " AS15169 " into "AS15169"; anything
+// that is not an autonomous system number is returned trimmed and unchanged.
+func normalizeASN(raw string) string {
+	t := strings.TrimSpace(raw)
+	digits := strings.TrimPrefix(strings.ToUpper(t), "AS")
+	if digits == "" {
+		return t
+	}
+	for _, r := range digits {
+		if r < '0' || r > '9' {
+			return t
+		}
+	}
+	return "AS" + digits
 }
 
 func validateCountryValue(value string) string {
