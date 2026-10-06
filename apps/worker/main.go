@@ -70,6 +70,7 @@ import (
 	"github.com/ismagilovnail/flox/apps/internal/postgres"
 	"github.com/ismagilovnail/flox/apps/internal/queuereaper"
 	"github.com/ismagilovnail/flox/apps/internal/queuestats"
+	"github.com/ismagilovnail/flox/apps/internal/reconcile"
 	"github.com/ismagilovnail/flox/apps/internal/telemetry"
 	"github.com/ismagilovnail/flox/apps/internal/urlsafety"
 )
@@ -112,6 +113,11 @@ const costSyncInterval = 6 * time.Hour
 // there is no reason to poll faster than anyone will actually look at a
 // dashboard.
 const queueDepthPollInterval = 15 * time.Second
+
+// reconcileInterval: how often Postgres conversions are checked against
+// ClickHouse. Cheap (two grouped reads over three days, by index), and an
+// hour is well inside the 2h alert window.
+const reconcileInterval = time.Hour
 
 // fxSyncInterval: reference rates are published once per working day, so a
 // few runs a day pick up each fixing the same afternoon without hammering
@@ -315,6 +321,15 @@ func run() error {
 		logger.Info("fx rate sync starting", "provider", cfg.FXProvider, "interval", fxSyncInterval)
 		start(func() { fxSyncer.RunLoop(ctx, fxSyncInterval) })
 	}
+
+	// Postgres postbacks vs ClickHouse conversion_events, hourly over the
+	// last 3 days (internal/reconcile): every lost, duplicated or mis-summed
+	// conversion shows up in flox_reconciliation_mismatched_buckets.
+	reconciler := reconcile.New(db, ch, logger)
+	logger.Info("postgres/clickhouse reconciliation starting", "interval", reconcileInterval)
+	start(func() {
+		reconciler.RunLoop(ctx, reconcileInterval, reconcile.Window{Lookback: 72 * time.Hour, Settle: 30 * time.Minute})
+	})
 
 	// Backstop for claims a crashed worker (this one's previous process, or
 	// another replica) never finished — see internal/queuereaper.

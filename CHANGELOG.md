@@ -5,6 +5,34 @@ per-phase, matching `CLAUDE.md`'s phase protocol. The one exception is
 [Between phases], below: spec amendments and the code changes that follow from
 them land between phases and would otherwise be invisible here.
 
+## [Between phases] — Postgres and ClickHouse conversions are reconciled hourly
+
+Technical audit (§12, §17): nothing checked that the reports' copy of the conversions
+(ClickHouse `conversion_events`) matches their record (Postgres `postbacks`), so a lost,
+duplicated or mis-summed event — every path the earlier steps closed — would have stayed
+invisible.
+
+- `internal/reconcile`, run by `apps/worker` every hour over the last 3 days minus the newest
+  30 minutes: per (organization, UTC day, status), count and USD sum on both sides, USD the
+  way reports count it (accept/redep `usd_value`, decline/trash the reversal negated), with a
+  rounding tolerance (Postgres numeric(14,4) vs the event's float). Differences are logged per
+  bucket and published as `flox_reconciliation_mismatched_buckets{kind}`; alerts
+  `ConversionsDiverge` (2h) and `ReconciliationNotRunning` (3h). Detection only.
+- Migration 00054: `postbacks.event_at`, the analytics event's own time, written with every
+  success row (older rows take `created_at`); 00055 indexes it `CONCURRENTLY`. Bucketing on
+  `created_at` reports a phantom difference whenever a conversion lands within milliseconds
+  of midnight.
+
+Tests: on real Postgres + ClickHouse, one organization with a matching accept, a chargeback
+(reversal 25 ↔ −25), a hold received at 23:59:59.998 and written 5 ms later, a redeposit
+missing from ClickHouse, a trash duplicated in ClickHouse and an accept with a different USD
+sum — exactly the last three are reported. Mutation-checked: bucketing on `created_at` adds
+two phantom HOLD differences. The store writes `event_at` = the event's time. Live: an
+injected Postgres-only accept two hours old was reported by the restarted dev worker
+("conversions differ…", postgres 1/42 USD vs clickhouse 0; both mismatch gauges 1), then
+removed. Migrations up → down → up. Full-env `go test ./...` with e2e: exit 0. Alerts:
+20 rules, `promtool` OK.
+
 ## [Between phases] — a chargeback reverses the FTD's revenue
 
 Technical audit, finding T4/AN3 — §45: "chargeback (ACCEPT then DECLINE → recorded, revenue

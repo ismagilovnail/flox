@@ -189,6 +189,13 @@ func (s *PostgresStore) recordSuccess(ctx context.Context, tx pgx.Tx, e Entry) (
 	if e.Reversal != nil {
 		revRevenue, revUSD, revCurrency = e.Reversal.Revenue, e.Reversal.USDValue, e.Reversal.Currency
 	}
+	// event_at is the analytics event's own time, so the reconciliation
+	// (internal/reconcile) buckets this row on the same day ClickHouse does.
+	var eventAt *time.Time
+	if e.Event != nil && !e.Event.EventAt.IsZero() {
+		t := e.Event.EventAt
+		eventAt = &t
+	}
 
 	// created_at is the moment of the write, not the column default now()
 	// (the transaction's START): LastStatus orders by it, and a transaction
@@ -196,8 +203,9 @@ func (s *PostgresStore) recordSuccess(ctx context.Context, tx pgx.Tx, e Entry) (
 	id := idgen.New()
 	var returnedID string
 	err = tx.QueryRow(ctx, `
-		INSERT INTO postbacks (`+insertColumns+`, created_at, reversal_revenue, reversal_currency, reversal_usd_value)
-		VALUES ($1,$2,$3,$4,$5,'incoming','success',$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17, clock_timestamp(), $18, $19, $20)
+		INSERT INTO postbacks (`+insertColumns+`, created_at, reversal_revenue, reversal_currency, reversal_usd_value, event_at)
+		VALUES ($1,$2,$3,$4,$5,'incoming','success',$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17, clock_timestamp(), $18, $19, $20,
+		        COALESCE($21, clock_timestamp()))
 		ON CONFLICT (organization_id, click_id, status, event_ref)
 			WHERE NOT network_accepts_duplicates AND result = 'success'
 		DO NOTHING
@@ -206,7 +214,7 @@ func (s *PostgresStore) recordSuccess(ctx context.Context, tx pgx.Tx, e Entry) (
 		e.AcceptDuplicates, e.EventRef, e.NetworkTxnID, e.RawStatus,
 		e.Revenue, e.Currency, e.USDValue, e.AttributionOutcome,
 		e.AttributedClickID, e.AttributionMethod, e.TimeToConversionMS, e.Message,
-		revRevenue, revCurrency, revUSD,
+		revRevenue, revCurrency, revUSD, eventAt,
 	).Scan(&returnedID)
 
 	if errors.Is(err, pgx.ErrNoRows) {

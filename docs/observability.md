@@ -164,11 +164,11 @@ alone can only serve one path.
 | `flox_events_queue_write_retries_total` | tracker | Event writes retried after a Postgres failure |
 | `flox_fx_sync_total{outcome}`, `flox_fx_latest_rate_age_seconds`, `flox_fx_rate_missing_total` | worker, tracker, api | FX rate sync and amounts stored without a USD value (no currency label: the code comes from requests) |
 | `flox_redis_errors_total{op}` | tracker, api | Redis failures that fell back (`conversion_last_status`, `ratelimit`) |
+| `flox_reconciliation_mismatched_buckets{kind}`, `flox_reconciliation_runs_total{outcome}`, `flox_reconciliation_last_success_timestamp_seconds` | worker (`internal/reconcile`, hourly) | Postgres postbacks vs ClickHouse conversion_events per (org, day, status) |
 
 Alerts for them are in `infra/alerts.yml` (`flox.infra`, `flox.postbacks`,
 `flox.fx`, `flox.events`). Still missing from the audit's list: error
-tracking (Sentry or similar) and a reconciliation of Postgres `postbacks`
-against ClickHouse `conversion_events`.
+tracking (Sentry or similar).
 
 ## Dev-stack: Prometheus in `infra/docker-compose.dev.yml`
 

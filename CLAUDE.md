@@ -36,17 +36,18 @@ STATUS        : P0 code items + P1 (RL1/A1/RL4, CH1/DB1, Q2, metrics) done: Q1 q
                 missing metrics + alerts; queue tests isolated from the dev
                 worker (testpg.PrivateTable) — full suite reliably green;
                 T4/AN3 a chargeback reverses the FTD payout on the decline's
-                date (reports + LTV).
+                date (reports + LTV); hourly Postgres↔ClickHouse conversion
+                reconciliation (internal/reconcile) with alerts.
                 Technical audit is docs/audit-tech-2026-10-06.md; the user asked
                 to fix it step by step and allowed wiping the dev database when
                 a step needs it.
-LAST COMMIT   : feat(conversion): reverse the FTD payout on a chargeback.
+LAST COMMIT   : feat(worker): reconcile Postgres and ClickHouse conversions.
 UNCOMMITTED   : none expected. Dev DB wiped and refilled by `make fixtures`
                 (accounts in README; password flox-demo-2026).
 NEXT          : P0 code items done. CI (DO1) is the user's own decision — do
                 not set it up. Confirm the next slice with the user. Open
-                follow-ups: Postgres↔ClickHouse conversion reconciliation,
-                error tracking (Sentry); USD
+                follow-ups: re-emitting events the reconciliation finds
+                missing, error tracking (Sentry); USD
                 repair of pre-sync conversions in ClickHouse (docs/fx.md);
                 stable per-event id so a retried write whose commit actually
                 landed is not inserted twice (CHANGELOG, RL2).

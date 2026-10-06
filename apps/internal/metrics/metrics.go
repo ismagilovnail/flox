@@ -222,6 +222,27 @@ var (
 		Help:      "Failed Redis calls that fell back to the durable path, by operation.",
 	}, []string{"op"})
 
+	// ReconciliationMismatchedBuckets is how many (organization, day,
+	// status) buckets of the last reconciliation run differ between Postgres
+	// postbacks and ClickHouse conversion_events, by kind (count, usd).
+	ReconciliationMismatchedBuckets = promauto.NewGaugeVec(prometheus.GaugeOpts{
+		Namespace: namespace,
+		Name:      "reconciliation_mismatched_buckets",
+		Help:      "Buckets where Postgres and ClickHouse conversions differ, by kind (count|usd), as of the last run.",
+	}, []string{"kind"})
+
+	ReconciliationRunsTotal = promauto.NewCounterVec(prometheus.CounterOpts{
+		Namespace: namespace,
+		Name:      "reconciliation_runs_total",
+		Help:      "Postgres/ClickHouse reconciliation runs, by outcome.",
+	}, []string{"outcome"})
+
+	ReconciliationLastSuccessSeconds = promauto.NewGauge(prometheus.GaugeOpts{
+		Namespace: namespace,
+		Name:      "reconciliation_last_success_timestamp_seconds",
+		Help:      "Unix time of the last successful Postgres/ClickHouse reconciliation run.",
+	})
+
 	PostbackDeliveriesTotal = promauto.NewCounterVec(prometheus.CounterOpts{
 		Namespace: namespace,
 		Name:      "postback_deliveries_total",

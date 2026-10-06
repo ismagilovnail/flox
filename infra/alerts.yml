@@ -115,6 +115,27 @@ groups:
 
   - name: flox.infra
     rules:
+      - alert: ConversionsDiverge
+        # internal/reconcile: Postgres postbacks (truth) vs ClickHouse
+        # conversion_events, hourly over 3 days, leaving out the newest 30
+        # minutes. Two runs in a row rule out an in-flight batch.
+        expr: max(flox_reconciliation_mismatched_buckets) > 0
+        for: 2h
+        labels:
+          severity: warning
+        annotations:
+          summary: "Reports disagree with the recorded conversions"
+          description: "flox_reconciliation_mismatched_buckets has been above 0 for 2h: some (organization, day, status) has a different count or USD sum in ClickHouse than in Postgres postbacks. The worker log lists each bucket (\"conversions differ between postgres and clickhouse\"). Look for dead-lettered batches first (flox_queue_rows{status=\"dead\"})."
+
+      - alert: ReconciliationNotRunning
+        expr: time() - flox_reconciliation_last_success_timestamp_seconds > 3 * 3600
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: "The Postgres/ClickHouse reconciliation has not succeeded for 3h"
+          description: "No successful reconciliation run in 3h (flox_reconciliation_runs_total{outcome=\"error\"}); divergence between the stores would go unnoticed."
+
       - alert: QueueStalled
         # flox_queue_oldest_due_age_seconds catches a small queue that stopped
         # draining, which a depth threshold would not.

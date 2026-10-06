@@ -149,6 +149,33 @@ The tokens are remembered for the last 100,000 blocks per table
 (schema/012); a batch put back much later than that can insert duplicates
 into the tables that had already accepted it.
 
+## Reconciliation: Postgres vs ClickHouse (audit 2026-10-06)
+
+`postbacks` is the record of every conversion; `conversion_events` is its
+copy. `internal/reconcile` (run by `apps/worker` hourly over the last 3 days,
+leaving out the newest 30 minutes still in flight) compares, per
+(organization, UTC day, status), the number of events and the USD sum the
+way reports count it — an accept/redeposit its `usd_value`, a
+decline/trash its `reversal_usd_value` negated. USD is compared with a
+tolerance of 0.01 + 0.0001 × rows (Postgres keeps 4 decimals, the event the
+unrounded float).
+
+Rows are bucketed on `postbacks.event_at` (migration 00054, indexed by
+00055), written with the row from the analytics event's own time: a
+conversion received at 23:59:59.998 is stamped by `created_at` a few
+milliseconds later — the next day — and bucketing on that would report a
+phantom difference on both days (the test fails exactly that way when the
+query uses `created_at`).
+
+Each differing bucket is logged as "conversions differ between postgres and
+clickhouse" (at most 20 per run) and counted in
+`flox_reconciliation_mismatched_buckets{kind=count|usd}`; alerts
+`ConversionsDiverge` (two runs in a row) and `ReconciliationNotRunning`.
+Detection only — a missing or duplicated event is not rewritten. Usual
+causes, in order: a dead-lettered batch (`flox_queue_rows{status="dead"}`,
+see "Backoff and dead-letter"), a queue backlog older than 30 minutes, a
+retried event write whose commit had landed (RL2's remaining window).
+
 ## `click_lookup`: clicks by id (audit 2026-10-06, CH1)
 
 A `ReplacingMergeTree` copy of `SOURCE_CLICK` rows with only the columns

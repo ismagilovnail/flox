@@ -192,3 +192,29 @@ func TestConcurrentHoldAndAcceptNeverEndOnHold(t *testing.T) {
 		}
 	}
 }
+
+// The row is dated like its ClickHouse event (postbacks.event_at), not by
+// the moment of the write, so the reconciliation buckets both sides on the
+// same day.
+func TestRecordStampsTheEventTime(t *testing.T) {
+	pool := mustPool(t)
+	ctx := context.Background()
+	orgID := seedOrg(t, ctx, pool)
+	networkID := seedNetwork(t, ctx, pool, orgID, false)
+	store := conversion.NewPostgresStore(pool).WithDeliveries(&probeWriter{inner: *pbstore.NewPostgresStore(pool)})
+
+	received := time.Date(2026, 9, 10, 23, 59, 59, 998_000_000, time.UTC)
+	e := successEntry(orgID, networkID, idgen.New(), event.CpaAccept)
+	e.Event.EventAt = received
+	rec, err := store.Record(ctx, e)
+	if err != nil {
+		t.Fatalf("Record: %v", err)
+	}
+	var eventAt, createdAt time.Time
+	if err := pool.QueryRow(ctx, `SELECT event_at, created_at FROM postbacks WHERE id = $1`, rec.ID).Scan(&eventAt, &createdAt); err != nil {
+		t.Fatalf("reading row: %v", err)
+	}
+	if !eventAt.Equal(received) {
+		t.Fatalf("event_at = %s, want the event's %s (created_at is %s)", eventAt.UTC(), received, createdAt.UTC())
+	}
+}
