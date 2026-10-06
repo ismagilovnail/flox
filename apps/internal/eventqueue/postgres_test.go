@@ -261,21 +261,18 @@ func TestEnqueueBatchOrphanOrganizationDoesNotDropTheRest(t *testing.T) {
 		t.Fatalf("err = %#v, want a SinkError dropping 1 event and retrying none", err)
 	}
 
-	claimed, cerr := q.ClaimDue(ctx, 100)
-	if cerr != nil {
-		t.Fatalf("ClaimDue: %v", cerr)
+	// The SinkError above already says the live organization's event was
+	// written (nothing to retry, only the orphan dropped). Its row is not
+	// looked up: the dev-stack worker polls this same table and may have
+	// flushed and deleted it already — this test used to claim rows itself
+	// and flaked whenever it lost that race. The orphan, though, can never
+	// appear, so its absence is checked directly.
+	var orphanRows int
+	if err := pool.QueryRow(ctx, `SELECT count(*) FROM event_queue WHERE payload->>'clickId' = $1`, orphanClick).Scan(&orphanRows); err != nil {
+		t.Fatalf("counting orphan rows: %v", err)
 	}
-	var live, orphan int
-	for _, c := range claimed {
-		switch c.Event.ClickID {
-		case liveClick:
-			live++
-		case orphanClick:
-			orphan++
-		}
-	}
-	if live != 1 || orphan != 0 {
-		t.Fatalf("queued live=%d orphan=%d, want 1 and 0 (the live organization's event must survive)", live, orphan)
+	if orphanRows != 0 {
+		t.Fatalf("orphan organization's event was queued (%d rows), want none", orphanRows)
 	}
 }
 

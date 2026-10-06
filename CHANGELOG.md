@@ -26,6 +26,13 @@ ClickHouse outage was hit at the same fixed pace.
   splitting changes the batch's rows and would break the dedup tokens of the tables that
   already took it.
 
+`eventqueue.TestEnqueueBatchOrphanOrganizationDoesNotDropTheRest` failed in the first
+full run after this change (committed before the failure was noticed — fixed in the next
+commit): it claimed rows from the shared `event_queue` itself, and lost the race to the
+dev-stack worker, made likelier by D2's retry-batch-first claim. It now checks the orphan's
+absence directly and the live event through the `SinkError` contract. Full-env
+`go test ./...` with e2e: exit 0.
+
 Tests: classifier table plus a real `NO_SUCH_COLUMN` rejection from ClickHouse; `pgqueue.Fail`
 on a private table — 12 transient failures back off 10 s → 10 min and stay queued, a rejected
 batch dies exactly on the 5th attempt with `last_error`/`dead_at`, and is never claimed again;
