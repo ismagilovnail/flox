@@ -38,17 +38,9 @@ PARTITION BY toYYYYMM(event_at)
 ORDER BY (organization_id, click_id, event_at)
 SETTINGS index_granularity = 8192;
 
--- Audit 2026-10-06, T4/AN3: declines are copied too, so a chargeback (a
--- CPA_DECLINE/CPA_TRASH carrying the reversed accept's payout, negated)
--- nets out of LTV. A view cannot be altered in place: the original
--- ltv_events_mv is dropped here, in the same file that used to create it,
--- so no start ever has both views feeding ltv_events at once.
+-- The view feeding ltv_events lives in schema/014 (ltv_events_mv_v3: it
+-- also copies declines — T4/AN3 — and event_id, which only exists after
+-- 011). The older views are dropped here and never recreated, so no start
+-- ever has two views feeding ltv_events at once.
 DROP VIEW IF EXISTS ltv_events_mv;
-
-CREATE MATERIALIZED VIEW IF NOT EXISTS ltv_events_mv_v2
-TO ltv_events
-AS
-SELECT
-    organization_id, click_id, campaign_id, network_id, country, event_at, type, usd_value, has_usd_value
-FROM conversion_events
-WHERE type IN ('CPA_HOLD', 'CPA_ACCEPT', 'CPA_REDEP', 'CPA_DECLINE', 'CPA_TRASH');
+DROP VIEW IF EXISTS ltv_events_mv_v2;

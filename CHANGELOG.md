@@ -5,6 +5,39 @@ per-phase, matching `CLAUDE.md`'s phase protocol. The one exception is
 [Between phases], below: spec amendments and the code changes that follow from
 them land between phases and would otherwise be invisible here.
 
+## [Between phases] — every event has a stable id
+
+Closes the last duplicate window RL2 left open (a write retried after its commit had in
+fact landed) and gives the reconciliation something to repair by.
+
+- `event.Event.ID`: assigned by `eventbuf.Writer.Enqueue` when empty; for a conversion it is
+  the `postbacks` row id (set by the outbox in the record transaction).
+- `event_queue` uses it as the row id with `ON CONFLICT (id) DO NOTHING`: a batch written again
+  is a no-op while its rows are still queued. (A retry arriving after the worker already
+  flushed and deleted them still inserts again — narrower than before, not closed.)
+- ClickHouse schema/014: `event_id` appended to `click_events`, `tracking_events`,
+  `conversion_events` and `ltv_events`; `ltv_events_mv_v3` (declines + event_id) replaces v2.
+  The view moved from schema/007 — which now only drops the older views — to 014: an `event_id`
+  column added before 008–011 on a fresh store would have put it in a different position
+  than on an upgraded one, and `EventStore` appends positionally. Checked: a fresh database
+  passes the whole `chstore` suite and has the same column order as the upgraded dev store in
+  all four tables. On the start that upgrades a store, a conversion inserted in the
+  milliseconds between 007's drop and 014's create gets no LTV row.
+
+Tests: the buffer assigns ids and keeps one already set; the same batch enqueued 3× leaves 2
+rows; the conversion's CPA event id equals its `postbacks` id (read inside the record
+transaction). Live: a click and a postback reached ClickHouse with `event_id`; the conversion
+and its LTV row carry the `postbacks` id. Full-env `go test ./...` with e2e: exit 0.
+
+**Found while checking it:** a `worker` binary started by hand for step 1's SIGTERM check
+(`cd … && ./worker &` — the signal went to the subshell) had kept running for 3h21m on the
+host, polling the shared dev queues with step-1 code. It was a hidden cause of the
+"queue tests race the dev worker" flakes, and some of the untokened ClickHouse inserts seen
+from the host address in D2's live check came from it, not from tests as stated there (the
+dev worker's own inserts were tokenized, as reported). It surfaced when it began failing every
+insert against the new 51-column schema and requeueing a row with the old `Requeue`. Stopped
+(SIGTERM); the dev store has been reset several times since, so no stale data remains.
+
 ## [Between phases] — Postgres and ClickHouse conversions are reconciled hourly
 
 Technical audit (§12, §17): nothing checked that the reports' copy of the conversions

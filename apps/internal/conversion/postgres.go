@@ -233,6 +233,9 @@ func (s *PostgresStore) recordSuccess(ctx context.Context, tx pgx.Tx, e Entry) (
 	// row or not at all (audit 2026-10-06, D1).
 	if e.Event != nil {
 		ev := *e.Event
+		// The conversion's event is identified by its postbacks row, so
+		// the reconciliation can match and repair it row by row.
+		ev.ID = returnedID
 		if e.Reversal != nil {
 			// The decline books the accept's payout back, on the decline's
 			// own date (closed periods keep what they showed).

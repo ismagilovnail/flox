@@ -135,9 +135,15 @@ func insert(ctx context.Context, db batchSender, table string, events []event.Ev
 		if err != nil {
 			return fmt.Errorf("%w: %w", errUnencodable, err)
 		}
+		// The event's own id is the row id: a batch written again after a
+		// lost reply (eventbuf retries) is a no-op instead of a second copy.
+		id := e.ID
+		if id == "" {
+			id = idgen.New()
+		}
 		batch.Queue(
-			`INSERT INTO `+table+` (id, organization_id, type, payload) VALUES ($1, $2, $3, $4)`,
-			idgen.New(), e.OrganizationID, string(e.Type), payload,
+			`INSERT INTO `+table+` (id, organization_id, type, payload) VALUES ($1, $2, $3, $4) ON CONFLICT (id) DO NOTHING`,
+			id, e.OrganizationID, string(e.Type), payload,
 		)
 	}
 

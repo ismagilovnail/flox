@@ -72,6 +72,7 @@ func (s *EventStore) insertClickEvents(ctx context.Context, events []event.Event
 			e.Subs[0], e.Subs[1], e.Subs[2], e.Subs[3], e.Subs[4], e.Subs[5], e.Subs[6], e.Subs[7], e.Subs[8], e.Subs[9],
 			e.ExternalClickID, e.FBClickID, e.TTClickID, e.FilterReason,
 			e.LandingID, e.OfferID, e.PwaID, e.TrafficSourceID, // schema/008-011: appended last, keep this order
+			e.ID, // schema/014: event_id, after them
 		); err != nil {
 			return fmt.Errorf("chstore: appending to click_events batch: %w", err)
 		}
@@ -100,6 +101,7 @@ func (s *EventStore) insertTrackingEvents(ctx context.Context, events []event.Ev
 			e.Subs[0], e.Subs[1], e.Subs[2], e.Subs[3], e.Subs[4], e.Subs[5], e.Subs[6], e.Subs[7], e.Subs[8], e.Subs[9],
 			e.ExternalClickID,
 			e.LandingID, e.OfferID, e.PwaID, e.TrafficSourceID, // schema/008-011: appended last, keep this order
+			e.ID, // schema/014: event_id, after them
 		); err != nil {
 			return fmt.Errorf("chstore: appending to tracking_events batch: %w", err)
 		}
@@ -129,6 +131,7 @@ func (s *EventStore) insertConversionEvents(ctx context.Context, events []event.
 			e.NetworkID, e.Revenue, e.Currency, e.USDValue, boolToUInt8(e.HasUSDValue), e.EventRef, e.NetworkTxnID,
 			e.AttributionOutcome, e.AttributionMethod, e.TimeToConversionMS,
 			e.LandingID, e.OfferID, e.PwaID, e.TrafficSourceID, // schema/008-011: appended last, keep this order
+			e.ID, // schema/014: event_id, after them
 		); err != nil {
 			return fmt.Errorf("chstore: appending to conversion_events batch: %w", err)
 		}

@@ -83,7 +83,7 @@ reverses are seen consistently.
 - Booked on the decline's own date: closed days keep what they showed (the
   same principle as never moving back to CPA_HOLD); the decline's day can
   show negative revenue. Conversion counts do not change.
-- Reports and LTV net it in (`ltv_events_mv_v2` copies declines; LTV adds
+- Reports and LTV net it in (`ltv_events_mv_v3` copies declines; LTV adds
   them to revenue and the window of their date, not to deposit counts).
 - A repeated decline is a duplicate (dedup key) and reverses nothing twice.
   DECLINE then ACCEPT records the accept as usual. ACCEPT → DECLINE →

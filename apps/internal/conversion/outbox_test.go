@@ -27,6 +27,7 @@ type probeWriter struct {
 	eventsInTx  int
 	failWith    error
 	lastRequest conversion.DeliveryRequest
+	eventID     string // the queued CPA event's id, read in the transaction
 }
 
 func (w *probeWriter) InsertTx(ctx context.Context, tx pgx.Tx, req conversion.DeliveryRequest) error {
@@ -37,6 +38,11 @@ func (w *probeWriter) InsertTx(ctx context.Context, tx pgx.Tx, req conversion.De
 	if err := tx.QueryRow(ctx,
 		`SELECT count(*) FROM event_queue WHERE payload->>'clickId' = $1`, req.ClickID,
 	).Scan(&w.eventsInTx); err != nil {
+		return err
+	}
+	if err := tx.QueryRow(ctx,
+		`SELECT COALESCE(max(payload->>'id'), '') FROM event_queue WHERE payload->>'clickId' = $1`, req.ClickID,
+	).Scan(&w.eventID); err != nil {
 		return err
 	}
 	if w.failWith != nil {
@@ -78,6 +84,9 @@ func TestRecordWritesOutboxInSameTransaction(t *testing.T) {
 	}
 	if writer.eventsInTx != 1 {
 		t.Fatalf("CPA events visible in the record's transaction = %d, want 1", writer.eventsInTx)
+	}
+	if writer.eventID != rec.ID {
+		t.Fatalf("CPA event id = %q, want the postbacks row id %q (the reconciliation repairs by it)", writer.eventID, rec.ID)
 	}
 	if writer.lastRequest.SourcePostbackID != rec.ID {
 		t.Fatalf("delivery source_postback_id = %q, want the recorded row %q", writer.lastRequest.SourcePostbackID, rec.ID)

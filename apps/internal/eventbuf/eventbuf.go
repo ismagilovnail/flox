@@ -32,6 +32,7 @@ import (
 	"time"
 
 	"github.com/ismagilovnail/flox/apps/internal/event"
+	"github.com/ismagilovnail/flox/apps/internal/idgen"
 )
 
 // Sink is where flushed batches go. The real implementation (Phase 24's
@@ -134,6 +135,9 @@ func New(sink Sink, logger *slog.Logger, cfg Config) *Writer {
 // handle — the redirect must not care whether persistence succeeded.
 // Returns false only so tests (and metrics) can observe drops.
 func (w *Writer) Enqueue(e event.Event) bool {
+	if e.ID == "" {
+		e.ID = idgen.New()
+	}
 	if w.closed.Load() {
 		// Nothing drains the channel any more: accepting the event would
 		// count it as enqueued and lose it silently.

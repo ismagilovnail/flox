@@ -311,3 +311,17 @@ func TestEnqueueAfterCloseIsDropped(t *testing.T) {
 		t.Fatalf("stats = %+v, want 1 dropped, 0 enqueued", s)
 	}
 }
+
+// Every event leaves the buffer with an id (audit 2026-10-06): the queue
+// row id that makes a re-sent write a no-op. One already set is kept.
+func TestEnqueueAssignsEventIDs(t *testing.T) {
+	sink := &collectingSink{}
+	w := eventbuf.New(sink, quietLogger(), eventbuf.Config{})
+	w.Enqueue(event.Event{Type: event.SourceClick})
+	w.Enqueue(event.Event{Type: event.SourceClick, ID: "kept"})
+	w.Close()
+
+	if len(sink.events) != 2 || sink.events[0].ID == "" || sink.events[1].ID != "kept" {
+		t.Fatalf("ids = %q, %q; want a generated one and \"kept\"", sink.events[0].ID, sink.events[1].ID)
+	}
+}

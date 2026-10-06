@@ -121,6 +121,13 @@ func (s Subs) SubCount() int {
 // ClickHouse). Field set covers what Phase 21 can actually populate;
 // later phases extend it rather than redefining it.
 type Event struct {
+	// ID identifies the event itself, stable from its creation through
+	// every retry (audit 2026-10-06): assigned by eventbuf.Writer.Enqueue
+	// when empty, and for a conversion it is the postbacks row id. It is
+	// the event_queue row id (a re-sent write is a no-op) and the
+	// ClickHouse event_id the reconciliation repairs by.
+	ID string `json:"id,omitempty"`
+
 	Type           Type      `json:"type"`
 	EventAt        time.Time `json:"eventAt"`
 	OrganizationID string    `json:"organizationId"`

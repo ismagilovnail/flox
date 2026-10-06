@@ -296,3 +296,30 @@ func TestEnqueueBatchTransientFailureIsRetryable(t *testing.T) {
 		t.Fatalf("err = %#v, want a plain (retry everything) error", err)
 	}
 }
+
+// A batch written again after a lost reply (eventbuf retries it) adds
+// nothing: the event id is the row id.
+func TestEnqueueBatchIsIdempotentByEventID(t *testing.T) {
+	pool := mustPool(t)
+	ctx := context.Background()
+	orgID := seedOrg(t, ctx, pool)
+	table := testpg.PrivateTable(t, pool, "event_queue")
+	q := eventqueue.NewPostgresQueueOnTable(pool, table)
+
+	batch := []event.Event{
+		{ID: idgen.New(), Type: event.SourceClick, OrganizationID: orgID, ClickID: idgen.New(), EventAt: time.Now().UTC()},
+		{ID: idgen.New(), Type: event.LandView, OrganizationID: orgID, ClickID: idgen.New(), EventAt: time.Now().UTC()},
+	}
+	for i := 0; i < 3; i++ {
+		if err := q.EnqueueBatch(ctx, batch); err != nil {
+			t.Fatalf("EnqueueBatch %d: %v", i, err)
+		}
+	}
+	var n int
+	if err := pool.QueryRow(ctx, `SELECT count(*) FROM `+table).Scan(&n); err != nil {
+		t.Fatalf("counting: %v", err)
+	}
+	if n != 2 {
+		t.Fatalf("rows = %d after writing the same batch 3 times, want 2", n)
+	}
+}
