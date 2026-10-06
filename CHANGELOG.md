@@ -5,6 +5,17 @@ per-phase, matching `CLAUDE.md`'s phase protocol. The one exception is
 [Between phases], below: spec amendments and the code changes that follow from
 them land between phases and would otherwise be invisible here.
 
+## [Between phases] — unsaved report edits survive a reload
+
+Choosing a timezone (or hiding a column, reordering, changing metrics, filters,
+grouping) without saving the preset was lost on reload: the remembered preset was
+re-applied over it. The report builder now keeps a per-browser draft
+(`flox.analytics.draft` in localStorage: timezone, dimensions, metrics, filters,
+column order/widths/hidden columns, groupBy) on top of the active preset id; it is
+re-applied after the preset on load and dropped as soon as the report matches the
+preset again (saved, or edited back). Not part of the draft: date range, sort,
+compare. A draft made on a deleted/other preset is ignored.
+
 ## [Between phases] — Russian timezones in the timezone dropdown
 
 `lib/timezones.ts` + `components/ui/timezone-select.tsx`: one dropdown shared by

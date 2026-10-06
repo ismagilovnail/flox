@@ -52,6 +52,33 @@ function writeActivePreset(id: string | null) {
   }
 }
 
+/** The report's unsaved edits (on top of the active preset) survive a reload too,
+ * per browser: picking a timezone or hiding a column shouldn't be lost just
+ * because the preset wasn't saved. Dropped as soon as the report matches the
+ * preset again. */
+const DRAFT_KEY = "flox.analytics.draft";
+const DRAFT_FIELDS = ["timezone", "dimensions", "metrics", "filters", "columnOrder", "columnWidths", "hiddenColumns", "groupBy"] as const;
+type DraftPatch = Partial<Pick<ReportControlsState, (typeof DRAFT_FIELDS)[number]>>;
+type Draft = { presetId: string | null; patch: DraftPatch };
+
+function readDraft(): Draft | null {
+  try {
+    const raw = window.localStorage.getItem(DRAFT_KEY);
+    return raw ? (JSON.parse(raw) as Draft) : null;
+  } catch {
+    return null;
+  }
+}
+
+function writeDraft(draft: Draft | null) {
+  try {
+    if (draft) window.localStorage.setItem(DRAFT_KEY, JSON.stringify(draft));
+    else window.localStorage.removeItem(DRAFT_KEY);
+  } catch {
+    // storage blocked: the edits just won't survive a reload
+  }
+}
+
 const isoDay = (d: Date) => d.toISOString().slice(0, 10);
 
 function sameRange(a: ReportControlsState["dateRange"], b: { from: Date; to: Date }): boolean {
@@ -111,6 +138,7 @@ export function ReportPresetBar({
     typeof window === "undefined" ? null : readActivePreset(),
   );
   const restored = React.useRef(false);
+  const justRestored = React.useRef(false);
 
   function toPatch(preset: ReportPreset): Partial<ReportControlsState> {
     return {
@@ -142,7 +170,31 @@ export function ReportPresetBar({
     const preset = activeId ? presetsQuery.data.presets.find((p) => p.id === activeId) : undefined;
     if (preset) onApply(toPatch(preset));
     else if (activeId) writeActivePreset(null); // deleted since
+    // Unsaved edits made on top of that preset (or on top of no preset at all).
+    const draft = readDraft();
+    if (draft && draft.presetId === (preset?.id ?? null)) onApply(draft.patch);
+    justRestored.current = true;
   });
+
+  // Keep the draft in step with the report: anything different from the active
+  // preset is stored, a report equal to its preset clears it.
+  React.useEffect(() => {
+    if (!restored.current || !presetsQuery.isSuccess) return;
+    if (justRestored.current) {
+      // This commit still holds the state from before the restore.
+      justRestored.current = false;
+      return;
+    }
+    if (new URLSearchParams(window.location.search).has("dim")) return;
+    const preset = presetsQuery.data.presets.find((p) => p.id === activeId);
+    if (preset && matchesPreset(state, preset)) {
+      writeDraft(null);
+      return;
+    }
+    const patch: Record<string, unknown> = {};
+    for (const f of DRAFT_FIELDS) patch[f] = state[f];
+    writeDraft({ presetId: preset?.id ?? null, patch: patch as DraftPatch });
+  }, [state, activeId, presetsQuery.isSuccess, presetsQuery.data]);
 
   function openSaveDialog(target: ReportPreset | null) {
     setName(target?.name ?? "");
