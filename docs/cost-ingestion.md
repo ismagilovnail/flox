@@ -35,7 +35,9 @@ NULL means "no `fx_rates` row for (currency, entry_date) yet," never 0.
 existing `conversion.PostgresFX` (reused, not reimplemented) — USD is
 special-cased to a 1:1 rate there already, so the common case (manual
 entries in USD, the only currency the Cost tab defaults to) always
-converts cleanly with no `fx_rates` seeding required.
+converts cleanly with no `fx_rates` seeding required. Other currencies
+convert once `apps/worker` has synced rates (`docs/fx.md`); an entry
+saved before its rate existed is filled in by the next sync's repair.
 
 ## `created_by_user_id`: nullable, and why that's honest
 

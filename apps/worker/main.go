@@ -39,6 +39,7 @@ package main
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
 	"os"
 	"os/signal"
@@ -60,6 +61,8 @@ import (
 	"github.com/ismagilovnail/flox/apps/internal/cost"
 	"github.com/ismagilovnail/flox/apps/internal/costsync"
 	"github.com/ismagilovnail/flox/apps/internal/eventqueue"
+	"github.com/ismagilovnail/flox/apps/internal/fx"
+	"github.com/ismagilovnail/flox/apps/internal/fx/ecb"
 	"github.com/ismagilovnail/flox/apps/internal/logging"
 	"github.com/ismagilovnail/flox/apps/internal/metrics"
 	"github.com/ismagilovnail/flox/apps/internal/postback"
@@ -108,6 +111,11 @@ const costSyncInterval = 6 * time.Hour
 // there is no reason to poll faster than anyone will actually look at a
 // dashboard.
 const queueDepthPollInterval = 15 * time.Second
+
+// fxSyncInterval: reference rates are published once per working day, so a
+// few runs a day pick up each fixing the same afternoon without hammering
+// the provider.
+const fxSyncInterval = 4 * time.Hour
 
 // shutdownDrainTimeout is how long shutdown waits for in-flight batches.
 // Covers a ClickHouse insert (30s cap) but not a full 20-delivery postback
@@ -172,6 +180,22 @@ func run() error {
 		logger.Error("ad account encryption key configuration failed", "error", err)
 		return err
 	}
+	// Reference FX rates: without them every non-USD payout and spend has no
+	// USD value and drops out of Revenue/Cost/ROI (audit 2026-10-06, AN1).
+	// Same "fail loudly at boot" bar as the key above: a typo must not
+	// silently leave every non-USD amount without a USD value.
+	var fxProvider fx.Provider
+	switch cfg.FXProvider {
+	case "ecb":
+		fxProvider = ecb.New()
+	case "none":
+		logger.Warn("FX_PROVIDER=none: fx_rates is not synced, non-USD amounts get a USD value only if rates are loaded by other means")
+	default:
+		err := fmt.Errorf("unknown FX_PROVIDER %q (want ecb or none)", cfg.FXProvider)
+		logger.Error("fx provider configuration failed", "error", err)
+		return err
+	}
+
 	adAccountRepo := adaccount.NewRepository(db, adAccountKey)
 	costSyncSvc := costsync.NewService(adAccountRepo, campaign.NewRepository(db), cost.NewService(cost.NewRepository(db), conversion.NewPostgresFX(db)), costsync.Providers{
 		FacebookAds: facebookads.New(),
@@ -265,6 +289,12 @@ func run() error {
 
 	logger.Info("event queue depth poller starting", "interval", queueDepthPollInterval)
 	start(func() { eventqueue.PollDepth(ctx, eventQueue, metrics.EventQueueDepth, queueDepthPollInterval, logger) })
+
+	if fxProvider != nil {
+		fxSyncer := fx.NewSyncer(fxProvider, fx.NewStore(db), logger)
+		logger.Info("fx rate sync starting", "provider", cfg.FXProvider, "interval", fxSyncInterval)
+		start(func() { fxSyncer.RunLoop(ctx, fxSyncInterval) })
+	}
 
 	// Backstop for claims a crashed worker (this one's previous process, or
 	// another replica) never finished — see internal/queuereaper.

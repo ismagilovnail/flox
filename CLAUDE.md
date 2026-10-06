@@ -20,24 +20,28 @@ referenced below as §N).
 
 ```
 CURRENT PHASE : TECH AUDIT FOLLOW-UPS (between phases)
-STATUS        : steps 1–4 of the P0 list done: Q1 queue claims never abandoned;
+STATUS        : steps 1–5 of the P0 list done: Q1 queue claims never abandoned;
                 D1+D3 conversion + CPA event + outgoing postback in one tx under
-                a per-click lock; S3 postback revenue validated (finite, 0..1e9);
-                RL3 tracker exits 0 on SIGTERM (idempotent eventbuf.Close).
+                a per-click lock; S3 postback revenue validated; RL3 tracker
+                exits 0 on SIGTERM; AN1 FX rates synced from the ECB by the
+                worker, USD repaired in Postgres (ClickHouse history: with D2).
                 Technical audit is docs/audit-tech-2026-10-06.md; the user asked
                 to fix it step by step and allowed wiping the dev database when
                 a step needs it.
-LAST COMMIT   : fix(eventbuf): make Close idempotent.
-UNCOMMITTED   : none expected. Verified: full-env go test, e2e all PASS, binary
-                SIGTERM exit 0.
-NEXT          : AN1 FX rates → D2 idempotent
-                ClickHouse inserts (may wipe dev CH) → RL2 eventbuf retry → DO1
-                CI (fix the eventqueue TestEnqueueClaimAndDelete flake there).
-                Then T4/AN3: §45 requires a chargeback (ACCEPT→DECLINE) to
-                reverse revenue; reports don't. Marketer audit items
-                (docs/audit-marketer-2026-10-06.md) are still open behind them.
-                Run go test with the full env line AND check e2e did not skip
-                on the auth rate limit (memory: flox-full-test-env).
+LAST COMMIT   : feat(fx): sync reference rates from the ECB.
+UNCOMMITTED   : none expected. Verified: full-env go test, e2e all PASS, live
+                EUR postback stored with USD in PG and CH.
+NEXT          : D2 idempotent ClickHouse inserts + rebuild of derived analytics
+                from Postgres (also repairs pre-sync conversions' USD in CH; may
+                wipe dev CH) → RL2 eventbuf retry → DO1 CI (isolate the queue
+                tests from the live dev worker: eventqueue
+                TestEnqueueClaimAndDelete, postback
+                TestPostgresStoreClaimRespectsLimit). Then T4/AN3: §45 requires a
+                chargeback (ACCEPT→DECLINE) to reverse revenue; reports don't.
+                Marketer audit items (docs/audit-marketer-2026-10-06.md) are
+                still open behind them. Run go test with the full env line AND
+                check e2e did not skip on the auth rate limit (memory:
+                flox-full-test-env).
 ```
 
 > At the end of every phase: update the four lines above, add a CHANGELOG entry,

@@ -231,16 +231,25 @@ func TestPostgresFX(t *testing.T) {
 		t.Fatalf("USD passthrough: usd=%v ok=%v err=%v", usd, ok, err)
 	}
 
-	seedFXRate(t, ctx, pool, "EUR", at, 1.1)
-	usd, ok, err := fx.ToUSD(ctx, "EUR", 100, at)
+	// XTS is the ISO 4217 code reserved for testing: no provider publishes
+	// it, so the dev worker's real rate sync cannot interfere.
+	seedFXRate(t, ctx, pool, "XTS", at, 1.1)
+	usd, ok, err := fx.ToUSD(ctx, "xts", 100, at)
 	if err != nil || !ok || usd < 109.99 || usd > 110.01 {
-		t.Fatalf("EUR on rate date: usd=%v ok=%v err=%v, want ~110 true nil", usd, ok, err)
+		t.Fatalf("XTS on rate date: usd=%v ok=%v err=%v, want ~110 true nil", usd, ok, err)
 	}
 
-	// No rate on file for the day before: never invent a rate.
-	dayBefore := at.AddDate(0, 0, -1)
-	if usd, ok, err := fx.ToUSD(ctx, "EUR", 100, dayBefore); err != nil || ok {
-		t.Fatalf("no rate for that date: usd=%v ok=%v err=%v, want ok=false err=nil", usd, ok, err)
+	// A weekend or holiday after the fixing uses the latest earlier rate.
+	if usd, ok, err := fx.ToUSD(ctx, "XTS", 100, at.AddDate(0, 0, 3)); err != nil || !ok || usd < 109.99 || usd > 110.01 {
+		t.Fatalf("3 days after the rate: usd=%v ok=%v err=%v, want ~110 true nil", usd, ok, err)
+	}
+
+	// Never a later rate, and never one older than fx.MaxStaleDays.
+	if usd, ok, err := fx.ToUSD(ctx, "XTS", 100, at.AddDate(0, 0, -1)); err != nil || ok {
+		t.Fatalf("before the first rate: usd=%v ok=%v err=%v, want ok=false err=nil", usd, ok, err)
+	}
+	if usd, ok, err := fx.ToUSD(ctx, "XTS", 100, at.AddDate(0, 0, 7)); err != nil || ok {
+		t.Fatalf("7 days after the rate: usd=%v ok=%v err=%v, want ok=false err=nil", usd, ok, err)
 	}
 }
 

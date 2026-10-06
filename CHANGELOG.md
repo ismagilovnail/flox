@@ -5,6 +5,41 @@ per-phase, matching `CLAUDE.md`'s phase protocol. The one exception is
 [Between phases], below: spec amendments and the code changes that follow from
 them land between phases and would otherwise be invisible here.
 
+## [Between phases] — FX rates are synced from the ECB
+
+Technical audit, finding AN1 (P0 for any non-USD money). `fx_rates` existed and was read
+with an exact-date match, but nothing ever wrote it — every non-USD payout and spend was
+stored without a USD value and dropped out of Revenue, Cost and ROI.
+
+- `internal/fx`: `Provider` interface, `Store` (upsert, repair) and `Syncer`;
+  `internal/fx/ecb` reads the ECB reference rates (free, no key; 90-day feed, full history
+  only when a first sync has to reach further back) and converts EUR quotes to USD.
+- `apps/worker` syncs at startup and every 4h. `FX_PROVIDER=ecb|none` (default `ecb`);
+  anything else fails the worker at boot.
+- Lookup (`conversion.PostgresFX` and the repair): the latest rate on or before the event's
+  UTC date, at most 7 days old — weekends/holidays use the last fixing, never a later rate.
+- After each sync, `postbacks.usd_value` and `cost_entries.amount_usd` that are NULL and now
+  have a rate are filled in. Costs are read from Postgres only, so ROI is fixed by this;
+  **ClickHouse copies of past conversions are not repaired yet** (they keep
+  `has_usd_value = 0`) — that is a rebuild of derived analytics, planned with D2.
+- Metrics `flox_fx_sync_total{outcome}`, `flox_fx_latest_rate_age_seconds`; alerts
+  `FXRatesStale` (> 4 days), `FXSyncFailing` (checked with `promtool`).
+- ECB does not publish RUB (suspended), UAH or KZT: amounts in them still have no USD value.
+  Another provider can be added behind `fx.Provider`.
+
+Tests: ECB parser (EUR→USD cross rates, USD not stored, days without USD skipped, garbage
+refused), feed choice (90-day vs history) and HTTP errors via httptest; syncer window
+(empty table, re-read window, reach back for an old missing value; provider failure writes
+nothing); Postgres repair (weekend uses Friday's rate, lower-case `usd` 1:1, too old / before
+any rate / unpublished currency stay NULL, cost entry converted) using the ISO test code
+XTS; `TestPostgresFX` moved off real EUR onto XTS and covers the 7-day window. Live: the
+dev worker synced 1885 ECB rates (29 currencies, from 2026-07-08); a real postback of
+100 EUR through the tracker was stored as 112.69 USD in Postgres and in ClickHouse
+(`has_usd_value = 1`) — test rows removed from both stores afterwards. Full-env
+`go test ./...` green except a known shared-queue flake
+(`postback.TestPostgresStoreClaimRespectsLimit` lost a row to the live dev worker while e2e
+ran; 3/3 alone); `apps/e2e` all four PASS.
+
 ## [Between phases] — tracker shuts down cleanly
 
 Technical audit, finding RL3. `apps/tracker` closes its event writer explicitly (so it can

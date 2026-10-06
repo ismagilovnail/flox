@@ -116,6 +116,23 @@ var (
 		Help:      "Abandoned 'processing' queue rows returned to their queue, by queue.",
 	}, []string{"queue"})
 
+	// FXSyncTotal counts apps/worker's reference-rate syncs (internal/fx),
+	// by outcome (ok|error).
+	FXSyncTotal = promauto.NewCounterVec(prometheus.CounterOpts{
+		Namespace: namespace,
+		Name:      "fx_sync_total",
+		Help:      "FX reference-rate sync runs, by outcome.",
+	}, []string{"outcome"})
+
+	// FXLatestRateAgeSeconds is how old the newest stored rate is. Reference
+	// rates skip weekends and holidays, so a few days is normal; past
+	// fx.MaxStaleDays new non-USD money stops getting a USD value.
+	FXLatestRateAgeSeconds = promauto.NewGauge(prometheus.GaugeOpts{
+		Namespace: namespace,
+		Name:      "fx_latest_rate_age_seconds",
+		Help:      "Age of the newest FX rate on file, refreshed after each sync.",
+	})
+
 	PostbackDeliveriesTotal = promauto.NewCounterVec(prometheus.CounterOpts{
 		Namespace: namespace,
 		Name:      "postback_deliveries_total",

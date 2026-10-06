@@ -72,6 +72,11 @@ type Config struct {
 	// plain text (migration 00018) — this key never touches it.
 	AdAccountEncryptionKey string
 
+	// FXProvider is where apps/worker pulls reference FX rates from
+	// (internal/fx): "ecb" (default) or "none" — offline dev, or rates
+	// loaded into fx_rates by other means.
+	FXProvider string
+
 	// LandingLinkKey is the HMAC key (32+ raw bytes, base64-encoded)
 	// apps/tracker signs internal landings' click links with
 	// (apps/internal/landinglink). Missing or invalid: the tracker logs a
@@ -185,6 +190,7 @@ func load(portVar, portDefault, defaultServiceName string) (Config, error) {
 		IntegrationEncryptionKey: getEnv("INTEGRATION_ENCRYPTION_KEY", ""),
 		AdAccountEncryptionKey:   getEnv("ADACCOUNT_ENCRYPTION_KEY", ""),
 		LandingLinkKey:           getEnv("LANDING_LINK_KEY", ""),
+		FXProvider:               getEnv("FX_PROVIDER", "ecb"),
 		TrackerPublicURL:         getEnv("TRACKER_PUBLIC_URL", ""),
 		TrackerDNSTarget:         getEnv("TRACKER_DNS_TARGET", ""),
 

@@ -55,8 +55,8 @@ FROM alpine:3.21 AS worker
 # ca-certificates: apps/worker's own outbound HTTPS calls are real and
 # frequent — outgoing postback delivery to a network operator's
 # postback_url (§46, urlsafety-guarded but still a real TLS connection)
-# and Facebook/TikTok ad spend sync (§74/§27-COST) both need a working CA
-# bundle, unlike apps/tracker.
+# Facebook/TikTok ad spend sync (§74/§27-COST) and the ECB FX rate sync
+# (internal/fx) all need a working CA bundle, unlike apps/tracker.
 RUN apk add --no-cache ca-certificates && adduser -D -u 10001 -h /app app
 
 WORKDIR /app

@@ -71,8 +71,8 @@ ENTRYPOINT ["go", "tool", "goose", "-dir", "api/migrations", "postgres"]
 # ---------- runtime ----------
 FROM alpine:3.21 AS api
 
-# ca-certificates: apps/api makes outbound HTTPS calls (FX rate provider,
-# domain/DNS providers, Facebook/TikTok ad account sync — all behind
+# ca-certificates: apps/api makes outbound HTTPS calls (domain/DNS
+# providers, Facebook/TikTok ad account sync — all behind
 # interfaces per CLAUDE.md non-negotiable #11) that need a real CA bundle;
 # alpine's base image does not carry one, unlike the Go builder stage.
 RUN apk add --no-cache ca-certificates && adduser -D -u 10001 -h /app app

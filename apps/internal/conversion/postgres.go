@@ -13,6 +13,7 @@ import (
 
 	"github.com/ismagilovnail/flox/apps/internal/event"
 	"github.com/ismagilovnail/flox/apps/internal/eventqueue"
+	"github.com/ismagilovnail/flox/apps/internal/fx"
 	"github.com/ismagilovnail/flox/apps/internal/idgen"
 )
 
@@ -301,7 +302,13 @@ func (m *PostgresMapper) MapStatus(ctx context.Context, organizationID, networkI
 	return event.Type(floxStatus), nil
 }
 
-// PostgresFX reads fx_rates (§50-FX), keyed by (currency, rate_date).
+// PostgresFX reads fx_rates (§50-FX), kept filled by internal/fx. The rate
+// used is the latest published on or before the event's date, at most
+// fx.MaxStaleDays old: reference rates skip weekends and holidays, and an
+// event before today's fixing takes yesterday's — the rate in force then,
+// never a later one. Before the 2026-10-06 audit (AN1) this demanded an exact
+// date match on a table nothing filled, so every non-USD amount had no USD
+// value.
 type PostgresFX struct {
 	db *pgxpool.Pool
 }
@@ -322,8 +329,10 @@ func (f *PostgresFX) ToUSD(ctx context.Context, currency string, amount float64,
 	var rate float64
 	err := f.db.QueryRow(ctx, `
 		SELECT rate_to_usd FROM fx_rates
-		WHERE currency = $1 AND rate_date = $2`,
-		currency, at.UTC().Format("2006-01-02"),
+		WHERE currency = $1 AND rate_date <= $2::date AND rate_date > $2::date - $3::int
+		ORDER BY rate_date DESC
+		LIMIT 1`,
+		currency, at.UTC().Format("2006-01-02"), fx.MaxStaleDays,
 	).Scan(&rate)
 
 	if errors.Is(err, pgx.ErrNoRows) {

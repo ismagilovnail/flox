@@ -75,6 +75,28 @@ groups:
           summary: "Postgres event_queue backlog is growing"
           description: "flox_event_queue_depth has been above 10,000 for 10m — apps/worker's flush loop is falling behind. Events are not yet lost (still durable in Postgres) but analytics/attribution are increasingly stale until this drains."
 
+  - name: flox.fx
+    rules:
+      - alert: FXRatesStale
+        # Reference rates skip weekends and holidays, so 2-3 days is normal.
+        # Past fx.MaxStaleDays (7) new non-USD payouts and spend stop getting
+        # a USD value and drop out of Revenue/Cost/ROI; alert well before.
+        expr: flox_fx_latest_rate_age_seconds > 4 * 86400
+        for: 1h
+        labels:
+          severity: warning
+        annotations:
+          summary: "FX reference rates are going stale"
+          description: "The newest FX rate is over 4 days old — apps/worker's rate sync is failing (see flox_fx_sync_total{outcome=\"error\"}). After 7 days non-USD amounts are stored without a USD value until rates return; the next successful sync repairs them."
+
+      - alert: FXSyncFailing
+        expr: increase(flox_fx_sync_total{outcome="error"}[1d]) >= 3 and increase(flox_fx_sync_total{outcome="ok"}[1d]) == 0
+        labels:
+          severity: warning
+        annotations:
+          summary: "FX rate sync has not succeeded for a day"
+          description: "Every apps/worker FX sync in the last 24h failed. Rates already on file keep working for up to 7 days."
+
   - name: flox.postbacks
     rules:
       - alert: PostbackDeliveryDeadLetterRateHigh

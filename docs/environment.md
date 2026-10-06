@@ -127,7 +127,16 @@ metrics (`docs/observability.md`) are a completely separate signal, always
 on regardless of this variable — `GET /metrics` on all three Go binaries
 needs no configuration at all.
 
-### FX rate provider, domain/DNS providers, Facebook/TikTok ad accounts
+### FX rates
+
+| Variable | Dev value | Staging/production |
+|---|---|---|
+| `FX_PROVIDER` | `ecb` (default) | `ecb`. `none` only when `fx_rates` is filled by other means — then non-USD amounts get a USD value only from those rows. Anything else fails `apps/worker` at boot. |
+
+`ecb` needs no key and outbound HTTPS to `www.ecb.europa.eu` from
+`apps/worker`. See `docs/fx.md`.
+
+### Domain/DNS providers, Facebook/TikTok ad accounts
 
 All blank in `.env.example` on purpose — every one of these is a real
 external vendor credential CLAUDE.md non-negotiable #11 requires stay
