@@ -104,6 +104,7 @@
   "rowActions": {
     "actionsAria": "Actions for {{name}}",
     "open": "Open",
+    "viewStatistics": "Campaign statistics",
     "pause": "Pause",
     "resume": "Resume",
     "activate": "Activate",

@@ -4,7 +4,7 @@ import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { CopyIcon, ExternalLinkIcon, PauseIcon, PlayIcon, Trash2Icon } from "lucide-react";
+import { BarChart3Icon, CopyIcon, ExternalLinkIcon, PauseIcon, PlayIcon, Trash2Icon } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 import { IconButton } from "@/components/ui/icon-button";
@@ -20,6 +20,7 @@ import {
 } from "@/components/ui/dialog";
 import { useActivateCampaign, useArchiveCampaign, useDuplicateCampaign, usePauseCampaign } from "@/hooks/use-campaigns";
 import { usePermission } from "@/hooks/use-auth";
+import { viewStatisticsHref } from "@/features/analytics/view-statistics-link";
 import type { Campaign } from "@/lib/api/campaigns";
 
 export function CampaignRowActions({
@@ -87,6 +88,11 @@ export function CampaignRowActions({
     <>
       {variant === "inline" ? (
         <div className="flex items-center gap-2">
+          <Button variant="outline" size="sm" asChild>
+            <Link href={viewStatisticsHref("campaign", campaign.id)}>
+              <BarChart3Icon className="size-4" /> {t("rowActions.viewStatistics")}
+            </Link>
+          </Button>
           {canWrite && campaign.status !== "archived" && (
             <Button variant="outline" size="sm" onClick={togglePause}>
               {campaign.status === "active" ? <PauseIcon className="size-4" /> : <PlayIcon className="size-4" />}
@@ -115,6 +121,18 @@ export function CampaignRowActions({
               </IconButton>
             </TooltipTrigger>
             <TooltipContent>{t("rowActions.open")}</TooltipContent>
+          </Tooltip>
+
+          {/* campaign.id: the `campaign` report dimension groups by campaign_id. */}
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <IconButton aria-label={t("rowActions.viewStatistics")} size="icon-sm" asChild>
+                <Link href={viewStatisticsHref("campaign", campaign.id)}>
+                  <BarChart3Icon className="size-3.5" />
+                </Link>
+              </IconButton>
+            </TooltipTrigger>
+            <TooltipContent>{t("rowActions.viewStatistics")}</TooltipContent>
           </Tooltip>
 
           {canWrite && campaign.status !== "archived" && (

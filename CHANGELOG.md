@@ -5,6 +5,14 @@ per-phase, matching `CLAUDE.md`'s phase protocol. The one exception is
 [Between phases], below: spec amendments and the code changes that follow from
 them land between phases and would otherwise be invisible here.
 
+## [Between phases] — "Статистика кампании" link
+
+Campaigns get the same drill-in the other directories have: an icon button in each
+campaigns-table row and a labelled button in the campaign page header open
+`/analytics?dim=campaign&val=<id>&tab=line` (the report pre-filtered to that
+campaign). `campaign` is added to `viewStatisticsHref`'s dimensions and to the
+analytics view's deep-link allowlist.
+
 ## [Between phases] — Overview tables remember their columns; header hints
 
 `DataTable` gets an opt-in `persistKey`: the table's own column visibility, order

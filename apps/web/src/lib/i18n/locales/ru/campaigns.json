@@ -104,6 +104,7 @@
   "rowActions": {
     "actionsAria": "Действия для {{name}}",
     "open": "Открыть",
+    "viewStatistics": "Статистика кампании",
     "pause": "Приостановить",
     "resume": "Возобновить",
     "activate": "Активировать",
