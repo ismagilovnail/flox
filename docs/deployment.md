@@ -80,6 +80,36 @@ header will show (§54 CSRF check, `apps/internal/tenant.
 RequireSameOrigin`) — `https://app.yourdomain.example`, not an internal
 hostname.
 
+## HTTPS for tracking domains
+
+Organizations add their own tracking domains, so the tracker's certificates
+cannot be configured by hand. Put Caddy in front of `apps/tracker` with
+`infra/Caddyfile.tracker`:
+
+```
+docker run -d -p 80:80 -p 443:443 \
+  -e ACME_EMAIL=ops@yourdomain.example -e TRACKER=tracker:8081 \
+  -v $PWD/infra/Caddyfile.tracker:/etc/caddy/Caddyfile:ro \
+  -v caddy_data:/data caddy:2
+```
+
+- Caddy issues a certificate on the first HTTPS connection to a domain, after
+  asking the tracker's `/internal/tls-ask` whether it is registered; the
+  worker's SSL check (every 10 minutes for domains without one) makes that
+  first connection, so nobody has to open the domain by hand.
+- Ports 80 and 443 must reach Caddy from the internet (ACME HTTP-01 /
+  TLS-ALPN-01), and each domain's DNS must point at it — see
+  `TRACKER_DNS_TARGET` for the Cloudflare "Sync DNS" button.
+- Keep `/data` persistent; with several Caddy replicas share it (or use a
+  Caddy storage module), or each will request its own certificates and hit
+  the CA's rate limits.
+- Add Caddy's address to `TRUSTED_PROXIES` if it is not on a private
+  network, or the tracker will see Caddy's IP instead of the visitor's.
+- Behind Cloudflare's proxy (orange cloud) Cloudflare serves the visitor's
+  certificate; the check then reports Cloudflare's and that is correct.
+
+The worker's checker needs outbound access to the domains on port 443.
+
 ## Health checks
 
 Every one of the four services answers `GET /health` (`apps/web`:

@@ -5,6 +5,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   createDomain,
   deleteDomain,
+  checkDomainSSL,
   getDomain,
   listDomains,
   renewDomain,
@@ -78,6 +79,14 @@ export function useSyncDomainDNS() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (id: string) => syncDomainDNS(id),
+    onSuccess: (_data, id) => invalidateAfter(qc, id),
+  });
+}
+
+export function useCheckDomainSSL() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => checkDomainSSL(id),
     onSuccess: (_data, id) => invalidateAfter(qc, id),
   });
 }

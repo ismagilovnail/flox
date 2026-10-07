@@ -164,8 +164,15 @@ type Domain struct {
 	DNSProvider    DNSProvider `json:"dnsProvider"`
 	ExpiresAt      *time.Time  `json:"expiresAt"`
 	VerifiedAt     *time.Time  `json:"verifiedAt"`
-	CreatedAt      time.Time   `json:"createdAt"`
-	UpdatedAt      time.Time   `json:"updatedAt"`
+	// SSLExpiresAt is the expiry of the certificate the domain served on
+	// the last successful TLS check; SSLError says why the last check
+	// did not find a valid one. Both come from a real connection to the
+	// domain (internal/sslcheck), never from client input.
+	SSLExpiresAt *time.Time `json:"sslExpiresAt"`
+	SSLCheckedAt *time.Time `json:"sslCheckedAt"`
+	SSLError     string     `json:"sslError"`
+	CreatedAt    time.Time  `json:"createdAt"`
+	UpdatedAt    time.Time  `json:"updatedAt"`
 }
 
 type CreateInput struct {

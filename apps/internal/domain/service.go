@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/ismagilovnail/flox/apps/internal/apierror"
+	"github.com/ismagilovnail/flox/apps/internal/domain/tlsprobe"
 	"github.com/ismagilovnail/flox/apps/internal/idgen"
 	"github.com/ismagilovnail/flox/apps/internal/integrations"
 )
@@ -26,6 +27,13 @@ type Service struct {
 	registrar        RegistrarProvider
 	dnsProvider      DNSProviderAdapter
 	trackerDNSTarget string
+	prober           SSLProber
+}
+
+// SSLProber checks the certificate a domain actually serves —
+// tlsprobe.Prober in production.
+type SSLProber interface {
+	Probe(ctx context.Context, host string) tlsprobe.Result
 }
 
 // NewService wires the automation dependencies alongside the repository
@@ -35,8 +43,8 @@ type Service struct {
 // real Namecheap/Cloudflare account. trackerDNSTarget is config.
 // TrackerDNSTarget — see its own doc comment for why an empty value is
 // refused rather than defaulted.
-func NewService(repo *Repository, credentials CredentialSource, registrar RegistrarProvider, dnsProvider DNSProviderAdapter, trackerDNSTarget string) *Service {
-	return &Service{repo: repo, credentials: credentials, registrar: registrar, dnsProvider: dnsProvider, trackerDNSTarget: trackerDNSTarget}
+func NewService(repo *Repository, credentials CredentialSource, registrar RegistrarProvider, dnsProvider DNSProviderAdapter, trackerDNSTarget string, prober SSLProber) *Service {
+	return &Service{repo: repo, credentials: credentials, registrar: registrar, dnsProvider: dnsProvider, trackerDNSTarget: trackerDNSTarget, prober: prober}
 }
 
 func (s *Service) List(ctx context.Context, orgID string) ([]Domain, error) {
@@ -273,4 +281,22 @@ func validatePurpose(purpose []string) string {
 		}
 	}
 	return ""
+}
+
+// CheckSSL connects to the domain over TLS now and records what
+// certificate it serves — the same check the worker runs on a schedule
+// (internal/sslcheck), for an operator who just pointed DNS and does not
+// want to wait for it.
+func (s *Service) CheckSSL(ctx context.Context, orgID, id string) (Domain, error) {
+	d, err := s.repo.GetByID(ctx, orgID, id)
+	if err != nil {
+		return Domain{}, err
+	}
+	return s.repo.ApplySSLCheck(ctx, orgID, id, ProbeSSL(ctx, s.prober, d.Domain))
+}
+
+// ProbeSSL runs one probe and maps it onto the domain's SSL fields.
+func ProbeSSL(ctx context.Context, prober SSLProber, host string) SSLCheckResult {
+	res := prober.Probe(ctx, host)
+	return SSLCheckResult{SSL: SSL(res.Outcome), ExpiresAt: res.ExpiresAt, Err: res.Err, CheckedAt: time.Now()}
 }

@@ -27,6 +27,23 @@ func TestCreateGetUpdateDelete(t *testing.T) {
 	if created.URL != "http://tl-track.example.com/t/summer-promo" {
 		t.Fatalf("URL = %q, want the tracker's own /t/{slug} shape", created.URL)
 	}
+	if created.Secure {
+		t.Fatal("Secure = true for a domain without a certificate")
+	}
+
+	// Marketer audit #4: once the domain serves a valid certificate the
+	// link is https.
+	if _, err := pool.Exec(ctx, `UPDATE domains SET ssl = 'issued' WHERE id = $1`, domainID); err != nil {
+		t.Fatalf("issuing: %v", err)
+	}
+	secure, err := svc.Get(ctx, orgID, created.ID)
+	if err != nil {
+		t.Fatalf("Get: %v", err)
+	}
+	if !secure.Secure || secure.URL != "https://tl-track.example.com/t/summer-promo" {
+		t.Fatalf("with a certificate: secure=%v URL=%q, want https", secure.Secure, secure.URL)
+	}
+
 	if created.Status != trackinglink.StatusActive {
 		t.Fatalf("Status = %q, want active default", created.Status)
 	}

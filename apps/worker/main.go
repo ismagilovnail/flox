@@ -61,6 +61,8 @@ import (
 	"github.com/ismagilovnail/flox/apps/internal/conversion"
 	"github.com/ismagilovnail/flox/apps/internal/cost"
 	"github.com/ismagilovnail/flox/apps/internal/costsync"
+	"github.com/ismagilovnail/flox/apps/internal/domain"
+	"github.com/ismagilovnail/flox/apps/internal/domain/tlsprobe"
 	"github.com/ismagilovnail/flox/apps/internal/errtrack"
 	"github.com/ismagilovnail/flox/apps/internal/eventqueue"
 	"github.com/ismagilovnail/flox/apps/internal/fx"
@@ -73,6 +75,7 @@ import (
 	"github.com/ismagilovnail/flox/apps/internal/queuereaper"
 	"github.com/ismagilovnail/flox/apps/internal/queuestats"
 	"github.com/ismagilovnail/flox/apps/internal/reconcile"
+	"github.com/ismagilovnail/flox/apps/internal/sslcheck"
 	"github.com/ismagilovnail/flox/apps/internal/telemetry"
 	"github.com/ismagilovnail/flox/apps/internal/urlsafety"
 )
@@ -346,6 +349,12 @@ func run() error {
 	start(func() {
 		reconciler.RunLoop(ctx, reconcileInterval, reconcile.Window{Lookback: 72 * time.Hour, Settle: 30 * time.Minute})
 	})
+
+	// Every domain's SSL status from a real TLS connection to it
+	// (internal/sslcheck, marketer audit #4).
+	sslChecker := &sslcheck.Checker{Repo: domain.NewRepository(db), Prober: &tlsprobe.Prober{}, Logger: logger}
+	logger.Info("domain ssl check starting", "interval", sslcheck.Interval)
+	start(func() { sslChecker.RunLoop(ctx, sslcheck.Interval) })
 
 	// Backstop for claims a crashed worker (this one's previous process, or
 	// another replica) never finished — see internal/queuereaper.

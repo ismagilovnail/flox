@@ -18,19 +18,27 @@ type Repository struct {
 
 func NewRepository(db *pgxpool.Pool) *Repository { return &Repository{db: db} }
 
-const selectColumns = `tl.id, tl.organization_id, tl.campaign_id, tl.domain_id, d.domain, tl.slug, tl.status, tl.created_at, tl.updated_at`
+const selectColumns = `tl.id, tl.organization_id, tl.campaign_id, tl.domain_id, d.domain, d.ssl = 'issued', tl.slug, tl.status, tl.created_at, tl.updated_at`
 
 func scanLink(row pgx.Row) (TrackingLink, error) {
 	var l TrackingLink
-	err := row.Scan(&l.ID, &l.OrganizationID, &l.CampaignID, &l.DomainID, &l.Domain, &l.Slug, &l.Status, &l.CreatedAt, &l.UpdatedAt)
+	err := row.Scan(&l.ID, &l.OrganizationID, &l.CampaignID, &l.DomainID, &l.Domain, &l.Secure, &l.Slug, &l.Status, &l.CreatedAt, &l.UpdatedAt)
 	if err == nil {
-		l.URL = buildURL(l.Domain, l.Slug)
+		l.URL = buildURL(l.Domain, l.Slug, l.Secure)
 	}
 	return l, err
 }
 
-func buildURL(domain, slug string) string {
-	return "http://" + domain + "/t/" + slug
+// buildURL gives https once the domain serves a valid certificate
+// (domains.ssl, kept true by internal/sslcheck). Before that an https link
+// would fail in the visitor's browser, so the link stays http and the
+// Domains page says why.
+func buildURL(domain, slug string, secure bool) string {
+	scheme := "http://"
+	if secure {
+		scheme = "https://"
+	}
+	return scheme + domain + "/t/" + slug
 }
 
 // List returns every tracking link for one campaign, newest first — a

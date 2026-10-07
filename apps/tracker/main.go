@@ -44,6 +44,7 @@ import (
 	"github.com/ismagilovnail/flox/apps/internal/routingstore"
 	"github.com/ismagilovnail/flox/apps/internal/storage"
 	"github.com/ismagilovnail/flox/apps/internal/telemetry"
+	"github.com/ismagilovnail/flox/apps/internal/tlsask"
 )
 
 func main() {
@@ -278,6 +279,8 @@ func run() error {
 		_, _ = w.Write([]byte(`{"status":"ready"}`))
 	})
 	r.Handle("/metrics", metrics.Handler())
+	// The TLS proxy's on-demand certificate check (internal/tlsask).
+	r.Get(tlsask.Path, tlsask.Handler(db, logger))
 	handler.Register(r)
 	postbackHandler.Register(r)
 

@@ -19,43 +19,22 @@ referenced below as §N).
 ## CURRENT STATE — UPDATE THIS EVERY PHASE
 
 ```
-CURRENT PHASE : TECH AUDIT FOLLOW-UPS (between phases)
-STATUS        : P0 code items + P1 (RL1/A1/RL4, CH1/DB1, Q2, metrics) done: Q1 queue claims never abandoned;
-                D1+D3 conversion + CPA event + outgoing postback in one tx under
-                a per-click lock; S3 postback revenue validated; RL3 tracker
-                exits 0 on SIGTERM; AN1 ECB FX rates + USD repair in Postgres;
-                D2 retried ClickHouse inserts deduplicated by batch token;
-                T7 tracker resolves {click_id} etc. in offer/landing URLs;
-                RL2 tracker retries failed event writes with backoff;
-                RL1/A1+RL4 tracker serves routing from an in-memory cache
-                (LISTEN/NOTIFY flush) with /ready — clicks survive Postgres
-                outages. Edits now apply ms after commit, not synchronously;
-                CH1+DB1 postbacks find click (click_lookup) and status
-                (postbacks index) without scanning the org's history;
-                Q2 backoff + dead-letter of rejected CH batches; the audit's
-                missing metrics + alerts; queue tests isolated from the dev
-                worker (testpg.PrivateTable) — full suite reliably green;
-                T4/AN3 a chargeback reverses the FTD payout on the decline's
-                date (reports + LTV); hourly Postgres↔ClickHouse conversion
-                reconciliation (internal/reconcile) with alerts; stable event
-                ids (event_queue idempotent, ClickHouse event_id); the
-                reconciliation repairs ClickHouse event by event (also USD
-                history); `make reconcile` for any range; error tracking
-                (internal/errtrack, SENTRY_DSN).
-                Technical audit is docs/audit-tech-2026-10-06.md; the user asked
-                to fix it step by step and allowed wiping the dev database when
-                a step needs it.
-LAST COMMIT   : feat(errtrack): report errors and panics to a Sentry-protocol tracker.
-UNCOMMITTED   : none expected. Dev DB wiped and refilled by `make fixtures`
-                (accounts in README; password flox-demo-2026).
-NEXT          : P0 code items done. CI (DO1) is the user's own decision — do
-                not set it up. Confirm the next slice with the user. Open
-                follow-ups: none from the technical audit. Next: the marketer
-                audit (docs/audit-marketer-2026-10-06.md) — confirm scope.
-                Marketer audit items (docs/audit-marketer-2026-10-06.md) are
-                still open behind them. Run go test with the full env line AND
-                check e2e did not skip on the auth rate limit (memory:
-                flox-full-test-env).
+CURRENT PHASE : MARKETER AUDIT FOLLOW-UPS (between phases)
+STATUS        : technical audit closed (docs/audit-tech-2026-10-06.md). Marketer
+                audit (docs/audit-marketer-2026-10-06.md): user picked #4, #10,
+                #5, offer-cap badge + #11, one commit each. #4 done: Caddy
+                on-demand TLS (infra/Caddyfile.tracker) + tracker ask hook
+                (internal/tlsask) + worker TLS check (internal/sslcheck) +
+                https links once a domain's certificate is valid.
+LAST COMMIT   : feat(domains): https for tracking domains.
+UNCOMMITTED   : none expected. Dev DB from `make fixtures` (password
+                flox-demo-2026).
+NEXT          : #10 alerts (spend/ROI/offer cap or pause/SSL expiry — uses
+                domains.ssl_expires_at), then #5 menu stubs (LTV screen),
+                then offer-cap badge + #11 Top Offers. CI (DO1) is the user's
+                own decision — do not set it up. Run go test with the full env
+                line AND check e2e did not skip (memory: flox-full-test-env);
+                wait for air rebuilds before e2e.
 ```
 
 > At the end of every phase: update the four lines above, add a CHANGELOG entry,

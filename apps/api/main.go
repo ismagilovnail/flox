@@ -41,6 +41,7 @@ import (
 	"github.com/ismagilovnail/flox/apps/internal/domain"
 	domaincloudflare "github.com/ismagilovnail/flox/apps/internal/domain/cloudflare"
 	domainnamecheap "github.com/ismagilovnail/flox/apps/internal/domain/namecheap"
+	"github.com/ismagilovnail/flox/apps/internal/domain/tlsprobe"
 	"github.com/ismagilovnail/flox/apps/internal/errtrack"
 	"github.com/ismagilovnail/flox/apps/internal/eventmapping"
 	"github.com/ismagilovnail/flox/apps/internal/httpserver"
@@ -400,7 +401,7 @@ func run() error {
 	// unmanaged have no real adapter and stay plain operator-declared,
 	// same as before this phase.
 	domainHandler := domain.NewHandler(
-		domain.NewService(domain.NewRepository(db), integrationsSvc, domainnamecheap.New(), domaincloudflare.New(), cfg.TrackerDNSTarget),
+		domain.NewService(domain.NewRepository(db), integrationsSvc, domainnamecheap.New(), domaincloudflare.New(), cfg.TrackerDNSTarget, &tlsprobe.Prober{}),
 		requireSettingsWrite,
 		logger,
 	)

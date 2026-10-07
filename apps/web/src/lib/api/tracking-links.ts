@@ -10,6 +10,8 @@ export type TrackingLink = {
   domainId: string;
   domain: string;
   slug: string;
+  /** The domain serves a valid certificate, so url is https. */
+  secure: boolean;
   url: string;
   status: TrackingLinkStatus;
   createdAt: string;

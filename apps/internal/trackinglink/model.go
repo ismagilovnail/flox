@@ -33,16 +33,18 @@ func (s Status) Valid() bool {
 // (apps/tracker/handler.go's `GET /t/{trackingID}`, host-matched against
 // domains.domain).
 type TrackingLink struct {
-	ID             string    `json:"id"`
-	OrganizationID string    `json:"organizationId"`
-	CampaignID     string    `json:"campaignId"`
-	DomainID       string    `json:"domainId"`
-	Domain         string    `json:"domain"`
-	Slug           string    `json:"slug"`
-	URL            string    `json:"url"`
-	Status         Status    `json:"status"`
-	CreatedAt      time.Time `json:"createdAt"`
-	UpdatedAt      time.Time `json:"updatedAt"`
+	ID             string `json:"id"`
+	OrganizationID string `json:"organizationId"`
+	CampaignID     string `json:"campaignId"`
+	DomainID       string `json:"domainId"`
+	Domain         string `json:"domain"`
+	Slug           string `json:"slug"`
+	// Secure: the domain serves a valid certificate, so URL is https.
+	Secure    bool      `json:"secure"`
+	URL       string    `json:"url"`
+	Status    Status    `json:"status"`
+	CreatedAt time.Time `json:"createdAt"`
+	UpdatedAt time.Time `json:"updatedAt"`
 }
 
 type CreateInput struct {

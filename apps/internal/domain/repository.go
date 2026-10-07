@@ -20,13 +20,13 @@ type Repository struct {
 
 func NewRepository(db *pgxpool.Pool) *Repository { return &Repository{db: db} }
 
-const selectColumns = `id, organization_id, domain, status, ssl, purpose, registrar, dns_provider, expires_at, verified_at, created_at, updated_at`
+const selectColumns = `id, organization_id, domain, status, ssl, purpose, registrar, dns_provider, expires_at, verified_at, ssl_expires_at, ssl_checked_at, ssl_error, created_at, updated_at`
 
 func scanDomain(row pgx.Row) (Domain, error) {
 	var d Domain
 	err := row.Scan(
 		&d.ID, &d.OrganizationID, &d.Domain, &d.Status, &d.SSL, &d.Purpose, &d.Registrar, &d.DNSProvider,
-		&d.ExpiresAt, &d.VerifiedAt, &d.CreatedAt, &d.UpdatedAt,
+		&d.ExpiresAt, &d.VerifiedAt, &d.SSLExpiresAt, &d.SSLCheckedAt, &d.SSLError, &d.CreatedAt, &d.UpdatedAt,
 	)
 	return d, err
 }
@@ -216,4 +216,66 @@ func (r *Repository) Delete(ctx context.Context, orgID, id string) error {
 		return apierror.NotFound("domain not found")
 	}
 	return nil
+}
+
+// SSLCheckResult is what a real TLS connection to the domain found
+// (internal/domain/tlsprobe). Like AutomationResult, it is never reachable
+// from client input.
+type SSLCheckResult struct {
+	SSL SSL
+	// ExpiresAt is the served certificate's expiry; nil when none was
+	// received, in which case the last one seen is kept.
+	ExpiresAt *time.Time
+	Err       string
+	CheckedAt time.Time
+}
+
+func (r *Repository) ApplySSLCheck(ctx context.Context, orgID, id string, res SSLCheckResult) (Domain, error) {
+	row := r.db.QueryRow(ctx, `
+		UPDATE domains
+		SET ssl = $1, ssl_expires_at = COALESCE($2, ssl_expires_at), ssl_error = $3, ssl_checked_at = $4
+		WHERE id = $5 AND organization_id = $6
+		RETURNING `+selectColumns,
+		res.SSL, res.ExpiresAt, res.Err, res.CheckedAt, id, orgID,
+	)
+	d, err := scanDomain(row)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return Domain{}, apierror.NotFound("domain not found")
+	}
+	if err != nil {
+		return Domain{}, fmt.Errorf("domain: recording ssl check: %w", err)
+	}
+	return d, nil
+}
+
+// DueSSLCheck is one domain the SSL check loop should probe now.
+type DueSSLCheck struct {
+	ID             string
+	OrganizationID string
+	Domain         string
+}
+
+// ClaimSSLChecks picks up to limit domains, across every organization,
+// whose last SSL check is older than issuedEvery (a domain with a valid
+// certificate) or otherEvery (any other), and stamps them checked now so a
+// second worker does not probe them too. This is the background job's only
+// cross-tenant read: it returns each domain's organization_id, and every
+// write after it filters on that id.
+func (r *Repository) ClaimSSLChecks(ctx context.Context, limit int, issuedEvery, otherEvery time.Duration) ([]DueSSLCheck, error) {
+	rows, err := r.db.Query(ctx, `
+		UPDATE domains SET ssl_checked_at = now()
+		WHERE id IN (
+		  SELECT id FROM domains
+		  WHERE ssl_checked_at IS NULL
+		     OR ssl_checked_at < now() - make_interval(secs => CASE WHEN ssl = 'issued' THEN $1::float8 ELSE $2::float8 END)
+		  ORDER BY ssl_checked_at NULLS FIRST
+		  LIMIT $3
+		  FOR UPDATE SKIP LOCKED)
+		RETURNING id, organization_id, domain`,
+		issuedEvery.Seconds(), otherEvery.Seconds(), limit,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("domain: claiming ssl checks: %w", err)
+	}
+	return pgx.CollectRows(rows, pgx.RowToStructByPos[DueSSLCheck])
 }

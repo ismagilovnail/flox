@@ -5,6 +5,38 @@ per-phase, matching `CLAUDE.md`'s phase protocol. The one exception is
 [Between phases], below: spec amendments and the code changes that follow from
 them land between phases and would otherwise be invisible here.
 
+## [Between phases] — HTTPS for tracking domains
+
+Marketer audit #4 (P0): domain SSL showed "none" for every domain not on Cloudflare and
+every tracking link was `http://` — unusable for Facebook/TikTok traffic.
+
+- Issuance: Caddy with on-demand TLS in front of the tracker (`infra/Caddyfile.tracker`,
+  `docs/deployment.md`). FLOX holds no ACME code; Caddy issues and renews.
+- `GET /internal/tls-ask?domain=` on the tracker (`internal/tlsask`): Caddy's ask hook, 200
+  only for a hostname registered on some organization's Domains page. The Caddyfile returns
+  404 for `/internal/*` and `/metrics` to the public.
+- `internal/domain/tlsprobe`: a real TLS connection to `domain:443`, verified against the
+  system roots and hostname → `issued` / `pending` (no certificate yet) / `none` (nothing on
+  443) / `error` (expired, wrong name, untrusted — expiry still recorded).
+- Worker loop `internal/sslcheck`: domains never checked, `issued` ones every 6 h, others every
+  10 min, claimed with `FOR UPDATE SKIP LOCKED`; its connection also triggers on-demand
+  issuance. `POST /domains/{id}/check-ssl` (tenant-scoped) runs it now.
+- Migration 00056: `domains.ssl_expires_at`, `ssl_checked_at`, `ssl_error`; the routing-cache
+  NOTIFY trigger on `domains` now fires only on INSERT/DELETE/TRUNCATE and `UPDATE OF domain`,
+  so the checks do not flush the tracker's cache.
+- Tracking links are `https://` once the domain is `issued` (`secure` in the API). The UI shows
+  SSL expiry and the check error on the Domains page, a "Check SSL" button, and an open-lock
+  warning next to http links.
+
+Tests: probe outcomes against local TLS servers (valid/expired/other name/untrusted/no
+certificate/closed port); `CheckSSL` records results and is 404 from another org; claim picks
+only due domains and not twice; ask allows only registered names (case-insensitive); links turn
+https. Full-env `go test ./...` and e2e (FullFunnel, OfferDailyCap, both filter matrices) pass;
+tsc, eslint, vitest pass. Live: Caddy 2 with its local CA in front of the dev tracker issued a
+certificate for `track.localhost` on first connection, refused an unregistered name, hid
+`/internal/tls-ask`; the probe reported error/issued/pending as expected. Not checked in a
+browser (extension unavailable) and not against real Let's Encrypt (needs a public domain).
+
 ## [Between phases] — error tracking
 
 Technical audit §14: no error tracker — a panic was one log line among millions.

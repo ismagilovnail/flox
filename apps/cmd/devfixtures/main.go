@@ -192,7 +192,7 @@ func seedDemo(ctx context.Context, db *pgxpool.Pool, orgID, trackingURL string) 
 	var out demoSetup
 
 	// Only Create is used, which needs no registrar/DNS adapters.
-	dom, err := domain.NewService(domain.NewRepository(db), nil, nil, nil, "").Create(ctx, orgID, domain.CreateInput{
+	dom, err := domain.NewService(domain.NewRepository(db), nil, nil, nil, "", nil).Create(ctx, orgID, domain.CreateInput{
 		Domain: trackingHost, Purpose: []string{"tracking"},
 	})
 	if err != nil {

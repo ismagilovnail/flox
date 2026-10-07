@@ -3,7 +3,7 @@
 import * as React from "react";
 import { toast } from "sonner";
 import { formatDistanceToNow } from "date-fns";
-import { RefreshCwIcon, ShieldCheckIcon } from "lucide-react";
+import { LockIcon, RefreshCwIcon, ShieldCheckIcon } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -20,8 +20,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Caption } from "@/components/ui/typography";
 import { usePermission } from "@/hooks/use-auth";
-import { useRenewDomain, useSyncDomainDNS, useVerifyDomain } from "@/hooks/use-domains";
-import { STATUS_VARIANT, SSL_VARIANT } from "@/features/domains/domain-columns";
+import { useCheckDomainSSL, useRenewDomain, useSyncDomainDNS, useVerifyDomain } from "@/hooks/use-domains";
+import { STATUS_VARIANT, SslBadge } from "@/features/domains/domain-columns";
 import type { Domain } from "@/lib/api/domains";
 
 /** Shown on the domain edit page only (an unsaved new domain has nothing
@@ -38,6 +38,7 @@ export function DomainAutomationCard({ domain }: { domain: Domain }) {
   const verify = useVerifyDomain();
   const renew = useRenewDomain();
   const syncDns = useSyncDomainDNS();
+  const checkSsl = useCheckDomainSSL();
 
   const [renewOpen, setRenewOpen] = React.useState(false);
   const [years, setYears] = React.useState(1);
@@ -50,6 +51,16 @@ export function DomainAutomationCard({ domain }: { domain: Domain }) {
     verify.mutate(domain.id, {
       onSuccess: () => toast("Verified", { description: "Expiry/SSL status refreshed from the real provider." }),
       onError: (err) => toast.error("Couldn't verify", { description: err.message }),
+    });
+  }
+
+  function handleCheckSsl() {
+    checkSsl.mutate(domain.id, {
+      onSuccess: (d) =>
+        d.ssl === "issued"
+          ? toast("HTTPS works", { description: "Tracking links on this domain now use https." })
+          : toast.warning(`SSL: ${d.ssl}`, { description: d.sslError || undefined }),
+      onError: (err) => toast.error("Couldn't check SSL", { description: err.message }),
     });
   }
 
@@ -92,7 +103,7 @@ export function DomainAutomationCard({ domain }: { domain: Domain }) {
           </div>
           <div className="flex flex-col gap-0.5">
             <Caption className="text-muted-foreground">SSL</Caption>
-            <Badge variant={SSL_VARIANT[domain.ssl]}>{domain.ssl}</Badge>
+            <SslBadge domain={domain} />
           </div>
           <div className="flex flex-col gap-0.5">
             <Caption className="text-muted-foreground">Expires</Caption>
@@ -111,6 +122,9 @@ export function DomainAutomationCard({ domain }: { domain: Domain }) {
         <div className="flex flex-wrap gap-2">
           <Button type="button" variant="outline" size="sm" onClick={handleVerify} disabled={verify.isPending}>
             <ShieldCheckIcon className="size-3.5" /> {verify.isPending ? "Verifying…" : "Verify"}
+          </Button>
+          <Button type="button" variant="outline" size="sm" onClick={handleCheckSsl} disabled={checkSsl.isPending}>
+            <LockIcon className="size-3.5" /> {checkSsl.isPending ? "Checking…" : "Check SSL"}
           </Button>
           <Button
             type="button"

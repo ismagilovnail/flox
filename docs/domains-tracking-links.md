@@ -189,3 +189,50 @@ Verify (a real 422 network call, confirmed via the network log) with no
 console errors, opened both the Renew and Sync DNS confirm dialogs and
 confirmed their real warning copy, and confirmed Sync DNS's real
 network call. Test domain and org_integrations row deleted afterward.
+
+## HTTPS for tracking domains (marketer audit 2026-10-06, #4)
+
+Before this, `ssl` was set only by a Cloudflare check, so every other domain
+showed `none` forever and every tracking link was `http://`. Now:
+
+- **Issuance** is done by a TLS proxy in front of the tracker with on-demand
+  certificates — `infra/Caddyfile.tracker`, see `docs/deployment.md`. Caddy
+  issues a Let's Encrypt/ZeroSSL certificate the first time a domain is
+  reached over HTTPS and renews it. FLOX itself holds no ACME code or keys.
+- **Who gets a certificate**: Caddy asks `GET /internal/tls-ask?domain=` on
+  the tracker (`internal/tlsask`) first; only a hostname on some
+  organization's Domains page gets one. The Caddyfile hides `/internal/*`
+  and `/metrics` from the public.
+- **Status** comes from a real TLS connection, never from input:
+  `internal/domain/tlsprobe` connects to `domain:443`, verifies the chain
+  against the system roots and the hostname, and maps the result:
+
+  | `ssl` | meaning |
+  |---|---|
+  | `issued` | valid certificate; `sslExpiresAt` is its expiry |
+  | `pending` | port 443 answers but no certificate (not issued yet, or the proxy refused) |
+  | `none` | nothing answers on 443 (DNS not pointed, no proxy) |
+  | `error` | a certificate a browser would reject (expired, other name, untrusted); its expiry is still recorded |
+
+  `sslError` holds the reason; `sslCheckedAt` when. A failed check keeps the
+  last seen expiry.
+- **Schedule**: the worker (`internal/sslcheck`) checks every minute for due
+  domains — never checked, `issued` and older than 6 h, anything else older
+  than 10 min — claiming them with `UPDATE … FOR UPDATE SKIP LOCKED`, so
+  replicas do not double-probe. Under on-demand TLS the check's own
+  connection triggers issuance, so a freshly pointed domain turns `issued`
+  within one or two checks. `POST /domains/{id}/check-ssl` (the "Check SSL"
+  button) runs it now.
+- **Links**: a tracking link's `url` is `https://` once its domain is
+  `issued` (`secure: true`), `http://` before — an https link to a domain
+  without a certificate would fail in the visitor's browser. The campaign page
+  marks such links with an open-lock icon linking to the domain.
+- Probing rewrites `domains.ssl_checked_at` constantly, so migration 00056
+  narrows the routing-cache NOTIFY trigger on `domains` to INSERT/DELETE/
+  TRUNCATE and `UPDATE OF domain` — the only column the tracker reads.
+
+Verified live: Caddy 2 with its local CA in front of the dev tracker —
+`track.localhost` got a certificate on first connection, an unregistered
+name got a TLS alert, `/internal/tls-ask` answered 404 through the proxy,
+plain HTTP still served; the probe reported `error` (untrusted) with system
+roots, `issued` with Caddy's root, and `pending` for the unregistered name.

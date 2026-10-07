@@ -72,6 +72,7 @@
     "statusHeader": "Status",
     "copyAria": "Copy tracking link",
     "copiedToast": "Link copied",
+    "insecure": "The domain has no valid SSL certificate yet, so this link is http. Facebook and TikTok need https: open the domain to check SSL.",
     "pause": "Pause",
     "resume": "Resume",
     "deleteAria": "Delete tracking link",

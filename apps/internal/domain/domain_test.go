@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -11,6 +12,7 @@ import (
 
 	"github.com/ismagilovnail/flox/apps/internal/apierror"
 	"github.com/ismagilovnail/flox/apps/internal/domain"
+	"github.com/ismagilovnail/flox/apps/internal/domain/tlsprobe"
 	"github.com/ismagilovnail/flox/apps/internal/idgen"
 	"github.com/ismagilovnail/flox/apps/internal/integrations"
 )
@@ -70,7 +72,21 @@ func newTestService(pool *pgxpool.Pool, creds *fakeCredentialSource, registrar *
 	if dns == nil {
 		dns = &fakeDNS{}
 	}
-	return domain.NewService(domain.NewRepository(pool), creds, registrar, dns, trackerDNSTarget)
+	return domain.NewService(domain.NewRepository(pool), creds, registrar, dns, trackerDNSTarget, &fakeProber{})
+}
+
+// fakeProber answers each host with a canned TLS probe result.
+type fakeProber struct {
+	results map[string]tlsprobe.Result
+	hosts   []string
+}
+
+func (f *fakeProber) Probe(_ context.Context, host string) tlsprobe.Result {
+	f.hosts = append(f.hosts, host)
+	if r, ok := f.results[host]; ok {
+		return r
+	}
+	return tlsprobe.Result{Outcome: tlsprobe.None, Err: "no such host"}
 }
 
 func TestCreateGetUpdateDelete(t *testing.T) {
@@ -423,6 +439,100 @@ func TestSyncDNSCallsTheRealAdapterWithTheConfiguredTarget(t *testing.T) {
 	}
 	if dns.lastTarget != "tracker.floxlink.io" {
 		t.Fatalf("EnsureRecord target = %q, want the configured tracker.floxlink.io", dns.lastTarget)
+	}
+}
+
+// Marketer audit 2026-10-06, #4: SSL status comes from a real TLS
+// connection, is tenant-scoped, and a failed check keeps the last expiry.
+func TestCheckSSLRecordsTheProbeAndStaysInItsOrg(t *testing.T) {
+	pool := mustPool(t)
+	ctx := context.Background()
+	orgID := seedOrg(t, ctx, pool)
+	otherOrg := seedOrg(t, ctx, pool)
+	host := "ssl-" + strings.ToLower(idgen.New()) + ".example.com"
+	expiry := time.Now().Add(80 * 24 * time.Hour).Truncate(time.Second)
+	prober := &fakeProber{results: map[string]tlsprobe.Result{host: {Outcome: tlsprobe.Issued, ExpiresAt: &expiry}}}
+	svc := domain.NewService(domain.NewRepository(pool), nil, nil, nil, "", prober)
+
+	d, err := svc.Create(ctx, orgID, domain.CreateInput{Domain: host, Purpose: []string{"tracking"}})
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	if d.SSL != domain.SSLNone || d.SSLCheckedAt != nil {
+		t.Fatalf("new domain: ssl=%s checked=%v, want none and never checked", d.SSL, d.SSLCheckedAt)
+	}
+
+	if _, err := svc.CheckSSL(ctx, otherOrg, d.ID); !isNotFound(err) {
+		t.Fatalf("CheckSSL from another org: err=%v, want not found", err)
+	}
+	if len(prober.hosts) != 0 {
+		t.Fatalf("another org's CheckSSL probed %v", prober.hosts)
+	}
+
+	checked, err := svc.CheckSSL(ctx, orgID, d.ID)
+	if err != nil {
+		t.Fatalf("CheckSSL: %v", err)
+	}
+	if checked.SSL != domain.SSLIssued || checked.SSLExpiresAt == nil || !checked.SSLExpiresAt.Equal(expiry) || checked.SSLError != "" || checked.SSLCheckedAt == nil {
+		t.Fatalf("after a valid probe: %+v, want issued expiring %s", checked, expiry)
+	}
+
+	prober.results[host] = tlsprobe.Result{Outcome: tlsprobe.None, Err: "dial tcp: connection refused"}
+	failed, err := svc.CheckSSL(ctx, orgID, d.ID)
+	if err != nil {
+		t.Fatalf("CheckSSL: %v", err)
+	}
+	if failed.SSL != domain.SSLNone || failed.SSLError != "dial tcp: connection refused" || failed.SSLExpiresAt == nil || !failed.SSLExpiresAt.Equal(expiry) {
+		t.Fatalf("after a failed probe: %+v, want none with the error and the last expiry kept", failed)
+	}
+}
+
+func TestClaimSSLChecksPicksOnlyDueDomains(t *testing.T) {
+	pool := mustPool(t)
+	ctx := context.Background()
+	orgID := seedOrg(t, ctx, pool)
+	repo := domain.NewRepository(pool)
+	svc := newTestService(pool, nil, nil, nil, "")
+
+	mk := func(ssl string, checkedAgo time.Duration) string {
+		d, err := svc.Create(ctx, orgID, domain.CreateInput{Domain: "due-" + strings.ToLower(idgen.New()) + ".example.com", Purpose: []string{"tracking"}})
+		if err != nil {
+			t.Fatalf("Create: %v", err)
+		}
+		if checkedAgo > 0 {
+			if _, err := pool.Exec(ctx, `UPDATE domains SET ssl = $1, ssl_checked_at = now() - make_interval(secs => $2::float8) WHERE id = $3`, ssl, checkedAgo.Seconds(), d.ID); err != nil {
+				t.Fatalf("aging: %v", err)
+			}
+		}
+		return d.ID
+	}
+	never := mk("", 0)
+	issuedRecent := mk("issued", time.Hour)
+	issuedStale := mk("issued", 7*time.Hour)
+	pendingRecent := mk("pending", 5*time.Minute)
+	pendingStale := mk("pending", 15*time.Minute)
+
+	claimed := func() map[string]bool {
+		due, err := repo.ClaimSSLChecks(ctx, 100000, 6*time.Hour, 10*time.Minute)
+		if err != nil {
+			t.Fatalf("ClaimSSLChecks: %v", err)
+		}
+		out := map[string]bool{}
+		for _, d := range due {
+			if d.OrganizationID == orgID {
+				out[d.ID] = true
+			}
+		}
+		return out
+	}
+	got := claimed()
+	for id, want := range map[string]bool{never: true, issuedRecent: false, issuedStale: true, pendingRecent: false, pendingStale: true} {
+		if got[id] != want {
+			t.Fatalf("domain %s claimed=%v, want %v (claimed: %v)", id, got[id], want, got)
+		}
+	}
+	if again := claimed(); len(again) != 0 {
+		t.Fatalf("second claim right away took %v, want nothing (the first claim stamps them)", again)
 	}
 }
 

@@ -36,6 +36,12 @@ export type Domain = {
   dnsProvider: DnsProvider;
   expiresAt: string | null;
   verifiedAt: string | null;
+  /** From a real TLS connection to the domain (worker, every few minutes
+   * until issued, then every few hours): the served certificate's expiry,
+   * when it was last checked, and why the check found no valid one. */
+  sslExpiresAt: string | null;
+  sslCheckedAt: string | null;
+  sslError: string;
   createdAt: string;
   updatedAt: string;
 };
@@ -90,4 +96,10 @@ export function renewDomain(id: string, years: number): Promise<Domain> {
  * cloudflare. Mutates the org's actual live DNS. */
 export function syncDomainDNS(id: string): Promise<Domain> {
   return apiFetch(`/domains/${id}/sync-dns`, { method: "POST" });
+}
+
+/** Connects to the domain over TLS now and records the certificate it
+ * serves — the worker's scheduled check, on demand. Read-only. */
+export function checkDomainSSL(id: string): Promise<Domain> {
+  return apiFetch(`/domains/${id}/check-ssl`, { method: "POST" });
 }

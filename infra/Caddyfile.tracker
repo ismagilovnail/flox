@@ -1,0 +1,41 @@
+# TLS for tracking domains (marketer audit 2026-10-06, #4).
+#
+# Caddy terminates HTTPS in front of apps/tracker for every domain an
+# organization adds on the Domains page, issuing a Let's Encrypt (or ZeroSSL)
+# certificate the first time a visitor — or the worker's SSL check
+# (internal/sslcheck) — connects to it, and renewing it on its own.
+#
+# `ask` is what keeps this safe: before issuing, Caddy asks the tracker
+# whether the hostname is a registered domain (internal/tlsask). Anything
+# else pointed at this server gets no certificate.
+#
+# Replace TRACKER with the tracker's internal address and ACME_EMAIL with a
+# real mailbox for expiry notices. Certificates live in Caddy's data
+# directory: keep it on a persistent volume, and shared between replicas
+# (or use a storage module) so they do not each request the same
+# certificates. docs/deployment.md has the rest.
+{
+	email {$ACME_EMAIL}
+	on_demand_tls {
+		ask http://{$TRACKER:tracker:8081}/internal/tls-ask
+	}
+}
+
+https:// {
+	tls {
+		on_demand
+	}
+	# The ask endpoint and metrics are for the proxy and Prometheus only.
+	@internal path /internal/* /metrics
+	respond @internal 404
+	reverse_proxy {$TRACKER:tracker:8081}
+}
+
+# Plain HTTP stays served (not redirected) so links created before a
+# domain's certificate existed keep working; Caddy answers ACME HTTP-01
+# challenges here itself.
+http:// {
+	@internal path /internal/* /metrics
+	respond @internal 404
+	reverse_proxy {$TRACKER:tracker:8081}
+}

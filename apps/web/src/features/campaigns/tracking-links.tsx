@@ -6,7 +6,7 @@ import { toast } from "sonner";
 import { useForm, useWatch, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { CopyIcon, LinkIcon, PauseIcon, PlayIcon, RefreshCwIcon, Trash2Icon } from "lucide-react";
+import { CopyIcon, LinkIcon, LockOpenIcon, PauseIcon, PlayIcon, RefreshCwIcon, Trash2Icon } from "lucide-react";
 import type { ColumnDef } from "@tanstack/react-table";
 import { useTranslation } from "react-i18next";
 import type { TFunction } from "i18next";
@@ -106,6 +106,16 @@ function columns(
       accessorFn: (row) => row.url,
       cell: ({ row }) => (
         <div className="flex items-center gap-1.5">
+          {!row.original.secure && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Link href={`/domains/${row.original.domainId}`} aria-label={t("trackingLinks.insecure")}>
+                  <LockOpenIcon className="size-3.5 text-warning" />
+                </Link>
+              </TooltipTrigger>
+              <TooltipContent className="max-w-72">{t("trackingLinks.insecure")}</TooltipContent>
+            </Tooltip>
+          )}
           <Mono className="text-sm">{row.original.url}</Mono>
           <IconButton
             aria-label={t("trackingLinks.copyAria")}
@@ -363,7 +373,8 @@ export function TrackingLinks({
               <p className="text-xs text-muted-foreground">
                 {selectedDomain && slugPreview ? (
                   <Mono className="text-xs text-muted-foreground">
-                    http://{selectedDomain.domain}/t/{slugPreview.toLowerCase()}
+                    {selectedDomain.ssl === "issued" ? "https" : "http"}://{selectedDomain.domain}/t/
+                    {slugPreview.toLowerCase()}
                   </Mono>
                 ) : (
                   t("trackingLinks.slugHelp")
