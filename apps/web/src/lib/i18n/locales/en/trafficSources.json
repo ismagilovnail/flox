@@ -39,7 +39,7 @@
   "form": {
     "titleNew": "New Source",
     "titleEdit": "Edit {{name}}",
-    "description": "Traffic sources are where campaigns originate from (§27).",
+    "description": "Traffic sources are where your campaigns' traffic comes from.",
     "nameLabel": "Name",
     "namePlaceholder": "Facebook",
     "typeLabel": "Type",

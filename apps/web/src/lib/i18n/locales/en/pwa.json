@@ -25,7 +25,7 @@
   "form": {
     "titleNew": "New PWA",
     "titleEdit": "Edit {{name}}",
-    "description": "These fields are the real Web App Manifest (§28) — the preview below is what installs on the device.",
+    "description": "These fields are the app's real Web App Manifest — the preview below is what installs on the device.",
     "nameLabel": "Name",
     "namePlaceholder": "Sweeps PWA",
     "nameHint": "Full name: shown on the install page and on the launch splash screen.",
@@ -61,7 +61,7 @@
     "iconUrlChange": "Change",
     "iconUrlRemoveAria": "Remove icon",
     "bounceLabel": "Bounce in-app WebView traffic",
-    "bounceHint": "Sends FB/IG/TikTok/Telegram in-app browser traffic to the device's external browser (Android intent / iOS Safari scheme) so the install prompt can fire. Provider-neutral technical requirement, not moderator detection (§73).",
+    "bounceHint": "Sends FB/IG/TikTok/Telegram in-app browser traffic to the device's external browser (Android intent / iOS Safari scheme) so the install prompt can fire. Works the same for every platform; it does not detect moderators.",
     "bounceAria": "Bounce in-app WebView traffic",
     "listingSectionLabel": "App listing",
     "listingSectionHint": "Optional — feeds the live preview on the right. Leave blank to show \"—\" rather than a made-up rating/size.",

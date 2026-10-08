@@ -1,7 +1,7 @@
 {
   "view": {
     "title": "Click Log",
-    "description": "Every SOURCE_CLICK and SOURCE_FILTER event over the last 7 days, one row per visit — IP, geo, device, and everything else the tracker captured. No retention policy exists yet, so rows are kept indefinitely (see docs/click-log.md).",
+    "description": "Every click (SOURCE_CLICK) and blocked click (SOURCE_FILTER) of the last 7 days, one row per visit — IP, geo, device and everything else the tracker captured.",
     "loading": "Loading click log…",
     "loadError": "Couldn't load the click log",
     "searchPlaceholder": "Search click log…",

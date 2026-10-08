@@ -39,7 +39,7 @@
   "form": {
     "titleNew": "Новый источник",
     "titleEdit": "Изменить {{name}}",
-    "description": "Источники трафика — это места, откуда приходят кампании (§27).",
+    "description": "Источники трафика — откуда приходит трафик ваших кампаний.",
     "nameLabel": "Название",
     "namePlaceholder": "Facebook",
     "typeLabel": "Тип",

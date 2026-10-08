@@ -5,6 +5,27 @@ per-phase, matching `CLAUDE.md`'s phase protocol. The one exception is
 [Between phases], below: spec amendments and the code changes that follow from
 them land between phases and would otherwise be invisible here.
 
+## [Between phases] — no development notes in the interface
+
+Marketer audit #6 (P1): user-facing texts carried phase numbers and spec references ("rules for
+this arrive in Phase 7", "§27", "§45", …).
+
+- Every translated string (en and ru) with a phase or `§` reference rewritten: campaigns, networks,
+  offers, postbacks, postlanding, PWA, traffic sources. While at it, the texts that were simply
+  wrong now: dedup is not "(click_id, status)" but once per click and status, a redeposit once per
+  transaction id, and "accept duplicates" never moves a status back to hold; the network postback
+  URL is delivered (it said "Phase 24 wires the real delivery"); traffic sources can be created
+  (the campaign form said they could not); the click log no longer points users at
+  `docs/click-log.md`.
+- `/` showed signed-in users "Product surfaces land in later phases…" with a style-guide link; it
+  now redirects to the Overview (signed-out users still end on /login).
+- The English-only pages (settings, team, domains, referral, custom metrics, integrations) still
+  had `§` marks in hardcoded strings; they are rewritten as part of their translation (#7, next
+  entry).
+
+Tests: no `§`/phase reference left in any locale file (grep); tsc, eslint, vitest pass; `/` answers
+307 → /overview.
+
 ## [Between phases] — offer cap in the list, Top Offers on the Overview
 
 Marketer audit: the offer-cap badge left open by #1, and #11.

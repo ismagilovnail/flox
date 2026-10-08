@@ -458,7 +458,7 @@ export default function StyleGuidePage() {
 
         <ChartCard title="Revenue (last 30 days)">
           <div className="flex h-full items-center justify-center">
-            <Caption>Apache ECharts mounts here (wired in later phases).</Caption>
+            <Caption>Chart area (Apache ECharts).</Caption>
           </div>
         </ChartCard>
 

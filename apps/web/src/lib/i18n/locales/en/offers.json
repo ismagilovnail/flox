@@ -27,7 +27,7 @@
   "form": {
     "titleNew": "New Offer",
     "titleEdit": "Edit {{name}}",
-    "description": "Offers belong to a network and carry one or more tracking links (§27: Network → Offer → Offer Link).",
+    "description": "An offer belongs to a network and has one or more offer links (Network → Offer → Offer link).",
     "nameLabel": "Name",
     "namePlaceholder": "US Sweeps — CPA $12",
     "networkLabel": "Network",
