@@ -5,6 +5,32 @@ per-phase, matching `CLAUDE.md`'s phase protocol. The one exception is
 [Between phases], below: spec amendments and the code changes that follow from
 them land between phases and would otherwise be invisible here.
 
+## [Between phases] — funnel metrics by default
+
+Marketer audit #12 (P2): PWA installs, registrations, purchases, repurchases, step rates and cost
+per step were in the registry but not in the default analytics columns, so a new user never saw
+them.
+
+- Analytics default (`analytics-view.tsx`): clicks → PWA installs → click→install → registrations
+  → install→reg → purchases → reg→purchase → repurchases, then cost, cost per install / reg /
+  purchase, revenue, profit, ROI, EPC. Saved presets and an unsaved draft keep their own set.
+- The system default preset (`reportpresets.defaultPresetSeed`) gets the same set and is created
+  in the organization's timezone instead of UTC (audit #2 left this one behind); migration 00058
+  moves every existing default preset onto both — it is not user-editable, so nothing of a user's
+  is overwritten. Its name is shown translated ("Обзор кампаний (по умолчанию)").
+- Custom metrics: the form's catalog already offered every report metric, but the API's registry
+  (`internal/custommetrics/registry.go`) knew only the first 13, so a formula with `{pwaInstalls}`
+  passed the form and failed on save. One `reportMetricIDs` list now feeds the catalog and the
+  report builder's available set; `TestReportMetricsMatchTheFrontend` reads
+  `features/analytics/registry.ts` and fails when the two differ (checked by dropping a metric).
+  `bots` was listed twice in the form's catalog (report metric and catalog-only "Fraud") — the
+  stale entry is gone.
+
+Tests: preset seeding uses the organization's timezone and the funnel metrics; registry parity;
+full-env `go test ./...` incl. e2e (FullFunnel, OfferDailyCap, FilterMatrix), tsc, eslint, vitest
+pass. Live: a published custom metric `{cost} / {repurchases}` saved through the API (removed
+again); in the browser the Analytics page and the default preset show the funnel columns.
+
 ## [Between phases] — the whole interface in Russian
 
 Marketer audit #7 (P1): Settings, Team, Domains, Referral, Tags, Custom Metrics and Content

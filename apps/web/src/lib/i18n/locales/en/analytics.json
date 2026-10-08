@@ -30,7 +30,8 @@
     },
     "saveChanges": "Save changes",
     "saveChangesTooltip": "Update the \"{{name}}\" preset with the current report: dimensions, metrics, filters, period, timezone.",
-    "modified": "Report changed, preset not saved"
+    "modified": "Report changed, preset not saved",
+    "defaultName": "Campaign overview (default)"
   },
   "controls": {
     "filter": "Filter",

@@ -106,7 +106,6 @@
     "dep_to_redep": "Deposit → redeposit rate",
     "total_deposits": "Total deposits",
     "total_deposit_revenue": "Total deposit revenue",
-    "bots": "Bot clicks",
     "click_all": "All clicks (incl. bots)",
     "push_sent": "Push sent",
     "push_delivered": "Push delivered",

@@ -23,6 +23,21 @@ type registryMetric struct {
 	insertable bool
 }
 
+// reportMetricIDs are the analytics report's metrics — every key of
+// features/analytics/registry.ts's METRICS, the numbers each report row
+// carries. Formulas on the report builder can use any of them.
+// TestReportMetricsMatchTheFrontend keeps the two lists equal (marketer
+// audit #12: the funnel metrics were missing here, so a formula the form
+// accepted was rejected on save).
+var reportMetricIDs = []string{
+	"clicks", "uniqueClicks", "conversions", "revenue", "cost", "profit",
+	"roi", "roas", "ctr", "cvr", "cpc", "cpa", "epc",
+	"pwaInstalls", "registrations", "purchases", "repurchases",
+	"clickToInstall", "installToReg", "regToPurchase",
+	"costPerInstall", "costPerReg", "costPerPurchase",
+	"blocked", "bots", "blockedRate", "botRate",
+}
+
 var metricCatalog = buildCatalog()
 
 func buildCatalog() map[string]registryMetric {
@@ -34,10 +49,7 @@ func buildCatalog() map[string]registryMetric {
 	}
 
 	// Traffic / Performance — features/analytics/registry.ts's METRICS.
-	add(sourceRegular, true,
-		"clicks", "uniqueClicks", "conversions", "revenue", "cost", "profit",
-		"roi", "roas", "ctr", "cvr", "cpc", "cpa", "epc",
-	)
+	add(sourceRegular, true, reportMetricIDs...)
 
 	// CPA Funnel — catalog-only until apps/tracker emits these, matching
 	// the frontend's own `live: false` (that flag doesn't affect formula
@@ -49,11 +61,9 @@ func buildCatalog() map[string]registryMetric {
 		"total_deposits", "total_deposit_revenue",
 	)
 
-	// Fraud — is_bot is stored per-click in ClickHouse (apps/internal/
-	// chstore/events.go) but not yet exposed as an aggregate report
-	// metric (apps/internal/analytics/report.go has no bots/click_all
-	// field), so these stay catalog-only too.
-	add(sourceRegular, true, "bots", "click_all")
+	// Fraud — "bots" is a report metric now (above); "all clicks incl.
+	// bots" is not, so it stays catalog-only.
+	add(sourceRegular, true, "click_all")
 
 	// Push — no Push module exists yet.
 	add(sourcePush, true, "push_sent", "push_delivered", "push_opened", "push_ctr")
@@ -86,10 +96,7 @@ var surfaceAvailableMetricIDs = map[ShowInTarget]map[string]bool{
 
 func allRegularMetricIDs() map[string]bool {
 	out := map[string]bool{}
-	for _, id := range []string{
-		"clicks", "uniqueClicks", "conversions", "revenue", "cost", "profit",
-		"roi", "roas", "ctr", "cvr", "cpc", "cpa", "epc",
-	} {
+	for _, id := range reportMetricIDs {
 		out[id] = true
 	}
 	return out

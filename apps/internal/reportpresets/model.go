@@ -127,14 +127,23 @@ type UpdateInput struct {
 // first time an org has zero report presets — matching the mock's own
 // seed data (lib/mock/report-presets.ts's "Campaign Overview (default)")
 // so a real org's first-ever preset list looks the same as it did against
-// the mock. The metric set is the classic affiliate-media-buyer table (traffic, CR, cost, revenue, profit, ROI, EPC, CPA) over the last 7 days.
+// the mock. The metric set is the Analytics page's default (analytics-
+// view.tsx): the PWA → registration → purchase funnel with each step's rate
+// and cost, then money, over the last 7 days (marketer audit #12;
+// migration 00058 moved existing default presets onto it). The timezone is
+// the organization's own, filled in by EnsureDefault. The UI shows the name
+// translated; it is stored in English.
 var defaultPresetSeed = ReportPreset{
 	Name:       "Campaign Overview (default)",
 	Dimensions: []string{"campaign"},
-	Metrics:    []string{"clicks", "conversions", "cvr", "cost", "revenue", "profit", "roi", "epc", "cpa"},
-	GroupBy:    "campaign",
-	Period:     Period{Type: PeriodRelative, Days: intPtr(7)},
-	Timezone:   "UTC",
+	Metrics: []string{
+		"clicks", "pwaInstalls", "clickToInstall", "registrations", "installToReg",
+		"purchases", "regToPurchase", "repurchases",
+		"cost", "costPerInstall", "costPerReg", "costPerPurchase",
+		"revenue", "profit", "roi", "epc",
+	},
+	GroupBy: "campaign",
+	Period:  Period{Type: PeriodRelative, Days: intPtr(7)},
 }
 
 func intPtr(v int) *int { return &v }

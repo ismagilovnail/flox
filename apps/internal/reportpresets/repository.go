@@ -140,10 +140,11 @@ func (r *Repository) EnsureDefault(ctx context.Context, orgID string) error {
 	_, err := r.db.Exec(ctx, `
 		INSERT INTO report_presets
 			(id, organization_id, name, dimensions, metrics, group_by, period_type, period_days, timezone, is_default, created_by_user_id)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, true, NULL)
+		SELECT $1, o.id, $3, $4, $5, $6, $7, $8, o.timezone, true, NULL
+		FROM organizations o WHERE o.id = $2
 		ON CONFLICT (organization_id) WHERE is_default DO NOTHING`,
 		idgen.New(), orgID, def.Name, def.Dimensions, def.Metrics, def.GroupBy,
-		def.Period.Type, def.Period.Days, def.Timezone,
+		def.Period.Type, def.Period.Days,
 	)
 	if err != nil {
 		return fmt.Errorf("reportpresets: seeding default: %w", err)

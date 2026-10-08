@@ -62,8 +62,9 @@ const CPA_FUNNEL: RegistryMetric[] = CPA_FUNNEL_BASE.map((m) => ({
   live: false,
 }));
 
+// "bots" is a report metric (Traffic / Performance above); only "all clicks
+// incl. bots" stays catalog-only.
 const FRAUD: RegistryMetric[] = [
-  { id: "bots", label: "Bot Clicks" },
   { id: "click_all", label: "All Clicks (incl. bots)" },
 ].map((m) => ({ ...m, category: "Fraud" as const, dataSource: "regular" as const, format: "int" as MetricFormat, insertable: true, live: false }));
 

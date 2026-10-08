@@ -3,6 +3,7 @@ package reportpresets_test
 import (
 	"context"
 	"os"
+	"slices"
 	"testing"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -54,6 +55,9 @@ func TestListSeedsDefaultPreset(t *testing.T) {
 	pool := mustPool(t)
 	ctx := context.Background()
 	orgID, _ := seedOrgAndUser(t, ctx, pool)
+	if _, err := pool.Exec(ctx, `UPDATE organizations SET timezone = 'Europe/Moscow' WHERE id = $1`, orgID); err != nil {
+		t.Fatal(err)
+	}
 	svc := reportpresets.NewService(reportpresets.NewRepository(pool))
 
 	list, err := svc.List(ctx, orgID)
@@ -62,6 +66,11 @@ func TestListSeedsDefaultPreset(t *testing.T) {
 	}
 	if len(list) != 1 || !list[0].IsDefault {
 		t.Fatalf("List = %+v, want exactly one default preset", list)
+	}
+	// The organization's timezone, not UTC (audit #2), and the funnel
+	// metrics in the column set (audit #12).
+	if list[0].Timezone != "Europe/Moscow" || !slices.Contains(list[0].Metrics, "pwaInstalls") || !slices.Contains(list[0].Metrics, "costPerPurchase") {
+		t.Fatalf("default preset = timezone %q, metrics %v", list[0].Timezone, list[0].Metrics)
 	}
 
 	// Calling List again must not create a second default.

@@ -155,11 +155,15 @@ export function ReportPresetBar({
     };
   }
 
+  // The system default preset is FLOX's (stored in English, not editable),
+  // so its name follows the interface language.
+  const presetName = (preset: ReportPreset) => (preset.isDefault ? t("presets.defaultName") : preset.name);
+
   function applyPreset(preset: ReportPreset) {
     onApply(toPatch(preset));
     setActiveId(preset.id);
     writeActivePreset(preset.id);
-    toast(t("presets.toast.applied"), { description: preset.name });
+    toast(t("presets.toast.applied"), { description: presetName(preset) });
   }
 
   // Once the list has loaded, re-apply the preset chosen last time (silently).
@@ -324,7 +328,7 @@ export function ReportPresetBar({
             className={cn("flex items-center gap-1 px-2 py-1 text-xs hover:bg-muted", active && "font-medium")}
           >
             {preset.isDefault && <StarIcon className="size-3 fill-current text-warning" />}
-            {preset.name}
+            {presetName(preset)}
             {modified && <span className="text-primary" title={t("presets.modified")}>•</span>}
           </button>
           {!preset.isDefault && (
