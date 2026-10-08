@@ -1,0 +1,45 @@
+{
+  "title": "LTV / Cohorts",
+  "description": "Revenue of each cohort of first deposits (FTD) or registrations over its first 90 days, split by campaign, network and country. Cohort days are UTC.",
+  "types": { "ftd": "FTD cohorts", "reg": "Registration cohorts" },
+  "periods": { "day": "By day", "week": "By week", "month": "By month" },
+  "filters": {
+    "period": "Cohort period",
+    "campaign": "Campaign",
+    "network": "Network",
+    "allCampaigns": "All campaigns",
+    "allNetworks": "All networks",
+    "allCountries": "All countries"
+  },
+  "windows": { "d0": "Day 0", "d1_7": "Days 1–7", "d8_30": "Days 8–30", "d31_90": "Days 31–90" },
+  "windowHints": {
+    "d0": "Revenue on the day of the first deposit/registration",
+    "d1_7": "Revenue 1 to 7 days later",
+    "d8_30": "Revenue 8 to 30 days later",
+    "d31_90": "Revenue 31 to 90 days later"
+  },
+  "columns": {
+    "cohort": "Cohort",
+    "campaign": "Campaign",
+    "network": "Network",
+    "country": "Country",
+    "ftds": "FTDs",
+    "regs": "Registrations",
+    "ltvTotal": "LTV (90 days)",
+    "ltvPerFtd": "LTV per FTD",
+    "ltvPerReg": "LTV per registration",
+    "ftdToRedep": "FTD → redeposit",
+    "depToRedep": "Redeposits per FTD",
+    "regToFtd": "Registration → FTD",
+    "lifetime": "Avg lifetime, days",
+    "totalDeposits": "Deposits",
+    "totalDepositRevenue": "Deposit revenue"
+  },
+  "incomplete": "This window has not fully passed yet — the revenue so far, not final",
+  "legend": "* The window has not fully passed for the cohort's youngest member yet: the number is revenue so far, not final. LTV counts deposits up to day 90; Deposits and Deposit revenue count all of them.",
+  "loading": "Loading cohorts…",
+  "loadError": "Couldn't load cohorts",
+  "emptyTitle": "No cohorts in this range",
+  "emptyFtd": "Cohorts appear once clicks reach a first deposit (CPA_ACCEPT postback).",
+  "emptyReg": "Cohorts appear once clicks reach a registration (CPA_HOLD postback)."
+}

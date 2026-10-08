@@ -1,9 +1,9 @@
 import type { LucideIcon } from "lucide-react";
 import {
   BarChart3Icon,
-  BellRingIcon,
+  
   CheckCircle2Icon,
-  FileBarChart2Icon,
+  
   FileTextIcon,
   GiftIcon,
   GitBranchIcon,
@@ -91,9 +91,7 @@ export const NAV_GROUPS: NavGroup[] = [
   {
     label: "groups.insights",
     items: [
-      { label: "items.reports", href: "/reports", icon: FileBarChart2Icon },
       { label: "items.ltvCohorts", href: "/ltv-cohorts", icon: TrendingUpIcon },
-      { label: "items.push", href: "/push", icon: BellRingIcon },
     ],
   },
   {

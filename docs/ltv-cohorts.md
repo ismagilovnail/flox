@@ -98,7 +98,14 @@ neither `traffic_source_id` nor `offer_id` yet, the same pre-existing gap
 (Phase 26) already documented. Adding that propagation is its own piece of
 work, not silently approximated here.
 
-No frontend work in this phase either — consistent with every Go-backend
+**Update (marketer audit #5, 2026-10-08):** the screen exists now —
+`/ltv-cohorts` (`features/ltv/ltv-view.tsx`): FTD / registration tabs, period
+(day/week/month), UTC date range, campaign/network/country filters, the
+engine's rows as they come (cohort × campaign × network × country) with
+incomplete windows marked `*`. It only displays the API's numbers; nothing is
+re-aggregated in the browser.
+
+Originally, no frontend work in this phase either — consistent with every Go-backend
 phase since 23 (conversion engine, postback engine, analytics pipeline,
 ClickHouse), and there is no existing LTV/Cohorts UI mock to integrate with
 in the first place (ROADMAP.md has no such phase before 27).

@@ -1,5 +1,5 @@
-import { PageStub } from "@/components/shell/page-stub";
+import { LtvView } from "@/features/ltv/ltv-view";
 
 export default function Page() {
-  return <PageStub title="LTV / Cohorts" />;
+  return <LtvView />;
 }

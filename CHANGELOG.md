@@ -5,6 +5,27 @@ per-phase, matching `CLAUDE.md`'s phase protocol. The one exception is
 [Between phases], below: spec amendments and the code changes that follow from
 them land between phases and would otherwise be invisible here.
 
+## [Between phases] — LTV screen, no more menu stubs
+
+Marketer audit #5 (P1): Push, Reports and LTV / Cohorts opened a "Not built yet" page, while
+the LTV engine (`internal/ltv`, Phase 26.5) had no screen.
+
+- `/ltv-cohorts` (`features/ltv/ltv-view.tsx`, `lib/api/ltv.ts`): FTD and registration cohorts
+  from `GET /analytics/ltv/{ftd,reg}-cohorts` — period day/week/month (week by default), UTC date
+  range (last 90 days by default, matching the engine's day buckets), campaign/network/country
+  filters; columns: cohort, campaign, network, country, size, day 0 / 1–7 / 8–30 / 31–90 revenue
+  (incomplete windows in italics with `*`, legend under the table), LTV 90 days, LTV per anchor,
+  FTD→redeposit and redeposits per FTD (FTD) or registration→FTD (Reg), average lifetime,
+  deposits and deposit revenue. Sortable, CSV export, column settings remembered. Rows are the
+  engine's own (cohort × campaign × network × country) — nothing is re-aggregated in the
+  browser. New `ltv` i18n namespace, en and ru.
+- Push and Reports are gone from the menu, their stub pages and `PageStub` deleted ("drop it,
+  don't fake it"); saved reports already exist as Analytics presets.
+
+Tests: tsc, eslint, vitest pass. Live: the page compiles and serves on the dev stack, /push and
+/reports return 404, the cohort endpoints answer (empty — the fixtures have no deposits). Not
+checked in a browser (extension unavailable).
+
 ## [Between phases] — alerts
 
 Marketer audit #10 (P1): no alerts for spend, ROI, a paused or capped offer, or an expiring
