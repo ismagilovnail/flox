@@ -93,3 +93,12 @@ export function activateOffer(id: string): Promise<Offer> {
 export function archiveOffer(id: string): Promise<Offer> {
   return apiFetch(`/offers/${id}`, { method: "PATCH", body: { status: "archived" } });
 }
+
+/** Today's conversions of one capped offer (GET /offer-caps), from the same
+ * snapshot routing reads: `reached` is exactly when routing stops sending it
+ * traffic. Only active offers with a cap are listed. */
+export type OfferCapStatus = { offerId: string; cap: number; count: number; reached: boolean };
+
+export function listOfferCaps(): Promise<{ caps: OfferCapStatus[]; available: boolean }> {
+  return apiFetch("/offer-caps");
+}

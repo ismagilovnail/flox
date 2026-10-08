@@ -125,6 +125,7 @@ export type DashboardReport = {
   topCampaigns: ReportRow[];
   topCountries: ReportRow[];
   topFlows: ReportRow[];
+  topOffers: ReportRow[];
 };
 
 export function getDashboardReport(from: Date, to: Date, timezone?: string): Promise<DashboardReport> {
@@ -134,6 +135,7 @@ export function getDashboardReport(from: Date, to: Date, timezone?: string): Pro
     topCampaigns: ApiReportRow[];
     topCountries: ApiReportRow[];
     topFlows: ApiReportRow[];
+    topOffers: ApiReportRow[];
   }>("/analytics/dashboard", {
     method: "POST",
     body: { from: formatDate(from), to: formatDate(to), timezone },
@@ -143,5 +145,6 @@ export function getDashboardReport(from: Date, to: Date, timezone?: string): Pro
     topCampaigns: res.topCampaigns.map((r) => toReportRow(r, ["campaign"])),
     topCountries: res.topCountries.map((r) => toReportRow(r, ["country"])),
     topFlows: res.topFlows.map((r) => toReportRow(r, ["flow"])),
+    topOffers: res.topOffers.map((r) => toReportRow(r, ["offer"])),
   }));
 }

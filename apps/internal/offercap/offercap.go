@@ -58,12 +58,17 @@ type Monitor struct {
 	logger   *slog.Logger
 	interval time.Duration
 	snapshot atomic.Pointer[map[string]struct{}]
+	// statuses is every capped offer's count, by organization, from the
+	// same refresh as snapshot (the offers list shows it).
+	statuses atomic.Pointer[map[string][]Status]
 }
 
 func NewMonitor(source Source, counter Counter, logger *slog.Logger) *Monitor {
 	m := &Monitor{source: source, counter: counter, logger: logger, interval: DefaultInterval}
 	empty := map[string]struct{}{}
 	m.snapshot.Store(&empty)
+	noStatuses := map[string][]Status{}
+	m.statuses.Store(&noStatuses)
 	return m
 }
 
@@ -100,13 +105,25 @@ func (m *Monitor) Refresh(ctx context.Context, now time.Time) error {
 		return err
 	}
 	capped := map[string]struct{}{}
+	byOrg := map[string][]Status{}
 	for _, s := range statuses {
 		if s.Reached() {
 			capped[s.OfferID] = struct{}{}
 		}
+		byOrg[s.OrganizationID] = append(byOrg[s.OrganizationID], s)
 	}
 	m.snapshot.Store(&capped)
+	m.statuses.Store(&byOrg)
 	return nil
+}
+
+// StatusesFor returns organizationID's capped offers with today's counts as
+// of the last refresh. A nil Monitor (no ClickHouse) has none.
+func (m *Monitor) StatusesFor(organizationID string) []Status {
+	if m == nil {
+		return nil
+	}
+	return (*m.statuses.Load())[organizationID]
 }
 
 // Status is one capped offer's count of new conversions today.

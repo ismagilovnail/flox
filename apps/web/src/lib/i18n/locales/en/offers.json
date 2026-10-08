@@ -18,6 +18,8 @@
     "payout": "Payout",
     "dailyCap": "Daily Cap",
     "uncapped": "Uncapped",
+    "capReached": "Cap reached",
+    "capTodayHint": "Conversions today / daily cap, in the organization's timezone. At the cap routing skips the offer until midnight.",
     "status": "Status",
     "tags": "Tags",
     "updated": "Updated"

@@ -5,6 +5,28 @@ per-phase, matching `CLAUDE.md`'s phase protocol. The one exception is
 [Between phases], below: spec amendments and the code changes that follow from
 them land between phases and would otherwise be invisible here.
 
+## [Between phases] — offer cap in the list, Top Offers on the Overview
+
+Marketer audit: the offer-cap badge left open by #1, and #11.
+
+- `GET /offer-caps` (`offercap.Handler`): today's conversion count of each of the caller's active
+  capped offers, from the `offercap.Monitor` snapshot routing already reads (the monitor now
+  keeps the counts by organization, not only the capped set); `available: false` when the API
+  started without ClickHouse. The offers list's "Daily cap" column shows `count / cap` and a
+  "Cap reached" badge (en/ru), refreshed every minute.
+- Dashboard: `topOffers` (revenue breakdown by `offer`, like the other three) and a Top Offers
+  card. The KPI tiles already compared with the previous period of the same length; a line
+  under them now says which dates that is. `TestDashboardOmitsTopOffers`, which pinned the card's
+  absence until the product decision was made, is replaced by `TestDashboardTopOffers`.
+
+Tests: handler returns only the caller's offers, `available` false without a monitor;
+TopOffers ranked by revenue and kept out of the other breakdowns; vitest for the cap cell
+(count, badge at the cap, plain cap when unknown). Full-env `go test ./...` incl. e2e
+(FullFunnel, OfferDailyCap, FilterMatrix — not skipped), tsc, eslint, vitest pass. Live: a cap of
+5 on the demo offer showed `count 0, reached false`, the other tenant got an empty list; the
+dashboard answers with `topOffers` (empty — no conversions in the fixtures). The cap was removed
+again afterwards. Not checked in a browser (extension unavailable).
+
 ## [Between phases] — LTV screen, no more menu stubs
 
 Marketer audit #5 (P1): Push, Reports and LTV / Cohorts opened a "Not built yet" page, while

@@ -8,6 +8,7 @@ import {
   createOffer,
   duplicateOffer,
   getOffer,
+  listOfferCaps,
   listOffers,
   pauseOffer,
   updateOffer,
@@ -17,6 +18,11 @@ import {
 
 const offersKey = ["offers"] as const;
 const offerKey = (id: string) => ["offers", id] as const;
+
+/** The cap snapshot refreshes every 30 s on the server. */
+export function useOfferCaps() {
+  return useQuery({ queryKey: ["offer-caps"], queryFn: listOfferCaps, refetchInterval: 60_000 });
+}
 
 export function useOffers() {
   return useQuery({ queryKey: offersKey, queryFn: listOffers });

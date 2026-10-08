@@ -6,7 +6,7 @@ import { dataTableFeatures } from "@/components/ui/data-table";
 import { Badge } from "@/components/ui/badge";
 import { Mono } from "@/components/ui/typography";
 import { RelativeTime } from "@/components/ui/relative-time";
-import type { Offer, OfferStatus } from "@/lib/api/offers";
+import type { Offer, OfferCapStatus, OfferStatus } from "@/lib/api/offers";
 import { OfferRowActions } from "@/features/offers/offer-row-actions";
 import { TagBadgeList } from "@/features/tags/tag-badge-list";
 
@@ -19,6 +19,8 @@ const STATUS_VARIANT: Record<OfferStatus, "success" | "warning" | "secondary"> =
 export function offerColumns(
   t: TFunction,
   networkNameById: Record<string, string>,
+  /** Today's count per capped offer (GET /offer-caps); empty when unknown. */
+  capsByOffer: Record<string, OfferCapStatus> = {},
 ): ColumnDef<typeof dataTableFeatures, Offer>[] {
   return [
     {
@@ -71,9 +73,19 @@ export function offerColumns(
     {
       accessorKey: "cap",
       header: t("columns.dailyCap", { ns: "offers" }),
-      cell: ({ getValue }) => {
+      cell: ({ row, getValue }) => {
         const cap = getValue() as number | null;
-        return <Mono>{cap === null ? t("columns.uncapped", { ns: "offers" }) : cap.toLocaleString("en-US")}</Mono>;
+        if (cap === null) return <Mono>{t("columns.uncapped", { ns: "offers" })}</Mono>;
+        const today = capsByOffer[row.original.id];
+        if (!today) return <Mono>{cap.toLocaleString("en-US")}</Mono>;
+        return (
+          <div className="flex items-center gap-2" title={t("columns.capTodayHint", { ns: "offers" })}>
+            <Mono>
+              {today.count.toLocaleString("en-US")} / {cap.toLocaleString("en-US")}
+            </Mono>
+            {today.reached && <Badge variant="danger">{t("columns.capReached", { ns: "offers" })}</Badge>}
+          </div>
+        );
       },
     },
     {

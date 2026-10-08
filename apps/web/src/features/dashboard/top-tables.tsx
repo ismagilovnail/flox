@@ -7,12 +7,13 @@ import { Mono } from "@/components/ui/typography";
 import { formatUsd, formatInt } from "@/lib/format";
 import type { PerformanceRow } from "@/features/dashboard/metrics";
 
-type Entity = "campaigns" | "countries" | "flows";
+type Entity = "campaigns" | "countries" | "flows" | "offers";
 
 const NAME_HEADER_KEY: Record<Entity, string> = {
   campaigns: "campaignHeader",
   countries: "countryHeader",
   flows: "flowHeader",
+  offers: "offerHeader",
 };
 
 function columns(t: TFunction, nameHeader: string, nameHint: string): ColumnDef<typeof dataTableFeatures, PerformanceRow>[] {

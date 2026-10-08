@@ -583,28 +583,37 @@ func TestFunnelZeroFillsEveryStage(t *testing.T) {
 	}
 }
 
-func TestDashboardOmitsTopOffers(t *testing.T) {
-	// DashboardResult has no TopOffers field at all. "offer" became a
-	// backed dimension (chstore schema/009), but the dashboard card is a
-	// separate product decision nobody has made yet — the type keeps
-	// apps/web from rendering one by accident until then.
-	repo := &reportFakeRepo{
-		clicks: []chstore.ClickAgg{{Key: chstore.ReportKey{}, Clicks: 10, UniqueClicks: 9}},
-	}
-	svc := analytics.NewService(repo, nil)
+// offerRepo answers the offer breakdown with its own rows and every other
+// query with nothing, so the test sees which breakdown TopOffers came from.
+type offerRepo struct {
+	reportFakeRepo
+	byOffer []chstore.ConversionAgg
+}
 
-	result, err := svc.Dashboard(context.Background(), "org-1", time.Now().AddDate(0, 0, -7), time.Now(), "")
+func (r *offerRepo) ReportConversions(_ context.Context, q chstore.ReportQuery) ([]chstore.ConversionAgg, error) {
+	if len(q.Dims) == 1 && q.Dims[0] == chstore.DimOffer {
+		return r.byOffer, nil
+	}
+	return nil, nil
+}
+
+// Marketer audit #11: the Overview has a Top Offers card, ranked by revenue
+// like the other three.
+func TestDashboardTopOffers(t *testing.T) {
+	repo := &offerRepo{byOffer: []chstore.ConversionAgg{
+		{Key: dimKey(chstore.DimOffer, "offer-small"), Conversions: 1, RevenueUSD: 10},
+		{Key: dimKey(chstore.DimOffer, "offer-big"), Conversions: 3, RevenueUSD: 300},
+	}}
+	result, err := analytics.NewService(repo, nil).Dashboard(context.Background(), "org-1", time.Now().AddDate(0, 0, -7), time.Now(), "")
 	if err != nil {
 		t.Fatalf("Dashboard: %v", err)
 	}
-	if result.Totals.Clicks != 10 {
-		t.Fatalf("Totals.Clicks = %d, want 10", result.Totals.Clicks)
+	if len(result.TopOffers) != 2 || result.TopOffers[0].DimValues[chstore.DimOffer] != "offer-big" {
+		t.Fatalf("TopOffers = %+v, want offer-big first", result.TopOffers)
 	}
-	// Compile-time enforced (no result.TopOffers field exists) — this
-	// assertion just documents the three that DO exist.
-	_ = result.TopCampaigns
-	_ = result.TopCountries
-	_ = result.TopFlows
+	if len(result.TopCampaigns) != 0 {
+		t.Fatalf("TopCampaigns = %+v, want none (offer rows must not leak into other breakdowns)", result.TopCampaigns)
+	}
 }
 
 func TestDashboardNewOrganizationIsAllZeros(t *testing.T) {

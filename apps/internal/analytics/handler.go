@@ -422,11 +422,11 @@ type dashboardResponse struct {
 	TopCampaigns []reportRowResponse  `json:"topCampaigns"`
 	TopCountries []reportRowResponse  `json:"topCountries"`
 	TopFlows     []reportRowResponse  `json:"topFlows"`
+	TopOffers    []reportRowResponse  `json:"topOffers"`
 }
 
 // dashboard answers POST /analytics/dashboard — /overview's own endpoint
-// (KPI totals, a daily series, three Top-N breakdowns; see DashboardResult's
-// own doc comment on why there's no Top Offers here).
+// (KPI totals, a daily series, four Top-N breakdowns — DashboardResult).
 func (h *Handler) dashboard(w http.ResponseWriter, r *http.Request) {
 	orgID, _ := tenant.OrgID(r.Context())
 	var req rangeRequest
@@ -451,6 +451,7 @@ func (h *Handler) dashboard(w http.ResponseWriter, r *http.Request) {
 		TopCampaigns: reportRowsToResponse(result.TopCampaigns),
 		TopCountries: reportRowsToResponse(result.TopCountries),
 		TopFlows:     reportRowsToResponse(result.TopFlows),
+		TopOffers:    reportRowsToResponse(result.TopOffers),
 	})
 }
 

@@ -4,11 +4,15 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"net/http"
+	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/ismagilovnail/flox/apps/internal/chstore"
 	"github.com/ismagilovnail/flox/apps/internal/offercap"
+	"github.com/ismagilovnail/flox/apps/internal/tenant"
 )
 
 type fakeSource struct{ limits []offercap.Limit }
@@ -89,4 +93,50 @@ func TestStartOfDayFollowsTheOrganizationTimezone(t *testing.T) {
 	if utc := offercap.StartOfDay(now, "Nope/Nowhere"); !utc.Equal(time.Date(2026, 10, 6, 0, 0, 0, 0, time.UTC)) {
 		t.Fatalf("unknown zone should fall back to UTC, got %v", utc)
 	}
+}
+
+// The offers list reads counts per organization through Handler, from the
+// same refresh routing uses; another organization's offers never show.
+func TestHandlerShowsTheCallersCountsOnly(t *testing.T) {
+	src := &fakeSource{limits: []offercap.Limit{
+		{OrganizationID: "o1", OfferID: "a", Cap: 10},
+		{OrganizationID: "o1", OfferID: "b", Cap: 2},
+		{OrganizationID: "o2", OfferID: "c", Cap: 1},
+	}}
+	ctr := &fakeCounter{counts: map[string]uint64{"o1/a": 4, "o1/b": 2, "o2/c": 1}}
+	m := offercap.NewMonitor(src, ctr, slog.Default())
+	if err := m.Refresh(context.Background(), time.Now()); err != nil {
+		t.Fatal(err)
+	}
+
+	get := func(m *offercap.Monitor, org string) string {
+		h := tenant.NewMiddleware(sessionOf{org}, noAPIKeys{}, slog.Default(), false)(offercap.Handler(m))
+		req := httptest.NewRequest(http.MethodGet, "/offer-caps", nil)
+		req.AddCookie(&http.Cookie{Name: tenant.CookieName, Value: "x"})
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, req)
+		return strings.TrimSpace(rec.Body.String())
+	}
+	want := `{"available":true,"caps":[{"offerId":"a","cap":10,"count":4,"reached":false},{"offerId":"b","cap":2,"count":2,"reached":true}]}`
+	if got := get(m, "o1"); got != want {
+		t.Fatalf("o1 = %s\nwant %s", got, want)
+	}
+	if got := get(m, "o3"); got != `{"available":true,"caps":[]}` {
+		t.Fatalf("org without caps = %s", got)
+	}
+	if got := get(nil, "o1"); got != `{"available":false,"caps":[]}` {
+		t.Fatalf("no monitor = %s", got)
+	}
+}
+
+type sessionOf struct{ org string }
+
+func (s sessionOf) ResolveSession(context.Context, string) (string, string, error) {
+	return s.org, "user", nil
+}
+
+type noAPIKeys struct{}
+
+func (noAPIKeys) Authenticate(context.Context, string) (string, string, string, error) {
+	return "", "", "", errors.New("no api keys here")
 }

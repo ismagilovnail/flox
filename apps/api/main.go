@@ -520,6 +520,10 @@ func run() error {
 		offerHandler.Register(r)
 	})
 
+	// Today's count per capped offer, from the snapshot routing uses — the
+	// offers list's "cap reached" badge.
+	srv.Mux().With(tenantMiddleware).Get("/offer-caps", offercap.Handler(offerCaps))
+
 	eventMappingHandler := eventmapping.NewHandler(eventmapping.NewService(eventmapping.NewRepository(db)), requireOfferWrite, logger)
 	srv.Mux().Route("/event-mappings", func(r chi.Router) {
 		r.Use(tenantMiddleware)

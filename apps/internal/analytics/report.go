@@ -960,16 +960,15 @@ func (s *Service) Funnel(ctx context.Context, organizationID string, from, to ti
 
 // DashboardResult is /overview's own endpoint — KPI totals for the
 // requested range, a daily revenue/spend/profit/conversions series, and
-// three "Top X" breakdowns. Deliberately NOT four: Top Offers is one of
-// the 5 dimensions deferred pending event-pipeline work (see
-// chstore.ReportDimension's own doc) — apps/web drops that card rather
-// than rendering it against fake data.
+// four "Top X" breakdowns by revenue: campaigns, countries, flows and offers
+// (the offer a click was actually routed to — chstore.DimOffer).
 type DashboardResult struct {
 	Totals       MetricValues
 	Daily        []ReportRow
 	TopCampaigns []ReportRow
 	TopCountries []ReportRow
 	TopFlows     []ReportRow
+	TopOffers    []ReportRow
 }
 
 const dashboardTopN = 5
@@ -1019,11 +1018,17 @@ func (s *Service) Dashboard(ctx context.Context, organizationID string, from, to
 		return DashboardResult{}, err
 	}
 
+	topOffers, err := s.Breakdown(ctx, organizationID, BreakdownInput{Dim: chstore.DimOffer, Metric: "revenue", From: from, To: to, Limit: dashboardTopN, Timezone: timezone})
+	if err != nil {
+		return DashboardResult{}, err
+	}
+
 	return DashboardResult{
 		Totals:       totals,
 		Daily:        daily,
 		TopCampaigns: topCampaigns,
 		TopCountries: topCountries,
 		TopFlows:     topFlows,
+		TopOffers:    topOffers,
 	}, nil
 }

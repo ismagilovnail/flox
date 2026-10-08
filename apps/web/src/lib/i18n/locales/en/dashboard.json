@@ -49,6 +49,8 @@
     "clicksHint": "All clicks in the period, including repeat clicks from the same visitor.",
     "cvrHint": "CVR = conversions ÷ clicks × 100%. The share of clicks that ended in a conversion.",
     "revenueHint": "Revenue from conversions in USD at the rate on the event date, net of chargebacks: a declined FTD is subtracted on the day of the decline.",
-    "roiHint": "ROI = (revenue − cost) ÷ cost × 100%. \"—\" when no cost is entered."
-  }
+    "roiHint": "ROI = (revenue − cost) ÷ cost × 100%. \"—\" when no cost is entered.",
+    "offersHint": "The offer a click was routed to. Offers that received conversions in the period, by revenue."
+  },
+  "comparedWith": "Changes are against the previous period of the same length: {{from}} – {{to}}."
 }

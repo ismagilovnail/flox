@@ -15,6 +15,7 @@ import { metricsFromApi, performanceRowFromApi } from "@/features/dashboard/metr
 import { useDimensionValueLabel } from "@/features/analytics/use-dimension-value-label";
 import { useDashboardReport } from "@/hooks/use-analytics-report";
 import { useOrganization } from "@/hooks/use-organization";
+import { useLocale } from "@/hooks/use-locale";
 import { todayInZone } from "@/lib/timezones";
 
 function daysBetween(from: Date, to: Date) {
@@ -33,6 +34,9 @@ export function DashboardView() {
 
 function DashboardContent({ timezone }: { timezone: string }) {
   const { t } = useTranslation("dashboard");
+  const locale = useLocale();
+  // Range days are UTC-midnight Dates holding the organization's calendar day.
+  const formatDay = (d: Date) => new Intl.DateTimeFormat(locale, { day: "numeric", month: "short", timeZone: "UTC" }).format(d);
   const valueLabel = useDimensionValueLabel();
 
   const defaultTo = React.useMemo(() => todayInZone(timezone), [timezone]);
@@ -83,7 +87,12 @@ function DashboardContent({ timezone }: { timezone: string }) {
         <DateRangePicker value={range} onChange={setRange} timezone={timezone} />
       </div>
 
-      <KpiGrid current={currentMetrics} previous={previousMetrics} />
+      <div className="flex flex-col gap-1.5">
+        <KpiGrid current={currentMetrics} previous={previousMetrics} />
+        <p className="text-xs text-muted-foreground">
+          {t("comparedWith", { from: formatDay(prevFrom), to: formatDay(prevTo) })}
+        </p>
+      </div>
 
       <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
         <LineMetricChart
@@ -112,13 +121,11 @@ function DashboardContent({ timezone }: { timezone: string }) {
         />
       </div>
 
-      {/* No Top Offers card — "offer" isn't a backed report dimension yet
-          (DashboardResult's own doc comment); dropped rather than rendered
-          against fake data. */}
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         <TopTable entity="campaigns" rows={data.topCampaigns.map((r) => performanceRowFromApi(r, "campaign", valueLabel))} />
         <TopTable entity="countries" rows={data.topCountries.map((r) => performanceRowFromApi(r, "country", valueLabel))} />
         <TopTable entity="flows" rows={data.topFlows.map((r) => performanceRowFromApi(r, "flow", valueLabel))} />
+        <TopTable entity="offers" rows={data.topOffers.map((r) => performanceRowFromApi(r, "offer", valueLabel))} />
       </div>
     </div>
   );

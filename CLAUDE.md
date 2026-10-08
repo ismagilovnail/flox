@@ -20,17 +20,20 @@ referenced below as §N).
 
 ```
 CURRENT PHASE : MARKETER AUDIT FOLLOW-UPS (between phases)
-STATUS        : marketer audit (docs/audit-marketer-2026-10-06.md): user picked
-                #4, #10, #5, offer-cap badge + #11, one commit each. #4, #10,
-                #5 done. #5: /ltv-cohorts screen on internal/ltv; Push and
-                Reports removed from the menu (no backend).
-LAST COMMIT   : feat(ltv): cohort screen; drop menu stubs.
+STATUS        : the user's picks from the marketer audit (#4, #10, #5, offer-cap
+                badge + #11) are all done, one commit each. Still open in the
+                audit and not picked: #6 (phase/§ marks in UI texts), #7
+                (English-only pages), #12 (funnel metrics not in default
+                columns); #13 is a platform limit.
+LAST COMMIT   : feat(offers): cap progress in the list; Top Offers card.
 UNCOMMITTED   : none expected. Dev DB from `make fixtures` (password
-                flox-demo-2026) plus a $50 cost entry today on Demo Campaign,
-                two alert rules and a paused Demo Offer from the live check.
-NEXT          : offer-cap badge + #11 Top Offers / previous period. CI (DO1) is the user's own decision — do not set it up.
-                Run go test with the full env line AND check e2e did not skip
-                (memory: flox-full-test-env); wait for air rebuilds before e2e.
+                flox-demo-2026) plus, from live checks: a $50 cost entry today
+                on Demo Campaign, two alert rules (spend > $10, ROI < 0) and
+                their notifications.
+NEXT          : wait for the user — #6/#7/#12 or the next phase. CI (DO1) is
+                the user's own decision — do not set it up. Run go test with
+                the full env line AND check e2e did not skip (memory:
+                flox-full-test-env); wait for air rebuilds before e2e.
 ```
 
 > At the end of every phase: update the four lines above, add a CHANGELOG entry,

@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { render, screen } from "@testing-library/react";
 
 import i18n from "@/lib/i18n/config";
 import { offerColumns } from "@/features/offers/offer-columns";
@@ -66,5 +67,31 @@ describe("offerColumns' network column (regression: accessorFn stale-cache bug)"
     const networkColumn = columns.find((c) => c.id === "network");
     expect(networkColumn).toBeDefined();
     expect("accessorFn" in (networkColumn ?? {})).toBe(false);
+  });
+});
+
+describe("offerColumns' cap column", () => {
+  function capCell(offer: Offer, caps: Parameters<typeof offerColumns>[2]) {
+    const column = offerColumns(i18n.t, {}, caps).find((c) => "accessorKey" in c && c.accessorKey === "cap");
+    if (!column || !("cell" in column) || typeof column.cell !== "function") throw new Error("cap column has no cell renderer");
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    return render((column.cell as any)({ row: { original: offer }, getValue: () => offer.cap }));
+  }
+
+  it("shows today's count and a badge once the cap is reached", () => {
+    const capped = { ...baseOffer, cap: 100 };
+    capCell(capped, { "offer-1": { offerId: "offer-1", cap: 100, count: 100, reached: true } });
+    expect(screen.getByText("100 / 100")).toBeInTheDocument();
+    expect(screen.getByText("Cap reached")).toBeInTheDocument();
+  });
+
+  it("shows the count without a badge below the cap, and just the cap when the count is unknown", () => {
+    const capped = { ...baseOffer, cap: 100 };
+    const { unmount } = capCell(capped, { "offer-1": { offerId: "offer-1", cap: 100, count: 37, reached: false } });
+    expect(screen.getByText("37 / 100")).toBeInTheDocument();
+    expect(screen.queryByText("Cap reached")).toBeNull();
+    unmount();
+    capCell(capped, {});
+    expect(screen.getByText("100")).toBeInTheDocument();
   });
 });

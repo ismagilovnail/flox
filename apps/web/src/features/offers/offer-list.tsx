@@ -10,7 +10,7 @@ import { DataTable } from "@/components/ui/data-table";
 import { LoadingState } from "@/components/ui/loading-state";
 import { ErrorState } from "@/components/ui/error-state";
 import { usePermission } from "@/hooks/use-auth";
-import { useOffers } from "@/hooks/use-offers";
+import { useOfferCaps, useOffers } from "@/hooks/use-offers";
 import { useNetworks } from "@/hooks/use-networks";
 import { EMPTY_TAG_ASSIGNMENTS, useTagAssignments } from "@/hooks/use-tags";
 import { offerColumns } from "@/features/offers/offer-columns";
@@ -37,7 +37,12 @@ export function OfferList() {
     () => filterByTags("offer", offersQuery.data?.offers ?? [], tagFilter, assignments),
     [offersQuery.data, tagFilter, assignments],
   );
-  const columns = React.useMemo(() => offerColumns(t, networkNameById), [t, networkNameById]);
+  const capsData = useOfferCaps().data;
+  const capsByOffer = React.useMemo(
+    () => Object.fromEntries((capsData?.caps ?? []).map((c) => [c.offerId, c])),
+    [capsData],
+  );
+  const columns = React.useMemo(() => offerColumns(t, networkNameById, capsByOffer), [t, networkNameById, capsByOffer]);
 
   const header = (
     <div className="flex items-center justify-between">
