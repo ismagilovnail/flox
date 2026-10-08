@@ -2,11 +2,12 @@
 
 import * as React from "react";
 import type { ColumnDef } from "@tanstack/react-table";
-import { formatDistanceToNow } from "date-fns";
+import { useTranslation } from "react-i18next";
 
 import { DataTable, dataTableFeatures } from "@/components/ui/data-table";
 import { Badge } from "@/components/ui/badge";
 import { Caption, Mono } from "@/components/ui/typography";
+import { RelativeTime } from "@/components/ui/relative-time";
 import { formatUsd } from "@/lib/format";
 import { PayoutRowActions } from "@/features/referral/payout-row-actions";
 import type { PayoutRequest, PayoutStatus } from "@/lib/referral";
@@ -19,31 +20,30 @@ const STATUS_VARIANT: Record<PayoutStatus, "warning" | "info" | "success" | "dan
 };
 
 export function PayoutsTable({ payouts, canManage }: { payouts: PayoutRequest[]; canManage: boolean }) {
+  const { t } = useTranslation("referral");
   const columns: ColumnDef<typeof dataTableFeatures, PayoutRequest>[] = React.useMemo(
     () => [
       {
         accessorKey: "amount",
-        header: "Amount",
+        header: t("payouts.amount"),
         cell: ({ getValue }) => <Mono>{formatUsd(getValue() as number, 2)}</Mono>,
       },
       {
         accessorKey: "status",
-        header: "Status",
+        header: t("payouts.status"),
         cell: ({ getValue }) => {
           const status = getValue() as PayoutStatus;
-          return <Badge variant={STATUS_VARIANT[status]}>{status}</Badge>;
+          return <Badge variant={STATUS_VARIANT[status]}>{t(`payouts.statuses.${status}`)}</Badge>;
         },
       },
       {
         accessorKey: "requestedAt",
-        header: "Requested",
-        cell: ({ getValue }) => (
-          <Caption>{formatDistanceToNow(new Date(getValue() as string), { addSuffix: true })}</Caption>
-        ),
+        header: t("payouts.requested"),
+        cell: ({ getValue }) => <RelativeTime date={getValue() as string} />,
       },
       {
         accessorKey: "note",
-        header: "Note",
+        header: t("payouts.note"),
         cell: ({ getValue }) => <Caption className="text-muted-foreground">{(getValue() as string) || "—"}</Caption>,
       },
       ...(canManage
@@ -58,17 +58,17 @@ export function PayoutsTable({ payouts, canManage }: { payouts: PayoutRequest[];
           ]
         : []),
     ],
-    [canManage],
+    [canManage, t],
   );
 
   return (
     <DataTable
       columns={columns}
       data={payouts}
-      searchPlaceholder="Search payouts..."
+      searchPlaceholder={t("payouts.search")}
       exportFilename="referral-payouts"
-      emptyTitle="No payout requests yet"
-      emptyDescription="Request a payout from your available balance above."
+      emptyTitle={t("payouts.emptyTitle")}
+      emptyDescription={t("payouts.emptyDescription")}
       pageSize={10}
     />
   );

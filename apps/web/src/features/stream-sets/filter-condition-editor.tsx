@@ -122,7 +122,7 @@ function ValueInput({
     const selected = value.split(",").map((v) => v.trim()).filter(Boolean);
     return (
       <MultiSelect
-        label="Values"
+        label={t("a11y.values", { ns: "common" })}
         options={options}
         selected={selected}
         onChange={(values) => onChange({ value: values.join(", ") })}

@@ -1,0 +1,94 @@
+{
+  "title": "Referral program",
+  "loading": "Loading the referral program…",
+  "loadError": "Couldn't load the referral program",
+  "linkCopied": "Referral link copied",
+  "stats": {
+    "invited": "Invited",
+    "earned": "Total earned",
+    "pending": "Pending payout",
+    "available": "Available balance"
+  },
+  "tabs": {
+    "signups": "Referred signups",
+    "history": "Earnings history",
+    "payouts": "Payouts"
+  },
+  "payout": {
+    "request": "Request payout",
+    "title": "Request a payout",
+    "description": "Available balance: {{balance}}. An Owner or Admin approves the request before it is paid.",
+    "amount": "Amount (USD)",
+    "amountError": "Enter an amount from 0.01 to {{max}}.",
+    "requested": "Payout requested",
+    "requestError": "Couldn't request the payout"
+  },
+  "adjustment": {
+    "add": "Add adjustment",
+    "title": "Add a manual adjustment",
+    "description": "A credit (positive) or a correction (negative) to the balance. Each adjustment stays in the history with its reason; nothing is edited silently.",
+    "amount": "Amount (USD, negative for a correction)",
+    "reason": "Reason",
+    "reasonPlaceholder": "Why is this adjustment made?",
+    "recorded": "Adjustment recorded",
+    "error": "Couldn't record the adjustment"
+  },
+  "history": {
+    "type": "Type",
+    "types": {
+      "accrual": "Accrual",
+      "adjustment": "Adjustment",
+      "payout_paid": "Payout paid"
+    },
+    "amount": "Amount",
+    "description": "Description",
+    "by": "By",
+    "date": "Date",
+    "search": "Search history…",
+    "emptyTitle": "No earnings yet",
+    "emptyDescription": "Accruals, adjustments and payouts appear here. Entries are never changed or deleted."
+  },
+  "payouts": {
+    "amount": "Amount",
+    "status": "Status",
+    "statuses": {
+      "pending": "pending",
+      "approved": "approved",
+      "paid": "paid",
+      "rejected": "rejected"
+    },
+    "requested": "Requested",
+    "note": "Note",
+    "search": "Search payouts…",
+    "emptyTitle": "No payout requests yet",
+    "emptyDescription": "Request a payout from your available balance above.",
+    "approve": "Approve",
+    "approved": "Payout approved",
+    "approveError": "Couldn't approve the payout",
+    "markPaid": "Mark as paid",
+    "markedPaid": "Payout marked as paid",
+    "markPaidError": "Couldn't mark the payout as paid",
+    "reject": "Reject",
+    "rejectAria": "Reject payout",
+    "rejected": "Payout rejected",
+    "rejectError": "Couldn't reject the payout",
+    "rejectTitle": "Reject the payout of {{amount}} USD?",
+    "rejectDescription": "The requester can send a new request once the balance allows it.",
+    "reason": "Reason",
+    "reasonPlaceholder": "Why?"
+  },
+  "signups": {
+    "name": "Name",
+    "email": "Email",
+    "status": "Status",
+    "statuses": {
+      "trial": "Trial",
+      "active_customer": "Active customer",
+      "churned": "Churned"
+    },
+    "signedUp": "Signed up",
+    "search": "Search signups…",
+    "emptyTitle": "No referred signups yet",
+    "emptyDescription": "People who sign up through your referral link show up here."
+  }
+}

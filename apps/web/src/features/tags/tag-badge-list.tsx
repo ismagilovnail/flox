@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import { PlusIcon } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
 import { tagColorHex, type TaggableEntityType } from "@/lib/tags";
 import { useEntityTags } from "@/features/tags/use-entity-tags";
@@ -12,6 +13,7 @@ import { TagPickerPopover } from "@/features/tags/tag-picker-popover";
  * "Add tags" affordance. Clicking anywhere opens the same picker used by
  * each row's "Manage Tags" action. */
 export function TagBadgeList({ entityType, entityId }: { entityType: TaggableEntityType; entityId: string }) {
+  const { t } = useTranslation("tags");
   const [open, setOpen] = React.useState(false);
   const tags = useEntityTags(entityType, entityId);
   const visible = tags.slice(0, 3);
@@ -27,7 +29,7 @@ export function TagBadgeList({ entityType, entityId }: { entityType: TaggableEnt
         <button type="button" onClick={() => setOpen(true)} className="flex flex-wrap items-center gap-1">
           {tags.length === 0 ? (
             <span className="flex items-center gap-1 rounded-full border border-dashed border-border px-2 py-0.5 text-xs text-muted-foreground hover:border-foreground/40 hover:text-foreground">
-              <PlusIcon className="size-3" /> Add tags
+              <PlusIcon className="size-3" /> {t("add")}
             </span>
           ) : (
             <>

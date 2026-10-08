@@ -5,6 +5,37 @@ per-phase, matching `CLAUDE.md`'s phase protocol. The one exception is
 [Between phases], below: spec amendments and the code changes that follow from
 them land between phases and would otherwise be invisible here.
 
+## [Between phases] — the whole interface in Russian
+
+Marketer audit #7 (P1): Settings, Team, Domains, Referral, Tags, Custom Metrics and Content
+Gallery were English-only in an EN/RU app.
+
+- Seven new namespaces, en and ru: `settings` (organization, API keys, integrations, security,
+  2FA, tabs), `team` (members, invites, roles and a human-readable permission matrix — the
+  permission key stays as a small caption — activity), `domains` (list, form, SSL badge,
+  registrar/DNS actions), `referral`, `tags` (incl. colour names), `customMetrics` (list, form,
+  metric catalog with category and metric names, formula errors), `contentGallery`. Small
+  leftovers in `common`: the macro picker, theme toggle, user menu and filter-value labels.
+- Formula validation (`lib/formula-engine.ts`) now returns an error code and params next to the
+  English message; the form shows the translated text.
+- Activity feed entries are phrased without the actor ("Member invited", actor and time under
+  it), so Russian needs no grammatical gender. Relative times use the interface language
+  (`RelativeTime`) instead of English-only `formatDistanceToNow`.
+- Texts that were stale while being translated: the invite sheet no longer says email delivery
+  comes "yet" (FLOX does not email invites — said plainly); the roles panel no longer claims
+  "other domains don't check permissions" (every mutating route does); permission descriptions
+  match what each permission guards (domains are `settings.write`); integration descriptions no
+  longer promise Cloudflare SSL issuance (Caddy issues certificates).
+- The custom-metric and invite sheets were stuck at 384 px: the sheet's own
+  `data-[side=right]:sm:max-w-sm` beat their `sm:max-w-*`. Their width classes now use the same
+  variant.
+- `lib/i18n/locales.test.ts`: every key exists in both languages (plural suffixes folded) and no
+  string cites a phase or `§` — checked to fail on a removed key and on an injected "Фаза 3".
+
+Tests: tsc, eslint, vitest (96) pass. Browser pass in Russian on the dev stack (owner account):
+Settings (every tab, the alert list and bell), Team, Domains, Referral, Content Gallery, Custom
+Metrics form incl. a translated formula error, LTV — no English left, no console errors.
+
 ## [Between phases] — no development notes in the interface
 
 Marketer audit #6 (P1): user-facing texts carried phase numbers and spec references ("rules for

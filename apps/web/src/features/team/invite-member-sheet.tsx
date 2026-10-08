@@ -3,6 +3,8 @@
 import { Controller, useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
+import { useTranslation } from "react-i18next";
+import type { TFunction } from "i18next";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -20,13 +22,15 @@ import { ROLES, type Role } from "@/lib/mock/team";
 
 const INVITABLE_ROLES = ROLES.filter((r) => r !== "Owner") as [Role, ...Role[]];
 
-export const inviteMemberSchema = z.object({
-  name: z.string().min(2, "Name must be at least 2 characters").max(80),
-  email: z.email("Enter a valid email"),
-  role: z.enum(INVITABLE_ROLES),
-});
+export function inviteMemberSchema(t: TFunction<"team">) {
+  return z.object({
+    name: z.string().min(2, t("invite.errors.name")).max(80),
+    email: z.email(t("invite.errors.email")),
+    role: z.enum(INVITABLE_ROLES),
+  });
+}
 
-export type InviteMemberValues = z.infer<typeof inviteMemberSchema>;
+export type InviteMemberValues = z.infer<ReturnType<typeof inviteMemberSchema>>;
 
 export function InviteMemberSheet({
   open,
@@ -37,8 +41,9 @@ export function InviteMemberSheet({
   onOpenChange: (open: boolean) => void;
   onSubmit: (values: InviteMemberValues) => void;
 }) {
+  const { t } = useTranslation(["team", "common"]);
   const form = useForm<InviteMemberValues>({
-    resolver: zodResolver(inviteMemberSchema),
+    resolver: zodResolver(inviteMemberSchema(t)),
     defaultValues: { name: "", email: "", role: "Analyst" },
   });
 
@@ -51,24 +56,21 @@ export function InviteMemberSheet({
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent className="w-full gap-0 overflow-y-auto sm:max-w-md" side="right">
+      <SheetContent className="gap-0 overflow-y-auto data-[side=right]:w-full data-[side=right]:sm:max-w-md" side="right">
         <SheetHeader>
-          <SheetTitle>Invite team member</SheetTitle>
-          <SheetDescription>
-            You&apos;ll get a link to send them yourself — there&apos;s no email delivery yet. Roles determine what
-            they can see and edit (§52).
-          </SheetDescription>
+          <SheetTitle>{t("invite.title")}</SheetTitle>
+          <SheetDescription>{t("invite.description")}</SheetDescription>
         </SheetHeader>
 
         <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-4 px-4 pb-4">
           <div className="grid gap-1.5">
-            <Label htmlFor="inv-name">Name</Label>
-            <Input id="inv-name" placeholder="Jordan Lee" {...register("name")} aria-invalid={!!errors.name} />
+            <Label htmlFor="inv-name">{t("invite.name")}</Label>
+            <Input id="inv-name" placeholder={t("invite.namePlaceholder")} {...register("name")} aria-invalid={!!errors.name} />
             {errors.name && <p className="text-xs text-danger">{errors.name.message}</p>}
           </div>
 
           <div className="grid gap-1.5">
-            <Label htmlFor="inv-email">Email</Label>
+            <Label htmlFor="inv-email">{t("invite.email")}</Label>
             <Input
               id="inv-email"
               type="email"
@@ -80,7 +82,7 @@ export function InviteMemberSheet({
           </div>
 
           <div className="grid gap-1.5">
-            <Label htmlFor="inv-role">Role</Label>
+            <Label htmlFor="inv-role">{t("invite.role")}</Label>
             <Controller
               control={control}
               name="role"
@@ -92,7 +94,7 @@ export function InviteMemberSheet({
                   <SelectContent>
                     {INVITABLE_ROLES.map((r) => (
                       <SelectItem key={r} value={r}>
-                        {r}
+                        {t(`roles.${r}`)}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -103,10 +105,10 @@ export function InviteMemberSheet({
 
           <SheetFooter className="mt-0 flex-row justify-end gap-2 p-0">
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
-              Cancel
+              {t("common:actions.cancel")}
             </Button>
             <Button type="submit" disabled={isSubmitting}>
-              Send invite
+              {t("invite.submit")}
             </Button>
           </SheetFooter>
         </form>

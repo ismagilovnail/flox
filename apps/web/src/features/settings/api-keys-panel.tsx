@@ -4,9 +4,10 @@ import * as React from "react";
 import { Controller, useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { toast } from "sonner";
-import { formatDistanceToNow } from "date-fns";
 import { CopyIcon, PlusIcon, Trash2Icon } from "lucide-react";
 import { z } from "zod";
+import { useTranslation } from "react-i18next";
+import type { TFunction } from "i18next";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -24,17 +25,20 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Caption, Mono } from "@/components/ui/typography";
+import { RelativeTime } from "@/components/ui/relative-time";
 import { LoadingState } from "@/components/ui/loading-state";
 import { ErrorState } from "@/components/ui/error-state";
 import { useApiKeys, useCreateApiKey, useRevokeApiKey } from "@/hooks/use-api-keys";
 import { API_KEY_SCOPES, type ApiKeyScope } from "@/lib/api-keys";
 
-const createKeySchema = z.object({
-  name: z.string().min(2, "Name must be at least 2 characters").max(60),
-  scope: z.enum(API_KEY_SCOPES as [ApiKeyScope, ...ApiKeyScope[]]),
-});
+function createKeySchema(t: TFunction<"settings">) {
+  return z.object({
+    name: z.string().min(2, t("apiKeys.errors.name")).max(60),
+    scope: z.enum(API_KEY_SCOPES as [ApiKeyScope, ...ApiKeyScope[]]),
+  });
+}
 
-type CreateKeyValues = z.infer<typeof createKeySchema>;
+type CreateKeyValues = z.infer<ReturnType<typeof createKeySchema>>;
 
 const SCOPE_VARIANT: Record<ApiKeyScope, "outline" | "secondary" | "warning"> = {
   read: "outline",
@@ -43,6 +47,7 @@ const SCOPE_VARIANT: Record<ApiKeyScope, "outline" | "secondary" | "warning"> = 
 };
 
 export function ApiKeysPanel() {
+  const { t } = useTranslation(["settings", "common"]);
   const apiKeysQuery = useApiKeys();
   const createApiKeyMutation = useCreateApiKey();
   const revokeApiKeyMutation = useRevokeApiKey();
@@ -53,7 +58,7 @@ export function ApiKeysPanel() {
   const [revokeTarget, setRevokeTarget] = React.useState<{ id: string; name: string } | null>(null);
 
   const form = useForm<CreateKeyValues>({
-    resolver: zodResolver(createKeySchema),
+    resolver: zodResolver(createKeySchema(t)),
     defaultValues: { name: "", scope: "read" },
   });
 
@@ -64,21 +69,21 @@ export function ApiKeysPanel() {
         form.reset();
         setRevealedKey(fullKey);
       },
-      onError: (err) => toast.error("Couldn't create API key", { description: err.message }),
+      onError: (err) => toast.error(t("apiKeys.createError"), { description: err.message }),
     });
   }
 
   function copyKey() {
     if (!revealedKey) return;
     navigator.clipboard.writeText(revealedKey);
-    toast("API key copied");
+    toast(t("apiKeys.copied"));
   }
 
   function handleRevoke() {
     if (!revokeTarget) return;
     revokeApiKeyMutation.mutate(revokeTarget.id, {
-      onSuccess: () => toast("API key revoked", { description: revokeTarget.name }),
-      onError: (err) => toast.error("Couldn't revoke API key", { description: err.message }),
+      onSuccess: () => toast(t("apiKeys.revoked"), { description: revokeTarget.name }),
+      onError: (err) => toast.error(t("apiKeys.revokeError"), { description: err.message }),
     });
     setRevokeTarget(null);
   }
@@ -86,31 +91,31 @@ export function ApiKeysPanel() {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>API keys</CardTitle>
-        <CardDescription>Used for programmatic access. The full key is shown once, at creation.</CardDescription>
+        <CardTitle>{t("apiKeys.title")}</CardTitle>
+        <CardDescription>{t("apiKeys.description")}</CardDescription>
         <CardAction>
           <Button size="sm" onClick={() => setCreating(true)}>
-            <PlusIcon className="size-4" /> New API key
+            <PlusIcon className="size-4" /> {t("apiKeys.new")}
           </Button>
         </CardAction>
       </CardHeader>
       <CardContent className="flex flex-col divide-y divide-border p-0">
         {apiKeysQuery.isPending && (
           <div className="px-4 py-6">
-            <LoadingState label="Loading API keys…" />
+            <LoadingState label={t("apiKeys.loading")} />
           </div>
         )}
         {apiKeysQuery.isError && (
           <div className="px-4 py-6">
             <ErrorState
-              title="Couldn't load API keys"
+              title={t("apiKeys.loadError")}
               description={apiKeysQuery.error.message}
               onRetry={() => apiKeysQuery.refetch()}
             />
           </div>
         )}
         {apiKeysQuery.isSuccess && apiKeys.length === 0 && (
-          <p className="px-4 py-6 text-sm text-muted-foreground">No API keys yet.</p>
+          <p className="px-4 py-6 text-sm text-muted-foreground">{t("apiKeys.empty")}</p>
         )}
         {apiKeys.map((key) => (
           <div key={key.id} className="flex items-center gap-3 px-4 py-3">
@@ -118,12 +123,14 @@ export function ApiKeysPanel() {
               <span className="text-sm font-medium">{key.name}</span>
               <Mono className="text-xs text-muted-foreground">{key.prefix}</Mono>
             </div>
-            <Badge variant={SCOPE_VARIANT[key.scope]}>{key.scope}</Badge>
-            <Caption className="hidden w-32 sm:block">
-              {key.lastUsedAt ? `Used ${formatDistanceToNow(new Date(key.lastUsedAt), { addSuffix: true })}` : "Never used"}
-            </Caption>
+            <Badge variant={SCOPE_VARIANT[key.scope]}>{t(`apiKeys.scopes.${key.scope}`)}</Badge>
+            {key.lastUsedAt ? (
+              <RelativeTime date={key.lastUsedAt} className="hidden w-32 sm:block" />
+            ) : (
+              <Caption className="hidden w-32 sm:block">{t("apiKeys.neverUsed")}</Caption>
+            )}
             <IconButton
-              aria-label={`Revoke ${key.name}`}
+              aria-label={t("apiKeys.revokeAria", { name: key.name })}
               size="icon-sm"
               onClick={() => setRevokeTarget({ id: key.id, name: key.name })}
             >
@@ -136,23 +143,19 @@ export function ApiKeysPanel() {
       <Dialog open={creating} onOpenChange={setCreating}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>New API key</DialogTitle>
-            <DialogDescription>
-              Scope controls what this key can read or change. Read: view everything a member can. Write: read, plus
-              create/edit/delete campaigns, offers, content and more — team and security settings excluded. Admin:
-              everything, including team and security.
-            </DialogDescription>
+            <DialogTitle>{t("apiKeys.new")}</DialogTitle>
+            <DialogDescription>{t("apiKeys.scopeHint")}</DialogDescription>
           </DialogHeader>
           <form onSubmit={form.handleSubmit(handleCreate)} className="flex flex-col gap-4">
             <div className="grid gap-1.5">
-              <Label htmlFor="key-name">Name</Label>
-              <Input id="key-name" placeholder="Reporting export" {...form.register("name")} />
+              <Label htmlFor="key-name">{t("apiKeys.name")}</Label>
+              <Input id="key-name" placeholder={t("apiKeys.namePlaceholder")} {...form.register("name")} />
               {form.formState.errors.name && (
                 <p className="text-xs text-danger">{form.formState.errors.name.message}</p>
               )}
             </div>
             <div className="grid gap-1.5">
-              <Label htmlFor="key-scope">Scope</Label>
+              <Label htmlFor="key-scope">{t("apiKeys.scope")}</Label>
               <Controller
                 control={form.control}
                 name="scope"
@@ -164,7 +167,7 @@ export function ApiKeysPanel() {
                     <SelectContent>
                       {API_KEY_SCOPES.map((s) => (
                         <SelectItem key={s} value={s}>
-                          {s}
+                          {t(`apiKeys.scopes.${s}`)}
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -174,9 +177,9 @@ export function ApiKeysPanel() {
             </div>
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => setCreating(false)}>
-                Cancel
+                {t("common:actions.cancel")}
               </Button>
-              <Button type="submit">Create key</Button>
+              <Button type="submit">{t("apiKeys.create")}</Button>
             </DialogFooter>
           </form>
         </DialogContent>
@@ -185,23 +188,21 @@ export function ApiKeysPanel() {
       <Dialog open={!!revealedKey} onOpenChange={(open) => !open && setRevealedKey(null)}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Copy your API key now</DialogTitle>
-            <DialogDescription>
-              This is the only time it&apos;s shown in full. If you lose it, revoke this key and create a new one.
-            </DialogDescription>
+            <DialogTitle>{t("apiKeys.revealTitle")}</DialogTitle>
+            <DialogDescription>{t("apiKeys.revealDescription")}</DialogDescription>
           </DialogHeader>
           <div className="flex items-center gap-2 rounded-md border border-border bg-muted px-3 py-2">
             <Mono className="min-w-0 flex-1 truncate text-sm">{revealedKey}</Mono>
-            <IconButton aria-label="Copy API key" size="icon-sm" onClick={copyKey}>
+            <IconButton aria-label={t("apiKeys.copyAria")} size="icon-sm" onClick={copyKey}>
               <CopyIcon className="size-3.5" />
             </IconButton>
           </div>
           <p className="text-xs text-muted-foreground">
-            Send it as <Mono className="text-xs">Authorization: Bearer {"<key>"}</Mono> on any API request — it
-            authenticates the same way your own session does, within this key&apos;s scope.
+            {t("apiKeys.usageBefore")} <Mono className="text-xs">Authorization: Bearer {"<key>"}</Mono>{" "}
+            {t("apiKeys.usageAfter")}
           </p>
           <DialogFooter>
-            <Button onClick={() => setRevealedKey(null)}>Done</Button>
+            <Button onClick={() => setRevealedKey(null)}>{t("apiKeys.done")}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -209,15 +210,15 @@ export function ApiKeysPanel() {
       <Dialog open={!!revokeTarget} onOpenChange={(open) => !open && setRevokeTarget(null)}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Revoke &ldquo;{revokeTarget?.name}&rdquo;?</DialogTitle>
-            <DialogDescription>Anything using this key stops working immediately.</DialogDescription>
+            <DialogTitle>{t("apiKeys.revokeTitle", { name: revokeTarget?.name })}</DialogTitle>
+            <DialogDescription>{t("apiKeys.revokeDescription")}</DialogDescription>
           </DialogHeader>
           <DialogFooter>
             <Button variant="outline" onClick={() => setRevokeTarget(null)}>
-              Cancel
+              {t("common:actions.cancel")}
             </Button>
             <Button variant="destructive" onClick={handleRevoke}>
-              Revoke
+              {t("apiKeys.revoke")}
             </Button>
           </DialogFooter>
         </DialogContent>

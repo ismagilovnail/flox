@@ -3,6 +3,7 @@
 import * as React from "react";
 import { toast } from "sonner";
 import { PlusIcon } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -28,6 +29,7 @@ function toFormValues(metric: CustomMetric): CustomMetricFormValues {
 }
 
 export function CustomMetricsList() {
+  const { t } = useTranslation("customMetrics");
   const metrics = useCustomMetrics().data?.metrics ?? EMPTY_CUSTOM_METRICS;
   const createMetric = useCreateCustomMetric();
   const updateMetric = useUpdateCustomMetric();
@@ -65,36 +67,33 @@ export function CustomMetricsList() {
       updateMetric.mutate(
         { id: target.id, input: values },
         {
-          onSuccess: () => toast("Metric updated", { description: values.name }),
-          onError: (err) => toast.error("Couldn't update metric", { description: err.message }),
+          onSuccess: () => toast(t("toasts.updated"), { description: values.name }),
+          onError: (err) => toast.error(t("toasts.updateError"), { description: err.message }),
         },
       );
     } else {
       createMetric.mutate(values, {
-        onSuccess: () => toast("Metric created", { description: values.name }),
-        onError: (err) => toast.error("Couldn't create metric", { description: err.message }),
+        onSuccess: () => toast(t("toasts.created"), { description: values.name }),
+        onError: (err) => toast.error(t("toasts.createError"), { description: err.message }),
       });
     }
     setTarget(undefined);
   }
 
-  const columns = React.useMemo(() => customMetricColumns((metric) => setTarget(metric), canManage), [canManage]);
+  const columns = React.useMemo(() => customMetricColumns((metric) => setTarget(metric), canManage, t), [canManage, t]);
 
   return (
     <div className="flex flex-col gap-4">
       <Alert>
-        <AlertDescription>
-          Formulas reference registry metrics by stable id (§30.5, §50) — never raw columns. Owner/Admin manage any
-          metric; Manager can create and manage their own; Buyer/Analyst/Viewer only see published, active metrics.
-        </AlertDescription>
+        <AlertDescription>{t("intro")}</AlertDescription>
       </Alert>
 
       <div className="flex items-center justify-between">
-        <p className="text-sm text-muted-foreground">{visibleMetrics.length} metrics</p>
+        <p className="text-sm text-muted-foreground">{t("count", { count: visibleMetrics.length })}</p>
         {canCreate && (
           <Button onClick={() => setTarget(null)}>
             <PlusIcon className="size-4" />
-            New Custom Metric
+            {t("new")}
           </Button>
         )}
       </div>
@@ -102,10 +101,10 @@ export function CustomMetricsList() {
       <DataTable
         columns={columns}
         data={visibleMetrics}
-        searchPlaceholder="Search metrics..."
+        searchPlaceholder={t("search")}
         exportFilename="custom-metrics"
-        emptyTitle="No custom metrics yet"
-        emptyDescription="Build a formula on top of the metrics registry — safe division included."
+        emptyTitle={t("emptyTitle")}
+        emptyDescription={t("emptyDescription")}
         pageSize={10}
       />
 
@@ -114,8 +113,8 @@ export function CustomMetricsList() {
           key={target?.id ?? "new"}
           open
           onOpenChange={(open) => !open && setTarget(undefined)}
-          title={target ? `Edit ${target.name}` : "New Custom Metric"}
-          submitLabel={target ? "Save changes" : "Create metric"}
+          title={target ? t("form.editTitle", { name: target.name }) : t("new")}
+          submitLabel={target ? t("form.save") : t("form.create")}
           defaultValues={target ? toFormValues(target) : {}}
           existingGroups={existingGroups}
           onSubmit={handleSubmit}

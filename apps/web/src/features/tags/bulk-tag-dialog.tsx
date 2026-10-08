@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import { CheckIcon, PlusIcon } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -45,6 +46,7 @@ export function BulkTagDialog({
 }) {
   // content.write — same key apps/internal/tags.Handler requires for
   // create and bulkEdit alike.
+  const { t } = useTranslation(["tags", "common"]);
   const canWrite = usePermission("content.write");
   const tags = useTags().data?.tags ?? EMPTY_TAGS;
   const assignments = useTagAssignments(entityType).data?.assignments ?? EMPTY_TAG_ASSIGNMENTS;
@@ -101,14 +103,11 @@ export function BulkTagDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Edit tags for {entityIds.length} items</DialogTitle>
-          <DialogDescription>
-            Only tags on every selected item are pre-checked. Check a tag to add it to all; uncheck a pre-checked
-            tag to remove it from all. Tags only some items have are left as-is.
-          </DialogDescription>
+          <DialogTitle>{t("bulk.title", { count: entityIds.length })}</DialogTitle>
+          <DialogDescription>{t("bulk.description")}</DialogDescription>
         </DialogHeader>
 
-        <Input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search or create tag..." />
+        <Input value={query} onChange={(e) => setQuery(e.target.value)} placeholder={t("searchOrCreate")} />
 
         <div className="flex max-h-64 flex-col gap-0.5 overflow-y-auto">
           {filtered.map((tag) => {
@@ -140,17 +139,17 @@ export function BulkTagDialog({
               onClick={quickCreate}
               className="flex items-center gap-2 rounded-md px-1.5 py-1.5 text-left text-sm text-muted-foreground hover:bg-muted hover:text-foreground"
             >
-              <PlusIcon className="size-3.5" /> Create &ldquo;{trimmed}&rdquo;
+              <PlusIcon className="size-3.5" /> {t("create", { name: trimmed })}
             </button>
           )}
         </div>
 
         <DialogFooter>
           <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
-            Cancel
+            {t("common:actions.cancel")}
           </Button>
           <Button type="button" onClick={apply} disabled={!canWrite}>
-            Apply
+            {t("bulk.apply")}
           </Button>
         </DialogFooter>
       </DialogContent>

@@ -4,6 +4,8 @@ import * as React from "react";
 import { Controller, useForm, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
+import { useTranslation } from "react-i18next";
+import type { TFunction } from "i18next";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -31,13 +33,9 @@ import type { CustomMetricStatus } from "@/lib/custom-metrics";
 import { evaluateFormula, validateFormula } from "@/lib/formula-engine";
 import { MetricCatalogPanel } from "@/features/custom-metrics/metric-catalog-panel";
 import { FormulaInput, type FormulaInputHandle } from "@/features/custom-metrics/formula-input";
+import { targetLabel } from "@/features/custom-metrics/metric-label";
 
-const FORMATS: { value: MetricFormat; label: string }[] = [
-  { value: "int", label: "Number" },
-  { value: "currency", label: "Currency" },
-  { value: "percent", label: "Percent" },
-  { value: "ratio", label: "Ratio" },
-];
+const FORMATS: MetricFormat[] = ["int", "currency", "percent", "ratio"];
 
 /** Representative sample values covering every insertable registry metric, used
  * only for the form's live preview — not real data. */
@@ -73,16 +71,20 @@ const SAMPLE_VALUES: Record<string, number | null> = {
   push_ctr: 20,
 };
 
-const customMetricFormSchema = z.object({
-  name: z.string().min(2, "Name must be at least 2 characters").max(80),
-  group: z.string().min(1, "Pick or type a group").max(40),
-  format: z.enum(["int", "currency", "percent", "ratio"] as [MetricFormat, ...MetricFormat[]]),
-  formula: z.string().min(1, "Enter a formula"),
-  targets: z.array(z.enum(["report_builder", "campaigns_table", "offers_table", "sources_table"] as [ShowInTarget, ...ShowInTarget[]])),
-  status: z.enum(["draft", "published"] as [CustomMetricStatus, ...CustomMetricStatus[]]),
-});
+function customMetricFormSchema(t: TFunction<"customMetrics">) {
+  return z.object({
+    name: z.string().min(2, t("form.errors.name")).max(80),
+    group: z.string().min(1, t("form.errors.group")).max(40),
+    format: z.enum(FORMATS as [MetricFormat, ...MetricFormat[]]),
+    formula: z.string().min(1, t("form.errors.formula")),
+    targets: z.array(
+      z.enum(["report_builder", "campaigns_table", "offers_table", "sources_table"] as [ShowInTarget, ...ShowInTarget[]]),
+    ),
+    status: z.enum(["draft", "published"] as [CustomMetricStatus, ...CustomMetricStatus[]]),
+  });
+}
 
-export type CustomMetricFormValues = z.infer<typeof customMetricFormSchema>;
+export type CustomMetricFormValues = z.infer<ReturnType<typeof customMetricFormSchema>>;
 
 export function CustomMetricFormSheet({
   open,
@@ -101,8 +103,9 @@ export function CustomMetricFormSheet({
   submitLabel: string;
   onSubmit: (values: CustomMetricFormValues) => void;
 }) {
+  const { t } = useTranslation(["customMetrics", "common"]);
   const form = useForm<CustomMetricFormValues>({
-    resolver: zodResolver(customMetricFormSchema),
+    resolver: zodResolver(customMetricFormSchema(t)),
     defaultValues: {
       name: "",
       group: existingGroups[0] ?? "",
@@ -129,26 +132,23 @@ export function CustomMetricFormSheet({
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent className="w-full gap-0 overflow-y-auto sm:max-w-3xl" side="right">
+      <SheetContent className="gap-0 overflow-y-auto data-[side=right]:w-full data-[side=right]:sm:max-w-3xl" side="right">
         <SheetHeader>
           <SheetTitle>{title}</SheetTitle>
-          <SheetDescription>
-            A formula built from registry metrics (§30.5) — division is always safe: dividing by zero shows as
-            &ldquo;—&rdquo;, never an error.
-          </SheetDescription>
+          <SheetDescription>{t("form.description")}</SheetDescription>
         </SheetHeader>
 
         <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-4 px-4 pb-4">
           <div className="grid gap-4 sm:grid-cols-3">
             <div className="grid gap-1.5">
-              <Label htmlFor="cm-name">Name</Label>
-              <Input id="cm-name" placeholder="Margin per Click" {...register("name")} aria-invalid={!!formState.errors.name} />
+              <Label htmlFor="cm-name">{t("columns.name")}</Label>
+              <Input id="cm-name" placeholder={t("form.namePlaceholder")} {...register("name")} aria-invalid={!!formState.errors.name} />
               {formState.errors.name && <p className="text-xs text-danger">{formState.errors.name.message}</p>}
             </div>
 
             <div className="grid gap-1.5">
-              <Label htmlFor="cm-group">Group</Label>
-              <Input id="cm-group" list="cm-group-options" placeholder="Profitability" {...register("group")} />
+              <Label htmlFor="cm-group">{t("columns.group")}</Label>
+              <Input id="cm-group" list="cm-group-options" placeholder={t("form.groupPlaceholder")} {...register("group")} />
               <datalist id="cm-group-options">
                 {existingGroups.map((g) => (
                   <option key={g} value={g} />
@@ -157,7 +157,7 @@ export function CustomMetricFormSheet({
             </div>
 
             <div className="grid gap-1.5">
-              <Label htmlFor="cm-format">Format</Label>
+              <Label htmlFor="cm-format">{t("form.format")}</Label>
               <Controller
                 control={control}
                 name="format"
@@ -168,8 +168,8 @@ export function CustomMetricFormSheet({
                     </SelectTrigger>
                     <SelectContent>
                       {FORMATS.map((f) => (
-                        <SelectItem key={f.value} value={f.value}>
-                          {f.label}
+                        <SelectItem key={f} value={f}>
+                          {t(`formats.${f}`)}
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -183,11 +183,11 @@ export function CustomMetricFormSheet({
 
           <div className="grid gap-3 sm:grid-cols-[220px_1fr]">
             <div>
-              <Label className="mb-1.5 block">Metrics</Label>
+              <Label className="mb-1.5 block">{t("form.metrics")}</Label>
               <MetricCatalogPanel onInsert={(token) => formulaInputRef.current?.insertAtCursor(token)} />
             </div>
             <div className="flex flex-col gap-2">
-              <Label>Formula</Label>
+              <Label>{t("columns.formula")}</Label>
               <Controller
                 control={control}
                 name="formula"
@@ -201,7 +201,7 @@ export function CustomMetricFormSheet({
                 )}
               />
               <div className="rounded-md border border-border bg-muted/40 px-3 py-2 text-sm">
-                <span className="text-xs text-muted-foreground">Preview (sample data): </span>
+                <span className="text-xs text-muted-foreground">{t("form.preview")} </span>
                 <Mono>{validation.valid ? formatMetric(preview, format) : "—"}</Mono>
               </div>
             </div>
@@ -210,7 +210,7 @@ export function CustomMetricFormSheet({
           <Separator />
 
           <div className="flex flex-col gap-2">
-            <Label>Show in</Label>
+            <Label>{t("columns.showIn")}</Label>
             <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
               {SHOW_IN_TARGETS.map((target) => {
                 const canCompute = validation.valid && surfaceCanCompute(target.id, validation.usedMetricIds ?? []);
@@ -218,7 +218,7 @@ export function CustomMetricFormSheet({
                 const toggle = () => {
                   setValue(
                     "targets",
-                    checked ? targets.filter((t) => t !== target.id) : [...targets, target.id],
+                    checked ? targets.filter((id) => id !== target.id) : [...targets, target.id],
                     { shouldDirty: true },
                   );
                 };
@@ -237,7 +237,7 @@ export function CustomMetricFormSheet({
                           : "flex size-4 shrink-0 items-center justify-center rounded-sm border border-input"
                       }
                     />
-                    {target.label}
+                    {targetLabel(t, target.id)}
                   </button>
                 );
                 return canCompute ? (
@@ -246,9 +246,7 @@ export function CustomMetricFormSheet({
                   <Tooltip key={target.id}>
                     <TooltipTrigger asChild>{control_}</TooltipTrigger>
                     <TooltipContent>
-                      {validation.valid
-                        ? "This surface doesn't have all the metrics this formula needs."
-                        : "Fix the formula first."}
+                      {validation.valid ? t("form.surfaceMissing") : t("form.fixFirst")}
                     </TooltipContent>
                   </Tooltip>
                 );
@@ -257,7 +255,7 @@ export function CustomMetricFormSheet({
           </div>
 
           <div className="grid gap-1.5">
-            <Label htmlFor="cm-status">Status</Label>
+            <Label htmlFor="cm-status">{t("columns.status")}</Label>
             <Controller
               control={control}
               name="status"
@@ -267,20 +265,18 @@ export function CustomMetricFormSheet({
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="draft">Draft</SelectItem>
-                    <SelectItem value="published">Published</SelectItem>
+                    <SelectItem value="draft">{t("statuses.draft")}</SelectItem>
+                    <SelectItem value="published">{t("statuses.published")}</SelectItem>
                   </SelectContent>
                 </Select>
               )}
             />
-            <p className="text-xs text-muted-foreground">
-              Drafts are invisible in reports and pickers until published (§30.5).
-            </p>
+            <p className="text-xs text-muted-foreground">{t("form.draftHint")}</p>
           </div>
 
           <SheetFooter className="mt-0 flex-row justify-end gap-2 p-0">
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
-              Cancel
+              {t("common:actions.cancel")}
             </Button>
             <Button type="submit" disabled={!validation.valid || formState.isSubmitting}>
               {submitLabel}

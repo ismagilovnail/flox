@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import { CheckIcon, FolderIcon, FolderPlusIcon, PencilIcon, Trash2Icon, XIcon } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -40,6 +41,7 @@ export function GalleryFolderPanel({
   onSelect: (value: string | undefined) => void;
   className?: string;
 }) {
+  const { t } = useTranslation(["contentGallery", "common"]);
   const canWrite = usePermission("content.write");
   const { data } = useGalleryFolders();
   const folders = data?.folders ?? [];
@@ -56,7 +58,7 @@ export function GalleryFolderPanel({
         setNewName("");
         setCreating(false);
       },
-      onError: (err) => toast.error("Couldn't create folder", { description: err.message }),
+      onError: (err) => toast.error(t("folders.createError"), { description: err.message }),
     });
   }
 
@@ -64,13 +66,13 @@ export function GalleryFolderPanel({
     <div className={cn("flex w-56 shrink-0 flex-col gap-1", className)}>
       <FolderRow
         icon={FolderIcon}
-        label="All files"
+        label={t("folders.all")}
         active={selected === undefined}
         onClick={() => onSelect(undefined)}
       />
       <FolderRow
         icon={FolderIcon}
-        label="Unfiled"
+        label={t("folders.unfiled")}
         active={selected === GALLERY_ROOT}
         onClick={() => onSelect(GALLERY_ROOT)}
       />
@@ -94,7 +96,7 @@ export function GalleryFolderPanel({
               autoFocus
               value={newName}
               maxLength={50}
-              placeholder="Folder name"
+              placeholder={t("folders.namePlaceholder")}
               className="h-8 text-sm"
               onChange={(e) => setNewName(e.target.value)}
               onKeyDown={(e) => {
@@ -102,16 +104,16 @@ export function GalleryFolderPanel({
                 if (e.key === "Escape") setCreating(false);
               }}
             />
-            <IconButton size="icon-sm" variant="ghost" onClick={submitCreate} disabled={createFolder.isPending} aria-label="Save folder">
+            <IconButton size="icon-sm" variant="ghost" onClick={submitCreate} disabled={createFolder.isPending} aria-label={t("folders.save")}>
               <CheckIcon className="size-3.5" />
             </IconButton>
-            <IconButton size="icon-sm" variant="ghost" onClick={() => setCreating(false)} aria-label="Cancel">
+            <IconButton size="icon-sm" variant="ghost" onClick={() => setCreating(false)} aria-label={t("common:actions.cancel")}>
               <XIcon className="size-3.5" />
             </IconButton>
           </div>
         ) : (
           <Button variant="ghost" size="sm" className="justify-start gap-2 text-muted-foreground" onClick={() => setCreating(true)}>
-            <FolderPlusIcon className="size-3.5" /> New folder
+            <FolderPlusIcon className="size-3.5" /> {t("folders.new")}
           </Button>
         ))}
     </div>
@@ -155,6 +157,7 @@ function FolderItem({
   onSelect: () => void;
   canWrite: boolean;
 }) {
+  const { t } = useTranslation(["contentGallery", "common"]);
   const renameFolder = useRenameGalleryFolder();
   const deleteFolder = useDeleteGalleryFolder();
   const [editing, setEditing] = React.useState(false);
@@ -172,7 +175,7 @@ function FolderItem({
       { id: folder.id, name: trimmed },
       {
         onSuccess: () => setEditing(false),
-        onError: (err) => toast.error("Couldn't rename folder", { description: err.message }),
+        onError: (err) => toast.error(t("folders.renameError"), { description: err.message }),
       },
     );
   }
@@ -180,10 +183,10 @@ function FolderItem({
   function submitDelete() {
     deleteFolder.mutate(folder.id, {
       onSuccess: () => {
-        toast("Folder deleted", { description: "Its files were moved to Unfiled, not deleted." });
+        toast(t("folders.deleted"), { description: t("folders.deletedDescription") });
         setConfirmDelete(false);
       },
-      onError: (err) => toast.error("Couldn't delete folder", { description: err.message }),
+      onError: (err) => toast.error(t("folders.deleteError"), { description: err.message }),
     });
   }
 
@@ -204,7 +207,7 @@ function FolderItem({
             }
           }}
         />
-        <IconButton size="icon-sm" variant="ghost" onClick={submitRename} disabled={renameFolder.isPending} aria-label="Save name">
+        <IconButton size="icon-sm" variant="ghost" onClick={submitRename} disabled={renameFolder.isPending} aria-label={t("folders.saveName")}>
           <CheckIcon className="size-3.5" />
         </IconButton>
       </div>
@@ -228,7 +231,7 @@ function FolderItem({
           variant="ghost"
           className="opacity-0 group-hover:opacity-100"
           onClick={() => setEditing(true)}
-          aria-label={`Rename ${folder.name}`}
+          aria-label={t("folders.renameAria", { name: folder.name })}
         >
           <PencilIcon className="size-3" />
         </IconButton>
@@ -239,7 +242,7 @@ function FolderItem({
           variant="ghost"
           className="opacity-0 group-hover:opacity-100 hover:text-danger"
           onClick={() => setConfirmDelete(true)}
-          aria-label={`Delete ${folder.name}`}
+          aria-label={t("folders.deleteAria", { name: folder.name })}
         >
           <Trash2Icon className="size-3" />
         </IconButton>
@@ -248,15 +251,15 @@ function FolderItem({
       <Dialog open={confirmDelete} onOpenChange={setConfirmDelete}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Delete &ldquo;{folder.name}&rdquo;?</DialogTitle>
-            <DialogDescription>Its files move to Unfiled — they are not deleted.</DialogDescription>
+            <DialogTitle>{t("folders.deleteTitle", { name: folder.name })}</DialogTitle>
+            <DialogDescription>{t("folders.deleteDescription")}</DialogDescription>
           </DialogHeader>
           <DialogFooter>
             <Button variant="outline" onClick={() => setConfirmDelete(false)}>
-              Cancel
+              {t("common:actions.cancel")}
             </Button>
             <Button variant="destructive" onClick={submitDelete} disabled={deleteFolder.isPending}>
-              Delete folder
+              {t("folders.deleteConfirm")}
             </Button>
           </DialogFooter>
         </DialogContent>

@@ -3,6 +3,7 @@
 import * as React from "react";
 import { ChevronLeftIcon, ChevronRightIcon, ImageOffIcon } from "lucide-react";
 import { toast } from "sonner";
+import { useTranslation } from "react-i18next";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -62,6 +63,7 @@ export function GalleryBrowser({
   // tier and (b) never gated the real mutations below (upload, move,
   // archive, restore, permanent delete) — only the "Uploaded by" filter,
   // which isn't sensitive and is now shown to every role regardless.
+  const { t } = useTranslation(["contentGallery", "common"]);
   const canWrite = usePermission("content.write");
   const { data: members } = useTeamMembers();
   const { data: folderData } = useGalleryFolders();
@@ -170,20 +172,21 @@ export function GalleryBrowser({
           onPick?.(newFile);
         },
         onError: (err) => {
-          toast.error("Couldn't save the cropped image", { description: err.message });
+          toast.error(t("crop.saveError"), { description: err.message });
           setCropTarget(null);
         },
       },
     );
   }
 
-  function runBulk(action: (ids: string[]) => Promise<unknown>, verb: string) {
+  function runBulk(action: (ids: string[]) => Promise<unknown>, verb: "archived" | "restored" | "moved") {
+    const count = selected.size;
     action(Array.from(selected))
       .then(() => {
-        toast(`${selected.size} file(s) ${verb}`);
+        toast(t(`bulk.done.${verb}`, { count }));
         setSelected(new Set());
       })
-      .catch((err: Error) => toast.error(`Couldn't ${verb} files`, { description: err.message }));
+      .catch((err: Error) => toast.error(t(`bulk.error.${verb}`), { description: err.message }));
   }
 
   function confirmDelete() {
@@ -191,7 +194,7 @@ export function GalleryBrowser({
     if (!ids) return;
     deleteFiles.mutate(ids, {
       onSuccess: () => {
-        toast(`${ids.length} file(s) permanently deleted`);
+        toast(t("bulk.done.deleted", { count: ids.length }));
         setSelected((prev) => {
           const next = new Set(prev);
           for (const id of ids) next.delete(id);
@@ -199,7 +202,7 @@ export function GalleryBrowser({
         });
         setConfirmDeleteIds(null);
       },
-      onError: (err) => toast.error("Couldn't delete files", { description: err.message }),
+      onError: (err) => toast.error(t("bulk.error.deleted"), { description: err.message }),
     });
   }
 
@@ -209,17 +212,17 @@ export function GalleryBrowser({
         <div className="flex flex-wrap items-center justify-between gap-3">
           <Tabs value={status} onValueChange={(v) => setStatus(v as GalleryFileStatus)}>
             <TabsList>
-              <TabsTrigger value="active">Active</TabsTrigger>
-              <TabsTrigger value="archived">Inactive</TabsTrigger>
+              <TabsTrigger value="active">{t("tabs.active")}</TabsTrigger>
+              <TabsTrigger value="archived">{t("tabs.archived")}</TabsTrigger>
             </TabsList>
           </Tabs>
 
           <Select value={uploadedBy ?? "all"} onValueChange={(v) => setUploadedBy(v === "all" ? undefined : v)}>
             <SelectTrigger className="w-48">
-              <SelectValue placeholder="Uploaded by" />
+              <SelectValue placeholder={t("uploadedBy")} />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">Everyone</SelectItem>
+              <SelectItem value="all">{t("everyone")}</SelectItem>
               {members?.map((m) => (
                 <SelectItem key={m.userId} value={m.userId}>
                   {m.name}
@@ -249,9 +252,9 @@ export function GalleryBrowser({
           )}
 
           {isPending ? (
-            <LoadingState />
+            <LoadingState label={t("loading")} />
           ) : isError ? (
-            <ErrorState description={error.message} onRetry={() => refetch()} />
+            <ErrorState title={t("loadError")} description={error.message} onRetry={() => refetch()} />
           ) : (
             <>
               <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
@@ -266,7 +269,7 @@ export function GalleryBrowser({
                 )}
                 {files.length === 0 && !(mode === "pick" || status === "active") && (
                   <div className="col-span-full">
-                    <EmptyState icon={ImageOffIcon} title="No files here" description="Upload an image or pick a different folder." />
+                    <EmptyState icon={ImageOffIcon} title={t("emptyTitle")} description={t("emptyDescription")} />
                   </div>
                 )}
                 {files.map((file) => (
@@ -297,11 +300,9 @@ export function GalleryBrowser({
 
               {total > PAGE_SIZE && (
                 <div className="flex items-center justify-between text-xs text-muted-foreground">
-                  <span className="font-mono">
-                    Page {page + 1} of {pageCount} · {total} files
-                  </span>
+                  <span className="font-mono">{t("pagination", { page: page + 1, pages: pageCount, count: total })}</span>
                   <div className="flex items-center gap-1">
-                    <Button variant="outline" size="icon-sm" disabled={page === 0} onClick={() => setPage((p) => p - 1)} aria-label="Previous page">
+                    <Button variant="outline" size="icon-sm" disabled={page === 0} onClick={() => setPage((p) => p - 1)} aria-label={t("common:dataTable.previousPageAria")}>
                       <ChevronLeftIcon className="size-3.5" />
                     </Button>
                     <Button
@@ -309,7 +310,7 @@ export function GalleryBrowser({
                       size="icon-sm"
                       disabled={page + 1 >= pageCount}
                       onClick={() => setPage((p) => p + 1)}
-                      aria-label="Next page"
+                      aria-label={t("common:dataTable.nextPageAria")}
                     >
                       <ChevronRightIcon className="size-3.5" />
                     </Button>
@@ -324,7 +325,7 @@ export function GalleryBrowser({
       {mode === "pick" && (
         <div className="flex justify-end border-t border-border pt-3">
           <Button disabled={!pickedFile} onClick={confirmPick}>
-            Use this image
+            {t("picker.use")}
           </Button>
         </div>
       )}
@@ -345,15 +346,15 @@ export function GalleryBrowser({
       <Dialog open={confirmDeleteIds !== null} onOpenChange={(open) => !open && setConfirmDeleteIds(null)}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Permanently delete {confirmDeleteIds?.length ?? 0} file(s)?</DialogTitle>
-            <DialogDescription>This can&apos;t be undone — unlike Archive, there&apos;s no way to restore a permanently deleted file.</DialogDescription>
+            <DialogTitle>{t("deleteDialog.title", { count: confirmDeleteIds?.length ?? 0 })}</DialogTitle>
+            <DialogDescription>{t("deleteDialog.description")}</DialogDescription>
           </DialogHeader>
           <DialogFooter>
             <Button variant="outline" onClick={() => setConfirmDeleteIds(null)}>
-              Cancel
+              {t("common:actions.cancel")}
             </Button>
             <Button variant="destructive" onClick={confirmDelete} disabled={deleteFiles.isPending}>
-              Delete permanently
+              {t("actions.deletePermanently")}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -383,18 +384,19 @@ function BulkActionBar({
   onMove: (folderId: string | null) => void;
   onDeletePermanently: () => void;
 }) {
+  const { t } = useTranslation("contentGallery");
   return (
     <div className="flex items-center gap-2 rounded-md border border-border bg-muted/40 px-3 py-2 text-sm">
-      <span className="font-medium">{count} selected</span>
+      <span className="font-medium">{t("bulk.selected", { count })}</span>
       <div className="ml-auto flex items-center gap-2">
         {canWrite && (
           <>
             <Select onValueChange={(v) => onMove(v === GALLERY_ROOT ? null : v)}>
               <SelectTrigger className="h-7 w-40 text-xs">
-                <SelectValue placeholder="Move to…" />
+                <SelectValue placeholder={t("bulk.moveTo")} />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value={GALLERY_ROOT}>Unfiled</SelectItem>
+                <SelectItem value={GALLERY_ROOT}>{t("folders.unfiled")}</SelectItem>
                 {folders.map((f) => (
                   <SelectItem key={f.id} value={f.id}>
                     {f.name}
@@ -404,22 +406,22 @@ function BulkActionBar({
             </Select>
             {status === "active" ? (
               <Button variant="outline" size="sm" onClick={onArchive}>
-                Archive
+                {t("actions.archive")}
               </Button>
             ) : (
               <>
                 <Button variant="outline" size="sm" onClick={onRestore}>
-                  Restore
+                  {t("actions.restore")}
                 </Button>
                 <Button variant="destructive" size="sm" onClick={onDeletePermanently}>
-                  Delete permanently
+                  {t("actions.deletePermanently")}
                 </Button>
               </>
             )}
           </>
         )}
         <Button variant="ghost" size="sm" onClick={onDeselect}>
-          Deselect
+          {t("bulk.deselect")}
         </Button>
       </div>
     </div>

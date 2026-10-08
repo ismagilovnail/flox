@@ -8,6 +8,8 @@
 export type MacroDef = {
   token: string;
   label: string;
+  /** sub1–sub10: the number, for the translated label. */
+  sub?: number;
   example: string;
 };
 
@@ -25,6 +27,7 @@ export const MACROS: MacroDef[] = [
   ...Array.from({ length: 10 }, (_, i) => ({
     token: `{sub${i + 1}}`,
     label: `Sub parameter ${i + 1}`,
+    sub: i + 1,
     example: `sub${i + 1}_value`,
   })),
 ];

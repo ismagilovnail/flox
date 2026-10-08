@@ -31,9 +31,10 @@ export type IntegrationsSummary = {
   adPlatforms: AdPlatformStatus[];
 };
 
+/** Labels and descriptions live in the `settings` translations, keyed by
+ * provider and field name (integrations.providers.* / integrations.fields.*). */
 export type CredentialField = {
   name: string;
-  label: string;
   type: "text" | "password";
   placeholder?: string;
 };
@@ -41,7 +42,6 @@ export type CredentialField = {
 export type CredentialProviderMeta = {
   provider: CredentialProvider;
   label: string;
-  description: string;
   fields: CredentialField[];
 };
 
@@ -53,24 +53,21 @@ export const CREDENTIAL_PROVIDERS: CredentialProviderMeta[] = [
   {
     provider: "namecheap",
     label: "Namecheap",
-    description: "Registrar connection for automatic domain renewal and DNS record management (§30).",
     fields: [
-      { name: "apiUser", label: "API user", type: "text" },
-      { name: "apiKey", label: "API key", type: "password" },
-      { name: "clientIp", label: "Whitelisted client IP", type: "text", placeholder: "203.0.113.10" },
+      { name: "apiUser", type: "text" },
+      { name: "apiKey", type: "password" },
+      { name: "clientIp", type: "text", placeholder: "203.0.113.10" },
     ],
   },
   {
     provider: "cloudflare",
     label: "Cloudflare",
-    description: "DNS + automatic SSL issuance for tracking/PWA/fallback domains (§30).",
-    fields: [{ name: "apiToken", label: "API token", type: "password" }],
+    fields: [{ name: "apiToken", type: "password" }],
   },
   {
     provider: "slack",
     label: "Slack",
-    description: "Post campaign and team alerts to a channel via an incoming webhook.",
-    fields: [{ name: "webhookUrl", label: "Incoming webhook URL", type: "text", placeholder: "https://hooks.slack.com/services/..." }],
+    fields: [{ name: "webhookUrl", type: "text", placeholder: "https://hooks.slack.com/services/..." }],
   },
 ];
 
@@ -78,10 +75,4 @@ export const AD_PLATFORM_LABELS: Record<string, string> = {
   facebook_ads: "Facebook Ads",
   tiktok_ads: "TikTok Ads",
   google_ads: "Google Ads",
-};
-
-export const AD_PLATFORM_DESCRIPTIONS: Record<string, string> = {
-  facebook_ads: "Pull ad spend automatically for ROI (§27-COST). Connected per traffic source.",
-  tiktok_ads: "Pull ad spend automatically for ROI (§27-COST). Connected per traffic source.",
-  google_ads: "Pull ad spend automatically for ROI (§27-COST). Connected per traffic source.",
 };

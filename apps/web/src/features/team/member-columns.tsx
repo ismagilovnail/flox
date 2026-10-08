@@ -1,11 +1,12 @@
 import type { ColumnDef } from "@tanstack/react-table";
-import { formatDistanceToNow } from "date-fns";
+import type { TFunction } from "i18next";
 
 import { dataTableFeatures } from "@/components/ui/data-table";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Caption } from "@/components/ui/typography";
+import { RelativeTime } from "@/components/ui/relative-time";
 import { ROLES, type MemberStatus, type Role } from "@/lib/mock/team";
 import type { Membership } from "@/lib/api/team";
 import { MemberRowActions } from "@/features/team/member-row-actions";
@@ -28,11 +29,12 @@ function initials(name: string) {
 export function memberColumns(
   onRoleChange: (member: Membership, role: Role) => void,
   canWrite: boolean,
+  t: TFunction<["team", "common"]>,
 ): ColumnDef<typeof dataTableFeatures, Membership>[] {
   return [
     {
       accessorKey: "name",
-      header: "Member",
+      header: t("columns.member"),
       cell: ({ row }) => (
         <div className="flex items-center gap-2.5">
           <Avatar size="sm">
@@ -47,7 +49,7 @@ export function memberColumns(
     },
     {
       accessorKey: "role",
-      header: "Role",
+      header: t("columns.role"),
       cell: ({ row }) => {
         const member = row.original;
         return (
@@ -62,7 +64,7 @@ export function memberColumns(
             <SelectContent>
               {ROLES.map((r) => (
                 <SelectItem key={r} value={r} disabled={r === "Owner"}>
-                  {r}
+                  {t(`roles.${r}`)}
                 </SelectItem>
               ))}
             </SelectContent>
@@ -72,18 +74,18 @@ export function memberColumns(
     },
     {
       accessorKey: "status",
-      header: "Status",
+      header: t("columns.status"),
       cell: ({ getValue }) => {
         const status = getValue() as MemberStatus;
-        return <Badge variant={STATUS_VARIANT[status]}>{status}</Badge>;
+        return <Badge variant={STATUS_VARIANT[status]}>{t(`statuses.${status}`)}</Badge>;
       },
     },
     {
       accessorKey: "lastActiveAt",
-      header: "Last active",
+      header: t("columns.lastActive"),
       cell: ({ getValue }) => {
         const value = getValue() as string | null;
-        return <Caption>{value ? formatDistanceToNow(new Date(value), { addSuffix: true }) : "Never"}</Caption>;
+        return value ? <RelativeTime date={value} /> : <Caption>{t("columns.never")}</Caption>;
       },
     },
     {

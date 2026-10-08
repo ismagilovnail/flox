@@ -1,0 +1,37 @@
+{
+  "add": "Add tags",
+  "searchOrCreate": "Search or create a tag…",
+  "create": "Create \"{{name}}\"",
+  "deleteTag": "Delete tag",
+  "editTag": "Edit {{name}}",
+  "emptyPicker": "No tags yet — type a name to create one.",
+  "filter": {
+    "label": "Tags:",
+    "all": "All",
+    "count_one": "{{count}} tag",
+    "count_few": "{{count}} tags",
+    "count_many": "{{count}} tags",
+    "count_other": "{{count}} tags",
+    "empty": "No tags yet."
+  },
+  "bulk": {
+    "title_one": "Edit tags of {{count}} item",
+    "title_few": "Edit tags of {{count}} items",
+    "title_many": "Edit tags of {{count}} items",
+    "title_other": "Edit tags of {{count}} items",
+    "description": "Only tags every selected item has are checked. Check a tag to add it to all of them; uncheck a checked tag to remove it from all. Tags only some items have stay as they are.",
+    "apply": "Apply"
+  },
+  "colors": {
+    "red": "Red",
+    "orange": "Orange",
+    "amber": "Amber",
+    "green": "Green",
+    "teal": "Teal",
+    "blue": "Blue",
+    "indigo": "Indigo",
+    "purple": "Purple",
+    "pink": "Pink",
+    "gray": "Gray"
+  }
+}

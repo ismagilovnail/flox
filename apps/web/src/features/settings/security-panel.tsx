@@ -5,6 +5,8 @@ import { Controller, useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { toast } from "sonner";
 import { z } from "zod";
+import { useTranslation } from "react-i18next";
+import type { TFunction } from "i18next";
 
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -27,19 +29,26 @@ import { ApiError } from "@/lib/api/client";
 // already at the pre-existing 43200-minute (30-day) default must still
 // load and save correctly, same "backend validates broadly" precedent
 // organization-panel.tsx's own timezone/currency fields already follow.
-const securitySchema = z.object({
-  twoFactorRequired: z.boolean(),
-  sessionTimeoutMinutes: z.number("Enter a number of minutes").int().min(15, "At least 15 minutes").max(86400, "At most 60 days"),
-  ipAllowlist: z.string(),
-});
+function securitySchema(t: TFunction<"settings">) {
+  return z.object({
+    twoFactorRequired: z.boolean(),
+    sessionTimeoutMinutes: z
+      .number(t("security.errors.minutes"))
+      .int()
+      .min(15, t("security.errors.min"))
+      .max(86400, t("security.errors.max")),
+    ipAllowlist: z.string(),
+  });
+}
 
-type SecurityValues = z.infer<typeof securitySchema>;
+type SecurityValues = z.infer<ReturnType<typeof securitySchema>>;
 
 function SecurityForm({ security }: { security: SecurityValues }) {
+  const { t } = useTranslation("settings");
   const updateSecurity = useUpdateSecuritySettings();
 
   const form = useForm<SecurityValues>({
-    resolver: zodResolver(securitySchema),
+    resolver: zodResolver(securitySchema(t)),
     defaultValues: security,
   });
   const {
@@ -60,8 +69,8 @@ function SecurityForm({ security }: { security: SecurityValues }) {
           .filter(Boolean),
       },
       {
-        onSuccess: () => toast("Security settings saved"),
-        onError: (err) => toast.error("Couldn't save security settings", { description: err.message }),
+        onSuccess: () => toast(t("security.saved")),
+        onError: (err) => toast.error(t("security.saveError"), { description: err.message }),
       },
     );
   }
@@ -70,22 +79,20 @@ function SecurityForm({ security }: { security: SecurityValues }) {
     <form onSubmit={handleSubmit(onSubmit)} className="flex max-w-md flex-col gap-4">
       <div className="flex items-center justify-between rounded-md border border-border p-2.5">
         <div>
-          <p className="text-sm font-medium">Require two-factor authentication</p>
-          <p className="text-xs text-muted-foreground">
-            Every member must set up 2FA on their next sign-in — see &ldquo;Your two-factor authentication&rdquo; below to set up your own.
-          </p>
+          <p className="text-sm font-medium">{t("security.require2fa")}</p>
+          <p className="text-xs text-muted-foreground">{t("security.require2faHint")}</p>
         </div>
         <Controller
           control={control}
           name="twoFactorRequired"
           render={({ field }) => (
-            <Switch checked={field.value} onCheckedChange={field.onChange} aria-label="Require two-factor authentication" />
+            <Switch checked={field.value} onCheckedChange={field.onChange} aria-label={t("security.require2fa")} />
           )}
         />
       </div>
 
       <div className="grid gap-1.5">
-        <Label htmlFor="sec-timeout">Session timeout (minutes)</Label>
+        <Label htmlFor="sec-timeout">{t("security.timeout")}</Label>
         <Input
           id="sec-timeout"
           type="number"
@@ -96,20 +103,18 @@ function SecurityForm({ security }: { security: SecurityValues }) {
       </div>
 
       <div className="grid gap-1.5">
-        <Label htmlFor="sec-ips">IP allowlist</Label>
+        <Label htmlFor="sec-ips">{t("security.allowlist")}</Label>
         <Textarea
           id="sec-ips"
-          placeholder={"One IP or CIDR per line, e.g.\n203.0.113.4\n198.51.100.0/24"}
+          placeholder={t("security.allowlistPlaceholder")}
           className="min-h-24 font-mono text-xs"
           {...register("ipAllowlist")}
         />
-        <p className="text-xs text-muted-foreground">
-          Empty allowlist means no restriction. Applies to sign-in only — an existing session stays valid regardless of IP.
-        </p>
+        <p className="text-xs text-muted-foreground">{t("security.allowlistHint")}</p>
       </div>
 
       <Button type="submit" disabled={isSubmitting} className="w-fit">
-        Save changes
+        {t("security.save")}
       </Button>
     </form>
   );
@@ -120,6 +125,7 @@ function SecurityForm({ security }: { security: SecurityValues }) {
  * the org-wide policy toggle above, but not gated by settings.write:
  * every member manages their own 2FA regardless of role. */
 function PersonalTOTPCard() {
+  const { t } = useTranslation(["settings", "common"]);
   const status = useTOTPStatus();
   const enroll = useEnrollTOTP();
   const confirm = useConfirmTOTP();
@@ -143,7 +149,7 @@ function PersonalTOTPCard() {
         onSuccess: () => {
           setEnrolling(false);
           setCode("");
-          toast("Two-factor authentication enabled");
+          toast(t("totp.enabledToast"));
         },
       },
     );
@@ -155,9 +161,9 @@ function PersonalTOTPCard() {
       onSuccess: () => {
         setDisabling(false);
         setPassword("");
-        toast("Two-factor authentication disabled");
+        toast(t("totp.disabledToast"));
       },
-      onError: (err) => toast.error("Couldn't disable two-factor authentication", { description: err.message }),
+      onError: (err) => toast.error(t("totp.disableError"), { description: err.message }),
     });
   }
 
@@ -166,25 +172,25 @@ function PersonalTOTPCard() {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Your two-factor authentication</CardTitle>
-        <CardDescription>A personal authenticator app code required at sign-in, in addition to your password.</CardDescription>
+        <CardTitle>{t("totp.title")}</CardTitle>
+        <CardDescription>{t("totp.description")}</CardDescription>
       </CardHeader>
       <CardContent>
-        {status.isPending && <LoadingState label="Loading…" />}
+        {status.isPending && <LoadingState label={t("totp.loading")} />}
         {status.isError && (
-          <ErrorState title="Couldn't load 2FA status" description={status.error.message} onRetry={() => status.refetch()} />
+          <ErrorState title={t("totp.loadError")} description={status.error.message} onRetry={() => status.refetch()} />
         )}
         {status.isSuccess && !enrolling && (
           <div className="flex items-center justify-between">
             <Badge variant={status.data.enabled ? "success" : "secondary"}>
-              {status.data.enabled ? "Enabled" : "Not enabled"}
+              {status.data.enabled ? t("totp.enabled") : t("totp.notEnabled")}
             </Badge>
             {status.data.enabled ? (
               <Button variant="outline" onClick={() => setDisabling(true)}>
-                Disable
+                {t("totp.disable")}
               </Button>
             ) : (
-              <Button onClick={startEnroll}>Set up 2FA</Button>
+              <Button onClick={startEnroll}>{t("totp.setUp")}</Button>
             )}
           </div>
         )}
@@ -199,16 +205,16 @@ function PersonalTOTPCard() {
             ) : (
               <>
                 {/* eslint-disable-next-line @next/next/no-img-element -- a base64 data: URI, not a remote asset next/image would optimize */}
-                <img src={enroll.data.qrCodeDataUri} alt="QR code for two-factor authentication setup" className="mx-auto size-48" />
+                <img src={enroll.data.qrCodeDataUri} alt={t("totp.qrAlt")} className="mx-auto size-48" />
                 <p className="text-center font-mono text-xs text-muted-foreground">{enroll.data.secret}</p>
                 <div className="rounded-md border border-border bg-muted p-3">
-                  <p className="mb-2 text-xs font-medium">Backup codes — save these now</p>
+                  <p className="mb-2 text-xs font-medium">{t("totp.backupTitle")}</p>
                   <div className="grid grid-cols-2 gap-1 font-mono text-xs">
                     {enroll.data.backupCodes.map((c) => (
                       <span key={c}>{c}</span>
                     ))}
                   </div>
-                  <p className="mt-2 text-xs text-muted-foreground">Each code works once. They won&apos;t be shown again.</p>
+                  <p className="mt-2 text-xs text-muted-foreground">{t("totp.backupHint")}</p>
                 </div>
                 <form onSubmit={submitConfirm} className="flex flex-col gap-3">
                   {confirmError && (
@@ -217,7 +223,7 @@ function PersonalTOTPCard() {
                     </Alert>
                   )}
                   <div className="grid gap-1.5">
-                    <Label htmlFor="personal-totp-code">Authentication code</Label>
+                    <Label htmlFor="personal-totp-code">{t("totp.code")}</Label>
                     <Input
                       id="personal-totp-code"
                       value={code}
@@ -230,10 +236,10 @@ function PersonalTOTPCard() {
                   </div>
                   <div className="flex gap-2">
                     <Button type="button" variant="outline" onClick={() => setEnrolling(false)}>
-                      Cancel
+                      {t("common:actions.cancel")}
                     </Button>
                     <Button type="submit" disabled={confirm.isPending || !code.trim()}>
-                      Confirm and enable
+                      {t("totp.confirm")}
                     </Button>
                   </div>
                 </form>
@@ -246,12 +252,12 @@ function PersonalTOTPCard() {
       <Dialog open={disabling} onOpenChange={setDisabling}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Disable two-factor authentication?</DialogTitle>
-            <DialogDescription>Confirm your password to turn off 2FA for your account.</DialogDescription>
+            <DialogTitle>{t("totp.disableTitle")}</DialogTitle>
+            <DialogDescription>{t("totp.disableDescription")}</DialogDescription>
           </DialogHeader>
           <form onSubmit={submitDisable} className="flex flex-col gap-3">
             <div className="grid gap-1.5">
-              <Label htmlFor="disable-totp-password">Password</Label>
+              <Label htmlFor="disable-totp-password">{t("totp.password")}</Label>
               <Input
                 id="disable-totp-password"
                 type="password"
@@ -263,10 +269,10 @@ function PersonalTOTPCard() {
             </div>
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => setDisabling(false)}>
-                Cancel
+                {t("common:actions.cancel")}
               </Button>
               <Button type="submit" variant="destructive" disabled={disable.isPending || !password}>
-                Disable
+                {t("totp.disable")}
               </Button>
             </DialogFooter>
           </form>
@@ -277,20 +283,21 @@ function PersonalTOTPCard() {
 }
 
 export function SecurityPanel() {
+  const { t } = useTranslation("settings");
   const securityQuery = useSecuritySettings();
 
   return (
     <div className="flex flex-col gap-6">
       <Card>
         <CardHeader>
-          <CardTitle>Security</CardTitle>
-          <CardDescription>Session timeout, IP allowlist, and your organization&apos;s 2FA policy.</CardDescription>
+          <CardTitle>{t("security.title")}</CardTitle>
+          <CardDescription>{t("security.description")}</CardDescription>
         </CardHeader>
         <CardContent>
-          {securityQuery.isPending && <LoadingState label="Loading security settings…" />}
+          {securityQuery.isPending && <LoadingState label={t("security.loading")} />}
           {securityQuery.isError && (
             <ErrorState
-              title="Couldn't load security settings"
+              title={t("security.loadError")}
               description={securityQuery.error.message}
               onRetry={() => securityQuery.refetch()}
             />

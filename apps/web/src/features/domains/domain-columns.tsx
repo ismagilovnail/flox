@@ -1,10 +1,13 @@
 import type { ColumnDef } from "@tanstack/react-table";
 import Link from "next/link";
-import { format, formatDistanceToNow } from "date-fns";
+import { format } from "date-fns";
+import type { TFunction } from "i18next";
+import { useTranslation } from "react-i18next";
 
 import { dataTableFeatures } from "@/components/ui/data-table";
 import { Badge } from "@/components/ui/badge";
 import { Caption } from "@/components/ui/typography";
+import { RelativeTime } from "@/components/ui/relative-time";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import type { Domain, DomainStatus, SslStatus } from "@/lib/api/domains";
 import { DomainRowActions } from "@/features/domains/domain-row-actions";
@@ -33,25 +36,26 @@ function expiresSoon(expires: Date): boolean {
  * expiry under it and the check's error (or what "none"/"pending" means)
  * on hover. */
 export function SslBadge({ domain }: { domain: Domain }) {
+  const { t } = useTranslation("domains");
   const expires = domain.sslExpiresAt ? new Date(domain.sslExpiresAt) : null;
   const soon = expires !== null && expiresSoon(expires);
   const hint =
     domain.sslError ||
     (domain.ssl === "issued"
-      ? "Valid certificate"
+      ? t("ssl.hints.issued")
       : domain.ssl === "none" && !domain.sslCheckedAt
-        ? "Not checked yet"
+        ? t("ssl.hints.unchecked")
         : domain.ssl === "pending"
-          ? "Waiting for the certificate to be issued"
-          : "No HTTPS on this domain yet");
+          ? t("ssl.hints.pending")
+          : t("ssl.hints.none"));
   return (
     <Tooltip>
       <TooltipTrigger asChild>
         <div className="flex flex-col items-start gap-0.5">
-          <Badge variant={SSL_VARIANT[domain.ssl]}>{domain.ssl}</Badge>
+          <Badge variant={SSL_VARIANT[domain.ssl]}>{t(`ssl.statuses.${domain.ssl}`)}</Badge>
           {domain.ssl === "issued" && expires && (
             <Caption className={soon ? "text-warning" : "text-muted-foreground"}>
-              until {format(expires, "dd.MM.yyyy")}
+              {t("ssl.until", { date: format(expires, "dd.MM.yyyy") })}
             </Caption>
           )}
         </div>
@@ -59,18 +63,21 @@ export function SslBadge({ domain }: { domain: Domain }) {
       <TooltipContent className="max-w-80 break-words">
         {hint}
         {domain.sslCheckedAt && (
-          <> · checked {formatDistanceToNow(new Date(domain.sslCheckedAt), { addSuffix: true })}</>
+          <>
+            {" · "}
+            {t("ssl.checked")} <RelativeTime date={domain.sslCheckedAt} className="text-inherit" />
+          </>
         )}
       </TooltipContent>
     </Tooltip>
   );
 }
 
-export function domainColumns(): ColumnDef<typeof dataTableFeatures, Domain>[] {
+export function domainColumns(t: TFunction<"domains">): ColumnDef<typeof dataTableFeatures, Domain>[] {
   return [
     {
       accessorKey: "domain",
-      header: "Domain",
+      header: t("columns.domain"),
       cell: ({ row }) => (
         <Link href={`/domains/${row.original.id}`} className="font-mono text-sm text-foreground hover:underline">
           {row.original.domain}
@@ -79,12 +86,12 @@ export function domainColumns(): ColumnDef<typeof dataTableFeatures, Domain>[] {
     },
     {
       accessorKey: "purpose",
-      header: "Purpose",
+      header: t("columns.purpose"),
       cell: ({ getValue }) => (
         <div className="flex flex-wrap gap-1">
           {(getValue() as string[]).map((p) => (
             <Badge key={p} variant="outline">
-              {p}
+              {t(`purposes.${p}`)}
             </Badge>
           ))}
         </div>
@@ -92,10 +99,10 @@ export function domainColumns(): ColumnDef<typeof dataTableFeatures, Domain>[] {
     },
     {
       accessorKey: "status",
-      header: "Status",
+      header: t("columns.status"),
       cell: ({ getValue }) => {
         const status = getValue() as DomainStatus;
-        return <Badge variant={STATUS_VARIANT[status]}>{status}</Badge>;
+        return <Badge variant={STATUS_VARIANT[status]}>{t(`statuses.${status}`)}</Badge>;
       },
     },
     {
@@ -105,17 +112,13 @@ export function domainColumns(): ColumnDef<typeof dataTableFeatures, Domain>[] {
     },
     {
       accessorKey: "expiresAt",
-      header: "Expires",
+      header: t("columns.expires"),
       cell: ({ getValue }) => {
         const value = getValue() as string | null;
         if (!value) return <Caption className="text-muted-foreground">—</Caption>;
         const expires = new Date(value);
         const isSoon = expires.getTime() - Date.now() < 1000 * 60 * 60 * 24 * 30;
-        return (
-          <Caption className={isSoon ? "text-warning" : undefined}>
-            {formatDistanceToNow(expires, { addSuffix: true })}
-          </Caption>
-        );
+        return <RelativeTime date={expires} className={isSoon ? "text-warning" : undefined} />;
       },
     },
     {

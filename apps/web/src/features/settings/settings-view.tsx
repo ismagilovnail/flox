@@ -14,7 +14,7 @@ import { AlertsPanel } from "@/features/alerts/alerts-panel";
 const TABS = ["organization", "api-keys", "integrations", "alerts", "security", "custom-metrics"];
 
 export function SettingsView() {
-  const { t } = useTranslation("alerts");
+  const { t } = useTranslation(["settings", "alerts"]);
   const searchParams = useSearchParams();
   const router = useRouter();
   const pathname = usePathname();
@@ -30,16 +30,16 @@ export function SettingsView() {
 
   return (
     <div className="flex flex-col gap-4">
-      <h1 className="text-2xl font-semibold tracking-tight">Settings</h1>
+      <h1 className="text-2xl font-semibold tracking-tight">{t("title")}</h1>
 
       <Tabs value={tab} onValueChange={selectTab}>
-        <TabsList>
-          <TabsTrigger value="organization">Organization</TabsTrigger>
-          <TabsTrigger value="api-keys">API Keys</TabsTrigger>
-          <TabsTrigger value="integrations">Integrations</TabsTrigger>
-          <TabsTrigger value="alerts">{t("tab")}</TabsTrigger>
-          <TabsTrigger value="security">Security</TabsTrigger>
-          <TabsTrigger value="custom-metrics">Custom Metrics</TabsTrigger>
+        <TabsList className="h-auto flex-wrap">
+          <TabsTrigger value="organization">{t("tabs.organization")}</TabsTrigger>
+          <TabsTrigger value="api-keys">{t("tabs.apiKeys")}</TabsTrigger>
+          <TabsTrigger value="integrations">{t("tabs.integrations")}</TabsTrigger>
+          <TabsTrigger value="alerts">{t("alerts:tab")}</TabsTrigger>
+          <TabsTrigger value="security">{t("tabs.security")}</TabsTrigger>
+          <TabsTrigger value="custom-metrics">{t("tabs.customMetrics")}</TabsTrigger>
         </TabsList>
 
         <TabsContent value="organization">

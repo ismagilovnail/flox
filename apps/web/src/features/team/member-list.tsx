@@ -3,6 +3,7 @@
 import * as React from "react";
 import { toast } from "sonner";
 import { CopyIcon, PlusIcon } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
@@ -26,6 +27,7 @@ import { ApiError } from "@/lib/api/client";
 import type { Role } from "@/lib/mock/team";
 
 export function MemberList() {
+  const { t } = useTranslation(["team", "common"]);
   const me = useMe();
   const canWrite = !!me.data?.permissions.includes("team.write");
   const membersQuery = useTeamMembers();
@@ -42,8 +44,8 @@ export function MemberList() {
         setInviteUrl(result.inviteUrl);
       },
       onError: (err) => {
-        const message = err instanceof ApiError ? err.message : "Couldn't send the invite";
-        toast.error("Couldn't invite member", { description: message });
+        const message = err instanceof ApiError ? err.message : undefined;
+        toast.error(t("members.inviteError"), { description: message });
       },
     });
   }
@@ -51,7 +53,7 @@ export function MemberList() {
   function copyInviteUrl() {
     if (!inviteUrl) return;
     navigator.clipboard.writeText(inviteUrl);
-    toast("Invite link copied");
+    toast(t("members.linkCopied"));
   }
 
   const columns = React.useMemo(
@@ -61,23 +63,25 @@ export function MemberList() {
           updateMember.mutate(
             { id: member.id, input: { role } },
             {
-              onSuccess: () => toast("Role updated", { description: `${member.name} → ${role}` }),
+              onSuccess: () => toast(t("members.roleUpdated"), { description: `${member.name} → ${t(`roles.${role}`)}` }),
               onError: (err) => {
-                const message = err instanceof ApiError ? err.message : "Couldn't update role";
-                toast.error("Couldn't update role", { description: message });
+                const message = err instanceof ApiError ? err.message : undefined;
+                toast.error(t("members.roleError"), { description: message });
               },
             },
           );
         },
         canWrite,
+        t,
       ),
-    [updateMember, canWrite],
+    [updateMember, canWrite, t],
   );
 
-  if (membersQuery.isLoading) return <LoadingState />;
+  if (membersQuery.isLoading) return <LoadingState label={t("members.loading")} />;
   if (membersQuery.isError) {
     return (
       <ErrorState
+        title={t("members.loadError")}
         description={membersQuery.error instanceof ApiError ? membersQuery.error.message : undefined}
         onRetry={() => membersQuery.refetch()}
       />
@@ -89,11 +93,11 @@ export function MemberList() {
   return (
     <div className="flex flex-col gap-4">
       <div className="flex items-center justify-between">
-        <p className="text-sm text-muted-foreground">{members.length} members</p>
+        <p className="text-sm text-muted-foreground">{t("members.count", { count: members.length })}</p>
         {canWrite && (
           <Button onClick={() => setInviting(true)}>
             <PlusIcon className="size-4" />
-            Invite member
+            {t("members.invite")}
           </Button>
         )}
       </div>
@@ -101,10 +105,10 @@ export function MemberList() {
       <DataTable
         columns={columns}
         data={members}
-        searchPlaceholder="Search members..."
+        searchPlaceholder={t("members.search")}
         exportFilename="team-members"
-        emptyTitle="No members yet"
-        emptyDescription="Invite teammates to give them access to this workspace."
+        emptyTitle={t("members.emptyTitle")}
+        emptyDescription={t("members.emptyDescription")}
         pageSize={10}
       />
 
@@ -113,20 +117,17 @@ export function MemberList() {
       <Dialog open={!!inviteUrl} onOpenChange={(open) => !open && setInviteUrl(null)}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Invite link ready</DialogTitle>
-            <DialogDescription>
-              There&apos;s no email delivery yet — copy this link and send it to your teammate yourself. It expires in
-              7 days.
-            </DialogDescription>
+            <DialogTitle>{t("invite.linkTitle")}</DialogTitle>
+            <DialogDescription>{t("invite.linkDescription")}</DialogDescription>
           </DialogHeader>
           <div className="flex items-center gap-2 rounded-md border border-border bg-muted px-3 py-2">
             <Mono className="min-w-0 flex-1 truncate text-xs">{inviteUrl}</Mono>
-            <IconButton aria-label="Copy invite link" size="icon-sm" onClick={copyInviteUrl}>
+            <IconButton aria-label={t("invite.copyAria")} size="icon-sm" onClick={copyInviteUrl}>
               <CopyIcon className="size-3.5" />
             </IconButton>
           </div>
           <DialogFooter>
-            <Button onClick={() => setInviteUrl(null)}>Done</Button>
+            <Button onClick={() => setInviteUrl(null)}>{t("invite.done")}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import { CheckIcon, PencilIcon, PlusIcon, Trash2Icon } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
 import { Button } from "@/components/ui/button";
 import { IconButton } from "@/components/ui/icon-button";
@@ -24,6 +25,7 @@ function TagEditRow({
   onDelete: () => void;
   onCancel: () => void;
 }) {
+  const { t } = useTranslation(["tags", "common"]);
   const [name, setName] = React.useState(tag.name);
   const [color, setColor] = React.useState<TagColorId>(tag.color);
 
@@ -35,7 +37,7 @@ function TagEditRow({
           <button
             key={c.id}
             type="button"
-            aria-label={c.id}
+            aria-label={t(`colors.${c.id}`)}
             onClick={() => setColor(c.id)}
             className={cn(
               "size-4 rounded-full ring-offset-2 ring-offset-popover transition-shadow",
@@ -46,15 +48,15 @@ function TagEditRow({
         ))}
       </div>
       <div className="flex items-center justify-between gap-1">
-        <IconButton aria-label="Delete tag" size="icon-sm" variant="ghost" className="text-danger" onClick={onDelete}>
+        <IconButton aria-label={t("deleteTag")} size="icon-sm" variant="ghost" className="text-danger" onClick={onDelete}>
           <Trash2Icon className="size-3.5" />
         </IconButton>
         <div className="flex gap-1.5">
           <Button type="button" size="sm" variant="outline" onClick={onCancel}>
-            Cancel
+            {t("common:actions.cancel")}
           </Button>
           <Button type="button" size="sm" disabled={!name.trim()} onClick={() => onSave({ name: name.trim(), color })}>
-            Save
+            {t("common:actions.save")}
           </Button>
         </div>
       </div>
@@ -82,6 +84,7 @@ export function TagPickerPopover({
   // content.write — same key apps/internal/tags.Handler requires for
   // create/update/delete AND assignment (setEntityTags/bulkEdit), so one
   // check covers every mutation in this popover.
+  const { t } = useTranslation("tags");
   const canWrite = usePermission("content.write");
 
   const [query, setQuery] = React.useState("");
@@ -130,7 +133,7 @@ export function TagPickerPopover({
         <Input
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          placeholder="Search or create tag..."
+          placeholder={t("searchOrCreate")}
           className="mb-2 h-8"
         />
         <div className="flex max-h-56 flex-col gap-0.5 overflow-y-auto">
@@ -170,7 +173,7 @@ export function TagPickerPopover({
                 </button>
                 {canWrite && (
                   <IconButton
-                    aria-label={`Edit ${tag.name}`}
+                    aria-label={t("editTag", { name: tag.name })}
                     size="icon-sm"
                     variant="ghost"
                     className="opacity-0 group-hover:opacity-100"
@@ -189,12 +192,12 @@ export function TagPickerPopover({
               onClick={quickCreate}
               className="flex items-center gap-2 rounded-md px-1.5 py-1.5 text-left text-sm text-muted-foreground hover:bg-muted hover:text-foreground"
             >
-              <PlusIcon className="size-3.5" /> Create &ldquo;{trimmed}&rdquo;
+              <PlusIcon className="size-3.5" /> {t("create", { name: trimmed })}
             </button>
           )}
 
           {filtered.length === 0 && !trimmed && (
-            <p className="px-1.5 py-2 text-xs text-muted-foreground">No tags yet — type a name to create one.</p>
+            <p className="px-1.5 py-2 text-xs text-muted-foreground">{t("emptyPicker")}</p>
           )}
         </div>
       </PopoverContent>

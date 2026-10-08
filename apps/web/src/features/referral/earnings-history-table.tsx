@@ -2,11 +2,12 @@
 
 import * as React from "react";
 import type { ColumnDef } from "@tanstack/react-table";
-import { formatDistanceToNow } from "date-fns";
+import { useTranslation } from "react-i18next";
 
 import { DataTable, dataTableFeatures } from "@/components/ui/data-table";
 import { Badge } from "@/components/ui/badge";
-import { Caption, Mono } from "@/components/ui/typography";
+import { Mono } from "@/components/ui/typography";
+import { RelativeTime } from "@/components/ui/relative-time";
 import { formatUsd } from "@/lib/format";
 import { useTeamMembers } from "@/hooks/use-team";
 import type { ReferralTransaction, ReferralTransactionType } from "@/lib/referral";
@@ -17,17 +18,13 @@ const TYPE_VARIANT: Record<ReferralTransactionType, "success" | "outline" | "war
   payout_paid: "warning",
 };
 
-const TYPE_LABEL: Record<ReferralTransactionType, string> = {
-  accrual: "Accrual",
-  adjustment: "Adjustment",
-  payout_paid: "Payout paid",
-};
 
 export function EarningsHistoryTable({ transactions }: { transactions: ReferralTransaction[] }) {
   // Real team roster (§28) — a transaction's createdByUserId is a real
   // users.id, resolved to a display name the same way the real team page
   // itself does. A creator who has since left the team falls back to the
   // raw id rather than hiding the row.
+  const { t } = useTranslation("referral");
   const membersQuery = useTeamMembers();
   const memberNameByUserId = React.useMemo(
     () => Object.fromEntries((membersQuery.data ?? []).map((m) => [m.userId, m.name])),
@@ -38,15 +35,15 @@ export function EarningsHistoryTable({ transactions }: { transactions: ReferralT
     () => [
       {
         accessorKey: "type",
-        header: "Type",
+        header: t("history.type"),
         cell: ({ getValue }) => {
           const type = getValue() as ReferralTransactionType;
-          return <Badge variant={TYPE_VARIANT[type]}>{TYPE_LABEL[type]}</Badge>;
+          return <Badge variant={TYPE_VARIANT[type]}>{t(`history.types.${type}`)}</Badge>;
         },
       },
       {
         accessorKey: "amount",
-        header: "Amount",
+        header: t("history.amount"),
         cell: ({ getValue }) => {
           const amount = getValue() as number;
           return (
@@ -57,10 +54,10 @@ export function EarningsHistoryTable({ transactions }: { transactions: ReferralT
           );
         },
       },
-      { accessorKey: "description", header: "Description" },
+      { accessorKey: "description", header: t("history.description") },
       {
         id: "by",
-        header: "By",
+        header: t("history.by"),
         // A `cell` renderer, not `accessorFn` — TanStack Table caches a row's
         // computed value per (row, columnId) the first time it's read, and
         // only invalidates that cache when the `data` array itself changes
@@ -75,23 +72,21 @@ export function EarningsHistoryTable({ transactions }: { transactions: ReferralT
       },
       {
         accessorKey: "createdAt",
-        header: "Date",
-        cell: ({ getValue }) => (
-          <Caption>{formatDistanceToNow(new Date(getValue() as string), { addSuffix: true })}</Caption>
-        ),
+        header: t("history.date"),
+        cell: ({ getValue }) => <RelativeTime date={getValue() as string} />,
       },
     ],
-    [memberNameByUserId],
+    [memberNameByUserId, t],
   );
 
   return (
     <DataTable
       columns={columns}
       data={transactions}
-      searchPlaceholder="Search history..."
+      searchPlaceholder={t("history.search")}
       exportFilename="referral-earnings"
-      emptyTitle="No earnings yet"
-      emptyDescription="Accruals, adjustments, and payouts appear here — an immutable, append-only ledger (§54)."
+      emptyTitle={t("history.emptyTitle")}
+      emptyDescription={t("history.emptyDescription")}
       pageSize={10}
     />
   );

@@ -1,0 +1,145 @@
+{
+  "organization": {
+    "title": "Organization",
+    "description": "Workspace name, timezone and default currency. The currency is only the display default — each amount is stored in its own currency with its USD value at the event date.",
+    "name": "Organization name",
+    "timezone": "Timezone",
+    "currency": "Default currency",
+    "save": "Save changes",
+    "saved": "Organization settings saved",
+    "saveError": "Couldn't save organization settings",
+    "loading": "Loading organization settings…",
+    "loadError": "Couldn't load organization settings",
+    "errors": {
+      "name": "Name must be at least 2 characters",
+      "timezone": "Pick a timezone",
+      "currency": "Pick a currency"
+    }
+  },
+  "security": {
+    "title": "Security",
+    "description": "Session timeout, IP allowlist and your organization's 2FA policy.",
+    "require2fa": "Require two-factor authentication",
+    "require2faHint": "Every member must set up 2FA on their next sign-in — set up your own under \"Your two-factor authentication\" below.",
+    "timeout": "Session timeout (minutes)",
+    "allowlist": "IP allowlist",
+    "allowlistPlaceholder": "One IP or CIDR per line, e.g.\n203.0.113.4\n198.51.100.0/24",
+    "allowlistHint": "An empty list means no restriction. Applies to sign-in only — an existing session stays valid from any IP.",
+    "save": "Save changes",
+    "saved": "Security settings saved",
+    "saveError": "Couldn't save security settings",
+    "loading": "Loading security settings…",
+    "loadError": "Couldn't load security settings",
+    "errors": {
+      "minutes": "Enter a number of minutes",
+      "min": "At least 15 minutes",
+      "max": "At most 60 days"
+    }
+  },
+  "totp": {
+    "title": "Your two-factor authentication",
+    "description": "A code from an authenticator app, asked at sign-in in addition to your password.",
+    "loading": "Loading…",
+    "loadError": "Couldn't load 2FA status",
+    "enabled": "Enabled",
+    "notEnabled": "Not enabled",
+    "disable": "Disable",
+    "setUp": "Set up 2FA",
+    "qrAlt": "QR code for two-factor authentication setup",
+    "backupTitle": "Backup codes — save these now",
+    "backupHint": "Each code works once. They won't be shown again.",
+    "code": "Authentication code",
+    "confirm": "Confirm and enable",
+    "enabledToast": "Two-factor authentication enabled",
+    "disabledToast": "Two-factor authentication disabled",
+    "disableError": "Couldn't disable two-factor authentication",
+    "disableTitle": "Disable two-factor authentication?",
+    "disableDescription": "Confirm your password to turn off 2FA for your account.",
+    "password": "Password"
+  },
+  "apiKeys": {
+    "title": "API keys",
+    "description": "For programmatic access. The full key is shown once, when it is created.",
+    "new": "New API key",
+    "loading": "Loading API keys…",
+    "loadError": "Couldn't load API keys",
+    "empty": "No API keys yet.",
+    "neverUsed": "Never used",
+    "revokeAria": "Revoke {{name}}",
+    "scopeHint": "The scope decides what the key can read or change. Read: everything a member can see. Write: read, plus creating, editing and deleting campaigns, offers, content and more — team and security settings excluded. Admin: everything, team and security included.",
+    "name": "Name",
+    "namePlaceholder": "Reporting export",
+    "scope": "Scope",
+    "scopes": {
+      "read": "Read",
+      "write": "Write",
+      "admin": "Admin"
+    },
+    "create": "Create key",
+    "createError": "Couldn't create API key",
+    "copied": "API key copied",
+    "revoked": "API key revoked",
+    "revokeError": "Couldn't revoke API key",
+    "revealTitle": "Copy your API key now",
+    "revealDescription": "This is the only time it is shown in full. If you lose it, revoke the key and create a new one.",
+    "copyAria": "Copy API key",
+    "usageBefore": "Send it as",
+    "usageAfter": "on any API request — it signs in the same way your session does, within the key's scope.",
+    "done": "Done",
+    "revokeTitle": "Revoke \"{{name}}\"?",
+    "revokeDescription": "Anything using this key stops working immediately.",
+    "revoke": "Revoke",
+    "errors": {
+      "name": "Name must be at least 2 characters"
+    }
+  },
+  "integrations": {
+    "loading": "Loading integrations…",
+    "loadError": "Couldn't load integrations",
+    "adPlatformDescription": "Imports ad spend automatically, for profit and ROI. Connected per traffic source.",
+    "noSources": "Not set up on any traffic source yet",
+    "sourcesConnected_one": "Connected on {{connected}} of {{count}} traffic source",
+    "sourcesConnected_other": "Connected on {{connected}} of {{count}} traffic sources",
+    "manage": "Manage",
+    "providers": {
+      "namecheap": "Domain registrar: renewals and DNS records for your domains.",
+      "cloudflare": "DNS records for your tracking domains.",
+      "slack": "Alerts set up under Settings → Alerts go to a channel through an incoming webhook."
+    },
+    "fields": {
+      "apiUser": "API user",
+      "apiKey": "API key",
+      "clientIp": "Whitelisted client IP",
+      "apiToken": "API token",
+      "webhookUrl": "Incoming webhook URL"
+    },
+    "status": {
+      "connected": "connected",
+      "not_connected": "not connected",
+      "error": "error"
+    },
+    "verifiedAt": "Verified",
+    "verify": "Verify",
+    "connect": "Connect",
+    "disconnect": "Disconnect",
+    "connected": "{{name}} connected",
+    "connectError": "Couldn't connect",
+    "verified": "Connection verified",
+    "verifyFailed": "Verification failed",
+    "verifyError": "Couldn't verify the connection",
+    "disconnected": "{{name}} disconnected",
+    "disconnectError": "Couldn't disconnect",
+    "connectTitle": "Connect {{name}}",
+    "connectDescription": "Credentials are stored encrypted and never shown again after saving.",
+    "disconnectTitle": "Disconnect {{name}}?",
+    "disconnectDescription": "The stored credential is deleted. You can reconnect at any time."
+  },
+  "title": "Settings",
+  "tabs": {
+    "organization": "Organization",
+    "apiKeys": "API keys",
+    "integrations": "Integrations",
+    "security": "Security",
+    "customMetrics": "Custom metrics"
+  }
+}

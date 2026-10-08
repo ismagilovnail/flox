@@ -46,7 +46,7 @@ export function UserMenu() {
       <DropdownMenuTrigger asChild>
         <button
           type="button"
-          aria-label="User menu"
+          aria-label={t("a11y.userMenu", { ns: "common" })}
           className="rounded-full outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
         >
           <Avatar className="size-7">

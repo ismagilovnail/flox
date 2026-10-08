@@ -3,6 +3,7 @@
 import * as React from "react";
 import Link from "next/link";
 import { PlusIcon } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
@@ -13,19 +14,20 @@ import { useDomains } from "@/hooks/use-domains";
 import { domainColumns } from "@/features/domains/domain-columns";
 
 export function DomainList() {
+  const { t } = useTranslation("domains");
   const canWrite = usePermission("settings.write");
   const domainsQuery = useDomains();
 
-  const columns = React.useMemo(() => domainColumns(), []);
+  const columns = React.useMemo(() => domainColumns(t), [t]);
 
   const header = (
     <div className="flex items-center justify-between">
-      <h1 className="text-2xl font-semibold tracking-tight">Domains</h1>
+      <h1 className="text-2xl font-semibold tracking-tight">{t("list.title")}</h1>
       {canWrite && (
         <Button asChild>
           <Link href="/domains/new">
             <PlusIcon className="size-4" />
-            New Domain
+            {t("list.new")}
           </Link>
         </Button>
       )}
@@ -36,7 +38,7 @@ export function DomainList() {
     return (
       <div className="flex flex-col gap-4">
         {header}
-        <LoadingState label="Loading domains..." />
+        <LoadingState label={t("list.loading")} />
       </div>
     );
   }
@@ -46,7 +48,7 @@ export function DomainList() {
       <div className="flex flex-col gap-4">
         {header}
         <ErrorState
-          title="Couldn't load domains"
+          title={t("list.loadError")}
           description={domainsQuery.error.message}
           onRetry={() => domainsQuery.refetch()}
         />
@@ -61,10 +63,10 @@ export function DomainList() {
       <DataTable
         columns={columns}
         data={domainsQuery.data.domains}
-        searchPlaceholder="Search domains..."
+        searchPlaceholder={t("list.search")}
         exportFilename="domains"
-        emptyTitle="No domains yet"
-        emptyDescription="Park a domain for tracking links, PWA installs, or fallback destinations."
+        emptyTitle={t("list.emptyTitle")}
+        emptyDescription={t("list.emptyDescription")}
         pageSize={10}
       />
     </div>

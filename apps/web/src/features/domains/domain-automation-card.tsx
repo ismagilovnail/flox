@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { toast } from "sonner";
-import { formatDistanceToNow } from "date-fns";
+import { useTranslation } from "react-i18next";
 import { LockIcon, RefreshCwIcon, ShieldCheckIcon } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
@@ -19,6 +19,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Caption } from "@/components/ui/typography";
+import { RelativeTime } from "@/components/ui/relative-time";
 import { usePermission } from "@/hooks/use-auth";
 import { useCheckDomainSSL, useRenewDomain, useSyncDomainDNS, useVerifyDomain } from "@/hooks/use-domains";
 import { STATUS_VARIANT, SslBadge } from "@/features/domains/domain-columns";
@@ -34,6 +35,7 @@ import type { Domain } from "@/lib/api/domains";
  * gated behind their own confirm dialog, matching CLAUDE.md's
  * destructive/consequential-action confirmation rule. */
 export function DomainAutomationCard({ domain }: { domain: Domain }) {
+  const { t, i18n } = useTranslation(["domains", "common"]);
   const canWrite = usePermission("settings.write");
   const verify = useVerifyDomain();
   const renew = useRenewDomain();
@@ -49,8 +51,8 @@ export function DomainAutomationCard({ domain }: { domain: Domain }) {
 
   function handleVerify() {
     verify.mutate(domain.id, {
-      onSuccess: () => toast("Verified", { description: "Expiry/SSL status refreshed from the real provider." }),
-      onError: (err) => toast.error("Couldn't verify", { description: err.message }),
+      onSuccess: () => toast(t("automation.verified"), { description: t("automation.verifiedDescription") }),
+      onError: (err) => toast.error(t("automation.verifyError"), { description: err.message }),
     });
   }
 
@@ -58,9 +60,9 @@ export function DomainAutomationCard({ domain }: { domain: Domain }) {
     checkSsl.mutate(domain.id, {
       onSuccess: (d) =>
         d.ssl === "issued"
-          ? toast("HTTPS works", { description: "Tracking links on this domain now use https." })
-          : toast.warning(`SSL: ${d.ssl}`, { description: d.sslError || undefined }),
-      onError: (err) => toast.error("Couldn't check SSL", { description: err.message }),
+          ? toast(t("automation.httpsWorks"), { description: t("automation.httpsWorksDescription") })
+          : toast.warning(`SSL: ${t(`ssl.statuses.${d.ssl}`)}`, { description: d.sslError || undefined }),
+      onError: (err) => toast.error(t("automation.sslError"), { description: err.message }),
     });
   }
 
@@ -69,10 +71,12 @@ export function DomainAutomationCard({ domain }: { domain: Domain }) {
       { id: domain.id, years },
       {
         onSuccess: (d) =>
-          toast("Domain renewed", {
-            description: d.expiresAt ? `New expiry: ${new Date(d.expiresAt).toLocaleDateString()}` : undefined,
+          toast(t("automation.renewed"), {
+            description: d.expiresAt
+              ? t("automation.newExpiry", { date: new Date(d.expiresAt).toLocaleDateString(i18n.language) })
+              : undefined,
           }),
-        onError: (err) => toast.error("Renewal failed", { description: err.message }),
+        onError: (err) => toast.error(t("automation.renewError"), { description: err.message }),
       },
     );
     setRenewOpen(false);
@@ -80,8 +84,8 @@ export function DomainAutomationCard({ domain }: { domain: Domain }) {
 
   function handleSyncDns() {
     syncDns.mutate(domain.id, {
-      onSuccess: () => toast("DNS record synced", { description: "A CNAME now points this domain at FLOX." }),
-      onError: (err) => toast.error("DNS sync failed", { description: err.message }),
+      onSuccess: () => toast(t("automation.synced"), { description: t("automation.syncedDescription") }),
+      onError: (err) => toast.error(t("automation.syncError"), { description: err.message }),
     });
     setSyncOpen(false);
   }
@@ -89,42 +93,43 @@ export function DomainAutomationCard({ domain }: { domain: Domain }) {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Registrar &amp; DNS automation</CardTitle>
-        <CardDescription>
-          Real checks/actions against the org&apos;s connected Namecheap (registrar) and Cloudflare (DNS) accounts —
-          Settings &gt; Integrations. Other registrars/DNS providers have no automation and stay operator-declared.
-        </CardDescription>
+        <CardTitle>{t("automation.title")}</CardTitle>
+        <CardDescription>{t("automation.description")}</CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-4">
         <div className="flex flex-wrap items-center gap-4">
           <div className="flex flex-col gap-0.5">
-            <Caption className="text-muted-foreground">Status</Caption>
-            <Badge variant={STATUS_VARIANT[domain.status]}>{domain.status}</Badge>
+            <Caption className="text-muted-foreground">{t("columns.status")}</Caption>
+            <Badge variant={STATUS_VARIANT[domain.status]}>{t(`statuses.${domain.status}`)}</Badge>
           </div>
           <div className="flex flex-col gap-0.5">
             <Caption className="text-muted-foreground">SSL</Caption>
             <SslBadge domain={domain} />
           </div>
           <div className="flex flex-col gap-0.5">
-            <Caption className="text-muted-foreground">Expires</Caption>
-            <span className="text-sm">
-              {domain.expiresAt ? formatDistanceToNow(new Date(domain.expiresAt), { addSuffix: true }) : "—"}
-            </span>
+            <Caption className="text-muted-foreground">{t("columns.expires")}</Caption>
+            {domain.expiresAt ? (
+              <RelativeTime date={domain.expiresAt} className="text-sm text-foreground" />
+            ) : (
+              <span className="text-sm">—</span>
+            )}
           </div>
           <div className="flex flex-col gap-0.5">
-            <Caption className="text-muted-foreground">Last verified</Caption>
-            <span className="text-sm">
-              {domain.verifiedAt ? formatDistanceToNow(new Date(domain.verifiedAt), { addSuffix: true }) : "Never"}
-            </span>
+            <Caption className="text-muted-foreground">{t("automation.lastVerified")}</Caption>
+            {domain.verifiedAt ? (
+              <RelativeTime date={domain.verifiedAt} className="text-sm text-foreground" />
+            ) : (
+              <span className="text-sm">{t("automation.never")}</span>
+            )}
           </div>
         </div>
 
         <div className="flex flex-wrap gap-2">
           <Button type="button" variant="outline" size="sm" onClick={handleVerify} disabled={verify.isPending}>
-            <ShieldCheckIcon className="size-3.5" /> {verify.isPending ? "Verifying…" : "Verify"}
+            <ShieldCheckIcon className="size-3.5" /> {verify.isPending ? t("automation.verifying") : t("automation.verify")}
           </Button>
           <Button type="button" variant="outline" size="sm" onClick={handleCheckSsl} disabled={checkSsl.isPending}>
-            <LockIcon className="size-3.5" /> {checkSsl.isPending ? "Checking…" : "Check SSL"}
+            <LockIcon className="size-3.5" /> {checkSsl.isPending ? t("automation.checking") : t("automation.checkSsl")}
           </Button>
           <Button
             type="button"
@@ -132,9 +137,9 @@ export function DomainAutomationCard({ domain }: { domain: Domain }) {
             size="sm"
             onClick={() => setRenewOpen(true)}
             disabled={!canWrite || !canRenew || renew.isPending}
-            title={!canWrite ? "You don't have permission to do this" : canRenew ? undefined : "Registrar must be Namecheap"}
+            title={!canWrite ? t("automation.noPermission") : canRenew ? undefined : t("automation.needsNamecheap")}
           >
-            <RefreshCwIcon className="size-3.5" /> Renew…
+            <RefreshCwIcon className="size-3.5" /> {t("automation.renew")}
           </Button>
           <Button
             type="button"
@@ -142,9 +147,9 @@ export function DomainAutomationCard({ domain }: { domain: Domain }) {
             size="sm"
             onClick={() => setSyncOpen(true)}
             disabled={!canWrite || !canSyncDns || syncDns.isPending}
-            title={!canWrite ? "You don't have permission to do this" : canSyncDns ? undefined : "DNS provider must be Cloudflare"}
+            title={!canWrite ? t("automation.noPermission") : canSyncDns ? undefined : t("automation.needsCloudflare")}
           >
-            <RefreshCwIcon className="size-3.5" /> Sync DNS record
+            <RefreshCwIcon className="size-3.5" /> {t("automation.syncDns")}
           </Button>
         </div>
       </CardContent>
@@ -152,14 +157,11 @@ export function DomainAutomationCard({ domain }: { domain: Domain }) {
       <Dialog open={renewOpen} onOpenChange={setRenewOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Renew {domain.domain}?</DialogTitle>
-            <DialogDescription>
-              This calls Namecheap&apos;s real renewal API against your connected account and will charge it for the
-              selected number of years. This is not reversible.
-            </DialogDescription>
+            <DialogTitle>{t("automation.renewTitle", { domain: domain.domain })}</DialogTitle>
+            <DialogDescription>{t("automation.renewDescription")}</DialogDescription>
           </DialogHeader>
           <div className="grid gap-1.5">
-            <Label htmlFor="renew-years">Years</Label>
+            <Label htmlFor="renew-years">{t("automation.years")}</Label>
             <Input
               id="renew-years"
               type="number"
@@ -171,10 +173,10 @@ export function DomainAutomationCard({ domain }: { domain: Domain }) {
           </div>
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => setRenewOpen(false)}>
-              Cancel
+              {t("common:actions.cancel")}
             </Button>
             <Button type="button" variant="destructive" onClick={handleRenew}>
-              Renew and charge my account
+              {t("automation.renewConfirm")}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -183,18 +185,15 @@ export function DomainAutomationCard({ domain }: { domain: Domain }) {
       <Dialog open={syncOpen} onOpenChange={setSyncOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Sync DNS record for {domain.domain}?</DialogTitle>
-            <DialogDescription>
-              This creates or updates a real, proxied CNAME record in your connected Cloudflare account, pointing this
-              domain at FLOX. If this domain currently serves anything else, that traffic will move to FLOX.
-            </DialogDescription>
+            <DialogTitle>{t("automation.syncTitle", { domain: domain.domain })}</DialogTitle>
+            <DialogDescription>{t("automation.syncDescription")}</DialogDescription>
           </DialogHeader>
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => setSyncOpen(false)}>
-              Cancel
+              {t("common:actions.cancel")}
             </Button>
             <Button type="button" variant="destructive" onClick={handleSyncDns}>
-              Update DNS record
+              {t("automation.syncConfirm")}
             </Button>
           </DialogFooter>
         </DialogContent>

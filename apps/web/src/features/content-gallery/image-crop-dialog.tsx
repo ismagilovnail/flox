@@ -1,5 +1,7 @@
 "use client";
 
+import { useTranslation } from "react-i18next";
+
 import * as React from "react";
 import ReactCrop, { centerCrop, cropToCanvas, makeAspectCrop, type Crop, type PixelCrop } from "react-image-crop";
 import "react-image-crop/dist/ReactCrop.css";
@@ -60,12 +62,13 @@ export function ImageCropDialog({
   onConfirm: (cropped: File) => void;
   onSkip: () => void;
 }) {
+  const { t } = useTranslation("contentGallery");
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle>Crop image</DialogTitle>
-          <DialogDescription>Required aspect ratio: {aspect.toFixed(2)}. Drag the selection to reposition it, or drag a handle to resize.</DialogDescription>
+          <DialogTitle>{t("crop.title")}</DialogTitle>
+          <DialogDescription>{t("crop.description", { aspect: aspect.toFixed(2) })}</DialogDescription>
         </DialogHeader>
         {/* Keyed by the source itself — a fresh image means a fresh
          * centered selection, via a full remount rather than an effect
@@ -103,6 +106,7 @@ function CropperBody({
   onConfirm: (cropped: File) => void;
   onSkip: () => void;
 }) {
+  const { t } = useTranslation("contentGallery");
   const imgRef = React.useRef<HTMLImageElement>(null);
   const [crop, setCrop] = React.useState<Crop>();
   const [completedCrop, setCompletedCrop] = React.useState<PixelCrop>();
@@ -166,10 +170,10 @@ function CropperBody({
 
       <DialogFooter className="mt-0 flex-row items-center justify-between">
         <Button type="button" variant="ghost" onClick={onSkip}>
-          Skip crop
+          {t("crop.skip")}
         </Button>
         <Button type="button" onClick={apply} disabled={!completedCrop || applying}>
-          {applying ? "Applying…" : "Apply"}
+          {applying ? t("crop.applying") : t("crop.apply")}
         </Button>
       </DialogFooter>
     </>

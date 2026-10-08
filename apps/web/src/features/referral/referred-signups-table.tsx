@@ -1,11 +1,14 @@
 "use client";
 
+"use client";
+
+import * as React from "react";
 import type { ColumnDef } from "@tanstack/react-table";
-import { formatDistanceToNow } from "date-fns";
+import { useTranslation } from "react-i18next";
 
 import { DataTable, dataTableFeatures } from "@/components/ui/data-table";
 import { Badge } from "@/components/ui/badge";
-import { Caption } from "@/components/ui/typography";
+import { RelativeTime } from "@/components/ui/relative-time";
 import type { ReferredSignup, SignupStatus } from "@/lib/referral";
 
 const STATUS_VARIANT: Record<SignupStatus, "warning" | "success" | "secondary"> = {
@@ -14,41 +17,36 @@ const STATUS_VARIANT: Record<SignupStatus, "warning" | "success" | "secondary"> 
   churned: "secondary",
 };
 
-const STATUS_LABEL: Record<SignupStatus, string> = {
-  trial: "Trial",
-  active_customer: "Active customer",
-  churned: "Churned",
-};
-
-const columns: ColumnDef<typeof dataTableFeatures, ReferredSignup>[] = [
-  { accessorKey: "name", header: "Name" },
-  { accessorKey: "email", header: "Email" },
-  {
-    accessorKey: "status",
-    header: "Status",
-    cell: ({ getValue }) => {
-      const status = getValue() as SignupStatus;
-      return <Badge variant={STATUS_VARIANT[status]}>{STATUS_LABEL[status]}</Badge>;
-    },
-  },
-  {
-    accessorKey: "signedUpAt",
-    header: "Signed up",
-    cell: ({ getValue }) => (
-      <Caption>{formatDistanceToNow(new Date(getValue() as string), { addSuffix: true })}</Caption>
-    ),
-  },
-];
-
 export function ReferredSignupsTable({ signups }: { signups: ReferredSignup[] }) {
+  const { t } = useTranslation("referral");
+  const columns: ColumnDef<typeof dataTableFeatures, ReferredSignup>[] = React.useMemo(
+    () => [
+      { accessorKey: "name", header: t("signups.name") },
+      { accessorKey: "email", header: t("signups.email") },
+      {
+        accessorKey: "status",
+        header: t("signups.status"),
+        cell: ({ getValue }) => {
+          const status = getValue() as SignupStatus;
+          return <Badge variant={STATUS_VARIANT[status]}>{t(`signups.statuses.${status}`)}</Badge>;
+        },
+      },
+      {
+        accessorKey: "signedUpAt",
+        header: t("signups.signedUp"),
+        cell: ({ getValue }) => <RelativeTime date={getValue() as string} />,
+      },
+    ],
+    [t],
+  );
   return (
     <DataTable
       columns={columns}
       data={signups}
-      searchPlaceholder="Search signups..."
+      searchPlaceholder={t("signups.search")}
       exportFilename="referral-signups"
-      emptyTitle="No referred signups yet"
-      emptyDescription="People who sign up through your referral link show up here."
+      emptyTitle={t("signups.emptyTitle")}
+      emptyDescription={t("signups.emptyDescription")}
       pageSize={10}
     />
   );

@@ -1,0 +1,142 @@
+{
+  "intro": "A formula is built from metrics of the registry, never from raw columns. Owner and Admin manage every metric; a Manager creates and manages their own; Buyer, Analyst and Viewer see published, active metrics.",
+  "count_one": "{{count}} metric",
+  "count_few": "{{count}} metrics",
+  "count_many": "{{count}} metrics",
+  "count_other": "{{count}} metrics",
+  "new": "New custom metric",
+  "search": "Search metrics…",
+  "emptyTitle": "No custom metrics yet",
+  "emptyDescription": "Build a formula from the registry metrics — division by zero is safe.",
+  "columns": {
+    "name": "Name",
+    "group": "Group",
+    "formula": "Formula",
+    "status": "Status",
+    "active": "Active",
+    "showIn": "Show in",
+    "updated": "Updated"
+  },
+  "statuses": {
+    "draft": "draft",
+    "published": "published"
+  },
+  "active": {
+    "on": "on",
+    "off": "off"
+  },
+  "notShown": "Not shown anywhere",
+  "targets": {
+    "report_builder": "Report builder",
+    "campaigns_table": "Campaigns table",
+    "offers_table": "Offers table",
+    "sources_table": "Traffic sources table"
+  },
+  "formats": {
+    "int": "Number",
+    "currency": "Currency",
+    "percent": "Percent",
+    "ratio": "Ratio"
+  },
+  "form": {
+    "editTitle": "Edit {{name}}",
+    "save": "Save changes",
+    "create": "Create metric",
+    "description": "A formula from the registry metrics. Division is always safe: dividing by zero shows \"—\", never an error.",
+    "namePlaceholder": "Margin per click",
+    "groupPlaceholder": "Profitability",
+    "format": "Format",
+    "metrics": "Metrics",
+    "preview": "Preview (sample data):",
+    "surfaceMissing": "This place does not have all the metrics this formula needs.",
+    "fixFirst": "Fix the formula first.",
+    "draftHint": "Drafts are hidden from reports and pickers until published.",
+    "errors": {
+      "name": "Name must be at least 2 characters",
+      "group": "Pick or type a group",
+      "formula": "Enter a formula"
+    }
+  },
+  "toasts": {
+    "created": "Metric created",
+    "createError": "Couldn't create the metric",
+    "updated": "Metric updated",
+    "updateError": "Couldn't update the metric",
+    "published": "Metric published",
+    "unpublished": "Unpublished — back to draft",
+    "activated": "Metric activated",
+    "deactivated": "Metric deactivated",
+    "duplicated": "Metric duplicated",
+    "duplicateError": "Couldn't duplicate the metric",
+    "deleted": "Metric deleted",
+    "deleteError": "Couldn't delete the metric",
+    "inUse": "Can't delete — the metric is in use",
+    "inUseDescription": "Unpublish it and remove it from every place first, or just deactivate it."
+  },
+  "actions": {
+    "aria": "Actions for {{name}}",
+    "publish": "Publish",
+    "unpublish": "Unpublish",
+    "deactivate": "Deactivate",
+    "activate": "Activate",
+    "deleteTitle": "Delete \"{{name}}\"?",
+    "deleteDescription": "The metric is deleted for good. A published metric or one shown anywhere can't be deleted — unpublish it and clear \"Show in\" first, or deactivate it instead."
+  },
+  "catalogSearch": "Search metrics…",
+  "catalogEmpty": "No metrics match.",
+  "draftOnly": "drafts only",
+  "ltvNotAllowed": "LTV metrics can't be used in custom metric formulas.",
+  "example": "e.g.",
+  "formulaValid": "Formula is valid",
+  "categories": {
+    "traffic": "Traffic / performance",
+    "cpaFunnel": "CPA funnel",
+    "push": "Push",
+    "fraud": "Fraud",
+    "ltv": "LTV"
+  },
+  "catalog": {
+    "cpa_hold": "CPA hold (registrations)",
+    "cpa_accept": "CPA accept (FTDs)",
+    "cpa_redep": "CPA redeposit",
+    "cpa_decline": "CPA decline",
+    "cpa_trash": "CPA trash",
+    "reg_to_ftd_rate": "Reg → FTD rate",
+    "ftd_to_redep_rate": "FTD → redeposit rate",
+    "dep_to_redep": "Deposit → redeposit rate",
+    "total_deposits": "Total deposits",
+    "total_deposit_revenue": "Total deposit revenue",
+    "bots": "Bot clicks",
+    "click_all": "All clicks (incl. bots)",
+    "push_sent": "Push sent",
+    "push_delivered": "Push delivered",
+    "push_opened": "Push opened",
+    "push_ctr": "Push CTR",
+    "ltv_d0": "LTV day 0",
+    "ltv_d1_7": "LTV days 1–7",
+    "ltv_d8_30": "LTV days 8–30",
+    "ltv_d31_90": "LTV days 31–90",
+    "ltv_total": "LTV total",
+    "ltv_per_ftd": "LTV per FTD",
+    "ltv_per_reg": "LTV per registration",
+    "lifetime_days": "Lifetime days"
+  },
+  "formulaErrors": {
+    "unterminatedToken": "A metric token is not closed — missing }",
+    "emptyToken": "Empty metric token {}",
+    "invalidNumber": "Invalid number \"{{value}}\"",
+    "unexpectedChar": "Unexpected character \"{{value}}\"",
+    "expectedClose": "Expected ')'",
+    "expectedOpenAfter": "Expected '(' after {{name}}",
+    "unexpected": "Unexpected \"{{value}}\"",
+    "unknownFunction": "Unknown function \"{{name}}\"",
+    "arity": "{{name}} takes {{arity}} argument(s), got {{got}}",
+    "unexpectedEnd": "The formula ends too early — an operand is missing",
+    "empty": "The formula is empty",
+    "invalid": "Invalid formula",
+    "noMetric": "The formula must use at least one metric",
+    "unknownMetric": "Unknown metric \"{{id}}\"",
+    "notInsertable": "\"{{label}}\" can't be used in custom metric formulas",
+    "mixedSources": "A formula can use one data source only — this one mixes {{sources}}"
+  }
+}

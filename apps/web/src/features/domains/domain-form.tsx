@@ -4,6 +4,8 @@ import Link from "next/link";
 import { Controller, useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
+import { useTranslation } from "react-i18next";
+import type { TFunction } from "i18next";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -23,29 +25,25 @@ import {
 const DNS_PROVIDERS: DnsProvider[] = ["cloudflare", "route53", "unmanaged"];
 const REGISTRARS: Registrar[] = ["namecheap", "godaddy", "cloudflare_registrar", "unmanaged"];
 const STATUS_OPTIONS: DomainStatus[] = ["active", "pending", "error", "expired"];
-const PURPOSE_OPTIONS: { value: DomainPurpose; label: string }[] = [
-  { value: "tracking", label: "Tracking links" },
-  { value: "pwa", label: "PWA install" },
-  { value: "fallback", label: "Fallback/safe" },
-];
+const PURPOSES: DomainPurpose[] = ["tracking", "pwa", "fallback"];
 
-export const domainFormSchema = z.object({
-  domain: z.string().regex(/^([a-z0-9-]+\.)+[a-z]{2,}$/i, "Enter a valid domain, e.g. track.example.com"),
-  purpose: z.array(z.enum(["tracking", "pwa", "fallback"] as [DomainPurpose, ...DomainPurpose[]])).min(1, "Select at least one purpose"),
-  registrar: z.enum(REGISTRARS as [Registrar, ...Registrar[]]),
-  dnsProvider: z.enum(DNS_PROVIDERS as [DnsProvider, ...DnsProvider[]]),
-  status: z.enum(STATUS_OPTIONS as [DomainStatus, ...DomainStatus[]]),
-});
+export function domainFormSchema(t: TFunction<"domains">) {
+  return z.object({
+    domain: z.string().regex(/^([a-z0-9-]+\.)+[a-z]{2,}$/i, t("form.errors.domain")),
+    purpose: z.array(z.enum(PURPOSES as [DomainPurpose, ...DomainPurpose[]])).min(1, t("form.errors.purpose")),
+    registrar: z.enum(REGISTRARS as [Registrar, ...Registrar[]]),
+    dnsProvider: z.enum(DNS_PROVIDERS as [DnsProvider, ...DnsProvider[]]),
+    status: z.enum(STATUS_OPTIONS as [DomainStatus, ...DomainStatus[]]),
+  });
+}
 
-export type DomainFormValues = z.infer<typeof domainFormSchema>;
+export type DomainFormValues = z.infer<ReturnType<typeof domainFormSchema>>;
 
 /** The domain create/edit form — its own page (features/domains/{new-
  * domain-view,domain-detail-view}.tsx) instead of a slide-out Sheet,
  * matching the Offers/Traffic-Sources/Campaigns create/edit pages'
  * layout. Same fields/validation/mutation shape the Sheet version had;
- * only the container changed. Domains' own UI stays plain English (no
- * domains.json exists — a known, separately-scoped gap, see CLAUDE.md),
- * unlike every other converted feature in this batch. */
+ * only the container changed. */
 export function DomainForm({
   title,
   defaultValues,
@@ -61,8 +59,10 @@ export function DomainForm({
    * (Purpose), when the caller lacks settings.write. */
   disabled?: boolean;
 }) {
+  const { t } = useTranslation(["domains", "common"]);
+  const purposeOptions = PURPOSES.map((value) => ({ value, label: t(`purposes.${value}`) }));
   const form = useForm<DomainFormValues>({
-    resolver: zodResolver(domainFormSchema),
+    resolver: zodResolver(domainFormSchema(t)),
     defaultValues: {
       domain: "",
       purpose: ["tracking"],
@@ -85,14 +85,11 @@ export function DomainForm({
       <Card>
         <CardHeader>
           <CardTitle>{title}</CardTitle>
-          <CardDescription>
-            Own-domain parking (§30). SSL issuance and ownership verification are separate actions once the
-            domain exists.
-          </CardDescription>
+          <CardDescription>{t("form.description")}</CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-4">
           <div className="grid gap-1.5">
-            <Label htmlFor="dom-domain">Domain</Label>
+            <Label htmlFor="dom-domain">{t("columns.domain")}</Label>
             <Input
               id="dom-domain"
               placeholder="track.example.com"
@@ -105,14 +102,14 @@ export function DomainForm({
           </div>
 
           <div className="grid gap-1.5">
-            <Label>Purpose</Label>
+            <Label>{t("columns.purpose")}</Label>
             <Controller
               control={control}
               name="purpose"
               render={({ field }) => (
                 <MultiSelect
-                  label="Purpose"
-                  options={PURPOSE_OPTIONS}
+                  label={t("columns.purpose")}
+                  options={purposeOptions}
                   selected={field.value}
                   onChange={(values) => field.onChange(values as DomainPurpose[])}
                   className="w-full"
@@ -125,7 +122,7 @@ export function DomainForm({
 
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="grid gap-1.5">
-              <Label htmlFor="dom-registrar">Registrar</Label>
+              <Label htmlFor="dom-registrar">{t("form.registrar")}</Label>
               <Controller
                 control={control}
                 name="registrar"
@@ -137,7 +134,7 @@ export function DomainForm({
                     <SelectContent>
                       {REGISTRARS.map((r) => (
                         <SelectItem key={r} value={r}>
-                          {REGISTRAR_LABELS[r]}
+                          {r === "unmanaged" ? t("form.unmanaged") : REGISTRAR_LABELS[r]}
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -147,7 +144,7 @@ export function DomainForm({
             </div>
 
             <div className="grid gap-1.5">
-              <Label htmlFor="dom-dns">DNS provider</Label>
+              <Label htmlFor="dom-dns">{t("form.dnsProvider")}</Label>
               <Controller
                 control={control}
                 name="dnsProvider"
@@ -159,7 +156,7 @@ export function DomainForm({
                     <SelectContent>
                       {DNS_PROVIDERS.map((d) => (
                         <SelectItem key={d} value={d}>
-                          {DNS_PROVIDER_LABELS[d]}
+                          {d === "unmanaged" ? t("form.unmanaged") : DNS_PROVIDER_LABELS[d]}
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -170,7 +167,7 @@ export function DomainForm({
           </div>
 
           <div className="grid gap-1.5 sm:w-1/2">
-            <Label htmlFor="dom-status">Status</Label>
+            <Label htmlFor="dom-status">{t("columns.status")}</Label>
             <Controller
               control={control}
               name="status"
@@ -182,7 +179,7 @@ export function DomainForm({
                   <SelectContent>
                     {STATUS_OPTIONS.map((s) => (
                       <SelectItem key={s} value={s}>
-                        {s}
+                        {t(`statuses.${s}`)}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -195,7 +192,7 @@ export function DomainForm({
 
       <div className="flex justify-end gap-2">
         <Button type="button" variant="outline" asChild>
-          <Link href="/domains">Cancel</Link>
+          <Link href="/domains">{t("common:actions.cancel")}</Link>
         </Button>
         <Button type="submit" disabled={disabled || isSubmitting}>
           {submitLabel}

@@ -3,7 +3,7 @@
 import * as React from "react";
 import Link from "next/link";
 import { toast } from "sonner";
-import { formatDistanceToNow } from "date-fns";
+import { useTranslation } from "react-i18next";
 import { ArrowRightIcon } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
@@ -20,11 +20,11 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Caption } from "@/components/ui/typography";
+import { RelativeTime } from "@/components/ui/relative-time";
 import { LoadingState } from "@/components/ui/loading-state";
 import { ErrorState } from "@/components/ui/error-state";
 import { useConnectIntegration, useDisconnectIntegration, useIntegrations, useVerifyIntegration } from "@/hooks/use-integrations";
 import {
-  AD_PLATFORM_DESCRIPTIONS,
   AD_PLATFORM_LABELS,
   CREDENTIAL_PROVIDERS,
   type CredentialProvider,
@@ -40,7 +40,9 @@ const STATUS_VARIANT: Record<IntegrationStatus, "success" | "outline" | "danger"
 const AD_PLATFORM_ORDER = ["facebook_ads", "tiktok_ads", "google_ads"];
 
 export function IntegrationsPanel() {
+  const { t } = useTranslation(["settings", "common"]);
   const integrationsQuery = useIntegrations();
+  const labelOf = (provider: CredentialProvider | null) => CREDENTIAL_PROVIDERS.find((p) => p.provider === provider)?.label ?? "";
   const connectMutation = useConnectIntegration();
   const verifyMutation = useVerifyIntegration();
   const disconnectMutation = useDisconnectIntegration();
@@ -63,10 +65,10 @@ export function IntegrationsPanel() {
       { provider: connectTarget, fields },
       {
         onSuccess: () => {
-          toast(`${CREDENTIAL_PROVIDERS.find((p) => p.provider === connectTarget)?.label} connected`);
+          toast(t("integrations.connected", { name: labelOf(connectTarget) }));
           setConnectTarget(null);
         },
-        onError: (err) => toast.error("Couldn't connect", { description: err.message }),
+        onError: (err) => toast.error(t("integrations.connectError"), { description: err.message }),
       },
     );
   }
@@ -75,9 +77,9 @@ export function IntegrationsPanel() {
     verifyMutation.mutate(provider, {
       onSuccess: (result) =>
         result.status === "connected"
-          ? toast("Connection verified")
-          : toast.error("Verification failed", { description: result.lastError ?? undefined }),
-      onError: (err) => toast.error("Couldn't verify connection", { description: err.message }),
+          ? toast(t("integrations.verified"))
+          : toast.error(t("integrations.verifyFailed"), { description: result.lastError ?? undefined }),
+      onError: (err) => toast.error(t("integrations.verifyError"), { description: err.message }),
     });
   }
 
@@ -85,19 +87,19 @@ export function IntegrationsPanel() {
     if (!disconnectTarget) return;
     const target = disconnectTarget;
     disconnectMutation.mutate(target, {
-      onSuccess: () => toast(`${CREDENTIAL_PROVIDERS.find((p) => p.provider === target)?.label} disconnected`),
-      onError: (err) => toast.error("Couldn't disconnect", { description: err.message }),
+      onSuccess: () => toast(t("integrations.disconnected", { name: labelOf(target) })),
+      onError: (err) => toast.error(t("integrations.disconnectError"), { description: err.message }),
     });
     setDisconnectTarget(null);
   }
 
   if (integrationsQuery.isPending) {
-    return <LoadingState label="Loading integrations…" />;
+    return <LoadingState label={t("integrations.loading")} />;
   }
   if (integrationsQuery.isError) {
     return (
       <ErrorState
-        title="Couldn't load integrations"
+        title={t("integrations.loadError")}
         description={integrationsQuery.error.message}
         onRetry={() => integrationsQuery.refetch()}
       />
@@ -117,22 +119,22 @@ export function IntegrationsPanel() {
           <Card key={provider}>
             <CardHeader>
               <CardTitle className="text-sm">{AD_PLATFORM_LABELS[provider]}</CardTitle>
-              <CardDescription>{AD_PLATFORM_DESCRIPTIONS[provider]}</CardDescription>
+              <CardDescription>{t("integrations.adPlatformDescription")}</CardDescription>
               <CardAction>
                 <Badge variant={connectedCount > 0 ? "success" : "outline"}>
-                  {connectedCount > 0 ? "connected" : "not connected"}
+                  {connectedCount > 0 ? t("integrations.status.connected") : t("integrations.status.not_connected")}
                 </Badge>
               </CardAction>
             </CardHeader>
             <CardContent className="flex items-center justify-between">
               <Caption>
                 {totalCount === 0
-                  ? "Not configured on any traffic source yet"
-                  : `Connected on ${connectedCount} of ${totalCount} traffic source${totalCount === 1 ? "" : "s"}`}
+                  ? t("integrations.noSources")
+                  : t("integrations.sourcesConnected", { connected: connectedCount, count: totalCount })}
               </Caption>
               <Button asChild size="sm" variant="outline">
                 <Link href="/traffic-sources">
-                  Manage <ArrowRightIcon className="size-3.5" />
+                  {t("integrations.manage")} <ArrowRightIcon className="size-3.5" />
                 </Link>
               </Button>
             </CardContent>
@@ -148,18 +150,20 @@ export function IntegrationsPanel() {
           <Card key={p.provider}>
             <CardHeader>
               <CardTitle className="text-sm">{p.label}</CardTitle>
-              <CardDescription>{p.description}</CardDescription>
+              <CardDescription>{t(`integrations.providers.${p.provider}`)}</CardDescription>
               <CardAction>
-                <Badge variant={STATUS_VARIANT[status]}>{status.replace("_", " ")}</Badge>
+                <Badge variant={STATUS_VARIANT[status]}>{t(`integrations.status.${status}`)}</Badge>
               </CardAction>
             </CardHeader>
             <CardContent className="flex flex-col gap-2">
               <div className="flex items-center justify-between">
-                <Caption>
-                  {integration?.lastVerifiedAt
-                    ? `Verified ${formatDistanceToNow(new Date(integration.lastVerifiedAt), { addSuffix: true })}`
-                    : "Not connected"}
-                </Caption>
+                {integration?.lastVerifiedAt ? (
+                  <Caption>
+                    {t("integrations.verifiedAt")} <RelativeTime date={integration.lastVerifiedAt} className="inline" />
+                  </Caption>
+                ) : (
+                  <Caption>{t("integrations.status.not_connected")}</Caption>
+                )}
                 <div className="flex gap-2">
                   {connected && (
                     <Button
@@ -168,7 +172,7 @@ export function IntegrationsPanel() {
                       onClick={() => handleVerify(p.provider)}
                       disabled={verifyMutation.isPending}
                     >
-                      Verify
+                      {t("integrations.verify")}
                     </Button>
                   )}
                   <Button
@@ -176,7 +180,7 @@ export function IntegrationsPanel() {
                     variant={connected ? "outline" : "default"}
                     onClick={() => (connected ? setDisconnectTarget(p.provider) : openConnect(p.provider))}
                   >
-                    {connected ? "Disconnect" : "Connect"}
+                    {connected ? t("integrations.disconnect") : t("integrations.connect")}
                   </Button>
                 </div>
               </div>
@@ -191,13 +195,13 @@ export function IntegrationsPanel() {
       <Dialog open={!!connectTarget} onOpenChange={(open) => !open && setConnectTarget(null)}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Connect {meta?.label}</DialogTitle>
-            <DialogDescription>Credentials are encrypted at rest and never shown again after saving.</DialogDescription>
+            <DialogTitle>{t("integrations.connectTitle", { name: meta?.label })}</DialogTitle>
+            <DialogDescription>{t("integrations.connectDescription")}</DialogDescription>
           </DialogHeader>
           <form onSubmit={submitConnect} className="flex flex-col gap-4">
             {meta?.fields.map((field) => (
               <div key={field.name} className="grid gap-1.5">
-                <Label htmlFor={`integration-${field.name}`}>{field.label}</Label>
+                <Label htmlFor={`integration-${field.name}`}>{t(`integrations.fields.${field.name}`)}</Label>
                 <Input
                   id={`integration-${field.name}`}
                   type={field.type}
@@ -210,10 +214,10 @@ export function IntegrationsPanel() {
             ))}
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => setConnectTarget(null)}>
-                Cancel
+                {t("common:actions.cancel")}
               </Button>
               <Button type="submit" disabled={connectMutation.isPending}>
-                Connect
+                {t("integrations.connect")}
               </Button>
             </DialogFooter>
           </form>
@@ -223,17 +227,15 @@ export function IntegrationsPanel() {
       <Dialog open={!!disconnectTarget} onOpenChange={(open) => !open && setDisconnectTarget(null)}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>
-              Disconnect {CREDENTIAL_PROVIDERS.find((p) => p.provider === disconnectTarget)?.label}?
-            </DialogTitle>
-            <DialogDescription>The stored credential is deleted. You can reconnect at any time.</DialogDescription>
+            <DialogTitle>{t("integrations.disconnectTitle", { name: labelOf(disconnectTarget) })}</DialogTitle>
+            <DialogDescription>{t("integrations.disconnectDescription")}</DialogDescription>
           </DialogHeader>
           <DialogFooter>
             <Button variant="outline" onClick={() => setDisconnectTarget(null)}>
-              Cancel
+              {t("common:actions.cancel")}
             </Button>
             <Button variant="destructive" onClick={handleDisconnect}>
-              Disconnect
+              {t("integrations.disconnect")}
             </Button>
           </DialogFooter>
         </DialogContent>

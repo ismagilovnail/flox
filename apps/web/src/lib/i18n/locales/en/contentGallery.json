@@ -1,0 +1,103 @@
+{
+  "title": "Content gallery",
+  "loading": "Loading files…",
+  "loadError": "Couldn't load files",
+  "emptyTitle": "No files here",
+  "emptyDescription": "Upload an image or pick another folder.",
+  "tabs": {
+    "active": "Active",
+    "archived": "Archived"
+  },
+  "uploadedBy": "Uploaded by",
+  "everyone": "Everyone",
+  "picker": {
+    "title": "Choose an image",
+    "description": "Pick a file from your content gallery or upload a new one.",
+    "use": "Use this image"
+  },
+  "crop": {
+    "title": "Crop image",
+    "description": "Required aspect ratio: {{aspect}}. Drag the selection to move it, or a handle to resize it.",
+    "skip": "Skip cropping",
+    "apply": "Apply",
+    "applying": "Applying…",
+    "saveError": "Couldn't save the cropped image"
+  },
+  "upload": {
+    "label": "Upload",
+    "pending": "Uploading…",
+    "error": "Upload failed"
+  },
+  "card": {
+    "select": "Select",
+    "deselect": "Deselect",
+    "actions": "File actions",
+    "moveTo": "Move to"
+  },
+  "actions": {
+    "archive": "Archive",
+    "restore": "Restore",
+    "deletePermanently": "Delete permanently"
+  },
+  "folders": {
+    "all": "All files",
+    "unfiled": "Unfiled",
+    "new": "New folder",
+    "namePlaceholder": "Folder name",
+    "save": "Save folder",
+    "saveName": "Save name",
+    "renameAria": "Rename {{name}}",
+    "deleteAria": "Delete {{name}}",
+    "createError": "Couldn't create the folder",
+    "renameError": "Couldn't rename the folder",
+    "deleted": "Folder deleted",
+    "deletedDescription": "Its files were moved to Unfiled, not deleted.",
+    "deleteError": "Couldn't delete the folder",
+    "deleteTitle": "Delete \"{{name}}\"?",
+    "deleteDescription": "Its files move to Unfiled — they are not deleted.",
+    "deleteConfirm": "Delete folder"
+  },
+  "bulk": {
+    "moveTo": "Move to…",
+    "deselect": "Deselect",
+    "error": {
+      "archived": "Couldn't archive the files",
+      "restored": "Couldn't restore the files",
+      "moved": "Couldn't move the files",
+      "deleted": "Couldn't delete the files"
+    },
+    "selected_one": "{{count}} selected",
+    "selected_few": "{{count}} selected",
+    "selected_many": "{{count}} selected",
+    "selected_other": "{{count}} selected",
+    "done": {
+      "archived_one": "{{count}} file archived",
+      "archived_few": "{{count}} files archived",
+      "archived_many": "{{count}} files archived",
+      "archived_other": "{{count}} files archived",
+      "restored_one": "{{count}} file restored",
+      "restored_few": "{{count}} files restored",
+      "restored_many": "{{count}} files restored",
+      "restored_other": "{{count}} files restored",
+      "moved_one": "{{count}} file moved",
+      "moved_few": "{{count}} files moved",
+      "moved_many": "{{count}} files moved",
+      "moved_other": "{{count}} files moved",
+      "deleted_one": "{{count}} file permanently deleted",
+      "deleted_few": "{{count}} files permanently deleted",
+      "deleted_many": "{{count}} files permanently deleted",
+      "deleted_other": "{{count}} files permanently deleted"
+    }
+  },
+  "deleteDialog": {
+    "description": "This can't be undone — unlike the archive, a permanently deleted file can't be restored.",
+    "title_one": "Permanently delete {{count}} file?",
+    "title_few": "Permanently delete {{count}} files?",
+    "title_many": "Permanently delete {{count}} files?",
+    "title_other": "Permanently delete {{count}} files?"
+  },
+  "pagination_one": "Page {{page}} of {{pages}} · {{count}} file",
+  "pagination_few": "Page {{page}} of {{pages}} · {{count}} files",
+  "pagination_many": "Page {{page}} of {{pages}} · {{count}} files",
+  "pagination_other": "Page {{page}} of {{pages}} · {{count}} files"
+}

@@ -2,6 +2,7 @@
 
 import { useTheme } from "next-themes";
 import { MoonIcon, SunIcon } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { useSyncExternalStore } from "react";
 
 import { IconButton } from "@/components/ui/icon-button";
@@ -18,18 +19,19 @@ function useMounted() {
 }
 
 export function ThemeToggle() {
+  const { t } = useTranslation("common");
   const { resolvedTheme, setTheme } = useTheme();
   const mounted = useMounted();
 
   if (!mounted) {
-    return <IconButton aria-label="Toggle theme" disabled />;
+    return <IconButton aria-label={t("a11y.toggleTheme")} disabled />;
   }
 
   const isDark = resolvedTheme === "dark";
 
   return (
     <IconButton
-      aria-label={isDark ? "Switch to light theme" : "Switch to dark theme"}
+      aria-label={isDark ? t("a11y.lightTheme") : t("a11y.darkTheme")}
       onClick={() => setTheme(isDark ? "light" : "dark")}
     >
       {isDark ? (

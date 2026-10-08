@@ -2,11 +2,13 @@
 
 import * as React from "react";
 import { CheckCircle2Icon, XCircleIcon } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Caption, Mono } from "@/components/ui/typography";
 import { cn } from "@/lib/utils";
+import { metricLabel } from "@/features/custom-metrics/metric-label";
 import { FUNCTION_SIGNATURES, functionAtCursor, type FormulaValidation } from "@/lib/formula-engine";
 
 export type FormulaInputHandle = { insertAtCursor: (text: string, cursorOffsetFromEnd?: number) => void };
@@ -29,6 +31,7 @@ export const FormulaInput = React.forwardRef<
     validation: FormulaValidation;
   }
 >(function FormulaInput({ value, onChange, validation }, ref) {
+  const { t } = useTranslation("customMetrics");
   const textareaRef = React.useRef<HTMLTextAreaElement>(null);
   const [cursorPos, setCursorPos] = React.useState(0);
 
@@ -98,14 +101,22 @@ export const FormulaInput = React.forwardRef<
 
       {activeFunctionSpec && (
         <Caption className="rounded-md bg-muted px-2 py-1">
-          <Mono className="text-xs">{activeFunctionSpec.hint}</Mono> — e.g.{" "}
+          <Mono className="text-xs">{activeFunctionSpec.hint}</Mono> — {t("example")}{" "}
           <Mono className="text-xs">{activeFunctionSpec.example}</Mono>
         </Caption>
       )}
 
       <div className={cn("flex items-center gap-1.5 text-xs", validation.valid ? "text-success" : "text-danger")}>
         {validation.valid ? <CheckCircle2Icon className="size-3.5" /> : <XCircleIcon className="size-3.5" />}
-        {validation.valid ? "Formula is valid" : validation.error}
+        {validation.valid
+          ? t("formulaValid")
+          : t(`formulaErrors.${validation.code}`, {
+              ...validation.params,
+              // the metric's name in the interface language, not the registry's English
+              ...(validation.code === "notInsertable"
+                ? { label: metricLabel(t, { id: String(validation.params.id), label: String(validation.params.label) }) }
+                : {}),
+            })}
       </div>
     </div>
   );

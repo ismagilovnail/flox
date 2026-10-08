@@ -1,12 +1,14 @@
 import type { ColumnDef } from "@tanstack/react-table";
-import { formatDistanceToNow } from "date-fns";
+import type { TFunction } from "i18next";
 
 import { dataTableFeatures } from "@/components/ui/data-table";
 import { Badge } from "@/components/ui/badge";
 import { Caption, Mono } from "@/components/ui/typography";
+import { RelativeTime } from "@/components/ui/relative-time";
 import { SHOW_IN_TARGETS } from "@/lib/custom-metrics-registry";
 import type { CustomMetric, CustomMetricStatus } from "@/lib/custom-metrics";
 import { CustomMetricRowActions } from "@/features/custom-metrics/custom-metric-row-actions";
+import { targetLabel } from "@/features/custom-metrics/metric-label";
 
 const STATUS_VARIANT: Record<CustomMetricStatus, "success" | "outline"> = {
   published: "success",
@@ -16,11 +18,12 @@ const STATUS_VARIANT: Record<CustomMetricStatus, "success" | "outline"> = {
 export function customMetricColumns(
   onEdit: (metric: CustomMetric) => void,
   canManage: (metric: CustomMetric) => boolean,
+  t: TFunction<"customMetrics">,
 ): ColumnDef<typeof dataTableFeatures, CustomMetric>[] {
   return [
     {
       accessorKey: "name",
-      header: "Name",
+      header: t("columns.name"),
       cell: ({ row }) =>
         canManage(row.original) ? (
           <button
@@ -34,36 +37,38 @@ export function customMetricColumns(
           <span className="font-medium text-foreground">{row.original.name}</span>
         ),
     },
-    { accessorKey: "group", header: "Group" },
+    { accessorKey: "group", header: t("columns.group") },
     {
       accessorKey: "formula",
-      header: "Formula",
+      header: t("columns.formula"),
       cell: ({ getValue }) => <Mono className="block max-w-xs truncate text-xs">{getValue() as string}</Mono>,
     },
     {
       accessorKey: "status",
-      header: "Status",
+      header: t("columns.status"),
       cell: ({ getValue }) => {
         const status = getValue() as CustomMetricStatus;
-        return <Badge variant={STATUS_VARIANT[status]}>{status}</Badge>;
+        return <Badge variant={STATUS_VARIANT[status]}>{t(`statuses.${status}`)}</Badge>;
       },
     },
     {
       accessorKey: "active",
-      header: "Active",
-      cell: ({ getValue }) => <Badge variant={getValue() ? "success" : "secondary"}>{getValue() ? "on" : "off"}</Badge>,
+      header: t("columns.active"),
+      cell: ({ getValue }) => (
+        <Badge variant={getValue() ? "success" : "secondary"}>{getValue() ? t("active.on") : t("active.off")}</Badge>
+      ),
     },
     {
       id: "targets",
-      header: "Show in",
+      header: t("columns.showIn"),
       cell: ({ row }) => (
         <div className="flex flex-wrap gap-1">
           {row.original.targets.length === 0 ? (
-            <Caption className="text-muted-foreground">Not exposed</Caption>
+            <Caption className="text-muted-foreground">{t("notShown")}</Caption>
           ) : (
-            row.original.targets.map((t) => (
-              <Badge key={t} variant="outline">
-                {SHOW_IN_TARGETS.find((s) => s.id === t)?.label ?? t}
+            row.original.targets.map((target) => (
+              <Badge key={target} variant="outline">
+                {SHOW_IN_TARGETS.some((s) => s.id === target) ? targetLabel(t, target) : target}
               </Badge>
             ))
           )}
@@ -72,10 +77,8 @@ export function customMetricColumns(
     },
     {
       accessorKey: "updatedAt",
-      header: "Updated",
-      cell: ({ getValue }) => (
-        <Caption>{formatDistanceToNow(new Date(getValue() as string), { addSuffix: true })}</Caption>
-      ),
+      header: t("columns.updated"),
+      cell: ({ getValue }) => <RelativeTime date={getValue() as string} />,
     },
     {
       id: "actions",

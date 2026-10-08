@@ -3,6 +3,7 @@
 import * as React from "react";
 import { toast } from "sonner";
 import { BanknoteIcon, CheckIcon, XIcon } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
 import { Button } from "@/components/ui/button";
 import { IconButton } from "@/components/ui/icon-button";
@@ -20,6 +21,7 @@ import { useApprovePayout, useMarkPayoutPaid, useRejectPayout } from "@/hooks/us
 import type { PayoutRequest } from "@/lib/referral";
 
 export function PayoutRowActions({ payout }: { payout: PayoutRequest }) {
+  const { t } = useTranslation(["referral", "common"]);
   const approvePayout = useApprovePayout();
   const rejectPayout = useRejectPayout();
   const markPayoutPaid = useMarkPayoutPaid();
@@ -29,15 +31,15 @@ export function PayoutRowActions({ payout }: { payout: PayoutRequest }) {
 
   function approve() {
     approvePayout.mutate(payout.id, {
-      onSuccess: () => toast("Payout approved"),
-      onError: (err) => toast.error("Couldn't approve payout", { description: err.message }),
+      onSuccess: () => toast(t("payouts.approved")),
+      onError: (err) => toast.error(t("payouts.approveError"), { description: err.message }),
     });
   }
 
   function markPaid() {
     markPayoutPaid.mutate(payout.id, {
-      onSuccess: () => toast("Payout marked as paid"),
-      onError: (err) => toast.error("Couldn't mark payout as paid", { description: err.message }),
+      onSuccess: () => toast(t("payouts.markedPaid")),
+      onError: (err) => toast.error(t("payouts.markPaidError"), { description: err.message }),
     });
   }
 
@@ -48,9 +50,9 @@ export function PayoutRowActions({ payout }: { payout: PayoutRequest }) {
         onSuccess: () => {
           setRejecting(false);
           setNote("");
-          toast("Payout rejected");
+          toast(t("payouts.rejected"));
         },
-        onError: (err) => toast.error("Couldn't reject payout", { description: err.message }),
+        onError: (err) => toast.error(t("payouts.rejectError"), { description: err.message }),
       },
     );
   }
@@ -60,9 +62,9 @@ export function PayoutRowActions({ payout }: { payout: PayoutRequest }) {
       <>
         <div className="flex justify-end gap-1">
           <Button size="sm" variant="outline" onClick={approve}>
-            <CheckIcon className="size-3.5" /> Approve
+            <CheckIcon className="size-3.5" /> {t("payouts.approve")}
           </Button>
-          <IconButton aria-label="Reject payout" size="icon-sm" onClick={() => setRejecting(true)}>
+          <IconButton aria-label={t("payouts.rejectAria")} size="icon-sm" onClick={() => setRejecting(true)}>
             <XIcon className="size-3.5" />
           </IconButton>
         </div>
@@ -70,19 +72,19 @@ export function PayoutRowActions({ payout }: { payout: PayoutRequest }) {
         <Dialog open={rejecting} onOpenChange={setRejecting}>
           <DialogContent>
             <DialogHeader>
-              <DialogTitle>Reject payout of {payout.amount.toFixed(2)} USD?</DialogTitle>
-              <DialogDescription>The requester can submit a new request once the balance allows it.</DialogDescription>
+              <DialogTitle>{t("payouts.rejectTitle", { amount: payout.amount.toFixed(2) })}</DialogTitle>
+              <DialogDescription>{t("payouts.rejectDescription")}</DialogDescription>
             </DialogHeader>
             <div className="grid gap-1.5">
-              <Label htmlFor="reject-note">Reason</Label>
-              <Textarea id="reject-note" value={note} onChange={(e) => setNote(e.target.value)} placeholder="Why?" />
+              <Label htmlFor="reject-note">{t("payouts.reason")}</Label>
+              <Textarea id="reject-note" value={note} onChange={(e) => setNote(e.target.value)} placeholder={t("payouts.reasonPlaceholder")} />
             </div>
             <DialogFooter>
               <Button variant="outline" onClick={() => setRejecting(false)}>
-                Cancel
+                {t("common:actions.cancel")}
               </Button>
               <Button variant="destructive" onClick={submitReject} disabled={!note.trim()}>
-                Reject
+                {t("payouts.reject")}
               </Button>
             </DialogFooter>
           </DialogContent>
@@ -95,7 +97,7 @@ export function PayoutRowActions({ payout }: { payout: PayoutRequest }) {
     return (
       <div className="flex justify-end">
         <Button size="sm" variant="outline" onClick={markPaid}>
-          <BanknoteIcon className="size-3.5" /> Mark as paid
+          <BanknoteIcon className="size-3.5" /> {t("payouts.markPaid")}
         </Button>
       </div>
     );

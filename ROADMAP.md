@@ -122,6 +122,7 @@ session.
 | HTTPS for tracking domains: Caddy on-demand TLS, worker SSL check, https links (audit #4, `docs/domains-tracking-links.md`) | done |
 | LTV / Cohorts screen on the existing engine; Push and Reports removed from the menu until they exist (audit #5) | done |
 | Overview: Top Offers card; the KPI comparison names the previous period it is against (audit #11) | done |
+| No phase/spec references in interface texts (audit #6); settings, team, domains, referral, tags, custom metrics, content gallery translated — the whole app is EN/RU (audit #7) | done |
 | Alerts: spend over, ROI below, offer capped / paused, SSL expiring → the bell and Slack; rules under Settings → Alerts (audit #10, `docs/alerts.md`). Campaign/source reports keep rows that have spend but no events | done |
 
 ## Known open gaps
@@ -135,7 +136,6 @@ scoped phase; none blocks anything that ships today.
 | Brave is indistinguishable from Chrome by User-Agent (audit #13) | platform limit, not fixable |
 | `cloudflare_registrar` has no adapter, though Cloudflare works as a DNS provider | `apps/internal/domain/model.go` |
 | SMS/email 2FA as an alternative delivery channel (TOTP only today) | `apps/internal/totp` |
-| Seven feature areas are English-only in an EN/RU app | `content-gallery`, `custom-metrics`, `domains`, `referral`, `settings`, `tags`, `team` |
 | Video upload/transcoding in Content Gallery (images only today) | needs a real ffmpeg/worker pipeline |
 | Flows have no top-level list view, so no "View statistics" drill-in row | flows live nested inside a campaign's edit page |
 | Postlanding stage serving + `postlanding` report dimension | the tracker doesn't serve postlandings yet (no POSTLANDING_VIEW is emitted) — next; then follow `pwa`'s pattern (`docs/pwa-serving.md`, `chstore/schema/010`) |

@@ -1,0 +1,105 @@
+{
+  "list": {
+    "title": "Domains",
+    "new": "New domain",
+    "loading": "Loading domains…",
+    "loadError": "Couldn't load domains",
+    "search": "Search domains…",
+    "emptyTitle": "No domains yet",
+    "emptyDescription": "Add a domain for tracking links, PWA installs or fallback destinations."
+  },
+  "columns": {
+    "domain": "Domain",
+    "purpose": "Purpose",
+    "status": "Status",
+    "expires": "Expires"
+  },
+  "purposes": {
+    "tracking": "Tracking links",
+    "pwa": "PWA install",
+    "fallback": "Fallback"
+  },
+  "statuses": {
+    "active": "active",
+    "pending": "pending",
+    "error": "error",
+    "expired": "expired"
+  },
+  "ssl": {
+    "statuses": {
+      "issued": "issued",
+      "pending": "pending",
+      "error": "error",
+      "none": "none"
+    },
+    "hints": {
+      "issued": "Valid certificate",
+      "unchecked": "Not checked yet",
+      "pending": "Waiting for the certificate to be issued",
+      "none": "No HTTPS on this domain"
+    },
+    "until": "until {{date}}",
+    "checked": "checked"
+  },
+  "form": {
+    "newTitle": "New domain",
+    "editTitle": "Edit {{domain}}",
+    "description": "A domain of your own for tracking links, PWAs or fallbacks. After it is added FLOX checks its SSL certificate on its own; registrar and DNS actions are below on the domain's page.",
+    "registrar": "Registrar",
+    "dnsProvider": "DNS provider",
+    "unmanaged": "Not managed by FLOX",
+    "add": "Add domain",
+    "save": "Save changes",
+    "added": "Domain added",
+    "addError": "Couldn't add the domain",
+    "updated": "Domain updated",
+    "updateError": "Couldn't update the domain",
+    "loading": "Loading domain…",
+    "loadError": "Couldn't load the domain",
+    "errors": {
+      "domain": "Enter a valid domain, e.g. track.example.com",
+      "purpose": "Select at least one purpose"
+    }
+  },
+  "actions": {
+    "remove": "Remove",
+    "removed": "Domain removed",
+    "removeError": "Couldn't remove the domain",
+    "removeTitle": "Remove \"{{domain}}\"?",
+    "removeDescription": "Tracking links on this domain are removed with it, and campaigns using them stop resolving. This cannot be undone."
+  },
+  "automation": {
+    "title": "Registrar & DNS",
+    "description": "Checks and actions through the Namecheap (registrar) and Cloudflare (DNS) accounts connected under Settings → Integrations. Other registrars and DNS providers are not managed by FLOX.",
+    "lastVerified": "Last verified",
+    "never": "Never",
+    "verify": "Verify",
+    "verifying": "Verifying…",
+    "checkSsl": "Check SSL",
+    "checking": "Checking…",
+    "renew": "Renew…",
+    "syncDns": "Sync DNS record",
+    "noPermission": "You don't have permission to do this",
+    "needsNamecheap": "The registrar must be Namecheap",
+    "needsCloudflare": "The DNS provider must be Cloudflare",
+    "verified": "Verified",
+    "verifiedDescription": "Expiry and SSL status refreshed from the provider.",
+    "verifyError": "Couldn't verify",
+    "httpsWorks": "HTTPS works",
+    "httpsWorksDescription": "Tracking links on this domain now use https.",
+    "sslError": "Couldn't check SSL",
+    "renewed": "Domain renewed",
+    "newExpiry": "New expiry: {{date}}",
+    "renewError": "Renewal failed",
+    "synced": "DNS record updated",
+    "syncedDescription": "A CNAME now points this domain at FLOX.",
+    "syncError": "Couldn't update the DNS record",
+    "renewTitle": "Renew {{domain}}?",
+    "renewDescription": "FLOX renews the domain through your connected Namecheap account, which is charged for the selected number of years. This cannot be undone.",
+    "years": "Years",
+    "renewConfirm": "Renew and charge my account",
+    "syncTitle": "Update the DNS record of {{domain}}?",
+    "syncDescription": "FLOX creates or updates a proxied CNAME record in your connected Cloudflare account, pointing this domain at FLOX. Whatever the domain serves now will be replaced by FLOX.",
+    "syncConfirm": "Update DNS record"
+  }
+}

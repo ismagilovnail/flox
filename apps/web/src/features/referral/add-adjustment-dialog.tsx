@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import { toast } from "sonner";
+import { useTranslation } from "react-i18next";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -24,6 +25,7 @@ export function AddAdjustmentDialog({
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
+  const { t } = useTranslation(["referral", "common"]);
   const addTransaction = useAddTransaction();
   const [amount, setAmount] = React.useState("");
   const [description, setDescription] = React.useState("");
@@ -37,10 +39,10 @@ export function AddAdjustmentDialog({
       { type: "adjustment", amount: parsed, description },
       {
         onSuccess: () => {
-          toast("Adjustment recorded", { description });
+          toast(t("adjustment.recorded"), { description });
           onOpenChange(false);
         },
-        onError: (err) => toast.error("Couldn't record adjustment", { description: err.message }),
+        onError: (err) => toast.error(t("adjustment.error"), { description: err.message }),
       },
     );
   }
@@ -49,31 +51,28 @@ export function AddAdjustmentDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Add a manual adjustment</DialogTitle>
-          <DialogDescription>
-            Positive credits or negative corrections to the balance — every adjustment is a permanent, reasoned
-            ledger entry (§54), never a silent edit.
-          </DialogDescription>
+          <DialogTitle>{t("adjustment.title")}</DialogTitle>
+          <DialogDescription>{t("adjustment.description")}</DialogDescription>
         </DialogHeader>
         <div className="grid gap-1.5">
-          <Label htmlFor="adj-amount">Amount (USD, negative for a correction)</Label>
+          <Label htmlFor="adj-amount">{t("adjustment.amount")}</Label>
           <Input id="adj-amount" type="number" step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="25.00" />
         </div>
         <div className="grid gap-1.5">
-          <Label htmlFor="adj-desc">Reason</Label>
+          <Label htmlFor="adj-desc">{t("adjustment.reason")}</Label>
           <Textarea
             id="adj-desc"
             value={description}
             onChange={(e) => setDescription(e.target.value)}
-            placeholder="Why is this adjustment being made?"
+            placeholder={t("adjustment.reasonPlaceholder")}
           />
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>
-            Cancel
+            {t("common:actions.cancel")}
           </Button>
           <Button onClick={submit} disabled={!isValid || addTransaction.isPending}>
-            Add adjustment
+            {t("adjustment.add")}
           </Button>
         </DialogFooter>
       </DialogContent>

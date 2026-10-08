@@ -4,6 +4,7 @@ import * as React from "react";
 import Link from "next/link";
 import { toast } from "sonner";
 import { PencilIcon, Trash2Icon } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
 import { IconButton } from "@/components/ui/icon-button";
 import { Button } from "@/components/ui/button";
@@ -21,6 +22,7 @@ import { useDeleteDomain } from "@/hooks/use-domains";
 import type { Domain } from "@/lib/api/domains";
 
 export function DomainRowActions({ domain }: { domain: Domain }) {
+  const { t } = useTranslation(["domains", "common"]);
   const canWrite = usePermission("settings.write");
   const deleteDomain = useDeleteDomain();
   const [confirmRemove, setConfirmRemove] = React.useState(false);
@@ -29,11 +31,11 @@ export function DomainRowActions({ domain }: { domain: Domain }) {
     deleteDomain.mutate(domain.id, {
       onSuccess: () => {
         setConfirmRemove(false);
-        toast("Domain removed", { description: domain.domain });
+        toast(t("actions.removed"), { description: domain.domain });
       },
       onError: (err) => {
         setConfirmRemove(false);
-        toast.error("Couldn't remove domain", { description: err.message });
+        toast.error(t("actions.removeError"), { description: err.message });
       },
     });
   }
@@ -43,23 +45,23 @@ export function DomainRowActions({ domain }: { domain: Domain }) {
       <div className="flex items-center justify-end gap-1">
         <Tooltip>
           <TooltipTrigger asChild>
-            <IconButton aria-label="Edit" size="icon-sm" asChild>
+            <IconButton aria-label={t("common:actions.edit")} size="icon-sm" asChild>
               <Link href={`/domains/${domain.id}`}>
                 <PencilIcon className="size-3.5" />
               </Link>
             </IconButton>
           </TooltipTrigger>
-          <TooltipContent>Edit</TooltipContent>
+          <TooltipContent>{t("common:actions.edit")}</TooltipContent>
         </Tooltip>
 
         {canWrite && (
           <Tooltip>
             <TooltipTrigger asChild>
-              <IconButton aria-label="Remove" size="icon-sm" onClick={() => setConfirmRemove(true)}>
+              <IconButton aria-label={t("actions.remove")} size="icon-sm" onClick={() => setConfirmRemove(true)}>
                 <Trash2Icon className="size-3.5" />
               </IconButton>
             </TooltipTrigger>
-            <TooltipContent>Remove</TooltipContent>
+            <TooltipContent>{t("actions.remove")}</TooltipContent>
           </Tooltip>
         )}
       </div>
@@ -67,18 +69,15 @@ export function DomainRowActions({ domain }: { domain: Domain }) {
       <Dialog open={confirmRemove} onOpenChange={setConfirmRemove}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Remove &ldquo;{domain.domain}&rdquo;?</DialogTitle>
-            <DialogDescription>
-              Any tracking links on this domain are removed with it, and campaigns using them stop resolving.
-              This cannot be undone.
-            </DialogDescription>
+            <DialogTitle>{t("actions.removeTitle", { domain: domain.domain })}</DialogTitle>
+            <DialogDescription>{t("actions.removeDescription")}</DialogDescription>
           </DialogHeader>
           <DialogFooter>
             <Button variant="outline" onClick={() => setConfirmRemove(false)}>
-              Cancel
+              {t("common:actions.cancel")}
             </Button>
             <Button variant="destructive" onClick={handleRemove} disabled={deleteDomain.isPending}>
-              Remove
+              {t("actions.remove")}
             </Button>
           </DialogFooter>
         </DialogContent>

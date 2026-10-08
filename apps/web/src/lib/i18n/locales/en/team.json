@@ -1,0 +1,117 @@
+{
+  "title": "Team",
+  "tabs": {
+    "members": "Members",
+    "roles": "Roles & permissions",
+    "activity": "Activity"
+  },
+  "roles": {
+    "Owner": "Owner",
+    "Admin": "Admin",
+    "Manager": "Manager",
+    "Buyer": "Buyer",
+    "Analyst": "Analyst",
+    "Viewer": "Viewer"
+  },
+  "statuses": {
+    "active": "active",
+    "invited": "invited",
+    "suspended": "suspended"
+  },
+  "rolesPanel": {
+    "intro": "Roles are fixed. The server checks these permissions on every change; anyone in the organization can view its data.",
+    "permission": "Permission",
+    "granted": "Granted"
+  },
+  "permissions": {
+    "campaign_read": "View campaigns",
+    "campaign_write": "Edit campaigns, stream sets, flows, tracking links, costs",
+    "analytics_read": "View analytics",
+    "offer_read": "View offers and networks",
+    "offer_write": "Edit offers, networks, event mapping",
+    "source_read": "View traffic sources",
+    "source_write": "Edit traffic sources",
+    "content_read": "View landings, PWAs, pixels, content",
+    "content_write": "Edit landings, PWAs, pixels, content, tags",
+    "custom_metric_read": "View custom metrics",
+    "custom_metric_write": "Edit custom metrics",
+    "report_preset_read": "View report presets",
+    "report_preset_write": "Edit report presets",
+    "referral_read": "View the referral program",
+    "referral_write": "Manage referral payouts and adjustments",
+    "team_read": "View the team",
+    "team_write": "Invite and manage members",
+    "settings_write": "Change organization settings, domains, API keys, integrations, alerts"
+  },
+  "members": {
+    "loading": "Loading members…",
+    "loadError": "Couldn't load members",
+    "count_one": "{{count}} member",
+    "count_few": "{{count}} members",
+    "count_many": "{{count}} members",
+    "count_other": "{{count}} members",
+    "invite": "Invite member",
+    "search": "Search members…",
+    "emptyTitle": "No members yet",
+    "emptyDescription": "Invite teammates to give them access to this workspace.",
+    "inviteError": "Couldn't invite the member",
+    "linkCopied": "Invite link copied",
+    "roleUpdated": "Role updated",
+    "roleError": "Couldn't update the role"
+  },
+  "columns": {
+    "member": "Member",
+    "role": "Role",
+    "status": "Status",
+    "lastActive": "Last active",
+    "never": "Never"
+  },
+  "invite": {
+    "title": "Invite a team member",
+    "description": "You get a link to send them yourself — FLOX does not email it. The role decides what they can see and change.",
+    "name": "Name",
+    "namePlaceholder": "Jordan Lee",
+    "email": "Email",
+    "role": "Role",
+    "submit": "Create invite",
+    "linkTitle": "Invite link ready",
+    "linkDescription": "Copy this link and send it to your teammate. It expires in 7 days.",
+    "resentDescription": "The previous link no longer works. Copy this new one and send it yourself.",
+    "copyAria": "Copy invite link",
+    "done": "Done",
+    "errors": {
+      "name": "Name must be at least 2 characters",
+      "email": "Enter a valid email"
+    }
+  },
+  "actions": {
+    "aria": "Actions for {{name}}",
+    "resend": "Resend invite",
+    "reactivate": "Reactivate",
+    "suspend": "Suspend",
+    "remove": "Remove",
+    "suspended": "Member suspended",
+    "reactivated": "Member reactivated",
+    "removed": "Member removed",
+    "resendError": "Couldn't resend the invite",
+    "statusError": "Couldn't update the status",
+    "removeError": "Couldn't remove the member",
+    "removeTitle": "Remove {{name}}?",
+    "removeDescription": "They lose access to this workspace immediately. You can invite them again later."
+  },
+  "activity": {
+    "loading": "Loading activity…",
+    "loadError": "Couldn't load activity",
+    "empty": "No activity yet.",
+    "someone": "Someone",
+    "actions": {
+      "team_invited": "Member invited",
+      "team_invite_resent": "Invite sent again",
+      "team_invite_accepted": "Invite accepted",
+      "team_role_changed": "Member's role changed",
+      "team_suspended": "Member suspended",
+      "team_reactivated": "Member reactivated",
+      "team_removed": "Member removed"
+    }
+  }
+}

@@ -3,6 +3,7 @@
 import * as React from "react";
 import { toast } from "sonner";
 import { CopyIcon, MailIcon, MoreHorizontalIcon, PauseIcon, PlayIcon, Trash2Icon } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
 import { IconButton } from "@/components/ui/icon-button";
 import { Button } from "@/components/ui/button";
@@ -27,6 +28,7 @@ import { ApiError } from "@/lib/api/client";
 import type { Membership } from "@/lib/api/team";
 
 export function MemberRowActions({ member }: { member: Membership }) {
+  const { t } = useTranslation(["team", "common"]);
   const updateMember = useUpdateMember();
   const resendInvite = useResendInvite();
   const removeMember = useRemoveMember();
@@ -40,8 +42,8 @@ export function MemberRowActions({ member }: { member: Membership }) {
     resendInvite.mutate(member.id, {
       onSuccess: (result) => setInviteUrl(result.inviteUrl),
       onError: (err) => {
-        const message = err instanceof ApiError ? err.message : "Couldn't resend the invite";
-        toast.error("Couldn't resend invite", { description: message });
+        const message = err instanceof ApiError ? err.message : undefined;
+        toast.error(t("actions.resendError"), { description: message });
       },
     });
   }
@@ -49,7 +51,7 @@ export function MemberRowActions({ member }: { member: Membership }) {
   function copyInviteUrl() {
     if (!inviteUrl) return;
     navigator.clipboard.writeText(inviteUrl);
-    toast("Invite link copied");
+    toast(t("members.linkCopied"));
   }
 
   function toggleSuspend() {
@@ -57,10 +59,11 @@ export function MemberRowActions({ member }: { member: Membership }) {
     updateMember.mutate(
       { id: member.id, input: { status: next } },
       {
-        onSuccess: () => toast(next === "suspended" ? "Member suspended" : "Member reactivated", { description: member.name }),
+        onSuccess: () =>
+          toast(next === "suspended" ? t("actions.suspended") : t("actions.reactivated"), { description: member.name }),
         onError: (err) => {
-          const message = err instanceof ApiError ? err.message : "Couldn't update status";
-          toast.error("Couldn't update status", { description: message });
+          const message = err instanceof ApiError ? err.message : undefined;
+          toast.error(t("actions.statusError"), { description: message });
         },
       },
     );
@@ -70,12 +73,12 @@ export function MemberRowActions({ member }: { member: Membership }) {
     removeMember.mutate(member.id, {
       onSuccess: () => {
         setConfirmRemove(false);
-        toast("Member removed", { description: member.name });
+        toast(t("actions.removed"), { description: member.name });
       },
       onError: (err) => {
         setConfirmRemove(false);
-        const message = err instanceof ApiError ? err.message : "Couldn't remove member";
-        toast.error("Couldn't remove member", { description: message });
+        const message = err instanceof ApiError ? err.message : undefined;
+        toast.error(t("actions.removeError"), { description: message });
       },
     });
   }
@@ -88,32 +91,32 @@ export function MemberRowActions({ member }: { member: Membership }) {
     <>
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <IconButton aria-label={`Actions for ${member.name}`} variant="ghost" size="icon-sm">
+          <IconButton aria-label={t("actions.aria", { name: member.name })} variant="ghost" size="icon-sm">
             <MoreHorizontalIcon className="size-4" />
           </IconButton>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
           {member.status === "invited" && (
             <DropdownMenuItem onSelect={handleResend}>
-              <MailIcon className="size-4" /> Resend invite
+              <MailIcon className="size-4" /> {t("actions.resend")}
             </DropdownMenuItem>
           )}
           {member.status !== "invited" && (
             <DropdownMenuItem onSelect={toggleSuspend}>
               {member.status === "suspended" ? (
                 <>
-                  <PlayIcon className="size-4" /> Reactivate
+                  <PlayIcon className="size-4" /> {t("actions.reactivate")}
                 </>
               ) : (
                 <>
-                  <PauseIcon className="size-4" /> Suspend
+                  <PauseIcon className="size-4" /> {t("actions.suspend")}
                 </>
               )}
             </DropdownMenuItem>
           )}
           <DropdownMenuSeparator />
           <DropdownMenuItem variant="destructive" onSelect={() => setConfirmRemove(true)}>
-            <Trash2Icon className="size-4" /> Remove
+            <Trash2Icon className="size-4" /> {t("actions.remove")}
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
@@ -121,17 +124,15 @@ export function MemberRowActions({ member }: { member: Membership }) {
       <Dialog open={confirmRemove} onOpenChange={setConfirmRemove}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Remove {member.name}?</DialogTitle>
-            <DialogDescription>
-              They immediately lose access to this workspace. This can be reversed by inviting them again.
-            </DialogDescription>
+            <DialogTitle>{t("actions.removeTitle", { name: member.name })}</DialogTitle>
+            <DialogDescription>{t("actions.removeDescription")}</DialogDescription>
           </DialogHeader>
           <DialogFooter>
             <Button variant="outline" onClick={() => setConfirmRemove(false)}>
-              Cancel
+              {t("common:actions.cancel")}
             </Button>
             <Button variant="destructive" onClick={handleRemove}>
-              Remove
+              {t("actions.remove")}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -140,17 +141,17 @@ export function MemberRowActions({ member }: { member: Membership }) {
       <Dialog open={!!inviteUrl} onOpenChange={(open) => !open && setInviteUrl(null)}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Invite link ready</DialogTitle>
-            <DialogDescription>The previous link no longer works. Copy this new one and send it yourself.</DialogDescription>
+            <DialogTitle>{t("invite.linkTitle")}</DialogTitle>
+            <DialogDescription>{t("invite.resentDescription")}</DialogDescription>
           </DialogHeader>
           <div className="flex items-center gap-2 rounded-md border border-border bg-muted px-3 py-2">
             <Mono className="min-w-0 flex-1 truncate text-xs">{inviteUrl}</Mono>
-            <IconButton aria-label="Copy invite link" size="icon-sm" onClick={copyInviteUrl}>
+            <IconButton aria-label={t("invite.copyAria")} size="icon-sm" onClick={copyInviteUrl}>
               <CopyIcon className="size-3.5" />
             </IconButton>
           </div>
           <DialogFooter>
-            <Button onClick={() => setInviteUrl(null)}>Done</Button>
+            <Button onClick={() => setInviteUrl(null)}>{t("invite.done")}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

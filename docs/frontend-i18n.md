@@ -68,6 +68,12 @@ page), `auth` (login/signup/accept-invite/verify-email), `analytics`
 outside this phase's original scope, after a user report that the page
 still read as unmigrated; text-only, see the number-formatting note
 below).
+Since then: `landings`, `pwa`, `postlanding`, `clickLog`, `pixels`, `flows`,
+`alerts`, `ltv`, and (marketer audit #7) `settings`, `team`, `domains`,
+`referral`, `tags`, `customMetrics`, `contentGallery` — every page of the app
+is translated. `lib/i18n/locales.test.ts` fails when a key exists in one
+language only (plural suffixes folded) or when a string cites a phase or a
+spec section.
 
 Resources are bundled statically (JSON imported directly into
 `config.ts`, `resolveJsonModule` already enabled in `tsconfig.json`) —

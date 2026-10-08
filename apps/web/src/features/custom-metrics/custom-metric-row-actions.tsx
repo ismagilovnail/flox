@@ -3,6 +3,7 @@
 import * as React from "react";
 import { toast } from "sonner";
 import { CopyIcon, MoreHorizontalIcon, PauseIcon, PencilIcon, PlayIcon, SendIcon, Trash2Icon } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
 import { IconButton } from "@/components/ui/icon-button";
 import { Button } from "@/components/ui/button";
@@ -31,6 +32,7 @@ import {
 import type { CustomMetric } from "@/lib/custom-metrics";
 
 export function CustomMetricRowActions({ metric, onEdit }: { metric: CustomMetric; onEdit: () => void }) {
+  const { t } = useTranslation(["customMetrics", "common"]);
   const updateMetric = useUpdateCustomMetric();
   const setActive = useSetCustomMetricActive();
   const deleteMetric = useDeleteCustomMetric();
@@ -46,8 +48,8 @@ export function CustomMetricRowActions({ metric, onEdit }: { metric: CustomMetri
       { id: metric.id, input: { status: next } },
       {
         onSuccess: () =>
-          toast(next === "published" ? "Metric published" : "Unpublished — back to draft", { description: metric.name }),
-        onError: (err) => toast.error("Couldn't update metric", { description: err.message }),
+          toast(next === "published" ? t("toasts.published") : t("toasts.unpublished"), { description: metric.name }),
+        onError: (err) => toast.error(t("toasts.updateError"), { description: err.message }),
       },
     );
   }
@@ -56,16 +58,16 @@ export function CustomMetricRowActions({ metric, onEdit }: { metric: CustomMetri
     setActive.mutate(
       { id: metric.id, active: !metric.active },
       {
-        onSuccess: () => toast(metric.active ? "Metric deactivated" : "Metric activated", { description: metric.name }),
-        onError: (err) => toast.error("Couldn't update metric", { description: err.message }),
+        onSuccess: () => toast(metric.active ? t("toasts.deactivated") : t("toasts.activated"), { description: metric.name }),
+        onError: (err) => toast.error(t("toasts.updateError"), { description: err.message }),
       },
     );
   }
 
   function duplicate() {
     duplicateMetric.mutate(metric.id, {
-      onSuccess: (created) => toast("Metric duplicated", { description: created.name }),
-      onError: (err) => toast.error("Couldn't duplicate metric", { description: err.message }),
+      onSuccess: (created) => toast(t("toasts.duplicated"), { description: created.name }),
+      onError: (err) => toast.error(t("toasts.duplicateError"), { description: err.message }),
     });
   }
 
@@ -73,17 +75,15 @@ export function CustomMetricRowActions({ metric, onEdit }: { metric: CustomMetri
     deleteMetric.mutate(metric.id, {
       onSuccess: () => {
         setConfirmDelete(false);
-        toast("Metric deleted", { description: metric.name });
+        toast(t("toasts.deleted"), { description: metric.name });
       },
       onError: (err) => {
         setConfirmDelete(false);
         if (err instanceof ApiError && err.status === 409) {
-          toast.error("Can't delete — metric is in use", {
-            description: "Unpublish and remove it from every surface first, or leave it archived (inactive).",
-          });
+          toast.error(t("toasts.inUse"), { description: t("toasts.inUseDescription") });
           return;
         }
-        toast.error("Couldn't delete metric", { description: err.message });
+        toast.error(t("toasts.deleteError"), { description: err.message });
       },
     });
   }
@@ -92,34 +92,34 @@ export function CustomMetricRowActions({ metric, onEdit }: { metric: CustomMetri
     <>
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <IconButton aria-label={`Actions for ${metric.name}`} variant="ghost" size="icon-sm">
+          <IconButton aria-label={t("actions.aria", { name: metric.name })} variant="ghost" size="icon-sm">
             <MoreHorizontalIcon className="size-4" />
           </IconButton>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
           <DropdownMenuItem onSelect={onEdit}>
-            <PencilIcon className="size-4" /> Edit
+            <PencilIcon className="size-4" /> {t("common:actions.edit")}
           </DropdownMenuItem>
           <DropdownMenuItem onSelect={togglePublish}>
-            <SendIcon className="size-4" /> {metric.status === "published" ? "Unpublish" : "Publish"}
+            <SendIcon className="size-4" /> {metric.status === "published" ? t("actions.unpublish") : t("actions.publish")}
           </DropdownMenuItem>
           <DropdownMenuItem onSelect={toggleActive}>
             {metric.active ? (
               <>
-                <PauseIcon className="size-4" /> Deactivate (archive)
+                <PauseIcon className="size-4" /> {t("actions.deactivate")}
               </>
             ) : (
               <>
-                <PlayIcon className="size-4" /> Activate
+                <PlayIcon className="size-4" /> {t("actions.activate")}
               </>
             )}
           </DropdownMenuItem>
           <DropdownMenuItem onSelect={duplicate}>
-            <CopyIcon className="size-4" /> Duplicate
+            <CopyIcon className="size-4" /> {t("common:actions.duplicate")}
           </DropdownMenuItem>
           <DropdownMenuSeparator />
           <DropdownMenuItem variant="destructive" onSelect={() => setConfirmDelete(true)}>
-            <Trash2Icon className="size-4" /> Delete
+            <Trash2Icon className="size-4" /> {t("common:actions.delete")}
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
@@ -127,18 +127,15 @@ export function CustomMetricRowActions({ metric, onEdit }: { metric: CustomMetri
       <Dialog open={confirmDelete} onOpenChange={setConfirmDelete}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Delete &ldquo;{metric.name}&rdquo;?</DialogTitle>
-            <DialogDescription>
-              This is a hard delete. Published metrics or ones exposed on any surface can&apos;t be deleted —
-              unpublish and clear its Show-in targets first, or just deactivate it instead.
-            </DialogDescription>
+            <DialogTitle>{t("actions.deleteTitle", { name: metric.name })}</DialogTitle>
+            <DialogDescription>{t("actions.deleteDescription")}</DialogDescription>
           </DialogHeader>
           <DialogFooter>
             <Button variant="outline" onClick={() => setConfirmDelete(false)}>
-              Cancel
+              {t("common:actions.cancel")}
             </Button>
             <Button variant="destructive" onClick={handleDelete}>
-              Delete
+              {t("common:actions.delete")}
             </Button>
           </DialogFooter>
         </DialogContent>

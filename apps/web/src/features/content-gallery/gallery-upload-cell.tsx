@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import { Loader2Icon, UploadCloudIcon } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 
 import { cn } from "@/lib/utils";
@@ -30,6 +31,7 @@ export function GalleryUploadCell({
    * 1080x1920-recommended framing). */
   className?: string;
 }) {
+  const { t } = useTranslation("contentGallery");
   const upload = useUploadGalleryFile();
   const [dragging, setDragging] = React.useState(false);
   const inputRef = React.useRef<HTMLInputElement>(null);
@@ -39,7 +41,7 @@ export function GalleryUploadCell({
       { file, folderId },
       {
         onSuccess: onUploaded,
-        onError: (err) => toast.error("Upload failed", { description: err.message }),
+        onError: (err) => toast.error(t("upload.error"), { description: err.message }),
       },
     );
   }
@@ -67,7 +69,7 @@ export function GalleryUploadCell({
       )}
     >
       {upload.isPending ? <Loader2Icon className="size-6 animate-spin" /> : <UploadCloudIcon className="size-6" />}
-      <span className="text-xs font-medium">{upload.isPending ? "Uploading…" : "Upload"}</span>
+      <span className="text-xs font-medium">{upload.isPending ? t("upload.pending") : t("upload.label")}</span>
       <input
         ref={inputRef}
         type="file"

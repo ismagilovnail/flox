@@ -7,10 +7,56 @@
  * and function the same way (except IF/EMPTYIF, which use it explicitly).
  */
 
+/** Every way a formula can be rejected. The UI translates the code
+ * (customMetrics:formulaErrors.<code>, with params); `message` stays the
+ * English text for logs and tests. */
+export type FormulaErrorCode =
+  | "unterminatedToken"
+  | "emptyToken"
+  | "invalidNumber"
+  | "unexpectedChar"
+  | "expectedClose"
+  | "expectedOpenAfter"
+  | "unexpected"
+  | "unknownFunction"
+  | "arity"
+  | "unexpectedEnd"
+  | "empty"
+  | "invalid"
+  | "noMetric"
+  | "unknownMetric"
+  | "notInsertable"
+  | "mixedSources";
+
+export type FormulaErrorParams = Record<string, string | number>;
+
+const ENGLISH: Record<FormulaErrorCode, (p: FormulaErrorParams) => string> = {
+  unterminatedToken: () => "Unterminated metric token — missing closing }",
+  emptyToken: () => "Empty metric token {}",
+  invalidNumber: (p) => `Invalid number "${p.value}"`,
+  unexpectedChar: (p) => `Unexpected character "${p.value}"`,
+  expectedClose: () => "Expected ')'",
+  expectedOpenAfter: (p) => `Expected '(' after ${p.name}`,
+  unexpected: (p) => `Unexpected "${p.value}"`,
+  unknownFunction: (p) => `Unknown function "${p.name}"`,
+  arity: (p) => `${p.name} expects ${p.arity} argument(s), got ${p.got}`,
+  unexpectedEnd: () => "Formula ends unexpectedly — missing an operand",
+  empty: () => "Formula is empty",
+  invalid: () => "Invalid formula",
+  noMetric: () => "Formula must reference at least one metric",
+  unknownMetric: (p) => `Unknown metric {${p.id}}`,
+  notInsertable: (p) => `"${p.label}" can't be used in custom metric formulas`,
+  mixedSources: (p) => `A formula can only draw from one data source — this mixes ${p.sources}`,
+};
+
 export class FormulaError extends Error {
   pos: number;
-  constructor(message: string, pos: number) {
-    super(message);
+  code: FormulaErrorCode;
+  params: FormulaErrorParams;
+  constructor(code: FormulaErrorCode, params: FormulaErrorParams, pos: number) {
+    super(ENGLISH[code](params));
+    this.code = code;
+    this.params = params;
     this.pos = pos;
   }
 }
@@ -47,9 +93,9 @@ function tokenize(input: string): Token[] {
     }
     if (ch === "{") {
       const end = input.indexOf("}", i);
-      if (end === -1) throw new FormulaError("Unterminated metric token — missing closing }", i);
+      if (end === -1) throw new FormulaError("unterminatedToken", {}, i);
       const name = input.slice(i + 1, end).trim();
-      if (!name) throw new FormulaError("Empty metric token {}", i);
+      if (!name) throw new FormulaError("emptyToken", {}, i);
       tokens.push({ type: "metric", value: name, pos: i });
       i = end + 1;
       continue;
@@ -58,7 +104,7 @@ function tokenize(input: string): Token[] {
       let j = i;
       while (j < input.length && /[0-9.]/.test(input[j])) j++;
       const raw = input.slice(i, j);
-      if (!/^\d+(\.\d+)?$/.test(raw)) throw new FormulaError(`Invalid number "${raw}"`, i);
+      if (!/^\d+(\.\d+)?$/.test(raw)) throw new FormulaError("invalidNumber", { value: raw }, i);
       tokens.push({ type: "number", value: raw, pos: i });
       i = j;
       continue;
@@ -135,7 +181,7 @@ function tokenize(input: string): Token[] {
       i += 2;
       continue;
     }
-    throw new FormulaError(`Unexpected character "${ch}"`, i);
+    throw new FormulaError("unexpectedChar", { value: ch }, i);
   }
   tokens.push({ type: "eof", value: "", pos: input.length });
   return tokens;
@@ -172,15 +218,15 @@ class Parser {
   next() {
     return this.tokens[this.pos++];
   }
-  expect(type: TokenType, label: string) {
+  expect(type: TokenType, code: "expectedClose" | "expectedOpenAfter", params: FormulaErrorParams = {}) {
     const t = this.next();
-    if (t.type !== type) throw new FormulaError(`Expected ${label}`, t.pos);
+    if (t.type !== type) throw new FormulaError(code, params, t.pos);
     return t;
   }
 
   parse(): Node {
     const node = this.parseComparison();
-    if (this.peek().type !== "eof") throw new FormulaError(`Unexpected "${this.peek().value}"`, this.peek().pos);
+    if (this.peek().type !== "eof") throw new FormulaError("unexpected", { value: this.peek().value }, this.peek().pos);
     return node;
   }
 
@@ -244,15 +290,15 @@ class Parser {
     if (t.type === "lparen") {
       this.next();
       const inner = this.parseComparison();
-      this.expect("rparen", "')'");
+      this.expect("rparen", "expectedClose");
       return inner;
     }
     if (t.type === "ident") {
       this.next();
       const name = t.value.toUpperCase();
       const spec = FUNCTION_SIGNATURES[name];
-      if (!spec) throw new FormulaError(`Unknown function "${t.value}"`, t.pos);
-      this.expect("lparen", `'(' after ${name}`);
+      if (!spec) throw new FormulaError("unknownFunction", { name: t.value }, t.pos);
+      this.expect("lparen", "expectedOpenAfter", { name });
       const args: Node[] = [];
       if (this.peek().type !== "rparen") {
         args.push(this.parseComparison());
@@ -261,15 +307,15 @@ class Parser {
           args.push(this.parseComparison());
         }
       }
-      this.expect("rparen", "')'");
+      this.expect("rparen", "expectedClose");
       if (args.length < spec.min || args.length > spec.max) {
         const arity = spec.min === spec.max ? `${spec.min}` : `${spec.min}-${spec.max === Infinity ? "many" : spec.max}`;
-        throw new FormulaError(`${name} expects ${arity} argument(s), got ${args.length}`, t.pos);
+        throw new FormulaError("arity", { name, arity, got: args.length }, t.pos);
       }
       return { kind: "call", name, args };
     }
-    if (t.type === "eof") throw new FormulaError("Formula ends unexpectedly — missing an operand", t.pos);
-    throw new FormulaError(`Unexpected "${t.value}"`, t.pos);
+    if (t.type === "eof") throw new FormulaError("unexpectedEnd", {}, t.pos);
+    throw new FormulaError("unexpected", { value: t.value }, t.pos);
   }
 }
 
@@ -383,38 +429,47 @@ export type FormulaRegistryEntry = {
 
 export type FormulaValidation =
   | { valid: true; error?: undefined; usedMetricIds: string[]; dataSource: string }
-  | { valid: false; error: string; usedMetricIds?: undefined; dataSource?: undefined };
+  | {
+      valid: false;
+      /** English, for logs; the UI renders code + params. */
+      error: string;
+      code: FormulaErrorCode;
+      params: FormulaErrorParams;
+      usedMetricIds?: undefined;
+      dataSource?: undefined;
+    };
+
+function invalid(code: FormulaErrorCode, params: FormulaErrorParams = {}): FormulaValidation {
+  return { valid: false, error: ENGLISH[code](params), code, params };
+}
 
 /** Validates a formula against the metric catalog: syntax, unknown tokens, the
  * single-data-source constraint, and the LTV-metrics-forbidden constraint. */
 export function validateFormula(formula: string, registry: FormulaRegistryEntry[]): FormulaValidation {
   const trimmed = formula.trim();
-  if (!trimmed) return { valid: false, error: "Formula is empty" };
+  if (!trimmed) return invalid("empty");
 
   let ast: Node;
   try {
     ast = parseFormula(trimmed);
   } catch (e) {
-    return { valid: false, error: e instanceof FormulaError ? e.message : "Invalid formula" };
+    return e instanceof FormulaError ? invalid(e.code, e.params) : invalid("invalid");
   }
 
   const idsSet = new Set<string>();
   collectMetricIds(ast, idsSet);
   const usedMetricIds = [...idsSet];
-  if (usedMetricIds.length === 0) return { valid: false, error: "Formula must reference at least one metric" };
+  if (usedMetricIds.length === 0) return invalid("noMetric");
 
   const dataSources = new Set<string>();
   for (const id of usedMetricIds) {
     const meta = registry.find((m) => m.id === id);
-    if (!meta) return { valid: false, error: `Unknown metric {${id}}` };
-    if (!meta.insertable) return { valid: false, error: `"${meta.label}" can't be used in custom metric formulas` };
+    if (!meta) return invalid("unknownMetric", { id });
+    if (!meta.insertable) return invalid("notInsertable", { id, label: meta.label });
     dataSources.add(meta.dataSource);
   }
   if (dataSources.size > 1) {
-    return {
-      valid: false,
-      error: `A formula can only draw from one data source — this mixes ${[...dataSources].join(" and ")}`,
-    };
+    return invalid("mixedSources", { sources: [...dataSources].join(" + ") });
   }
 
   return { valid: true, usedMetricIds, dataSource: [...dataSources][0] };

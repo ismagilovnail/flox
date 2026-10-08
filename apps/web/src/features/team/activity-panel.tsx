@@ -1,10 +1,10 @@
 "use client";
 
-import { formatDistanceToNow } from "date-fns";
+import { useTranslation } from "react-i18next";
 
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Card, CardContent } from "@/components/ui/card";
-import { Caption } from "@/components/ui/typography";
+import { RelativeTime } from "@/components/ui/relative-time";
 import { LoadingState } from "@/components/ui/loading-state";
 import { ErrorState } from "@/components/ui/error-state";
 import { useTeamActivity } from "@/hooks/use-team";
@@ -20,25 +20,22 @@ function initials(name: string) {
 }
 
 /** apps/internal/auth writes a fixed, small set of action keys (see
- * docs/auth.md) — mapped here to a short sentence fragment, rendered
- * after the actor's name ("Owner Curl invited a new member"). */
-const ACTION_LABELS: Record<string, string> = {
-  "team.invited": "invited a new member",
-  "team.invite_resent": "resent an invite",
-  "team.invite_accepted": "accepted their invite",
-  "team.role_changed": "changed a member's role",
-  "team.suspended": "suspended a member",
-  "team.reactivated": "reactivated a member",
-  "team.removed": "removed a member",
-};
+ * docs/auth.md); each is a translation under team:activity.actions, with
+ * "." replaced by "_". Phrased without the actor ("Member invited"), who
+ * is shown under it, so the sentence needs no grammatical gender. */
+function actionKey(action: string) {
+  return `activity.actions.${action.replace(".", "_")}`;
+}
 
 export function ActivityPanel() {
+  const { t } = useTranslation("team");
   const activityQuery = useTeamActivity();
 
-  if (activityQuery.isLoading) return <LoadingState />;
+  if (activityQuery.isLoading) return <LoadingState label={t("activity.loading")} />;
   if (activityQuery.isError) {
     return (
       <ErrorState
+        title={t("activity.loadError")}
         description={activityQuery.error instanceof ApiError ? activityQuery.error.message : undefined}
         onRetry={() => activityQuery.refetch()}
       />
@@ -50,7 +47,7 @@ export function ActivityPanel() {
   if (entries.length === 0) {
     return (
       <Card>
-        <CardContent className="p-6 text-center text-sm text-muted-foreground">No activity yet.</CardContent>
+        <CardContent className="p-6 text-center text-sm text-muted-foreground">{t("activity.empty")}</CardContent>
       </Card>
     );
   }
@@ -64,11 +61,10 @@ export function ActivityPanel() {
               <AvatarFallback>{entry.actorName ? initials(entry.actorName) : "?"}</AvatarFallback>
             </Avatar>
             <div className="flex min-w-0 flex-1 flex-col">
-              <p className="text-sm">
-                <span className="font-medium text-foreground">{entry.actorName ?? "Someone"}</span>{" "}
-                <span className="text-muted-foreground">{ACTION_LABELS[entry.action] ?? entry.action}</span>
-              </p>
-              <Caption>{formatDistanceToNow(new Date(entry.createdAt), { addSuffix: true })}</Caption>
+              <p className="text-sm text-foreground">{t(actionKey(entry.action), { defaultValue: entry.action })}</p>
+              <span className="text-xs text-muted-foreground">
+                {entry.actorName ?? t("activity.someone")} · <RelativeTime date={entry.createdAt} />
+              </span>
             </div>
           </div>
         ))}

@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import { toast } from "sonner";
+import { useTranslation } from "react-i18next";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -26,6 +27,7 @@ export function RequestPayoutDialog({
   onOpenChange: (open: boolean) => void;
   availableBalance: number;
 }) {
+  const { t } = useTranslation(["referral", "common"]);
   const requestPayout = useRequestPayout();
   // The parent only renders this component while the dialog is open, so it
   // fully unmounts on close and remounts fresh on reopen — a lazy initializer
@@ -39,10 +41,10 @@ export function RequestPayoutDialog({
     if (!isValid) return;
     requestPayout.mutate(parsed, {
       onSuccess: () => {
-        toast("Payout requested", { description: formatUsd(parsed, 2) });
+        toast(t("payout.requested"), { description: formatUsd(parsed, 2) });
         onOpenChange(false);
       },
-      onError: (err) => toast.error("Couldn't request payout", { description: err.message }),
+      onError: (err) => toast.error(t("payout.requestError"), { description: err.message }),
     });
   }
 
@@ -50,14 +52,11 @@ export function RequestPayoutDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Request a payout</DialogTitle>
-          <DialogDescription>
-            Available balance: {formatUsd(availableBalance, 2)}. Requests go through Owner/Admin approval before
-            being marked paid (§30.7).
-          </DialogDescription>
+          <DialogTitle>{t("payout.title")}</DialogTitle>
+          <DialogDescription>{t("payout.description", { balance: formatUsd(availableBalance, 2) })}</DialogDescription>
         </DialogHeader>
         <div className="grid gap-1.5">
-          <Label htmlFor="payout-amount">Amount (USD)</Label>
+          <Label htmlFor="payout-amount">{t("payout.amount")}</Label>
           <Input
             id="payout-amount"
             type="number"
@@ -68,14 +67,14 @@ export function RequestPayoutDialog({
             onChange={(e) => setAmount(e.target.value)}
             aria-invalid={!isValid}
           />
-          {!isValid && <p className="text-xs text-danger">Enter an amount between 0.01 and {formatUsd(availableBalance, 2)}.</p>}
+          {!isValid && <p className="text-xs text-danger">{t("payout.amountError", { max: formatUsd(availableBalance, 2) })}</p>}
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>
-            Cancel
+            {t("common:actions.cancel")}
           </Button>
           <Button onClick={submit} disabled={!isValid || requestPayout.isPending}>
-            Request payout
+            {t("payout.request")}
           </Button>
         </DialogFooter>
       </DialogContent>

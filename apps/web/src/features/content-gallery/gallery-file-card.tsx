@@ -1,6 +1,7 @@
 "use client";
 
 import { ArchiveIcon, ArchiveRestoreIcon, FolderInputIcon, MoreVerticalIcon, Trash2Icon } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -45,6 +46,7 @@ export function GalleryFileCard({
   onRestore?: () => void;
   onDeletePermanently?: () => void;
 }) {
+  const { t } = useTranslation("contentGallery");
   return (
     <div
       className={cn(
@@ -68,7 +70,7 @@ export function GalleryFileCard({
           onCheckedChange={onToggleSelect}
           onClick={(e) => e.stopPropagation()}
           className="border-white bg-black/30 data-checked:bg-primary"
-          aria-label={selected ? "Deselect" : "Select"}
+          aria-label={selected ? t("card.deselect") : t("card.select")}
         />
       </div>
 
@@ -76,7 +78,7 @@ export function GalleryFileCard({
         <div className="absolute top-1 right-1 opacity-0 transition-opacity group-hover:opacity-100">
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <IconButton size="icon-sm" variant="secondary" aria-label="File actions" onClick={(e) => e.stopPropagation()}>
+              <IconButton size="icon-sm" variant="secondary" aria-label={t("card.actions")} onClick={(e) => e.stopPropagation()}>
                 <MoreVerticalIcon className="size-3.5" />
               </IconButton>
             </DropdownMenuTrigger>
@@ -84,10 +86,10 @@ export function GalleryFileCard({
               {onMove && (
                 <DropdownMenuSub>
                   <DropdownMenuSubTrigger>
-                    <FolderInputIcon className="size-3.5" /> Move to
+                    <FolderInputIcon className="size-3.5" /> {t("card.moveTo")}
                   </DropdownMenuSubTrigger>
                   <DropdownMenuSubContent>
-                    <DropdownMenuItem onClick={() => onMove(null)}>Unfiled</DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => onMove(null)}>{t("folders.unfiled")}</DropdownMenuItem>
                     {folders.map((f) => (
                       <DropdownMenuItem key={f.id} onClick={() => onMove(f.id)}>
                         {f.name}
@@ -98,19 +100,19 @@ export function GalleryFileCard({
               )}
               {onArchive && (
                 <DropdownMenuItem onClick={onArchive}>
-                  <ArchiveIcon className="size-3.5" /> Archive
+                  <ArchiveIcon className="size-3.5" /> {t("actions.archive")}
                 </DropdownMenuItem>
               )}
               {onRestore && (
                 <DropdownMenuItem onClick={onRestore}>
-                  <ArchiveRestoreIcon className="size-3.5" /> Restore
+                  <ArchiveRestoreIcon className="size-3.5" /> {t("actions.restore")}
                 </DropdownMenuItem>
               )}
               {onDeletePermanently && (
                 <>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem variant="destructive" onClick={onDeletePermanently}>
-                    <Trash2Icon className="size-3.5" /> Delete permanently
+                    <Trash2Icon className="size-3.5" /> {t("actions.deletePermanently")}
                   </DropdownMenuItem>
                 </>
               )}

@@ -1,6 +1,7 @@
 "use client";
 
 import { toast } from "sonner";
+import { useTranslation } from "react-i18next";
 
 import { LoadingState } from "@/components/ui/loading-state";
 import { ErrorState } from "@/components/ui/error-state";
@@ -10,17 +11,18 @@ import { DomainForm, type DomainFormValues } from "@/features/domains/domain-for
 import { DomainAutomationCard } from "@/features/domains/domain-automation-card";
 
 export function DomainDetailView({ id }: { id: string }) {
+  const { t } = useTranslation("domains");
   const canWrite = usePermission("settings.write");
   const domainQuery = useDomain(id);
   const updateDomain = useUpdateDomain();
 
   if (domainQuery.isPending) {
-    return <LoadingState label="Loading domain..." />;
+    return <LoadingState label={t("form.loading")} />;
   }
 
   if (domainQuery.isError) {
     return (
-      <ErrorState title="Couldn't load domain" description={domainQuery.error.message} onRetry={() => domainQuery.refetch()} />
+      <ErrorState title={t("form.loadError")} description={domainQuery.error.message} onRetry={() => domainQuery.refetch()} />
     );
   }
 
@@ -30,8 +32,8 @@ export function DomainDetailView({ id }: { id: string }) {
     updateDomain.mutate(
       { id, input: values },
       {
-        onSuccess: () => toast("Domain updated", { description: values.domain }),
-        onError: (err) => toast.error("Couldn't update domain", { description: err.message }),
+        onSuccess: () => toast(t("form.updated"), { description: values.domain }),
+        onError: (err) => toast.error(t("form.updateError"), { description: err.message }),
       },
     );
   }
@@ -39,9 +41,9 @@ export function DomainDetailView({ id }: { id: string }) {
   return (
     <div className="flex flex-col gap-4">
       <DomainForm
-        title={`Edit ${domain.domain}`}
+        title={t("form.editTitle", { domain: domain.domain })}
         defaultValues={domain}
-        submitLabel="Save changes"
+        submitLabel={t("form.save")}
         onSubmit={handleSubmit}
         disabled={!canWrite}
       />

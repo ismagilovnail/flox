@@ -52,6 +52,13 @@ import enDashboard from "@/lib/i18n/locales/en/dashboard.json";
 import enFlows from "@/lib/i18n/locales/en/flows.json";
 import enAlerts from "@/lib/i18n/locales/en/alerts.json";
 import enLtv from "@/lib/i18n/locales/en/ltv.json";
+import enContentGallery from "@/lib/i18n/locales/en/contentGallery.json";
+import enCustomMetrics from "@/lib/i18n/locales/en/customMetrics.json";
+import enTags from "@/lib/i18n/locales/en/tags.json";
+import enReferral from "@/lib/i18n/locales/en/referral.json";
+import enTeam from "@/lib/i18n/locales/en/team.json";
+import enDomains from "@/lib/i18n/locales/en/domains.json";
+import enSettings from "@/lib/i18n/locales/en/settings.json";
 
 import ruCommon from "@/lib/i18n/locales/ru/common.json";
 import ruNav from "@/lib/i18n/locales/ru/nav.json";
@@ -75,6 +82,13 @@ import ruDashboard from "@/lib/i18n/locales/ru/dashboard.json";
 import ruFlows from "@/lib/i18n/locales/ru/flows.json";
 import ruAlerts from "@/lib/i18n/locales/ru/alerts.json";
 import ruLtv from "@/lib/i18n/locales/ru/ltv.json";
+import ruContentGallery from "@/lib/i18n/locales/ru/contentGallery.json";
+import ruCustomMetrics from "@/lib/i18n/locales/ru/customMetrics.json";
+import ruTags from "@/lib/i18n/locales/ru/tags.json";
+import ruReferral from "@/lib/i18n/locales/ru/referral.json";
+import ruTeam from "@/lib/i18n/locales/ru/team.json";
+import ruDomains from "@/lib/i18n/locales/ru/domains.json";
+import ruSettings from "@/lib/i18n/locales/ru/settings.json";
 
 // Re-exported so existing "use client" call sites can keep importing
 // locale/cookie concerns from this module as before — the actual
@@ -107,6 +121,13 @@ export const NAMESPACES = [
   "flows",
   "alerts",
   "ltv",
+  "settings",
+  "team",
+  "domains",
+  "referral",
+  "tags",
+  "customMetrics",
+  "contentGallery",
 ] as const;
 
 const resources = {
@@ -133,6 +154,13 @@ const resources = {
     flows: enFlows,
     alerts: enAlerts,
     ltv: enLtv,
+    contentGallery: enContentGallery,
+    customMetrics: enCustomMetrics,
+    tags: enTags,
+    referral: enReferral,
+    team: enTeam,
+    domains: enDomains,
+    settings: enSettings,
   },
   ru: {
     common: ruCommon,
@@ -157,6 +185,13 @@ const resources = {
     flows: ruFlows,
     alerts: ruAlerts,
     ltv: ruLtv,
+    contentGallery: ruContentGallery,
+    customMetrics: ruCustomMetrics,
+    tags: ruTags,
+    referral: ruReferral,
+    team: ruTeam,
+    domains: ruDomains,
+    settings: ruSettings,
   },
 };
 

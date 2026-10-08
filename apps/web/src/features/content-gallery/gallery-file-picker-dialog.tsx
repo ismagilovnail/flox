@@ -1,5 +1,7 @@
 "use client";
 
+import { useTranslation } from "react-i18next";
+
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { GalleryBrowser } from "@/features/content-gallery/gallery-browser";
 import type { GalleryFile } from "@/lib/api/content-gallery";
@@ -23,12 +25,13 @@ export function GalleryFilePickerDialog({
    * reference itself allows in varying aspect ratios). */
   requiredAspect?: number;
 }) {
+  const { t } = useTranslation("contentGallery");
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-3xl">
         <DialogHeader>
-          <DialogTitle>Choose an image</DialogTitle>
-          <DialogDescription>Pick a file already in your Content Gallery, or upload a new one.</DialogDescription>
+          <DialogTitle>{t("picker.title")}</DialogTitle>
+          <DialogDescription>{t("picker.description")}</DialogDescription>
         </DialogHeader>
         <GalleryBrowser
           mode="pick"

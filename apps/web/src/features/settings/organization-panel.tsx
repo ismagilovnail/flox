@@ -5,6 +5,8 @@ import { Controller, useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { toast } from "sonner";
 import { z } from "zod";
+import { useTranslation } from "react-i18next";
+import type { TFunction } from "i18next";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -24,19 +26,22 @@ import { CURRENCIES } from "@/lib/countries";
 // so an org already set to a value outside these two short lists must
 // still load and save correctly, not get rejected by a stricter
 // frontend-only check the backend itself doesn't share.
-const organizationSchema = z.object({
-  name: z.string().min(2, "Name must be at least 2 characters").max(80),
-  timezone: z.string().min(1, "Pick a timezone"),
-  currency: z.string().min(1, "Pick a currency"),
-});
+function organizationSchema(t: TFunction<"settings">) {
+  return z.object({
+    name: z.string().min(2, t("organization.errors.name")).max(80),
+    timezone: z.string().min(1, t("organization.errors.timezone")),
+    currency: z.string().min(1, t("organization.errors.currency")),
+  });
+}
 
-type OrganizationValues = z.infer<typeof organizationSchema>;
+type OrganizationValues = z.infer<ReturnType<typeof organizationSchema>>;
 
 function OrganizationForm({ org }: { org: OrganizationValues }) {
+  const { t } = useTranslation("settings");
   const updateOrganization = useUpdateOrganization();
 
   const form = useForm<OrganizationValues>({
-    resolver: zodResolver(organizationSchema),
+    resolver: zodResolver(organizationSchema(t)),
     defaultValues: org,
   });
 
@@ -49,8 +54,8 @@ function OrganizationForm({ org }: { org: OrganizationValues }) {
 
   function onSubmit(values: OrganizationValues) {
     updateOrganization.mutate(values, {
-      onSuccess: () => toast("Organization settings saved"),
-      onError: (err) => toast.error("Couldn't save organization settings", { description: err.message }),
+      onSuccess: () => toast(t("organization.saved")),
+      onError: (err) => toast.error(t("organization.saveError"), { description: err.message }),
     });
   }
 
@@ -63,13 +68,13 @@ function OrganizationForm({ org }: { org: OrganizationValues }) {
   return (
     <form onSubmit={handleSubmit(onSubmit)} className="grid max-w-md gap-4">
       <div className="grid gap-1.5">
-        <Label htmlFor="org-name">Organization name</Label>
+        <Label htmlFor="org-name">{t("organization.name")}</Label>
         <Input id="org-name" {...register("name")} aria-invalid={!!errors.name} />
         {errors.name && <p className="text-xs text-danger">{errors.name.message}</p>}
       </div>
 
       <div className="grid gap-1.5">
-        <Label htmlFor="org-timezone">Timezone</Label>
+        <Label htmlFor="org-timezone">{t("organization.timezone")}</Label>
         <Controller
           control={control}
           name="timezone"
@@ -80,7 +85,7 @@ function OrganizationForm({ org }: { org: OrganizationValues }) {
       </div>
 
       <div className="grid gap-1.5">
-        <Label htmlFor="org-currency">Default currency</Label>
+        <Label htmlFor="org-currency">{t("organization.currency")}</Label>
         <Controller
           control={control}
           name="currency"
@@ -102,29 +107,27 @@ function OrganizationForm({ org }: { org: OrganizationValues }) {
       </div>
 
       <Button type="submit" disabled={isSubmitting} className="w-fit">
-        Save changes
+        {t("organization.save")}
       </Button>
     </form>
   );
 }
 
 export function OrganizationPanel() {
+  const { t } = useTranslation("settings");
   const orgQuery = useOrganization();
 
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Organization</CardTitle>
-        <CardDescription>
-          Workspace name, timezone, and default currency (§30) — currency here is the display default; per-event
-          currency is always stored at event time (§50-FX).
-        </CardDescription>
+        <CardTitle>{t("organization.title")}</CardTitle>
+        <CardDescription>{t("organization.description")}</CardDescription>
       </CardHeader>
       <CardContent>
-        {orgQuery.isPending && <LoadingState label="Loading organization settings…" />}
+        {orgQuery.isPending && <LoadingState label={t("organization.loading")} />}
         {orgQuery.isError && (
           <ErrorState
-            title="Couldn't load organization settings"
+            title={t("organization.loadError")}
             description={orgQuery.error.message}
             onRetry={() => orgQuery.refetch()}
           />

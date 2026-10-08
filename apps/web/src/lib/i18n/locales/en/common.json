@@ -61,5 +61,28 @@
   "permissionDenied": {
     "title": "You don't have permission to do this",
     "description": "Ask an Owner or Admin for access if you think this is a mistake."
+  },
+  "macros": {
+    "button": "Macros",
+    "hint": "Click to insert",
+    "click_id": "Click ID",
+    "status": "Conversion status",
+    "revenue": "Revenue (original currency)",
+    "currency": "Currency code",
+    "payout": "Offer payout",
+    "campaign_id": "Campaign ID",
+    "offer_id": "Offer ID",
+    "source": "Traffic source",
+    "country": "Geo (ISO country code)",
+    "device": "Device type",
+    "sub": "Sub parameter {{n}}"
+  },
+  "a11y": {
+    "userMenu": "User menu",
+    "toggleTheme": "Toggle theme",
+    "lightTheme": "Switch to light theme",
+    "darkTheme": "Switch to dark theme",
+    "removeTag": "Remove tag",
+    "values": "Values"
   }
 }

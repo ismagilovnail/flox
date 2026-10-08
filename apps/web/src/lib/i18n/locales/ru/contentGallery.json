@@ -1,0 +1,103 @@
+{
+  "title": "Галерея контента",
+  "loading": "Загрузка файлов…",
+  "loadError": "Не удалось загрузить файлы",
+  "emptyTitle": "Здесь нет файлов",
+  "emptyDescription": "Загрузите изображение или выберите другую папку.",
+  "tabs": {
+    "active": "Активные",
+    "archived": "В архиве"
+  },
+  "uploadedBy": "Кто загрузил",
+  "everyone": "Все",
+  "picker": {
+    "title": "Выберите изображение",
+    "description": "Выберите файл из галереи контента или загрузите новый.",
+    "use": "Использовать"
+  },
+  "crop": {
+    "title": "Обрезка изображения",
+    "description": "Нужное соотношение сторон: {{aspect}}. Перетащите область, чтобы сдвинуть её, или угол, чтобы изменить размер.",
+    "skip": "Без обрезки",
+    "apply": "Применить",
+    "applying": "Применяем…",
+    "saveError": "Не удалось сохранить обрезанное изображение"
+  },
+  "upload": {
+    "label": "Загрузить",
+    "pending": "Загрузка…",
+    "error": "Загрузка не удалась"
+  },
+  "card": {
+    "select": "Выбрать",
+    "deselect": "Снять выбор",
+    "actions": "Действия с файлом",
+    "moveTo": "Переместить в"
+  },
+  "actions": {
+    "archive": "В архив",
+    "restore": "Восстановить",
+    "deletePermanently": "Удалить навсегда"
+  },
+  "folders": {
+    "all": "Все файлы",
+    "unfiled": "Без папки",
+    "new": "Новая папка",
+    "namePlaceholder": "Название папки",
+    "save": "Сохранить папку",
+    "saveName": "Сохранить название",
+    "renameAria": "Переименовать {{name}}",
+    "deleteAria": "Удалить {{name}}",
+    "createError": "Не удалось создать папку",
+    "renameError": "Не удалось переименовать папку",
+    "deleted": "Папка удалена",
+    "deletedDescription": "Её файлы перенесены в «Без папки», а не удалены.",
+    "deleteError": "Не удалось удалить папку",
+    "deleteTitle": "Удалить «{{name}}»?",
+    "deleteDescription": "Её файлы перейдут в «Без папки» — они не удаляются.",
+    "deleteConfirm": "Удалить папку"
+  },
+  "bulk": {
+    "moveTo": "Переместить в…",
+    "deselect": "Снять выбор",
+    "error": {
+      "archived": "Не удалось отправить файлы в архив",
+      "restored": "Не удалось восстановить файлы",
+      "moved": "Не удалось переместить файлы",
+      "deleted": "Не удалось удалить файлы"
+    },
+    "selected_one": "Выбран {{count}}",
+    "selected_few": "Выбрано {{count}}",
+    "selected_many": "Выбрано {{count}}",
+    "selected_other": "Выбрано {{count}}",
+    "done": {
+      "archived_one": "{{count}} файл в архиве",
+      "archived_few": "{{count}} файла в архиве",
+      "archived_many": "{{count}} файлов в архиве",
+      "archived_other": "{{count}} файла в архиве",
+      "restored_one": "{{count}} файл восстановлен",
+      "restored_few": "{{count}} файла восстановлено",
+      "restored_many": "{{count}} файлов восстановлено",
+      "restored_other": "{{count}} файла восстановлено",
+      "moved_one": "{{count}} файл перемещён",
+      "moved_few": "{{count}} файла перемещено",
+      "moved_many": "{{count}} файлов перемещено",
+      "moved_other": "{{count}} файла перемещено",
+      "deleted_one": "{{count}} файл удалён навсегда",
+      "deleted_few": "{{count}} файла удалено навсегда",
+      "deleted_many": "{{count}} файлов удалено навсегда",
+      "deleted_other": "{{count}} файла удалено навсегда"
+    }
+  },
+  "deleteDialog": {
+    "description": "Отменить нельзя — в отличие от архива, удалённый навсегда файл не восстановить.",
+    "title_one": "Удалить навсегда {{count}} файл?",
+    "title_few": "Удалить навсегда {{count}} файла?",
+    "title_many": "Удалить навсегда {{count}} файлов?",
+    "title_other": "Удалить навсегда {{count}} файла?"
+  },
+  "pagination_one": "Страница {{page}} из {{pages}} · {{count}} файл",
+  "pagination_few": "Страница {{page}} из {{pages}} · {{count}} файла",
+  "pagination_many": "Страница {{page}} из {{pages}} · {{count}} файлов",
+  "pagination_other": "Страница {{page}} из {{pages}} · {{count}} файла"
+}

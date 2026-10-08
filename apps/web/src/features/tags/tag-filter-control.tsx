@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import { CheckIcon, ChevronDownIcon } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -19,6 +20,7 @@ export function TagFilterControl({
   selected: string[];
   onChange: (tagIds: string[]) => void;
 }) {
+  const { t } = useTranslation("tags");
   const tags = useTags().data?.tags ?? EMPTY_TAGS;
   const [open, setOpen] = React.useState(false);
 
@@ -28,10 +30,10 @@ export function TagFilterControl({
 
   const summary =
     selected.length === 0
-      ? "All tags"
+      ? t("filter.all")
       : selected.length <= 2
-        ? selected.map((id) => tags.find((t) => t.id === id)?.name ?? id).join(", ")
-        : `${selected.length} tags`;
+        ? selected.map((id) => tags.find((tag) => tag.id === id)?.name ?? id).join(", ")
+        : t("filter.count", { count: selected.length });
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -43,17 +45,17 @@ export function TagFilterControl({
                 <span
                   key={id}
                   className="size-2 rounded-full ring-1 ring-background"
-                  style={{ backgroundColor: tagColorHex(tags.find((t) => t.id === id)?.color ?? "gray") }}
+                  style={{ backgroundColor: tagColorHex(tags.find((tag) => tag.id === id)?.color ?? "gray") }}
                 />
               ))}
             </span>
           )}
-          <span className="text-muted-foreground">Tags:</span> {summary}
+          <span className="text-muted-foreground">{t("filter.label")}</span> {summary}
           <ChevronDownIcon className="size-3.5 text-muted-foreground" />
         </Button>
       </PopoverTrigger>
       <PopoverContent align="start" className="w-56 p-1">
-        {tags.length === 0 && <p className="px-2 py-2 text-xs text-muted-foreground">No tags yet.</p>}
+        {tags.length === 0 && <p className="px-2 py-2 text-xs text-muted-foreground">{t("filter.empty")}</p>}
         {tags.map((tag) => {
           const checked = selected.includes(tag.id);
           return (
