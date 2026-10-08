@@ -18,6 +18,7 @@ import (
 	"github.com/ismagilovnail/flox/apps/internal/idgen"
 	"github.com/ismagilovnail/flox/apps/internal/logging"
 	"github.com/ismagilovnail/flox/apps/internal/tenant"
+	"github.com/ismagilovnail/flox/apps/internal/testpg"
 	"github.com/ismagilovnail/flox/apps/internal/totp"
 )
 
@@ -97,7 +98,7 @@ func signupOrg(t *testing.T, ctx context.Context, pool *pgxpool.Pool, svc *auth.
 		t.Fatalf("signup: %v", err)
 	}
 	t.Cleanup(func() {
-		_, _ = pool.Exec(context.Background(), `DELETE FROM organizations WHERE id = $1`, signupRes.Organization.ID)
+		_ = testpg.DeleteOrganization(context.Background(), pool, signupRes.Organization.ID)
 	})
 
 	if sharedTestMailer.lastTo != ownerEmail {
@@ -215,7 +216,7 @@ func TestLoginBlockedBeforeEmailVerification(t *testing.T) {
 		t.Fatalf("signup: %v", err)
 	}
 	t.Cleanup(func() {
-		_, _ = pool.Exec(context.Background(), `DELETE FROM organizations WHERE id = $1`, signupRes.Organization.ID)
+		_ = testpg.DeleteOrganization(context.Background(), pool, signupRes.Organization.ID)
 	})
 
 	_, err = svc.Login(ctx, auth.LoginInput{Email: email, Password: "correct-horse-battery-staple"})
@@ -241,7 +242,7 @@ func TestVerifyEmailLogsInAndConsumesTheToken(t *testing.T) {
 		t.Fatalf("signup: %v", err)
 	}
 	t.Cleanup(func() {
-		_, _ = pool.Exec(context.Background(), `DELETE FROM organizations WHERE id = $1`, signupRes.Organization.ID)
+		_ = testpg.DeleteOrganization(context.Background(), pool, signupRes.Organization.ID)
 	})
 	token := tokenFromBody(t, sharedTestMailer.lastBody)
 
@@ -287,7 +288,7 @@ func TestResendVerificationIssuesAFreshTokenAndInvalidatesTheOld(t *testing.T) {
 		t.Fatalf("signup: %v", err)
 	}
 	t.Cleanup(func() {
-		_, _ = pool.Exec(context.Background(), `DELETE FROM organizations WHERE id = $1`, signupRes.Organization.ID)
+		_ = testpg.DeleteOrganization(context.Background(), pool, signupRes.Organization.ID)
 	})
 	oldToken := tokenFromBody(t, sharedTestMailer.lastBody)
 

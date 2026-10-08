@@ -25,11 +25,10 @@ STATUS        : marketer audit (docs/audit-marketer-2026-10-06.md) closed:
                 each: #6 (no phase/§ in texts), #7 (whole app EN/RU, locale
                 parity test), #12 (funnel metrics by default, custom-metric
                 registry synced with a test).
-LAST COMMIT   : feat(analytics): funnel metrics by default.
-UNCOMMITTED   : none expected. Dev DB from `make fixtures` (password
-                flox-demo-2026) plus, from live checks: a $50 cost entry today
-                on Demo Campaign, two alert rules (spend > $10, ROI < 0) and
-                their notifications.
+LAST COMMIT   : chore(dev): dev-fresh / dev-status; tests clean up after
+                themselves.
+UNCOMMITTED   : none expected. Dev DB fresh from `make dev-fresh CONFIRM=yes`
+                (password flox-demo-2026); `make dev-status` shows what is in it.
 NEXT          : wait for the user — the next phase. CI (DO1) is the user's own
                 decision — do not set it up. Run go test with the full env line
                 AND check e2e did not skip (memory: flox-full-test-env); wait

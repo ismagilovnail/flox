@@ -67,7 +67,7 @@ var inviteRoles = []struct{ email, name, role string }{
 
 func main() {
 	if err := run(); err != nil {
-		fmt.Fprintln(os.Stderr, "devfixtures:", err)
+		fmt.Fprintln(os.Stderr, "Фикстуры не созданы:", err)
 		var apiErr *apierror.Error
 		if errors.As(err, &apiErr) && len(apiErr.Fields) > 0 {
 			fmt.Fprintln(os.Stderr, "  fields:", apiErr.Fields)
@@ -79,7 +79,7 @@ func main() {
 func run() error {
 	dsn := os.Getenv("DATABASE_URL")
 	if dsn == "" {
-		return errors.New("DATABASE_URL not set")
+		return errors.New("не задан DATABASE_URL (make fixtures подставляет его сам)")
 	}
 	password := envOr("FIXTURES_PASSWORD", defaultPassword)
 	appURL := envOr("APP_URL", "http://localhost:3000")
@@ -98,7 +98,7 @@ func run() error {
 			return fmt.Errorf("checking for %q: %w", name, err)
 		}
 		if exists {
-			return fmt.Errorf("organization %q already exists — run `make dev-reset` first", name)
+			return fmt.Errorf("организация %q уже есть — фикстуры создаются только в пустой базе. Сначала сброс: make dev-fresh CONFIRM=yes (сброс + фикстуры) или make dev-reset CONFIRM=yes", name)
 		}
 	}
 
@@ -124,27 +124,27 @@ func run() error {
 	}
 
 	fmt.Printf(`
-FLOX dev fixtures created.
+Фикстуры созданы.
 
-Sign in at %s (password for every account: %s)
+Вход: %s — пароль у всех аккаунтов: %s
 
-  FLOX Demo   owner@flox.local    Owner
-              admin@flox.local    Admin
-              manager@flox.local  Manager
-              buyer@flox.local    Buyer
-              analyst@flox.local  Analyst
-              viewer@flox.local   Viewer
-  FLOX Other  other-owner@flox.local  Owner (second tenant)
+  FLOX Demo   owner@flox.local        Владелец
+              admin@flox.local        Администратор
+              manager@flox.local      Менеджер
+              buyer@flox.local        Байер
+              analyst@flox.local      Аналитик
+              viewer@flox.local       Наблюдатель
+  FLOX Other  other-owner@flox.local  Владелец (вторая организация, для проверки изоляции)
 
-Tracking link:  %s
-  (host %s resolves to 127.0.0.1; the tracker matches the link by host)
+Трекинговая ссылка:  %s
+  (хост %s указывает на 127.0.0.1; трекер узнаёт ссылку по хосту)
 
-Postback (network "%s", statuses reg / ftd / redep / rejected):
+Постбэк сети «%s» (статусы reg / ftd / redep / rejected):
   %s/postback/%s?secret=%s&click_id={click_id}&status=ftd&revenue=25&currency=USD
 
-The postback secret is stored hashed — this is the only time it is shown.
-Outgoing postbacks go to partner.example (never resolves): they retry and then
-dead-letter. Set a real URL on the network to test delivery.
+Секрет постбэка хранится в виде хеша — показан только сейчас, сохраните его.
+Исходящие постбэки уходят на partner.example (не существует): повторяются и
+попадают в dead-letter. Чтобы проверить доставку, укажите в сети настоящий URL.
 `, appURL, password,
 		trackerURLWithHost(trackerURL, trackingHost)+"/t/"+trackingSlug, trackingHost,
 		demo.networkName, trackerURL, demo.networkID, demo.postbackSecret)

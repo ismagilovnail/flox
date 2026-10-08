@@ -13,6 +13,7 @@ import (
 
 	"github.com/ismagilovnail/flox/apps/internal/chconn"
 	"github.com/ismagilovnail/flox/apps/internal/config"
+	"github.com/ismagilovnail/flox/apps/internal/testpg"
 )
 
 // TestOfferDailyCap drives the whole path of the daily cap through the real
@@ -54,7 +55,7 @@ func TestOfferDailyCap(t *testing.T) {
 		if s.orgID == "" {
 			return
 		}
-		_, _ = pg.Exec(context.Background(), `DELETE FROM organizations WHERE id = $1`, s.orgID)
+		_ = testpg.DeleteOrganization(context.Background(), pg, s.orgID)
 		for _, table := range []string{
 			"click_events", "tracking_events", "conversion_events", "postback_events",
 			"click_events_daily_campaign", "click_events_daily_geo", "conversion_events_daily_campaign",

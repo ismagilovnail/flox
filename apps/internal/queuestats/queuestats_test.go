@@ -25,7 +25,7 @@ func TestRefreshCountsStatusesAndOldestDueAge(t *testing.T) {
 	if err != nil {
 		t.Fatalf("connecting: %v", err)
 	}
-	defer db.Close()
+	t.Cleanup(db.Close) // not defer: the table cleanup below needs the pool
 	table := "queuestats_test_" + strings.ToLower(idgen.New())
 	if _, err := db.Exec(ctx, `CREATE TABLE `+table+` (id text, status text, next_attempt_at timestamptz)`); err != nil {
 		t.Fatalf("creating table: %v", err)

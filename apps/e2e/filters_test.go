@@ -26,6 +26,7 @@ import (
 
 	"github.com/ismagilovnail/flox/apps/internal/chconn"
 	"github.com/ismagilovnail/flox/apps/internal/config"
+	"github.com/ismagilovnail/flox/apps/internal/testpg"
 )
 
 const (
@@ -127,7 +128,7 @@ func newFilterEnv(t *testing.T) *filterEnv {
 		http: &http.Client{Jar: jar, Timeout: 10 * time.Second}, pg: pg}
 	t.Cleanup(func() {
 		if s.orgID != "" {
-			_, _ = pg.Exec(context.Background(), `DELETE FROM organizations WHERE id = $1`, s.orgID)
+			_ = testpg.DeleteOrganization(context.Background(), pg, s.orgID)
 			if chURL := os.Getenv("CLICKHOUSE_URL"); chURL != "" {
 				if ch, err := chconn.NewConn(context.Background(), config.ClickHouseConfig{
 					URL: chURL, Database: envOr("CLICKHOUSE_DATABASE", "flox"), User: envOr("CLICKHOUSE_USER", "flox"),

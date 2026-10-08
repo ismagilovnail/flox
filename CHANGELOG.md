@@ -5,6 +5,30 @@ per-phase, matching `CLAUDE.md`'s phase protocol. The one exception is
 [Between phases], below: spec amendments and the code changes that follow from
 them land between phases and would otherwise be invisible here.
 
+## [Between phases] — dev data commands with readable output; tests clean up after themselves
+
+- `make dev-fresh CONFIRM=yes` (new): wipe every dev store, wait for api/tracker/worker, create
+  the fixtures, show the result. `make dev-status` (new): services up or not, schema version,
+  organizations/users/campaigns/offers/domains/alert rules/notifications, ClickHouse tables and
+  event counts, Redis keys, MinIO files. `make dev-reset` keeps its meaning. All three run
+  `infra/dev-data.sh`, which prints each step with ✓, names the failing step with the command's
+  output, refuses to start when a store's container is not running, and waits (up to 180 s) for
+  `/health` and the ClickHouse schema after a reset. The fixtures' summary is in Russian; running
+  them over a non-empty database says which command to run first.
+- `make dev-status` showed 264 leftover test organizations in the dev database. Fixed at the source:
+  - `custommetrics`, `tags`, `apikey`, `referral`, `reportpresets` tests seeded organizations
+    and users with no cleanup;
+  - `reconcile` and `queuestats` tests closed their pool with `defer`, which runs before
+    `t.Cleanup` — the cleanup then failed silently on a closed pool;
+  - tests that sign up or invite through the real service (e2e, auth) deleted the organization
+    but left its users. New `testpg.DeleteOrganization` removes the organization and the users
+    who belonged only to it (or acted in it and were removed), in one transaction — the audit
+    log references users, so the organization's cascade has to run first.
+
+Tests: after `make dev-fresh CONFIRM=yes` the full-env `go test ./...` (e2e FullFunnel,
+OfferDailyCap, FilterMatrix not skipped) leaves the database exactly as before: 2 organizations,
+7 users, 51 tables.
+
 ## [Between phases] — funnel metrics by default
 
 Marketer audit #12 (P2): PWA installs, registrations, purchases, repurchases, step rates and cost

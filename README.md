@@ -45,10 +45,18 @@ and Node.js on the host for `make check` and the dev commands below.
 
 ```
 make up                       # start everything
-make dev-reset CONFIRM=yes    # DESTRUCTIVE: wipe Postgres, ClickHouse, Redis, MinIO
-make fixtures                 # dev accounts + a working demo setup
+make dev-fresh CONFIRM=yes    # DESTRUCTIVE: wipe all dev data, then create the demo accounts
+make dev-reset CONFIRM=yes    # DESTRUCTIVE: wipe only (Postgres re-migrated; ClickHouse, Redis, MinIO emptied)
+make fixtures                 # dev accounts + a working demo setup, into an empty database
+make dev-status               # what is in the dev stores right now
 make help                     # every target
 ```
+
+The data commands live in `infra/dev-data.sh`: each step prints what it does
+and whether it worked, a failure names the step and shows the command's
+output, and `dev-reset`/`dev-fresh` wait until api, tracker and worker answer
+`/health` before returning. They touch only the services of
+`infra/docker-compose.dev.yml`.
 
 `make fixtures` (`apps/cmd/devfixtures`) needs an empty database and goes
 through the real services. It creates:

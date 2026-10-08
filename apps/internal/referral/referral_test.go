@@ -35,6 +35,10 @@ func seedOrgAndUser(t *testing.T, ctx context.Context, pool *pgxpool.Pool) (orgI
 	if _, err := pool.Exec(ctx, `INSERT INTO users (id, email, name) VALUES ($1, $2, 'Test User')`, userID, userID+"@example.com"); err != nil {
 		t.Fatalf("seeding user: %v", err)
 	}
+	t.Cleanup(func() {
+		_, _ = pool.Exec(context.Background(), `DELETE FROM organizations WHERE id = $1`, orgID)
+		_, _ = pool.Exec(context.Background(), `DELETE FROM users WHERE id = $1`, userID)
+	})
 	return orgID, userID
 }
 

@@ -27,3 +27,49 @@ func PrivateTable(t testing.TB, pool *pgxpool.Pool, table string) string {
 	t.Cleanup(func() { _, _ = pool.Exec(context.Background(), `DROP TABLE `+name) })
 	return name
 }
+
+// DeleteOrganization removes an organization a test created (its rows
+// cascade) together with the users who belonged to it and to no other
+// organization (or acted in it and left) — tests that sign up or invite people through the real
+// service otherwise leave those users behind in the dev database. Three
+// statements in one transaction: the users are found first, then the
+// organization's cascade removes everything that points at them (audit
+// log, memberships), then they go.
+func DeleteOrganization(ctx context.Context, pool *pgxpool.Pool, orgID string) error {
+	tx, err := pool.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	rows, err := tx.Query(ctx, `
+		SELECT u.id FROM users u
+		WHERE (EXISTS (SELECT 1 FROM memberships m WHERE m.user_id = u.id AND m.organization_id = $1)
+		       -- a member the test itself removed still has entries in the audit log
+		       OR EXISTS (SELECT 1 FROM audit_logs a WHERE a.actor_user_id = u.id AND a.organization_id = $1))
+		  AND NOT EXISTS (SELECT 1 FROM memberships o WHERE o.user_id = u.id AND o.organization_id <> $1)`, orgID)
+	if err != nil {
+		return err
+	}
+	var users []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			rows.Close()
+			return err
+		}
+		users = append(users, id)
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return err
+	}
+
+	if _, err := tx.Exec(ctx, `DELETE FROM organizations WHERE id = $1`, orgID); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(ctx, `DELETE FROM users WHERE id = ANY($1)`, users); err != nil {
+		return err
+	}
+	return tx.Commit(ctx)
+}

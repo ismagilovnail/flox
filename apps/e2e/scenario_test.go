@@ -47,6 +47,7 @@ import (
 	"github.com/ismagilovnail/flox/apps/internal/chconn"
 	"github.com/ismagilovnail/flox/apps/internal/config"
 	"github.com/ismagilovnail/flox/apps/internal/idgen"
+	"github.com/ismagilovnail/flox/apps/internal/testpg"
 )
 
 const dateLayout = "2006-01-02"
@@ -161,7 +162,7 @@ func TestFullFunnel(t *testing.T) {
 			return
 		}
 		cleanupCtx := context.Background()
-		if _, err := pg.Exec(cleanupCtx, `DELETE FROM organizations WHERE id = $1`, s.orgID); err != nil {
+		if err := testpg.DeleteOrganization(cleanupCtx, pg, s.orgID); err != nil {
 			t.Logf("cleanup: deleting organization: %v", err)
 		}
 		for _, table := range []string{

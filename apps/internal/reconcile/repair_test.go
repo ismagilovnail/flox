@@ -29,12 +29,12 @@ func TestRepairMakesClickHouseMatchPostgres(t *testing.T) {
 	if err != nil {
 		t.Fatalf("postgres: %v", err)
 	}
-	defer pg.Close()
+	t.Cleanup(pg.Close) // not defer: the org cleanup below runs in t.Cleanup and needs the pool
 	ch, err := chconn.NewConn(ctx, config.ClickHouseConfig{URL: chURL, Database: "flox", User: "flox"})
 	if err != nil {
 		t.Fatalf("clickhouse: %v", err)
 	}
-	defer ch.Close()
+	t.Cleanup(func() { _ = ch.Close() })
 	if err := chstore.Migrate(ctx, ch); err != nil {
 		t.Fatalf("migrate: %v", err)
 	}
