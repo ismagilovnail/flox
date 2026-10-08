@@ -39,7 +39,7 @@ func (a *slackAdapter) Verify(ctx context.Context, fields map[string]string) err
 	if err := urlsafety.ValidateURL(webhookURL); err != nil {
 		return fmt.Errorf("slack: %w", err)
 	}
-	return a.post(ctx, webhookURL)
+	return a.post(ctx, webhookURL, "FLOX connected to this Slack channel. Campaign and team alerts will post here.")
 }
 
 // post is split out from Verify purely so tests can exercise the real
@@ -47,8 +47,8 @@ func (a *slackAdapter) Verify(ctx context.Context, fields map[string]string) err
 // loopback, and so would always fail ValidateURL's own real SSRF check)
 // without weakening Verify's actual production behavior, which always
 // validates first.
-func (a *slackAdapter) post(ctx context.Context, webhookURL string) error {
-	body, err := json.Marshal(map[string]string{"text": "FLOX connected to this Slack channel. Campaign and team alerts will post here."})
+func (a *slackAdapter) post(ctx context.Context, webhookURL, text string) error {
+	body, err := json.Marshal(map[string]string{"text": text})
 	if err != nil {
 		return fmt.Errorf("integrations: encoding slack payload: %w", err)
 	}

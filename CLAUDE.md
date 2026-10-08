@@ -20,21 +20,19 @@ referenced below as §N).
 
 ```
 CURRENT PHASE : MARKETER AUDIT FOLLOW-UPS (between phases)
-STATUS        : technical audit closed (docs/audit-tech-2026-10-06.md). Marketer
-                audit (docs/audit-marketer-2026-10-06.md): user picked #4, #10,
-                #5, offer-cap badge + #11, one commit each. #4 done: Caddy
-                on-demand TLS (infra/Caddyfile.tracker) + tracker ask hook
-                (internal/tlsask) + worker TLS check (internal/sslcheck) +
-                https links once a domain's certificate is valid.
-LAST COMMIT   : feat(domains): https for tracking domains.
+STATUS        : marketer audit (docs/audit-marketer-2026-10-06.md): user picked
+                #4, #10, #5, offer-cap badge + #11, one commit each. #4 and #10
+                done. #10: internal/alert (rules, notifications, worker
+                evaluator, Slack), bell + Settings → Alerts; campaign/source
+                reports keep spend-only rows.
+LAST COMMIT   : feat(alerts): spend, ROI, offer and SSL alerts.
 UNCOMMITTED   : none expected. Dev DB from `make fixtures` (password
-                flox-demo-2026).
-NEXT          : #10 alerts (spend/ROI/offer cap or pause/SSL expiry — uses
-                domains.ssl_expires_at), then #5 menu stubs (LTV screen),
-                then offer-cap badge + #11 Top Offers. CI (DO1) is the user's
-                own decision — do not set it up. Run go test with the full env
-                line AND check e2e did not skip (memory: flox-full-test-env);
-                wait for air rebuilds before e2e.
+                flox-demo-2026) plus a $50 cost entry today on Demo Campaign,
+                two alert rules and a paused Demo Offer from the live check.
+NEXT          : #5 menu stubs (LTV screen), then offer-cap badge + #11 Top
+                Offers. CI (DO1) is the user's own decision — do not set it up.
+                Run go test with the full env line AND check e2e did not skip
+                (memory: flox-full-test-env); wait for air rebuilds before e2e.
 ```
 
 > At the end of every phase: update the four lines above, add a CHANGELOG entry,

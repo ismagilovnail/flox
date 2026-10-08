@@ -278,6 +278,9 @@ services:
       # (§74/§27-COST) needs it to decrypt Google Ads credentials
       # apps/api encrypted at Connect time.
       ADACCOUNT_ENCRYPTION_KEY: "KatbgYl+Kd4KPI5T0hKfwZRYsij/t7g7fVomXdjhW/c="
+      # Same dev-only value as the api's: alerts read the Slack webhook
+      # apps/api encrypted (internal/alert).
+      INTEGRATION_ENCRYPTION_KEY: "wLE0wIEHBNnfVfq8d62JDEAltM4frTgYmPi8XAv1QpY="
     volumes:
       - ../apps:/src
       - worker_go_mod_cache:/go/pkg/mod

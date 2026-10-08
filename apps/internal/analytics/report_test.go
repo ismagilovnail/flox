@@ -740,3 +740,57 @@ func TestReportBlockedRatesAreNullWithoutTraffic(t *testing.T) {
 		t.Fatalf("no traffic: rates must be nil, never 0 / NaN; got %v %v", m.BlockedRate, m.BotRate)
 	}
 }
+
+// A campaign or source with spend but no events in the range is a row of
+// its own (spend, zero revenue, ROI -100%) — it used to be dropped, which
+// hid money spent on no traffic and broke the rows-add-up-to-total rule.
+// With filters it stays out: spend cannot be split by a filter.
+func TestReportKeepsSpendWithoutEvents(t *testing.T) {
+	from, to := time.Date(2026, 8, 1, 0, 0, 0, 0, time.UTC), time.Date(2026, 8, 1, 0, 0, 0, 0, time.UTC)
+	repo := &reportFakeRepo{clicks: []chstore.ClickAgg{{Key: dimKey(chstore.DimCampaign, "camp-a"), Clicks: 10, UniqueClicks: 10}}}
+	costs := &fakeCost{
+		byCampaign: []cost.CampaignSpend{{CampaignID: "camp-a", AmountUSD: 5, AllConverted: true}, {CampaignID: "camp-idle", AmountUSD: 50, AllConverted: true}},
+		bySource:   []cost.SourceSpend{{TrafficSourceID: "src-idle", AmountUSD: 50}},
+	}
+	svc := analytics.NewService(repo, costs)
+
+	rows, err := svc.Report(context.Background(), "org-1", analytics.ReportInput{Dims: []chstore.ReportDimension{chstore.DimCampaign}, From: from, To: to})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var idle *analytics.MetricValues
+	for _, r := range rows {
+		if r.DimValues[chstore.DimCampaign] == "camp-idle" {
+			idle = &r.Metrics
+		}
+	}
+	if len(rows) != 2 || idle == nil {
+		t.Fatalf("rows = %+v, want camp-a and camp-idle", rows)
+	}
+	if idle.Clicks != 0 || idle.Cost == nil || *idle.Cost != 50 || idle.Revenue == nil || *idle.Revenue != 0 || idle.ROI == nil || *idle.ROI != -100 {
+		t.Fatalf("idle campaign = %+v, want cost 50, revenue 0, ROI -100", *idle)
+	}
+
+	rows, err = svc.Report(context.Background(), "org-1", analytics.ReportInput{Dims: []chstore.ReportDimension{chstore.DimSource}, From: from, To: to})
+	if err != nil {
+		t.Fatal(err)
+	}
+	found := false
+	for _, r := range rows {
+		found = found || (r.DimValues[chstore.DimSource] == "src-idle" && r.Metrics.Cost != nil && *r.Metrics.Cost == 50)
+	}
+	if !found {
+		t.Fatalf("source rows = %+v, want src-idle with its spend", rows)
+	}
+
+	rows, err = svc.Report(context.Background(), "org-1", analytics.ReportInput{
+		Dims: []chstore.ReportDimension{chstore.DimCampaign}, From: from, To: to,
+		Filters: []chstore.ReportFilter{{Dimension: chstore.DimCountry, Value: "US"}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rows) != 1 {
+		t.Fatalf("filtered report = %+v, want only the campaign with events", rows)
+	}
+}

@@ -434,7 +434,24 @@ func (s *Service) groupedReport(ctx context.Context, organizationID string, dims
 	}
 
 	if s.cost != nil {
-		if err := s.attachCost(ctx, organizationID, dims, byDay, from, to, merged); err != nil {
+		// A campaign (or source) with spend but no events in the range is
+		// still a row: leaving it out hid money spent on no traffic, and
+		// made the rows not add up to the total. Only without filters — a
+		// filtered report has no way to tell which spend matches them.
+		var addRow func(map[chstore.ReportDimension]string) *rowAccumulator
+		if len(filters) == 0 {
+			addRow = func(dimValues map[chstore.ReportDimension]string) *rowAccumulator {
+				acc := get(chstore.ReportKey{DimValues: dimValues})
+				if convSupported && acc.conversions == nil {
+					zero, zeroF := uint64(0), 0.0
+					acc.conversions, acc.revenueUSD = &zero, &zeroF
+					z1, z2, z3 := uint64(0), uint64(0), uint64(0)
+					acc.registrations, acc.purchases, acc.repurchases = &z1, &z2, &z3
+				}
+				return acc
+			}
+		}
+		if err := s.attachCost(ctx, organizationID, dims, byDay, from, to, merged, addRow); err != nil {
 			return nil, err
 		}
 	}
@@ -463,8 +480,10 @@ func costEligible(dims []chstore.ReportDimension) bool {
 }
 
 // attachCost fills acc.costUSD (and leaves it nil where CLAUDE.md #6
-// requires) for every row groupedReport has already built.
-func (s *Service) attachCost(ctx context.Context, organizationID string, dims []chstore.ReportDimension, byDay bool, from, to time.Time, merged map[string]*rowAccumulator) error {
+// requires) for every row groupedReport has already built. addRow, when
+// not nil, creates the row for a campaign or source that has spend but no
+// row yet (per-period reports only).
+func (s *Service) attachCost(ctx context.Context, organizationID string, dims []chstore.ReportDimension, byDay bool, from, to time.Time, merged map[string]*rowAccumulator, addRow func(map[chstore.ReportDimension]string) *rowAccumulator) error {
 	if !costEligible(dims) {
 		return nil // every acc.costUSD stays nil — no dimension breakdown cost_entries can answer
 	}
@@ -504,10 +523,21 @@ func (s *Service) attachCost(ctx context.Context, organizationID string, dims []
 		for _, c := range bySource {
 			bySourceID[c.TrafficSourceID] = c.AmountUSD
 		}
+		seen := map[string]bool{}
 		for _, acc := range merged {
-			if usd, ok := bySourceID[acc.dimValues[chstore.DimSource]]; ok {
+			id := acc.dimValues[chstore.DimSource]
+			seen[id] = true
+			if usd, ok := bySourceID[id]; ok {
 				v := usd
 				acc.costUSD = &v
+			}
+		}
+		if addRow != nil {
+			for _, c := range bySource {
+				if !seen[c.TrafficSourceID] {
+					v := c.AmountUSD
+					addRow(map[chstore.ReportDimension]string{chstore.DimSource: c.TrafficSourceID}).costUSD = &v
+				}
 			}
 		}
 		return nil
@@ -522,11 +552,21 @@ func (s *Service) attachCost(ctx context.Context, organizationID string, dims []
 	for _, c := range spend {
 		byCampaign[c.CampaignID] = c.AmountUSD
 	}
+	seen := map[string]bool{}
 	for _, acc := range merged {
 		campaignID := acc.dimValues[dims[0]]
+		seen[campaignID] = true
 		if usd, ok := byCampaign[campaignID]; ok {
 			v := usd
 			acc.costUSD = &v
+		}
+	}
+	if addRow != nil {
+		for _, c := range spend {
+			if !seen[c.CampaignID] {
+				v := c.AmountUSD
+				addRow(map[chstore.ReportDimension]string{chstore.DimCampaign: c.CampaignID}).costUSD = &v
+			}
 		}
 	}
 	return nil

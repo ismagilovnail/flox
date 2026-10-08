@@ -50,6 +50,7 @@ import enAuth from "@/lib/i18n/locales/en/auth.json";
 import enAnalytics from "@/lib/i18n/locales/en/analytics.json";
 import enDashboard from "@/lib/i18n/locales/en/dashboard.json";
 import enFlows from "@/lib/i18n/locales/en/flows.json";
+import enAlerts from "@/lib/i18n/locales/en/alerts.json";
 
 import ruCommon from "@/lib/i18n/locales/ru/common.json";
 import ruNav from "@/lib/i18n/locales/ru/nav.json";
@@ -71,6 +72,7 @@ import ruAuth from "@/lib/i18n/locales/ru/auth.json";
 import ruAnalytics from "@/lib/i18n/locales/ru/analytics.json";
 import ruDashboard from "@/lib/i18n/locales/ru/dashboard.json";
 import ruFlows from "@/lib/i18n/locales/ru/flows.json";
+import ruAlerts from "@/lib/i18n/locales/ru/alerts.json";
 
 // Re-exported so existing "use client" call sites can keep importing
 // locale/cookie concerns from this module as before — the actual
@@ -101,6 +103,7 @@ export const NAMESPACES = [
   "analytics",
   "dashboard",
   "flows",
+  "alerts",
 ] as const;
 
 const resources = {
@@ -125,6 +128,7 @@ const resources = {
     analytics: enAnalytics,
     dashboard: enDashboard,
     flows: enFlows,
+    alerts: enAlerts,
   },
   ru: {
     common: ruCommon,
@@ -147,6 +151,7 @@ const resources = {
     analytics: ruAnalytics,
     dashboard: ruDashboard,
     flows: ruFlows,
+    alerts: ruAlerts,
   },
 };
 

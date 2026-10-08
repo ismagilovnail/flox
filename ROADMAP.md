@@ -119,6 +119,8 @@ session.
 | Dev compose subnet pinned to `10.99.0.0/24` (docker's auto-pick `192.168.0.0/20` shadowed the host LAN and broke host → container traffic) | done |
 | Offer daily cap enforced in routing (`internal/offercap`, org-timezone day, capped offers leave the flow draw; audit #1) — UI badge/alerts still open | done |
 | Blocked traffic and bots in analytics: `blocked`/`bots`/`blockedRate`/`botRate` metrics + four Overview tiles (audit #3) | done |
+| HTTPS for tracking domains: Caddy on-demand TLS, worker SSL check, https links (audit #4, `docs/domains-tracking-links.md`) | done |
+| Alerts: spend over, ROI below, offer capped / paused, SSL expiring → the bell and Slack; rules under Settings → Alerts (audit #10, `docs/alerts.md`). Campaign/source reports keep rows that have spend but no events | done |
 
 ## Known open gaps
 
@@ -127,9 +129,7 @@ scoped phase; none blocks anything that ships today.
 
 | Gap | Where |
 |---|---|
-| Domains: SSL never issued (`SSLIssued`), links on `http` (audit #4, P0) | `apps/internal/domain` |
 | Menu stubs "Not built yet": Push, Reports, LTV / Cohorts (audit #5) — the LTV engine exists (`docs/ltv-cohorts.md`), only its UI is missing | `apps/web/src/app/(app)/{push,reports,ltv-cohorts}` |
-| Alerts (spend threshold, ROI < 0, offer paused / cap hit, SSL expiry) (audit #10) | only infra Prometheus alerts exist |
 | Overview: Top Offers card and previous-period comparison (audit #11) — `offer` dimension is now backed, so unblocked | `features/dashboard/dashboard-view.tsx` |
 | New funnel metrics are not in the default analytics column set, and the Custom Metrics registry lacks them (audit #12) | `features/analytics/registry.ts`, custom metrics registry |
 | Brave is indistinguishable from Chrome by User-Agent (audit #13) | platform limit, not fixable |

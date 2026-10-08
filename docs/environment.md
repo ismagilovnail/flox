@@ -148,6 +148,12 @@ an HTTP handler or a worker loop is sent, asynchronously; visitor IPs and
 headers are not attached. A malformed DSN fails the binary at boot.
 `internal/errtrack`.
 
+### Alerts
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `INTEGRATION_ENCRYPTION_KEY` (worker) | empty | The api's key for integration credentials. The worker needs the same value to read the Slack webhook alerts are sent to (`docs/alerts.md`). Without it the worker logs a warning at start, alerts still appear in the app, and every Slack delivery is recorded as failed. |
+
 ### Domain/DNS providers, Facebook/TikTok ad accounts
 
 All blank in `.env.example` on purpose — every one of these is a real

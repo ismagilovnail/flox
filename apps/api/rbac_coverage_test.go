@@ -44,6 +44,7 @@ var deliberatelyOpen = map[string]string{
 	"auth.enroll":             "personal 2FA, every role manages its own",
 	"auth.confirm":            "personal 2FA, every role manages its own",
 	"auth.disable":            "personal 2FA, re-proves the caller's password",
+	"alert.markRead":          "the caller's own read state; every role reads notifications",
 	// POST-shaped reads: a JSON query body, no write.
 	"analytics.report":          "read-only query, POST only for its body",
 	"analytics.timeseries":      "read-only query, POST only for its body",

@@ -2,6 +2,7 @@ package integrations
 
 import (
 	"context"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -62,12 +63,16 @@ func TestSlackAdapterVerify(t *testing.T) {
 		if r.Header.Get("Content-Type") != "application/json" {
 			t.Fatalf("Content-Type = %q, want application/json", r.Header.Get("Content-Type"))
 		}
+		body, _ := io.ReadAll(r.Body)
+		if string(body) != `{"text":"hello *team*"}` {
+			t.Fatalf("body = %s, want the text as Slack's text field", body)
+		}
 		w.Write([]byte("ok"))
 	}))
 	defer srv.Close()
 
 	a := &slackAdapter{HTTPClient: srv.Client()}
-	if err := a.post(context.Background(), srv.URL); err != nil {
+	if err := a.post(context.Background(), srv.URL, "hello *team*"); err != nil {
 		t.Fatalf("post = %v, want nil", err)
 	}
 }
@@ -88,7 +93,7 @@ func TestSlackAdapterVerifyFailureResponse(t *testing.T) {
 	defer srv.Close()
 
 	a := &slackAdapter{HTTPClient: srv.Client()}
-	err := a.post(context.Background(), srv.URL)
+	err := a.post(context.Background(), srv.URL, "x")
 	if err == nil {
 		t.Fatal("post against a failing webhook succeeded, want an error")
 	}

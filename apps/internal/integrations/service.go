@@ -2,11 +2,14 @@ package integrations
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"strings"
 
 	"github.com/ismagilovnail/flox/apps/internal/adaccount"
 	"github.com/ismagilovnail/flox/apps/internal/apierror"
 	"github.com/ismagilovnail/flox/apps/internal/idgen"
+	"github.com/ismagilovnail/flox/apps/internal/urlsafety"
 )
 
 // Verifier is what each provider's adapter implements — a single real
@@ -32,19 +35,43 @@ type Service struct {
 	key         []byte
 	adapters    map[Provider]Verifier
 	adPlatforms AdPlatformSource
+	slack       *slackAdapter
 }
 
 func NewService(repo *Repository, key []byte, adPlatforms AdPlatformSource) *Service {
+	slack := newSlackAdapter()
 	return &Service{
 		repo: repo,
 		key:  key,
 		adapters: map[Provider]Verifier{
 			ProviderNamecheap:  newNamecheapAdapter(),
 			ProviderCloudflare: newCloudflareAdapter(),
-			ProviderSlack:      newSlackAdapter(),
+			ProviderSlack:      slack,
 		},
 		adPlatforms: adPlatforms,
+		slack:       slack,
 	}
+}
+
+// ErrNotConnected is PostSlack's answer for an organization without a
+// Slack integration.
+var ErrNotConnected = errors.New("integration not connected")
+
+// PostSlack posts text to orgID's connected Slack webhook — alerts
+// (internal/alert) deliver through it. Never HTTP-reachable.
+func (s *Service) PostSlack(ctx context.Context, orgID, text string) error {
+	fields, found, err := s.CredentialsFor(ctx, orgID, ProviderSlack)
+	if err != nil {
+		return err
+	}
+	if !found {
+		return ErrNotConnected
+	}
+	webhookURL := fields["webhookUrl"]
+	if err := urlsafety.ValidateURL(webhookURL); err != nil {
+		return fmt.Errorf("slack: %w", err)
+	}
+	return s.slack.post(ctx, webhookURL, text)
 }
 
 // CredentialsFor decrypts and returns one org's stored credential fields

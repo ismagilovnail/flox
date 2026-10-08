@@ -1,0 +1,105 @@
+{
+  "tab": "Alerts",
+  "panel": {
+    "title": "Alerts",
+    "description": "FLOX checks these rules every few minutes and notifies you once per day (per offer, per certificate) when one trips. Spend and ROI are for today in the organization's timezone.",
+    "add": "New alert",
+    "loading": "Loading alerts…",
+    "loadError": "Couldn't load alerts",
+    "empty": "No alerts yet.",
+    "slackNotConnected": "Slack is not connected — connect it on the Integrations tab to send alerts there.",
+    "allCampaigns": "Every campaign",
+    "unknownCampaign": "Deleted campaign",
+    "disabled": "Off",
+    "slack": "Slack",
+    "toggleAria": "Turn {{name}} on or off",
+    "editAria": "Edit {{name}}",
+    "deleteAria": "Delete {{name}}"
+  },
+  "kinds": {
+    "spend_over": "Spend over threshold",
+    "roi_below": "ROI below threshold",
+    "offer_capped": "Offer hit its daily cap",
+    "offer_paused": "Offer paused",
+    "ssl_expiring": "SSL certificate expiring"
+  },
+  "kindHints": {
+    "spend_over": "Today's spend on a campaign goes over the amount.",
+    "roi_below": "Today's ROI of a campaign drops below the percentage. Needs spend on file — no cost, no ROI.",
+    "offer_capped": "An offer reaches its daily conversion cap and leaves the flow draw until midnight.",
+    "offer_paused": "Someone sets an offer to paused; traffic of the flows that use it goes to the stream set's or campaign's fallback.",
+    "ssl_expiring": "A domain's certificate expires within the number of days, or has expired."
+  },
+  "summary": {
+    "spend_over": "over ${{value}}",
+    "roi_below": "below {{value}}%",
+    "roi_below_min": "below {{value}}% once spend reaches ${{minSpend}}",
+    "ssl_expiring_one": "{{count}} day before expiry",
+    "ssl_expiring_other": "{{count}} days before expiry"
+  },
+  "form": {
+    "createTitle": "New alert",
+    "editTitle": "Edit alert",
+    "kind": "When",
+    "campaign": "Campaign",
+    "thresholdSpend": "Spend over, USD",
+    "thresholdRoi": "ROI below, %",
+    "thresholdDays": "Days before expiry",
+    "minSpend": "Only once spend reaches, USD (optional)",
+    "notifySlack": "Also send to Slack",
+    "enabled": "On",
+    "save": "Save alert",
+    "saved": "Alert saved",
+    "saveError": "Couldn't save the alert",
+    "errors": {
+      "thresholdRequired": "Enter a number",
+      "positive": "Must be greater than 0",
+      "roiRange": "Between -100 and 100000",
+      "days": "Whole days, 1 to 90",
+      "minSpend": "Must not be negative"
+    }
+  },
+  "delete": {
+    "title": "Delete this alert?",
+    "description": "\"{{name}}\" stops notifying. Notifications it already sent stay.",
+    "done": "Alert deleted",
+    "error": "Couldn't delete the alert"
+  },
+  "bell": {
+    "title": "Notifications",
+    "aria": "Notifications",
+    "ariaUnread_one": "Notifications, {{count}} unread",
+    "ariaUnread_other": "Notifications, {{count}} unread",
+    "markRead": "Mark all as read",
+    "empty": "Nothing yet. Alerts you set up in Settings → Alerts show here.",
+    "error": "Couldn't load notifications",
+    "settings": "Alert settings"
+  },
+  "messages": {
+    "spend_over": {
+      "title": "Spend over threshold",
+      "body": "{{campaign}}: ${{spend}} spent today, over ${{threshold}}."
+    },
+    "roi_below": {
+      "title": "ROI below threshold",
+      "body": "{{campaign}}: ROI {{roi}}% today, below {{threshold}}% (spend ${{spend}}, revenue ${{revenue}})."
+    },
+    "offer_capped": {
+      "title": "Offer daily cap reached",
+      "body": "{{offer}}: {{used}} of {{cap}} conversions — no traffic until midnight."
+    },
+    "offer_paused": {
+      "title": "Offer paused",
+      "body": "{{offer}} was paused; traffic of its flows goes to the fallback URL."
+    },
+    "ssl_expiring": {
+      "title": "SSL certificate expiring",
+      "body_one": "{{domain}}: the certificate expires in {{count}} day ({{date}}).",
+      "body_other": "{{domain}}: the certificate expires in {{count}} days ({{date}})."
+    },
+    "ssl_expired": {
+      "title": "SSL certificate expired",
+      "body": "{{domain}}: the certificate has expired — tracking links on it fail in browsers."
+    }
+  }
+}

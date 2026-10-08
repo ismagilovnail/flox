@@ -95,28 +95,52 @@ func (m *Monitor) Run(ctx context.Context) {
 
 // Refresh rebuilds the snapshot as of now.
 func (m *Monitor) Refresh(ctx context.Context, now time.Time) error {
-	limits, err := m.source.Limits(ctx, now)
+	statuses, err := Statuses(ctx, m.source, m.counter, now)
 	if err != nil {
-		return fmt.Errorf("listing capped offers: %w", err)
+		return err
 	}
 	capped := map[string]struct{}{}
-	if len(limits) > 0 {
-		targets := make([]chstore.OfferConversionTarget, len(limits))
-		for i, l := range limits {
-			targets[i] = chstore.OfferConversionTarget{OrganizationID: l.OrganizationID, OfferID: l.OfferID, Since: l.Since}
-		}
-		counts, err := m.counter.NewConversionsByOffer(ctx, targets)
-		if err != nil {
-			return fmt.Errorf("counting conversions: %w", err)
-		}
-		for _, l := range limits {
-			if counts[l.OrganizationID+"/"+l.OfferID] >= uint64(l.Cap) {
-				capped[l.OfferID] = struct{}{}
-			}
+	for _, s := range statuses {
+		if s.Reached() {
+			capped[s.OfferID] = struct{}{}
 		}
 	}
 	m.snapshot.Store(&capped)
 	return nil
+}
+
+// Status is one capped offer's count of new conversions today.
+type Status struct {
+	Limit
+	Count uint64
+}
+
+// Reached reports whether the offer has used up its daily cap.
+func (s Status) Reached() bool { return s.Count >= uint64(s.Cap) }
+
+// Statuses counts today's conversions for every active offer with a cap.
+// Routing (Monitor) and alerts (internal/alert) both read caps through it.
+func Statuses(ctx context.Context, source Source, counter Counter, now time.Time) ([]Status, error) {
+	limits, err := source.Limits(ctx, now)
+	if err != nil {
+		return nil, fmt.Errorf("listing capped offers: %w", err)
+	}
+	if len(limits) == 0 {
+		return nil, nil
+	}
+	targets := make([]chstore.OfferConversionTarget, len(limits))
+	for i, l := range limits {
+		targets[i] = chstore.OfferConversionTarget{OrganizationID: l.OrganizationID, OfferID: l.OfferID, Since: l.Since}
+	}
+	counts, err := counter.NewConversionsByOffer(ctx, targets)
+	if err != nil {
+		return nil, fmt.Errorf("counting conversions: %w", err)
+	}
+	out := make([]Status, len(limits))
+	for i, l := range limits {
+		out[i] = Status{Limit: l, Count: counts[l.OrganizationID+"/"+l.OfferID]}
+	}
+	return out, nil
 }
 
 // StartOfDay is midnight of now's calendar day in the named zone (UTC when

@@ -218,6 +218,9 @@ services:
       CLICKHOUSE_USER: flox
       CLICKHOUSE_PASSWORD: ""
       ADACCOUNT_ENCRYPTION_KEY: "KatbgYl+Kd4KPI5T0hKfwZRYsij/t7g7fVomXdjhW/c="
+      # Same dev-only value as the api's: alerts read the Slack webhook
+      # apps/api encrypted (internal/alert).
+      INTEGRATION_ENCRYPTION_KEY: "wLE0wIEHBNnfVfq8d62JDEAltM4frTgYmPi8XAv1QpY="
     ports:
       - "8082:8082"
 

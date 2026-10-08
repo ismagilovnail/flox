@@ -22,6 +22,7 @@ import (
 	"github.com/ismagilovnail/flox/apps/internal/adaccount/facebookads"
 	"github.com/ismagilovnail/flox/apps/internal/adaccount/googleads"
 	"github.com/ismagilovnail/flox/apps/internal/adaccount/tiktokads"
+	"github.com/ismagilovnail/flox/apps/internal/alert"
 	"github.com/ismagilovnail/flox/apps/internal/analytics"
 	"github.com/ismagilovnail/flox/apps/internal/apikey"
 	"github.com/ismagilovnail/flox/apps/internal/attribution"
@@ -442,6 +443,17 @@ func run() error {
 	srv.Mux().Route("/content-gallery", func(r chi.Router) {
 		r.Use(tenantMiddleware)
 		contentGalleryHandler.Register(r)
+	})
+
+	// Alerts (marketer audit #10): rules under Settings, the bell's feed.
+	alertHandler := alert.NewHandler(alert.NewService(alert.NewRepository(db)), requireSettingsWrite, logger)
+	srv.Mux().Route("/alert-rules", func(r chi.Router) {
+		r.Use(tenantMiddleware)
+		alertHandler.RegisterRules(r)
+	})
+	srv.Mux().Route("/notifications", func(r chi.Router) {
+		r.Use(tenantMiddleware)
+		alertHandler.RegisterNotifications(r)
 	})
 
 	tagsHandler := tags.NewHandler(tags.NewService(tags.NewRepository(db)), requireContentWrite, logger)

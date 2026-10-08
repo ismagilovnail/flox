@@ -54,6 +54,8 @@ import (
 	"github.com/ismagilovnail/flox/apps/internal/adaccount/facebookads"
 	"github.com/ismagilovnail/flox/apps/internal/adaccount/googleads"
 	"github.com/ismagilovnail/flox/apps/internal/adaccount/tiktokads"
+	"github.com/ismagilovnail/flox/apps/internal/alert"
+	"github.com/ismagilovnail/flox/apps/internal/analytics"
 	"github.com/ismagilovnail/flox/apps/internal/campaign"
 	"github.com/ismagilovnail/flox/apps/internal/chconn"
 	"github.com/ismagilovnail/flox/apps/internal/chstore"
@@ -67,8 +69,10 @@ import (
 	"github.com/ismagilovnail/flox/apps/internal/eventqueue"
 	"github.com/ismagilovnail/flox/apps/internal/fx"
 	"github.com/ismagilovnail/flox/apps/internal/fx/ecb"
+	"github.com/ismagilovnail/flox/apps/internal/integrations"
 	"github.com/ismagilovnail/flox/apps/internal/logging"
 	"github.com/ismagilovnail/flox/apps/internal/metrics"
+	"github.com/ismagilovnail/flox/apps/internal/offercap"
 	"github.com/ismagilovnail/flox/apps/internal/postback"
 	"github.com/ismagilovnail/flox/apps/internal/postbacklog"
 	"github.com/ismagilovnail/flox/apps/internal/postgres"
@@ -239,7 +243,8 @@ func run() error {
 	}
 
 	adAccountRepo := adaccount.NewRepository(db, adAccountKey)
-	costSyncSvc := costsync.NewService(adAccountRepo, campaign.NewRepository(db), cost.NewService(cost.NewRepository(db), conversion.NewPostgresFX(db)), costsync.Providers{
+	costSvc := cost.NewService(cost.NewRepository(db), conversion.NewPostgresFX(db))
+	costSyncSvc := costsync.NewService(adAccountRepo, campaign.NewRepository(db), costSvc, costsync.Providers{
 		FacebookAds: facebookads.New(),
 		TikTokAds:   tiktokads.New(),
 		GoogleAds:   googleads.New(),
@@ -356,6 +361,31 @@ func run() error {
 	logger.Info("domain ssl check starting", "interval", sslcheck.Interval)
 	start(func() { sslChecker.RunLoop(ctx, sslcheck.Interval) })
 
+	// Alerts (internal/alert, marketer audit #10): spend, ROI, offer capped
+	// or paused, SSL expiring — into the app's notifications and, per rule,
+	// Slack. Slack needs the integrations key to read the webhook; without
+	// it notifications still appear in the app.
+	alertEvaluator := &alert.Evaluator{
+		Repo:    alert.NewRepository(db),
+		Reports: analytics.NewService(chEvents, costSvc),
+		Caps: func(ctx context.Context, now time.Time) ([]offercap.Status, error) {
+			return offercap.Statuses(ctx, offercap.NewPostgresSource(db), chEvents, now)
+		},
+		Logger: logger,
+	}
+	if cfg.IntegrationEncryptionKey == "" {
+		logger.Warn("INTEGRATION_ENCRYPTION_KEY is not set: alert notifications are not sent to Slack")
+	} else {
+		integrationKey, err := integrations.ParseKey(cfg.IntegrationEncryptionKey)
+		if err != nil {
+			logger.Error("integration encryption key configuration failed", "error", err)
+			return err
+		}
+		alertEvaluator.Slack = slackPoster{integrations.NewService(integrations.NewRepository(db), integrationKey, nil)}
+	}
+	logger.Info("alert evaluation starting", "interval", alert.Interval)
+	start(func() { alertEvaluator.RunLoop(ctx, alert.Interval) })
+
 	// Backstop for claims a crashed worker (this one's previous process, or
 	// another replica) never finished — see internal/queuereaper.
 	logger.Info("queue reapers starting", "interval", queuereaper.Interval, "stuck_after", queuereaper.StuckAfter)
@@ -386,4 +416,15 @@ func run() error {
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	return healthSrv.Shutdown(shutdownCtx)
+}
+
+// slackPoster adapts the integrations service to alert.SlackSender.
+type slackPoster struct{ svc *integrations.Service }
+
+func (p slackPoster) PostSlack(ctx context.Context, orgID, text string) error {
+	err := p.svc.PostSlack(ctx, orgID, text)
+	if errors.Is(err, integrations.ErrNotConnected) {
+		return alert.ErrSlackNotConnected
+	}
+	return err
 }

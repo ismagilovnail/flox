@@ -5,6 +5,48 @@ per-phase, matching `CLAUDE.md`'s phase protocol. The one exception is
 [Between phases], below: spec amendments and the code changes that follow from
 them land between phases and would otherwise be invisible here.
 
+## [Between phases] — alerts
+
+Marketer audit #10 (P1): no alerts for spend, ROI, a paused or capped offer, or an expiring
+certificate — only infrastructure Prometheus alerts existed. `docs/alerts.md`.
+
+- Migration 00057: `alert_rules` (kind, optional campaign, threshold, `min_spend`,
+  `notify_slack`, enabled), `notifications` (dedup key unique per organization, `params` jsonb,
+  Slack delivery state), `notification_reads` (per-user read mark), `offers.status_changed_at`
+  (trigger), `flox_new_ulid()`; every organization gets offer-capped, offer-paused and
+  SSL-expiring-in-14-days rules (trigger on new organizations, backfill for existing ones).
+- `internal/alert`: rules CRUD (`/alert-rules`, `settings.write`), `GET /notifications`,
+  `POST /notifications/read`; worker `Evaluator` every 2 min — spend over / ROI below from the
+  campaign report for today in the organization's timezone (no spend → no alert), offer caps
+  through the new `offercap.Statuses` (shared with routing), pauses after the rule existed and
+  within 24 h, certificates by `ssl_expires_at`. Each condition fires once (per day / pause /
+  certificate); Slack posts go through `integrations.Service.PostSlack`, retried 5 times, failed
+  at once without a Slack integration. The worker takes `INTEGRATION_ENCRYPTION_KEY` (compose
+  files updated; optional — without it Slack deliveries fail with a reason).
+- Analytics: a campaign or traffic source with spend but no events in the range is now a row
+  in the (unfiltered) report — spend, revenue 0, ROI −100%. It was dropped before, so the rows
+  did not add up to the total and a spend alert could not see money spent on no traffic.
+- Web: the bell shows real notifications (unread badge, mark all read, links to the campaign /
+  offer / Domains page, polling every minute; the hardcoded mock list is gone); Settings →
+  Alerts tab (`?tab=` in the URL) with create/edit/delete/toggle and inline validation; new
+  `alerts` i18n namespace in en and ru.
+- Docs: `ROADMAP.md` also moves audit #4 (HTTPS) from open gaps to done — the previous commit
+  left it listed as open.
+
+Tests: default rules on a new organization; validation per kind incl. another org's campaign;
+cross-tenant (another org cannot list, update, delete rules or see notifications); per-user read
+state, API-key caller; evaluation fires each kind once over two runs, in the organization's day,
+not for a campaign without spend, not for a disabled rule, again for a second pause but not for
+an edit of a paused offer, not for a pause older than the rule; Slack delivered / not connected /
+retried / failed after the last attempt; Slack text; report keeps spend-only campaign and
+source rows, not with filters; vitest for message rendering (ru plurals, number format) and
+links. RBAC coverage test lists mark-read as deliberately open. Full-env `go test ./...` incl. e2e
+(FullFunnel, OfferDailyCap) pass; tsc, eslint, vitest pass. Live on the dev stack: spend $50 on
+the demo campaign today with no traffic fired spend-over and ROI −100%, pausing the demo offer
+fired offer-paused, Slack marked failed "slack is not connected"; the other tenant saw nothing
+and got 404 deleting the rule; a viewer got 403 creating one. Not checked in a browser (extension
+unavailable) and not against a real Slack workspace.
+
 ## [Between phases] — HTTPS for tracking domains
 
 Marketer audit #4 (P0): domain SSL showed "none" for every domain not on Cloudflare and
