@@ -33,6 +33,7 @@ DATABASE_URL ?= postgres://flox:flox@localhost:5432/flox?sslmode=disable
         up down restart status build \
         logs infra-logs api-logs tracker-logs worker-logs web-logs \
         api-restart tracker-restart worker-restart web-restart \
+        backup-now backup-drill backup-list \
         migrate-up migrate-down migrate-status dev-reset dev-fresh dev-status fixtures reconcile \
         test-stack-up test-stack-down test-stack-restart test-stack-logs \
         fmt vet test lint check clean
@@ -157,6 +158,18 @@ dev-status: ## Show what is in the dev stores (services, Postgres, ClickHouse, R
 reconcile: ## Compare+repair ClickHouse conversions vs Postgres: make reconcile FROM=YYYY-MM-DD TO=YYYY-MM-DD [REPORT_ONLY=1]
 	@if [ -z "$(FROM)" ] || [ -z "$(TO)" ]; then echo "usage: make reconcile FROM=YYYY-MM-DD TO=YYYY-MM-DD [REPORT_ONLY=1]"; exit 1; fi
 	cd $(GO_DIR) && go run ./cmd/reconcile -from $(FROM) -to $(TO) $(if $(REPORT_ONLY),-report-only,)
+
+# --- Backups (internal/backup, docs/backup.md) ----------------------------
+# Run inside the backup sidecar: it has wal-g, pg_ctl and the data directory.
+
+backup-now: ## Back up Postgres, ClickHouse and the files bucket now
+	$(COMPOSE) exec backup flox-backup now
+
+backup-drill: ## Restore every store into a scratch copy and check it
+	$(COMPOSE) exec backup flox-backup drill
+
+backup-list: ## What the backup bucket holds, WAL archiving state, last drill
+	$(COMPOSE) exec backup flox-backup list
 
 # --- Full containerized stack (infra/docker-compose.test.yml) --------------
 # Production-target build of all 8 §61 services (no hot reload) — its own

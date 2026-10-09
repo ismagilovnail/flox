@@ -27,3 +27,7 @@ scrape_configs:
   - job_name: flox-worker
     static_configs:
       - targets: ["worker:8082"]
+
+  - job_name: flox-backup
+    static_configs:
+      - targets: ["backup:8083"]

@@ -17,6 +17,8 @@ running it, not written from the Dockerfiles alone.
 | `apps/tracker` | Go hot-path redirect | `apps/tracker/Dockerfile` | 8081 |
 | `apps/worker` | Go async processor | `apps/worker/Dockerfile` | 8082 |
 | — (one-shot) | Postgres migrations | `apps/api/Dockerfile`, `--target migrate` | — |
+| backup sidecar | nightly backups, monthly restore drill (`docs/backup.md`) | `apps/cmd/backup/Dockerfile`, `--target backup` | 8083 |
+| Postgres (self-hosted) | `postgres:16-alpine` + WAL-G for WAL archiving | `apps/cmd/backup/Dockerfile`, `--target postgres` | 5432 |
 
 Plus four data stores this repo doesn't containerize a *production*
 version of (dev/test both run throwaway single-node containers —
@@ -32,6 +34,8 @@ docker build -f apps/api/Dockerfile     -t flox/api:$VERSION     apps/
 docker build -f apps/tracker/Dockerfile -t flox/tracker:$VERSION apps/
 docker build -f apps/worker/Dockerfile  -t flox/worker:$VERSION  apps/
 docker build -f apps/api/Dockerfile --target migrate -t flox/api:$VERSION-migrate apps/
+docker build -f apps/cmd/backup/Dockerfile --target backup   -t flox/backup:$VERSION   apps/
+docker build -f apps/cmd/backup/Dockerfile --target postgres -t flox/postgres:$VERSION apps/
 docker build -f apps/web/Dockerfile -t flox/web:$VERSION \
   --build-arg NEXT_PUBLIC_API_URL=https://api.yourdomain.example \
   apps/web

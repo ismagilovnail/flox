@@ -87,11 +87,24 @@ a reason to leave it unauthenticated on a real network.
 
 ### S3-compatible object storage
 
-Not consumed by any code path yet (`apps/internal/config.S3Config` exists,
-nothing reads it — see `docs/backup.md`'s own note). The dev/test values
-(MinIO's `flox-minio-admin`/`flox-minio-secret`) are throwaway
-compose-internal credentials; replace both before this is ever wired to a
-real feature, same as every other credential on this list.
+Content Gallery files (`apps/internal/storage`; `apps/api` creates the
+bucket on start). The dev/test values (MinIO's
+`flox-minio-admin`/`flox-minio-secret`) are throwaway compose-internal
+credentials; replace both in any real deployment.
+
+### Backups
+
+Read by the backup sidecar (`apps/cmd/backup`, `docs/backup.md`).
+
+| Variable | Dev value | Staging/production |
+|---|---|---|
+| `BACKUP_S3_ENDPOINT` / `_REGION` / `_BUCKET` / `_ACCESS_KEY_ID` / `_SECRET_ACCESS_KEY` | dev MinIO, bucket `flox-backups` | An **off-site** bucket — another provider or region than the databases and `S3_BUCKET`. Refused if equal to `S3_BUCKET` on the same host. Credentials limited to that bucket. |
+| `BACKUP_CLICKHOUSE_S3_ENDPOINT` | `BACKUP_S3_ENDPOINT` | Set only when the ClickHouse server reaches the bucket by another URL than the sidecar |
+| `BACKUP_DATABASE_URL` | `DATABASE_URL` | A role allowed `pg_backup_start`/`pg_backup_stop`/`pg_switch_wal` (superuser, or granted them) |
+| `BACKUP_AT` | `03:00` | Daily run, UTC |
+| `BACKUP_KEEP_POSTGRES` / `BACKUP_KEEP_CLICKHOUSE` | `14` / `14` | Base backups / ClickHouse backups kept. The Postgres PITR window is the oldest kept base backup to now. |
+| `BACKUP_DRILL_DAY` | `1` | Day of the month (1–28) the restore drill follows the backup; `0` turns the scheduled drill off |
+| Postgres server: `WALG_S3_PREFIX`, `AWS_ENDPOINT`, `AWS_REGION`, `AWS_S3_FORCE_PATH_STYLE`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` | see `infra/docker-compose.dev.yml` | Same bucket, prefix `postgres`. Read by `archive_command = wal-g wal-push %p` |
 
 ### Auth / sessions
 

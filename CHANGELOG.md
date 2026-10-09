@@ -5,6 +5,41 @@ per-phase, matching `CLAUDE.md`'s phase protocol. The one exception is
 [Between phases], below: spec amendments and the code changes that follow from
 them land between phases and would otherwise be invisible here.
 
+## [Between phases] — backups, PITR and a restore drill (tech audit DO2)
+
+- **Postgres:** the server image is `postgres:16-alpine` plus WAL-G (`apps/cmd/backup/Dockerfile`,
+  target `postgres`; WAL-G v3.0.8 built from its tag against musl). `archive_mode=on`,
+  `archive_command='wal-g wal-push %p'`, `archive_timeout=60`: every WAL segment goes to the
+  backup bucket. A nightly base backup, 14 kept — point-in-time recovery to any moment of the last
+  14 days, losing at most 60 s.
+- **ClickHouse:** nightly `BACKUP DATABASE flox TO S3`, 14 kept, with a manifest of each table's
+  rows right before and after.
+- **Files:** the `S3_BUCKET` files mirrored into the backup bucket (new and changed files).
+- **Backup sidecar** `flox-backup` (`apps/cmd/backup`, `internal/backup`): `serve` runs the nightly
+  backups at `BACKUP_AT` and the restore drill on `BACKUP_DRILL_DAY`; `now`, `drill`, `list`;
+  `make backup-now|backup-drill|backup-list`. Config `BACKUP_*` (`.env.example`,
+  `docs/environment.md`); refuses a backup bucket equal to the files bucket.
+- **Restore drill:** Postgres restored from base backup + archived WAL into a scratch server; a mark
+  written just before (`backup_drill_marks`, migration 00060, with the table list) must be in it,
+  with every table and the live schema version. ClickHouse restored as `flox_drill` (views are
+  rewritten to the copy), rows checked against the manifest. Files checked by size and a hashed
+  sample. Report in the bucket (`drills/`).
+- **Monitoring:** `/metrics` on :8083 read back from the bucket and `pg_stat_archiver`
+  (`flox_backup_*`, `docs/observability.md`); alerts `flox.backup` — BackupMissing,
+  BackupNeverTaken, WALArchivingFailing, RestoreDrillFailed, RestoreDrillOverdue, BackupSidecarDown.
+- Dev and the production-template stack (`docker-compose.test.yml`) both run archiving and the
+  sidecar. `docs/backup.md` rewritten: the method per store, RPO, restore and PITR steps; it was
+  also stale (said nothing used object storage, listed 5 of 11 ClickHouse tables).
+
+Tests: unit (schedule, config, count ranges, pruning, archiver state); integration against real
+ClickHouse + MinIO (backup → drill → a changed manifest fails it → prune; mirror → change → a
+lost mirror file fails the drill). The Postgres drill runs in the sidecar, verified on the dev
+stack: passes, and fails on purpose when WAL archiving is broken (wrong secret on the postgres
+server: segment not archived, `flox_backup_wal_archive_failing` 1, WALArchivingFailing pending); a
+file removed from the mirror and a changed manifest count also fail it. The production-template
+stack: backup + drill pass for Postgres and ClickHouse. Full-env `go test ./...` passes; e2e
+FullFunnel / OfferDailyCap / FilterMatrix not skipped. `promtool check rules` passes.
+
 ## [Between phases] — retried attribution for unknown_click conversions (tech audit T1)
 
 - A conversion whose click is not in ClickHouse yet (still in `event_queue`, a backlog, ClickHouse

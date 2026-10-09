@@ -20,11 +20,12 @@ referenced below as §N).
 
 ```
 CURRENT PHASE : AUDIT FOLLOW-UPS (between phases)
-STATUS        : marketer audit closed (#1–#12, #13 platform limit). Tech audit
-                T1 fixed: unknown_click conversions are retried by the worker
-                (internal/reattribute, attribution_retries) and the tracker
-                connects to ClickHouse in the background.
-LAST COMMIT   : feat(attribution): retry unknown_click conversions.
+STATUS        : marketer audit closed (#1–#12, #13 platform limit). Tech audit:
+                P0/P1 done except DO1 (CI, the user's call); AN1 marked partial
+                in the audit. Next open: P2 (T5 first). Last: DO2 —
+                WAL-G archiving + nightly backups of PG/CH/files, monthly
+                restore drill, flox.backup alerts (internal/backup).
+LAST COMMIT   : feat(backup): WAL archiving, nightly backups, restore drill.
 UNCOMMITTED   : none expected. Dev DB fresh from `make dev-fresh CONFIRM=yes`
                 (password flox-demo-2026); `make dev-status` shows what is in it.
 NEXT          : wait for the user — the next phase. CI (DO1) is the user's own

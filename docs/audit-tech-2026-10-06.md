@@ -788,7 +788,11 @@ Error tracking (Sentry или аналог) не подключён. Паник�
 - **DO1 [HIGH]. CI.** (**Статус: владелец решает сам**, вне плана исправлений.) Нет `.github/workflows` или аналога. Ни один merge не
   проверяет `go test`, `tsc`, `eslint`, build и миграции. Для системы с
   деньгами это P1.
-- **DO2 [HIGH]. Автоматизации бэкапов и проверенного restore.** Это
+- **DO2 [HIGH]. Автоматизации бэкапов и проверенного restore.** (**Статус:
+  исправлено** — WAL-G: непрерывная архивация WAL + ночной base backup,
+  `BACKUP DATABASE ... TO S3` для CH, зеркало файлового бакета; ежемесячный
+  restore-drill с проверкой PITR по метке; метрики и алерты
+  `flox.backup`. `internal/backup`, `apps/cmd/backup`, `docs/backup.md`.) Это
   осознанно отложено в `docs/backup.md`, но до production обязательно:
   PITR для PG (WAL archiving), `BACKUP ... TO S3` для CH и ежемесячный
   restore-drill.

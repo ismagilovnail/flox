@@ -258,3 +258,19 @@ three `up == 0` service-down rules. `infra/prometheus.yml` loads them via
 and confirmed loaded via a real dev-stack Prometheus's own
 `/api/v1/rules`. See `docs/deployment.md`'s monitoring section for the
 production story, including why no Alertmanager ships in this repo.
+
+## Backups (tech audit 2026-10-06, DO2)
+
+Served by the backup sidecar on :8083 (job `flox-backup`, its own
+registry — none of the series above). Read back from the backup bucket
+and `pg_stat_archiver` every 5 minutes, so they survive a sidecar restart.
+Alerts: `infra/alerts.yml`, group `flox.backup`; see `docs/backup.md`.
+
+| Metric | What it shows |
+|---|---|
+| `flox_backup_last_success_timestamp_seconds{store}` | When the newest backup in the bucket finished: `postgres` (base backup), `clickhouse`, `objects` (mirror run) |
+| `flox_backup_kept{store}`, `flox_backup_size_bytes{store}` | Backups kept; size of the newest (compressed base backup; files mirrored) |
+| `flox_backup_failures_total{store}`, `flox_backup_last_duration_seconds{store}` | This sidecar's failed runs; how long the last good one took |
+| `flox_backup_drill_last_timestamp_seconds{result}` | Last passed (`success`) and last failed (`failure`) restore drill |
+| `flox_backup_wal_archive_failing`, `flox_backup_wal_last_archived_timestamp_seconds` | 1 when Postgres's latest WAL archive attempt failed; last archived segment's time (an idle database archives nothing, so age alone is no alarm) |
+| `flox_backup_status_errors_total` | Failures reading the state back |

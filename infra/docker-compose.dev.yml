@@ -20,11 +20,31 @@
 # docker-compose.test.yml.
 services:
   postgres:
-    image: postgres:16-alpine
+    # postgres:16-alpine plus WAL-G: every WAL segment is archived to the
+    # backup bucket (docs/backup.md). archive_timeout bounds how much a
+    # busy database can lose to 60 s; an idle one switches no segments.
+    build:
+      context: ../apps
+      dockerfile: cmd/backup/Dockerfile
+      target: postgres
+    command:
+      - postgres
+      - -c
+      - archive_mode=on
+      - -c
+      - archive_command=wal-g wal-push %p
+      - -c
+      - archive_timeout=60
     environment:
       POSTGRES_USER: flox
       POSTGRES_PASSWORD: flox
       POSTGRES_DB: flox
+      WALG_S3_PREFIX: s3://flox-backups/postgres
+      AWS_ENDPOINT: http://minio:9000
+      AWS_REGION: us-east-1
+      AWS_S3_FORCE_PATH_STYLE: "true"
+      AWS_ACCESS_KEY_ID: flox-minio-admin
+      AWS_SECRET_ACCESS_KEY: flox-minio-secret
     ports:
       - "5432:5432"
     volumes:
@@ -319,6 +339,49 @@ services:
     ports:
       - "3000:3000"
 
+  backup:
+    # Nightly backups of Postgres (WAL-G base backup; WAL is archived by
+    # the postgres service itself), ClickHouse and the files bucket, a
+    # monthly restore drill, /metrics (internal/backup, docs/backup.md).
+    # In dev the backups land in the same MinIO, bucket flox-backups; in
+    # production BACKUP_S3_* points off-site. `make backup-now`,
+    # `make backup-drill`, `make backup-list`.
+    build:
+      context: ../apps
+      dockerfile: cmd/backup/Dockerfile
+      target: backup
+    depends_on:
+      postgres:
+        condition: service_healthy
+      clickhouse:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    environment:
+      BACKUP_DATABASE_URL: postgres://flox:flox@postgres:5432/flox?sslmode=disable
+      CLICKHOUSE_URL: http://clickhouse:8123
+      CLICKHOUSE_DATABASE: flox
+      CLICKHOUSE_USER: flox
+      BACKUP_S3_ENDPOINT: http://minio:9000
+      BACKUP_S3_REGION: us-east-1
+      BACKUP_S3_BUCKET: flox-backups
+      BACKUP_S3_ACCESS_KEY_ID: flox-minio-admin
+      BACKUP_S3_SECRET_ACCESS_KEY: flox-minio-secret
+      S3_ENDPOINT: http://minio:9000
+      S3_REGION: us-east-1
+      S3_BUCKET: flox
+      S3_ACCESS_KEY_ID: flox-minio-admin
+      S3_SECRET_ACCESS_KEY: flox-minio-secret
+      BACKUP_AT: "03:00"
+      BACKUP_DRILL_DAY: "1"
+    volumes:
+      # The live data directory, read-only: WAL-G reads it for the base
+      # backup. Same path as in the postgres container.
+      - postgres_data:/var/lib/postgresql/data:ro
+      - backup_drill:/var/lib/flox-drill
+    ports:
+      - "8083:8083"
+
   prometheus:
     # §53/Phase 29. Scrapes api/tracker/worker by their compose service
     # name (see prometheus.yml) now that all three run as containers on
@@ -354,6 +417,7 @@ volumes:
   redis_data:
   minio_data:
   prometheus_data:
+  backup_drill:
   api_go_mod_cache:
   api_go_build_cache:
   tracker_go_mod_cache:

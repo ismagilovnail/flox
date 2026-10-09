@@ -38,11 +38,24 @@ name: flox-test
 
 services:
   postgres:
-    image: postgres:16-alpine
+    # WAL archived to the backup bucket by WAL-G (docs/backup.md). In a
+    # real deployment the AWS_* below point at the off-site backup bucket,
+    # never at the files bucket's own storage.
+    build:
+      context: ../apps
+      dockerfile: cmd/backup/Dockerfile
+      target: postgres
+    command: ["postgres", "-c", "archive_mode=on", "-c", "archive_command=wal-g wal-push %p", "-c", "archive_timeout=60"]
     environment:
       POSTGRES_USER: flox
       POSTGRES_PASSWORD: flox
       POSTGRES_DB: flox
+      WALG_S3_PREFIX: s3://flox-backups/postgres
+      AWS_ENDPOINT: http://minio:9000
+      AWS_REGION: us-east-1
+      AWS_S3_FORCE_PATH_STYLE: "true"
+      AWS_ACCESS_KEY_ID: flox-minio-admin
+      AWS_SECRET_ACCESS_KEY: flox-minio-secret
     ports:
       - "5433:5432" # offset from dev's 5432 so both stacks can run at once
     volumes:
@@ -224,6 +237,40 @@ services:
     ports:
       - "8082:8082"
 
+  backup:
+    # Nightly backups + monthly restore drill (internal/backup).
+    build:
+      context: ../apps
+      dockerfile: cmd/backup/Dockerfile
+      target: backup
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      clickhouse:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    environment:
+      BACKUP_DATABASE_URL: postgres://flox:flox@postgres:5432/flox?sslmode=disable
+      CLICKHOUSE_URL: http://clickhouse:8123
+      CLICKHOUSE_DATABASE: flox
+      CLICKHOUSE_USER: flox
+      BACKUP_S3_ENDPOINT: http://minio:9000
+      BACKUP_S3_REGION: us-east-1
+      BACKUP_S3_BUCKET: flox-backups
+      BACKUP_S3_ACCESS_KEY_ID: flox-minio-admin
+      BACKUP_S3_SECRET_ACCESS_KEY: flox-minio-secret
+      S3_ENDPOINT: http://minio:9000
+      S3_REGION: us-east-1
+      S3_BUCKET: flox
+      S3_ACCESS_KEY_ID: flox-minio-admin
+      S3_SECRET_ACCESS_KEY: flox-minio-secret
+    volumes:
+      - postgres_test_data:/var/lib/postgresql/data:ro
+      - backup_test_drill:/var/lib/flox-drill
+    ports:
+      - "8084:8083" # offset from dev's 8083
+
   web:
     build:
       context: ../apps/web
@@ -245,3 +292,4 @@ volumes:
   clickhouse_test_data:
   redis_test_data:
   minio_test_data:
+  backup_test_drill:

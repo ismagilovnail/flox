@@ -262,3 +262,63 @@ groups:
         annotations:
           summary: "apps/worker is down"
           description: "Prometheus has not scraped a healthy apps/worker instance for 1m — event flushing, outgoing postback delivery, and ad-spend sync have all stopped. Events remain durable in Postgres (see EventQueueBacklogGrowing) but nothing is draining them."
+
+  - name: flox.backup
+    # Tech audit 2026-10-06, DO2 (internal/backup, docs/backup.md). Every
+    # metric is read back from the backup bucket by the sidecar, so these
+    # hold across its restarts.
+    rules:
+      - alert: BackupSidecarDown
+        expr: up{job="flox-backup"} == 0
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "backup sidecar is down"
+          description: "No nightly backups or drills run while it is down. WAL archiving does not depend on it and goes on."
+
+      - alert: BackupMissing
+        # Daily at BACKUP_AT; 26h allows one slow run before firing.
+        expr: time() - flox_backup_last_success_timestamp_seconds > 26 * 3600
+        labels:
+          severity: critical
+        annotations:
+          summary: "no {{ $labels.store }} backup for over 26h"
+          description: "The newest {{ $labels.store }} backup in the bucket is older than a day. Check the backup sidecar's log (`make backup-list`, flox_backup_failures_total)."
+
+      - alert: BackupNeverTaken
+        expr: up{job="flox-backup"} == 1 unless on() flox_backup_last_success_timestamp_seconds{store="postgres"}
+        for: 26h
+        labels:
+          severity: critical
+        annotations:
+          summary: "the backup bucket has no Postgres base backup"
+          description: "The sidecar has run for a day without a single base backup in the bucket."
+
+      - alert: WALArchivingFailing
+        # Every WAL segment that fails to archive is lost from PITR, and
+        # piles up in pg_wal until the disk fills.
+        expr: flox_backup_wal_archive_failing == 1
+        for: 10m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Postgres cannot archive WAL"
+          description: "pg_stat_archiver's last attempt failed and none has succeeded since, for 10m. Point-in-time recovery stops at the last archived segment and pg_wal grows. Check the postgres container's log for wal-g wal-push errors (bucket credentials, reachability)."
+
+      - alert: RestoreDrillFailed
+        expr: flox_backup_drill_last_timestamp_seconds{result="failure"} > on() group_left() (flox_backup_drill_last_timestamp_seconds{result="success"} or on() vector(0))
+        labels:
+          severity: critical
+        annotations:
+          summary: "the last restore drill failed"
+          description: "A backup that does not restore is not a backup. See the drill report (`make backup-list` names it) for the failed checks."
+
+      - alert: RestoreDrillOverdue
+        # Monthly on BACKUP_DRILL_DAY; 35 days allows a missed day.
+        expr: time() - flox_backup_drill_last_timestamp_seconds{result="success"} > 35 * 86400
+        labels:
+          severity: warning
+        annotations:
+          summary: "no passed restore drill for over 35 days"
+          description: "Run `make backup-drill` (or `flox-backup drill` in the sidecar) and check BACKUP_DRILL_DAY."
