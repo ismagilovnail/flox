@@ -34,7 +34,13 @@ func TestAskAllowsOnlyRegisteredDomains(t *testing.T) {
 	}
 	t.Cleanup(func() { _, _ = pool.Exec(context.Background(), `DELETE FROM organizations WHERE id = $1`, orgID) })
 	host := "ask-" + strings.ToLower(idgen.New()) + ".example.com"
-	if _, err := pool.Exec(ctx, `INSERT INTO domains (id, organization_id, domain) VALUES ($1, $2, $3)`, idgen.New(), orgID, host); err != nil {
+	if _, err := pool.Exec(ctx, `INSERT INTO domains (id, organization_id, domain, status) VALUES ($1, $2, $3, 'active')`, idgen.New(), orgID, host); err != nil {
+		t.Fatal(err)
+	}
+	// Anyone can add a name; only an active (ownership-verified) one gets a
+	// certificate (tech audit T6).
+	unverified := "pending-" + host
+	if _, err := pool.Exec(ctx, `INSERT INTO domains (id, organization_id, domain) VALUES ($1, $2, $3)`, idgen.New(), orgID, unverified); err != nil {
 		t.Fatal(err)
 	}
 
@@ -46,6 +52,7 @@ func TestAskAllowsOnlyRegisteredDomains(t *testing.T) {
 		{"domain=" + host, http.StatusOK},
 		{"domain=" + strings.ToUpper(host), http.StatusOK},
 		{"domain=not-" + host, http.StatusNotFound},
+		{"domain=" + unverified, http.StatusNotFound},
 		{"", http.StatusBadRequest},
 	} {
 		rec := httptest.NewRecorder()

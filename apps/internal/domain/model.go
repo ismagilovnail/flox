@@ -15,12 +15,12 @@
 // through the CredentialSource interface (never a second copy of them).
 // GoDaddy/Route53/cloudflare_registrar/unmanaged have no adapter and stay
 // plain operator-declared, same as every registrar/provider did before
-// this phase. Status/SSL/ExpiresAt/VerifiedAt are still never accepted as
-// client input on Create/Update (see UpdateInput's own doc comment) — the
-// only way they change now is a real Verify/Renew/SyncDNS call actually
-// checking or acting on the real registrar/DNS provider, via
-// Repository.ApplyAutomationResult, a path Create/Update's own UpdateInput
-// deliberately can't reach.
+// this phase. SSL/ExpiresAt/VerifiedAt are never client input — they
+// change only through a real Verify/Renew/SyncDNS call
+// (Repository.ApplyAutomationResult). Status is client input except
+// 'active', which needs the domain's DNS ownership verified first
+// (Service.VerifyOwnership, tech audit T6): a domain is tracked only
+// while active.
 package domain
 
 import (
@@ -171,8 +171,30 @@ type Domain struct {
 	SSLExpiresAt *time.Time `json:"sslExpiresAt"`
 	SSLCheckedAt *time.Time `json:"sslCheckedAt"`
 	SSLError     string     `json:"sslError"`
-	CreatedAt    time.Time  `json:"createdAt"`
-	UpdatedAt    time.Time  `json:"updatedAt"`
+	// OwnershipVerifiedAt is when the organization proved it controls the
+	// domain's DNS (Service.VerifyOwnership); nil until then. Only a
+	// verified domain can be active, and only an active one is tracked
+	// (tech audit T6).
+	OwnershipVerifiedAt *time.Time `json:"ownershipVerifiedAt"`
+	// OwnershipRecord is the TXT record that proves it.
+	OwnershipRecord OwnershipRecord `json:"ownershipRecord"`
+	CreatedAt       time.Time       `json:"createdAt"`
+	UpdatedAt       time.Time       `json:"updatedAt"`
+}
+
+// OwnershipRecord is the DNS TXT record an organization adds to prove it
+// controls a domain: Name holds Value.
+type OwnershipRecord struct {
+	Name  string `json:"name"`
+	Value string `json:"value"`
+}
+
+// ownershipRecordName is where the TXT record lives: under the domain
+// itself, so only whoever controls the domain's DNS can create it.
+const ownershipRecordName = "_flox-verify."
+
+func ownershipRecord(domainName, token string) OwnershipRecord {
+	return OwnershipRecord{Name: ownershipRecordName + domainName, Value: "flox-verify=" + token}
 }
 
 type CreateInput struct {

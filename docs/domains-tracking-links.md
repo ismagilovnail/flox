@@ -236,3 +236,53 @@ Verified live: Caddy 2 with its local CA in front of the dev tracker —
 name got a TLS alert, `/internal/tls-ask` answered 404 through the proxy,
 plain HTTP still served; the probe reported `error` (untrusted) with system
 roots, `issued` with Caddy's root, and `pending` for the unregistered name.
+
+## Domain ownership (tech audit 2026-10-06, T6)
+
+Before: a domain tracked as soon as any organization typed it in —
+`status` was client input, default `active` — and the name was unique
+across all organizations, so whoever added someone else's domain first
+held it (squatting) and the real owner could not add it at all.
+
+Now:
+
+- **A new domain is `pending`.** It becomes `active` only through
+  `POST /domains/{id}/verify-ownership`: the API looks up the TXT record
+  `_flox-verify.<domain>` and needs `flox-verify=<token>` in it. The token
+  is per domain row (`verification_token`), so another organization's
+  record for the same name proves nothing for this one. The domain page
+  shows the record to add (copy buttons) and a "Check DNS" button; the
+  form offers `active` only once verified, and the API refuses it
+  otherwise (422).
+- **Only `active` domains track and get certificates:**
+  `routingstore.ResolveTrackingLink` and `tlsask` filter on it. The
+  routing-cache trigger now fires on `status` changes too (it watched only
+  `domain`), so verifying or deactivating takes effect in about a second.
+- **Uniqueness is among active domains only** (`domains_active_domain_key`),
+  plus once per organization (`domains_org_domain_key`). Any number of
+  organizations may hold a name pending; a squatter blocks nobody. A name
+  active elsewhere stays there — verifying it in a second organization is
+  a 409, not a takeover (a transfer would write another tenant's data;
+  that is a support action).
+- **A rename is a new domain**: it resets verification and the token and
+  takes an active domain back to pending — otherwise a verified domain
+  could be renamed into someone else's and track on it at once.
+- **Reserved names** (`.localhost`, `.test`, `.example`, `.invalid` — RFC
+  2606/6761) are verified when added: nobody can own or squat them. The
+  dev fixtures live on `track.localhost`.
+- Domains already active when this shipped (migration 00062) were kept
+  active and marked verified at their creation time: no production
+  deployment existed yet.
+- DNS is read through `domain.TXTResolver` (the system resolver in
+  production), swappable like every other provider (CLAUDE.md #11).
+
+Tests: two organizations add one name; the squatter cannot verify with
+the owner's record; the owner verifies and gets it active; the squatter
+then gets 409 even with its own record. Active refused unverified on
+create and update; verified domains toggle freely; a rename resets
+verification. Reserved names verify at once. The tracker 404s a link on a
+pending domain; `tlsask` refuses a pending one. Live: a pending flip of
+`track.localhost` took the demo link from 302 to 404 and back within a
+second; the domain page showed the TXT record, the check reported the
+missing record, `active` was disabled in the form.
+

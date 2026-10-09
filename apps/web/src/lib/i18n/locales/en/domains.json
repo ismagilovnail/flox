@@ -101,5 +101,22 @@
     "syncTitle": "Update the DNS record of {{domain}}?",
     "syncDescription": "FLOX creates or updates a proxied CNAME record in your connected Cloudflare account, pointing this domain at FLOX. Whatever the domain serves now will be replaced by FLOX.",
     "syncConfirm": "Update DNS record"
+  },
+  "ownership": {
+    "title": "Domain ownership",
+    "instructions": "Prove you control this domain's DNS: add the TXT record below at your DNS provider, then check it. Until then the domain does not track — anyone can add a domain name, only its owner can verify it.",
+    "type": "Type",
+    "name": "Name",
+    "value": "Value",
+    "copyAria": "Copy {{what}}",
+    "copied": "Copied",
+    "check": "Check DNS",
+    "checking": "Checking…",
+    "propagation": "A new record can take a few minutes to appear.",
+    "verified": "Ownership verified",
+    "verifiedDescription": "{{domain}} is active and tracks.",
+    "notYet": "Not verified yet",
+    "verifiedOn": "Verified {{date}}. The TXT record can be removed.",
+    "activeNeedsVerification": "verify ownership first"
   }
 }

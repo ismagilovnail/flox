@@ -5,6 +5,36 @@ per-phase, matching `CLAUDE.md`'s phase protocol. The one exception is
 [Between phases], below: spec amendments and the code changes that follow from
 them land between phases and would otherwise be invisible here.
 
+## [Between phases] — domain ownership verification (tech audit T6 / S4)
+
+- A domain tracked as soon as any organization added it: `status` was client input (default
+  `active`) and names were unique across organizations, so whoever added someone else's domain
+  first held it and the owner could not add it at all.
+- Now a new domain is `pending`; it becomes `active` only via `POST /domains/{id}/verify-ownership`,
+  which needs the TXT record `_flox-verify.<domain>` = `flox-verify=<token>` (a token per domain
+  row, `domain.TXTResolver`, system DNS in production). `active` is refused otherwise on create and
+  update (422). Only active domains track (`routingstore`) and get certificates (`tlsask`).
+- Uniqueness among active domains only, plus once per organization (migration 00062): any number
+  of organizations may hold a name pending, so squatting blocks nobody; a name active elsewhere is
+  a 409, not a takeover.
+- A rename resets verification and the token (a verified domain could otherwise be renamed into
+  someone else's and track on it at once). Reserved TLDs (`.localhost`, `.test`, `.example`,
+  `.invalid`) verify on creation; dev fixtures keep working. Existing active domains kept active and
+  marked verified (no production yet).
+- Found on the way: the routing-cache trigger fired on `domain` changes only, so a status change
+  would not have reached the tracker's cache — it now fires on `status` too.
+- UI: a Domain ownership card on the domain page — the TXT record with copy buttons and a Check
+  DNS button, or when it was verified; `active` disabled in the form until then. EN/RU.
+- `docs/domains-tracking-links.md` (new section), audit T6/S4 status.
+
+Tests: squatter and owner add one name; the squatter cannot verify with the owner's record; the
+owner verifies; the squatter then gets 409 even with its own record. Active refused unverified;
+verified domains toggle; a rename resets verification; reserved names verify at once. The tracker
+404s a pending domain's link; `tlsask` refuses a pending domain. Migration down and up. Live: the
+demo link went 302 → 404 → 302 within a second as `track.localhost` was flipped pending and back;
+the domain page showed the record, the check reported it missing, `active` was disabled. Full-env
+`go test ./...` passes; e2e not skipped; tsc, eslint, vitest pass.
+
 ## [Between phases] — security headers on web and API (tech audit S2)
 
 - `apps/web` (`next.config.ts`, every route): `Content-Security-Policy: frame-ancestors 'none';

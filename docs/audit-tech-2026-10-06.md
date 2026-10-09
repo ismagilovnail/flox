@@ -243,7 +243,7 @@ func signSticky(key []byte, campaignID, v string) string {
 }
 ```
 
-**T6 [LOW]. Трекинг работает на неверифицированных доменах.**
+**T6 [LOW]. Трекинг работает на неверифицированных доменах.** (**Статус: исправлено** — новый домен `pending`; `active` только после TXT-проверки `_flox-verify.<домен>` с токеном домена; трекинг и сертификаты только для `active`; уникальность имени только среди активных, так что squatting никого не блокирует; переименование сбрасывает проверку; зарезервированные зоны подтверждаются сразу. Миграция 00062, `docs/domains-tracking-links.md`.)
 `ResolveTrackingLink` не проверяет `domains.status`/`verified_at`.
 `domains_domain_key` уникален глобально, поэтому любой тенант может
 «занять» чужой домен до владельца: это squatting и DoS онбординга.
@@ -489,7 +489,7 @@ type entry struct { link TrackingLink; cfg CampaignRouting; loadedAt time.Time }
   INSERT падает, ответ 500, сеть ретраит бесконечно (poison message).
   **Исправление:** `math.IsNaN/IsInf`, диапазон
   `0 ≤ v < 1e9`, иначе 400.
-- **S4 [LOW].** Squatting доменов (T6).
+- **S4 [LOW].** Squatting доменов (T6). **Статус: исправлено** (T6).
 
 ---
 

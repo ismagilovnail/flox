@@ -35,6 +35,7 @@ func (h *Handler) Register(r chi.Router) {
 	r.With(h.requireWrite).Patch("/{id}", h.update)
 	r.With(h.requireWrite).Delete("/{id}", h.delete)
 	r.With(h.requireWrite).Post("/{id}/verify", h.verify)
+	r.With(h.requireWrite).Post("/{id}/verify-ownership", h.verifyOwnership)
 	r.With(h.requireWrite).Post("/{id}/renew", h.renew)
 	r.With(h.requireWrite).Post("/{id}/sync-dns", h.syncDNS)
 	r.With(h.requireWrite).Post("/{id}/check-ssl", h.checkSSL)
@@ -125,6 +126,16 @@ func (h *Handler) update(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) verify(w http.ResponseWriter, r *http.Request) {
 	orgID, _ := tenant.OrgID(r.Context())
 	d, err := h.svc.Verify(r.Context(), orgID, chi.URLParam(r, "id"))
+	if err != nil {
+		apierror.Write(w, h.logger, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, d)
+}
+
+func (h *Handler) verifyOwnership(w http.ResponseWriter, r *http.Request) {
+	orgID, _ := tenant.OrgID(r.Context())
+	d, err := h.svc.VerifyOwnership(r.Context(), orgID, chi.URLParam(r, "id"))
 	if err != nil {
 		apierror.Write(w, h.logger, err)
 		return

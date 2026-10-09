@@ -36,6 +36,12 @@ export type Domain = {
   dnsProvider: DnsProvider;
   expiresAt: string | null;
   verifiedAt: string | null;
+  /** When the organization proved it controls the domain's DNS; null until
+   * then. Only a verified domain can be active, and only an active one
+   * tracks (tech audit T6). */
+  ownershipVerifiedAt: string | null;
+  /** The TXT record that proves it: `name` must hold `value`. */
+  ownershipRecord: { name: string; value: string };
   /** From a real TLS connection to the domain (worker, every few minutes
    * until issued, then every few hours): the served certificate's expiry,
    * when it was last checked, and why the check found no valid one. */
@@ -79,6 +85,12 @@ export function deleteDomain(id: string): Promise<void> {
 /** Read-only: a real Namecheap check for registrar=namecheap, a real
  * Cloudflare check for dnsProvider=cloudflare. Neither charges anything
  * nor changes any DNS record. */
+/** Checks the domain's ownership TXT record; on success the domain is
+ * verified and active. A 422 says what DNS returned. */
+export function verifyDomainOwnership(id: string): Promise<Domain> {
+  return apiFetch(`/domains/${id}/verify-ownership`, { method: "POST" });
+}
+
 export function verifyDomain(id: string): Promise<Domain> {
   return apiFetch(`/domains/${id}/verify`, { method: "POST" });
 }

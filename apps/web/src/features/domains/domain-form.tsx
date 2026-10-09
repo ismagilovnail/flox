@@ -50,6 +50,7 @@ export function DomainForm({
   submitLabel,
   onSubmit,
   disabled = false,
+  ownershipVerified = false,
 }: {
   title: string;
   defaultValues: Partial<DomainFormValues>;
@@ -58,6 +59,9 @@ export function DomainForm({
   /** Locks the submit button and every field, including MultiSelect
    * (Purpose), when the caller lacks settings.write. */
   disabled?: boolean;
+  /** Active is offered only once the domain's DNS ownership is verified
+   * (DomainOwnershipCard; the API refuses it otherwise). */
+  ownershipVerified?: boolean;
 }) {
   const { t } = useTranslation(["domains", "common"]);
   const purposeOptions = PURPOSES.map((value) => ({ value, label: t(`purposes.${value}`) }));
@@ -178,8 +182,9 @@ export function DomainForm({
                   </SelectTrigger>
                   <SelectContent>
                     {STATUS_OPTIONS.map((s) => (
-                      <SelectItem key={s} value={s}>
+                      <SelectItem key={s} value={s} disabled={s === "active" && !ownershipVerified}>
                         {t(`statuses.${s}`)}
+                        {s === "active" && !ownershipVerified ? ` — ${t("ownership.activeNeedsVerification")}` : ""}
                       </SelectItem>
                     ))}
                   </SelectContent>

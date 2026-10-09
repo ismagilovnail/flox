@@ -28,9 +28,10 @@ STATUS        : marketer audit closed (#1–#12, #13 platform limit). Tech audit
                 docs/retention.md), CH4 (query limits per binary, cancel on
                 client close, 422 query_too_heavy), T3 (event_time on
                 postbacks), DO4 (explicit CA certs in the tracker), S2
-                (security headers; no script-src yet — srcdoc preview)
-                done; next T6.
-LAST COMMIT   : feat(security): security headers on web and API.
+                (security headers; no script-src yet — srcdoc preview),
+                T6 (domain ownership via TXT) done; next CQ2 (generic
+                pgqueue), then P3.
+LAST COMMIT   : feat(domains): verify ownership before a domain tracks.
 UNCOMMITTED   : none expected. Dev DB fresh from `make dev-fresh CONFIRM=yes`
                 (password flox-demo-2026); `make dev-status` shows what is in it.
 NEXT          : wait for the user — the next phase. CI (DO1) is the user's own

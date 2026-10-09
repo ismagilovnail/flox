@@ -107,8 +107,8 @@ func TestCreateGetUpdateDelete(t *testing.T) {
 	if created.Domain != "track.example.com" {
 		t.Fatalf("Domain = %q, want lowercased", created.Domain)
 	}
-	if created.Status != domain.StatusActive {
-		t.Fatalf("Status = %q, want active default", created.Status)
+	if created.Status != domain.StatusPending || created.OwnershipVerifiedAt != nil {
+		t.Fatalf("Status = %q verified %v, want pending and unverified until its DNS is proved (T6)", created.Status, created.OwnershipVerifiedAt)
 	}
 	if created.SSL != domain.SSLNone {
 		t.Fatalf("SSL = %q, want none (nothing issues certs yet)", created.SSL)
@@ -125,13 +125,13 @@ func TestCreateGetUpdateDelete(t *testing.T) {
 		t.Fatalf("Get returned a different domain")
 	}
 
-	status := domain.StatusPending
+	status := domain.StatusExpired
 	updated, err := svc.Update(ctx, orgID, created.ID, domain.UpdateInput{Status: &status})
 	if err != nil {
 		t.Fatalf("Update: %v", err)
 	}
-	if updated.Status != domain.StatusPending {
-		t.Fatalf("Status after update = %q, want pending", updated.Status)
+	if updated.Status != domain.StatusExpired {
+		t.Fatalf("Status after update = %q, want expired", updated.Status)
 	}
 
 	if err := svc.Delete(ctx, orgID, created.ID); err != nil {
@@ -142,20 +142,125 @@ func TestCreateGetUpdateDelete(t *testing.T) {
 	}
 }
 
-func TestCreateRejectsDuplicateDomainAcrossOrgs(t *testing.T) {
+// fakeTXT answers TXT lookups from a map.
+type fakeTXT map[string][]string
+
+func (f fakeTXT) LookupTXT(_ context.Context, name string) ([]string, error) { return f[name], nil }
+
+func isCode(err error, code string) bool {
+	apiErr, ok := err.(*apierror.Error)
+	return ok && apiErr.Code == code
+}
+
+// A pending entry blocks nobody: any organization may add a name, only the
+// one that proves its DNS gets it active (tech audit T6). Before, the
+// first to type a name in held it and its owner could not add it at all.
+func TestOwnershipDecidesWhoGetsADomain(t *testing.T) {
 	pool := mustPool(t)
 	ctx := context.Background()
-	orgA := seedOrg(t, ctx, pool)
-	orgB := seedOrg(t, ctx, pool)
-	svc := newTestService(pool, nil, nil, nil, "")
+	squatter, owner := seedOrg(t, ctx, pool), seedOrg(t, ctx, pool)
+	dns := fakeTXT{}
+	svc := newTestService(pool, nil, nil, nil, "").WithTXTResolver(dns)
+	name := "shop-" + strings.ToLower(idgen.New()) + ".com"
 
-	if _, err := svc.Create(ctx, orgA, domain.CreateInput{Domain: "shared.example.com", Purpose: []string{"tracking"}}); err != nil {
-		t.Fatalf("first Create: %v", err)
+	squatted, err := svc.Create(ctx, squatter, domain.CreateInput{Domain: name, Purpose: []string{"tracking"}})
+	if err != nil {
+		t.Fatalf("squatter Create: %v", err)
 	}
-	_, err := svc.Create(ctx, orgB, domain.CreateInput{Domain: "shared.example.com", Purpose: []string{"tracking"}})
-	apiErr, ok := err.(*apierror.Error)
-	if !ok || apiErr.Code != "conflict" {
-		t.Fatalf("second Create err = %v, want a conflict (one hostname can't belong to two orgs)", err)
+	owned, err := svc.Create(ctx, owner, domain.CreateInput{Domain: name, Purpose: []string{"tracking"}})
+	if err != nil {
+		t.Fatalf("owner Create while a squatter holds it pending: %v", err)
+	}
+	if _, err := svc.Create(ctx, owner, domain.CreateInput{Domain: strings.ToUpper(name), Purpose: []string{"tracking"}}); !isCode(err, "conflict") {
+		t.Fatalf("same org twice: err = %v, want conflict", err)
+	}
+	if squatted.OwnershipRecord.Value == owned.OwnershipRecord.Value || owned.OwnershipRecord.Name != "_flox-verify."+name {
+		t.Fatalf("records %+v / %+v: want one name, a token per row", squatted.OwnershipRecord, owned.OwnershipRecord)
+	}
+
+	// No record yet.
+	if _, err := svc.VerifyOwnership(ctx, owner, owned.ID); !isCode(err, "validation") {
+		t.Fatalf("verify without a record: err = %v", err)
+	}
+	// The owner publishes its token; the squatter's token is not there.
+	dns[owned.OwnershipRecord.Name] = []string{"v=spf1 -all", " " + owned.OwnershipRecord.Value + " "}
+	if _, err := svc.VerifyOwnership(ctx, squatter, squatted.ID); !isCode(err, "validation") {
+		t.Fatalf("squatter verify against the owner's record: err = %v, want refused", err)
+	}
+	verified, err := svc.VerifyOwnership(ctx, owner, owned.ID)
+	if err != nil {
+		t.Fatalf("owner verify: %v", err)
+	}
+	if verified.Status != domain.StatusActive || verified.OwnershipVerifiedAt == nil {
+		t.Fatalf("after verify: %+v, want active and verified", verified)
+	}
+	// Even with its own record, the squatter cannot take an active name.
+	dns[owned.OwnershipRecord.Name] = append(dns[owned.OwnershipRecord.Name], squatted.OwnershipRecord.Value)
+	if _, err := svc.VerifyOwnership(ctx, squatter, squatted.ID); !isCode(err, "conflict") {
+		t.Fatalf("second verified org: err = %v, want conflict", err)
+	}
+}
+
+func TestActiveNeedsVerifiedOwnership(t *testing.T) {
+	pool := mustPool(t)
+	ctx := context.Background()
+	org := seedOrg(t, ctx, pool)
+	dns := fakeTXT{}
+	svc := newTestService(pool, nil, nil, nil, "").WithTXTResolver(dns)
+	active := domain.StatusActive
+
+	if _, err := svc.Create(ctx, org, domain.CreateInput{Domain: "x-" + strings.ToLower(idgen.New()) + ".com", Purpose: []string{"tracking"}, Status: active}); !isCode(err, "validation") {
+		t.Fatalf("Create active: err = %v, want refused", err)
+	}
+	d, err := svc.Create(ctx, org, domain.CreateInput{Domain: "x-" + strings.ToLower(idgen.New()) + ".com", Purpose: []string{"tracking"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.Update(ctx, org, d.ID, domain.UpdateInput{Status: &active}); !isCode(err, "validation") {
+		t.Fatalf("PATCH active unverified: err = %v, want refused", err)
+	}
+
+	dns[d.OwnershipRecord.Name] = []string{d.OwnershipRecord.Value}
+	if _, err := svc.VerifyOwnership(ctx, org, d.ID); err != nil {
+		t.Fatal(err)
+	}
+	// Verified: it may go off and on again.
+	pending := domain.StatusPending
+	if _, err := svc.Update(ctx, org, d.ID, domain.UpdateInput{Status: &pending}); err != nil {
+		t.Fatal(err)
+	}
+	if back, err := svc.Update(ctx, org, d.ID, domain.UpdateInput{Status: &active}); err != nil || back.Status != domain.StatusActive {
+		t.Fatalf("re-activate verified: %v %v", back.Status, err)
+	}
+
+	// A rename is a new domain: unverified, pending, a fresh token.
+	other := "y-" + strings.ToLower(idgen.New()) + ".com"
+	renamed, err := svc.Update(ctx, org, d.ID, domain.UpdateInput{Domain: &other})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if renamed.Status != domain.StatusPending || renamed.OwnershipVerifiedAt != nil || renamed.OwnershipRecord.Value == d.OwnershipRecord.Value {
+		t.Fatalf("renamed: %+v, want pending, unverified, new token", renamed)
+	}
+}
+
+// A name under a reserved TLD (.test, .localhost, …) cannot be owned or
+// squatted by anyone: it is verified as soon as it is added.
+func TestReservedNamesAreVerifiedAtOnce(t *testing.T) {
+	pool := mustPool(t)
+	ctx := context.Background()
+	org := seedOrg(t, ctx, pool)
+	svc := newTestService(pool, nil, nil, nil, "")
+	d, err := svc.Create(ctx, org, domain.CreateInput{Domain: "t-" + strings.ToLower(idgen.New()) + ".test", Purpose: []string{"tracking"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if d.Status != domain.StatusActive || d.OwnershipVerifiedAt == nil {
+		t.Fatalf("reserved: %+v, want active and verified", d)
+	}
+	example := "e-" + strings.ToLower(idgen.New()) + ".example.com"
+	if r, err := svc.Update(ctx, org, d.ID, domain.UpdateInput{Domain: &example}); err != nil || r.Status != domain.StatusPending {
+		t.Fatalf("renamed to a public name: %v %v, want pending", r.Status, err)
 	}
 }
 

@@ -55,6 +55,7 @@ func (s *Store) ResolveTrackingLink(ctx context.Context, host, slug string) (Tra
 		JOIN domains   d ON d.id = tl.domain_id
 		JOIN campaigns c ON c.id = tl.campaign_id
 		WHERE lower(d.domain) = lower($1)
+		  AND d.status = 'active' -- verified (tech audit T6); at most one per name
 		  AND tl.slug = $2
 		  AND tl.status = 'active'`,
 		host, slug,

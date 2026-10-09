@@ -2,6 +2,8 @@ package domain
 
 import (
 	"context"
+	"errors"
+	"net"
 	"regexp"
 	"strings"
 	"time"
@@ -28,6 +30,51 @@ type Service struct {
 	dnsProvider      DNSProviderAdapter
 	trackerDNSTarget string
 	prober           SSLProber
+	txt              TXTResolver
+}
+
+// TXTResolver looks up a name's TXT records — the system resolver in
+// production (NetTXTResolver), a fake in tests. Behind an interface like
+// every other provider (CLAUDE.md #11).
+type TXTResolver interface {
+	LookupTXT(ctx context.Context, name string) ([]string, error)
+}
+
+// NetTXTResolver is the system DNS resolver. A name with no records is an
+// empty answer, not an error.
+type NetTXTResolver struct{}
+
+func (NetTXTResolver) LookupTXT(ctx context.Context, name string) ([]string, error) {
+	recs, err := net.DefaultResolver.LookupTXT(ctx, name)
+	var dnsErr *net.DNSError
+	if errors.As(err, &dnsErr) && dnsErr.IsNotFound {
+		return nil, nil
+	}
+	return recs, err
+}
+
+// WithTXTResolver replaces the DNS resolver ownership checks use.
+func (s *Service) WithTXTResolver(r TXTResolver) *Service {
+	s.txt = r
+	return s
+}
+
+// reservedTLDs can never be registered by anyone (RFC 2606, RFC 6761), so
+// nobody can prove — or squat — them: a domain under one is verified as
+// soon as it is added. Dev and test stacks live on them (track.localhost).
+var reservedTLDs = map[string]bool{"localhost": true, "test": true, "example": true, "invalid": true}
+
+func reservedName(domainName string) bool {
+	i := strings.LastIndex(domainName, ".")
+	return reservedTLDs[domainName[i+1:]]
+}
+
+// errNeedsOwnership refuses activating a domain whose DNS ownership is not
+// verified.
+func errNeedsOwnership() error {
+	return apierror.Validation("invalid domain", map[string]string{
+		"status": "a domain becomes active once you verify you control its DNS (add the TXT record, then Verify ownership)",
+	})
 }
 
 // SSLProber checks the certificate a domain actually serves —
@@ -44,7 +91,7 @@ type SSLProber interface {
 // TrackerDNSTarget — see its own doc comment for why an empty value is
 // refused rather than defaulted.
 func NewService(repo *Repository, credentials CredentialSource, registrar RegistrarProvider, dnsProvider DNSProviderAdapter, trackerDNSTarget string, prober SSLProber) *Service {
-	return &Service{repo: repo, credentials: credentials, registrar: registrar, dnsProvider: dnsProvider, trackerDNSTarget: trackerDNSTarget, prober: prober}
+	return &Service{repo: repo, credentials: credentials, registrar: registrar, dnsProvider: dnsProvider, trackerDNSTarget: trackerDNSTarget, prober: prober, txt: NetTXTResolver{}}
 }
 
 func (s *Service) List(ctx context.Context, orgID string) ([]Domain, error) {
@@ -57,8 +104,18 @@ func (s *Service) Get(ctx context.Context, orgID, id string) (Domain, error) {
 
 func (s *Service) Create(ctx context.Context, orgID string, in CreateInput) (Domain, error) {
 	in.Domain = strings.ToLower(strings.TrimSpace(in.Domain))
+	// A new domain is pending until its organization proves it controls
+	// the DNS (VerifyOwnership, tech audit T6) — except a reserved name,
+	// which nobody can own.
+	reserved := in.Domain != "" && reservedName(in.Domain)
 	if in.Status == "" {
-		in.Status = StatusActive
+		in.Status = StatusPending
+		if reserved {
+			in.Status = StatusActive
+		}
+	}
+	if in.Status == StatusActive && !reserved {
+		return Domain{}, errNeedsOwnership()
 	}
 	if in.Registrar == "" {
 		in.Registrar = RegistrarUnmanaged
@@ -69,7 +126,12 @@ func (s *Service) Create(ctx context.Context, orgID string, in CreateInput) (Dom
 	if fields := validate(in.Domain, in.Purpose, in.Registrar, in.DNSProvider, in.Status); len(fields) > 0 {
 		return Domain{}, apierror.Validation("invalid domain", fields)
 	}
-	return s.repo.Create(ctx, idgen.New(), orgID, in)
+	var verifiedAt *time.Time
+	if reserved {
+		now := time.Now()
+		verifiedAt = &now
+	}
+	return s.repo.Create(ctx, idgen.New(), orgID, in, verifiedAt)
 }
 
 func (s *Service) Update(ctx context.Context, orgID, id string, in UpdateInput) (Domain, error) {
@@ -100,11 +162,66 @@ func (s *Service) Update(ctx context.Context, orgID, id string, in UpdateInput) 
 		return Domain{}, apierror.Validation("invalid domain", fields)
 	}
 
-	return s.repo.Update(ctx, orgID, id, in)
+	cur, err := s.repo.GetByID(ctx, orgID, id)
+	if err != nil {
+		return Domain{}, err
+	}
+	verified := cur.OwnershipVerifiedAt != nil
+	// A new name is a new domain: proving the old one says nothing about
+	// it. Without this a verified domain could be renamed into someone
+	// else's and track on it at once.
+	var reset *ownershipReset
+	if in.Domain != nil && *in.Domain != cur.Domain {
+		verified = reservedName(*in.Domain)
+		reset = &ownershipReset{}
+		if verified {
+			now := time.Now()
+			reset.verifiedAt = &now
+		} else if in.Status == nil && cur.Status == StatusActive {
+			pending := StatusPending
+			in.Status = &pending
+		}
+	}
+	if in.Status != nil && *in.Status == StatusActive && !verified {
+		return Domain{}, errNeedsOwnership()
+	}
+	return s.repo.Update(ctx, orgID, id, in, reset)
 }
 
 func (s *Service) Delete(ctx context.Context, orgID, id string) error {
 	return s.repo.Delete(ctx, orgID, id)
+}
+
+// ownershipLookupTimeout bounds the DNS lookup of an ownership check.
+const ownershipLookupTimeout = 10 * time.Second
+
+// VerifyOwnership checks the domain's TXT record (OwnershipRecord) and,
+// when it carries this domain's token, marks it verified and active (tech
+// audit T6). Only whoever controls the domain's DNS can create that
+// record, and the token is per domain row, so another organization's
+// record for the same name proves nothing here. A domain already active
+// in another organization stays there: 409.
+func (s *Service) VerifyOwnership(ctx context.Context, orgID, id string) (Domain, error) {
+	d, err := s.repo.GetByID(ctx, orgID, id)
+	if err != nil {
+		return Domain{}, err
+	}
+	lookupCtx, cancel := context.WithTimeout(ctx, ownershipLookupTimeout)
+	defer cancel()
+	records, err := s.txt.LookupTXT(lookupCtx, d.OwnershipRecord.Name)
+	if err != nil {
+		return Domain{}, apierror.Validation("could not look up "+d.OwnershipRecord.Name+": "+err.Error()+" — try again in a minute", nil)
+	}
+	for _, r := range records {
+		if strings.TrimSpace(r) == d.OwnershipRecord.Value {
+			return s.repo.MarkOwnershipVerified(ctx, orgID, id, time.Now())
+		}
+	}
+	msg := "no TXT record " + d.OwnershipRecord.Name + " yet"
+	if len(records) > 0 {
+		msg = d.OwnershipRecord.Name + " has TXT records, but not " + d.OwnershipRecord.Value
+	}
+	return Domain{}, apierror.Validation(msg+" — DNS changes can take a few minutes to appear", map[string]string{"ownership": "not verified"})
 }
 
 // Verify checks the domain against whichever real provider(s) it

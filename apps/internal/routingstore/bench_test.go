@@ -169,7 +169,7 @@ func BenchmarkLoadRoutingConfig(b *testing.B) {
 
 // BenchmarkResolveTrackingLink measures the other Postgres round trip on
 // the hot path: the (domain, slug) -> campaign lookup, a single indexed
-// query (tracking_links_domain_id_slug_key + domains_domain_key).
+// query (tracking_links_domain_id_slug_key + domains_active_domain_key).
 func BenchmarkResolveTrackingLink(b *testing.B) {
 	pool := benchPool(b)
 	ctx := context.Background()

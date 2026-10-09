@@ -32,8 +32,10 @@ func Handler(db *pgxpool.Pool, logger *slog.Logger) http.HandlerFunc {
 		ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
 		defer cancel()
 		var known bool
-		// domains_domain_key is a unique index on lower(domain).
-		err := db.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM domains WHERE lower(domain) = $1)`, host).Scan(&known)
+		// Only an active (ownership-verified) domain gets a certificate:
+		// anyone can add a name, only its DNS owner can verify it (tech
+		// audit T6).
+		err := db.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM domains WHERE lower(domain) = $1 AND status = 'active')`, host).Scan(&known)
 		if err != nil {
 			logger.Error("tls ask: looking up domain", "domain", host, "error", err)
 			http.Error(w, "lookup failed", http.StatusServiceUnavailable)

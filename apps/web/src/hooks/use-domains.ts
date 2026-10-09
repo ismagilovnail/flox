@@ -12,6 +12,7 @@ import {
   syncDomainDNS,
   updateDomain,
   verifyDomain,
+  verifyDomainOwnership,
   type CreateDomainInput,
   type UpdateDomainInput,
 } from "@/lib/api/domains";
@@ -57,6 +58,14 @@ export function useDeleteDomain() {
 function invalidateAfter(qc: ReturnType<typeof useQueryClient>, id: string) {
   qc.invalidateQueries({ queryKey: domainsKey });
   qc.invalidateQueries({ queryKey: domainKey(id) });
+}
+
+export function useVerifyDomainOwnership() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => verifyDomainOwnership(id),
+    onSuccess: (_data, id) => invalidateAfter(qc, id),
+  });
 }
 
 export function useVerifyDomain() {

@@ -2,6 +2,8 @@ package domain
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"strings"
@@ -20,14 +22,16 @@ type Repository struct {
 
 func NewRepository(db *pgxpool.Pool) *Repository { return &Repository{db: db} }
 
-const selectColumns = `id, organization_id, domain, status, ssl, purpose, registrar, dns_provider, expires_at, verified_at, ssl_expires_at, ssl_checked_at, ssl_error, created_at, updated_at`
+const selectColumns = `id, organization_id, domain, status, ssl, purpose, registrar, dns_provider, expires_at, verified_at, ssl_expires_at, ssl_checked_at, ssl_error, ownership_verified_at, verification_token, created_at, updated_at`
 
 func scanDomain(row pgx.Row) (Domain, error) {
 	var d Domain
+	var token string
 	err := row.Scan(
 		&d.ID, &d.OrganizationID, &d.Domain, &d.Status, &d.SSL, &d.Purpose, &d.Registrar, &d.DNSProvider,
-		&d.ExpiresAt, &d.VerifiedAt, &d.SSLExpiresAt, &d.SSLCheckedAt, &d.SSLError, &d.CreatedAt, &d.UpdatedAt,
+		&d.ExpiresAt, &d.VerifiedAt, &d.SSLExpiresAt, &d.SSLCheckedAt, &d.SSLError, &d.OwnershipVerifiedAt, &token, &d.CreatedAt, &d.UpdatedAt,
 	)
+	d.OwnershipRecord = ownershipRecord(d.Domain, token)
 	return d, err
 }
 
@@ -76,33 +80,55 @@ func (r *Repository) GetByID(ctx context.Context, orgID, id string) (Domain, err
 	return d, err
 }
 
-// Create's unique violation on domains_domain_key (case-insensitive,
-// migration 00007) is a real cross-org race, not a per-org one: two
-// different organizations both trying to park the same hostname genuinely
-// can't both own it, the same way two people can't both register the same
-// DNS name. Reported as a plain conflict rather than a per-field
-// validation error since it isn't knowable until the INSERT itself runs.
-func (r *Repository) Create(ctx context.Context, id, orgID string, in CreateInput) (Domain, error) {
+// uniqueConflict turns a unique violation into what the user can act on:
+// the organization already lists the name, or another one has it active
+// (proved its DNS first).
+func uniqueConflict(err error) error {
+	var pgErr *pgconn.PgError
+	if !errors.As(err, &pgErr) || pgErr.Code != "23505" {
+		return nil
+	}
+	if pgErr.ConstraintName == "domains_active_domain_key" {
+		return apierror.Conflict("this domain is active in another organization, which proved control of its DNS")
+	}
+	return apierror.Conflict("this domain is already in your list")
+}
+
+// Create inserts a domain. verifiedAt is set only for a name nobody can
+// own publicly (Service.Create); everything else starts unverified.
+func (r *Repository) Create(ctx context.Context, id, orgID string, in CreateInput, verifiedAt *time.Time) (Domain, error) {
 	row := r.db.QueryRow(ctx, `
-		INSERT INTO domains (id, organization_id, domain, status, purpose, registrar, dns_provider)
-		VALUES ($1, $2, $3, $4, $5, $6, $7)
+		INSERT INTO domains (id, organization_id, domain, status, purpose, registrar, dns_provider, ownership_verified_at, verification_token)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
 		RETURNING `+selectColumns,
-		id, orgID, in.Domain, in.Status, in.Purpose, in.Registrar, in.DNSProvider,
+		id, orgID, in.Domain, in.Status, in.Purpose, in.Registrar, in.DNSProvider, verifiedAt, newVerificationToken(),
 	)
 	d, err := scanDomain(row)
 	if err != nil {
-		var pgErr *pgconn.PgError
-		if errors.As(err, &pgErr) && pgErr.Code == "23505" {
-			return Domain{}, apierror.Conflict("this domain is already parked")
+		if c := uniqueConflict(err); c != nil {
+			return Domain{}, c
 		}
 		return Domain{}, fmt.Errorf("domain: inserting: %w", err)
 	}
 	return d, nil
 }
 
+// newVerificationToken is a domain's ownership token: random, so another
+// organization's TXT record for the same name proves nothing for this one.
+func newVerificationToken() string {
+	b := make([]byte, 16)
+	_, _ = rand.Read(b)
+	return hex.EncodeToString(b)
+}
+
+// ownershipReset is what a rename does to ownership: the new name is not
+// verified (verifiedAt nil) unless nobody can own it publicly, and gets a
+// fresh token.
+type ownershipReset struct{ verifiedAt *time.Time }
+
 // Update applies only the non-nil fields in in, via a dynamically built
 // SET clause — matching trafficsource.Repository.Update/campaign.Repository.Update.
-func (r *Repository) Update(ctx context.Context, orgID, id string, in UpdateInput) (Domain, error) {
+func (r *Repository) Update(ctx context.Context, orgID, id string, in UpdateInput, reset *ownershipReset) (Domain, error) {
 	sets := []string{}
 	args := []any{}
 	arg := func(v any) string {
@@ -125,6 +151,9 @@ func (r *Repository) Update(ctx context.Context, orgID, id string, in UpdateInpu
 	if in.Status != nil {
 		sets = append(sets, "status = "+arg(*in.Status))
 	}
+	if reset != nil {
+		sets = append(sets, "ownership_verified_at = "+arg(reset.verifiedAt), "verification_token = "+arg(newVerificationToken()))
+	}
 
 	if len(sets) == 0 {
 		return r.GetByID(ctx, orgID, id)
@@ -140,11 +169,24 @@ func (r *Repository) Update(ctx context.Context, orgID, id string, in UpdateInpu
 	if errors.Is(err, pgx.ErrNoRows) {
 		return Domain{}, apierror.NotFound("domain not found")
 	}
-	if err != nil {
-		var pgErr *pgconn.PgError
-		if errors.As(err, &pgErr) && pgErr.Code == "23505" {
-			return Domain{}, apierror.Conflict("this domain is already parked")
-		}
+	if c := uniqueConflict(err); c != nil {
+		return Domain{}, c
+	}
+	return d, err
+}
+
+// MarkOwnershipVerified records a passed ownership check and makes the
+// domain active.
+func (r *Repository) MarkOwnershipVerified(ctx context.Context, orgID, id string, at time.Time) (Domain, error) {
+	d, err := scanDomain(r.db.QueryRow(ctx, `
+		UPDATE domains SET ownership_verified_at = $3, status = 'active'
+		WHERE id = $1 AND organization_id = $2
+		RETURNING `+selectColumns, id, orgID, at))
+	if errors.Is(err, pgx.ErrNoRows) {
+		return Domain{}, apierror.NotFound("domain not found")
+	}
+	if c := uniqueConflict(err); c != nil {
+		return Domain{}, c
 	}
 	return d, err
 }

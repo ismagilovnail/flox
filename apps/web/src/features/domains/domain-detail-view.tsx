@@ -9,6 +9,7 @@ import { usePermission } from "@/hooks/use-auth";
 import { useDomain, useUpdateDomain } from "@/hooks/use-domains";
 import { DomainForm, type DomainFormValues } from "@/features/domains/domain-form";
 import { DomainAutomationCard } from "@/features/domains/domain-automation-card";
+import { DomainOwnershipCard } from "@/features/domains/domain-ownership-card";
 
 export function DomainDetailView({ id }: { id: string }) {
   const { t } = useTranslation("domains");
@@ -46,7 +47,9 @@ export function DomainDetailView({ id }: { id: string }) {
         submitLabel={t("form.save")}
         onSubmit={handleSubmit}
         disabled={!canWrite}
+        ownershipVerified={domain.ownershipVerifiedAt !== null}
       />
+      <DomainOwnershipCard domain={domain} />
       <DomainAutomationCard domain={domain} />
     </div>
   );
