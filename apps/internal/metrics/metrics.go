@@ -198,6 +198,14 @@ var (
 		Help:      "Conversion attribution outcomes.",
 	}, []string{"outcome"})
 
+	// RetentionDeletedTotal counts rows the retention job deleted
+	// (internal/retention), by table.
+	RetentionDeletedTotal = promauto.NewCounterVec(prometheus.CounterOpts{
+		Namespace: namespace,
+		Name:      "retention_deleted_total",
+		Help:      "Rows deleted by the retention job, by table.",
+	}, []string{"table"})
+
 	// ReattributionsTotal counts unknown_click conversions the worker
 	// looked up again (internal/reattribute): attributed — the click turned
 	// up and the conversion was rewritten; gave_up — still no click after

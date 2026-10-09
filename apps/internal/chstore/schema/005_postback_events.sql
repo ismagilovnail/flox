@@ -25,7 +25,8 @@
 -- payout, docs/attribution.md's framing) is a rarer, point-lookup-shaped
 -- query that doesn't need range-scan locality the way network_id does.
 --
--- No TTL — see click_events' comment.
+-- TTL: set by apps/worker at start from RETENTION_POSTBACK_LOG_MONTHS
+-- (chstore.SetPostbackLogTTL, docs/retention.md) — configuration, not schema.
 CREATE TABLE IF NOT EXISTS postback_events
 (
     organization_id String,

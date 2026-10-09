@@ -140,6 +140,13 @@ metrics (`docs/observability.md`) are a completely separate signal, always
 on regardless of this variable — `GET /metrics` on all three Go binaries
 needs no configuration at all.
 
+### Retention
+
+| Variable | Dev value | Staging/production |
+|---|---|---|
+| `RETENTION_FAILED_POSTBACKS_DAYS` (worker) | `90` | Days a postback that was not recorded (duplicate/error/ignored) is kept in Postgres; `0` keeps them. Successes are never deleted. `docs/retention.md` |
+| `RETENTION_POSTBACK_LOG_MONTHS` (worker) | `13` | TTL of ClickHouse's postback attempt log, applied by the worker at start; `0` removes it. Lowering it deletes older log rows at the next merges. |
+
 ### FX rates
 
 | Variable | Dev value | Staging/production |

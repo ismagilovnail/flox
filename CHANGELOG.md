@@ -5,6 +5,30 @@ per-phase, matching `CLAUDE.md`'s phase protocol. The one exception is
 [Between phases], below: spec amendments and the code changes that follow from
 them land between phases and would otherwise be invisible here.
 
+## [Between phases] — data retention: only logs expire (tech audit CH3/DB2)
+
+- Decided with the owner (2026-10-09): only logs expire; everything reports, conversions and
+  invoices rest on is kept. `docs/retention.md`.
+- **Postgres:** postbacks not recorded as conversions (duplicate/error/ignored) are deleted after
+  `RETENTION_FAILED_POSTBACKS_DAYS` (default 90, 0 = keep) by `internal/retention` in the worker,
+  hourly, in batches of 5000 over a new partial index (migration 00061, `CONCURRENTLY`).
+  Successes are never deleted. Not partitioned as the audit suggested: a partitioned table's
+  unique index must include the partition key, and the dedup key must stay global (CLAUDE.md #3).
+  `flox_retention_deleted_total{table}`.
+- **ClickHouse:** the postback attempt log `postback_events` gets a TTL of
+  `RETENTION_POSTBACK_LOG_MONTHS` (default 13, 0 = none), set by the worker at start only when it
+  differs (`chstore.SetPostbackLogTTL`). The report tables (`click_events`, `tracking_events`,
+  `conversion_events`, `ltv_events`, `click_lookup`, `cost_events`) keep no TTL, against the
+  audit's suggestion for `tracking_events`: every report reads them for any period, and a TTL
+  would silently empty old reports.
+- Docs: `docs/retention.md` (new), `docs/environment.md`, `docs/observability.md`,
+  `.env.example`, the "No TTL" comments in the ClickHouse schema, audit status.
+
+Tests: on a real database with a batch of 2, old duplicate/error/ignored rows go, an old success
+and a young duplicate stay; the TTL setter changes the table only when the period differs (none →
+13 → 13 → 1 → 13), ending on the default. The DELETE's plan uses the new index. The dev worker
+applied the 13-month TTL and started the job. Full-env `go test ./...` passes; e2e not skipped.
+
 ## [Between phases] — timeouts on every outbound call (tech audit, P2)
 
 - New `internal/httpclient`: clients with a timeout on the whole call — 60 s for ad APIs

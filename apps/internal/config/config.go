@@ -82,6 +82,15 @@ type Config struct {
 	// loaded into fx_rates by other means.
 	FXProvider string
 
+	// Retention (apps/worker, internal/retention; tech audit CH3/DB2).
+	// FailedPostbacksDays: postbacks rows that were not recorded
+	// (duplicate/error/ignored) are deleted after this many days; 0 keeps
+	// them. PostbackLogMonths: TTL of ClickHouse's postback_events attempt
+	// log; 0 removes it. Successful conversions and the report tables are
+	// never expired.
+	RetentionFailedPostbacksDays int
+	RetentionPostbackLogMonths   int
+
 	// LandingLinkKey is the HMAC key (32+ raw bytes, base64-encoded)
 	// apps/tracker signs internal landings' click links with
 	// (apps/internal/landinglink). Missing or invalid: the tracker logs a
@@ -188,6 +197,15 @@ func load(portVar, portDefault, defaultServiceName string) (Config, error) {
 		return Config{}, fmt.Errorf("parsing %s: %w", portVar, err)
 	}
 
+	failedDays, err := parseNonNegative("RETENTION_FAILED_POSTBACKS_DAYS", 90)
+	if err != nil {
+		return Config{}, err
+	}
+	logMonths, err := parseNonNegative("RETENTION_POSTBACK_LOG_MONTHS", 13)
+	if err != nil {
+		return Config{}, err
+	}
+
 	return Config{
 		Env:      getEnv("NODE_ENV", "development"),
 		HTTPAddr: fmt.Sprintf(":%d", port),
@@ -203,10 +221,13 @@ func load(portVar, portDefault, defaultServiceName string) (Config, error) {
 		LandingLinkKey:           getEnv("LANDING_LINK_KEY", ""),
 		StickyCookieKey:          getEnv("STICKY_COOKIE_KEY", ""),
 		FXProvider:               getEnv("FX_PROVIDER", "ecb"),
-		SentryDSN:                getEnv("SENTRY_DSN", ""),
-		SentryEnvironment:        getEnv("SENTRY_ENVIRONMENT", ""),
-		TrackerPublicURL:         getEnv("TRACKER_PUBLIC_URL", ""),
-		TrackerDNSTarget:         getEnv("TRACKER_DNS_TARGET", ""),
+
+		RetentionFailedPostbacksDays: failedDays,
+		RetentionPostbackLogMonths:   logMonths,
+		SentryDSN:                    getEnv("SENTRY_DSN", ""),
+		SentryEnvironment:            getEnv("SENTRY_ENVIRONMENT", ""),
+		TrackerPublicURL:             getEnv("TRACKER_PUBLIC_URL", ""),
+		TrackerDNSTarget:             getEnv("TRACKER_DNS_TARGET", ""),
 
 		GeoIPCityDBPath: getEnv("GEOIP_CITY_DB_PATH", ""),
 		GeoIPASNDBPath:  getEnv("GEOIP_ASN_DB_PATH", ""),
@@ -233,6 +254,19 @@ func load(portVar, portDefault, defaultServiceName string) (Config, error) {
 			PublicEndpoint:  getEnv("S3_PUBLIC_ENDPOINT", getEnv("S3_ENDPOINT", "")),
 		},
 	}, nil
+}
+
+// parseNonNegative reads a whole number ≥ 0, fallback when unset.
+func parseNonNegative(key string, fallback int) (int, error) {
+	raw := getEnv(key, "")
+	if raw == "" {
+		return fallback, nil
+	}
+	n, err := strconv.Atoi(raw)
+	if err != nil || n < 0 {
+		return 0, fmt.Errorf("%s: want a whole number ≥ 0, got %q", key, raw)
+	}
+	return n, nil
 }
 
 func getEnv(key, fallback string) string {

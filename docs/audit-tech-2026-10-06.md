@@ -277,7 +277,7 @@ CREATE INDEX CONCURRENTLY postbacks_click_lookup_idx
   WHERE result = 'success';
 ```
 
-**DB2 [MEDIUM]. Таблица `postbacks` растёт без ограничений** (все попытки,
+**DB2 [MEDIUM]. Таблица `postbacks` растёт без ограничений** (**статус: исправлено** — несуспешные строки удаляются через 90 дней пачками по частичному индексу, `internal/retention`, `docs/retention.md`; партиционирование не делалось: уникальный индекс секционированной таблицы обязан включать ключ партиции, а dedup-ключ должен оставаться глобальным) (все попытки,
 включая duplicate/error), retention нет. Через год активных сетей это
 десятки и сотни миллионов строк. **Исправление:** партиционирование по
 месяцу `created_at`, retention для `result IN ('duplicate','error','ignored')`
@@ -339,7 +339,7 @@ CREATE MATERIALIZED VIEW click_lookup_mv TO click_lookup AS
 
 **CH2 [HIGH]. Дубли при повторе батча.** Подробно в D2.
 
-**CH3 [MEDIUM]. Нет TTL и retention ни на одной таблице.** Добавить
+**CH3 [MEDIUM]. Нет TTL и retention ни на одной таблице.** (**Статус: исправлено по решению владельца** — TTL 13 месяцев только на журнал попыток `postback_events`; `tracking_events` и остальные таблицы отчётов без TTL, потому что отчёты читают их за любой период, `docs/retention.md`.) Добавить
 `TTL event_at + INTERVAL 13 MONTH` для raw `tracking_events` и
 `postback_events`. Агрегаты (MV) хранятся дольше.
 

@@ -80,6 +80,7 @@ import (
 	"github.com/ismagilovnail/flox/apps/internal/queuestats"
 	"github.com/ismagilovnail/flox/apps/internal/reattribute"
 	"github.com/ismagilovnail/flox/apps/internal/reconcile"
+	"github.com/ismagilovnail/flox/apps/internal/retention"
 	"github.com/ismagilovnail/flox/apps/internal/sslcheck"
 	"github.com/ismagilovnail/flox/apps/internal/telemetry"
 	"github.com/ismagilovnail/flox/apps/internal/urlsafety"
@@ -209,6 +210,12 @@ func run() error {
 	if err := chstore.Migrate(ctx, ch); err != nil {
 		logger.Error("clickhouse schema migration failed", "error", err)
 		return err
+	}
+	// The postback attempt log's TTL (tech audit CH3, docs/retention.md).
+	if changed, err := chstore.SetPostbackLogTTL(ctx, ch, cfg.RetentionPostbackLogMonths); err != nil {
+		logger.Warn("postback log retention not applied", "error", err)
+	} else if changed {
+		logger.Info("postback log retention set", "months", cfg.RetentionPostbackLogMonths)
 	}
 	chEvents := chstore.NewEventStore(ch)
 	// One-time copies of existing data into tables added by later schema
@@ -370,6 +377,14 @@ func run() error {
 	retrier := reattribute.New(db, conversion.NewPostgresStore(db), chstore.NewClickResolver(ch), chEvents, logger)
 	logger.Info("attribution retry starting", "interval", reattributeInterval)
 	start(func() { retrier.RunLoop(ctx, reattributeInterval, reattributeBatchSize) })
+
+	// Postbacks that were not recorded (duplicate/error/ignored) expire
+	// (internal/retention, tech audit DB2).
+	if days := cfg.RetentionFailedPostbacksDays; days > 0 {
+		expire := &retention.FailedPostbacks{DB: db, Age: time.Duration(days) * 24 * time.Hour, Logger: logger}
+		logger.Info("postback retention starting", "older_than_days", days, "interval", retention.Interval)
+		start(func() { expire.RunLoop(ctx, retention.Interval) })
+	}
 
 	// Every domain's SSL status from a real TLS connection to it
 	// (internal/sslcheck, marketer audit #4).

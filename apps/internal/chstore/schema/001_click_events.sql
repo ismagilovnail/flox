@@ -15,11 +15,9 @@
 --   key unique without forcing a wider key, and is the join column
 --   attribution/conversion queries actually use.
 --
--- No TTL: no data retention policy exists yet anywhere in this project's
--- docs (PRODUCT.md, ARCHITECTURE.md) — inventing one here, silently, would
--- be a real product/compliance decision (e.g. GDPR-relevant) made by
--- default rather than on purpose. Add one later with `ALTER TABLE ...
--- MODIFY TTL` when a real policy exists; no schema redesign needed.
+-- No TTL, on purpose (docs/retention.md, decided 2026-10-09): every report
+-- reads this table for any period, so expiring it would empty old reports.
+-- Only the postback attempt log expires (chstore.SetPostbackLogTTL).
 --
 -- "source" from §48's "organization/date/campaign/source/country/flow/
 -- offer" optimization list is NOT in the sort key: apps/internal/event.Event

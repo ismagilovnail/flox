@@ -163,6 +163,7 @@ alone can only serve one path.
 | `flox_pg_pool_conns{service,state}`, `flox_pg_pool_acquires_total{service,kind}`, `flox_pg_pool_acquire_wait_seconds_total{service}` | api, tracker, worker | Postgres pool use; `kind="empty"` = an acquire that had to wait |
 | `flox_routing_cache_requests_total{table,result}`, `flox_routing_cache_invalidations_total` | tracker | Routing served from memory, stale, missed, failing |
 | `flox_events_queue_write_retries_total` | tracker | Event writes retried after a Postgres failure |
+| `flox_retention_deleted_total{table}` | worker | Rows the retention job deleted (`postbacks`: not-recorded postbacks past `RETENTION_FAILED_POSTBACKS_DAYS`; `docs/retention.md`) |
 | `flox_sticky_cookies_rejected_total{reason}` | tracker | Sticky cookies ignored: `unsigned` (issued before signing, or forged), `bad_signature` (forged, another key or campaign), `malformed` (signed, ids not ULIDs — a bug). Steady `bad_signature` is someone trying (tech audit T5) |
 | `flox_fx_sync_total{outcome}`, `flox_fx_latest_rate_age_seconds`, `flox_fx_rate_missing_total` | worker, tracker, api | FX rate sync and amounts stored without a USD value (no currency label: the code comes from requests) |
 | `flox_redis_errors_total{op}` | tracker, api | Redis failures that fell back (`conversion_last_status`, `ratelimit`) |
