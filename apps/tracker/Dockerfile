@@ -52,14 +52,14 @@ ENTRYPOINT ["sh", "-c", "mkdir -p tmp/tracker && exec air -c tracker/.air.toml"]
 # ---------- runtime ----------
 FROM alpine:3.21 AS tracker
 
-# No ca-certificates here on purpose: as currently wired
-# (classifier.New(nil, nil, nil) — no real geo/ASN/bot vendor yet, §74),
-# apps/tracker makes no outbound HTTPS calls at all on its request path —
-# CLAUDE.md non-negotiable #9 keeps the redirect hot path free of exactly
-# that kind of dependency. Revisit this line the day a real geo/ASN/bot
-# provider (behind CLAUDE.md non-negotiable #11's interfaces) is actually
-# wired into apps/tracker and needs one.
-RUN adduser -D -u 10001 -h /app app
+# ca-certificates: the redirect path makes no outbound calls (CLAUDE.md
+# #9), but the tracker does reach its stores and services over TLS in a
+# real deployment — Postgres with sslmode=verify-full, rediss://, an
+# https:// ClickHouse, S3 for landing assets, Sentry. alpine:3.21 happens
+# to ship ca-certificates-bundle in its base image; installed explicitly
+# so a base-image change cannot silently break every TLS connection
+# (tech audit DO4).
+RUN apk add --no-cache ca-certificates && adduser -D -u 10001 -h /app app
 
 WORKDIR /app
 COPY --from=builder /out/tracker /usr/local/bin/tracker

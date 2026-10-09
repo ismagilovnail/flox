@@ -73,8 +73,9 @@ FROM alpine:3.21 AS api
 
 # ca-certificates: apps/api makes outbound HTTPS calls (domain/DNS
 # providers, Facebook/TikTok ad account sync — all behind
-# interfaces per CLAUDE.md non-negotiable #11) that need a real CA bundle;
-# alpine's base image does not carry one, unlike the Go builder stage.
+# interfaces per CLAUDE.md non-negotiable #11) that need a real CA bundle.
+# alpine:3.21's base carries ca-certificates-bundle today; installed
+# explicitly so a base-image change cannot remove it.
 RUN apk add --no-cache ca-certificates && adduser -D -u 10001 -h /app app
 
 WORKDIR /app

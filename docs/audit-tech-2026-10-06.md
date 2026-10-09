@@ -811,7 +811,7 @@ Error tracking (Sentry или аналог) не подключён. Паник�
   restore-drill.
 - **DO3 [MEDIUM]. Манифестов оркестрации** (requests/limits, PDB,
   HPA, `terminationGracePeriodSeconds`) нет. NEEDS VERIFICATION.
-- **DO4 [MEDIUM].** В runtime-образе tracker'а нет `ca-certificates`
+- **DO4 [MEDIUM].** (**Статус: проверено и закреплено** — на `alpine:3.21` бандл уже был в базовом образе (`ca-certificates-bundle`), Go-TLS из образа tracker'а работал; теперь `ca-certificates` ставится явно, чтобы смена базового образа его не убрала.) В runtime-образе tracker'а нет `ca-certificates`
   (`apps/tracker/Dockerfile`). При managed-PG с `sslmode=verify-full`,
   Redis с TLS (`rediss://`) или HTTPS-ClickHouse tracker не стартует или не
   подключится.

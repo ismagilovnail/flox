@@ -5,6 +5,20 @@ per-phase, matching `CLAUDE.md`'s phase protocol. The one exception is
 [Between phases], below: spec amendments and the code changes that follow from
 them land between phases and would otherwise be invisible here.
 
+## [Between phases] — CA certificates in the tracker image (tech audit DO4)
+
+- Checked before changing anything: the audit's premise does not hold on the current base —
+  `alpine:3.21` ships `ca-certificates-bundle`, and a Go TLS dial from inside the tracker image
+  succeeded. The tracker does need it (Postgres `verify-full`, `rediss://`, `https://` ClickHouse,
+  S3 for landing assets, Sentry), so `ca-certificates` is now installed explicitly, as in the api
+  and worker images, and a base-image change cannot take it away silently.
+- Comments corrected: the tracker's said it made no TLS connections; the api's said alpine had no
+  bundle. The backup sidecar (`postgres:16-alpine`) and the migrate image (Go builder) already
+  carry one.
+
+Verified: rebuilt tracker image — Go TLS dial OK, `ca-certificates` installed, runs as uid 10001,
+starts and refuses without `STICKY_COOKIE_KEY` as designed.
+
 ## [Between phases] — postbacks can say when the conversion happened (tech audit T3)
 
 - Incoming postbacks accept an optional `event_time` (or `ts`): unix seconds or milliseconds,
