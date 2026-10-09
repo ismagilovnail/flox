@@ -8,10 +8,12 @@ import { ErrorState } from "@/components/ui/error-state";
 import { LoadingState } from "@/components/ui/loading-state";
 import { useNetworks } from "@/hooks/use-networks";
 import { usePostbackLogs } from "@/hooks/use-postback-logs";
+import { useApiErrorMessage } from "@/hooks/use-api-error-message";
 import { postbackLogColumns } from "@/features/postbacks/postback-log-columns";
 
 export function PostbackLogsPanel() {
   const { t } = useTranslation(["postbacks", "conversions"]);
+  const errorMessage = useApiErrorMessage();
   const logsQuery = usePostbackLogs();
   const networksQuery = useNetworks();
 
@@ -30,7 +32,7 @@ export function PostbackLogsPanel() {
     return (
       <ErrorState
         title={t("logs.loadError")}
-        description={logsQuery.error.message}
+        description={errorMessage(logsQuery.error)}
         onRetry={() => logsQuery.refetch()}
       />
     );

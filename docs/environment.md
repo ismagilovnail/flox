@@ -66,14 +66,42 @@ compose passwords anywhere real — they're published in this repo.
 
 ### ClickHouse
 
-`CLICKHOUSE_URL`/`_DATABASE`/`_USER`/`_PASSWORD` — same story: dev runs
-with an empty password (`infra/docker-compose.dev.yml`'s
-`CLICKHOUSE_PASSWORD: ""`) and `CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: 1`
-(lets the default user manage other users — fine for a single-developer
-local container, wrong for anything real). Production needs a real
-password and TLS (`https://` in `CLICKHOUSE_URL`) — `apps/internal/chconn`
-already just passes the URL through to the official driver, no code
-change needed to point it at a TLS endpoint.
+`CLICKHOUSE_URL`/`_DATABASE`/`_USER`/`_PASSWORD` — dev runs with an empty
+password (`infra/docker-compose.dev.yml`'s `CLICKHOUSE_PASSWORD: ""`) and
+`CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: 1` (lets the default user manage
+other users — fine for a single-developer local container, wrong for
+anything real). Production needs a real password and TLS: `https://` in
+`CLICKHOUSE_URL` (`apps/internal/chconn`; before the 2026-10-06 tech audit
+the scheme was ignored and an `https://` URL was dialed in plain HTTP).
+
+**Query limits per binary** (`apps/internal/chconn`, tech audit CH4) — so
+one heavy report cannot hold the ClickHouse that postback attribution
+needs:
+
+| Binary | `max_execution_time` | `max_memory_usage` |
+|---|---|---|
+| `apps/api` (reports) | 30 s | 4 GiB |
+| `apps/tracker` (attribution, offer caps) | 10 s | 1 GiB |
+| `apps/worker` (inserts, backfills, reconciliation) | none | server default |
+
+Override per container with `CLICKHOUSE_MAX_EXECUTION_TIME` (seconds) and
+`CLICKHOUSE_MAX_MEMORY_USAGE` (bytes); `0` = no limit. A report stopped
+at a limit answers **422 `query_too_heavy`** ("narrow the date range or
+remove a breakdown"), translated in the UI, never retried by it. With a
+time limit, a query whose caller went away (the user left the page, the
+API's 30 s request timeout fired) is cancelled on ClickHouse too.
+Connections dial with a 5 s timeout, at most 20 per binary; uncompressed — with LZ4 over HTTP the driver loses the server's error text on a failed insert, which the dead-letter logic reads.
+
+These limits are sent by the client. In production also give each
+binary its own ClickHouse user and settings profile, so the server
+enforces them whatever a client sends:
+
+```sql
+CREATE SETTINGS PROFILE flox_api SETTINGS max_execution_time = 30, max_memory_usage = 4294967296;
+CREATE USER flox_api IDENTIFIED WITH sha256_password BY '…' SETTINGS PROFILE 'flox_api';
+GRANT SELECT, INSERT, CREATE TABLE, ALTER ON flox.* TO flox_api;
+-- the same for flox_tracker (10 s, 1 GiB) and flox_worker (no limits)
+```
 
 ### Redis
 

@@ -8,10 +8,12 @@ import { ErrorState } from "@/components/ui/error-state";
 import { LoadingState } from "@/components/ui/loading-state";
 import { useCampaigns } from "@/hooks/use-campaigns";
 import { useClickLogs } from "@/hooks/use-click-logs";
+import { useApiErrorMessage } from "@/hooks/use-api-error-message";
 import { CLICK_LOG_INITIAL_COLUMN_VISIBILITY, clickLogColumns } from "@/features/clicklogs/click-log-columns";
 
 export function ClickLogView() {
   const { t } = useTranslation("clickLog");
+  const errorMessage = useApiErrorMessage();
   const logsQuery = useClickLogs();
   const campaignsQuery = useCampaigns();
 
@@ -32,7 +34,7 @@ export function ClickLogView() {
       {logsQuery.isPending ? (
         <LoadingState label={t("view.loading")} />
       ) : logsQuery.isError ? (
-        <ErrorState title={t("view.loadError")} description={logsQuery.error.message} onRetry={() => logsQuery.refetch()} />
+        <ErrorState title={t("view.loadError")} description={errorMessage(logsQuery.error)} onRetry={() => logsQuery.refetch()} />
       ) : (
         <DataTable
           columns={columns}

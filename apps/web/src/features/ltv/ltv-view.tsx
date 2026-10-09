@@ -18,6 +18,7 @@ import { useCampaigns } from "@/hooks/use-campaigns";
 import { useLocale } from "@/hooks/use-locale";
 import { useCohorts } from "@/hooks/use-ltv";
 import { useNetworks } from "@/hooks/use-networks";
+import { useApiErrorMessage } from "@/hooks/use-api-error-message";
 import { LTV_WINDOWS, type Cohort, type CohortPeriod, type CohortType, type LtvWindow } from "@/lib/api/ltv";
 import { countryOptions } from "@/lib/countries";
 import { formatInt, formatPercent, formatUsd } from "@/lib/format";
@@ -112,6 +113,7 @@ function cohortColumns(
 
 export function LtvView() {
   const { t, i18n } = useTranslation("ltv");
+  const errorMessage = useApiErrorMessage();
   const locale = useLocale();
   const [type, setType] = React.useState<CohortType>("ftd");
   const [period, setPeriod] = React.useState<CohortPeriod>("week");
@@ -218,7 +220,7 @@ export function LtvView() {
       </div>
 
       {query.isPending && <LoadingState label={t("loading")} />}
-      {query.isError && <ErrorState title={t("loadError")} description={query.error.message} onRetry={() => query.refetch()} />}
+      {query.isError && <ErrorState title={t("loadError")} description={errorMessage(query.error)} onRetry={() => query.refetch()} />}
       {query.isSuccess && (
         <div className={cn("flex flex-col gap-2", query.isPlaceholderData && "opacity-60")}>
           <DataTable

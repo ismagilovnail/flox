@@ -25,8 +25,9 @@ STATUS        : marketer audit closed (#1–#12, #13 platform limit). Tech audit
                 in the audit. P2 in progress: T5 (signed sticky cookies,
                 STICKY_COOKIE_KEY required by the tracker), API1, outbound
                 timeouts, CH3/DB2 (only logs expire — owner's decision,
-                docs/retention.md) done; next CH4.
-LAST COMMIT   : feat(retention): expire not-recorded postbacks and the attempt log.
+                docs/retention.md), CH4 (query limits per binary, cancel on
+                client close, 422 query_too_heavy) done; next T3.
+LAST COMMIT   : feat(clickhouse): query limits per binary, cancellation, TLS.
 UNCOMMITTED   : none expected. Dev DB fresh from `make dev-fresh CONFIRM=yes`
                 (password flox-demo-2026); `make dev-status` shows what is in it.
 NEXT          : wait for the user — the next phase. CI (DO1) is the user's own

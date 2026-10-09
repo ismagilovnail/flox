@@ -5,6 +5,39 @@ per-phase, matching `CLAUDE.md`'s phase protocol. The one exception is
 [Between phases], below: spec amendments and the code changes that follow from
 them land between phases and would otherwise be invisible here.
 
+## [Between phases] — ClickHouse query limits, cancellation, TLS (tech audit CH4)
+
+- Every query runs under its binary's limits (`apps/internal/chconn`, `config.ClickHouseConfig`):
+  api 30 s / 4 GiB (reports), tracker 10 s / 1 GiB (attribution, offer caps), worker none
+  (inserts, backfills, reconciliation). `CLICKHOUSE_MAX_EXECUTION_TIME` /
+  `CLICKHOUSE_MAX_MEMORY_USAGE` override per container. One heavy report can no longer hold the
+  ClickHouse postback attribution needs.
+- A query whose caller went away is now cancelled on ClickHouse (api, tracker). Over HTTP the
+  server kept running a SELECT whose client disconnected — a report the user left, or one the
+  API's 30 s request timeout already answered. Fixed with
+  `cancel_http_readonly_queries_on_client_close` plus a progress header a second (the server only
+  notices a disconnect when it writes); not for the worker, whose hour-long queries would outgrow
+  the HTTP client's header limit.
+- A report stopped at a limit answers **422 `query_too_heavy`** instead of an opaque 500; the UI
+  shows a translated "narrow the date range or remove a breakdown" (EN/RU) on analytics, LTV, the
+  overview, click logs and postback logs (`useApiErrorMessage`). The UI no longer retries any 4xx
+  (`shouldRetry`): a too-heavy report used to run four times before the error showed.
+- `https://` in `CLICKHOUSE_URL` now means TLS — the scheme was ignored and docs claimed it worked.
+  Dial timeout 5 s (was 30), at most 20 connections per binary.
+- Not done: LZ4 compression, which the audit listed — over HTTP the driver then loses the
+  server's error text on a failed insert, and the dead-letter logic (`chstore.Rejected`) needs it;
+  found by `TestRejectedMatchesARealServerRejection`. Server-side profiles per binary are documented
+  (`docs/environment.md`, SQL checked on dev), not created: dev has one user.
+- Seen while verifying: the dev web container died on a Turbopack internal panic (its disk cache
+  failed to restore); a restart fixed it.
+
+Tests: real ClickHouse stops a query at a 1 s time limit and at a 10 MB memory limit, and both are
+recognized; a cancelled query disappears from `system.processes` within ~1 s; a 2 s query with
+progress headers still returns; limits per binary and env overrides; 422 mapping; `shouldRetry`.
+Live: api with a 1 KB memory limit answered 422 `query_too_heavy`, the overview showed the RU and
+EN message after 2 requests (8 before); `system.query_log` shows the limits on api queries.
+Full-env `go test ./...` passes; e2e not skipped; tsc, eslint, vitest (98) pass.
+
 ## [Between phases] — data retention: only logs expire (tech audit CH3/DB2)
 
 - Decided with the owner (2026-10-09): only logs expire; everything reports, conversions and

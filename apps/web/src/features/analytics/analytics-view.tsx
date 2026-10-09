@@ -19,6 +19,7 @@ import { useReport, useTimeseries, useFunnelReport } from "@/hooks/use-analytics
 import { useOrganization } from "@/hooks/use-organization";
 import { todayInZone } from "@/lib/timezones";
 import { EMPTY_CUSTOM_METRICS, useCustomMetrics } from "@/hooks/use-custom-metrics";
+import { useApiErrorMessage } from "@/hooks/use-api-error-message";
 
 /** Dimensions "View statistics" (§27.5) is allowed to deep-link a filter for —
  * an allowlist so an arbitrary/malformed URL query can't inject a bogus filter. */
@@ -45,6 +46,7 @@ export function AnalyticsView() {
 
 function AnalyticsContent({ orgTimezone }: { orgTimezone: string }) {
   const { t } = useTranslation("analytics");
+  const errorMessage = useApiErrorMessage();
   const searchParams = useSearchParams();
   const allCustomMetrics = useCustomMetrics().data?.metrics ?? EMPTY_CUSTOM_METRICS;
   const reportBuilderMetrics = React.useMemo(
@@ -184,7 +186,7 @@ function AnalyticsContent({ orgTimezone }: { orgTimezone: string }) {
           ) : tableQuery.isError ? (
             <ErrorState
               title={t("view.loadError")}
-              description={tableQuery.error.message}
+              description={errorMessage(tableQuery.error)}
               onRetry={() => tableQuery.refetch()}
             />
           ) : (
@@ -208,7 +210,7 @@ function AnalyticsContent({ orgTimezone }: { orgTimezone: string }) {
           ) : timeseriesQuery.isError ? (
             <ErrorState
               title={t("view.loadError")}
-              description={timeseriesQuery.error.message}
+              description={errorMessage(timeseriesQuery.error)}
               onRetry={() => timeseriesQuery.refetch()}
             />
           ) : (
@@ -221,7 +223,7 @@ function AnalyticsContent({ orgTimezone }: { orgTimezone: string }) {
           ) : barQuery.isError ? (
             <ErrorState
               title={t("view.loadError")}
-              description={barQuery.error.message}
+              description={errorMessage(barQuery.error)}
               onRetry={() => barQuery.refetch()}
             />
           ) : (
@@ -234,7 +236,7 @@ function AnalyticsContent({ orgTimezone }: { orgTimezone: string }) {
           ) : funnelQuery.isError ? (
             <ErrorState
               title={t("view.loadError")}
-              description={funnelQuery.error.message}
+              description={errorMessage(funnelQuery.error)}
               onRetry={() => funnelQuery.refetch()}
             />
           ) : (

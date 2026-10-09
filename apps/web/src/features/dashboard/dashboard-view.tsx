@@ -16,6 +16,7 @@ import { useDimensionValueLabel } from "@/features/analytics/use-dimension-value
 import { useDashboardReport } from "@/hooks/use-analytics-report";
 import { useOrganization } from "@/hooks/use-organization";
 import { useLocale } from "@/hooks/use-locale";
+import { useApiErrorMessage } from "@/hooks/use-api-error-message";
 import { todayInZone } from "@/lib/timezones";
 
 function daysBetween(from: Date, to: Date) {
@@ -34,6 +35,7 @@ export function DashboardView() {
 
 function DashboardContent({ timezone }: { timezone: string }) {
   const { t } = useTranslation("dashboard");
+  const errorMessage = useApiErrorMessage();
   const locale = useLocale();
   // Range days are UTC-midnight Dates holding the organization's calendar day.
   const formatDay = (d: Date) => new Intl.DateTimeFormat(locale, { day: "numeric", month: "short", timeZone: "UTC" }).format(d);
@@ -67,7 +69,7 @@ function DashboardContent({ timezone }: { timezone: string }) {
     return (
       <ErrorState
         title={t("loadError")}
-        description={currentQuery.error.message}
+        description={errorMessage(currentQuery.error)}
         onRetry={() => currentQuery.refetch()}
       />
     );

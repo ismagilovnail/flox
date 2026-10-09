@@ -9,6 +9,8 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
+
+	"github.com/ismagilovnail/flox/apps/internal/chconn"
 )
 
 type Error struct {
@@ -73,6 +75,17 @@ func Write(w http.ResponseWriter, logger *slog.Logger, err error) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(apiErr.Status)
 		_ = json.NewEncoder(w).Encode(apiErr)
+		return
+	}
+
+	if chconn.IsQueryTooHeavy(err) {
+		// ClickHouse stopped the query at this binary's limits (tech
+		// audit CH4): the request asks too much, the server is fine.
+		logger.Warn("query stopped at its clickhouse limits", "error", err)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusUnprocessableEntity)
+		_ = json.NewEncoder(w).Encode(&Error{Code: "query_too_heavy",
+			Message: "This report needs more time or memory than allowed. Narrow the date range or remove a breakdown."})
 		return
 	}
 

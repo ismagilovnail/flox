@@ -84,5 +84,8 @@
     "darkTheme": "Switch to dark theme",
     "removeTag": "Remove tag",
     "values": "Values"
+  },
+  "apiErrors": {
+    "query_too_heavy": "This report needs more time or memory than allowed. Narrow the date range or remove a breakdown."
   }
 }

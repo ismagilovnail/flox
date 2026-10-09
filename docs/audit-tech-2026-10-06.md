@@ -343,7 +343,7 @@ CREATE MATERIALIZED VIEW click_lookup_mv TO click_lookup AS
 `TTL event_at + INTERVAL 13 MONTH` для raw `tracking_events` и
 `postback_events`. Агрегаты (MV) хранятся дольше.
 
-**CH4 [MEDIUM]. Соединение без настроек.** `chconn.NewConn`: HTTP без TLS,
+**CH4 [MEDIUM]. Соединение без настроек.** (**Статус: исправлено** — TLS по `https://`, `DialTimeout` 5 с, пул 20 (без LZ4: со сжатием по HTTP драйвер теряет текст ошибки вставки, нужный dead-letter); лимиты на запросы по бинарникам: api 30 с / 4 ГиБ, tracker 10 с / 1 ГиБ, worker без лимита; отмена запроса на сервере при уходе клиента; 422 `query_too_heavy` в API и UI без повторов; серверные профили — рекомендация в `docs/environment.md`.) `chconn.NewConn`: HTTP без TLS,
 без `max_execution_time`, без `DialTimeout`, без лимитов пула, без
 сжатия. Один тяжёлый отчёт из API может занять CH, на котором висит
 атрибуция postback'ов. **Исправление:** отдельные пользователи и профили CH

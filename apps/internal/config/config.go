@@ -11,6 +11,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"time"
 )
 
 type Config struct {
@@ -145,11 +146,38 @@ type Config struct {
 }
 
 type ClickHouseConfig struct {
-	URL      string
+	URL      string // http:// or https:// (TLS)
 	Database string
 	User     string
 	Password string
+
+	// Limits every query of this binary runs under (internal/chconn; tech
+	// audit CH4) — so one heavy report from apps/api cannot hold the
+	// ClickHouse that postback attribution needs. Zero: no limit (the
+	// server's). Defaults per binary (chLimits), overridden by
+	// CLICKHOUSE_MAX_EXECUTION_TIME (seconds) and CLICKHOUSE_MAX_MEMORY_USAGE
+	// (bytes).
+	MaxExecutionTime time.Duration
+	MaxMemoryUsage   int64
 }
+
+// chLimits are a binary's default ClickHouse query limits.
+type chLimits struct {
+	execution time.Duration
+	memory    int64
+}
+
+var (
+	// apps/api: reports. 30 s and 4 GiB — a report needing more is a
+	// date range or a breakdown to narrow, and says so (apierror).
+	apiCHLimits = chLimits{execution: 30 * time.Second, memory: 4 << 30}
+	// apps/tracker: attribution lookups and the offer-cap snapshot —
+	// point queries; 10 s is already a ClickHouse in trouble.
+	trackerCHLimits = chLimits{execution: 10 * time.Second, memory: 1 << 30}
+	// apps/worker: inserts, backfills, the reconciliation — long by
+	// nature, bounded by their own batching rather than a timeout.
+	workerCHLimits = chLimits{}
+)
 
 type S3Config struct {
 	Endpoint        string
@@ -171,7 +199,7 @@ type S3Config struct {
 
 // Load builds the control-plane API's configuration (apps/api).
 func Load() (Config, error) {
-	return load("API_URL", "http://localhost:8080", "flox-api")
+	return load("API_URL", "http://localhost:8080", "flox-api", apiCHLimits)
 }
 
 // LoadTracker builds the hot-path tracker's configuration (apps/tracker).
@@ -180,7 +208,7 @@ func Load() (Config, error) {
 // and in their default OTel service name, so they share one loader rather
 // than each growing a near-identical copy that can drift.
 func LoadTracker() (Config, error) {
-	return load("TRACKER_URL", "http://localhost:8081", "flox-tracker")
+	return load("TRACKER_URL", "http://localhost:8081", "flox-tracker", trackerCHLimits)
 }
 
 // LoadWorker builds the async worker's configuration (apps/worker, Phase
@@ -188,15 +216,23 @@ func LoadTracker() (Config, error) {
 // health check for orchestration liveness probes — but shares the same
 // config shape so it can be wired up identically.
 func LoadWorker() (Config, error) {
-	return load("WORKER_URL", "http://localhost:8082", "flox-worker")
+	return load("WORKER_URL", "http://localhost:8082", "flox-worker", workerCHLimits)
 }
 
-func load(portVar, portDefault, defaultServiceName string) (Config, error) {
+func load(portVar, portDefault, defaultServiceName string, ch chLimits) (Config, error) {
 	port, err := parsePort(getEnv(portVar, portDefault))
 	if err != nil {
 		return Config{}, fmt.Errorf("parsing %s: %w", portVar, err)
 	}
 
+	execSeconds, err := parseNonNegative("CLICKHOUSE_MAX_EXECUTION_TIME", int(ch.execution/time.Second))
+	if err != nil {
+		return Config{}, err
+	}
+	memory, err := parseNonNegative("CLICKHOUSE_MAX_MEMORY_USAGE", int(ch.memory))
+	if err != nil {
+		return Config{}, err
+	}
 	failedDays, err := parseNonNegative("RETENTION_FAILED_POSTBACKS_DAYS", 90)
 	if err != nil {
 		return Config{}, err
@@ -243,6 +279,9 @@ func load(portVar, portDefault, defaultServiceName string) (Config, error) {
 			Database: getEnv("CLICKHOUSE_DATABASE", ""),
 			User:     getEnv("CLICKHOUSE_USER", ""),
 			Password: getEnv("CLICKHOUSE_PASSWORD", ""),
+
+			MaxExecutionTime: time.Duration(execSeconds) * time.Second,
+			MaxMemoryUsage:   int64(memory),
 		},
 		RedisURL: getEnv("REDIS_URL", ""),
 		S3: S3Config{
