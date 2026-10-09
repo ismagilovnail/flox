@@ -454,21 +454,63 @@ func TestUnattributedConversionIsStillRecorded(t *testing.T) {
 	}
 }
 
-func TestAttributionFailureSurfacesAsError(t *testing.T) {
+// A failed click lookup (ClickHouse down or not connected yet) is recorded
+// as unknown_click with a retry, not answered 500: the worker attributes it
+// once ClickHouse answers (audit 2026-10-06, T1).
+func TestAttributionFailureRecordsUnknownClickWithRetry(t *testing.T) {
 	mapper := newFakeMapper()
 	mapper.set("net-1", "sale", event.CpaAccept)
 	events := &fakeEvents{}
 	store := newFakeStore(events, nil)
-	boom := errors.New("resolver unavailable")
-	attr := &fakeAttribution{err: boom}
+	attr := &fakeAttribution{err: errors.New("resolver unavailable")}
 	svc := conversion.NewService(mapper, store, &fakeFX{}, attr, &fakeAttempts{})
 
-	_, err := svc.Record(ctx(), postback("net-1", "click-1", "sale"))
-	if err == nil {
-		t.Fatal("expected an error when the attribution resolver fails — a blip must never be recorded as unattributed")
+	res, err := svc.Record(ctx(), postback("net-1", "click-1", "sale"))
+	if err != nil {
+		t.Fatalf("Record: %v", err)
+	}
+	if res.Kind != conversion.ResultSuccess || res.Attribution.Outcome != attribution.OutcomeUnknownClick {
+		t.Fatalf("got %s/%s, want success/unknown_click", res.Kind, res.Attribution.Outcome)
+	}
+	if got := store.records[len(store.records)-1]; !got.RetryAttribution {
+		t.Error("entry must schedule an attribution retry")
+	}
+	if events.count() != 1 {
+		t.Errorf("events = %d, want the conversion's event emitted at once", events.count())
+	}
+}
+
+func TestUnknownClickSchedulesRetryAttributedDoesNot(t *testing.T) {
+	for outcome, want := range map[attribution.Outcome]bool{
+		attribution.OutcomeUnknownClick: true,
+		attribution.OutcomeAttributed:   false,
+	} {
+		mapper := newFakeMapper()
+		mapper.set("net-1", "sale", event.CpaAccept)
+		store := newFakeStore(&fakeEvents{}, nil)
+		attr := &fakeAttribution{outcome: outcome, click: attribution.Click{ClickID: "click-1", OrganizationID: orgA}}
+		svc := conversion.NewService(mapper, store, &fakeFX{}, attr, &fakeAttempts{})
+		if _, err := svc.Record(ctx(), postback("net-1", "click-1", "sale")); err != nil {
+			t.Fatalf("%s: Record: %v", outcome, err)
+		}
+		if got := store.records[len(store.records)-1].RetryAttribution; got != want {
+			t.Errorf("%s: RetryAttribution = %v, want %v", outcome, got, want)
+		}
+	}
+}
+
+func TestAttributionWithoutOrganizationIsAnError(t *testing.T) {
+	mapper := newFakeMapper()
+	mapper.set("net-1", "sale", event.CpaAccept)
+	events := &fakeEvents{}
+	attr := &fakeAttribution{err: attribution.ErrNoOrganization}
+	svc := conversion.NewService(mapper, newFakeStore(events, nil), &fakeFX{}, attr, &fakeAttempts{})
+
+	if _, err := svc.Record(ctx(), postback("net-1", "click-1", "sale")); !errors.Is(err, attribution.ErrNoOrganization) {
+		t.Fatalf("err = %v, want ErrNoOrganization: an unscoped lookup is a bug, not a retry", err)
 	}
 	if events.count() != 0 {
-		t.Fatal("no event should be emitted on infrastructure failure")
+		t.Fatal("no event on a programming error")
 	}
 }
 

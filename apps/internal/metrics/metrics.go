@@ -187,6 +187,24 @@ var (
 		Help:      "Conversion attribution outcomes.",
 	}, []string{"outcome"})
 
+	// ReattributionsTotal counts unknown_click conversions the worker
+	// looked up again (internal/reattribute): attributed — the click turned
+	// up and the conversion was rewritten; gave_up — still no click after
+	// the last retry, unknown_click stays.
+	ReattributionsTotal = promauto.NewCounterVec(prometheus.CounterOpts{
+		Namespace: namespace,
+		Name:      "reattributions_total",
+		Help:      "Retried attributions of unknown_click conversions, by outcome.",
+	}, []string{"outcome"})
+
+	// AttributionRetriesPending is how many conversions wait for their
+	// click to be looked up again or their event to be rewritten.
+	AttributionRetriesPending = promauto.NewGauge(prometheus.GaugeOpts{
+		Namespace: namespace,
+		Name:      "attribution_retries_pending",
+		Help:      "Conversions waiting for a retried attribution.",
+	})
+
 	// QueueOldestDueAgeSeconds is how long the oldest due row of each
 	// worker queue has been waiting past its due time — catches a stalled
 	// queue that is too small for a depth alert.

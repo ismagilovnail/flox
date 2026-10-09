@@ -157,6 +157,7 @@ alone can only serve one path.
 |---|---|---|
 | `flox_postback_incoming_total{result}`, `flox_postback_incoming_latency_seconds` | tracker | Incoming postbacks by result — the engine's (`success`, `duplicate`, `ignored`, `error`) or a refusal before it (`unknown_network`, `unauthorized`, `bad_request`, `internal_error`) |
 | `flox_attribution_outcomes_total{outcome}` | tracker, api | `attributed`, `unknown_click`, `no_identifier`, `ambiguous_external_click_id` |
+| `flox_reattributions_total{outcome}`, `flox_attribution_retries_pending` | worker (`internal/reattribute`) | `unknown_click` conversions looked up again: `attributed` (rewritten) or `gave_up` (still no click after ~7 h); how many wait |
 | `flox_queue_rows{queue,status}`, `flox_queue_oldest_due_age_seconds{queue}` | worker (`internal/queuestats`, every 15 s) | Open rows per status (incl. `dead`) and how long the oldest due row has waited past due, for `event_queue`, `postback_attempt_queue`, `postback_deliveries` |
 | `flox_queue_dead_lettered_total{queue}`, `flox_queue_reaped_total{queue}` | worker | Batches parked as dead; claims returned from a dead worker |
 | `flox_pg_pool_conns{service,state}`, `flox_pg_pool_acquires_total{service,kind}`, `flox_pg_pool_acquire_wait_seconds_total{service}` | api, tracker, worker | Postgres pool use; `kind="empty"` = an acquire that had to wait |

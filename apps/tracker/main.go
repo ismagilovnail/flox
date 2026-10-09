@@ -21,8 +21,6 @@ import (
 	"github.com/go-chi/chi/v5/middleware"
 
 	"github.com/ismagilovnail/flox/apps/internal/attribution"
-	"github.com/ismagilovnail/flox/apps/internal/chconn"
-	"github.com/ismagilovnail/flox/apps/internal/chstore"
 	"github.com/ismagilovnail/flox/apps/internal/classifier"
 	"github.com/ismagilovnail/flox/apps/internal/classifier/maxmind"
 	"github.com/ismagilovnail/flox/apps/internal/clientip"
@@ -175,27 +173,18 @@ func run() error {
 		handler.assets = assets
 	}
 
-	// ClickHouse is best-effort at startup, same stance as Redis below: a
-	// down analytics store must not block the redirect path (CLAUDE.md #9)
-	// or prevent the tracker from starting at all. Falling back to
-	// MemoryResolver degrades attribution to "always unattributed" — worse
-	// than real matching, but no worse than every phase before this one.
-	var clickResolver attribution.ClickResolver = attribution.NewMemoryResolver()
-	var offerCaps *offercap.Monitor
-	chConn, chErr := chconn.NewConn(ctx, cfg.ClickHouse)
-	if chErr != nil {
-		logger.Warn("clickhouse unavailable at startup, attribution will not match real clicks", "error", chErr)
-	} else if migrateErr := chstore.Migrate(ctx, chConn); migrateErr != nil {
-		logger.Warn("clickhouse schema migration failed, attribution will not match real clicks", "error", migrateErr)
-		_ = chConn.Close()
-	} else {
-		defer chConn.Close()
-		clickResolver = chstore.NewClickResolver(chConn)
-		// Daily offer caps: a background snapshot, never a query on the
-		// redirect path. Without ClickHouse no offer is ever capped.
-		offerCaps = offercap.NewMonitor(offercap.NewPostgresSource(db), chstore.NewEventStore(chConn), logger)
-		go offerCaps.Run(ctx)
-	}
+	// ClickHouse is connected in the background: a down analytics store
+	// must not block the redirect path (CLAUDE.md #9) or keep the tracker
+	// from starting. Until it connects, postbacks are recorded unknown_click
+	// and retried by the worker (audit 2026-10-06, T1), and no offer is
+	// capped.
+	clickHouse := &lateClickHouse{}
+	go clickHouse.connect(ctx, cfg.ClickHouse, logger)
+	var clickResolver attribution.ClickResolver = clickHouse
+	// Daily offer caps: a background snapshot, never a query on the
+	// redirect path.
+	offerCaps := offercap.NewMonitor(offercap.NewPostgresSource(db), clickHouse, logger)
+	go offerCaps.Run(ctx)
 	handler.caps = offerCaps
 	attributionSvc := attribution.NewService(clickResolver)
 

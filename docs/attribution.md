@@ -147,28 +147,57 @@ event-sourced table rather than a live index:
 
 - **Eventual consistency**: a click reaches `click_events` only after
   `apps/tracker` enqueues it and `apps/worker` flushes it
-  (`internal/eventqueue`, up to ~2s behind in the worst case). A conversion
-  arriving within that window for a brand-new click can see
-  `unknown_click` even though the click genuinely happened. Real postback
-  delay dwarfs this window in practice; nothing compensates for it (no
-  retry-after-delay), and none was added — see `chstore`'s own doc comment.
+  (`internal/eventqueue`, ~2s behind normally, hours during a backlog or a
+  ClickHouse outage). A conversion arriving in that window sees
+  `unknown_click` even though the click happened. Since the 2026-10-06
+  audit (T1) that is not final — see **Retried attribution** below.
 - **`stickyFlowKeepClickId` reuse** (§39-STICKY) means one `click_id` can
   legitimately appear on more than one `click_events` row across a
   returning visitor's journey. `ByClickID` resolves to the **earliest**
   occurrence — the original click that started the journey — not the most
   recent.
 
-A resolver **failure** (a query against a live ClickHouse erroring) surfaces
-as an error, never as `unattributed` — recording a blip as "no click found"
-would permanently write off a real conversion, so the caller has to be able
-to retry. This is distinct from `apps/tracker`'s own startup choice of
-*which* resolver to wire up at all: ClickHouse being unreachable when the
-tracker boots falls back to an empty `MemoryResolver` (logged clearly, not
-silently) rather than refusing to start — the redirect path must never
-depend on ClickHouse being up (CLAUDE.md #9's spirit), even though the
-practical effect is every conversion reading `unknown_click` until the next
-successful restart. Recorded here as a deliberate, known degradation, not
-an oversight.
+A resolver **failure** (a query against ClickHouse erroring, or the tracker
+not connected to it yet) surfaces from `internal/attribution` as an error,
+never as `unattributed`. `conversion.Service.Record` turns it into
+`unknown_click` **with a retry**, the same as a click that has not arrived
+yet: the network gets its answer without waiting on ClickHouse, and the
+conversion is attributed once ClickHouse answers. `apps/tracker` connects to
+ClickHouse in the background (`lateClickHouse`, backoff 1–30 s) and switches
+over the moment it connects — it starts, and redirects, with ClickHouse down
+(CLAUDE.md #9). Until then no offer is capped by its daily limit.
+
+## Retried attribution (audit 2026-10-06, T1)
+
+Every `unknown_click` success gets a row in `attribution_retries`
+(migration 00059), in the transaction that records it. Its CPA event and
+outgoing postback leave at once, unattributed. `apps/worker`
+(`internal/reattribute`, every 15 s) looks the click up again — by
+`click_id`, within the conversion's organization — on
+`conversion.AttributionRetryDelays`: 30 s, 2 min, 10 min, 1 h, 6 h (about
+7 hours). A failed lookup (ClickHouse down) does not use up an attempt.
+
+When the click turns up:
+
+1. the `postbacks` row gets the attribution (`message` notes
+   "attributed on retry");
+2. if its event is still `queued` and unclaimed in `event_queue`, the
+   payload is rewritten in the same transaction — done;
+3. otherwise, once it has left the queue, its copies in `conversion_events`
+   (and `ltv_events`) are deleted, the attributed event inserted under its
+   own batch id, and the `conversion_events_daily_campaign` bucket the old
+   copy fed (no campaign) rebuilt. A crash between 1 and 3 leaves the row
+   with `attributed_at` set; the next run repeats step 3 alone.
+
+A dead-lettered event is left to the reconciliation, which re-emits it from
+the `postbacks` row — attributed by then. After the last miss the row is
+deleted and `message` notes "still no click after 5 retries";
+`unknown_click` is final.
+
+The outgoing postback is **not** re-sent with the click's subs: it has
+already gone, and a second one would count the conversion twice at the
+source. Metrics: `flox_reattributions_total{outcome}` (`attributed`,
+`gave_up`), `flox_attribution_retries_pending`.
 
 ## Attribution window: decided in Phase 23 — there isn't one
 

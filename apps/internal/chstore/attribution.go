@@ -25,9 +25,9 @@ import (
 // genuinely happened — inherent to routing attribution through an
 // asynchronously-flushed analytics store, not a bug in either resolver or
 // store. In practice postback delay (real user time between a click and a
-// registration/deposit) dwarfs this window; nothing here compensates for
-// it (e.g. a retry-after-delay), and none is added — recorded here rather
-// than silently accepted.
+// registration/deposit) dwarfs this window, and a backlog stretches it to
+// hours: such a conversion is recorded unknown_click and its click looked
+// up again by the worker (internal/reattribute, audit 2026-10-06 T1).
 type ClickResolver struct {
 	conn driver.Conn
 	// lookupBackfill names the backfill that completes click_lookup.

@@ -250,6 +250,14 @@ func (s *PostgresStore) recordSuccess(ctx context.Context, tx pgx.Tx, e Entry) (
 			return Recorded{}, fmt.Errorf("conversion: queueing outgoing postback: %w", err)
 		}
 	}
+	if e.RetryAttribution {
+		if _, err := tx.Exec(ctx, `
+			INSERT INTO attribution_retries (postback_id, organization_id, next_attempt_at)
+			VALUES ($1, $2, clock_timestamp() + make_interval(secs => $3))`,
+			returnedID, e.OrganizationID, AttributionRetryDelays[0].Seconds()); err != nil {
+			return Recorded{}, fmt.Errorf("conversion: scheduling attribution retry: %w", err)
+		}
+	}
 	return Recorded{ID: returnedID, Kind: ResultSuccess, Message: e.Message}, nil
 }
 
@@ -421,15 +429,38 @@ func describeAmount(amount *float64, currency string) string {
 	return fmt.Sprintf(" %s %s", strconv.FormatFloat(*amount, 'f', -1, 64), currency)
 }
 
+// storedColumns are what scanStored reads from postbacks.
+const storedColumns = `
+	id, organization_id, network_id, click_id, status, event_ref, network_txn_id,
+	revenue::float8, currency, usd_value::float8,
+	reversal_revenue::float8, reversal_currency, reversal_usd_value::float8,
+	attribution_outcome, attribution_method, attributed_click_id, time_to_conversion_ms, event_at`
+
+func scanStored(row pgx.Row) (StoredConversion, error) {
+	var (
+		c                  StoredConversion
+		st                 string
+		revRevenue, revUSD *float64
+		revCurrency        string
+	)
+	if err := row.Scan(&c.ID, &c.OrganizationID, &c.NetworkID, &c.ClickID, &st, &c.EventRef, &c.NetworkTxnID,
+		&c.Revenue, &c.Currency, &c.USDValue, &revRevenue, &revCurrency, &revUSD,
+		&c.AttributionOutcome, &c.AttributionMethod, &c.AttributedClickID, &c.TimeToConversionMS, &c.EventAt); err != nil {
+		return StoredConversion{}, err
+	}
+	c.Status = event.Type(st)
+	if revRevenue != nil || revUSD != nil {
+		c.Reversal = &Reversal{Revenue: revRevenue, Currency: revCurrency, USDValue: revUSD}
+	}
+	return c, nil
+}
+
 // StoredSuccesses reads the recorded incoming successes of one organization
 // and status with event_at in [from, to) — what internal/reconcile rebuilds
 // ClickHouse events from.
 func (s *PostgresStore) StoredSuccesses(ctx context.Context, organizationID string, status event.Type, from, to time.Time) ([]StoredConversion, error) {
 	rows, err := s.db.Query(ctx, `
-		SELECT id, organization_id, network_id, click_id, status, event_ref, network_txn_id,
-		       revenue::float8, currency, usd_value::float8,
-		       reversal_revenue::float8, reversal_currency, reversal_usd_value::float8,
-		       attribution_outcome, attribution_method, attributed_click_id, time_to_conversion_ms, event_at
+		SELECT `+storedColumns+`
 		FROM postbacks
 		WHERE organization_id = $1 AND status = $2 AND result = 'success' AND direction = 'incoming'
 		  AND event_at >= $3 AND event_at < $4`,
@@ -440,22 +471,31 @@ func (s *PostgresStore) StoredSuccesses(ctx context.Context, organizationID stri
 	defer rows.Close()
 	var out []StoredConversion
 	for rows.Next() {
-		var (
-			c                  StoredConversion
-			st                 string
-			revRevenue, revUSD *float64
-			revCurrency        string
-		)
-		if err := rows.Scan(&c.ID, &c.OrganizationID, &c.NetworkID, &c.ClickID, &st, &c.EventRef, &c.NetworkTxnID,
-			&c.Revenue, &c.Currency, &c.USDValue, &revRevenue, &revCurrency, &revUSD,
-			&c.AttributionOutcome, &c.AttributionMethod, &c.AttributedClickID, &c.TimeToConversionMS, &c.EventAt); err != nil {
+		c, err := scanStored(rows)
+		if err != nil {
 			return nil, fmt.Errorf("conversion: scanning stored success: %w", err)
-		}
-		c.Status = event.Type(st)
-		if revRevenue != nil || revUSD != nil {
-			c.Reversal = &Reversal{Revenue: revRevenue, Currency: revCurrency, USDValue: revUSD}
 		}
 		out = append(out, c)
 	}
 	return out, rows.Err()
+}
+
+// ErrStoredNotFound is returned by StoredSuccess.
+var ErrStoredNotFound = errors.New("conversion: stored success not found")
+
+// StoredSuccess reads one recorded incoming success of an organization by
+// its postbacks id (internal/reattribute).
+func (s *PostgresStore) StoredSuccess(ctx context.Context, organizationID, id string) (StoredConversion, error) {
+	c, err := scanStored(s.db.QueryRow(ctx, `
+		SELECT `+storedColumns+`
+		FROM postbacks
+		WHERE organization_id = $1 AND id = $2 AND result = 'success' AND direction = 'incoming'`,
+		organizationID, id))
+	if errors.Is(err, pgx.ErrNoRows) {
+		return StoredConversion{}, ErrStoredNotFound
+	}
+	if err != nil {
+		return StoredConversion{}, fmt.Errorf("conversion: reading stored success: %w", err)
+	}
+	return c, nil
 }

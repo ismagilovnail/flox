@@ -44,6 +44,24 @@ func (s *EventStore) ConversionEventsByID(ctx context.Context, organizationID, s
 	return out, rows.Err()
 }
 
+// ConversionEventCopies reads one conversion event's copies by event_id.
+// at is the event's time, which narrows the read to its partition and a
+// few granules of the organization; the second either side covers the
+// millisecond precision ClickHouse keeps.
+func (s *EventStore) ConversionEventCopies(ctx context.Context, organizationID, eventID string, at time.Time) (StoredEvent, error) {
+	var e StoredEvent
+	err := s.conn.QueryRow(ctx, `
+		SELECT count(), sum(usd_value * has_usd_value), any(campaign_id)
+		FROM conversion_events
+		WHERE organization_id = ? AND event_at >= ? AND event_at <= ? AND event_id = ?`,
+		organizationID, at.Add(-time.Second), at.Add(time.Second), eventID,
+	).Scan(&e.Copies, &e.USD, &e.CampaignID)
+	if err != nil {
+		return StoredEvent{}, fmt.Errorf("chstore: reading conversion event %s: %w", eventID, err)
+	}
+	return e, nil
+}
+
 // DeleteConversionEvents removes every copy of the given events from
 // conversion_events and from the ltv_events rows they produced, waiting
 // until the deletes are applied.

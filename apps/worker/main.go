@@ -78,6 +78,7 @@ import (
 	"github.com/ismagilovnail/flox/apps/internal/postgres"
 	"github.com/ismagilovnail/flox/apps/internal/queuereaper"
 	"github.com/ismagilovnail/flox/apps/internal/queuestats"
+	"github.com/ismagilovnail/flox/apps/internal/reattribute"
 	"github.com/ismagilovnail/flox/apps/internal/reconcile"
 	"github.com/ismagilovnail/flox/apps/internal/sslcheck"
 	"github.com/ismagilovnail/flox/apps/internal/telemetry"
@@ -127,6 +128,14 @@ const queueDepthPollInterval = 15 * time.Second
 // ClickHouse. Cheap (two grouped reads over three days, by index), and an
 // hour is well inside the 2h alert window.
 const reconcileInterval = time.Hour
+
+// reattributeInterval/reattributeBatchSize: unknown_click conversions are
+// looked up again (internal/reattribute). The first retry is due 30s after
+// the postback, so polling faster than that only adds empty reads.
+const (
+	reattributeInterval  = 15 * time.Second
+	reattributeBatchSize = 100
+)
 
 // fxSyncInterval: reference rates are published once per working day, so a
 // few runs a day pick up each fixing the same afternoon without hammering
@@ -354,6 +363,13 @@ func run() error {
 	start(func() {
 		reconciler.RunLoop(ctx, reconcileInterval, reconcile.Window{Lookback: 72 * time.Hour, Settle: 30 * time.Minute})
 	})
+
+	// unknown_click conversions whose click was not in ClickHouse yet: looked
+	// up again for ~7 hours, then rewritten in Postgres and ClickHouse
+	// (internal/reattribute, audit 2026-10-06 T1).
+	retrier := reattribute.New(db, conversion.NewPostgresStore(db), chstore.NewClickResolver(ch), chEvents, logger)
+	logger.Info("attribution retry starting", "interval", reattributeInterval)
+	start(func() { retrier.RunLoop(ctx, reattributeInterval, reattributeBatchSize) })
 
 	// Every domain's SSL status from a real TLS connection to it
 	// (internal/sslcheck, marketer audit #4).

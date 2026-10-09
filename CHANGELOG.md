@@ -5,6 +5,31 @@ per-phase, matching `CLAUDE.md`'s phase protocol. The one exception is
 [Between phases], below: spec amendments and the code changes that follow from
 them land between phases and would otherwise be invisible here.
 
+## [Between phases] — retried attribution for unknown_click conversions (tech audit T1)
+
+- A conversion whose click is not in ClickHouse yet (still in `event_queue`, a backlog, ClickHouse
+  down) used to stay `unknown_click` for good. Now it is recorded at once — its CPA event and
+  outgoing postback leave immediately — with a row in `attribution_retries` (migration 00059) in
+  the same transaction. `apps/worker` (`internal/reattribute`, every 15 s) looks the click up again
+  at 30 s, 2 min, 10 min, 1 h, 6 h; a failed lookup does not use up an attempt. When the click
+  turns up the `postbacks` row is attributed and the event rewritten: in `event_queue` if it has
+  not been flushed yet, otherwise in ClickHouse (copies deleted, attributed event inserted, the
+  old daily campaign bucket rebuilt). After the last miss `unknown_click` is final and the
+  postback's message says so. The outgoing postback is not re-sent (double count at the source).
+- A failed click lookup is recorded the same way (`unknown_click` + retry) instead of answering
+  the network 500. Only a lookup without an organization is still an error.
+- `apps/tracker` no longer falls back to an empty in-memory resolver until the next restart when
+  ClickHouse is down at startup: it connects in the background (backoff 1–30 s) and switches
+  over the moment it connects (`tracker/clickhouse.go`). Offer daily caps start with it.
+- Metrics: `flox_reattributions_total{outcome}`, `flox_attribution_retries_pending`.
+- Docs: `docs/attribution.md` (Retried attribution), `docs/observability.md`, audit T1 status.
+
+Tests: `internal/reattribute` against real Postgres + ClickHouse on private copies of
+`attribution_retries` / `event_queue` — event still queued, already in ClickHouse (incl. the daily
+bucket; a mutation dropping the rebuild fails it), in flight then flushed, dead-lettered, click
+never arrives (backoff, give-up), another organization's click with the same id is not used.
+Full-env `go test ./...` passes; e2e FullFunnel / OfferDailyCap / FilterMatrix not skipped.
+
 ## [Between phases] — dev data commands with readable output; tests clean up after themselves
 
 - `make dev-fresh CONFIRM=yes` (new): wipe every dev store, wait for api/tracker/worker, create

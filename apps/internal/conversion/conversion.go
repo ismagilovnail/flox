@@ -163,6 +163,11 @@ type Entry struct {
 	AttributionMethod  string
 	TimeToConversionMS *int64
 
+	// RetryAttribution schedules the click to be looked up again
+	// (AttributionRetryDelays), in the transaction that records a success:
+	// set for unknown_click, whose click may simply not be in ClickHouse yet.
+	RetryAttribution bool
+
 	// Kind is the INTENDED outcome. ResultSuccess is arbitrated by the
 	// dedup unique constraint (Store may downgrade it to ResultDuplicate)
 	// and by the progression rule, re-checked under the click's lock (Store
@@ -384,8 +389,20 @@ func (s *Service) Record(ctx context.Context, p Postback) (Result, error) {
 		Status:          status,
 		OccurredAt:      p.OccurredAt,
 	})
-	if err != nil {
+	if errors.Is(err, attribution.ErrNoOrganization) {
 		return Result{}, fmt.Errorf("conversion: attributing: %w", err)
+	}
+	if err != nil {
+		// The click store failed (ClickHouse down or not connected yet).
+		// Recorded as unknown_click with a retry, like a click that has not
+		// arrived yet: the worker attributes it once the store answers, so
+		// the network gets its answer without waiting on ClickHouse (audit
+		// 2026-10-06, T1).
+		attr = attribution.Attribution{
+			Outcome: attribution.OutcomeUnknownClick,
+			Method:  attribution.MethodNone,
+			Reason:  fmt.Sprintf("click lookup failed, retried later: %v", err),
+		}
 	}
 	metrics.AttributionOutcomesTotal.WithLabelValues(string(attr.Outcome)).Inc()
 
@@ -413,6 +430,7 @@ func (s *Service) Record(ctx context.Context, p Postback) (Result, error) {
 		AttributedClickID:  attr.Click.ClickID,
 		AttributionMethod:  string(attr.Method),
 		TimeToConversionMS: ttcMS,
+		RetryAttribution:   attr.Outcome == attribution.OutcomeUnknownClick,
 		Kind:               ResultSuccess,
 		Message:            attr.Reason,
 	}
@@ -442,6 +460,14 @@ func (s *Service) Record(ctx context.Context, p Postback) (Result, error) {
 	s.logAttempt(ctx, p, clickID, status, eventRef, rec.Kind, message)
 
 	return Result{ID: rec.ID, Kind: rec.Kind, Status: status, Attribution: attr, Message: message}, nil
+}
+
+// AttributionRetryDelays is when an unknown_click conversion's click is
+// looked up again: the first delay after it is recorded, each next one after
+// a miss — about 7 hours in all, enough for a long ClickHouse backlog. After
+// the last miss unknown_click is final (internal/reattribute).
+var AttributionRetryDelays = []time.Duration{
+	30 * time.Second, 2 * time.Minute, 10 * time.Minute, time.Hour, 6 * time.Hour,
 }
 
 // MaxRevenue bounds one conversion's payout. postbacks.revenue is

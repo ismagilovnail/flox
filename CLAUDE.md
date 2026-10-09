@@ -19,14 +19,12 @@ referenced below as §N).
 ## CURRENT STATE — UPDATE THIS EVERY PHASE
 
 ```
-CURRENT PHASE : MARKETER AUDIT FOLLOW-UPS (between phases)
-STATUS        : marketer audit (docs/audit-marketer-2026-10-06.md) closed:
-                #1–#12 fixed, #13 is a platform limit. Last batch, one commit
-                each: #6 (no phase/§ in texts), #7 (whole app EN/RU, locale
-                parity test), #12 (funnel metrics by default, custom-metric
-                registry synced with a test).
-LAST COMMIT   : chore(dev): dev-fresh / dev-status; tests clean up after
-                themselves.
+CURRENT PHASE : AUDIT FOLLOW-UPS (between phases)
+STATUS        : marketer audit closed (#1–#12, #13 platform limit). Tech audit
+                T1 fixed: unknown_click conversions are retried by the worker
+                (internal/reattribute, attribution_retries) and the tracker
+                connects to ClickHouse in the background.
+LAST COMMIT   : feat(attribution): retry unknown_click conversions.
 UNCOMMITTED   : none expected. Dev DB fresh from `make dev-fresh CONFIRM=yes`
                 (password flox-demo-2026); `make dev-status` shows what is in it.
 NEXT          : wait for the user — the next phase. CI (DO1) is the user's own
