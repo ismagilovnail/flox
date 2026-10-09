@@ -109,6 +109,17 @@ func (h *PostbackHandler) handle(w http.ResponseWriter, r *http.Request) {
 		OccurredAt:       time.Now().UTC(),
 	}
 
+	// When the conversion happened at the network (tech audit T3); without
+	// it, the moment the postback arrived.
+	if raw := firstNonEmpty(r.FormValue("event_time"), r.FormValue("ts")); raw != "" {
+		at, err := conversion.ParseEventTime(raw, p.OccurredAt)
+		if err != nil {
+			writeJSON(w, http.StatusBadRequest, postbackResponse{Result: "error", Message: strings.TrimPrefix(err.Error(), "conversion: ")})
+			return
+		}
+		p.OccurredAt = at
+	}
+
 	if raw := r.FormValue("revenue"); raw != "" {
 		v, err := conversion.ParseRevenue(raw)
 		if err != nil {

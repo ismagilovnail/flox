@@ -5,6 +5,29 @@ per-phase, matching `CLAUDE.md`'s phase protocol. The one exception is
 [Between phases], below: spec amendments and the code changes that follow from
 them land between phases and would otherwise be invisible here.
 
+## [Between phases] — postbacks can say when the conversion happened (tech audit T3)
+
+- Incoming postbacks accept an optional `event_time` (or `ts`): unix seconds or milliseconds,
+  RFC 3339, or `YYYY-MM-DD HH:MM:SS` in UTC. It becomes the conversion's `event_at` — the day it
+  counts on in reports and the reconciliation, the date of its FX rate, its time to conversion.
+  Without it, the arrival time as before. Nightly replays and slow networks used to land every
+  conversion on the day its postback arrived, at that day's rate.
+- Bounds: up to 5 minutes ahead counts as now; further ahead or more than 90 days back is a 400
+  before anything is recorded (`conversion.ParseEventTime`, `MaxEventAge`).
+- `created_at` stays the arrival: the progression and dedup order by it, unchanged.
+- A time before the click is kept as sent. I first floored it at the click, then reverted: an
+  existing test and `docs/attribution.md` keep the negative time to conversion on purpose as the
+  clock-skew signal.
+- Postgres already stored both times (`event_at`, `created_at`), so no migration; the parameter
+  was the missing part. Manual replays from the UI stay dated at the replay.
+- `docs/conversion.md` (new section), audit T3 status.
+
+Tests: every accepted format and the bounds (4 minutes ahead → now, 6 → refused, 89 days back
+accepted, 100 refused, junk refused); the event time dates the conversion, its FX rate and its
+time to conversion; a time before the click keeps the negative value; through the handler both
+`event_time` and `ts` date the recorded event, none means now, bad values are 400s with nothing
+recorded. Full-env `go test ./...` passes; e2e not skipped.
+
 ## [Between phases] — ClickHouse query limits, cancellation, TLS (tech audit CH4)
 
 - Every query runs under its binary's limits (`apps/internal/chconn`, `config.ClickHouseConfig`):

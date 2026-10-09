@@ -10,7 +10,7 @@ CPA event, or an honestly-logged reason it wasn't. Implemented in
 ```
 {networkId} → PostgresNetworkLookup → OrganizationID, AcceptDuplicates
                                               │
-raw click_id/status/revenue/currency/txn_id  │
+raw click_id/status/revenue/currency/txn_id/event_time │
                                               ▼
                                     Mapper.MapStatus (per-network
                                     event_mappings table)
@@ -102,6 +102,31 @@ never retried — before anything is recorded; `Service.Record` repeats the
 check for other callers (postback replay) and logs those as `error`. A
 negative amount is refused too: a reversal is a `CPA_DECLINE` status
 (§45), not a negative payout.
+
+## When the conversion happened: `event_time` (tech audit T3)
+
+A postback may say when the conversion happened at the network:
+`event_time` (or `ts`) — unix seconds or milliseconds, RFC 3339, or
+`YYYY-MM-DD HH:MM:SS` in UTC. Without it, the moment the postback arrives
+is used, as before. That time is the conversion's `event_at`: the day it
+counts on in reports and the reconciliation, the date of its FX rate
+(§50-FX), and its time to conversion. `created_at` stays the arrival, and
+the progression and dedup order by it, unchanged — a replay dated last
+week still cannot move a conversion back to `CPA_HOLD`.
+
+Before this, nightly replays and slow networks put every conversion on
+the day its postback arrived, at that day's rate.
+
+Bounds: up to 5 minutes ahead counts as now (a network's clock running
+fast); further ahead, or more than 90 days back
+(`conversion.MaxEventAge`), is refused with **400** before anything is
+recorded — an older event belongs in a reconciliation, not a postback,
+and would rewrite long-closed reports. A time before the click is kept:
+the negative time to conversion is the clock-skew signal
+`docs/attribution.md` keeps on purpose. Note that a late, dated
+conversion changes the report of the day it names — that is the point.
+
+Manual replays from the Postback Logs screen are dated at the replay.
 
 ## Why OrganizationID comes from the URL, not the body
 

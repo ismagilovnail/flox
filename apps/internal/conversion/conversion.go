@@ -508,6 +508,56 @@ func CheckRevenue(v float64) error {
 	return nil
 }
 
+// Bounds on a network-supplied event time (ParseEventTime).
+const (
+	// MaxEventAge: an older event is a broken macro or a replay of history
+	// that belongs in a reconciliation, not a postback; it would also
+	// rewrite reports and FX for a period long closed.
+	MaxEventAge = 90 * 24 * time.Hour
+	// eventClockSkew: how far ahead of us a network's clock may run; such
+	// an event is taken as now.
+	eventClockSkew = 5 * time.Minute
+)
+
+// ErrInvalidEventTime is returned by ParseEventTime.
+var ErrInvalidEventTime = errors.New("conversion: invalid event_time")
+
+// ParseEventTime reads a postback's event_time — when the conversion
+// happened at the network, as opposed to when its postback reached us
+// (tech audit T3: nightly replays and slow networks used to land every
+// conversion on the day it arrived, and FX was taken on that day). Unix
+// seconds or milliseconds, RFC 3339, or "YYYY-MM-DD HH:MM:SS" in UTC. Up
+// to 5 minutes ahead of now counts as now; further ahead, or older than
+// MaxEventAge, is refused.
+func ParseEventTime(raw string, now time.Time) (time.Time, error) {
+	raw = strings.TrimSpace(raw)
+	var t time.Time
+	if n, err := strconv.ParseInt(raw, 10, 64); err == nil {
+		switch {
+		case len(raw) >= 13:
+			t = time.UnixMilli(n)
+		default:
+			t = time.Unix(n, 0)
+		}
+	} else if v, err := time.Parse(time.RFC3339Nano, raw); err == nil {
+		t = v
+	} else if v, err := time.Parse(time.DateTime, raw); err == nil {
+		t = v
+	} else {
+		return time.Time{}, fmt.Errorf("%w: %q is not unix seconds or milliseconds, RFC 3339, or YYYY-MM-DD HH:MM:SS (UTC)", ErrInvalidEventTime, raw)
+	}
+	t = t.UTC()
+	switch {
+	case t.After(now.Add(eventClockSkew)):
+		return time.Time{}, fmt.Errorf("%w: %s is in the future", ErrInvalidEventTime, t.Format(time.RFC3339))
+	case t.After(now):
+		return now.UTC(), nil
+	case now.Sub(t) > MaxEventAge:
+		return time.Time{}, fmt.Errorf("%w: %s is older than %d days", ErrInvalidEventTime, t.Format(time.RFC3339), int(MaxEventAge.Hours()/24))
+	}
+	return t, nil
+}
+
 // progressionRefusal is the message of a postback refused by the §45
 // progression rule — shared by Service's fast path and Store's locked check.
 func progressionRefusal(clickID string, last event.Type) string {
