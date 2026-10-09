@@ -1,6 +1,6 @@
 // Package ratelimit is §54's abuse-throttling defense: a fixed-window
-// counter backed by Redis (INCR, then EXPIRE once on the window's first
-// request) — exactly the "cache, rate limits..." role CLAUDE.md's own
+// counter backed by Redis (one Lua script: INCR, and the window's expiry
+// when the key has none) — exactly the "cache, rate limits..." role CLAUDE.md's own
 // STACK section already names for Redis.
 //
 // Fails OPEN on a Redis error: allows the request through and logs a
@@ -45,23 +45,30 @@ func New(rdb *redis.Client, logger *slog.Logger) *Limiter {
 	return &Limiter{rdb: rdb, logger: logger}
 }
 
+// allowScript counts one request and makes sure the key expires, in one
+// atomic step. INCR and EXPIRE as two calls (before the 2026-10-06 tech
+// audit, API1) left a key with no TTL whenever the EXPIRE was lost — a
+// dropped connection, a restart between the two — and that IP or key got
+// 429 for good. The TTL check also heals such a key left from before.
+var allowScript = redis.NewScript(`
+local n = redis.call('INCR', KEYS[1])
+if n == 1 or redis.call('PTTL', KEYS[1]) == -1 then
+  redis.call('PEXPIRE', KEYS[1], ARGV[1])
+end
+return n
+`)
+
 // Allow reports whether one more request under key is allowed within the
-// current fixed window. The classic INCR-then-set-TTL-once pattern: the
-// window's first request creates the key and sets its expiry; every
-// request after that is a plain increment, so a sustained attacker costs
-// one Redis round trip per request, never a growing key set.
+// current fixed window: the window's first request creates the key with
+// its expiry, every later one is a plain increment — one Redis round trip
+// per request, never a growing key set.
 func (l *Limiter) Allow(ctx context.Context, key string, limit int, window time.Duration) (bool, error) {
 	if l.rdb == nil {
 		return true, nil
 	}
-	n, err := l.rdb.Incr(ctx, key).Result()
+	n, err := allowScript.Run(ctx, l.rdb, []string{key}, window.Milliseconds()).Int64()
 	if err != nil {
-		return true, fmt.Errorf("ratelimit: incrementing %q: %w", key, err)
-	}
-	if n == 1 {
-		if err := l.rdb.Expire(ctx, key, window).Err(); err != nil {
-			return true, fmt.Errorf("ratelimit: setting expiry for %q: %w", key, err)
-		}
+		return true, fmt.Errorf("ratelimit: counting %q: %w", key, err)
 	}
 	return n <= int64(limit), nil
 }

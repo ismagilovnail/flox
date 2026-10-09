@@ -5,6 +5,19 @@ per-phase, matching `CLAUDE.md`'s phase protocol. The one exception is
 [Between phases], below: spec amendments and the code changes that follow from
 them land between phases and would otherwise be invisible here.
 
+## [Between phases] — atomic rate limit (tech audit API1)
+
+- `ratelimit.Allow` counted with `INCR` and set the window with a separate `EXPIRE` on the first
+  request. A lost `EXPIRE` (dropped connection, restart in between) left the key without a TTL:
+  that IP or key got 429 for good. Now one Lua script increments and sets the expiry
+  (`PEXPIRE`, millisecond windows) whenever the key has none — which also heals a key stuck that
+  way before. The only INCR/EXPIRE pair in the code. `docs/security.md`, audit API1 status.
+
+Tests: every counted key has a TTL within the window; a key planted without a TTL gets one on its
+next request and unblocks after the window (a mutation dropping the heal fails it). Full-env
+`go test ./...` passes; e2e FullFunnel / OfferDailyCap / FilterMatrix not skipped; the live API's
+rate-limit keys after the run all carry a TTL.
+
 ## [Between phases] — signed sticky cookies (tech audit T5 / S1)
 
 - `sf_{campaignId}` is now `setId:flowId[:clickId].sig`: HMAC-SHA256 over the campaign and the

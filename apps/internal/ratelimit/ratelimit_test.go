@@ -80,11 +80,8 @@ func TestAllowResetsAfterWindow(t *testing.T) {
 	limiter := ratelimit.New(rdb, discardLogger())
 	key := uniqueKey(t, rdb)
 
-	// Redis's EXPIRE has whole-second granularity — go-redis's Expire
-	// silently truncates anything under 1s up to 1s (confirmed against a
-	// real server: a 500ms window actually became a 1s one), so the
-	// window here has to be at least 1s for this test to mean anything.
-	const window = 1100 * time.Millisecond
+	// PEXPIRE: millisecond windows work.
+	const window = 300 * time.Millisecond
 
 	if allowed, err := limiter.Allow(ctx, key, 1, window); err != nil || !allowed {
 		t.Fatalf("first Allow: allowed=%v err=%v", allowed, err)
@@ -97,6 +94,52 @@ func TestAllowResetsAfterWindow(t *testing.T) {
 
 	if allowed, err := limiter.Allow(ctx, key, 1, window); err != nil || !allowed {
 		t.Fatalf("Allow after window expired: allowed=%v err=%v, want true", allowed, err)
+	}
+}
+
+// Every counted key expires: the count and its TTL are one atomic step
+// (tech audit API1 — a lost EXPIRE used to mean 429 forever).
+func TestAllowAlwaysLeavesATTL(t *testing.T) {
+	rdb := mustClient(t)
+	ctx := context.Background()
+	limiter := ratelimit.New(rdb, discardLogger())
+	key := uniqueKey(t, rdb)
+
+	for i := 0; i < 3; i++ {
+		if _, err := limiter.Allow(ctx, key, 10, time.Minute); err != nil {
+			t.Fatal(err)
+		}
+		ttl, err := rdb.PTTL(ctx, key).Result()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if ttl <= 0 || ttl > time.Minute {
+			t.Fatalf("after request %d PTTL = %v, want within (0, 1m]", i+1, ttl)
+		}
+	}
+}
+
+// A key stuck without a TTL — what the old INCR-then-EXPIRE left behind —
+// gets one on its next request, so the block ends with the window.
+func TestAllowHealsAKeyWithoutTTL(t *testing.T) {
+	rdb := mustClient(t)
+	ctx := context.Background()
+	limiter := ratelimit.New(rdb, discardLogger())
+	key := uniqueKey(t, rdb)
+	if err := rdb.Set(ctx, key, 1000, 0).Err(); err != nil {
+		t.Fatal(err)
+	}
+
+	const window = 300 * time.Millisecond
+	if allowed, err := limiter.Allow(ctx, key, 5, window); err != nil || allowed {
+		t.Fatalf("Allow over the stuck count: allowed=%v err=%v, want false", allowed, err)
+	}
+	if ttl, _ := rdb.PTTL(ctx, key).Result(); ttl <= 0 {
+		t.Fatalf("PTTL = %v, want the window set", ttl)
+	}
+	time.Sleep(window + 200*time.Millisecond)
+	if allowed, err := limiter.Allow(ctx, key, 5, window); err != nil || !allowed {
+		t.Fatalf("Allow after the healed window: allowed=%v err=%v, want true", allowed, err)
 	}
 }
 

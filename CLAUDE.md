@@ -22,9 +22,10 @@ referenced below as §N).
 CURRENT PHASE : AUDIT FOLLOW-UPS (between phases)
 STATUS        : marketer audit closed (#1–#12, #13 platform limit). Tech audit:
                 P0/P1 done except DO1 (CI, the user's call); AN1 marked partial
-                in the audit. P2 in progress: T5 done (signed sticky cookies,
-                STICKY_COOKIE_KEY required by the tracker); next API1.
-LAST COMMIT   : fix(tracker): sign sticky cookies.
+                in the audit. P2 in progress: T5 (signed sticky cookies,
+                STICKY_COOKIE_KEY required by the tracker), API1 done; next:
+                outbound HTTP client timeouts.
+LAST COMMIT   : fix(ratelimit): count and expire in one atomic step.
 UNCOMMITTED   : none expected. Dev DB fresh from `make dev-fresh CONFIRM=yes`
                 (password flox-demo-2026); `make dev-status` shows what is in it.
 NEXT          : wait for the user — the next phase. CI (DO1) is the user's own

@@ -430,7 +430,9 @@ type entry struct { link TrackingLink; cfg CampaignRouting; loadedAt time.Time }
 
 **Проблемы:**
 
-- **API1 [MEDIUM].** `ratelimit.Allow` делает `INCR`, затем отдельный
+- **API1 [MEDIUM]** (**статус: исправлено** — один Lua-скрипт: `INCR` +
+  `PEXPIRE`, если у ключа нет TTL; заодно лечит уже «вечные» ключи).
+  `ratelimit.Allow` делает `INCR`, затем отдельный
   `EXPIRE`. Если `EXPIRE` не выполнился (обрыв сети или рестарт между
   вызовами), ключ остаётся **без TTL**, и этот IP или ключ получает 429
   навсегда. **Исправление:** Lua-скрипт или

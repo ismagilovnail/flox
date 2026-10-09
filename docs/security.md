@@ -60,8 +60,9 @@ header is **present** and doesn't exactly match `APP_URL`.
 
 ## 3. Rate limiting
 
-`apps/internal/ratelimit`: a fixed-window Redis counter (`INCR`, `EXPIRE`
-once on the window's first request). **Fails open** on a Redis error —
+`apps/internal/ratelimit`: a fixed-window Redis counter — one Lua script
+that increments and sets the window's expiry when the key has none, so a
+key can never be left without a TTL (an endless 429; tech audit API1). **Fails open** on a Redis error —
 logs a warning and allows the request — matching every other
 Redis-optional path in this codebase (`conversion.RedisStore` falls through
 to Postgres directly). A limiter that failed closed would turn a Redis
