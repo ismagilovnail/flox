@@ -477,7 +477,7 @@ type entry struct { link TrackingLink; cfg CampaignRouting; loadedAt time.Time }
 **Проблемы:**
 
 - **S1 [MEDIUM].** Неподписанная sticky cookie (T5). **Статус: исправлено** (T5).
-- **S2 [LOW-MEDIUM].** У web/API нет `Content-Security-Policy`,
+- **S2 [LOW-MEDIUM].** (**Статус: исправлено** — web: `frame-ancestors 'none'; object-src 'none'`, `X-Frame-Options: DENY`, nosniff, Referrer-Policy, Permissions-Policy, HSTS в сборке; API: `default-src 'none'; frame-ancestors 'none'` и те же заголовки, HSTS при `NODE_ENV` ≠ development. `script-src` не введён: предпросмотр лендинга в `srcDoc` наследует CSP страницы, сначала его нужно вынести на отдельный URL; `docs/security.md` §7.) У web/API нет `Content-Security-Policy`,
   `X-Frame-Options`/`frame-ancestors`, HSTS (`apps/web/next.config.ts`,
   `httpserver`). Админку можно встроить во фрейм (clickjacking на
   деструктивные действия).

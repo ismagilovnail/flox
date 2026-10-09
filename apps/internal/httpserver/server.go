@@ -72,6 +72,35 @@ type Option func(*options)
 
 type options struct {
 	recoverer func(http.Handler) http.Handler
+	hsts      bool
+}
+
+// WithHSTS adds Strict-Transport-Security to every response — only once
+// TLS terminates in front of the API (apps/api passes NODE_ENV !=
+// development, the same gate as its Secure session cookie): a browser
+// that has seen it refuses plain HTTP to this host for a year.
+func WithHSTS(on bool) Option {
+	return func(o *options) { o.hsts = on }
+}
+
+// securityHeaders hardens every API response (tech audit S2). The API
+// serves JSON only, so its CSP allows nothing to load or run and nothing
+// to frame it: a response opened directly in a tab, or embedded by another
+// site, can do nothing. nosniff keeps a browser from reading JSON as HTML.
+func securityHeaders(hsts bool) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			h := w.Header()
+			h.Set("Content-Security-Policy", "default-src 'none'; frame-ancestors 'none'")
+			h.Set("X-Frame-Options", "DENY")
+			h.Set("X-Content-Type-Options", "nosniff")
+			h.Set("Referrer-Policy", "no-referrer")
+			if hsts {
+				h.Set("Strict-Transport-Security", "max-age=31536000")
+			}
+			next.ServeHTTP(w, r)
+		})
+	}
 }
 
 // WithRecoverer replaces chi's Recoverer — apps/api passes errtrack's, which
@@ -89,6 +118,7 @@ func New(logger *slog.Logger, serviceName string, db Pinger, ch Pinger, appURL s
 
 	r.Use(middleware.RequestID)
 	r.Use(responseRequestID)
+	r.Use(securityHeaders(o.hsts))
 	r.Use(requestLogger(logger))
 	r.Use(o.recoverer)
 	r.Use(middleware.Timeout(30 * time.Second))

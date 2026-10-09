@@ -5,6 +5,27 @@ per-phase, matching `CLAUDE.md`'s phase protocol. The one exception is
 [Between phases], below: spec amendments and the code changes that follow from
 them land between phases and would otherwise be invisible here.
 
+## [Between phases] — security headers on web and API (tech audit S2)
+
+- `apps/web` (`next.config.ts`, every route): `Content-Security-Policy: frame-ancestors 'none';
+  object-src 'none'`, `X-Frame-Options: DENY`, `nosniff`, `Referrer-Policy:
+  strict-origin-when-cross-origin`, `Permissions-Policy` (camera/microphone/geolocation off), HSTS
+  (1 year) in the built app. Closes the audit's clickjacking risk: any site could frame the app
+  over a destructive button.
+- `apps/api` (`httpserver.securityHeaders`, every response): `default-src 'none';
+  frame-ancestors 'none'`, `DENY`, `nosniff`, `no-referrer`; HSTS when `NODE_ENV` ≠ development
+  (`httpserver.WithHSTS`, the same gate as the Secure session cookie).
+- No `script-src`: the landing editor's `<iframe srcDoc>` preview inherits the page's CSP, so a
+  script or base-uri policy would block the landing's scripts and its `<base href>`. Recorded as a
+  follow-up in `docs/security.md` §7 (needs the preview on its own URL first). The tracker is
+  unchanged (visitor pages).
+
+Verified: headers on live web and API responses; a page on another origin cannot frame the app
+(blocked frame); a srcdoc iframe under the web's exact policy still runs its script and applies
+its base href; the app works as before. Test: every API response — a route, health, a 404 —
+carries the headers, HSTS only when enabled. Full-env `go test ./...` passes, e2e not skipped;
+tsc, eslint, vitest pass.
+
 ## [Between phases] — CA certificates in the tracker image (tech audit DO4)
 
 - Checked before changing anything: the audit's premise does not hold on the current base —

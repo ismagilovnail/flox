@@ -171,6 +171,31 @@ key's scope as a coarse tier — `read`/`write`(minus `team.write` and
 Full detail, including the live end-to-end verification against a real
 running API, is in `docs/auth.md`'s "API key authentication" section.
 
+## 7. Security headers (tech audit S2)
+
+| | `apps/web` (`next.config.ts`) | `apps/api` (`httpserver.securityHeaders`) |
+|---|---|---|
+| `Content-Security-Policy` | `frame-ancestors 'none'; object-src 'none'` | `default-src 'none'; frame-ancestors 'none'` |
+| `X-Frame-Options` | `DENY` | `DENY` |
+| `X-Content-Type-Options` | `nosniff` | `nosniff` |
+| `Referrer-Policy` | `strict-origin-when-cross-origin` | `no-referrer` |
+| `Permissions-Policy` | camera, microphone, geolocation off | — |
+| `Strict-Transport-Security` | `max-age=31536000` in the built app | same, when `NODE_ENV` ≠ `development` (the Secure-cookie gate: TLS in front) |
+
+The audit's concrete risk was clickjacking — another site framing the
+app over a destructive button; `frame-ancestors 'none'` closes it
+(verified: a page on another origin gets a blocked frame).
+
+**Not done: a script policy.** The landing editor previews a landing in
+an `<iframe srcDoc>`, and a srcdoc document inherits the page's CSP: a
+`script-src`/`base-uri` policy would block the landing's own scripts and
+its `<base href>` to the asset CDN. Verified that the policy above leaves
+such a preview working (script runs, base applies). A nonce-based
+`script-src` (Next.js `proxy.ts`) needs the preview moved to its own URL
+first. `apps/tracker` is unchanged: it serves visitors' landings and PWA
+pages, which set their own headers (`nosniff`), and must stay embeddable
+where a campaign needs it.
+
 ## Known limitations
 
 - No CAPTCHA/device-fingerprinting on `/auth/login`/`/auth/signup` — rate

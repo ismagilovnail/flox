@@ -311,7 +311,8 @@ func run() error {
 		return "ip:" + clientIP.String(r)
 	}
 	srv := httpserver.New(logger, cfg.OTelServiceName, db, ch, cfg.AppURL, limiter, generalLimitKey, identify,
-		httpserver.WithRecoverer(errtrack.Middleware(reporter, logger)))
+		httpserver.WithRecoverer(errtrack.Middleware(reporter, logger)),
+		httpserver.WithHSTS(cfg.Env != "development"))
 
 	// §52 RBAC. Until the 2026-09-06 audit, RequirePermission gated only
 	// /team, /security and the four features whose own phases wired it

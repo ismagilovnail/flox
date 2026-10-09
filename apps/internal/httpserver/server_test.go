@@ -155,3 +155,27 @@ func TestGeneralRateLimitKeysUnauthenticatedTrafficByIP(t *testing.T) {
 		t.Fatalf("%s does not exist — an unauthenticated request must still key by client IP", wantKey)
 	}
 }
+
+// Every API response carries the security headers (tech audit S2); HSTS
+// only when asked for — once TLS is in front of the API.
+func TestSecurityHeaders(t *testing.T) {
+	passThrough := func(next http.Handler) http.Handler { return next }
+	limiter := ratelimit.New(nil, discardLogger())
+	keyAll := func(*http.Request) string { return "all" }
+	for _, hsts := range []bool{false, true} {
+		srv := httpserver.New(discardLogger(), "test", okPinger{}, nil, "http://localhost:3000", limiter, keyAll, passThrough, httpserver.WithHSTS(hsts))
+		srv.Mux().Get("/thing", func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusTeapot) })
+		for _, path := range []string{"/health", "/thing", "/no-such-route"} {
+			rec := httptest.NewRecorder()
+			srv.Handler().ServeHTTP(rec, httptest.NewRequest(http.MethodGet, path, nil))
+			h := rec.Header()
+			if h.Get("Content-Security-Policy") != "default-src 'none'; frame-ancestors 'none'" ||
+				h.Get("X-Frame-Options") != "DENY" || h.Get("X-Content-Type-Options") != "nosniff" || h.Get("Referrer-Policy") != "no-referrer" {
+				t.Errorf("hsts=%v %s: headers %v", hsts, path, h)
+			}
+			if got := h.Get("Strict-Transport-Security") != ""; got != hsts {
+				t.Errorf("hsts=%v %s: Strict-Transport-Security present = %v", hsts, path, got)
+			}
+		}
+	}
+}
