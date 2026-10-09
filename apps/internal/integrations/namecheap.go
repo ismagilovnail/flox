@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+
+	"github.com/ismagilovnail/flox/apps/internal/httpclient"
 )
 
 // DefaultNamecheapBaseURL is the real Namecheap production API host.
@@ -22,7 +24,7 @@ type namecheapAdapter struct {
 }
 
 func newNamecheapAdapter() *namecheapAdapter {
-	return &namecheapAdapter{BaseURL: DefaultNamecheapBaseURL, HTTPClient: http.DefaultClient}
+	return &namecheapAdapter{BaseURL: DefaultNamecheapBaseURL, HTTPClient: httpclient.New(httpclient.ControlAPI)}
 }
 
 // namecheapResponse mirrors the subset of Namecheap's real XML envelope

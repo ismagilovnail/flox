@@ -18,7 +18,12 @@ import (
 	"time"
 
 	"github.com/ismagilovnail/flox/apps/internal/adaccount"
+	"github.com/ismagilovnail/flox/apps/internal/httpclient"
 )
+
+// defaultClient serves an Adapter built without New: never http.DefaultClient,
+// which has no timeout (internal/httpclient).
+var defaultClient = httpclient.New(httpclient.AdAPI)
 
 // DefaultBaseURL is the real TikTok Business API host + the API version
 // this adapter was written against. Adapter.BaseURL exists specifically
@@ -46,7 +51,7 @@ type Adapter struct {
 }
 
 func New() *Adapter {
-	return &Adapter{BaseURL: DefaultBaseURL, HTTPClient: http.DefaultClient}
+	return &Adapter{BaseURL: DefaultBaseURL, HTTPClient: httpclient.New(httpclient.AdAPI)}
 }
 
 var _ adaccount.CostProvider = (*Adapter)(nil)
@@ -91,7 +96,7 @@ type integratedReportResponse struct {
 func (a *Adapter) DailySpendByCampaign(ctx context.Context, creds adaccount.Credentials, from, to time.Time) ([]adaccount.DailyCampaignSpendRecord, error) {
 	client := a.HTTPClient
 	if client == nil {
-		client = http.DefaultClient
+		client = defaultClient
 	}
 	baseURL := a.BaseURL
 	if baseURL == "" {

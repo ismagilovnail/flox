@@ -28,7 +28,12 @@ import (
 	"time"
 
 	"github.com/ismagilovnail/flox/apps/internal/adaccount"
+	"github.com/ismagilovnail/flox/apps/internal/httpclient"
 )
+
+// defaultClient serves an Adapter built without New: never http.DefaultClient,
+// which has no timeout (internal/httpclient).
+var defaultClient = httpclient.New(httpclient.AdAPI)
 
 // DefaultOAuthBaseURL/DefaultAdsBaseURL are the real Google endpoints
 // this adapter was written against. Both are exported on Adapter so a
@@ -56,7 +61,7 @@ type Adapter struct {
 }
 
 func New() *Adapter {
-	return &Adapter{OAuthBaseURL: DefaultOAuthBaseURL, AdsBaseURL: DefaultAdsBaseURL, HTTPClient: http.DefaultClient}
+	return &Adapter{OAuthBaseURL: DefaultOAuthBaseURL, AdsBaseURL: DefaultAdsBaseURL, HTTPClient: httpclient.New(httpclient.AdAPI)}
 }
 
 var _ adaccount.CostProvider = (*Adapter)(nil)
@@ -99,7 +104,7 @@ type searchResponse struct {
 func (a *Adapter) DailySpendByCampaign(ctx context.Context, creds adaccount.Credentials, from, to time.Time) ([]adaccount.DailyCampaignSpendRecord, error) {
 	client := a.HTTPClient
 	if client == nil {
-		client = http.DefaultClient
+		client = defaultClient
 	}
 	oauthBaseURL := a.OAuthBaseURL
 	if oauthBaseURL == "" {

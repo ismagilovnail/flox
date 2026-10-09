@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+
+	"github.com/ismagilovnail/flox/apps/internal/httpclient"
 )
 
 // DefaultCloudflareBaseURL is the real Cloudflare API v4 host.
@@ -21,7 +23,7 @@ type cloudflareAdapter struct {
 }
 
 func newCloudflareAdapter() *cloudflareAdapter {
-	return &cloudflareAdapter{BaseURL: DefaultCloudflareBaseURL, HTTPClient: http.DefaultClient}
+	return &cloudflareAdapter{BaseURL: DefaultCloudflareBaseURL, HTTPClient: httpclient.New(httpclient.ControlAPI)}
 }
 
 // verifyResponse mirrors the subset of Cloudflare's real JSON envelope

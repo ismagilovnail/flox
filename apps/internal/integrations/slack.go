@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 
+	"github.com/ismagilovnail/flox/apps/internal/httpclient"
 	"github.com/ismagilovnail/flox/apps/internal/urlsafety"
 )
 
@@ -30,7 +31,7 @@ type slackAdapter struct {
 
 func newSlackAdapter() *slackAdapter {
 	return &slackAdapter{
-		HTTPClient: &http.Client{Transport: &http.Transport{DialContext: urlsafety.SafeDialContext}},
+		HTTPClient: httpclient.NewSafe(httpclient.Webhook),
 	}
 }
 

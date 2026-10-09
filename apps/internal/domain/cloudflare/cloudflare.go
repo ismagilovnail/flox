@@ -16,7 +16,12 @@ import (
 	"strings"
 
 	"github.com/ismagilovnail/flox/apps/internal/domain"
+	"github.com/ismagilovnail/flox/apps/internal/httpclient"
 )
+
+// defaultClient serves an Adapter built without New: never http.DefaultClient,
+// which has no timeout (internal/httpclient).
+var defaultClient = httpclient.New(httpclient.ControlAPI)
 
 // DefaultBaseURL is the real Cloudflare API v4 host. Adapter.BaseURL
 // exists specifically so a test can point it at an httptest.Server
@@ -29,7 +34,7 @@ type Adapter struct {
 }
 
 func New() *Adapter {
-	return &Adapter{BaseURL: DefaultBaseURL, HTTPClient: http.DefaultClient}
+	return &Adapter{BaseURL: DefaultBaseURL, HTTPClient: httpclient.New(httpclient.ControlAPI)}
 }
 
 var _ domain.DNSProviderAdapter = (*Adapter)(nil)
@@ -54,7 +59,7 @@ func (a *Adapter) client() *http.Client {
 	if a.HTTPClient != nil {
 		return a.HTTPClient
 	}
-	return http.DefaultClient
+	return defaultClient
 }
 
 func (a *Adapter) baseURL() string {

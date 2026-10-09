@@ -18,7 +18,12 @@ import (
 	"time"
 
 	"github.com/ismagilovnail/flox/apps/internal/domain"
+	"github.com/ismagilovnail/flox/apps/internal/httpclient"
 )
+
+// defaultClient serves an Adapter built without New: never http.DefaultClient,
+// which has no timeout (internal/httpclient).
+var defaultClient = httpclient.New(httpclient.ControlAPI)
 
 // DefaultBaseURL is the real Namecheap production API host. Adapter.
 // BaseURL exists specifically so a test can point it at an
@@ -36,7 +41,7 @@ type Adapter struct {
 }
 
 func New() *Adapter {
-	return &Adapter{BaseURL: DefaultBaseURL, HTTPClient: http.DefaultClient}
+	return &Adapter{BaseURL: DefaultBaseURL, HTTPClient: httpclient.New(httpclient.ControlAPI)}
 }
 
 var _ domain.RegistrarProvider = (*Adapter)(nil)
@@ -76,7 +81,7 @@ type getInfoResponse struct {
 func (a *Adapter) do(ctx context.Context, fields map[string]string, command string, extra url.Values) (*http.Response, error) {
 	client := a.HTTPClient
 	if client == nil {
-		client = http.DefaultClient
+		client = defaultClient
 	}
 	baseURL := a.BaseURL
 	if baseURL == "" {

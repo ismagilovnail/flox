@@ -5,6 +5,31 @@ per-phase, matching `CLAUDE.md`'s phase protocol. The one exception is
 [Between phases], below: spec amendments and the code changes that follow from
 them land between phases and would otherwise be invisible here.
 
+## [Between phases] — timeouts on every outbound call (tech audit, P2)
+
+- New `internal/httpclient`: clients with a timeout on the whole call — 60 s for ad APIs
+  (Facebook, TikTok, Google Ads cost sync), 30 s for registrars/DNS (Cloudflare, Namecheap — both
+  the domain automation and Settings > Integrations), 10 s for the Slack alert webhook. These all
+  used `http.DefaultClient` or a client without a timeout: one network leaving a connection open
+  blocked the cost sync of every organization until the worker restarted (the audit's case); a
+  stalled Slack webhook did the same to the alerts behind it. `NewSafe` (Slack) keeps the
+  private-address guard and drops `HTTP_PROXY`: through a proxy the guard would check the
+  proxy's address, not the webhook's.
+- SMTP had the same gap and was not in the audit: `smtp.SendMail` takes no context and sets no
+  deadline, and signup sends its verification email inside the request. `mailer.Send` now does
+  what `SendMail` did (STARTTLS when offered, AUTH) over a connection bounded by the context and
+  30 s. Also: the envelope sender is the bare address (`MAIL_FROM`'s display name went into
+  `MAIL FROM:<…>`, which strict relays refuse), and an address with a line break is refused
+  before dialing.
+- Unchanged and already bounded: outgoing postbacks (10 s per attempt), the ECB FX client (60 s),
+  the domain TLS probe (10 s), Sentry's own client.
+
+Tests: a stalled HTTP server and a stalled SMTP relay each give up within the timeout; the guarded
+client refuses loopback and ignores `HTTP_PROXY`; every adapter's default client has a timeout; a
+scripted relay receives the bare envelope sender, the display-name header and the body; a line
+break in the address is refused. Live: the e2e signups' verification emails reached mailhog
+through the new sender. Full-env `go test ./...` passes; e2e not skipped.
+
 ## [Between phases] — atomic rate limit (tech audit API1)
 
 - `ratelimit.Allow` counted with `INCR` and set the window with a separate `EXPIRE` on the first

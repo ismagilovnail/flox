@@ -13,10 +13,15 @@ package mailer
 
 import (
 	"context"
+	"crypto/tls"
+	"errors"
 	"fmt"
+	"net"
+	"net/mail"
 	"net/smtp"
 	"net/url"
 	"strings"
+	"time"
 )
 
 // Client sends mail over SMTP using Go's standard library client — no
@@ -26,7 +31,7 @@ import (
 // authenticated relay (SES SMTP, Postmark, Sendgrid, a corporate relay,
 // ...) in production by putting user:pass in SMTP_URL.
 type Client struct {
-	addr string // host:port smtp.SendMail dials
+	addr string // host:port Send dials
 	auth smtp.Auth
 	from string
 }
@@ -55,17 +60,84 @@ func New(rawURL, fromAddr string) (*Client, error) {
 	return &Client{addr: u.Host, auth: auth, from: fromAddr}, nil
 }
 
-// Send implements auth.Mailer. ctx is accepted for interface consistency
-// with every other outbound-provider interface in this codebase (e.g.
-// postbacklogs.OutgoingEnqueuer) — net/smtp has no context-aware dial, so
-// it isn't threaded through smtp.SendMail itself; a slow/unreachable relay
-// blocks for its own dial/network timeout, not ctx's deadline.
-func (c *Client) Send(_ context.Context, to, subject, body string) error {
-	msg := buildMessage(c.from, to, subject, body)
-	if err := smtp.SendMail(c.addr, c.auth, c.from, []string{to}, msg); err != nil {
+// sendTimeout bounds one message end to end: dial, TLS, AUTH, DATA. Signup
+// sends inside the request, so a relay that accepts the connection and then
+// stalls must not hold the request — smtp.SendMail, used before the
+// 2026-10-06 tech audit, has no context and no deadline at all.
+const sendTimeout = 30 * time.Second
+
+// Send implements auth.Mailer: what smtp.SendMail does (STARTTLS when the
+// relay offers it, AUTH when credentials are set), over a connection
+// bounded by ctx and sendTimeout.
+func (c *Client) Send(ctx context.Context, to, subject, body string) error {
+	if err := c.send(ctx, to, buildMessage(c.from, to, subject, body)); err != nil {
 		return fmt.Errorf("mailer: sending to %s: %w", to, err)
 	}
 	return nil
+}
+
+func (c *Client) send(ctx context.Context, to string, msg []byte) error {
+	// An address with a line break would add headers or SMTP commands.
+	for _, v := range []string{c.from, to} {
+		if strings.ContainsAny(v, "\r\n") {
+			return errors.New("address contains a line break")
+		}
+	}
+	ctx, cancel := context.WithTimeout(ctx, sendTimeout)
+	defer cancel()
+	var d net.Dialer
+	conn, err := d.DialContext(ctx, "tcp", c.addr)
+	if err != nil {
+		return err
+	}
+	deadline, _ := ctx.Deadline()
+	if err := conn.SetDeadline(deadline); err != nil {
+		_ = conn.Close()
+		return err
+	}
+	host, _, _ := net.SplitHostPort(c.addr)
+	sc, err := smtp.NewClient(conn, host)
+	if err != nil {
+		_ = conn.Close()
+		return err
+	}
+	defer sc.Close()
+	if ok, _ := sc.Extension("STARTTLS"); ok {
+		if err := sc.StartTLS(&tls.Config{ServerName: host}); err != nil {
+			return err
+		}
+	}
+	if c.auth != nil {
+		if ok, _ := sc.Extension("AUTH"); !ok {
+			return errors.New("relay does not offer AUTH but SMTP_URL has credentials")
+		}
+		if err := sc.Auth(c.auth); err != nil {
+			return err
+		}
+	}
+	// The envelope takes the bare address; MAIL_FROM may carry a display
+	// name ("FLOX <no-reply@…>"), which belongs in the From header only.
+	from := c.from
+	if a, err := mail.ParseAddress(c.from); err == nil {
+		from = a.Address
+	}
+	if err := sc.Mail(from); err != nil {
+		return err
+	}
+	if err := sc.Rcpt(to); err != nil {
+		return err
+	}
+	w, err := sc.Data()
+	if err != nil {
+		return err
+	}
+	if _, err := w.Write(msg); err != nil {
+		return err
+	}
+	if err := w.Close(); err != nil {
+		return err
+	}
+	return sc.Quit()
 }
 
 // buildMessage is a minimal RFC 5322 message: headers, a blank line, then
