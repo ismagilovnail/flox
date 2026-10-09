@@ -207,7 +207,13 @@ CH postback не отвечает 503, а записывается так же, 
   спецификацией, а не открытый вопрос. **Статус: исправлено** — сторно
   выплаты FTD днём отмены (`docs/conversion.md`, «Chargebacks»).
 
-**T5 [MEDIUM]. Sticky cookie без подписи.**
+**T5 [MEDIUM]. Sticky cookie без подписи.** **Статус: исправлено** —
+`setId:flowId[:clickId].sig`, HMAC-SHA256 ключом `STICKY_COOKIE_KEY`
+(отдельным, обязательным для tracker'а) по кампании и значению; ID
+проверяются как ULID; неподписанная или поддельная cookie игнорируется,
+визит маршрутизируется заново (`apps/tracker/sticky.go`,
+`docs/routing.md`). Перепроверка фильтров для подписанной cookie не
+добавлена — продуктовое поведение прежнее.
 
 - **Где:** `tracker/sticky.go:26`, `routing/engine.go:66 trySticky`.
 - `sf_{campaignId}=setId:flowId[:clickId]` принимается как есть.
@@ -463,7 +469,7 @@ type entry struct { link TrackingLink; cfg CampaignRouting; loadedAt time.Time }
 
 **Проблемы:**
 
-- **S1 [MEDIUM].** Неподписанная sticky cookie (T5).
+- **S1 [MEDIUM].** Неподписанная sticky cookie (T5). **Статус: исправлено** (T5).
 - **S2 [LOW-MEDIUM].** У web/API нет `Content-Security-Policy`,
   `X-Frame-Options`/`frame-ancestors`, HSTS (`apps/web/next.config.ts`,
   `httpserver`). Админку можно встроить во фрейм (clickjacking на

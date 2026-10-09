@@ -160,6 +160,7 @@ func newLandingHandler(tb testing.TB, pool *pgxpool.Pool, withLinks bool) (http.
 		tb.Fatalf("clientip: %v", err)
 	}
 	h := &Handler{
+		sticky:     testStickySigner(tb),
 		clientIP:   resolver,
 		store:      routingstore.New(pool),
 		classifier: classifier.New(nil, nil, nil),

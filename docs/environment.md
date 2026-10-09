@@ -166,6 +166,7 @@ headers are not attached. A malformed DSN fails the binary at boot.
 | Variable | Default | Purpose |
 |---|---|---|
 | `INTEGRATION_ENCRYPTION_KEY` (worker) | empty | The api's key for integration credentials. The worker needs the same value to read the Slack webhook alerts are sent to (`docs/alerts.md`). Without it the worker logs a warning at start, alerts still appear in the app, and every Slack delivery is recorded as failed. |
+| `STICKY_COOKIE_KEY` (tracker) | dev key in compose / `.env.example` | **Required** — the tracker refuses to start without it. 32+ random bytes, base64 (`head -c 32 /dev/urandom \| base64`). Signs sticky cookies (`docs/routing.md`, tech audit T5). Same value on every tracker replica and never rotated casually: a new key ignores every existing cookie and re-buckets returning visitors. |
 
 ### Domain/DNS providers, Facebook/TikTok ad accounts
 

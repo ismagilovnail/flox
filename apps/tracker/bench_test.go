@@ -169,6 +169,7 @@ func BenchmarkTrack(b *testing.B) {
 	b.Cleanup(events.Close)
 
 	handler := &Handler{
+		sticky:     testStickySigner(b),
 		store:      routingstore.New(pool),
 		classifier: classifier.New(nil, nil, nil),
 		engine:     &routing.Engine{},
@@ -209,6 +210,7 @@ func BenchmarkTrack_Parallel(b *testing.B) {
 	b.Cleanup(events.Close)
 
 	handler := &Handler{
+		sticky:     testStickySigner(b),
 		store:      routingstore.New(pool),
 		classifier: classifier.New(nil, nil, nil),
 		engine:     &routing.Engine{},

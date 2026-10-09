@@ -5,6 +5,31 @@ per-phase, matching `CLAUDE.md`'s phase protocol. The one exception is
 [Between phases], below: spec amendments and the code changes that follow from
 them land between phases and would otherwise be invisible here.
 
+## [Between phases] — signed sticky cookies (tech audit T5 / S1)
+
+- `sf_{campaignId}` is now `setId:flowId[:clickId].sig`: HMAC-SHA256 over the campaign and the
+  value, 16 bytes base64url, key `STICKY_COOKIE_KEY` (`apps/tracker/sticky.go`). The tracker took
+  the cookie as is: anyone who saw a real visit's ids could set one and skip the stream set's
+  geo/bot filters into its flow, and with keepClickId write any click_id (up to ~4 KB) into the
+  chain and ClickHouse. Now an unsigned, tampered, re-signed, other-campaign or other-key cookie,
+  or one whose ids are not ULIDs, is ignored — the visit is routed as new and gets a fresh signed
+  cookie. `flox_sticky_cookies_rejected_total{reason}`.
+- `STICKY_COOKIE_KEY` is a separate key, not `LANDING_LINK_KEY` as the audit suggested: that one
+  is optional (internal landings switch off without it), this one is required — the tracker logs
+  the reason and refuses to start without it. Dev/test compose and `.env.example` carry a dev key.
+- On deploy, cookies issued before signing are ignored once; the deterministic visit-key pick puts
+  most returning visitors back in the same flow, with keepClickId they get a new click_id.
+- Unchanged: a signed cookie does not re-run the stream set's filters (product behavior).
+- Docs: `docs/routing.md`, `docs/environment.md`, `docs/observability.md`, CLAUDE.md #4, audit
+  T5/S1 status.
+
+Tests: signer round trip; forged cookies (old unsigned format, another flow or click id under a
+real signature, another campaign, another key, truncated, 4 KB junk, signed non-ULIDs, wrong
+part count) each ignored and counted by reason; bad keys refused. Through the real handler on a
+seeded campaign with sticky + keepClickId: the tracker's own cookie keeps the flow and click id,
+both forged cookies get neither. A mutation trusting unsigned cookies fails both tests. Full-env
+`go test ./...` passes; e2e FullFunnel / OfferDailyCap / FilterMatrix not skipped.
+
 ## [Between phases] — backups, PITR and a restore drill (tech audit DO2)
 
 - **Postgres:** the server image is `postgres:16-alpine` plus WAL-G (`apps/cmd/backup/Dockerfile`,

@@ -22,10 +22,9 @@ referenced below as §N).
 CURRENT PHASE : AUDIT FOLLOW-UPS (between phases)
 STATUS        : marketer audit closed (#1–#12, #13 platform limit). Tech audit:
                 P0/P1 done except DO1 (CI, the user's call); AN1 marked partial
-                in the audit. Next open: P2 (T5 first). Last: DO2 —
-                WAL-G archiving + nightly backups of PG/CH/files, monthly
-                restore drill, flox.backup alerts (internal/backup).
-LAST COMMIT   : feat(backup): WAL archiving, nightly backups, restore drill.
+                in the audit. P2 in progress: T5 done (signed sticky cookies,
+                STICKY_COOKIE_KEY required by the tracker); next API1.
+LAST COMMIT   : fix(tracker): sign sticky cookies.
 UNCOMMITTED   : none expected. Dev DB fresh from `make dev-fresh CONFIRM=yes`
                 (password flox-demo-2026); `make dev-status` shows what is in it.
 NEXT          : wait for the user — the next phase. CI (DO1) is the user's own
@@ -146,7 +145,8 @@ Read the referenced section before touching related code.
    progression rule.
 
 4. **Sticky = cookie is truth, Redis is cache only (§39-STICKY).** Cookie
-   `sf_{campaignId}` = `setId:flowId[:clickId]`. Redis-only sticky is forbidden
+   `sf_{campaignId}` = `setId:flowId[:clickId].sig` (HMAC, STICKY_COOKIE_KEY;
+   unsigned/forged = ignored). Redis-only sticky is forbidden
    (silently corrupts A/B tests).
 
 5. **Tenant isolation (§36-TENANCY).** Every tenant-scoped table has

@@ -56,7 +56,6 @@ func run() error {
 	if err != nil {
 		return err
 	}
-
 	logger := logging.New(cfg.LogLevel)
 
 	// Error tracking (internal/errtrack): ERROR log records and panics go to
@@ -72,6 +71,14 @@ func run() error {
 	}
 	defer reporter.Flush(2 * time.Second)
 	logger = slog.New(errtrack.Handler(logger.Handler(), reporter))
+
+	// Refused up front: without the key, sticky routing would either stop
+	// (re-bucketing every returning visitor) or trust forged cookies.
+	sticky, err := newStickySigner(cfg.StickyCookieKey)
+	if err != nil {
+		logger.Error("sticky cookie key", "error", err)
+		return err
+	}
 
 	// See apps/api/main.go's identical construction — same TRUSTED_PROXIES
 	// value, same reasoning (security audit finding #2). apps/tracker's
@@ -150,6 +157,7 @@ func run() error {
 	go routes.Listen(ctx, cfg.DatabaseURL)
 
 	handler := &Handler{
+		sticky:     sticky,
 		store:      routes,
 		classifier: classifier.New(geoProvider, asnProvider, nil),
 		engine:     &routing.Engine{},

@@ -55,6 +55,7 @@ func cachedHandler(t *testing.T, store routingcache.Store, cfg routingcache.Conf
 		t.Fatalf("clientip: %v", err)
 	}
 	h := &Handler{
+		sticky:   testStickySigner(t),
 		clientIP: resolver, store: cache, classifier: classifier.New(nil, nil, nil),
 		engine: &routing.Engine{}, events: events, logger: logger,
 	}

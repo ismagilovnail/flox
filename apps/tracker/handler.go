@@ -39,6 +39,9 @@ type Handler struct {
 	events     *eventbuf.Writer
 	logger     *slog.Logger
 	clientIP   *clientip.Resolver
+	// sticky signs and checks the sf_{campaignId} cookies (sticky.go).
+	sticky *stickySigner
+
 	// links signs internal landings' click links; nil (LANDING_LINK_KEY
 	// unset/invalid) means internal landing stages are skipped.
 	links *landinglink.Signer
@@ -134,7 +137,7 @@ func (h *Handler) track(w http.ResponseWriter, r *http.Request) {
 	}
 	params.applyTo(attrs)
 
-	sticky := parseStickyCookie(r, link.CampaignID)
+	sticky := h.sticky.parse(r, link.CampaignID)
 
 	result, err := h.engine.Resolve(ctx, routing.RequestContext{
 		Attributes:   attrs,
@@ -174,7 +177,7 @@ func (h *Handler) track(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if cfg.StickyFlow && result.StreamSetID != "" && result.FlowID != "" {
-		setStickyCookie(w, link.CampaignID, result, clickID, loaded.StickyFlowKeepClickID)
+		h.sticky.set(w, link.CampaignID, result, clickID, loaded.StickyFlowKeepClickID)
 	}
 
 	// The flow's landing stage, if any, sits between this click and the

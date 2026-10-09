@@ -90,6 +90,12 @@ type Config struct {
 	// served — rather than serving pages whose links it can't sign.
 	LandingLinkKey string
 
+	// StickyCookieKey is the HMAC key (32+ raw bytes, base64-encoded) the
+	// tracker signs sticky cookies with (apps/tracker/sticky.go, tech audit
+	// T5). Required by apps/tracker; shared by its replicas and stable:
+	// changing it re-buckets every returning visitor.
+	StickyCookieKey string
+
 	// TrackerPublicURL is where a browser reaches apps/tracker directly
 	// (dev: http://localhost:8081) — used by apps/api only to mint the
 	// PWA constructor's test-page links (internal/pwa/testlink.go). Real
@@ -195,6 +201,7 @@ func load(portVar, portDefault, defaultServiceName string) (Config, error) {
 		IntegrationEncryptionKey: getEnv("INTEGRATION_ENCRYPTION_KEY", ""),
 		AdAccountEncryptionKey:   getEnv("ADACCOUNT_ENCRYPTION_KEY", ""),
 		LandingLinkKey:           getEnv("LANDING_LINK_KEY", ""),
+		StickyCookieKey:          getEnv("STICKY_COOKIE_KEY", ""),
 		FXProvider:               getEnv("FX_PROVIDER", "ecb"),
 		SentryDSN:                getEnv("SENTRY_DSN", ""),
 		SentryEnvironment:        getEnv("SENTRY_ENVIRONMENT", ""),

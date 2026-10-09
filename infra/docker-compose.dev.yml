@@ -252,6 +252,10 @@ services:
       # points at their assets. No storage credentials: the tracker only
       # builds public URLs, it never reads or writes objects.
       LANDING_LINK_KEY: "19RzlC3SBPwVig37KNN84MG90P84kvYsr8dVA+jnXn8="
+      # Signs sticky cookies (apps/tracker/sticky.go). Dev-only value;
+      # a real deployment sets its own and keeps it: changing it re-buckets
+      # every returning visitor.
+      STICKY_COOKIE_KEY: "qTA7h7I11yKvJn3xWZQQHKGN2Jvc6WFgS7qVIWW/qy8="
       S3_ENDPOINT: http://minio:9000
       S3_PUBLIC_ENDPOINT: http://localhost:9000
       S3_BUCKET: flox

@@ -41,8 +41,10 @@ matched / why not / why this flow / why fallback / sticky applied from where.
 ## Sticky assignment semantics (§39-STICKY — critical)
 
 ```
-SOURCE OF TRUTH: client cookie sf_{campaignId} = "setId:flowId[:clickId]".
+SOURCE OF TRUTH: client cookie sf_{campaignId} = "setId:flowId[:clickId].sig".
   Survives Redis eviction, restarts, cross-session returns.
+  sig = HMAC-SHA256(STICKY_COOKIE_KEY, "sf|campaignId|setId:flowId[:clickId]"),
+  first 16 bytes, base64url (apps/tracker/sticky.go; tech audit T5).
 
 REDIS: cache/acceleration ONLY, never the authority. Cold Redis still yields
   the correct sticky flow via the cookie.
@@ -56,6 +58,20 @@ CONFIG FLAGS:
 
 Redis-only sticky is forbidden — it silently corrupts A/B test data on
 eviction with no visible error.
+
+**Only cookies the tracker issued count.** An unsigned, re-signed,
+tampered or moved-between-campaigns cookie, or one whose ids are not ULIDs,
+is ignored: the visit is routed as a new one (filters apply) and gets a
+fresh signed cookie (`flox_sticky_cookies_rejected_total{reason}`). Before
+this a visitor could write any `setId:flowId` and skip the stream set's
+geo/bot filters, and with `stickyFlowKeepClickId` put any click_id into the
+chain. Cookies issued before signing are ignored once — the deterministic
+visit-key pick (§38) puts most of those visitors back in the same flow;
+with keepClickId they get a new click_id. A signed cookie still does not
+re-run the stream set's filters on return (unchanged product behavior:
+the visitor passed them when the cookie was issued). `STICKY_COOKIE_KEY`
+is required by the tracker, the same on every replica, and kept: a new
+key re-buckets every returning visitor.
 
 ## WebView bounce vs. moderator cloaking (§73 — keep separate)
 

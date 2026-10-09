@@ -177,6 +177,17 @@ var (
 		Buckets:   []float64{.005, .01, .025, .05, .1, .25, .5, 1, 2.5, 5},
 	})
 
+	// StickyCookiesRejectedTotal counts sticky cookies the tracker ignored
+	// (apps/tracker/sticky.go, tech audit T5): unsigned (issued before
+	// signing, or forged), bad_signature (forged or another key), malformed
+	// (signed but not ULIDs — a bug). Steady bad_signature is someone
+	// trying.
+	StickyCookiesRejectedTotal = promauto.NewCounterVec(prometheus.CounterOpts{
+		Namespace: namespace,
+		Name:      "sticky_cookies_rejected_total",
+		Help:      "Sticky cookies ignored, by reason.",
+	}, []string{"reason"})
+
 	// AttributionOutcomesTotal counts how conversions were attributed
 	// (attribution.Outcome: attributed, unknown_click, ambiguous, …). A
 	// rising unknown_click share means clicks are not reaching ClickHouse
