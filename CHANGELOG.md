@@ -5,6 +5,24 @@ per-phase, matching `CLAUDE.md`'s phase protocol. The one exception is
 [Between phases], below: spec amendments and the code changes that follow from
 them land between phases and would otherwise be invisible here.
 
+## [Between phases] — Cross-tenant ids in request bodies and queries
+
+The route walk covered ids in the path; this covers ids in bodies and query strings.
+
+- `TestEveryReferenceRefusesAnotherOrganizationsIDs` (`api/tenant_isolation_routes_test.go`):
+  25 requests whose body or query refers to other resources — campaign, offer, tracking link,
+  cost entry, event mapping, alert rule, stream set flows (landing, PWA, postlanding, offer,
+  network) and pixels, tag assignments, gallery files and folders, LTV filters, postback replay,
+  referral transactions, the organization chosen at sign-in. Each first succeeds with A's own
+  ids (the body is valid), then every reference field is sent with B's id and with an id that
+  exists nowhere: same status, same refusal, no other id of B's in the answer, and — checked
+  after each call — no row of A's referring to B. B's rows must not change.
+- A guard reads every `json:"…Id(s)"` tag under `internal/`: a new one needs a case or an entry
+  in `notReferences` with a reason.
+- Verified by removing the traffic-source ownership check from campaigns: caught as a different
+  answer and as a stored reference. No real findings: a flow's `networkId` is derived from its
+  offer, so a sent one is never stored.
+
 ## [Between phases] — Tech audit §16: cross-tenant route walk, slow Postgres
 
 Two of the three tests the audit's §16 still lacked; the third, a load test in the target

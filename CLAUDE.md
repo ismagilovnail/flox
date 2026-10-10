@@ -58,8 +58,9 @@ STATUS        : marketer audit closed (#1–#12, #13 platform limit). Tech audit
                 test in target network, prod restore drill). Still open:
                 DO1, AN5, CQ1, CQ3 partly, load test in target network.
                 §16 tests: PG latency (tracker, TCP proxy) and cross-tenant
-                walk of every API route (buildServer split from run) done.
-LAST COMMIT   : test(api,tracker): cross-tenant route walk, slow Postgres.
+                walk of every API route (buildServer split from run) done;
+                B's ids in request bodies/queries covered too.
+LAST COMMIT   : test(api): cross-tenant ids in request bodies and queries.
 UNCOMMITTED   : none expected. Dev DB fresh from `make dev-fresh CONFIRM=yes`
                 (password flox-demo-2026); `make dev-status` shows what is in it.
 NEXT          : wait for the user — the next phase. CI (DO1) is the user's own
