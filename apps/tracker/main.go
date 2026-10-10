@@ -1,9 +1,9 @@
-// Command tracker is the FLOX hot-path click/redirect service (§41,
-// Phase 21). It is a separate binary from apps/api so the redirect path
-// can be deployed and scaled independently, but shares
-// apps/internal/routing and apps/internal/classifier with it — there is
-// exactly one implementation of routing and classification in the system
-// (ARCHITECTURE.md, CLAUDE.md non-negotiable #1).
+// Command tracker is the FLOX hot-path click/redirect service (§41). It is
+// a separate binary from apps/api so the redirect path can be deployed and
+// scaled independently, but shares apps/internal/routing and
+// apps/internal/classifier with it — there is exactly one implementation of
+// routing and classification in the system (ARCHITECTURE.md, CLAUDE.md
+// non-negotiable #1).
 package main
 
 import (
@@ -82,12 +82,9 @@ func run() error {
 		return err
 	}
 
-	// See apps/api/main.go's identical construction — same TRUSTED_PROXIES
-	// value, same reasoning (security audit finding #2). apps/tracker's
-	// resolved IP feeds classifier.Input (geo/ASN) and the visit
-	// fingerprint (§38's deterministic flow pick), so a spoofable one here
-	// let a visitor choose its own A/B arm and defeat geo targeting, not
-	// just bypass a rate limit.
+	// Same TRUSTED_PROXIES as apps/api. The resolved IP feeds geo/ASN and
+	// the visit hash (§38's deterministic flow pick): a spoofable one would
+	// let a visitor choose its own A/B arm and defeat geo targeting.
 	clientIP, err := clientip.New(clientip.ParseList(cfg.TrustedProxies), logger)
 	if err != nil {
 		logger.Error("trusted proxy configuration failed", "error", err)
@@ -118,13 +115,9 @@ func run() error {
 	defer db.Close()
 	metrics.RegisterPgxPool(db, "tracker")
 
-	// §43's durable queue (apps/worker's ClickHouse consumer, Phase 25)
-	// replaces the structured-log stand-in this used through Phase 24 —
-	// exactly the one-line swap that design promised, because everything
-	// upstream only ever sees the eventbuf.Sink interface.
-	//
-	// With NATS_URL set, events go to the JetStream stream instead and the
-	// queue only takes what NATS refuses (internal/eventstream). The
+	// Events go to the Postgres event_queue, which apps/worker loads into
+	// ClickHouse (§43). With NATS_URL set they go to the JetStream stream
+	// and the queue only takes what NATS refuses (internal/eventstream). The
 	// connection opens first so it closes after the buffer's final flush.
 	var sink eventbuf.Sink = eventqueue.NewSink(eventqueue.NewPostgresQueue(db))
 	if cfg.NATSURL != "" {
@@ -174,9 +167,9 @@ func run() error {
 		reloadGeoIP(ctx, geoDBs, logger)
 	}
 
-	// Routing reads come from memory (audit 2026-10-06, RL1/A1): Postgres
-	// slow or down no longer stalls or fails clicks for campaigns already
-	// seen, and every edit flushes the cache through LISTEN/NOTIFY.
+	// Routing reads come from memory (tech audit RL1): a slow or down
+	// Postgres does not stall or fail clicks for campaigns already seen, and
+	// every edit flushes the cache through LISTEN/NOTIFY.
 	routes := routingcache.New(routingstore.New(db), routingcache.Config{}, logger)
 	go routes.Listen(ctx, cfg.DatabaseURL)
 
@@ -192,7 +185,7 @@ func run() error {
 
 	// Internal landings (docs/landings.md, "Serving visitors"). Both
 	// dependencies are optional: without a signing key internal landing
-	// stages are skipped (straight to the destination, as before), without
+	// stages are skipped (straight to the destination), without
 	// storage pages are served with no <base href>.
 	if key, err := landinglink.ParseKey(cfg.LandingLinkKey); err != nil {
 		logger.Warn("internal landings disabled: flows with one redirect straight to their destination", "error", err)
@@ -208,7 +201,7 @@ func run() error {
 	// ClickHouse is connected in the background: a down analytics store
 	// must not block the redirect path (CLAUDE.md #9) or keep the tracker
 	// from starting. Until it connects, postbacks are recorded unknown_click
-	// and retried by the worker (audit 2026-10-06, T1), and no offer is
+	// and retried by the worker (tech audit T1), and no offer is
 	// capped.
 	clickHouse := &lateClickHouse{}
 	go clickHouse.connect(ctx, db, cfg.ClickHouse, logger)
@@ -220,14 +213,11 @@ func run() error {
 	handler.caps = offerCaps
 	attributionSvc := attribution.NewService(clickResolver)
 
-	// Redis is best-effort at startup, matching §45's "REDIS UNAVAILABLE:
-	// fall through and record the event" at runtime: a postback correctness
-	// rule must not become a tracker-availability dependency, especially
-	// since the redirect path (this binary's actual latency budget) never
-	// touches Redis at all. conversion.PostgresStore alone is already
-	// correct — the cache only saves a round trip.
-	// The store records a conversion together with its CPA event and its
-	// outgoing postback in one transaction (audit 2026-10-06, D1).
+	// Redis is optional (§45: "REDIS UNAVAILABLE: fall through and record
+	// the event"): the redirect path never touches it, and PostgresStore
+	// alone is correct — the cache only saves a round trip. The store
+	// records a conversion, its CPA event and its outgoing postback in one
+	// transaction (tech audit D1).
 	var convStore conversion.Store = conversion.NewPostgresStore(db).WithDeliveries(postback.NewPostgresStore(db))
 	// Without Redis the refused-postback limit counts in this process.
 	limiter := ratelimit.New(nil, logger)
@@ -264,14 +254,9 @@ func run() error {
 	}
 
 	r := chi.NewRouter()
-	// RequestID + echoing it back is a plain context.WithValue and one
-	// response header write — negligible next to the hot path's real
-	// costs (DB reads, routing). It is NOT the per-request logging
-	// middleware apps/api uses (requestLogger, apps/internal/httpserver):
-	// that would mean one synchronous slog.Logger.Info call per click,
-	// which IS duplicate work (§53 request-ID correlation is satisfied by
-	// the header alone; the durable record of the click is the async
-	// event, not a log line).
+	// A request ID and its echo cost nothing next to routing. No
+	// per-request log line, unlike apps/api: the header is enough to
+	// correlate (§53), and a click's record is its event, not a log line.
 	r.Use(middleware.RequestID)
 	r.Use(echoRequestID)
 	r.Use(errtrack.Middleware(reporter, logger))
@@ -352,10 +337,8 @@ func logStats(logger *slog.Logger, events *eventbuf.Writer) {
 		"enqueued", s.Enqueued, "written", s.Written, "dropped", s.Dropped, "failed", s.Failed)
 }
 
-// echoRequestID mirrors apps/internal/httpserver's own responseRequestID —
-// duplicated rather than imported, since that package is documented as
-// apps/api's own chi router builder and pulling it in here for one six-line
-// helper would be a heavier coupling than just repeating it.
+// echoRequestID mirrors apps/internal/httpserver's responseRequestID —
+// repeated rather than importing apps/api's router package for six lines.
 func echoRequestID(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if id := middleware.GetReqID(r.Context()); id != "" {

@@ -4,10 +4,9 @@
 //
 // It exists as its own package specifically so internal/routing can stay
 // free of any database driver (§38: "keep routing independent from HTTP
-// handlers"; the same reasoning applies to storage). The tracker uses it
-// on the hot path; the API's future /routing/simulate endpoint (Phase 27)
-// will use the identical loader, so a simulated route and a real one can
-// never be reading differently-shaped configuration.
+// handlers"; the same reasoning applies to storage). The tracker (through
+// internal/routingcache) and the API's /routing/simulate use the same
+// loader, so a simulated route and a real one read the same configuration.
 package routingstore
 
 import (

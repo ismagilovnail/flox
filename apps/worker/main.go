@@ -1,39 +1,21 @@
-// Command worker is FLOX's async background processor. It is a separate
-// binary from apps/api and apps/tracker, same Go module, so it can be
-// deployed and scaled independently of the redirect hot path — exactly the
-// same reasoning apps/tracker's own doc comment gives.
+// Command worker is FLOX's background processor: a separate binary from
+// apps/api and apps/tracker (same module), so it scales apart from the
+// redirect hot path. It runs:
+//   - outgoing postback delivery (internal/postback, §46): due
+//     postback_deliveries, with backoff and a dead-letter state;
+//   - the event pipeline (internal/eventqueue, internal/eventstream; §43,
+//     §47): tracker events into ClickHouse's click, tracking and
+//     conversion tables (docs/analytics-pipeline.md, docs/event-stream.md);
+//   - the postback attempt log (internal/postbacklog, §48) into
+//     postback_events;
+//   - scheduled jobs: ad spend sync (internal/costsync), FX rates,
+//     attribution retries, Postgres/ClickHouse reconciliation, retention,
+//     expired auth cleanup, domain SSL checks, alert evaluation;
+//   - a reaper per queue (internal/queuereaper) returning claims a dead
+//     worker left 'processing'.
 //
-// Three poll loops and one interval scheduler run here:
-//   - internal/postback (§46, Phase 24): outgoing postback delivery —
-//     claim due rows from postback_deliveries and dispatch them, with
-//     exponential backoff and a dead-letter state after repeated failure.
-//   - internal/eventqueue (§43/§47/§48, Phases 25-26): the tracker's event
-//     queue, claimed in batches and routed by type into ClickHouse's
-//     click_events/tracking_events/conversion_events (internal/chstore) —
-//     the real five-table design, replacing Phase 25's disposable single
-//     table. See docs/analytics-pipeline.md.
-//   - internal/postbacklog (§48, Phase 26): the postback attempt audit
-//     log — both directions (conversion's incoming outcomes, postback's
-//     outgoing delivery attempts) claimed in batches and written to
-//     ClickHouse's postback_events.
-//   - internal/costsync (§74/§27-COST): the automated counterpart to the
-//     API's on-demand POST .../connection/sync — on a fixed interval
-//     (costSyncInterval below), pulls ad spend for every connected
-//     Facebook/TikTok ad account across every org and writes matching
-//     campaigns' cost_entries. Unlike the three loops above, this isn't a
-//     claim-a-batch-of-due-rows queue drain — there's no per-row "due"
-//     state to claim, just "sync everyone again every N hours" — so it
-//     runs on a time.Ticker (costsync.Scheduler.RunLoop) rather than
-//     PollLoop's claim/idle shape.
-//
-// One internal/queuereaper loop per queue returns claims a dead worker left
-// 'processing'; on SIGTERM the loops above stop claiming, finish the batch in
-// hand, and run() waits for them (audit 2026-10-06, Q1).
-//
-// §53/Phase 29: GET /metrics (Prometheus) joins /health on this binary's
-// bare mux, and a fifth background goroutine (eventqueue.PollDepth)
-// refreshes the event_queue_depth gauge on the same time.Ticker shape as
-// costSyncScheduler above.
+// On SIGTERM the loops stop claiming, finish the batch in hand, and run()
+// waits for them (tech audit Q1). /health and /metrics are served too.
 package main
 
 import (
@@ -221,9 +203,9 @@ func run() error {
 	}
 	chEvents := chstore.NewEventStore(ch)
 	// One-time copies of existing data into tables added by later schema
-	// files (click_lookup, audit 2026-10-06 CH1). In the background: copying
-	// a large history must not delay event flushing, and until it is done
-	// attribution falls back to the old scan. Interrupted, it reruns on the
+	// files (click_lookup, tech audit CH1). In the background: copying a
+	// large history must not delay event flushing, and until it is done
+	// attribution scans click_events instead. Interrupted, it reruns on the
 	// next start.
 	go func() {
 		start := time.Now()
@@ -245,7 +227,7 @@ func run() error {
 		return err
 	}
 	// Reference FX rates: without them every non-USD payout and spend has no
-	// USD value and drops out of Revenue/Cost/ROI (audit 2026-10-06, AN1).
+	// USD value and drops out of Revenue/Cost/ROI (tech audit AN1).
 	// Same "fail loudly at boot" bar as the key above: a typo must not
 	// silently leave every non-USD amount without a USD value.
 	var fxProvider fx.Provider
@@ -270,24 +252,16 @@ func run() error {
 	costSyncScheduler := costsync.NewScheduler(costSyncSvc, adAccountRepo, logger)
 
 	attemptLogQueue := postbacklog.NewPostgresQueue(db, logger)
-	// otelhttp.NewTransport gives each outbound postback delivery its own
-	// trace (§53's "trace IDs") — there's no inbound request to inherit a
-	// trace context from here (this fires from a poll loop, not an HTTP
-	// handler), so each call becomes its own root span. A no-op when no
-	// OTel endpoint is configured (telemetry.Setup's own doc comment).
+	// Each outbound postback is its own root trace (§53): it starts in a
+	// poll loop, with no inbound request to inherit one from. A no-op
+	// without an OTel endpoint.
 	//
-	// DialContext: urlsafety.SafeDialContext (§54/Phase 30) — del.URL is
-	// built from a network operator's own postback_url template
-	// (macro-substituted, apps/internal/macro), so this is the one
-	// outbound call in this codebase that fetches an operator-supplied
-	// destination. network.Service.isValidURL only ever ran once, at
-	// save time; SafeDialContext is the delivery-time recheck that
-	// actually stops an SSRF attempt, including one that only appears
-	// after the URL was saved (DNS rebinding). A fresh *http.Transport
-	// rather than http.DefaultTransport, since DialContext can't be set
-	// on the shared package-level default without mutating it for every
-	// other caller in this process — the other field values here match
-	// http.DefaultTransport's own defaults.
+	// SafeDialContext (§54): the URL comes from a network operator's
+	// postback_url template — the one operator-supplied destination this
+	// codebase fetches. Validation at save time cannot stop DNS rebinding;
+	// this check at dial time does. A fresh Transport, since DialContext
+	// cannot be set on http.DefaultTransport without changing it for every
+	// caller; the other fields match its defaults.
 	safeTransport := &http.Transport{
 		DialContext:           urlsafety.SafeDialContext,
 		MaxIdleConns:          100,
@@ -332,9 +306,8 @@ func run() error {
 		}
 	}()
 
-	// Every loop is tracked so shutdown can wait for in-flight batches:
-	// returning from run() while a flusher was mid-insert used to cut its
-	// batch off and leave it 'processing' (audit 2026-10-06, Q1).
+	// Every loop is tracked so shutdown waits for in-flight batches; one cut
+	// off mid-insert would stay 'processing' (tech audit Q1).
 	var loops sync.WaitGroup
 	start := func(fn func()) {
 		loops.Add(1)
@@ -414,7 +387,7 @@ func run() error {
 
 	// unknown_click conversions whose click was not in ClickHouse yet: looked
 	// up again for ~7 hours, then rewritten in Postgres and ClickHouse
-	// (internal/reattribute, audit 2026-10-06 T1).
+	// (internal/reattribute, tech audit T1).
 	retrier := reattribute.New(db, conversion.NewPostgresStore(db), chstore.NewClickResolver(ch), chEvents, logger)
 	logger.Info("attribution retry starting", "interval", reattributeInterval)
 	start(func() { retrier.RunLoop(ctx, reattributeInterval, reattributeBatchSize) })

@@ -1,4 +1,4 @@
-// Command api is the FLOX control-plane HTTP server (§33, Phase 16).
+// Command api is the FLOX control-plane HTTP server (§33).
 package main
 
 import (
@@ -108,12 +108,9 @@ func run() error {
 	defer reporter.Flush(2 * time.Second)
 	logger = slog.New(errtrack.Handler(logger.Handler(), reporter))
 
-	// clientIP resolves the real client address behind TRUSTED_PROXIES,
-	// replacing every previously-unconditional X-Forwarded-For read
-	// (ratelimit.ClientIP, chi's middleware.RealIP) — security audit
-	// finding #2. A malformed TRUSTED_PROXIES entry fails startup rather
-	// than silently narrowing or widening who gets trusted, the same
-	// stance cfg.TOTPEncryptionKey already takes on a bad key.
+	// clientIP resolves the client address behind TRUSTED_PROXIES; nothing
+	// else reads X-Forwarded-For. A malformed entry fails startup rather
+	// than silently narrowing or widening who is trusted.
 	clientIP, err := clientip.New(clientip.ParseList(cfg.TrustedProxies), logger)
 	if err != nil {
 		logger.Error("trusted proxy configuration failed", "error", err)
@@ -221,15 +218,10 @@ func buildServer(ctx context.Context, cfg config.Config, logger *slog.Logger, re
 		go offerCaps.Run(ctx)
 	}
 
-	// Redis, connected here (rather than down where it was previously only
-	// used, inside the ClickHouse-gated conversion-replay block) so
-	// apps/internal/ratelimit can use it too — §54/Phase 30 rate limiting
-	// needs to guard /auth/login and /auth/signup, both registered well
-	// before that block. Best-effort at startup, same stance as every
-	// other Redis-optional path in this codebase (conversion.RedisStore
-	// below reuses this exact client instead of opening a second
-	// connection): a rate limiter that failed closed on a down Redis
-	// would turn a cache outage into a full API outage.
+	// Redis backs the rate limits (§54) and the conversion cache below, one
+	// client for both. Optional: a limiter failing closed on a down Redis
+	// would turn a cache outage into an API outage (/auth/* counts in
+	// process instead, ratelimit.StrictMiddleware).
 	var rdb *redis.Client
 	if cfg.RedisURL != "" {
 		redisCtx, cancelRedis := context.WithTimeout(ctx, 5*time.Second)
@@ -265,19 +257,11 @@ func buildServer(ctx context.Context, cfg config.Config, logger *slog.Logger, re
 	// apiKeySvc exist — it needs tenant.PeekIdentity built from both (see
 	// the comment right before that call).
 
-	// Auth/RBAC (§52, Phase 28A). authSvc.ResolveSession implements
-	// tenant.SessionResolver — tenantMiddleware below replaces the old
-	// X-Organization-Id-header stand-in tenant.Middleware used to be, for
-	// every route mounted under it, with zero changes to those routes'
-	// own handlers (they still only ever read tenant.OrgID(ctx)).
-	// secureCookies is false in development (a Secure cookie is dropped
-	// by browsers over plain http, and this dev stack has no TLS
-	// termination in front of apps/api).
-	// Signup's email-verification link is the one place this codebase
-	// sends a real outbound email (§ auth.Service.Signup's own comment) —
-	// mailer.New only parses SMTP_URL, it doesn't dial anything at
-	// startup, so an unreachable relay surfaces on the first send
-	// attempt, not here.
+	// Auth/RBAC (§52): authSvc resolves sessions for tenantMiddleware below;
+	// routes only ever read tenant.OrgID(ctx). Cookies are Secure outside
+	// development (a Secure cookie is dropped over plain http). mailer.New
+	// only parses SMTP_URL, so an unreachable relay surfaces on the first
+	// send, not at startup.
 	mail, err := mailer.New(cfg.SMTPURL, cfg.MailFrom)
 	if err != nil {
 		logger.Error("mailer configuration failed", "error", err)
@@ -323,36 +307,23 @@ func buildServer(ctx context.Context, cfg config.Config, logger *slog.Logger, re
 		return nil, nil, err
 	}
 
-	// apiKeySvc is constructed here, ahead of tenant.NewMiddleware, so the
-	// same instance both authenticates every tenant-scoped request's
-	// Authorization: Bearer header (security audit finding #4's real-auth
-	// follow-up) and serves the Settings > API keys panel's own CRUD
-	// routes further down — one Service, not two.
+	// One apikey.Service both authenticates Bearer requests (tenant
+	// middleware) and serves the Settings > API keys routes below.
 	apiKeySvc := apikey.NewService(apikey.NewRepository(db), logger)
 
-	// §54/Phase 30: RequireSameOrigin runs OUTSIDE (before) session
-	// resolution — rejecting a forged cross-origin mutation is cheaper
-	// and safer than first looking up whose session it claims to be. A
-	// Bearer-token request naturally has no Origin header (RequireSameOrigin's
-	// own doc comment: absence means a non-browser client), so this needs
-	// no special-casing for API keys.
-	// tenantMiddleware keeps its original name/type (func(http.Handler)
-	// http.Handler) even though it's now two middlewares composed, so
-	// none of this file's r.Use(tenantMiddleware) call sites change.
+	// RequireSameOrigin runs before session resolution (§54): refusing a
+	// forged cross-origin mutation is cheaper and safer than looking up
+	// whose session it claims. Bearer requests carry no Origin and pass.
+	// tenantMiddleware is the two composed.
 	csrfCheck := tenant.RequireSameOrigin(cfg.AppURL, logger)
 	sessionCheck := tenant.NewMiddleware(authSvc, apiKeySvc, logger, cfg.Env != "development")
 	tenantMiddleware := func(next http.Handler) http.Handler { return csrfCheck(sessionCheck(next)) }
 
-	// §54: closes the "general rate limit stays IP-keyed" gap
-	// (ROADMAP.md) — identify resolves a request's org/API-key identity
-	// into context, best-effort, before the general limiter below ever
-	// runs (tenant.PeekIdentity's own doc comment has the full reasoning
-	// and why NewMiddleware, above, doesn't pay for it twice).
-	// generalLimitKey is what actually uses that identity: an API-key-
-	// authenticated request keys by its organization; everything else
-	// (unauthenticated, or session-cookie browser traffic) still keys by
-	// client IP, same as before this phase — a browser session isn't the
-	// "many unrelated requests sharing one IP" case this is fixing.
+	// identify puts the org/API-key identity into context, best-effort,
+	// before the general limiter (§54, tenant.PeekIdentity). The limiter
+	// keys API-key traffic by organization, so one integration does not
+	// share a bucket with everything behind its IP; browser and
+	// unauthenticated traffic is keyed by client IP.
 	identify := tenant.PeekIdentity(authSvc, apiKeySvc, logger)
 	generalLimitKey := func(r *http.Request) string {
 		if scope, ok := tenant.APIKeyScope(r.Context()); ok && scope != "" {
@@ -463,11 +434,10 @@ func buildServer(ctx context.Context, cfg config.Config, logger *slog.Logger, re
 		integrationsHandler.Register(r)
 	})
 
-	// Registrar/DNS automation (§30): domain.Service reads real
-	// Namecheap/Cloudflare credentials through integrationsSvc rather
-	// than a second copy of them — GoDaddy/Route53/cloudflare_registrar/
-	// unmanaged have no real adapter and stay plain operator-declared,
-	// same as before this phase.
+	// Registrar/DNS automation (§30): domain.Service reads Namecheap and
+	// Cloudflare credentials through integrationsSvc. GoDaddy, Route53,
+	// cloudflare_registrar and unmanaged have no adapter and stay
+	// operator-declared.
 	domainHandler := domain.NewHandler(
 		domain.NewService(domain.NewRepository(db), integrationsSvc, domainnamecheap.New(), domaincloudflare.New(), cfg.TrackerDNSTarget, &tlsprobe.Prober{}),
 		requireSettingsWrite,
@@ -697,22 +667,11 @@ func buildServer(ctx context.Context, cfg config.Config, logger *slog.Logger, re
 			clickLogsHandler.Register(r)
 		})
 
-		// Incoming Postback Replay needs the exact dependency graph
-		// apps/tracker/main.go's PostbackHandler already builds to call
-		// apps/internal/conversion.Service.Record for a real network hit —
-		// this used to be deliberately deferred pending exactly this
-		// architecture decision (docs/postback-logs.md). Redis and
-		// ClickHouse-backed attribution get the same best-effort-at-startup
-		// fallback stance tracker uses: a postback-recording rule (§45)
-		// must never become a control-plane-availability dependency. This
-		// whole block already only runs when ch != nil, so — unlike
-		// tracker, which must start even with ClickHouse down —
-		// chConn is guaranteed live here; no attribution.NewMemoryResolver
-		// fallback is needed on this path.
-		//
-		// Reuses rdb (connected once, near the top of run(), so
-		// apps/internal/ratelimit can also use it) rather than opening a
-		// second Redis connection.
+		// Incoming postback replay records through conversion.Service, built
+		// as apps/tracker builds it (docs/postback-logs.md). Redis stays
+		// optional, as in the tracker: recording a postback (§45) must not
+		// depend on it. The block runs only with ClickHouse connected, so
+		// attribution needs no fallback. rdb is the client from above.
 		postbackStore := postback.NewPostgresStore(db)
 		var convStore conversion.Store = conversion.NewPostgresStore(db).WithDeliveries(postbackStore)
 		if rdb != nil {

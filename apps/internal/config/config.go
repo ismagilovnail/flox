@@ -1,9 +1,6 @@
-// Package config loads apps/api's runtime configuration from environment
-// variables. Every variable here already exists in .env.example (§7/§17/§33)
-// — Phase 16 only wires up the ones this phase's server actually uses
-// (HTTP port, log level, OTel). DATABASE_URL/CLICKHOUSE_URL/REDIS_URL/S3_*
-// are parsed and carried on Config now so later phases don't touch this
-// file again, but nothing connects to them yet — that starts Phase 17+.
+// Package config loads the configuration of apps/api, apps/tracker and
+// apps/worker from environment variables, all of them listed in
+// .env.example (docs/environment.md).
 package config
 
 import (
@@ -19,11 +16,9 @@ type Config struct {
 	Env      string // development | staging | production
 	HTTPAddr string // host:port the HTTP server listens on
 	LogLevel string // debug | info | warn | error
-	// AppURL is apps/web's own origin (APP_URL in .env.example) — apps/api
-	// uses it as the one allowed CORS origin (Phase 27): the browser calls
-	// the control-plane API directly from apps/web, a different origin in
-	// dev (localhost:3000 vs :8080), so without this every fetch() would
-	// be blocked before ever reaching a handler.
+	// AppURL is apps/web's origin (APP_URL): the API's one allowed CORS
+	// origin — the browser calls the API directly, from another origin in
+	// dev (localhost:3000 vs :8080).
 	AppURL string
 
 	// --- SMTP / email ---
@@ -96,8 +91,8 @@ type Config struct {
 	// apps/tracker signs internal landings' click links with
 	// (apps/internal/landinglink). Missing or invalid: the tracker logs a
 	// warning at startup and skips internal landing stages — redirecting
-	// straight to the flow's destination, exactly as before landings were
-	// served — rather than serving pages whose links it can't sign.
+	// straight to the flow's destination — rather than serving pages whose
+	// links it can't sign.
 	LandingLinkKey string
 
 	// StickyCookieKey is the HMAC key (32+ raw bytes, base64-encoded) the
@@ -117,9 +112,8 @@ type Config struct {
 	// Local MaxMind GeoLite2 .mmdb file paths — both empty (the default,
 	// since no database ships in the repo; MaxMind's EULA requires a free
 	// account + license key to download one) means apps/tracker falls back
-	// to classifier.NoopGeoProvider/NoopASNProvider, same as before this
-	// existed. See docs/geoip.md for how to obtain and mount real
-	// databases.
+	// to classifier.NoopGeoProvider/NoopASNProvider. See docs/geoip.md for
+	// how to obtain and mount real databases.
 	GeoIPCityDBPath string
 	GeoIPASNDBPath  string
 
@@ -129,16 +123,15 @@ type Config struct {
 	// clientip.DefaultTrustedProxies" (loopback + RFC 1918/4193 private
 	// ranges) — the safe default for a deployment with no reverse proxy
 	// in front of it yet: a public peer address is never in that set, so
-	// X-Forwarded-For is ignored regardless of TRUSTED_PROXIES until a
-	// real proxy's address range is configured here (security audit
-	// finding #2).
+	// X-Forwarded-For is ignored until a real proxy's address range is
+	// configured here.
 	TrustedProxies string
 
 	// --- OpenTelemetry ---
 	OTelExporterOTLPEndpoint string
 	OTelServiceName          string
 
-	// --- Data stores (parsed, not yet connected — Phase 17+) ---
+	// --- Data stores ---
 	DatabaseURL string
 	ClickHouse  ClickHouseConfig
 	RedisURL    string
