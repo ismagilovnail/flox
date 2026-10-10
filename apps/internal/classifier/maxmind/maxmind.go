@@ -12,48 +12,139 @@
 // so this exposes two independent providers, each opening its own file.
 //
 // Lookups are in-memory, memory-mapped reads (geoip2.Open mmaps the
-// file once at startup), not network calls — safe on the tracker's hot
-// path (CLAUDE.md #9). An IP simply absent from the database is not an
-// error in maxminddb's own Lookup semantics (it leaves the result
-// zero-valued) — this package only returns an error for a genuine
-// read/decode failure, never for "not found," so a lookup miss degrades
-// to the same empty GeoResult/ASNResult the Noop providers already
-// return rather than breaking classification for that visit.
+// file), not network calls — safe on the tracker's hot path (CLAUDE.md
+// #9). Reload opens the file again when it changed on disk (replaced by a
+// rename, as the GeoIP updaters do) and swaps it in while lookups go on;
+// the old mapping is closed once no lookup holds it. An IP simply absent
+// from the database is not an error in maxminddb's own Lookup semantics
+// (it leaves the result zero-valued) — this package only returns an error
+// for a genuine read/decode failure, never for "not found," so a lookup
+// miss degrades to the same empty GeoResult/ASNResult the Noop providers
+// already return rather than breaking classification for that visit.
 package maxmind
 
 import (
 	"context"
 	"fmt"
 	"net"
+	"os"
+	"sync"
+	"time"
 
 	"github.com/oschwald/geoip2-golang"
 
 	"github.com/ismagilovnail/flox/apps/internal/classifier"
 )
 
-// GeoProvider reads country/region/city from a GeoLite2-City (or
-// GeoIP2-City) database.
-type GeoProvider struct {
+// db is one .mmdb file, reopened when it changes on disk.
+type db struct {
+	path string
+	kind string // "city" or "ASN", for errors
+
+	mu     sync.RWMutex // lookups hold it read; a swap or Close holds it write
 	reader *geoip2.Reader
+	stamp  stamp
 }
+
+// stamp identifies a version of the file: a rename puts a new inode with
+// its own mtime and size there.
+type stamp struct {
+	info os.FileInfo
+}
+
+func (s stamp) same(info os.FileInfo) bool {
+	return s.info != nil && os.SameFile(s.info, info) &&
+		s.info.ModTime().Equal(info.ModTime()) && s.info.Size() == info.Size()
+}
+
+// reload opens the file if it is new or changed since the last load.
+// On any error the database already loaded stays in use.
+func (d *db) reload() (bool, error) {
+	info, err := os.Stat(d.path)
+	if err != nil {
+		return false, fmt.Errorf("maxmind: opening %s database %q: %w", d.kind, d.path, err)
+	}
+	d.mu.RLock()
+	unchanged := d.stamp.same(info)
+	d.mu.RUnlock()
+	if unchanged {
+		return false, nil
+	}
+	reader, err := geoip2.Open(d.path)
+	if err != nil {
+		return false, fmt.Errorf("maxmind: opening %s database %q: %w", d.kind, d.path, err)
+	}
+	d.mu.Lock()
+	old := d.reader
+	d.reader, d.stamp = reader, stamp{info: info}
+	d.mu.Unlock()
+	if old != nil {
+		_ = old.Close()
+	}
+	return true, nil
+}
+
+// built is when the loaded database was built (its metadata), zero when
+// none is loaded.
+func (d *db) built() time.Time {
+	d.mu.RLock()
+	defer d.mu.RUnlock()
+	if d.reader == nil {
+		return time.Time{}
+	}
+	return time.Unix(int64(d.reader.Metadata().BuildEpoch), 0).UTC()
+}
+
+func (d *db) close() error {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	if d.reader == nil {
+		return nil
+	}
+	err := d.reader.Close()
+	d.reader = nil
+	return err
+}
+
+// GeoProvider reads country/region/city from a GeoLite2-City (or
+// GeoIP2-City, or DB-IP city) database.
+type GeoProvider struct{ db *db }
 
 // NewGeoProvider opens the .mmdb at path. The file stays memory-mapped
-// for the life of the returned provider — call Close on shutdown.
+// until Close or until Reload swaps in a newer one.
 func NewGeoProvider(path string) (*GeoProvider, error) {
-	reader, err := geoip2.Open(path)
-	if err != nil {
-		return nil, fmt.Errorf("maxmind: opening city database %q: %w", path, err)
+	p := LazyGeoProvider(path)
+	if _, err := p.Reload(); err != nil {
+		return nil, err
 	}
-	return &GeoProvider{reader: reader}, nil
+	return p, nil
 }
 
-func (p *GeoProvider) Close() error { return p.reader.Close() }
+// LazyGeoProvider loads nothing yet: lookups return the empty result
+// until a Reload finds the file.
+func LazyGeoProvider(path string) *GeoProvider {
+	return &GeoProvider{db: &db{path: path, kind: "city"}}
+}
+
+// Reload swaps in the file at the path if it changed since the last
+// load; changed reports a swap. An error keeps the current database.
+func (p *GeoProvider) Reload() (changed bool, err error) { return p.db.reload() }
+
+// Built is the loaded database's build time (zero when none is loaded).
+func (p *GeoProvider) Built() time.Time { return p.db.built() }
+
+func (p *GeoProvider) Close() error { return p.db.close() }
 
 func (p *GeoProvider) Lookup(_ context.Context, ip net.IP) (classifier.GeoResult, error) {
 	if ip == nil {
 		return classifier.GeoResult{}, nil
 	}
-	record, err := p.reader.City(ip)
+	p.db.mu.RLock()
+	defer p.db.mu.RUnlock()
+	if p.db.reader == nil {
+		return classifier.GeoResult{}, nil
+	}
+	record, err := p.db.reader.City(ip)
 	if err != nil {
 		return classifier.GeoResult{}, fmt.Errorf("maxmind: city lookup: %w", err)
 	}
@@ -87,28 +178,44 @@ func regionOf(subdivisions []struct {
 }
 
 // ASNProvider reads the autonomous system number from a GeoLite2-ASN (or
-// GeoIP2-ISP) database.
-type ASNProvider struct {
-	reader *geoip2.Reader
-}
+// GeoIP2-ISP, or DB-IP ASN) database.
+type ASNProvider struct{ db *db }
 
 // NewASNProvider opens the .mmdb at path. The file stays memory-mapped
-// for the life of the returned provider — call Close on shutdown.
+// until Close or until Reload swaps in a newer one.
 func NewASNProvider(path string) (*ASNProvider, error) {
-	reader, err := geoip2.Open(path)
-	if err != nil {
-		return nil, fmt.Errorf("maxmind: opening ASN database %q: %w", path, err)
+	p := LazyASNProvider(path)
+	if _, err := p.Reload(); err != nil {
+		return nil, err
 	}
-	return &ASNProvider{reader: reader}, nil
+	return p, nil
 }
 
-func (p *ASNProvider) Close() error { return p.reader.Close() }
+// LazyASNProvider loads nothing yet: lookups return the empty result
+// until a Reload finds the file.
+func LazyASNProvider(path string) *ASNProvider {
+	return &ASNProvider{db: &db{path: path, kind: "ASN"}}
+}
+
+// Reload swaps in the file at the path if it changed since the last
+// load; changed reports a swap. An error keeps the current database.
+func (p *ASNProvider) Reload() (changed bool, err error) { return p.db.reload() }
+
+// Built is the loaded database's build time (zero when none is loaded).
+func (p *ASNProvider) Built() time.Time { return p.db.built() }
+
+func (p *ASNProvider) Close() error { return p.db.close() }
 
 func (p *ASNProvider) Lookup(_ context.Context, ip net.IP) (classifier.ASNResult, error) {
 	if ip == nil {
 		return classifier.ASNResult{}, nil
 	}
-	record, err := p.reader.ASN(ip)
+	p.db.mu.RLock()
+	defer p.db.mu.RUnlock()
+	if p.db.reader == nil {
+		return classifier.ASNResult{}, nil
+	}
+	record, err := p.db.reader.ASN(ip)
 	if err != nil {
 		return classifier.ASNResult{}, fmt.Errorf("maxmind: asn lookup: %w", err)
 	}

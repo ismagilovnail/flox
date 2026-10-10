@@ -33,8 +33,8 @@ infra/k8s/
 | `worker` | Deployment | 2 | `/health` | replicas share the queues and the NATS consumer; grace 60 s |
 | `web` | Deployment + HPA 2–6 | 2 | `/api/health` | Ingress `app.<domain>` |
 | `edge` | Deployment + LoadBalancer | 2 | TCP | Caddy, on-demand TLS for tracking domains; certificates on one ReadWriteMany volume shared by the replicas |
-| `nats` | StatefulSet | 3 | `/healthz?js-enabled-only=true` | JetStream, 20 Gi each (`max_file_store` 18G ≥ the 10 GiB stream), lame-duck on stop; clients log in (`NATS_PASSWORD`), NetworkPolicy: tracker/worker only |
-| `geoip` | Deployment | 1 | ready `/ready` once both databases are there | downloads DB-IP Lite monthly, serves it to tracker pods; CronJob `geoip-restart-tracker` on the 4th |
+| `nats` | StatefulSet | 3 | `/healthz?js-enabled-only=true` | JetStream, 20 Gi each (`max_file_store` 18G ≥ the 10 GiB stream), lame-duck on stop; clients log in (`NATS_PASSWORD`), so do the routes between servers (`NATS_ROUTE_PASSWORD`); NetworkPolicy: tracker/worker only |
+| `geoip` | Deployment | 1 | ready `/ready` once both databases are there | downloads DB-IP Lite monthly, serves it to tracker pods; a sidecar in each tracker pod copies a new month in, the tracker swaps it in without a restart |
 | `backup` | Deployment | 1 | `/health` | `flox-backup serve` with `BACKUP_POSTGRES=off`: ClickHouse + files bucket nightly, drill monthly; `/metrics` |
 | `migrate` | Job | — | — | before every rollout, never inside pods (goose has no lock); a prebuilt goose + the migrations, ~50 MB |
 
@@ -121,22 +121,34 @@ HPA scale-up copies ~130 MB over the pod network. The init container is
 best effort, like GeoIP in the tracker itself: with `geoip` unreachable
 the pod starts without geo and both logs say so.
 
-The tracker opens the databases at start, so the `geoip-restart-tracker`
-CronJob (the 4th, 04:30 UTC; its ServiceAccount may only patch the
-tracker Deployment) rolls the trackers onto the new month. DB-IP Lite is
-CC BY 4.0 — `docs/geoip.md` has the attribution. For MaxMind instead,
-replace the `update` container with `geoipupdate` writing `city.mmdb` and
-`asn.mmdb` to the same volume.
+A new month needs no restart. The `geoip-sync` sidecar (`sync.sh loop`)
+asks the server for `city.month`/`asn.month` hourly and, when they differ
+from the pod's, downloads that database and renames it into place; the
+tracker checks its files every minute and swaps a changed one in while
+clicks go on (log `geoip database loaded`, with the build date). A pod
+that started without geo picks it up the same way once `geoip` has it.
+DB-IP Lite is CC BY 4.0 — `docs/geoip.md` has the attribution. For
+MaxMind instead, replace the `update` container with `geoipupdate`
+writing `city.mmdb` and `asn.mmdb` (and a `city.month`/`asn.month` that
+changes with each release) to the same volume.
 
 ## NATS
 
 Clients log in: user `flox`, password `NATS_PASSWORD` from the Secret,
 `NATS_URL=nats://flox:<password>@nats:4222` with the same password (hex or
 alphanumeric — it sits in a URL). The client log prints the URL with the
-password masked. Routes between the servers (6222) carry no login; the
-NetworkPolicy keeps that port to the NATS pods. Changing the password:
-update both keys, then `deploy.sh` — NATS restarts first, and tracker
-events go through the Postgres fallback until the trackers roll.
+password masked. Routes between the servers (6222) log in too: user
+`route`, password `NATS_ROUTE_PASSWORD` (letters and digits — NATS takes
+no variables in a route URL, so the pod writes its config with the
+password filled in, to its own `/var/run/nats`, and refuses to start when
+the key is missing or has other characters). The NetworkPolicy keeps
+that port to the NATS pods as well. One server (`nats-single`) has no
+routes and needs no route password. Changing a password: update the
+keys, then `deploy.sh` — NATS restarts first, and tracker events go
+through the Postgres fallback until the trackers roll. A new route
+password reaches the servers one at a time: servers on the old and the
+new one do not connect, so the stream can lose its quorum for a moment
+mid-roll — tracker events then take the Postgres fallback too.
 
 ## Local cluster (minikube)
 
@@ -199,13 +211,19 @@ Let's Encrypt rate-limits many at once). To keep them, before deploying:
 scale `edge` to 0, run a pod mounting both claims, `cp -a` the old `/data`
 into the new one, then deploy and delete `edge-certificates`.
 
+## Upgrading to route login and GeoIP without restarts
+
+Add `NATS_ROUTE_PASSWORD` to the Secret before deploying (`openssl rand
+-hex 24`) — without it the three NATS servers refuse to start. `kubectl
+apply` does not delete what a manifest no longer has, so remove the
+monthly restart job once:
+
+```
+kubectl -n flox delete cronjob,rolebinding,role,serviceaccount geoip-restart-tracker
+```
+
 ## Known gaps
 
 - **The edge needs ReadWriteMany storage.** On a cluster without it, set
   the edge to 1 replica and the volume to ReadWriteOnce (a patch in the
   overlay) — that loses the second replica, nothing else.
-- **NATS routes carry no login**, only the NetworkPolicy; without an
-  enforcing CNI, add `cluster { authorization { … } }` and credentials in
-  the routes.
-- **The tracker reads GeoIP at start only**, so the monthly restart is a
-  rolling restart of every tracker pod.

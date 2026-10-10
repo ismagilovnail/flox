@@ -147,30 +147,30 @@ func run() error {
 	defer events.Close()
 	metrics.RegisterEventBufStats(events)
 
-	// Geo/ASN are best-effort at startup, same stance as ClickHouse/Redis
-	// below (CLAUDE.md #9): an unset or bad GeoIP path must never block
-	// the redirect path or prevent the tracker from starting — it just
-	// falls back to classifier.New's own Noop defaults, exactly the
-	// pre-existing behavior when nothing is configured.
+	// Geo/ASN are best-effort, same stance as ClickHouse/Redis below
+	// (CLAUDE.md #9): an unset or bad GeoIP path must never block the
+	// redirect path or prevent the tracker from starting. A configured
+	// path is watched instead: until a file is there lookups come back
+	// empty (as classifier.New's Noop defaults would), and a file
+	// replaced on disk — a new month — is swapped in within a minute,
+	// no restart (docs/geoip.md).
 	var geoProvider classifier.GeoProvider
-	if cfg.GeoIPCityDBPath != "" {
-		p, err := maxmind.NewGeoProvider(cfg.GeoIPCityDBPath)
-		if err != nil {
-			logger.Warn("geoip city database unavailable, geo classification disabled", "path", cfg.GeoIPCityDBPath, "error", err)
-		} else {
-			defer p.Close()
-			geoProvider = p
-		}
-	}
 	var asnProvider classifier.ASNProvider
+	var geoDBs []geoIPDB
+	if cfg.GeoIPCityDBPath != "" {
+		p := maxmind.LazyGeoProvider(cfg.GeoIPCityDBPath)
+		defer p.Close()
+		geoProvider = p
+		geoDBs = append(geoDBs, geoIPDB{cfg.GeoIPCityDBPath, p})
+	}
 	if cfg.GeoIPASNDBPath != "" {
-		p, err := maxmind.NewASNProvider(cfg.GeoIPASNDBPath)
-		if err != nil {
-			logger.Warn("geoip asn database unavailable, asn classification disabled", "path", cfg.GeoIPASNDBPath, "error", err)
-		} else {
-			defer p.Close()
-			asnProvider = p
-		}
+		p := maxmind.LazyASNProvider(cfg.GeoIPASNDBPath)
+		defer p.Close()
+		asnProvider = p
+		geoDBs = append(geoDBs, geoIPDB{cfg.GeoIPASNDBPath, p})
+	}
+	if len(geoDBs) > 0 {
+		reloadGeoIP(ctx, geoDBs, logger)
 	}
 
 	// Routing reads come from memory (audit 2026-10-06, RL1/A1): Postgres
@@ -357,4 +357,50 @@ func echoRequestID(next http.Handler) http.Handler {
 		}
 		next.ServeHTTP(w, r)
 	})
+}
+
+// geoIPDB is one GeoIP database file the tracker watches.
+type geoIPDB struct {
+	path string
+	geoIPReloader
+}
+
+type geoIPReloader interface {
+	Reload() (changed bool, err error)
+	Built() time.Time
+}
+
+// reloadGeoIP loads the GeoIP databases now, then checks every minute for
+// a file replaced on disk. A missing or broken file is logged once until
+// it changes; the database already loaded stays in use.
+func reloadGeoIP(ctx context.Context, dbs []geoIPDB, logger *slog.Logger) {
+	failing := make([]string, len(dbs))
+	check := func() {
+		for i, db := range dbs {
+			changed, err := db.Reload()
+			switch {
+			case err != nil:
+				if msg := err.Error(); msg != failing[i] {
+					failing[i] = msg
+					logger.Warn("geoip database unavailable, keeping the one loaded (if any)", "path", db.path, "error", err)
+				}
+			case changed:
+				failing[i] = ""
+				logger.Info("geoip database loaded", "path", db.path, "built", db.Built().Format(time.DateOnly))
+			}
+		}
+	}
+	check()
+	go func() {
+		t := time.NewTicker(time.Minute)
+		defer t.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-t.C:
+				check()
+			}
+		}
+	}()
 }

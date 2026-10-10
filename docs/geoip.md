@@ -32,9 +32,13 @@ provided DB-IP is credited somewhere in the product (a footer/about/
 credits page) if this is ever shown to people outside your own org; see
 https://db-ip.com/db/lite.php for the exact attribution text.
 
-To refresh or switch to real MaxMind data instead, place the files (any
-name — just match the two `GEOIP_*_DB_PATH` env vars) in `infra/geoip/`
-and restart the `tracker` service:
+To refresh, replace a file under its configured name: the tracker
+checks its two files every minute and swaps a changed one in without a
+restart (log `geoip database loaded`). Write the new file beside the old
+one and `mv` it over — never copy over the open file in place, it is
+memory-mapped. A file missing at start is fine too: lookups return no geo
+until it appears. To switch to real MaxMind data under other names, change
+the two `GEOIP_*_DB_PATH` env vars and restart the `tracker` service:
 `docker compose -f infra/docker-compose.dev.yml restart tracker`.
 
 ## Alternative: MaxMind GeoLite2 (more accurate, needs a free account)
@@ -54,7 +58,8 @@ redistributing the actual files, so neither this ships in the repo.
    name the files `dbip-city-lite.mmdb`/`dbip-asn-lite.mmdb` to match the
    existing defaults — the reader doesn't care about the filename or
    vendor, only the file's own internal `DatabaseType` metadata).
-5. Restart the `tracker` service.
+5. Restart the `tracker` service if the env vars changed (same names:
+   `mv` them in, the tracker picks them up within a minute).
 
 Neither this repo nor this session created a MaxMind account — that step
 is the user's own to take if ever wanted; DB-IP Lite is what's actually
@@ -63,8 +68,9 @@ live right now.
 ## Kubernetes
 
 `infra/k8s/components/geoip` downloads DB-IP Lite once a month inside the
-cluster and copies it into each tracker pod at start, as `city.mmdb` and
-`asn.mmdb` (`docs/kubernetes.md`, GeoIP).
+cluster and copies it into each tracker pod, as `city.mmdb` and
+`asn.mmdb` — at start, and again by a sidecar when a new month is out;
+the tracker swaps it in without a restart (`docs/kubernetes.md`, GeoIP).
 
 ## `infra/geoip/` is gitignored either way
 

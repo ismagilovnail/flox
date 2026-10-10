@@ -50,8 +50,10 @@ STATUS        : marketer audit closed (#1–#12, #13 platform limit). Tech audit
                 NATS cluster; verified in minikube; docs/kubernetes.md) done,
                 its gaps closed (ClickHouse/bucket backups with
                 BACKUP_POSTGRES=off, edge 2 replicas on RWX, GeoIP component,
-                NATS login).
-LAST COMMIT   : feat(infra): k8s backups, edge HA, GeoIP, NATS login.
+                NATS login), then NATS route login (NATS_ROUTE_PASSWORD) and
+                GeoIP hot reload (tracker swaps a changed .mmdb within a
+                minute; geoip-sync sidecar replaces the restart CronJob).
+LAST COMMIT   : feat(infra): NATS route login, GeoIP without restarts.
 UNCOMMITTED   : none expected. Dev DB fresh from `make dev-fresh CONFIRM=yes`
                 (password flox-demo-2026); `make dev-status` shows what is in it.
 NEXT          : wait for the user — the next phase. CI (DO1) is the user's own

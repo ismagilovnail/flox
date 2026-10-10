@@ -5,6 +5,27 @@ per-phase, matching `CLAUDE.md`'s phase protocol. The one exception is
 [Between phases], below: spec amendments and the code changes that follow from
 them land between phases and would otherwise be invisible here.
 
+## [Between phases] — NATS route login, GeoIP without restarts
+
+Closes the two gaps the previous entry left in `docs/kubernetes.md`.
+
+- NATS routes log in: `cluster { authorization }` with user `route`, password
+  `NATS_ROUTE_PASSWORD` (new Secret key, letters and digits). NATS expands no variables inside a
+  route URL, so the pod writes its config with the password filled in to its own
+  `/var/run/nats` and refuses to start when the key is missing or malformed. `nats-single` needs
+  none. Verified with the real config on three servers in Docker: the cluster forms, a server
+  with a wrong password gets `Authorization Violation`.
+- GeoIP reloads in place: `maxmind` providers watch their file (inode, mtime, size) and swap a
+  changed one in under a lock while lookups go on; a broken file keeps the loaded one. The
+  tracker opens them lazily (a file missing at start means no geo until it appears, not geo off
+  until a restart) and checks every minute, logging `geoip database loaded` with the build date.
+- `components/geoip`: the monthly `geoip-restart-tracker` CronJob and its RBAC are gone; a
+  `geoip-sync` sidecar in each tracker pod (`sync.sh`, also the init container) compares the
+  server's `*.month` hourly and renames a new month into place. Verified in minikube: a forced
+  refresh was picked up within a minute, no container restart. Existing installs delete the old
+  CronJob once (`docs/kubernetes.md`, upgrading).
+- Dev: replacing a file in `infra/geoip/` (by `mv`) no longer needs a tracker restart.
+
 ## [Between phases] — Kubernetes: backups, edge HA, GeoIP, NATS login
 
 Closes the four gaps the first Kubernetes version listed.

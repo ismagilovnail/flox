@@ -3,7 +3,8 @@
 # serves it inside the cluster; every tracker pod copies the files in at
 # start, so the vendor sees one download a month, not one per pod, and a
 # scale-up copies ~130 MB over the pod network instead of the internet.
-# A CronJob restarts the trackers early each month to load the new month.
+# A sidecar in each tracker pod copies a new month in (sync.sh) and the
+# tracker swaps it in without a restart.
 #
 # DB-IP Lite is CC BY 4.0: credit DB-IP where geo data is shown to people
 # outside your organization (docs/geoip.md).
@@ -17,6 +18,9 @@ configMapGenerator:
   - name: geoip-update
     files:
       - update.sh
+  - name: geoip-sync
+    files:
+      - sync.sh
 
 patches:
   - path: tracker-patch.yaml

@@ -1,6 +1,9 @@
-# Copies the databases from the geoip server before the tracker starts.
-# Best effort, as GeoIP is in the tracker itself (docs/geoip.md): with the
-# server unreachable the tracker starts without geo and logs it.
+# Copies the databases from the geoip server before the tracker starts,
+# then keeps them current: the sidecar checks hourly and renames a new
+# month into place, and the tracker swaps it in within a minute — no
+# restart. Best effort, as GeoIP is in the tracker itself (docs/geoip.md):
+# with the server unreachable the tracker starts without geo, logs it, and
+# picks the databases up once they arrive.
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -11,16 +14,7 @@ spec:
       initContainers:
         - name: geoip
           image: flox/tracker
-          command:
-            - sh
-            - -c
-            - |
-              for f in city asn; do
-                wget -q -T 60 -O "/geoip/$f.tmp" "http://geoip:8080/$f.mmdb" &&
-                  mv "/geoip/$f.tmp" "/geoip/$f.mmdb" ||
-                  { rm -f "/geoip/$f.tmp"; echo "geoip: no $f database from http://geoip:8080 — starting without it" >&2; }
-              done
-              ls -l /geoip
+          command: ["sh", "/geoip-sync/sync.sh"]
           resources:
             requests: {cpu: 50m, memory: 32Mi}
             limits: {memory: 64Mi}
@@ -29,8 +23,8 @@ spec:
             readOnlyRootFilesystem: true
             capabilities: {drop: [ALL]}
           volumeMounts:
-            - name: geoip
-              mountPath: /geoip
+            - {name: geoip, mountPath: /geoip}
+            - {name: geoip-sync, mountPath: /geoip-sync, readOnly: true}
       containers:
         - name: tracker
           env:
@@ -38,7 +32,24 @@ spec:
               value: /geoip/city.mmdb
             - name: GEOIP_ASN_DB_PATH
               value: /geoip/asn.mmdb
+        - name: geoip-sync
+          image: flox/tracker
+          command: ["sh", "/geoip-sync/sync.sh", "loop"]
+          resources:
+            requests: {cpu: 10m, memory: 16Mi}
+            limits: {memory: 64Mi}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: {drop: [ALL]}
+          volumeMounts:
+            - {name: geoip, mountPath: /geoip}
+            - {name: geoip-sync, mountPath: /geoip-sync, readOnly: true}
       volumes:
+        # A new month is downloaded beside the old one before the rename.
         - name: geoip
           emptyDir:
             sizeLimit: 512Mi
+        - name: geoip-sync
+          configMap:
+            name: geoip-sync

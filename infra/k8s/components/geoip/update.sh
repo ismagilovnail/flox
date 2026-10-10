@@ -27,7 +27,7 @@ while :; do
       echo "geoip: no $kind database for $this${have:+ (keeping $have)}" >&2
   done
   rm -f /tmp/*.gz /tmp/*.mmdb
-  # Ready once both exist: trackers copy them at start.
+  # Ready once both exist: trackers copy them (sync.sh).
   [ -s city.mmdb ] && [ -s asn.mmdb ] && date -u +%FT%TZ > ready
   sleep 86400
 done

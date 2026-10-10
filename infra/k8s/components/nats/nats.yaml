@@ -34,12 +34,28 @@ spec:
       containers:
         - name: nats
           image: nats:2.10-alpine
-          args: ["--config", "/etc/nats/nats.conf"]
+          # The route password goes into the route URLs (nats.conf), so the
+          # config is written to the pod's own tmpfs with it filled in.
+          command:
+            - sh
+            - -c
+            - |
+              if grep -q @ROUTE_PASSWORD@ /etc/nats/nats.conf; then
+                case "$NATS_ROUTE_PASSWORD" in
+                  ""|*[!A-Za-z0-9]*) echo "NATS_ROUTE_PASSWORD must be set, letters and digits only (it goes in the route URLs)" >&2; exit 1 ;;
+                esac
+              fi
+              umask 077
+              sed "s/@ROUTE_PASSWORD@/$NATS_ROUTE_PASSWORD/g" /etc/nats/nats.conf > /var/run/nats/nats.conf &&
+                exec nats-server --config /var/run/nats/nats.conf
           env:
             - name: POD_NAME
               valueFrom: {fieldRef: {fieldPath: metadata.name}}
             - name: NATS_PASSWORD
               valueFrom: {secretKeyRef: {name: flox-secrets, key: NATS_PASSWORD}}
+            # Cluster routes only; a single server (nats-single) needs none.
+            - name: NATS_ROUTE_PASSWORD
+              valueFrom: {secretKeyRef: {name: flox-secrets, key: NATS_ROUTE_PASSWORD, optional: true}}
           ports:
             - {name: client, containerPort: 4222}
             - {name: cluster, containerPort: 6222}
@@ -126,9 +142,9 @@ spec:
     matchLabels:
       app.kubernetes.io/name: nats
 ---
-# Clients authenticate (nats.conf, NATS_PASSWORD); on top of that this keeps
-# the client port to the tracker and worker and the route port (no route
-# authentication) to the NATS pods themselves. Needs a CNI that enforces
+# Clients and routes authenticate (nats.conf: NATS_PASSWORD,
+# NATS_ROUTE_PASSWORD); on top of that this keeps the client port to the
+# tracker and worker and the route port to the NATS pods themselves. Needs a CNI that enforces
 # NetworkPolicy. Monitoring (:8222, read-only) is open inside the namespace.
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
