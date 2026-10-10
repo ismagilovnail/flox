@@ -5,6 +5,7 @@
 *.pem
 *.key
 secrets/
+secrets.env
 
 # --- Node / Next.js (apps/web) ---
 node_modules/

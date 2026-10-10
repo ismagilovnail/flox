@@ -1,0 +1,8 @@
+# Throwaway single-node Postgres, ClickHouse, Redis and MinIO for minikube.
+# NOT for production: no replication, no backups, dev passwords.
+# Production uses managed or operator-run stores (docs/kubernetes.md).
+apiVersion: kustomize.config.k8s.io/v1alpha1
+kind: Component
+
+resources:
+  - datastores.yaml

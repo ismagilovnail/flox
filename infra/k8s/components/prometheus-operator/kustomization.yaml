@@ -1,0 +1,9 @@
+# For clusters running the Prometheus Operator: scrape api, tracker and
+# worker. (Plain Prometheus uses the prometheus.io/* pod annotations
+# instead.) Alerts: load infra/alerts.yml — as rule_files, or wrapped in a
+# PrometheusRule (docs/kubernetes.md).
+apiVersion: kustomize.config.k8s.io/v1alpha1
+kind: Component
+
+resources:
+  - podmonitor.yaml

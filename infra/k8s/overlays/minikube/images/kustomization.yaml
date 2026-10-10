@@ -1,0 +1,10 @@
+# Images built locally and loaded into minikube (infra/k8s/minikube.sh).
+apiVersion: kustomize.config.k8s.io/v1alpha1
+kind: Component
+
+images:
+  - {name: flox/api, newTag: local}
+  - {name: flox/api-migrate, newTag: local}
+  - {name: flox/tracker, newTag: local}
+  - {name: flox/worker, newTag: local}
+  - {name: flox/web, newTag: local}

@@ -1,0 +1,47 @@
+# FLOX application workloads (docs/kubernetes.md). Data stores are not
+# here: production points at managed or operator-run Postgres, ClickHouse,
+# Redis and S3 (overlays/production); overlays/minikube adds throwaway
+# single-node ones (components/dev-datastores). NATS comes from a component
+# too (nats-cluster or nats-single).
+#
+# Secrets are never in this tree: every workload reads the Secret
+# `flox-secrets`, created out of band (keys: secrets.env.example).
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: flox
+
+labels:
+  - pairs:
+      app.kubernetes.io/part-of: flox
+
+resources:
+  - namespace.yaml
+  - api.yaml
+  - tracker.yaml
+  - worker.yaml
+  - web.yaml
+  - edge.yaml
+  - ingress.yaml
+
+configMapGenerator:
+  # Non-secret settings shared by every Go binary; overlays merge their own
+  # values (docs/environment.md has every variable).
+  - name: flox-config
+    envs:
+      - config.env
+  # The tracker's TLS edge: the same file as infra/Caddyfile.tracker
+  # (infra/k8s/check.sh fails if they drift).
+  - name: flox-edge-caddyfile
+    files:
+      - Caddyfile=edge/Caddyfile
+
+images:
+  - name: flox/api
+    newTag: latest
+  - name: flox/tracker
+    newTag: latest
+  - name: flox/worker
+    newTag: latest
+  - name: flox/web
+    newTag: latest

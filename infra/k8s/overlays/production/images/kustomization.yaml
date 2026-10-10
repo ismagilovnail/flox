@@ -1,0 +1,11 @@
+# Your registry and the release tag. Bump newTag for each release (by hand
+# or in CI) — the migrate Job reads the same component.
+apiVersion: kustomize.config.k8s.io/v1alpha1
+kind: Component
+
+images:
+  - {name: flox/api, newName: registry.example.com/flox/api, newTag: "1.0.0"}
+  - {name: flox/api-migrate, newName: registry.example.com/flox/api-migrate, newTag: "1.0.0"}
+  - {name: flox/tracker, newName: registry.example.com/flox/tracker, newTag: "1.0.0"}
+  - {name: flox/worker, newName: registry.example.com/flox/worker, newTag: "1.0.0"}
+  - {name: flox/web, newName: registry.example.com/flox/web, newTag: "1.0.0"}

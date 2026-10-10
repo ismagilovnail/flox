@@ -123,7 +123,10 @@ host `nats://localhost:4222` (test: `4223`). Unset: events go through the
 Postgres `event_queue` as before. Production: the cluster's client URL,
 with credentials (`nats://user:pass@host:4222`) if the server requires
 them. `NATS_STREAM_REPLICAS` — stream replicas, `1` (default) for a single
-server, `3` in a cluster.
+server, `3` in a cluster. `NATS_STREAM_MAX_MB` — the stream's size on disk,
+`10240` (default); it must fit the server's `max_file_store`, otherwise
+JetStream refuses to create the stream and every event goes through the
+Postgres fallback.
 
 ### S3-compatible object storage
 

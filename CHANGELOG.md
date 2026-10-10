@@ -5,6 +5,30 @@ per-phase, matching `CLAUDE.md`'s phase protocol. The one exception is
 [Between phases], below: spec amendments and the code changes that follow from
 them land between phases and would otherwise be invisible here.
 
+## [Between phases] — Kubernetes deployment (audit DO3)
+
+- `infra/k8s` (Kustomize, `kubectl apply -k`): base api / tracker / worker / web / edge (Caddy,
+  on-demand TLS) + Ingress; components `nats` (3-server JetStream StatefulSet, NetworkPolicy),
+  `nats-single`, `dev-datastores` (minikube only), `prometheus-operator` (PodMonitor); overlays
+  `production` (template, external stores) and `minikube`; `migrate/` goose Job run before every
+  rollout. Requests/limits, PDBs, HPAs (api, tracker, web), probes, grace periods + `preStop`,
+  `maxUnavailable: 0`, non-root / read-only / no capabilities, per-workload secret keys.
+- `deploy.sh` (ordered: config → migrate Job → rollouts), `minikube.sh` (up | forward | down),
+  `check.sh` (every overlay renders, everything lands in namespace `flox`, edge Caddyfile equals
+  `infra/Caddyfile.tracker`; server dry run with `KUBE_CONTEXT`).
+- `api` Dockerfile `migrate` target: a prebuilt goose on alpine (~50 MB) instead of `go tool
+  goose` in the builder image, which recompiled on every run and was OOM-killed under a 1 Gi limit.
+- New `NATS_STREAM_MAX_MB` (default 10240): the stream must fit the server's `max_file_store`, or
+  JetStream refuses it and every event silently goes to the Postgres fallback (found on a small
+  single NATS server).
+- `docs/kubernetes.md`; deployment, environment, event-stream, infra README, audit updated.
+
+Verified in minikube: `up` from scratch, migrations to 67, every rollout, health through `forward`,
+dev fixtures, clicks tracker → NATS → worker → ClickHouse, a postback to `CPA_ACCEPT`. `check.sh`
+renders both overlays; config test for `NATS_STREAM_MAX_MB`; full Go suite with full env, e2e
+`TestFullFunnel` passes; migrate image builds (goose v3.27.3). Gaps: ClickHouse/bucket backups
+on k8s, one edge replica, GeoIP volume, NATS auth (NetworkPolicy only).
+
 ## [Between phases] — tracker events through NATS JetStream (audit: broker, Stage 3)
 
 - New `internal/eventstream`: with `NATS_URL` set the tracker publishes its buffered events to

@@ -148,8 +148,11 @@ type Config struct {
 	// the tracker publishes its events there and the worker writes them to
 	// ClickHouse. Unset, events go through the Postgres event_queue as
 	// before. NATSStreamReplicas: 1 for a single server, 3 in a cluster.
+	// NATSStreamMaxMB: the stream's size on disk; it must fit the server's
+	// max_file_store, or JetStream refuses to create the stream.
 	NATSURL            string
 	NATSStreamReplicas int
+	NATSStreamMaxMB    int
 }
 
 type ClickHouseConfig struct {
@@ -252,6 +255,10 @@ func load(portVar, portDefault, defaultServiceName string, ch chLimits) (Config,
 	if err != nil {
 		return Config{}, err
 	}
+	natsMaxMB, err := parseNonNegative("NATS_STREAM_MAX_MB", 10240)
+	if err != nil {
+		return Config{}, err
+	}
 
 	return Config{
 		Env:      getEnv("NODE_ENV", "development"),
@@ -298,6 +305,7 @@ func load(portVar, portDefault, defaultServiceName string, ch chLimits) (Config,
 
 		NATSURL:            getEnv("NATS_URL", ""),
 		NATSStreamReplicas: natsReplicas,
+		NATSStreamMaxMB:    natsMaxMB,
 		S3: S3Config{
 			Endpoint:        getEnv("S3_ENDPOINT", ""),
 			Region:          getEnv("S3_REGION", ""),

@@ -45,9 +45,10 @@ STATUS        : marketer audit closed (#1–#12, #13 platform limit). Tech audit
                 loss to 8k clicks/s; drops at 12k/s — the tracker's serial
                 writer into event_queue), NATS JetStream event stream (one
                 tracker: 20k clicks/s no loss, Postgres idle; PG fallback;
-                conversions stay in PG). NEXT PHASE: DO3 — Kubernetes
-                deployment (the user asked for it, 2026-10-10).
-LAST COMMIT   : feat(events): tracker events through NATS JetStream.
+                conversions stay in PG). DO3 — Kubernetes (Kustomize in
+                infra/k8s, production + minikube overlays, migrate Job,
+                NATS cluster; verified in minikube; docs/kubernetes.md) done.
+LAST COMMIT   : feat(infra): Kubernetes deployment.
 UNCOMMITTED   : none expected. Dev DB fresh from `make dev-fresh CONFIRM=yes`
                 (password flox-demo-2026); `make dev-status` shows what is in it.
 NEXT          : wait for the user — the next phase. CI (DO1) is the user's own

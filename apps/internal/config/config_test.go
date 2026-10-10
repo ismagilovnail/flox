@@ -44,3 +44,26 @@ func TestClickHouseLimitsPerBinary(t *testing.T) {
 		t.Error("a negative limit was accepted")
 	}
 }
+
+// The JetStream stream's size must fit the server's max_file_store, so it
+// is configurable (a single small NATS server refused the 10 GiB default).
+func TestNATSStreamMaxMB(t *testing.T) {
+	t.Setenv("NATS_STREAM_MAX_MB", "")
+	cfg, err := LoadWorker()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.NATSStreamMaxMB != 10240 {
+		t.Errorf("default %d MB, want 10240", cfg.NATSStreamMaxMB)
+	}
+
+	t.Setenv("NATS_STREAM_MAX_MB", "2048")
+	if cfg, err = LoadTracker(); err != nil || cfg.NATSStreamMaxMB != 2048 {
+		t.Errorf("overridden: %d MB, %v", cfg.NATSStreamMaxMB, err)
+	}
+
+	t.Setenv("NATS_STREAM_MAX_MB", "lots")
+	if _, err := LoadWorker(); err == nil {
+		t.Error("a non-number was accepted")
+	}
+}

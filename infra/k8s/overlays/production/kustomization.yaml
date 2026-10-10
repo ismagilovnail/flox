@@ -1,0 +1,51 @@
+# Production template: copy, then replace every example.com value.
+#
+# Expected in the cluster: an ingress controller (class nginx), cert-manager
+# with a ClusterIssuer `letsencrypt`, metrics-server (HPA), a CNI enforcing
+# NetworkPolicy, a default StorageClass. Postgres, ClickHouse, Redis and S3
+# are external (managed or operator-run) — their addresses go in
+# flox-config below and in the Secret.
+#
+# The Secret `flox-secrets` is created out of band, never committed:
+#   kubectl -n flox create secret generic flox-secrets --from-env-file=secrets.env
+# (keys: ../../secrets.env.example), or by External Secrets / Sealed Secrets.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# Here, not only in base: what the overlay adds itself (components,
+# generators) gets no namespace from base.
+namespace: flox
+
+resources:
+  - ../../base
+
+components:
+  - ../../components/nats
+  - images
+
+configMapGenerator:
+  - name: flox-config
+    behavior: merge
+    literals:
+      - APP_URL=https://app.example.com
+      - TRACKER_PUBLIC_URL=https://track.example.com
+      - TRACKER_DNS_TARGET=track.example.com
+      - CLICKHOUSE_URL=https://clickhouse.example.internal:8443
+      - S3_ENDPOINT=https://s3.example.com
+      - S3_PUBLIC_ENDPOINT=https://s3.example.com
+      - S3_BUCKET=flox
+      - MAIL_FROM=FLOX <no-reply@example.com>
+      - ACME_EMAIL=ops@example.com
+
+patches:
+  - target: {kind: Ingress, name: flox}
+    patch: |-
+      - op: replace
+        path: /spec/tls/0/hosts
+        value: [app.example.com, api.example.com]
+      - op: replace
+        path: /spec/rules/0/host
+        value: app.example.com
+      - op: replace
+        path: /spec/rules/1/host
+        value: api.example.com

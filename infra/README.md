@@ -40,6 +40,10 @@ alerts.yml               Prometheus alerting rules over the nine tracked
                           metrics (§61, Phase 33) — promtool-validated,
                           no Alertmanager wired to them (see the file's
                           own comment).
+k8s/                     Kubernetes manifests (Kustomize): base workloads,
+                          NATS component, production and minikube
+                          overlays, deploy.sh / minikube.sh / check.sh —
+                          docs/kubernetes.md.
 ```
 
 Each app's Dockerfile lives with its own app, not here:

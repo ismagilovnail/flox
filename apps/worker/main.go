@@ -369,7 +369,7 @@ func run() error {
 		}
 		defer nc.Close()
 		start(func() {
-			cons, err := eventstream.EnsureTopologyLoop(ctx, js, eventstream.Topology{Replicas: cfg.NATSStreamReplicas}, logger)
+			cons, err := eventstream.EnsureTopologyLoop(ctx, js, eventstream.Topology{Replicas: cfg.NATSStreamReplicas, MaxBytes: int64(cfg.NATSStreamMaxMB) << 20}, logger)
 			if err != nil {
 				return
 			}

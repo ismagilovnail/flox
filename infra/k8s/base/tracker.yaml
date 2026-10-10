@@ -1,0 +1,170 @@
+# apps/tracker — the redirect hot path (CLAUDE.md #9). Stateless: routing
+# config is an in-process cache, sticky truth is the visitor's cookie, events
+# leave through NATS (Postgres event_queue as fallback). Scale it first.
+#
+# Readiness = GET /ready: 200 when Postgres answers or routing is cached,
+# 503 while it can serve nothing yet or is shutting down. Visitors reach it
+# through the Caddy edge (edge.yaml), never directly.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: tracker
+  labels:
+    app.kubernetes.io/name: tracker
+spec:
+  replicas: 3
+  revisionHistoryLimit: 5
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: tracker
+  strategy:
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: tracker
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8081"
+        prometheus.io/path: /metrics
+    spec:
+      # The server drains in-flight requests for up to 10s, then the event
+      # buffer gets its retry budget to publish what it still holds.
+      terminationGracePeriodSeconds: 40
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: tracker
+        - maxSkew: 1
+          topologyKey: topology.kubernetes.io/zone
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: tracker
+      containers:
+        - name: tracker
+          image: flox/tracker
+          ports:
+            - name: http
+              containerPort: 8081
+          envFrom:
+            - configMapRef:
+                name: flox-config
+          env:
+            - name: TRACKER_URL
+              value: http://0.0.0.0:8081
+            - name: OTEL_SERVICE_NAME
+              value: flox-tracker
+            - name: DATABASE_URL
+              valueFrom: {secretKeyRef: {name: flox-secrets, key: DATABASE_URL}}
+            - name: STICKY_COOKIE_KEY
+              valueFrom: {secretKeyRef: {name: flox-secrets, key: STICKY_COOKIE_KEY}}
+            - name: CLICKHOUSE_PASSWORD
+              valueFrom: {secretKeyRef: {name: flox-secrets, key: CLICKHOUSE_PASSWORD, optional: true}}
+            - name: REDIS_URL
+              valueFrom: {secretKeyRef: {name: flox-secrets, key: REDIS_URL, optional: true}}
+            - name: NATS_URL
+              valueFrom: {secretKeyRef: {name: flox-secrets, key: NATS_URL, optional: true}}
+            - name: LANDING_LINK_KEY
+              valueFrom: {secretKeyRef: {name: flox-secrets, key: LANDING_LINK_KEY, optional: true}}
+            - name: SENTRY_DSN
+              valueFrom: {secretKeyRef: {name: flox-secrets, key: SENTRY_DSN, optional: true}}
+            # GeoIP databases (docs/geoip.md): mount .mmdb files at /geoip
+            # (see the geoip volume below); missing files fall back to no geo.
+            - name: GEOIP_CITY_DB_PATH
+              value: /geoip/GeoLite2-City.mmdb
+            - name: GEOIP_ASN_DB_PATH
+              value: /geoip/GeoLite2-ASN.mmdb
+          readinessProbe:
+            httpGet: {path: /ready, port: http}
+            periodSeconds: 3
+            timeoutSeconds: 2
+            failureThreshold: 2
+          livenessProbe:
+            httpGet: {path: /health, port: http}
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 6
+          lifecycle:
+            preStop:
+              sleep: {seconds: 5}
+          resources:
+            # Measured: one tracker at 20k redirects/s used ~1.7 cores
+            # (docs/event-stream.md). Requests sized for ~5k/s per pod;
+            # the HPA adds pods from there.
+            requests: {cpu: 500m, memory: 256Mi}
+            limits: {memory: 1Gi}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: {drop: [ALL]}
+          volumeMounts:
+            - name: geoip
+              mountPath: /geoip
+              readOnly: true
+      volumes:
+        # Replace with a volume holding the MaxMind databases (a PVC kept
+        # current by geoipupdate, or an image-volume) — overlays patch it.
+        - name: geoip
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: tracker
+  labels:
+    app.kubernetes.io/name: tracker
+spec:
+  selector:
+    app.kubernetes.io/name: tracker
+  ports:
+    - name: http
+      port: 8081
+      targetPort: http
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: tracker
+spec:
+  maxUnavailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: tracker
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: tracker
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: tracker
+  minReplicas: 3
+  maxReplicas: 20
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target: {type: Utilization, averageUtilization: 60}
+  behavior:
+    # Click spikes come fast: scale up at once, down slowly.
+    scaleUp:
+      stabilizationWindowSeconds: 0
+      policies:
+        - {type: Percent, value: 100, periodSeconds: 30}
+    scaleDown:
+      stabilizationWindowSeconds: 300

@@ -1,0 +1,28 @@
+# One NATS server instead of three (minikube, small installs). Apply after
+# components/nats. The stream then has one replica.
+apiVersion: kustomize.config.k8s.io/v1alpha1
+kind: Component
+
+patches:
+  - target:
+      kind: StatefulSet
+      name: nats
+    patch: |-
+      - op: replace
+        path: /spec/replicas
+        value: 1
+      - op: replace
+        path: /spec/volumeClaimTemplates/0/spec/resources/requests/storage
+        value: 5Gi
+
+configMapGenerator:
+  - name: nats-config
+    behavior: replace
+    files:
+      - nats.conf
+  - name: flox-config
+    behavior: merge
+    literals:
+      - NATS_STREAM_REPLICAS=1
+      # Under nats.conf's max_file_store (4G), or the stream is refused.
+      - NATS_STREAM_MAX_MB=3072

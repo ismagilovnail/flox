@@ -1,0 +1,107 @@
+# apps/worker — event stream and queue consumers, postback delivery, cost
+# sync, retention, reconciliation. Replicas share the work: Postgres queues
+# claim with SKIP LOCKED, the NATS consumer is one durable pull consumer.
+# On SIGTERM it finishes the batch in hand and waits up to 40s for its
+# loops, hence the 60s grace (docs/deployment.md, Scaling).
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: worker
+  labels:
+    app.kubernetes.io/name: worker
+spec:
+  replicas: 2
+  revisionHistoryLimit: 5
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: worker
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: worker
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8082"
+        prometheus.io/path: /metrics
+    spec:
+      terminationGracePeriodSeconds: 60
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: worker
+      containers:
+        - name: worker
+          image: flox/worker
+          ports:
+            - name: http
+              containerPort: 8082
+          envFrom:
+            - configMapRef:
+                name: flox-config
+          env:
+            - name: WORKER_URL
+              value: http://0.0.0.0:8082
+            - name: OTEL_SERVICE_NAME
+              value: flox-worker
+            - name: DATABASE_URL
+              valueFrom: {secretKeyRef: {name: flox-secrets, key: DATABASE_URL}}
+            - name: CLICKHOUSE_PASSWORD
+              valueFrom: {secretKeyRef: {name: flox-secrets, key: CLICKHOUSE_PASSWORD, optional: true}}
+            - name: NATS_URL
+              valueFrom: {secretKeyRef: {name: flox-secrets, key: NATS_URL, optional: true}}
+            - name: INTEGRATION_ENCRYPTION_KEY
+              valueFrom: {secretKeyRef: {name: flox-secrets, key: INTEGRATION_ENCRYPTION_KEY, optional: true}}
+            - name: ADACCOUNT_ENCRYPTION_KEY
+              valueFrom: {secretKeyRef: {name: flox-secrets, key: ADACCOUNT_ENCRYPTION_KEY, optional: true}}
+            - name: SENTRY_DSN
+              valueFrom: {secretKeyRef: {name: flox-secrets, key: SENTRY_DSN, optional: true}}
+          readinessProbe:
+            httpGet: {path: /health, port: http}
+            periodSeconds: 10
+          livenessProbe:
+            httpGet: {path: /health, port: http}
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 6
+          resources:
+            requests: {cpu: 250m, memory: 256Mi}
+            limits: {memory: 1Gi}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: {drop: [ALL]}
+---
+# Metrics only; nothing calls the worker.
+apiVersion: v1
+kind: Service
+metadata:
+  name: worker
+  labels:
+    app.kubernetes.io/name: worker
+spec:
+  selector:
+    app.kubernetes.io/name: worker
+  ports:
+    - name: http
+      port: 8082
+      targetPort: http
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: worker
+spec:
+  maxUnavailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: worker

@@ -64,9 +64,21 @@ ENTRYPOINT ["sh", "-c", "mkdir -p tmp/api && exec air -c api/.air.toml"]
 # environment, matching api/migrations/README.md's own command reference
 # unchanged). No default CMD on purpose: a DSN is required, so there is
 # no meaningful "run with no arguments" default to provide.
-FROM builder AS migrate
-WORKDIR /src
-ENTRYPOINT ["go", "tool", "goose", "-dir", "api/migrations", "postgres"]
+#
+# goose is compiled here at the version go.mod's `tool` directive pins, not
+# at container start: `go tool goose` in the builder image recompiled goose
+# and every driver on each run, which took minutes and was OOM-killed under
+# a 1 Gi Kubernetes limit (infra/k8s/migrate).
+FROM builder AS goose
+RUN go build -trimpath -ldflags "-s -w" -o /out/goose github.com/pressly/goose/v3/cmd/goose
+
+FROM alpine:3.21 AS migrate
+# ca-certificates: managed Postgres with sslmode=verify-full.
+RUN apk add --no-cache ca-certificates && adduser -D -u 10001 -h /app app
+COPY --from=goose /out/goose /usr/local/bin/goose
+COPY api/migrations /migrations
+USER app
+ENTRYPOINT ["goose", "-dir", "/migrations", "postgres"]
 
 # ---------- runtime ----------
 FROM alpine:3.21 AS api

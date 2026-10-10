@@ -133,7 +133,7 @@ func run() error {
 			return err
 		}
 		defer nc.Close()
-		topology := eventstream.Topology{Replicas: cfg.NATSStreamReplicas}
+		topology := eventstream.Topology{Replicas: cfg.NATSStreamReplicas, MaxBytes: int64(cfg.NATSStreamMaxMB) << 20}
 		go func() {
 			if _, err := eventstream.EnsureTopologyLoop(ctx, js, topology, logger); err == nil {
 				logger.Info("nats event stream ready", "stream", eventstream.StreamName)

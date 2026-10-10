@@ -8,6 +8,9 @@ whatever). `infra/docker-compose.test.yml` is the reference
 implementation — every claim below was verified by actually building and
 running it, not written from the Dockerfiles alone.
 
+> Kubernetes: manifests and the ordered deploy script are in `infra/k8s`,
+> described in `docs/kubernetes.md`.
+
 ## What gets deployed
 
 | Service | Image | Dockerfile | Port |

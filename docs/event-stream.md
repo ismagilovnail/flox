@@ -89,7 +89,7 @@ and retry in the background while NATS is down.
 | Name / subject | `FLOX_EVENTS` / `flox.events` | |
 | Retention | work queue | a message stays until the worker acks it, even with no consumer yet |
 | Discard | new | a full stream refuses publishes (→ Postgres) instead of discarding unread events |
-| Max bytes | 10 GB | about 10M events of backlog |
+| Max bytes | `NATS_STREAM_MAX_MB` (10240) | about 10M events of backlog; must fit the server's `max_file_store`, or JetStream refuses the stream (`insufficient storage resources`) and every event goes to Postgres |
 | Max age | 7 days | |
 | Replicas | `NATS_STREAM_REPLICAS` (1) | 3 in a production cluster |
 | Duplicate window | 10 min | |

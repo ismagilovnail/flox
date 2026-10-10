@@ -1,0 +1,42 @@
+# Postgres migrations (goose, docs/migrations.md), run once per release
+# BEFORE the workloads roll: goose has no distributed lock, so they must not
+# run inside every pod. infra/k8s/deploy.sh deletes the previous Job,
+# applies this one and waits for it to complete. ClickHouse migrates itself
+# at startup under a Postgres advisory lock.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: migrate
+  labels:
+    app.kubernetes.io/name: migrate
+spec:
+  backoffLimit: 2
+  activeDeadlineSeconds: 900
+  ttlSecondsAfterFinished: 86400
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: migrate
+    spec:
+      restartPolicy: Never
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: migrate
+          # The api image's `migrate` target: a prebuilt goose + api/migrations.
+          image: flox/api-migrate
+          args: ["$(DATABASE_URL)", "up"]
+          env:
+            - name: DATABASE_URL
+              valueFrom: {secretKeyRef: {name: flox-secrets, key: DATABASE_URL}}
+          resources:
+            requests: {cpu: 50m, memory: 32Mi}
+            limits: {memory: 128Mi}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: {drop: [ALL]}

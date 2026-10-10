@@ -1,0 +1,33 @@
+# The app (web) and the API on their own hosts, TLS from cert-manager.
+# Only /v1 of the API is public: /health, /ready and /metrics sit at its
+# root and stay inside the cluster. Both hosts must share one registrable
+# domain (app.example.com / api.example.com) so the session cookie is
+# same-site. Overlays set the hosts, the class and the issuer.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: flox
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt
+    # Content Gallery uploads and landing ZIPs (docs/landings.md).
+    nginx.ingress.kubernetes.io/proxy-body-size: 64m
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts: [app.example.com, api.example.com]
+      secretName: flox-tls
+  rules:
+    - host: app.example.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service: {name: web, port: {name: http}}
+    - host: api.example.com
+      http:
+        paths:
+          - path: /v1
+            pathType: Prefix
+            backend:
+              service: {name: api, port: {name: http}}

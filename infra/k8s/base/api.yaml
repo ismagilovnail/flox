@@ -1,0 +1,141 @@
+# apps/api — control-plane REST API. Stateless (sessions in Postgres);
+# readiness = GET /ready (Postgres + ClickHouse), liveness = GET /health.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: api
+  labels:
+    app.kubernetes.io/name: api
+spec:
+  replicas: 2
+  revisionHistoryLimit: 5
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: api
+  strategy:
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: api
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
+        prometheus.io/path: /metrics
+    spec:
+      terminationGracePeriodSeconds: 30
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: api
+      containers:
+        - name: api
+          image: flox/api
+          ports:
+            - name: http
+              containerPort: 8080
+          envFrom:
+            - configMapRef:
+                name: flox-config
+          env:
+            - name: API_URL
+              value: http://0.0.0.0:8080
+            - name: OTEL_SERVICE_NAME
+              value: flox-api
+            - name: DATABASE_URL
+              valueFrom: {secretKeyRef: {name: flox-secrets, key: DATABASE_URL}}
+            - name: CLICKHOUSE_PASSWORD
+              valueFrom: {secretKeyRef: {name: flox-secrets, key: CLICKHOUSE_PASSWORD, optional: true}}
+            - name: REDIS_URL
+              valueFrom: {secretKeyRef: {name: flox-secrets, key: REDIS_URL, optional: true}}
+            - name: S3_ACCESS_KEY_ID
+              valueFrom: {secretKeyRef: {name: flox-secrets, key: S3_ACCESS_KEY_ID, optional: true}}
+            - name: S3_SECRET_ACCESS_KEY
+              valueFrom: {secretKeyRef: {name: flox-secrets, key: S3_SECRET_ACCESS_KEY, optional: true}}
+            - name: SMTP_URL
+              valueFrom: {secretKeyRef: {name: flox-secrets, key: SMTP_URL, optional: true}}
+            - name: TOTP_ENCRYPTION_KEY
+              valueFrom: {secretKeyRef: {name: flox-secrets, key: TOTP_ENCRYPTION_KEY, optional: true}}
+            - name: INTEGRATION_ENCRYPTION_KEY
+              valueFrom: {secretKeyRef: {name: flox-secrets, key: INTEGRATION_ENCRYPTION_KEY, optional: true}}
+            - name: ADACCOUNT_ENCRYPTION_KEY
+              valueFrom: {secretKeyRef: {name: flox-secrets, key: ADACCOUNT_ENCRYPTION_KEY, optional: true}}
+            - name: LANDING_LINK_KEY
+              valueFrom: {secretKeyRef: {name: flox-secrets, key: LANDING_LINK_KEY, optional: true}}
+            - name: SENTRY_DSN
+              valueFrom: {secretKeyRef: {name: flox-secrets, key: SENTRY_DSN, optional: true}}
+          readinessProbe:
+            httpGet: {path: /ready, port: http}
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 3
+          livenessProbe:
+            httpGet: {path: /health, port: http}
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 6
+          lifecycle:
+            # Let the Service drop this pod from its endpoints before the
+            # server stops accepting connections.
+            preStop:
+              sleep: {seconds: 5}
+          resources:
+            requests: {cpu: 250m, memory: 256Mi}
+            limits: {memory: 1Gi}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: {drop: [ALL]}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: api
+  labels:
+    app.kubernetes.io/name: api
+spec:
+  selector:
+    app.kubernetes.io/name: api
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: api
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: api
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: api
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: api
+  minReplicas: 2
+  maxReplicas: 6
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target: {type: Utilization, averageUtilization: 70}

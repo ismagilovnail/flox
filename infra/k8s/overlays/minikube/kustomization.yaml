@@ -1,0 +1,75 @@
+# Everything in one minikube cluster: the app, one NATS server and
+# throwaway data stores. Reached through `kubectl port-forward`
+# (infra/k8s/minikube.sh), so URLs are localhost and cookies are not Secure
+# (NODE_ENV=development). Dev-only secrets, the same as the compose files.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# Here, not only in base: what the overlay adds itself (components,
+# generators) gets no namespace from base.
+namespace: flox
+
+resources:
+  - ../../base
+
+components:
+  - ../../components/nats
+  - ../../components/nats-single
+  - ../../components/dev-datastores
+  - images
+
+configMapGenerator:
+  - name: flox-config
+    behavior: merge
+    literals:
+      - NODE_ENV=development
+      - APP_URL=http://localhost:3000
+      - TRACKER_PUBLIC_URL=http://localhost:8081
+      - TRACKER_DNS_TARGET=localhost
+      - CLICKHOUSE_URL=http://clickhouse:8123
+      - S3_ENDPOINT=http://minio:9000
+      - S3_PUBLIC_ENDPOINT=http://localhost:9000
+      - ACME_EMAIL=dev@flox.local
+
+secretGenerator:
+  - name: flox-secrets
+    options:
+      # The migrate Job (applied separately) refers to it by this name.
+      disableNameSuffixHash: true
+    literals:
+      - DATABASE_URL=postgres://flox:flox@postgres:5432/flox?sslmode=disable
+      - REDIS_URL=redis://redis:6379/0
+      - NATS_URL=nats://nats:4222
+      - S3_ACCESS_KEY_ID=flox-minio-admin
+      - S3_SECRET_ACCESS_KEY=flox-minio-secret
+      - STICKY_COOKIE_KEY=qTA7h7I11yKvJn3xWZQQHKGN2Jvc6WFgS7qVIWW/qy8=
+      - LANDING_LINK_KEY=19RzlC3SBPwVig37KNN84MG90P84kvYsr8dVA+jnXn8=
+      - INTEGRATION_ENCRYPTION_KEY=wLE0wIEHBNnfVfq8d62JDEAltM4frTgYmPi8XAv1QpY=
+      - ADACCOUNT_ENCRYPTION_KEY=KatbgYl+Kd4KPI5T0hKfwZRYsij/t7g7fVomXdjhW/c=
+      - TOTP_ENCRYPTION_KEY=IXkldrBTvgfDhIxzUBn3MrRAJq7Gh7z8mQ5UhBC4DRo=
+
+patches:
+  # One of each fits a laptop; two trackers keep the spread visible.
+  - target: {kind: Deployment, name: "api|web|worker"}
+    patch: |-
+      - {op: replace, path: /spec/replicas, value: 1}
+  - target: {kind: HorizontalPodAutoscaler, name: "api|web"}
+    patch: |-
+      - {op: replace, path: /spec/minReplicas, value: 1}
+  - target: {kind: Deployment, name: tracker}
+    patch: |-
+      - {op: replace, path: /spec/replicas, value: 2}
+  - target: {kind: HorizontalPodAutoscaler, name: tracker}
+    patch: |-
+      - {op: replace, path: /spec/minReplicas, value: 2}
+  - target: {kind: PodDisruptionBudget, name: "api|web"}
+    patch: |-
+      - {op: replace, path: /spec/minAvailable, value: 0}
+  # No ingress controller here: port-forward instead.
+  - target: {kind: Ingress, name: flox}
+    patch: |-
+      $patch: delete
+      apiVersion: networking.k8s.io/v1
+      kind: Ingress
+      metadata:
+        name: flox

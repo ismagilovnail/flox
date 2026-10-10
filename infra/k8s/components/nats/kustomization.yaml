@@ -1,0 +1,17 @@
+# NATS JetStream for the event stream (docs/event-stream.md): a 3-server
+# cluster, each with its own volume; the FLOX_EVENTS stream is created by
+# the tracker/worker with NATS_STREAM_REPLICAS=3. Pair with
+# components/nats-single for one server (minikube).
+#
+# Or use a managed NATS / the official Helm chart instead: drop this
+# component and point NATS_URL (Secret flox-secrets) at it.
+apiVersion: kustomize.config.k8s.io/v1alpha1
+kind: Component
+
+resources:
+  - nats.yaml
+
+configMapGenerator:
+  - name: nats-config
+    files:
+      - nats.conf
