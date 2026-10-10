@@ -1,6 +1,8 @@
 package metrics
 
 import (
+	"sync"
+
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/prometheus/client_golang/prometheus"
 )
@@ -9,9 +11,25 @@ import (
 // the binary it belongs to. Pool exhaustion is the first thing to break
 // under load (audit 2026-10-06, §14), and every binary used to run on
 // pgx's default size with nothing showing how close it was.
+//
+// A second pool for the same service replaces the first: a test that
+// builds the API more than once in one process must not panic on a
+// duplicate registration.
 func RegisterPgxPool(pool *pgxpool.Pool, service string) {
-	prometheus.MustRegister(&pgxPoolCollector{pool: pool, service: service})
+	pgxPoolsMu.Lock()
+	defer pgxPoolsMu.Unlock()
+	if old, ok := pgxPools[service]; ok {
+		prometheus.Unregister(old)
+	}
+	c := &pgxPoolCollector{pool: pool, service: service}
+	prometheus.MustRegister(c)
+	pgxPools[service] = c
 }
+
+var (
+	pgxPoolsMu sync.Mutex
+	pgxPools   = map[string]*pgxPoolCollector{}
+)
 
 type pgxPoolCollector struct {
 	pool    *pgxpool.Pool

@@ -136,12 +136,64 @@ func run() error {
 		}
 	}()
 
+	srv, closeAll, err := buildServer(ctx, cfg, logger, reporter, clientIP)
+	if err != nil {
+		return err
+	}
+	defer closeAll()
+
+	// Whole-request bounds (tech audit RL5): a client that sends or reads
+	// slowly cannot hold a connection open forever. Generous because
+	// landing bundles upload up to 50 MiB, and WriteTimeout runs from the
+	// end of the headers, so it covers the body upload too; handlers
+	// themselves stop at 30 s (httpserver's middleware.Timeout).
+	httpSrv := &http.Server{
+		Addr:              cfg.HTTPAddr,
+		Handler:           srv.Handler(),
+		ReadHeaderTimeout: 5 * time.Second,
+		ReadTimeout:       5 * time.Minute,
+		WriteTimeout:      5 * time.Minute,
+		IdleTimeout:       2 * time.Minute,
+	}
+
+	go func() {
+		logger.Info("http server starting", "addr", cfg.HTTPAddr, "env", cfg.Env)
+		if err := httpSrv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			logger.Error("http server failed", "error", err)
+		}
+	}()
+
+	<-ctx.Done()
+	logger.Info("shutting down")
+
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	return httpSrv.Shutdown(shutdownCtx)
+}
+
+// buildServer connects the API's stores and mounts every route. The
+// returned close releases the connections; it is also called when
+// buildServer fails part way. Split from run so a test can walk the real
+// router (tenant_isolation_routes_test.go).
+func buildServer(ctx context.Context, cfg config.Config, logger *slog.Logger, reporter errtrack.Reporter, clientIP *clientip.Resolver) (srv *httpserver.Server, closeAll func(), err error) {
+	var closers []func()
+	closeAll = func() {
+		for i := len(closers) - 1; i >= 0; i-- {
+			closers[i]()
+		}
+	}
+	defer func() {
+		if err != nil {
+			closeAll()
+		}
+	}()
+
 	db, err := postgres.NewPool(ctx, cfg.DatabaseURL)
 	if err != nil {
 		logger.Error("database connection failed", "error", err)
-		return err
+		return nil, nil, err
 	}
-	defer db.Close()
+	closers = append(closers, db.Close)
 	metrics.RegisterPgxPool(db, "api")
 
 	// ClickHouse is best-effort at startup, matching the tracker/worker's
@@ -161,7 +213,7 @@ func run() error {
 		logger.Warn("clickhouse schema migration failed, /analytics will fail until it recovers", "error", migrateErr)
 		_ = chConn.Close()
 	} else {
-		defer chConn.Close()
+		closers = append(closers, func() { _ = chConn.Close() })
 		ch = chConn
 		// Same snapshot the tracker routes with, so the simulator answers
 		// "what would happen right now" including offers at their daily cap.
@@ -186,7 +238,7 @@ func run() error {
 		if redisErr != nil {
 			logger.Warn("redis unavailable at startup, rate limiting and conversion progression checks degrade", "error", redisErr)
 		} else {
-			defer client.Close()
+			closers = append(closers, func() { _ = client.Close() })
 			rediscache.CheckEviction(ctx, client, logger)
 			rdb = client
 		}
@@ -229,7 +281,7 @@ func run() error {
 	mail, err := mailer.New(cfg.SMTPURL, cfg.MailFrom)
 	if err != nil {
 		logger.Error("mailer configuration failed", "error", err)
-		return err
+		return nil, nil, err
 	}
 
 	authRepo := auth.NewRepository(db)
@@ -249,7 +301,7 @@ func run() error {
 	totpKey, err := totpengine.ParseKey(cfg.TOTPEncryptionKey)
 	if err != nil {
 		logger.Error("TOTP encryption key configuration failed", "error", err)
-		return err
+		return nil, nil, err
 	}
 	authSvc.SetTOTPKey(totpKey)
 
@@ -259,7 +311,7 @@ func run() error {
 	integrationKey, err := integrationsengine.ParseKey(cfg.IntegrationEncryptionKey)
 	if err != nil {
 		logger.Error("integration encryption key configuration failed", "error", err)
-		return err
+		return nil, nil, err
 	}
 
 	// Same bar again — Google Ads' developer token/client secret/refresh
@@ -268,7 +320,7 @@ func run() error {
 	adAccountKey, err := adaccount.ParseKey(cfg.AdAccountEncryptionKey)
 	if err != nil {
 		logger.Error("ad account encryption key configuration failed", "error", err)
-		return err
+		return nil, nil, err
 	}
 
 	// apiKeySvc is constructed here, ahead of tenant.NewMiddleware, so the
@@ -310,7 +362,7 @@ func run() error {
 		}
 		return "ip:" + clientIP.String(r)
 	}
-	srv := httpserver.New(logger, cfg.OTelServiceName, db, ch, cfg.AppURL, limiter, generalLimitKey, identify,
+	srv = httpserver.New(logger, cfg.OTelServiceName, db, ch, cfg.AppURL, limiter, generalLimitKey, identify,
 		httpserver.WithRecoverer(errtrack.Middleware(reporter, logger)),
 		httpserver.WithHSTS(cfg.Env != "development"))
 
@@ -698,31 +750,5 @@ func run() error {
 		})
 	}
 
-	// Whole-request bounds (tech audit RL5): a client that sends or reads
-	// slowly cannot hold a connection open forever. Generous because
-	// landing bundles upload up to 50 MiB, and WriteTimeout runs from the
-	// end of the headers, so it covers the body upload too; handlers
-	// themselves stop at 30 s (httpserver's middleware.Timeout).
-	httpSrv := &http.Server{
-		Addr:              cfg.HTTPAddr,
-		Handler:           srv.Handler(),
-		ReadHeaderTimeout: 5 * time.Second,
-		ReadTimeout:       5 * time.Minute,
-		WriteTimeout:      5 * time.Minute,
-		IdleTimeout:       2 * time.Minute,
-	}
-
-	go func() {
-		logger.Info("http server starting", "addr", cfg.HTTPAddr, "env", cfg.Env)
-		if err := httpSrv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			logger.Error("http server failed", "error", err)
-		}
-	}()
-
-	<-ctx.Done()
-	logger.Info("shutting down")
-
-	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-	return httpSrv.Shutdown(shutdownCtx)
+	return srv, closeAll, nil
 }
