@@ -14,6 +14,7 @@
 
 import type { DimensionKey, MetricKey } from "@/features/analytics/registry";
 import type { FilterCondition } from "@/features/analytics/aggregate";
+import type { DateBasis } from "@/lib/api/analytics";
 
 export type ReportPeriod = { type: "relative"; days: number } | { type: "custom"; from: string; to: string };
 
@@ -77,6 +78,8 @@ export type ReportPreset = {
   groupBy: DimensionKey;
   period: ReportPeriod;
   timezone: string;
+  /** How the report dates conversions (tech audit AN5). */
+  dateBasis: DateBasis;
   /** System default — visible to everyone, can't be renamed or deleted.
    * Real backend lazily seeds this on an org's first GET /report-presets —
    * see apps/internal/reportpresets/repository.go's EnsureDefault. */
@@ -97,4 +100,5 @@ export type ReportPresetInput = {
   groupBy: DimensionKey;
   period: ReportPeriod;
   timezone: string;
+  dateBasis: DateBasis;
 };

@@ -30,10 +30,14 @@ import type { FilterCondition } from "@/features/analytics/aggregate";
 import { TimezoneSelect } from "@/components/ui/timezone-select";
 import { useDimensionValues } from "@/hooks/use-analytics-report";
 import { useDimensionValueLabel } from "@/features/analytics/use-dimension-value-label";
+import { DateBasisSelect } from "@/features/analytics/date-basis";
+import type { DateBasis } from "@/lib/api/analytics";
 
 export type ReportControlsState = {
   dateRange?: DateRange;
   timezone: string;
+  /** Which day a conversion counts on (tech audit AN5). Saved with presets. */
+  dateBasis: DateBasis;
   dimensions: DimensionKey[];
   metrics: MetricKey[];
   filters: FilterCondition[];
@@ -176,6 +180,8 @@ export function ReportControls({
         />
 
         <TimezoneSelect value={state.timezone} onValueChange={(timezone) => onChange({ timezone })} className="w-52" />
+
+        <DateBasisSelect value={state.dateBasis} onValueChange={(dateBasis) => onChange({ dateBasis })} />
 
         <MultiSelect
           label={t("controls.dimensionsLabel")}

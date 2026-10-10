@@ -15,6 +15,8 @@ import { metricsFromApi, performanceRowFromApi } from "@/features/dashboard/metr
 import { useDimensionValueLabel } from "@/features/analytics/use-dimension-value-label";
 import { useDashboardReport } from "@/hooks/use-analytics-report";
 import { CostTimezoneNotice } from "@/features/analytics/cost-timezone-notice";
+import { DateBasisNotice, DateBasisSelect } from "@/features/analytics/date-basis";
+import type { DateBasis } from "@/lib/api/analytics";
 import { useOrganization } from "@/hooks/use-organization";
 import { useLocale } from "@/hooks/use-locale";
 import { useApiErrorMessage } from "@/hooks/use-api-error-message";
@@ -50,6 +52,7 @@ function DashboardContent({ timezone }: { timezone: string }) {
   }, [defaultTo]);
 
   const [range, setRange] = React.useState<DateRange | undefined>({ from: defaultFrom, to: defaultTo });
+  const [dateBasis, setDateBasis] = React.useState<DateBasis>("conversion");
 
   const from = range?.from ?? defaultFrom;
   const to = range?.to ?? range?.from ?? defaultTo;
@@ -60,8 +63,8 @@ function DashboardContent({ timezone }: { timezone: string }) {
   const prevFrom = new Date(prevTo);
   prevFrom.setUTCDate(prevFrom.getUTCDate() - (spanDays - 1));
 
-  const currentQuery = useDashboardReport(from, to, timezone);
-  const previousQuery = useDashboardReport(prevFrom, prevTo, timezone);
+  const currentQuery = useDashboardReport(from, to, timezone, dateBasis);
+  const previousQuery = useDashboardReport(prevFrom, prevTo, timezone, dateBasis);
 
   if (currentQuery.isPending) {
     return <LoadingState label={t("loading")} />;
@@ -87,10 +90,14 @@ function DashboardContent({ timezone }: { timezone: string }) {
     <div className="flex flex-col gap-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-2xl font-semibold tracking-tight">{t("title")}</h1>
-        <DateRangePicker value={range} onChange={setRange} timezone={timezone} />
+        <div className="flex flex-wrap items-center gap-2">
+          <DateBasisSelect value={dateBasis} onValueChange={setDateBasis} />
+          <DateRangePicker value={range} onChange={setRange} timezone={timezone} />
+        </div>
       </div>
 
       <CostTimezoneNotice from={from} to={to} timezone={timezone} />
+      <DateBasisNotice dateBasis={dateBasis} datedByConversion={data.datedByConversion} />
 
       <div className="flex flex-col gap-1.5">
         <KpiGrid current={currentMetrics} previous={previousMetrics} />

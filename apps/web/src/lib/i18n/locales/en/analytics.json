@@ -188,5 +188,18 @@
       "America/Chicago": "Chicago",
       "America/Los_Angeles": "Los Angeles"
     }
+  },
+  "dateBasis": {
+    "label": "Dates:",
+    "options": {
+      "conversion": "by conversion",
+      "click": "by click"
+    },
+    "notice": {
+      "title": "Conversions by click date",
+      "description": "Conversions and revenue are counted on the day of the click they are attributed to, next to that day's clicks and spend. Recent days are still filling in: their clicks keep converting.",
+      "withoutClick_one": "{{count}} conversion without an attributed click is counted on its own date.",
+      "withoutClick_other": "{{count}} conversions without an attributed click are counted on their own date."
+    }
   }
 }

@@ -3,6 +3,10 @@ import type { DimensionKey, MetricKey } from "@/features/analytics/registry";
 import type { FilterCondition, ReportRow } from "@/features/analytics/aggregate";
 
 /** Mirrors apps/internal/analytics's response shapes exactly. */
+
+/** Which day a conversion is reported on: the day the network reported it,
+ * or the day of the click it is attributed to (tech audit AN5). */
+export type DateBasis = "conversion" | "click";
 export type DailyCount = { day: string; type: string; eventCount: number };
 export type DailyRevenue = { day: string; type: string; eventCount: number; revenueUsd: number };
 
@@ -20,9 +24,10 @@ export function getCampaignDailyRevenue(
   campaignId: string,
   from: Date,
   to: Date,
+  dateBasis: DateBasis = "conversion",
 ): Promise<{ revenue: DailyRevenue[] }> {
   return apiFetch(`/analytics/campaigns/${campaignId}/daily-revenue`, {
-    searchParams: { from: formatDate(from), to: formatDate(to) },
+    searchParams: { from: formatDate(from), to: formatDate(to), dateBasis },
   });
 }
 
@@ -33,7 +38,7 @@ export function getCampaignDailyRevenue(
 
 type ApiMetrics = Record<MetricKey, number | null>;
 
-type ApiReportRow = { day?: string; dims?: Record<string, string>; metrics: ApiMetrics };
+type ApiReportRow = { day?: string; dims?: Record<string, string>; metrics: ApiMetrics; datedByConversion?: number };
 
 function toReportRow(row: ApiReportRow, dims: DimensionKey[]): ReportRow {
   const dimValues = { ...(row.dims ?? {}) } as Partial<Record<DimensionKey, string>>;
@@ -42,7 +47,7 @@ function toReportRow(row: ApiReportRow, dims: DimensionKey[]): ReportRow {
   if (row.day && dims.includes("day")) dimValues.day = row.day;
   const key =
     dims.length === 0 ? (row.day ?? "__all__") : dims.map((d) => dimValues[d] ?? "").join(" · ");
-  return { key, dims: dimValues, metrics: row.metrics };
+  return { key, dims: dimValues, metrics: row.metrics, datedByConversion: row.datedByConversion };
 }
 
 function toFilterBody(filters: FilterCondition[]) {
@@ -58,6 +63,7 @@ export function getReport(input: {
   to: Date;
   sort: { key: string; dir: "asc" | "desc" };
   timezone?: string;
+  dateBasis?: DateBasis;
 }): Promise<ReportRow[]> {
   return apiFetch<{ rows: ApiReportRow[] }>("/analytics/report", {
     method: "POST",
@@ -68,6 +74,7 @@ export function getReport(input: {
       to: formatDate(input.to),
       sort: input.sort,
       timezone: input.timezone,
+      dateBasis: input.dateBasis,
     },
   }).then((res) => res.rows.map((r) => toReportRow(r, input.dims)));
 }
@@ -77,6 +84,7 @@ export function getTimeseries(input: {
   from: Date;
   to: Date;
   timezone?: string;
+  dateBasis?: DateBasis;
 }): Promise<TimeseriesPoint[]> {
   return apiFetch<{ rows: ApiReportRow[] }>("/analytics/timeseries", {
     method: "POST",
@@ -85,6 +93,7 @@ export function getTimeseries(input: {
       from: formatDate(input.from),
       to: formatDate(input.to),
       timezone: input.timezone,
+      dateBasis: input.dateBasis,
     },
   }).then((res) => res.rows.map((r) => ({ day: r.day!, metrics: r.metrics })));
 }
@@ -121,6 +130,9 @@ export function getDimensionValues(dim: DimensionKey, from: Date, to: Date): Pro
 
 export type DashboardReport = {
   totals: ApiMetrics;
+  /** Dated by click: conversions in the totals with no attributed click,
+   * counted on their own date. 0 otherwise. */
+  datedByConversion: number;
   daily: TimeseriesPoint[];
   topCampaigns: ReportRow[];
   topCountries: ReportRow[];
@@ -128,9 +140,15 @@ export type DashboardReport = {
   topOffers: ReportRow[];
 };
 
-export function getDashboardReport(from: Date, to: Date, timezone?: string): Promise<DashboardReport> {
+export function getDashboardReport(
+  from: Date,
+  to: Date,
+  timezone?: string,
+  dateBasis: DateBasis = "conversion",
+): Promise<DashboardReport> {
   return apiFetch<{
     totals: ApiMetrics;
+    datedByConversion?: number;
     daily: ApiReportRow[];
     topCampaigns: ApiReportRow[];
     topCountries: ApiReportRow[];
@@ -138,9 +156,10 @@ export function getDashboardReport(from: Date, to: Date, timezone?: string): Pro
     topOffers: ApiReportRow[];
   }>("/analytics/dashboard", {
     method: "POST",
-    body: { from: formatDate(from), to: formatDate(to), timezone },
+    body: { from: formatDate(from), to: formatDate(to), timezone, dateBasis },
   }).then((res) => ({
     totals: res.totals,
+    datedByConversion: res.datedByConversion ?? 0,
     daily: res.daily.map((d) => ({ day: d.day!, metrics: d.metrics })),
     topCampaigns: res.topCampaigns.map((r) => toReportRow(r, ["campaign"])),
     topCountries: res.topCountries.map((r) => toReportRow(r, ["country"])),

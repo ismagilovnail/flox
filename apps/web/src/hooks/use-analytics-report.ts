@@ -2,7 +2,15 @@
 
 import { useQuery } from "@tanstack/react-query";
 
-import { getReport, getTimeseries, getFunnel, getDashboardReport, getDimensionValues, getCostTimezones } from "@/lib/api/analytics";
+import {
+  getReport,
+  getTimeseries,
+  getFunnel,
+  getDashboardReport,
+  getDimensionValues,
+  getCostTimezones,
+  type DateBasis,
+} from "@/lib/api/analytics";
 import type { DimensionKey } from "@/features/analytics/registry";
 import type { FilterCondition } from "@/features/analytics/aggregate";
 
@@ -18,19 +26,35 @@ export function useReport(
     to: Date;
     sort: { key: string; dir: "asc" | "desc" };
     timezone?: string;
+    dateBasis?: DateBasis;
   },
   options?: { enabled?: boolean },
 ) {
   return useQuery({
-    queryKey: ["analytics-report", input.dims, input.filters, iso(input.from), iso(input.to), input.sort, input.timezone],
+    queryKey: [
+      "analytics-report",
+      input.dims,
+      input.filters,
+      iso(input.from),
+      iso(input.to),
+      input.sort,
+      input.timezone,
+      input.dateBasis,
+    ],
     queryFn: () => getReport(input),
     enabled: options?.enabled,
   });
 }
 
-export function useTimeseries(input: { filters: FilterCondition[]; from: Date; to: Date; timezone?: string }) {
+export function useTimeseries(input: {
+  filters: FilterCondition[];
+  from: Date;
+  to: Date;
+  timezone?: string;
+  dateBasis?: DateBasis;
+}) {
   return useQuery({
-    queryKey: ["analytics-timeseries", input.filters, iso(input.from), iso(input.to), input.timezone],
+    queryKey: ["analytics-timeseries", input.filters, iso(input.from), iso(input.to), input.timezone, input.dateBasis],
     queryFn: () => getTimeseries(input),
   });
 }
@@ -42,10 +66,10 @@ export function useFunnelReport(from: Date, to: Date, filters: FilterCondition[]
   });
 }
 
-export function useDashboardReport(from: Date, to: Date, timezone?: string) {
+export function useDashboardReport(from: Date, to: Date, timezone?: string, dateBasis: DateBasis = "conversion") {
   return useQuery({
-    queryKey: ["dashboard-report", iso(from), iso(to), timezone],
-    queryFn: () => getDashboardReport(from, to, timezone),
+    queryKey: ["dashboard-report", iso(from), iso(to), timezone, dateBasis],
+    queryFn: () => getDashboardReport(from, to, timezone, dateBasis),
   });
 }
 

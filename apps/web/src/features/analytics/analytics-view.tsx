@@ -17,6 +17,7 @@ import type { FilterCondition } from "@/features/analytics/aggregate";
 import { METRICS, metricLabel, formatMetric, type DimensionKey } from "@/features/analytics/registry";
 import { useReport, useTimeseries, useFunnelReport } from "@/hooks/use-analytics-report";
 import { CostTimezoneNotice } from "@/features/analytics/cost-timezone-notice";
+import { DateBasisNotice } from "@/features/analytics/date-basis";
 import { useOrganization } from "@/hooks/use-organization";
 import { todayInZone } from "@/lib/timezones";
 import { EMPTY_CUSTOM_METRICS, useCustomMetrics } from "@/hooks/use-custom-metrics";
@@ -72,6 +73,7 @@ function AnalyticsContent({ orgTimezone }: { orgTimezone: string }) {
     return {
       dateRange: { from: defaultFrom, to: defaultTo },
       timezone: orgTimezone,
+      dateBasis: "conversion",
       dimensions: ["campaign"],
       // The PWA → registration → purchase funnel, each step's rate and cost,
       // then money (marketer audit #12: these were only reachable through
@@ -113,25 +115,35 @@ function AnalyticsContent({ orgTimezone }: { orgTimezone: string }) {
   const from = state.dateRange?.from ?? defaultFrom;
   const to = state.dateRange?.to ?? state.dateRange?.from ?? defaultTo;
 
-  const tableQuery = useReport({ dims: state.dimensions, filters: state.filters, from, to, sort: state.sort, timezone: state.timezone });
-  const timeseriesQuery = useTimeseries({ filters: state.filters, from, to, timezone: state.timezone });
+  const { timezone, dateBasis } = state;
+  const tableQuery = useReport({ dims: state.dimensions, filters: state.filters, from, to, sort: state.sort, timezone, dateBasis });
+  const timeseriesQuery = useTimeseries({ filters: state.filters, from, to, timezone, dateBasis });
   const barQuery = useReport({
     dims: [state.groupBy],
     filters: state.filters,
     from,
     to,
     sort: { key: "revenue", dir: "desc" },
-    timezone: state.timezone,
+    timezone,
+    dateBasis,
   });
   const funnelQuery = useFunnelReport(from, to, state.filters, state.timezone);
 
   const prevRange = previousRange(state.dateRange);
   const compareCurrentQuery = useReport(
-    { dims: [], filters: state.filters, from, to, sort: state.sort, timezone: state.timezone },
+    { dims: [], filters: state.filters, from, to, sort: state.sort, timezone, dateBasis },
     { enabled: state.compare },
   );
   const comparePreviousQuery = useReport(
-    { dims: [], filters: state.filters, from: prevRange?.from ?? from, to: prevRange?.to ?? to, sort: state.sort, timezone: state.timezone },
+    {
+      dims: [],
+      filters: state.filters,
+      from: prevRange?.from ?? from,
+      to: prevRange?.to ?? to,
+      sort: state.sort,
+      timezone,
+      dateBasis,
+    },
     { enabled: state.compare && !!prevRange },
   );
 
@@ -147,6 +159,10 @@ function AnalyticsContent({ orgTimezone }: { orgTimezone: string }) {
       <ReportPresetBar state={state} onApply={onChange} />
       <ReportControls state={state} onChange={onChange} />
       <CostTimezoneNotice from={from} to={to} timezone={state.timezone} />
+      <DateBasisNotice
+        dateBasis={dateBasis}
+        datedByConversion={(tableQuery.data ?? []).reduce((n, r) => n + (r.datedByConversion ?? 0), 0)}
+      />
 
       {compareRows && (
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">

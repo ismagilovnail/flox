@@ -58,7 +58,17 @@ function writeActivePreset(id: string | null) {
  * because the preset wasn't saved. Dropped as soon as the report matches the
  * preset again. */
 const DRAFT_KEY = "flox.analytics.draft";
-const DRAFT_FIELDS = ["timezone", "dimensions", "metrics", "filters", "columnOrder", "columnWidths", "hiddenColumns", "groupBy"] as const;
+const DRAFT_FIELDS = [
+  "timezone",
+  "dateBasis",
+  "dimensions",
+  "metrics",
+  "filters",
+  "columnOrder",
+  "columnWidths",
+  "hiddenColumns",
+  "groupBy",
+] as const;
 type DraftPatch = Partial<Pick<ReportControlsState, (typeof DRAFT_FIELDS)[number]>>;
 type Draft = { presetId: string | null; patch: DraftPatch };
 
@@ -108,6 +118,7 @@ function matchesPreset(state: ReportControlsState, preset: ReportPreset): boolea
     same(state.metrics, preset.metrics) &&
     state.groupBy === preset.groupBy &&
     state.timezone === preset.timezone &&
+    state.dateBasis === (preset.dateBasis ?? "conversion") &&
     sameFilters(state.filters, preset.filters ?? []) &&
     same(state.columnOrder ?? [], preset.columnOrder ?? []) &&
     sameWidths(state.columnWidths ?? {}, preset.columnWidths ?? {}) &&
@@ -151,6 +162,7 @@ export function ReportPresetBar({
       hiddenColumns: preset.hiddenColumns ?? [],
       groupBy: preset.groupBy,
       timezone: preset.timezone,
+      dateBasis: preset.dateBasis ?? "conversion",
       dateRange: periodToDateRange(preset.period, todayInZone(preset.timezone)),
     };
   }
@@ -217,6 +229,7 @@ export function ReportPresetBar({
       hiddenColumns: state.hiddenColumns ?? [],
       groupBy: state.groupBy,
       timezone: state.timezone,
+      dateBasis: state.dateBasis,
       period: dateRangeToPeriod(state.dateRange, todayInZone(state.timezone)),
     };
   }

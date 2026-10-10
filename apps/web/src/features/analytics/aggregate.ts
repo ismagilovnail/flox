@@ -16,4 +16,7 @@ export type ReportRow = {
   key: string;
   dims: Partial<Record<DimensionKey, string>>;
   metrics: Record<MetricKey, number | null>;
+  /** Dated by click: the row's conversions with no attributed click, which
+   * keep their own date (absent otherwise). */
+  datedByConversion?: number;
 };
