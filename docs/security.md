@@ -111,6 +111,17 @@ brute-force protection.
   Redis round trip on every click would blow the p50/p95 budget outright.
   Click-volume protection there is an infrastructure concern (CDN/load
   balancer), not an in-process limiter.
+- `apps/tracker`'s `/postback/{networkId}` limits **refusals**, not
+  requests (tech audit P4): 30 postbacks refused as an unknown network or
+  a wrong secret within 10 minutes block that IP for the rest of the
+  window, answered 429 before any Postgres lookup
+  (`ratelimit.Failures`). Accepted postbacks, duplicates and 400s never
+  count, so a network's nightly replay of any size is never limited. A
+  network that keeps sending from an old postback URL beside its good one
+  gets its good postbacks 429'd too once over the limit — 429 is
+  retryable, and the refusals show up in `flox_postback_incoming_total`.
+  Counts in the tracker process while Redis fails, like `/auth/*`. Volume
+  from a valid network and secret is still the edge's concern.
 - The "per IP" case in every ceiling above is `apps/internal/
   clientip.Resolver`'s resolved address (§5 below), not a raw header
   read — see that section for why that distinction is load-bearing.

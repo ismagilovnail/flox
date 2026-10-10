@@ -18,10 +18,12 @@
 // Redis round trip on every click would blow that budget outright.
 // Tracker's own click volume needs infrastructure-level protection (a
 // CDN or load balancer), not an in-process limiter; see docs/security.md.
+// Its postback endpoint uses Failures, which limits refusals only.
 package ratelimit
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -162,4 +164,67 @@ func (c *localCounter) allow(key string, limit int, window time.Duration, now ti
 	w.count++
 	c.windows[key] = w
 	return w.count <= limit
+}
+
+// Failures limits failed attempts rather than requests: Blocked is a read,
+// only Record counts. For endpoints where legitimate volume has no bound
+// worth enforcing but failures do — a network's nightly postback replay
+// can be thousands of requests a minute from one IP, all valid, while a
+// scan of network IDs or secrets is all failures (tech audit 2026-10-06,
+// P4). Like StrictMiddleware it counts in process while Redis fails (or
+// was never connected), so the limit holds per replica through an outage.
+type Failures struct {
+	l      *Limiter
+	prefix string
+	limit  int
+	window time.Duration
+	local  *localCounter
+}
+
+// Failures blocks a key once it has limit failures within window; the
+// window starts at the key's first failure.
+func (l *Limiter) Failures(keyPrefix string, limit int, window time.Duration) *Failures {
+	return &Failures{l: l, prefix: "ratelimit:" + keyPrefix + ":", limit: limit, window: window, local: newLocalCounter()}
+}
+
+// Blocked reports whether key has used up its failures for the window.
+func (f *Failures) Blocked(ctx context.Context, key string) bool {
+	key = f.prefix + key
+	if f.l.rdb != nil {
+		n, err := f.l.rdb.Get(ctx, key).Int()
+		switch {
+		case err == nil:
+			return n >= f.limit
+		case errors.Is(err, redis.Nil):
+			return false
+		}
+		metrics.RedisErrorsTotal.WithLabelValues("ratelimit").Inc()
+		f.l.logger.Warn("failure limit check failed, reading in-process count", "error", err, "key_prefix", f.prefix)
+	}
+	return f.local.count(key, time.Now()) >= f.limit
+}
+
+// Record counts one failure for key.
+func (f *Failures) Record(ctx context.Context, key string) {
+	key = f.prefix + key
+	if f.l.rdb != nil {
+		err := allowScript.Run(ctx, f.l.rdb, []string{key}, f.window.Milliseconds()).Err()
+		if err == nil {
+			return
+		}
+		metrics.RedisErrorsTotal.WithLabelValues("ratelimit").Inc()
+		f.l.logger.Warn("failure limit record failed, counting in process", "error", err, "key_prefix", f.prefix)
+	}
+	f.local.allow(key, f.limit, f.window, time.Now())
+}
+
+// count is key's count in its current window, without adding to it.
+func (c *localCounter) count(key string, now time.Time) int {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	w, ok := c.windows[key]
+	if !ok || !now.Before(w.ends) {
+		return 0
+	}
+	return w.count
 }

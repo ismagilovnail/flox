@@ -155,7 +155,7 @@ alone can only serve one path.
 
 | Metric | Where | What it shows |
 |---|---|---|
-| `flox_postback_incoming_total{result}`, `flox_postback_incoming_latency_seconds` | tracker | Incoming postbacks by result — the engine's (`success`, `duplicate`, `ignored`, `error`) or a refusal before it (`unknown_network`, `unauthorized`, `bad_request`, `internal_error`) |
+| `flox_postback_incoming_total{result}`, `flox_postback_incoming_latency_seconds` | tracker | Incoming postbacks by result — the engine's (`success`, `duplicate`, `ignored`, `error`) or a refusal before it (`unknown_network`, `unauthorized`, `bad_request`, `rate_limited`, `internal_error`) |
 | `flox_attribution_outcomes_total{outcome}` | tracker, api | `attributed`, `unknown_click`, `no_identifier`, `ambiguous_external_click_id` |
 | `flox_reattributions_total{outcome}`, `flox_attribution_retries_pending` | worker (`internal/reattribute`) | `unknown_click` conversions looked up again: `attributed` (rewritten) or `gave_up` (still no click after ~7 h); how many wait |
 | `flox_queue_rows{queue,status}`, `flox_queue_oldest_due_age_seconds{queue}` | worker (`internal/queuestats`, every 15 s) | Open rows per status (incl. `dead`) and how long the oldest due row has waited past due, for `event_queue`, `postback_attempt_queue`, `postback_deliveries` |

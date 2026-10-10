@@ -37,6 +37,7 @@ import (
 	"github.com/ismagilovnail/flox/apps/internal/postback"
 	"github.com/ismagilovnail/flox/apps/internal/postbacklog"
 	"github.com/ismagilovnail/flox/apps/internal/postgres"
+	"github.com/ismagilovnail/flox/apps/internal/ratelimit"
 	"github.com/ismagilovnail/flox/apps/internal/rediscache"
 	"github.com/ismagilovnail/flox/apps/internal/routing"
 	"github.com/ismagilovnail/flox/apps/internal/routingcache"
@@ -228,6 +229,8 @@ func run() error {
 	// The store records a conversion together with its CPA event and its
 	// outgoing postback in one transaction (audit 2026-10-06, D1).
 	var convStore conversion.Store = conversion.NewPostgresStore(db).WithDeliveries(postback.NewPostgresStore(db))
+	// Without Redis the refused-postback limit counts in this process.
+	limiter := ratelimit.New(nil, logger)
 	if cfg.RedisURL != "" {
 		redisCtx, cancelRedis := context.WithTimeout(ctx, 5*time.Second)
 		rdb, err := rediscache.NewClient(redisCtx, cfg.RedisURL)
@@ -238,6 +241,7 @@ func run() error {
 			defer rdb.Close()
 			rediscache.CheckEviction(ctx, rdb, logger)
 			convStore = conversion.NewRedisStore(convStore, rdb, logger)
+			limiter = ratelimit.New(rdb, logger)
 		}
 	} else {
 		logger.Warn("REDIS_URL not set, conversion progression checks will read Postgres directly")
@@ -254,7 +258,9 @@ func run() error {
 			attributionSvc,
 			attemptLog,
 		),
-		logger: logger,
+		failures: limiter.Failures("postback-failures", postbackFailureLimit, postbackFailureWindow),
+		clientIP: clientIP,
+		logger:   logger,
 	}
 
 	r := chi.NewRouter()

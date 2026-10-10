@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"crypto/sha256"
 	"crypto/subtle"
 	"encoding/hex"
@@ -13,9 +14,20 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
+	"github.com/ismagilovnail/flox/apps/internal/clientip"
 	"github.com/ismagilovnail/flox/apps/internal/conversion"
 	"github.com/ismagilovnail/flox/apps/internal/idgen"
 	"github.com/ismagilovnail/flox/apps/internal/metrics"
+	"github.com/ismagilovnail/flox/apps/internal/ratelimit"
+)
+
+// A client IP with this many refused postbacks (unknown network, wrong
+// secret) within the window gets 429 for the rest of it, before any
+// Postgres lookup (tech audit 2026-10-06, P4). Accepted postbacks never
+// count, so a network's replay of any size is not limited.
+const (
+	postbackFailureLimit  = 30
+	postbackFailureWindow = 10 * time.Minute
 )
 
 // PostbackHandler is Phase 23's conversion engine endpoint (§45):
@@ -34,6 +46,10 @@ import (
 type PostbackHandler struct {
 	networks conversion.NetworkLookup
 	service  *conversion.Service
+	// failures and clientIP limit refused postbacks per IP; nil failures
+	// turns the limit off.
+	failures *ratelimit.Failures
+	clientIP *clientip.Resolver
 	logger   *slog.Logger
 }
 
@@ -58,6 +74,19 @@ func (h *PostbackHandler) handle(w http.ResponseWriter, r *http.Request) {
 	}()
 	ctx := r.Context()
 	networkID := chi.URLParam(r, "networkId")
+
+	if h.failures != nil {
+		ip := h.clientIP.String(r)
+		if h.failures.Blocked(ctx, ip) {
+			writeJSON(w, http.StatusTooManyRequests, postbackResponse{Result: "error", Message: "too many refused postbacks, try again later"})
+			return
+		}
+		defer func() {
+			if rw.result == "unknown_network" || rw.result == "unauthorized" {
+				h.failures.Record(context.WithoutCancel(ctx), ip)
+			}
+		}()
+	}
 
 	if !idgen.IsValid(networkID) {
 		writeJSON(w, http.StatusNotFound, postbackResponse{Result: "error", Message: "unknown network"})
@@ -172,15 +201,17 @@ type postbackResultWriter struct {
 }
 
 func (w *postbackResultWriter) label(status int, body postbackResponse) {
-	switch {
-	case status == http.StatusOK:
+	switch status {
+	case http.StatusOK:
 		w.result = body.Result
-	case status == http.StatusNotFound:
+	case http.StatusNotFound:
 		w.result = "unknown_network"
-	case status == http.StatusUnauthorized:
+	case http.StatusUnauthorized:
 		w.result = "unauthorized"
-	case status == http.StatusBadRequest:
+	case http.StatusBadRequest:
 		w.result = "bad_request"
+	case http.StatusTooManyRequests:
+		w.result = "rate_limited"
 	default:
 		w.result = "internal_error"
 	}

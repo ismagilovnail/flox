@@ -240,3 +240,34 @@ func TestStrictMiddlewareCountsInProcessWhileRedisIsDown(t *testing.T) {
 		}
 	}
 }
+
+// Tech audit 2026-10-06, P4: only recorded failures count, Blocked is a
+// read, and a key is blocked once it reaches the limit.
+func checkFailures(t *testing.T, f *ratelimit.Failures, key, other string) {
+	t.Helper()
+	ctx := context.Background()
+	for i := 0; i < 5; i++ {
+		if f.Blocked(ctx, key) {
+			t.Fatalf("blocked after %d reads and no failures", i+1)
+		}
+	}
+	for i := 1; i <= 3; i++ {
+		f.Record(ctx, key)
+		if blocked := f.Blocked(ctx, key); blocked != (i == 3) {
+			t.Fatalf("after %d failures blocked = %v, want %v", i, blocked, i == 3)
+		}
+	}
+	if f.Blocked(ctx, other) {
+		t.Fatal("another key is blocked by this key's failures")
+	}
+}
+
+func TestFailuresWithRedis(t *testing.T) {
+	prefix := "test-failures-" + idgen.New()
+	checkFailures(t, ratelimit.New(mustClient(t), discardLogger()).Failures(prefix, 3, time.Minute), "10.0.0.1", "10.0.0.2")
+}
+
+func TestFailuresWithoutRedisCountInProcess(t *testing.T) {
+	checkFailures(t, ratelimit.New(nil, discardLogger()).Failures("f", 3, time.Minute), "10.0.0.1", "10.0.0.2")
+	checkFailures(t, ratelimit.New(deadRedis(t), discardLogger()).Failures("f", 3, time.Minute), "10.0.0.1", "10.0.0.2")
+}
