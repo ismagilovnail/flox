@@ -9,10 +9,13 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
+	"path/filepath"
 	"regexp"
 	"sort"
 	"strings"
@@ -37,6 +40,7 @@ import (
 	"github.com/ismagilovnail/flox/apps/internal/errtrack"
 	"github.com/ismagilovnail/flox/apps/internal/event"
 	"github.com/ismagilovnail/flox/apps/internal/eventmapping"
+	"github.com/ismagilovnail/flox/apps/internal/httpserver"
 	"github.com/ismagilovnail/flox/apps/internal/idgen"
 	"github.com/ismagilovnail/flox/apps/internal/landing"
 	"github.com/ismagilovnail/flox/apps/internal/network"
@@ -106,49 +110,9 @@ var paramRE = regexp.MustCompile(`\{([^}]+)\}`)
 // not show B's ids either. Organization A owns the same kinds of resources,
 // so nested routes are also tried with A's parent and B's child.
 func TestEveryRouteRefusesAnotherOrganizationsIDs(t *testing.T) {
-	dsn := os.Getenv("DATABASE_URL")
-	if dsn == "" {
-		t.Skip("DATABASE_URL not set, skipping integration test")
-	}
-	for _, k := range []string{"TOTP_ENCRYPTION_KEY", "INTEGRATION_ENCRYPTION_KEY", "ADACCOUNT_ENCRYPTION_KEY"} {
-		if os.Getenv(k) == "" {
-			key := make([]byte, 32)
-			_, _ = rand.Read(key)
-			t.Setenv(k, base64.StdEncoding.EncodeToString(key))
-		}
-	}
-	cfg, err := config.Load()
-	if err != nil {
-		t.Fatal(err)
-	}
-	ctx, cancel := context.WithCancel(context.Background())
-	t.Cleanup(cancel)
-	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	reporter, err := errtrack.New(errtrack.Config{})
-	if err != nil {
-		t.Fatal(err)
-	}
-	resolver, err := clientip.New(nil, logger)
-	if err != nil {
-		t.Fatal(err)
-	}
-	srv, closeAll, err := buildServer(ctx, cfg, logger, reporter, resolver)
-	if err != nil {
-		t.Fatalf("building the API: %v", err)
-	}
-	t.Cleanup(closeAll)
-	pool, err := pgxpool.New(ctx, dsn)
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(pool.Close)
-
-	c := &isoClient{t: t, h: srv.Handler(), origin: cfg.AppURL, ip: randomTestIP()}
-	orgA, userA := c.signUp(pool)
-	orgB, userB := c.signUp(pool)
-	idsA := seedEveryKind(t, ctx, pool, orgA, userA, "a")
-	idsB := seedEveryKind(t, ctx, pool, orgB, userB, "b")
-	c.signIn(orgA)
+	env := newIsolationEnv(t)
+	c, ctx, pool, srv := env.c, env.ctx, env.pool, env.srv
+	orgB, userB, idsA, idsB := env.orgB, env.userB, env.idsA, env.idsB
 
 	before := snapshotOrg(t, ctx, pool, orgB)
 	leakIDs := append([]string{orgB, userB}, values(idsB)...)
@@ -207,7 +171,11 @@ func TestEveryRouteRefusesAnotherOrganizationsIDs(t *testing.T) {
 			if status >= 500 {
 				t.Errorf("%s %s = %d with organization B's id, want a 4xx\n%s", rt.method, path, status, trim(body))
 			}
-			if status != wantStatus || body != wantBody {
+			// Two successes differ by what they created (names, order); that
+			// nothing of B's was stored is checked below. A refusal must
+			// read the same either way.
+			ok2xx := status >= 200 && status < 300
+			if status != wantStatus || !ok2xx && body != wantBody {
 				t.Errorf("%s %s answers B's id differently from an unknown id:\n  B's id:     %d %s\n  unknown id: %d %s",
 					rt.method, path, status, trim(body), wantStatus, trim(wantBody))
 			}
@@ -228,6 +196,88 @@ func TestEveryRouteRefusesAnotherOrganizationsIDs(t *testing.T) {
 			t.Errorf("organization B's rows in %s changed while A called the API", table)
 		}
 	}
+}
+
+// isoReplayClick is the click of each organization's seeded conversion.
+const isoReplayClick = "isolation-click"
+
+// isolationEnv is the real API with two organizations, A and B, each
+// owning one resource of every kind; the client is signed in as A's owner.
+type isolationEnv struct {
+	c            *isoClient
+	ctx          context.Context
+	pool         *pgxpool.Pool
+	srv          *httpserver.Server
+	orgA, orgB   string
+	userA, userB string
+	idsA, idsB   map[string]string
+}
+
+func newIsolationEnv(t *testing.T) *isolationEnv {
+	t.Helper()
+	dsn := os.Getenv("DATABASE_URL")
+	if dsn == "" {
+		t.Skip("DATABASE_URL not set, skipping integration test")
+	}
+	for _, k := range []string{"TOTP_ENCRYPTION_KEY", "INTEGRATION_ENCRYPTION_KEY", "ADACCOUNT_ENCRYPTION_KEY"} {
+		if os.Getenv(k) == "" {
+			key := make([]byte, 32)
+			_, _ = rand.Read(key)
+			t.Setenv(k, base64.StdEncoding.EncodeToString(key))
+		}
+	}
+	cfg, err := config.Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	reporter, err := errtrack.New(errtrack.Config{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	resolver, err := clientip.New(nil, logger)
+	if err != nil {
+		t.Fatal(err)
+	}
+	srv, closeAll, err := buildServer(ctx, cfg, logger, reporter, resolver)
+	if err != nil {
+		t.Fatalf("building the API: %v", err)
+	}
+	t.Cleanup(closeAll)
+	pool, err := pgxpool.New(ctx, dsn)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(pool.Close)
+
+	c := &isoClient{t: t, h: srv.Handler(), origin: cfg.AppURL, ip: randomTestIP()}
+	orgA, userA := c.signUp(pool)
+	orgB, userB := c.signUp(pool)
+	idsA := seedEveryKind(t, ctx, pool, orgA, userA, "a")
+	idsB := seedEveryKind(t, ctx, pool, orgB, userB, "b")
+	// Each organization referred a third one of its own: a referral signup
+	// that names neither A nor B.
+	for org, ids := range map[string]map[string]string{orgA: idsA, orgB: idsB} {
+		referred := idgen.New()
+		if _, err := pool.Exec(ctx, `INSERT INTO organizations (id, name) VALUES ($1, 'Referred')`, referred); err != nil {
+			t.Fatalf("seeding a referred organization: %v", err)
+		}
+		id := idgen.New()
+		if _, err := pool.Exec(ctx, `INSERT INTO referral_signups (id, organization_id, referred_organization_id, name, email)
+			VALUES ($1, $2, $3, 'Referred', 'referred@example.test')`, id, org, referred); err != nil {
+			t.Fatalf("seeding a referral signup: %v", err)
+		}
+		ids["signup"] = id
+		// A successful conversion, for the outgoing postback replay.
+		if _, err := pool.Exec(ctx, `INSERT INTO postbacks (id, organization_id, network_id, click_id, status, direction, result)
+			VALUES ($1, $2, $3, $4, 'CPA_ACCEPT', 'incoming', 'success')`, idgen.New(), org, ids["network"], isoReplayClick); err != nil {
+			t.Fatalf("seeding a conversion: %v", err)
+		}
+	}
+	c.signIn(orgA)
+	return &isolationEnv{c: c, ctx: ctx, pool: pool, srv: srv, orgA: orgA, orgB: orgB, userA: userA, userB: userB, idsA: idsA, idsB: idsB}
 }
 
 func paramKinds(t *testing.T, path string) (kinds []string, skip bool) {
@@ -539,6 +589,16 @@ func seedEveryKind(t *testing.T, ctx context.Context, pool *pgxpool.Pool, orgID,
 	must("content gallery folder", err)
 	ids["folder"] = folder.ID
 
+	fileID := idgen.New()
+	file, err := contentgallery.NewRepository(pool).CreateFile(ctx, fileID, orgID, contentgallery.CreateFileInput{
+		UploadedByUserID: userID, FileType: contentgallery.FileTypeImage, ObjectKey: "isolation/" + fileID,
+		OriginalFilename: "a.png", MimeType: "image/png", SizeBytes: 1,
+	})
+	must("content gallery file", err)
+	ids["file"] = file.ID
+	ids["user"] = userID
+	ids["org"] = orgID
+
 	cm, err := custommetrics.NewService(custommetrics.NewRepository(pool)).Create(ctx, orgID, userID, custommetrics.CreateInput{
 		Name: name("Metric"), GroupName: "Profitability", Formula: "DIV({revenue}, {cost})",
 		Format: custommetrics.FormatCurrency, Status: custommetrics.StatusDraft,
@@ -596,4 +656,362 @@ func seedEveryKind(t *testing.T, ctx context.Context, pool *pgxpool.Pool, orgID,
 		}
 	}
 	return ids
+}
+
+// refCase is one request that names other resources in its body or query.
+// Its path may hold {kind} placeholders, always filled with A's ids; each
+// field in fields is a reference to a resource of the given kind.
+type refCase struct {
+	method, path string
+	fields       map[string]string // field -> kind
+	query        bool              // fields are query parameters, not body fields
+	body         func(ref func(field string) string) any
+}
+
+// referenceCases covers every field that refers to another resource. They
+// run in order: reorder before more stream sets exist, deletes last.
+func referenceCases(env *isolationEnv) []refCase {
+	uniq := func(s string) string { return s + " " + idgen.New()[16:] }
+	today := time.Now().UTC().Format("2006-01-02")
+	flows := func(ref func(string) string) []map[string]any {
+		return []map[string]any{{
+			"name": "Flow", "active": true, "weight": 100,
+			"landing":     map[string]any{"enabled": true, "landingId": ref("landingId")},
+			"pwa":         map[string]any{"enabled": true, "pwaId": ref("pwaId"), "pwaType": "internal"},
+			"postlanding": map[string]any{"enabled": true, "postlandingId": ref("postlandingId")},
+			"destination": map[string]any{"kind": "offer", "networkId": ref("networkId"), "offerId": ref("offerId")},
+		}}
+	}
+	flowFields := map[string]string{
+		"landingId": "landing", "pwaId": "pwa", "postlandingId": "postlanding",
+		"networkId": "network", "offerId": "offer", "pixelIds": "pixel",
+	}
+	return []refCase{
+		{http.MethodPost, "/campaigns/{campaign}/stream-sets/reorder", map[string]string{"orderedIds": "streamSet"}, false,
+			func(ref func(string) string) any { return map[string]any{"orderedIds": []string{ref("orderedIds")}} }},
+		{http.MethodPost, "/campaigns", map[string]string{"trafficSourceId": "trafficSource"}, false,
+			func(ref func(string) string) any {
+				return map[string]any{"trafficSourceId": ref("trafficSourceId"), "name": uniq("Campaign"), "fallbackUrl": "https://example.com/f"}
+			}},
+		{http.MethodPatch, "/campaigns/{campaign}", map[string]string{"trafficSourceId": "trafficSource"}, false,
+			func(ref func(string) string) any { return map[string]any{"trafficSourceId": ref("trafficSourceId")} }},
+		{http.MethodPost, "/campaigns/{campaign}/tracking-links", map[string]string{"domainId": "domain"}, false,
+			func(ref func(string) string) any {
+				return map[string]any{"domainId": ref("domainId"), "slug": strings.ToLower("r" + idgen.New()[16:])}
+			}},
+		{http.MethodPost, "/campaigns/{campaign}/cost-entries", map[string]string{"trafficSourceId": "trafficSource"}, false,
+			func(ref func(string) string) any {
+				return map[string]any{"trafficSourceId": ref("trafficSourceId"), "entryDate": today, "amount": 5, "currency": "USD"}
+			}},
+		{http.MethodPost, "/event-mappings", map[string]string{"networkId": "network"}, false,
+			func(ref func(string) string) any {
+				return map[string]any{"networkId": ref("networkId"), "networkStatus": strings.ToLower(idgen.New()[16:]), "floxStatus": "CPA_ACCEPT"}
+			}},
+		{http.MethodPost, "/offers", map[string]string{"networkId": "network"}, false,
+			func(ref func(string) string) any {
+				return map[string]any{"networkId": ref("networkId"), "name": uniq("Offer"), "countries": []string{"US"}, "payout": 5, "currency": "USD",
+					"links": []map[string]string{{"label": "Main", "url": "https://offer.example.com/?c={click_id}"}}}
+			}},
+		{http.MethodPatch, "/offers/{offer}", map[string]string{"networkId": "network"}, false,
+			func(ref func(string) string) any { return map[string]any{"networkId": ref("networkId")} }},
+		{http.MethodPost, "/alert-rules", map[string]string{"campaignId": "campaign"}, false,
+			func(ref func(string) string) any {
+				return map[string]any{"kind": "spend_over", "campaignId": ref("campaignId"), "threshold": 10, "enabled": false}
+			}},
+		{http.MethodPut, "/alert-rules/{alertRule}", map[string]string{"campaignId": "campaign"}, false,
+			func(ref func(string) string) any {
+				return map[string]any{"kind": "spend_over", "campaignId": ref("campaignId"), "threshold": 10, "enabled": false}
+			}},
+		{http.MethodPost, "/campaigns/{campaign}/stream-sets", flowFields, false,
+			func(ref func(string) string) any {
+				return map[string]any{"name": uniq("Set"), "fallbackUrl": "https://example.com/f",
+					"rootFilter": map[string]any{"type": "group", "joiner": "AND", "children": []any{}},
+					"flows":      flows(ref), "pixelIds": []string{ref("pixelIds")}}
+			}},
+		{http.MethodPatch, "/campaigns/{campaign}/stream-sets/{streamSet}", flowFields, false,
+			func(ref func(string) string) any {
+				return map[string]any{"flows": flows(ref), "pixelIds": []string{ref("pixelIds")}}
+			}},
+		{http.MethodPost, "/tags/assignments/set", map[string]string{"entityId": "campaign", "tagIds": "tag"}, false,
+			func(ref func(string) string) any {
+				return map[string]any{"entityType": "campaign", "entityId": ref("entityId"), "tagIds": []string{ref("tagIds")}}
+			}},
+		{http.MethodPost, "/tags/assignments/bulk", map[string]string{"entityIds": "campaign", "toAdd": "tag", "toRemove": "tag"}, false,
+			func(ref func(string) string) any {
+				return map[string]any{"entityType": "campaign", "entityIds": []string{ref("entityIds")},
+					"toAdd": []string{ref("toAdd")}, "toRemove": []string{ref("toRemove")}}
+			}},
+		{http.MethodPost, "/content-gallery/files/move", map[string]string{"ids": "file", "folderId": "folder"}, false,
+			func(ref func(string) string) any {
+				return map[string]any{"ids": []string{ref("ids")}, "folderId": ref("folderId")}
+			}},
+		{http.MethodPost, "/content-gallery/files/archive", map[string]string{"ids": "file"}, false,
+			func(ref func(string) string) any { return map[string]any{"ids": []string{ref("ids")}} }},
+		{http.MethodPost, "/content-gallery/files/restore", map[string]string{"ids": "file"}, false,
+			func(ref func(string) string) any { return map[string]any{"ids": []string{ref("ids")}} }},
+		{http.MethodGet, "/content-gallery/files", map[string]string{"folderId": "folder", "uploadedBy": "user"}, true, nil},
+		{http.MethodGet, "/analytics/ltv/ftd-cohorts", map[string]string{"campaignId": "campaign", "networkId": "network"}, true, nil},
+		{http.MethodGet, "/analytics/ltv/reg-cohorts", map[string]string{"campaignId": "campaign", "networkId": "network"}, true, nil},
+		{http.MethodPost, "/postback-logs/replay-incoming", map[string]string{"networkId": "network"}, false,
+			func(ref func(string) string) any {
+				return map[string]any{"networkId": ref("networkId"), "clickId": idgen.New(), "rawStatus": "ftd"}
+			}},
+		{http.MethodPost, "/postback-logs/replay-outgoing", map[string]string{"networkId": "network"}, false,
+			func(ref func(string) string) any {
+				return map[string]any{"networkId": ref("networkId"), "clickId": isoReplayClick, "status": "CPA_ACCEPT",
+					"url": "https://partner.example/postback?click_id=x"}
+			}},
+		{http.MethodPost, "/referral/transactions", map[string]string{"relatedSignupId": "signup"}, false,
+			func(ref func(string) string) any {
+				return map[string]any{"type": "accrual", "amount": 1, "description": "Isolation", "relatedSignupId": ref("relatedSignupId")}
+			}},
+		{http.MethodPost, "/auth/login", map[string]string{"organizationId": "org"}, false,
+			func(ref func(string) string) any {
+				return map[string]any{"email": env.c.email[env.orgA], "password": isoPassword, "organizationId": ref("organizationId")}
+			}},
+		{http.MethodPost, "/content-gallery/files/delete", map[string]string{"ids": "file"}, false,
+			func(ref func(string) string) any { return map[string]any{"ids": []string{ref("ids")}} }},
+	}
+}
+
+// notReferences are request or response JSON fields named like ids that do
+// not refer to another organization's row. A new id-named field fails
+// TestEveryReferenceRefusesAnotherOrganizationsIDs until it is covered by
+// a referenceCases entry or listed here with a reason.
+var notReferences = map[string]string{
+	"adAccountId":                  "the ad platform's own account id",
+	"clientId":                     "the ad platform's OAuth client id",
+	"pixelId":                      "the ad platform's pixel id",
+	"externalCampaignId":           "the traffic source's own campaign id",
+	"externalClickId":              "the traffic source's click id, a string, not a row",
+	"fbClickId":                    "Facebook's click id",
+	"ttClickId":                    "TikTok's click id",
+	"networkTxnId":                 "the network's transaction id",
+	"clickId":                      "a click id: ClickHouse reads filter on the session's org (chstore TestCrossTenantIsolation)",
+	"unmatchedExternalCampaignIds": "response only: platform campaign ids a sync could not match",
+	"createdByUserId":              "response only",
+	"uploadedByUserId":             "response only; the list filter is uploadedBy, covered",
+	"requestedByUserId":            "response only",
+	"resolvedByUserId":             "response only",
+	"referredOrganizationId":       "response only",
+	"relatedPayoutId":              "response only",
+	"deliveryId":                   "response only",
+	"ruleId":                       "response only",
+	"tagId":                        "response only; assignments take tagIds, covered",
+	"userId":                       "response only (team members, auth/me)",
+	"streamSetId":                  "response only (routing trace, events)",
+	"flowId":                       "response only (routing trace, events)",
+}
+
+var idFieldRE = regexp.MustCompile(`json:"([a-zA-Z]*(?:Id|Ids|IDs))(?:,[a-z]+)?"`)
+
+// Tech audit 2026-10-06, §16, the part the path walk cannot see: ids of
+// organization B inside a request body or query string. For every field
+// that refers to another resource, the request first succeeds with A's own
+// id (so the body is valid and the check is not vacuous), then is sent with
+// B's id and with an id that exists nowhere; the two answers must be the
+// same. Afterwards none of A's rows may refer to any of B's, and none of
+// B's rows may have changed.
+func TestEveryReferenceRefusesAnotherOrganizationsIDs(t *testing.T) {
+	cases := referenceCases(nil)
+	covered := map[string]bool{}
+	for _, rc := range cases {
+		for f := range rc.fields {
+			covered[f] = true
+		}
+	}
+	assertEveryIDFieldCovered(t, covered)
+
+	env := newIsolationEnv(t)
+	c, ctx, pool := env.c, env.ctx, env.pool
+	before := snapshotOrg(t, ctx, pool, env.orgB)
+	cases = referenceCases(env)
+
+	placeholder := regexp.MustCompile(`\{([a-zA-Z]+)\}`)
+	bIDs := map[string]bool{env.orgB: true, env.userB: true}
+	for _, id := range env.idsB {
+		bIDs[id] = true
+	}
+	known := map[string]bool{}
+	for _, id := range env.idsA {
+		known[id] = true
+	}
+	known[env.orgA], known[env.userA] = true, true
+	for _, rc := range cases {
+		path := placeholder.ReplaceAllStringFunc(rc.path, func(m string) string {
+			return env.idsA[strings.Trim(m, "{}")]
+		})
+		send := func(field, id string) (int, string) {
+			ref := func(f string) string {
+				if f == field {
+					return id
+				}
+				return env.idsA[rc.fields[f]]
+			}
+			if rc.query {
+				q := url.Values{}
+				for f := range rc.fields {
+					q.Set(f, ref(f))
+				}
+				status, body, _ := c.request(rc.method, path+"?"+q.Encode(), nil)
+				return status, body
+			}
+			status, body, _ := c.request(rc.method, path, rc.body(ref))
+			return status, body
+		}
+		name := rc.method + " " + rc.path
+		if status, body := send("", ""); status < 200 || status >= 300 {
+			t.Errorf("%s with A's own ids = %d, want 2xx — the case no longer builds a valid request\n%s", name, status, trim(body))
+			continue
+		}
+		fields := make([]string, 0, len(rc.fields))
+		for f := range rc.fields {
+			fields = append(fields, f)
+		}
+		sort.Strings(fields)
+		for _, field := range fields {
+			bID := env.idsB[rc.fields[field]]
+			unknown := idgen.New()
+			wantStatus, wantBody := send(field, unknown)
+			refsBefore := rowsReferring(t, ctx, pool, env.orgA, bIDs)
+			status, body := send(field, bID)
+			// The id sent may be echoed back (a validation message names
+			// it); any other id of B's in the answer is a leak.
+			echoed := strings.ReplaceAll(body, bID, "<id>")
+			wantBody = normalize(strings.ReplaceAll(wantBody, unknown, "<id>"), known)
+			body = normalize(echoed, known)
+			if status >= 500 {
+				t.Errorf("%s with B's %s in %s = %d, want a 4xx\n%s", name, rc.fields[field], field, status, trim(body))
+			}
+			// Two successes differ by what they created (names, order); that
+			// nothing of B's was stored is checked below. A refusal must
+			// read the same either way.
+			ok2xx := status >= 200 && status < 300
+			if status != wantStatus || !ok2xx && body != wantBody {
+				t.Errorf("%s answers B's %s in %s differently from an unknown id:\n  B's id:     %d %s\n  unknown id: %d %s",
+					name, rc.fields[field], field, status, trim(body), wantStatus, trim(wantBody))
+			}
+			if leaked := firstContained(echoed, append([]string{env.orgB, env.userB}, values(env.idsB)...)); leaked != "" {
+				t.Errorf("%s with B's %s in %s shows organization B's id %s", name, rc.fields[field], field, leaked)
+			}
+			// Checked after every call: a later request may overwrite
+			// what this one stored.
+			for row := range rowsReferring(t, ctx, pool, env.orgA, bIDs) {
+				if !refsBefore[row] {
+					t.Errorf("%s with B's %s in %s stored a reference to B in A's data: %s", name, rc.fields[field], field, trim(row))
+				}
+			}
+		}
+	}
+
+	after := snapshotOrg(t, ctx, pool, env.orgB)
+	for table, sum := range before {
+		if got, ok := after[table]; ok && got != sum {
+			t.Errorf("organization B's rows in %s changed while A called the API", table)
+		}
+	}
+	for row := range rowsReferring(t, ctx, pool, env.orgA, bIDs) {
+		t.Errorf("organization A's data refers to B: %s", trim(row))
+	}
+}
+
+var (
+	ulidRE      = regexp.MustCompile(`\b[0-9A-HJKMNP-TV-Z]{26}\b`)
+	timestampRE = regexp.MustCompile(`\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})`)
+)
+
+// normalize hides what differs between two otherwise equal answers: ids
+// minted by the request itself and timestamps. Seeded ids stay visible.
+func normalize(body string, known map[string]bool) string {
+	body = ulidRE.ReplaceAllStringFunc(body, func(id string) string {
+		if known[id] {
+			return id
+		}
+		return "<new>"
+	})
+	return timestampRE.ReplaceAllString(body, "<time>")
+}
+
+// rowsReferring is every row of orgID, as "table: row", that contains any
+// of ids.
+func rowsReferring(t *testing.T, ctx context.Context, pool *pgxpool.Pool, orgID string, ids map[string]bool) map[string]bool {
+	t.Helper()
+	out := map[string]bool{}
+	for table, rows := range orgRows(t, ctx, pool, orgID) {
+		for _, row := range rows {
+			for id := range ids {
+				if strings.Contains(row, id) {
+					out[table+": "+row] = true
+					break
+				}
+			}
+		}
+	}
+	return out
+}
+
+// assertEveryIDFieldCovered reads every JSON tag named like an id in the
+// non-test sources under internal/.
+func assertEveryIDFieldCovered(t *testing.T, covered map[string]bool) {
+	t.Helper()
+	var missing []string
+	seen := map[string]bool{}
+	err := filepath.WalkDir("../internal", func(path string, d fs.DirEntry, err error) error {
+		if err != nil || d.IsDir() || !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") {
+			return err
+		}
+		if strings.Contains(path, string(filepath.Separator)+"chstore"+string(filepath.Separator)) {
+			return nil // ClickHouse rows, read by org (chstore TestCrossTenantIsolation)
+		}
+		src, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		for _, m := range idFieldRE.FindAllStringSubmatch(string(src), -1) {
+			name := m[1]
+			if seen[name] {
+				continue
+			}
+			seen[name] = true
+			if !covered[name] && notReferences[name] == "" {
+				missing = append(missing, name+" ("+path+")")
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(seen) < 20 {
+		t.Fatalf("found only %d id-named JSON fields — the scan no longer matches", len(seen))
+	}
+	if len(missing) > 0 {
+		t.Fatalf("id-named JSON fields with no isolation case: %v\nadd a referenceCases entry, or list the field in notReferences with a reason", missing)
+	}
+}
+
+// orgRows is every row, as text, of every table with an organization_id,
+// for one organization.
+func orgRows(t *testing.T, ctx context.Context, pool *pgxpool.Pool, orgID string) map[string][]string {
+	t.Helper()
+	out := map[string][]string{}
+	for table := range snapshotOrg(t, ctx, pool, orgID) {
+		rows, err := pool.Query(ctx, fmt.Sprintf(`SELECT t::text FROM %q t WHERE organization_id = $1`, table), orgID)
+		if err != nil {
+			var pgErr *pgconn.PgError
+			if errors.As(err, &pgErr) && pgErr.Code == "42P01" {
+				continue
+			}
+			t.Fatalf("reading %s: %v", table, err)
+		}
+		for rows.Next() {
+			var row string
+			if err := rows.Scan(&row); err != nil {
+				t.Fatal(err)
+			}
+			out[table] = append(out[table], row)
+		}
+		rows.Close()
+	}
+	return out
 }
