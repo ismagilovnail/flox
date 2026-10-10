@@ -5,6 +5,25 @@ per-phase, matching `CLAUDE.md`'s phase protocol. The one exception is
 [Between phases], below: spec amendments and the code changes that follow from
 them land between phases and would otherwise be invisible here.
 
+## [Between phases] — Reports by click date (tech audit AN5)
+
+ROI per campaign day: revenue can now sit on the day of its click, beside that day's clicks and
+spend, instead of the day the network reported the conversion.
+
+- `dateBasis` (`conversion` default | `click`) on `/analytics/report`, `/timeseries`,
+  `/breakdown`, `/dashboard` and `/analytics/campaigns/{id}/daily-revenue`; unknown → 422.
+- No ClickHouse schema change: an attributed conversion's click time is `event_at −
+  time_to_conversion_ms`; range and day are cut from it in the report's zone. Conversions
+  without a click keep their own date and are counted (`datedByConversion`, per row and in
+  total) so the UI can say so. Clicks, views, installs and spend are unchanged.
+- Report presets keep the basis: `report_presets.date_basis`, migration 00068.
+- Web: "Dates: by conversion / by click" in the report builder and the overview, saved with
+  presets and the unsaved draft; a notice while dated by click (recent days still fill in; N
+  conversions without a click). en/ru, with Russian plural forms tested.
+- Tests: ClickHouse (days, range, Moscow zone, os join, campaign daily revenue, totals equal
+  across bases — the click-time expression removed, three of them fail), service (basis reaches
+  the query, 422), presets round trip. Default responses unchanged: existing tests untouched.
+
 ## [Between phases] — conversion.Service.Record in steps (tech audit CQ3)
 
 No behaviour change.

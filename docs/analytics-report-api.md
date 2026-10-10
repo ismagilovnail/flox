@@ -27,6 +27,9 @@ querystring).
 | `POST /analytics/dimension-values` | The report builder's filter-value dropdown — real distinct values seen for one dimension, most-common first (below). |
 | `POST /analytics/cost-timezones` | `{from, to, timezone}` → `{"mismatched": [...]}`: the ad-account zones whose daily spend in the range is cut in other days than the report (below). |
 
+`report`, `timeseries`, `breakdown` and `dashboard` also take `dateBasis`
+(`conversion` | `click`) — see "Conversions by click date" below.
+
 Request/response shapes: `apps/internal/analytics/handler.go`'s
 `reportRequest`/`timeseriesRequest`/`breakdownRequest`/`rangeRequest`/
 `dimensionValuesRequest` and `reportRowResponse`/`metricValuesResponse`/
@@ -249,6 +252,48 @@ Not verified against the real platforms (no accounts here): the field
 names follow their API documentation and are tested against fakes. A wrong
 guess only means no zone is stored and no note is shown — the spend itself
 does not depend on it.
+
+## Conversions by click date (tech audit AN5)
+
+`report`, `timeseries`, `breakdown`, `dashboard` (body) and `GET
+/analytics/campaigns/{id}/daily-revenue` (query) take `dateBasis`:
+`"conversion"` (default, also `""`) or `"click"`; anything else is a 422
+on `dateBasis`. By conversion, a conversion counts on the day the network
+reported it. By click, it counts on the day of the click it is attributed
+to — the day that click's spend and the click itself are on — so ROI per
+campaign day compares like with like: a Monday registration that deposits
+on Wednesday is Monday's revenue.
+
+Only conversions move. Clicks, landing views and installs are dated by
+when they happened either way, spend by its day.
+
+- **No schema change.** The click time of an attributed conversion is
+  `event_at − time_to_conversion_ms` (`conversionTimeExpr` in
+  `chstore/report.go`), filled in at attribution and again when a retry
+  attributes an `unknown_click` later (`internal/reattribute`). The range
+  filter and the day are cut from that time, in the report's timezone;
+  `event_at` is still bounded from below (a day of slack) so the scan
+  starts at the right partition.
+- **Conversions without a click** (`unknown_click`, `no_identifier`,
+  ambiguous) have no click time and keep their own date. Each row then
+  carries `datedByConversion`, their count, and `report`/`timeseries`/
+  `breakdown` add the total at the top level, `dashboard` for its totals;
+  the UI says how many (`DateBasisNotice`). They belong to no campaign, so
+  campaign rows are never affected.
+- **Recent days fill in.** By click, the last days keep gaining
+  conversions as their clicks convert; the UI says so.
+- **Totals agree.** Over a range holding the clicks and the conversions,
+  the two bases only move revenue between days.
+- `daily-revenue` by conversion reads the daily rollup
+  (`conversion_events_daily_campaign`); by click it reads
+  `conversion_events`, since the rollup only knows the conversion's day.
+- Report presets keep the basis (`report_presets.date_basis`, migration
+  00068); the funnel is unchanged (per click_id, its own logic).
+
+Tests: `chstore/date_basis_test.go` against ClickHouse (days, range, a
+non-UTC zone, the os join path, campaign daily revenue, equal totals),
+`analytics/date_basis_test.go` (basis reaches the query, 422 on an unknown
+one), `reportpresets` (round trip).
 
 ## Frontend integration
 
