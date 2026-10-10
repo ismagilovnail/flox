@@ -1,4 +1,4 @@
-// Package conversion is Phase 23's conversion engine (§45): it turns an
+// Package conversion is the conversion engine (§45): it turns an
 // inbound postback into a recorded, deduplicated, correctly-attributed CPA
 // event, or an honestly-logged reason it wasn't.
 //
@@ -68,11 +68,10 @@ type Postback struct {
 	// Stored regardless of whether this status's dedup key uses it (§45).
 	NetworkTxnID string
 
-	// PostbackURL is the network's outgoing macro template (§46, Phase 24),
-	// e.g. "...?click_id={click_id}&status={status}" — empty when the
-	// network has none configured. Threaded through from the same
-	// NetworkLookup the handler already did for OrganizationID, so Service
-	// still never needs its own NetworkLookup dependency.
+	// PostbackURL is the network's outgoing macro template (§46), e.g.
+	// "...?click_id={click_id}&status={status}" — empty when the network
+	// has none. It comes from the handler's NetworkLookup, so Service needs
+	// none of its own.
 	PostbackURL string
 
 	OccurredAt time.Time
@@ -115,12 +114,10 @@ type Network struct {
 	// network has no outgoing integration configured, and the handler must
 	// not populate Postback.PostbackURL in that case.
 	PostbackURL string
-	// PostbackSecretHash authenticates an INCOMING postback (the opposite
-	// direction from PostbackURL) — §54/Phase 30: apps/tracker's
-	// PostbackHandler hashes the request's own secret param and compares
-	// it against this before ever calling Service.Record. Never exposed
-	// outside this package (Network carries no json tags at all — it's
-	// never serialized to a client response, only consumed internally).
+	// PostbackSecretHash authenticates an incoming postback (§54):
+	// apps/tracker's PostbackHandler hashes the request's secret param and
+	// compares it with this before calling Service.Record. Network has no
+	// json tags: it is never serialized to a client.
 	PostbackSecretHash string
 }
 
@@ -179,15 +176,15 @@ type Entry struct {
 	// Event and Delivery are the side effects of a ResultSuccess entry — the
 	// CPA event for ClickHouse and the outgoing postback, nil when the
 	// network has none. Store writes them in the same transaction as the
-	// row, and only if the row lands as ResultSuccess: a recorded conversion
-	// without its event, or its delivery, can no longer happen (audit
-	// 2026-10-06, D1). Delivery.SourcePostbackID is filled in by Store.
+	// row, and only if the row lands as ResultSuccess: a conversion is never
+	// recorded without its event or its delivery (tech audit D1).
+	// Delivery.SourcePostbackID is filled in by Store.
 	Event    *event.Event
 	Delivery *DeliveryRequest
 
 	// Reversal is filled in by Store, under the click's lock: a CPA_DECLINE
 	// or CPA_TRASH recorded while the click stands accepted reverses that
-	// CPA_ACCEPT's payout (§45; audit 2026-10-06, T4/AN3).
+	// CPA_ACCEPT's payout (§45; tech audit T4).
 	Reversal *Reversal
 }
 
@@ -247,7 +244,7 @@ type FXConverter interface {
 	ToUSD(ctx context.Context, currency string, amount float64, at time.Time) (usd float64, ok bool, err error)
 }
 
-// DeliveryRequest is the outgoing postback (internal/postback, Phase 24/§46)
+// DeliveryRequest is the outgoing postback (internal/postback, §46)
 // a successfully recorded conversion queues.
 type DeliveryRequest struct {
 	OrganizationID string
@@ -557,9 +554,9 @@ var ErrInvalidRevenue = errors.New("conversion: invalid revenue")
 
 // ParseRevenue parses a postback's revenue parameter and applies
 // CheckRevenue. strconv.ParseFloat alone accepts "NaN" and "Inf": one NaN
-// payout turned every ClickHouse revenue sum it touched into NaN, and a value
-// past numeric(14,4) failed the insert with a 500 the network retried forever
-// (audit 2026-10-06, S3).
+// payout turns every ClickHouse revenue sum it touches into NaN, and a value
+// past numeric(14,4) fails the insert with a 500 the network retries forever
+// (tech audit S3).
 func ParseRevenue(raw string) (float64, error) {
 	v, err := strconv.ParseFloat(strings.TrimSpace(raw), 64)
 	if err != nil {
@@ -600,9 +597,9 @@ const (
 var ErrInvalidEventTime = errors.New("conversion: invalid event_time")
 
 // ParseEventTime reads a postback's event_time — when the conversion
-// happened at the network, as opposed to when its postback reached us
-// (tech audit T3: nightly replays and slow networks used to land every
-// conversion on the day it arrived, and FX was taken on that day). Unix
+// happened at the network, as opposed to when its postback reached us, so
+// nightly replays and slow networks land on the right day and FX date
+// (tech audit T3). Unix
 // seconds or milliseconds, RFC 3339, or "YYYY-MM-DD HH:MM:SS" in UTC. Up
 // to 5 minutes ahead of now counts as now; further ahead, or older than
 // MaxEventAge, is refused.

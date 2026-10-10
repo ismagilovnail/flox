@@ -1,13 +1,8 @@
 // Package analytics is the "analytics service" pipeline stage (§47/§48): a
 // read layer over chstore's event tables and materialized aggregates,
-// exposed as REST endpoints by apps/api. Started narrow — two queries,
-// two endpoints (click/filter volume, conversion revenue) for one
-// campaign, proving the pipeline's last two stages worked end to end.
-// Phase 35 (post-Phase-34, user-scoped — see CLAUDE.md CURRENT STATE) is
-// the real analytics surface that narrow start deferred: multi-dimension
-// group-by (report.go's Report/Breakdown), a daily timeseries, the §43
-// funnel, and the Overview dashboard — replacing apps/web's mock data for
-// both /analytics and /overview.
+// exposed as REST endpoints by apps/api: one campaign's daily clicks and
+// revenue, and in report.go the multi-dimension report, breakdown, daily
+// timeseries, the §43 funnel and the Overview dashboard.
 package analytics
 
 import (
@@ -34,7 +29,7 @@ type Repository interface {
 	DistinctValues(ctx context.Context, organizationID string, dim chstore.ReportDimension, from, to time.Time, limit int) ([]string, error)
 }
 
-// CostSource is the narrow slice of *cost.Service Phase 35 needs — same
+// CostSource is the narrow slice of *cost.Service this package needs — same
 // decoupling pattern as Repository above. Referencing cost.CampaignSpend/
 // cost.DailySpend directly (rather than package-local equivalents) mirrors
 // how Repository above already references chstore's own result types

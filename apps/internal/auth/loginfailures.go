@@ -8,7 +8,7 @@ import (
 	"github.com/ismagilovnail/flox/apps/internal/apierror"
 )
 
-// Failed sign-ins per account (tech audit 2026-10-06, API2). The per-IP
+// Failed sign-ins per account (tech audit API2). The per-IP
 // limiter on /auth/* lives in Redis; this one lives in Postgres
 // (login_failures, migration 00063), so guessing one account's password
 // stays bounded while Redis is down and from any number of IPs.
@@ -24,7 +24,7 @@ const (
 	LoginFailureWindow = 15 * time.Minute
 
 	// lastActiveResolution: ResolveSession writes last_active_at at most
-	// this often (tech audit 2026-10-06, DB4).
+	// this often (tech audit DB4).
 	lastActiveResolution = time.Minute
 )
 

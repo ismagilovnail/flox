@@ -50,10 +50,9 @@ func New(rdb *redis.Client, logger *slog.Logger) *Limiter {
 }
 
 // allowScript counts one request and makes sure the key expires, in one
-// atomic step. INCR and EXPIRE as two calls (before the 2026-10-06 tech
-// audit, API1) left a key with no TTL whenever the EXPIRE was lost — a
-// dropped connection, a restart between the two — and that IP or key got
-// 429 for good. The TTL check also heals such a key left from before.
+// atomic step (tech audit API1). As two calls, a lost EXPIRE — a dropped
+// connection, a restart between them — leaves a key with no TTL, and that
+// IP or key gets 429 for good. The TTL check also heals such a key.
 var allowScript = redis.NewScript(`
 local n = redis.call('INCR', KEYS[1])
 if n == 1 or redis.call('PTTL', KEYS[1]) == -1 then
@@ -89,7 +88,7 @@ func (l *Limiter) Middleware(keyPrefix string, keyFunc func(r *http.Request) str
 
 // StrictMiddleware is Middleware for routes that must stay limited while
 // Redis is down — /auth/*, where failing open meant unlimited password
-// guessing for the outage (tech audit 2026-10-06, API2). On a Redis error
+// guessing for the outage (tech audit API2). On a Redis error
 // it counts in this process instead: per replica, so N replicas allow up
 // to N× the limit, but bounded, and still no outage of its own.
 func (l *Limiter) StrictMiddleware(keyPrefix string, keyFunc func(r *http.Request) string, limit int, window time.Duration) func(http.Handler) http.Handler {
@@ -119,13 +118,6 @@ func (l *Limiter) middleware(keyPrefix string, keyFunc func(r *http.Request) str
 		})
 	}
 }
-
-// ClientIP has been removed (security audit finding #2): it trusted
-// X-Forwarded-For's first entry unconditionally, which is exactly the
-// entry a client controls, making every rate limit and the org IP
-// allowlist bypassable by rotating the header. Callers now take a
-// *clientip.Resolver (apps/internal/clientip), which only honours the
-// header from a configured trusted proxy.
 
 // localCounter is StrictMiddleware's in-process fixed window, used only
 // while Redis fails.
@@ -170,8 +162,8 @@ func (c *localCounter) allow(key string, limit int, window time.Duration, now ti
 // only Record counts. For endpoints where legitimate volume has no bound
 // worth enforcing but failures do — a network's nightly postback replay
 // can be thousands of requests a minute from one IP, all valid, while a
-// scan of network IDs or secrets is all failures (tech audit 2026-10-06,
-// P4). Like StrictMiddleware it counts in process while Redis fails (or
+// scan of network IDs or secrets is all failures (tech audit P4). Like
+// StrictMiddleware it counts in process while Redis fails (or
 // was never connected), so the limit holds per replica through an outage.
 type Failures struct {
 	l      *Limiter

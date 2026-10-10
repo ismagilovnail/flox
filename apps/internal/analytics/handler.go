@@ -30,7 +30,7 @@ func (h *Handler) Register(r chi.Router) {
 	r.Get("/campaigns/{campaignId}/daily", h.campaignDaily)
 	r.Get("/campaigns/{campaignId}/daily-revenue", h.campaignDailyRevenue)
 
-	// Phase 35's multi-dimension surface. POST+JSON body, not GET+query —
+	// The multi-dimension surface. POST+JSON body, not GET+query —
 	// dims/filters/sort are structured, variable-length shapes, the same
 	// reason routingsimulate.Handler's /simulate is POST (see that
 	// package's own handler.go).
@@ -133,7 +133,7 @@ func (h *Handler) parseRangeParams(w http.ResponseWriter, r *http.Request) (orgI
 	return orgID, campaignID, from, to, true
 }
 
-// --- Phase 35: Report/Timeseries/Breakdown/Funnel/Dashboard ---
+// --- Report/Timeseries/Breakdown/Funnel/Dashboard ---
 
 // metricValuesResponse is MetricValues with explicit JSON tags —
 // MetricValues itself stays tag-free since apps/internal/analytics's own

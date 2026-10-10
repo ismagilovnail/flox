@@ -946,10 +946,8 @@ func (s *Service) VerifyPendingLogin(ctx context.Context, pendingToken, code str
 		// window open for repeated guesses: the pending row is the only
 		// thing standing between a 6-digit TOTP code and a session, and
 		// its 5-minute TTL (pendingTOTPLoginTTL) is otherwise long enough
-		// for an unlimited number of attempts against one token (security
-		// audit finding #3). The cost is a genuine typo forcing a fresh
-		// login, same trade CLAUDE.md already makes for VerifyEmail/invite
-		// tokens elsewhere in this file.
+		// for an unlimited number of attempts against one token. The cost is
+		// a genuine typo forcing a fresh login.
 		_ = s.repo.DeletePendingTOTPLogin(ctx, pending.ID)
 		// A wrong code spends the same per-account budget as a wrong
 		// password: knowing the password must not buy unlimited code

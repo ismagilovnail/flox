@@ -6,7 +6,7 @@ import (
 )
 
 // CostTimezones answers "is this report's spend cut in other days than its
-// clicks?" (tech audit 2026-10-06, AN4). Ad platforms report spend per
+// clicks?" (tech audit AN4). Ad platforms report spend per
 // calendar day in the ad account's own zone, and cost_entries keep that
 // day; a report cuts clicks in its own zone. When the two zones have
 // different UTC offsets, a day's cost sits beside a day of clicks that is

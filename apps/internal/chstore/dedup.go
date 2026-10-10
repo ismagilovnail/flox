@@ -13,7 +13,7 @@ type batchIDKey struct{}
 // insert_deduplication_token = batchID:table, and ClickHouse skips a block
 // whose token it already stored — in the dependent materialized views too
 // (deduplicate_blocks_in_dependent_materialized_views). A retry of a batch
-// that partly or fully landed therefore adds nothing (audit 2026-10-06, D2).
+// that partly or fully landed therefore adds nothing (tech audit D2).
 //
 // The caller must send exactly the same rows under the same batchID
 // (internal/pgqueue guarantees that). Every insert into these tables should

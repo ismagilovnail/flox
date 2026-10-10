@@ -10,7 +10,7 @@ import (
 	"github.com/ClickHouse/clickhouse-go/v2/lib/driver"
 )
 
-// Revenue nets chargebacks (§45; audit 2026-10-06, T4/AN3): a CPA_DECLINE or
+// Revenue nets chargebacks (§45; tech audit T4): a CPA_DECLINE or
 // CPA_TRASH that reversed an accept carries the accept's payout negated
 // (conversion.PostgresStore), booked on the decline's own date; any other
 // decline carries 0. Conversion counts are unchanged — only revenue nets.
@@ -19,21 +19,15 @@ const (
 	reportCPATypes = "('CPA_HOLD', 'CPA_ACCEPT', 'CPA_REDEP', 'CPA_DECLINE', 'CPA_TRASH')"
 )
 
-// ReportDimension is a whitelisted group-by dimension the multi-dimension
-// report builder (Phase 35) can request — never an arbitrary client
-// string reaching a query verbatim; every method in this file rejects
-// anything not in reportClickColumns/reportConversionColumns below before it gets
-// near SQL.
+// ReportDimension is a whitelisted group-by dimension the report builder
+// can request — never an arbitrary client string reaching a query
+// verbatim; every method in this file rejects anything not in
+// reportClickColumns/reportConversionColumns below before it gets near SQL.
 //
-// 15 dimensions total, matching apps/web/src/features/analytics/registry.ts's
-// DIMENSIONS. Of the 16 the UI originally named at Phase 35, 2 — postlanding
-// and network — still have no backing column: postlanding because
-// apps/tracker doesn't serve that funnel stage yet (recording a
-// postlanding "shown" that never was would be fabricated attribution),
-// network because nothing carries it. DimStreamSet was a whitelist
-// omission (its column always existed); DimLanding (schema/008), DimOffer
-// (schema/009) and DimPwa (schema/010) got real columns, the pattern the
-// rest would follow.
+// The 15 here match apps/web's registry.ts DIMENSIONS. Postlanding and
+// network have no column: the tracker does not serve a postlanding stage
+// (recording one that was never shown would be fabricated attribution),
+// and no event carries a network.
 type ReportDimension string
 
 const (
@@ -193,9 +187,7 @@ type ReportFilter struct {
 // ReportQuery is the shared shape every method below takes. ByDay and
 // Dims are independent — Timeseries-style callers set ByDay and leave
 // Dims empty, report-table-style callers set Dims and leave ByDay false;
-// nothing stops a caller from setting both, but nothing in Phase 35's own
-// API surface does, since no UI screen needs a per-day-per-dimension
-// breakdown at once.
+// both together also work (the report builder's "day" dimension).
 type ReportQuery struct {
 	OrganizationID string
 	Dims           []ReportDimension
@@ -740,9 +732,7 @@ func (s *EventStore) FunnelCounts(ctx context.Context, organizationID string, fr
 
 // DistinctValues answers "what real values has dim actually taken" for
 // org across [from, to) — backs the report builder's filter-value
-// dropdown (docs/analytics-report-api.md), replacing the fixed mock
-// pool apps/web/src/lib/mock/analytics.ts used to be the only source
-// for. Ordered by frequency (most-common first, via count() DESC) so an
+// dropdown (docs/analytics-report-api.md). Ordered by frequency (most-common first, via count() DESC) so an
 // operator picking from a long tail sees the values actually worth
 // filtering on first, capped at limit.
 //
@@ -757,8 +747,7 @@ func (s *EventStore) FunnelCounts(ctx context.Context, organizationID string, fr
 // empty-string semantics (campaign fallback, blocked click) are
 // meaningful to filter on, but confusing to suggest as a pickable
 // dropdown value with no visible label — an operator who wants that
-// filter can still type "" directly into the existing free-text value
-// field, unaffected by this endpoint existing.
+// filter can still type "" into the free-text value field.
 func (s *EventStore) DistinctValues(ctx context.Context, organizationID string, dim ReportDimension, from, to time.Time, limit int) ([]string, error) {
 	col, ok := reportClickColumns[dim]
 	if !ok {

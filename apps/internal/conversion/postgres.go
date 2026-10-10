@@ -96,11 +96,9 @@ func (s *PostgresStore) FindSuccessID(ctx context.Context, organizationID, netwo
 }
 
 // direction is hardcoded 'incoming': this package only handles postbacks a
-// network sends TO FLOX. Outgoing (FLOX notifying a network) is Phase 24's
-// postback engine (internal/postback), which reads a success row here via
-// source_postback_id but writes its own delivery lifecycle to a separate
-// postback_deliveries table — see that migration's comment for why sharing
-// this one wasn't the right call after all.
+// network sends to FLOX. Outgoing ones (internal/postback) point at a
+// success row here through source_postback_id and keep their own delivery
+// lifecycle in postback_deliveries.
 const insertColumns = `
 	id, organization_id, network_id, click_id, status, direction, result,
 	network_accepts_duplicates, event_ref, network_txn_id, raw_status,
@@ -151,10 +149,10 @@ func (s *PostgresStore) Record(ctx context.Context, e Entry) (Recorded, error) {
 
 // recordSuccess runs inside Record's transaction. Every postback for one
 // click is serialized by a transaction-scoped advisory lock, so the
-// progression check and the insert are one step: before this, a CPA_HOLD
-// replay racing a CPA_ACCEPT could both pass the check and the HOLD land
-// last (audit 2026-10-06, D3). The lock key is per (organization, click),
-// so unrelated conversions never wait on each other.
+// progression check and the insert are one step: a CPA_HOLD replay racing
+// a CPA_ACCEPT cannot both pass the check and land the HOLD last (tech
+// audit D3). The lock key is per (organization, click), so unrelated
+// conversions never wait on each other.
 func (s *PostgresStore) recordSuccess(ctx context.Context, tx pgx.Tx, e Entry) (Recorded, error) {
 	if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1, 0))`,
 		e.OrganizationID+":"+e.ClickID); err != nil {
@@ -230,7 +228,7 @@ func (s *PostgresStore) recordSuccess(ctx context.Context, tx pgx.Tx, e Entry) (
 	}
 
 	// The outbox: the CPA event and the outgoing postback commit with the
-	// row or not at all (audit 2026-10-06, D1).
+	// row or not at all (tech audit D1).
 	if e.Event != nil {
 		ev := *e.Event
 		// The conversion's event is identified by its postbacks row, so
@@ -312,9 +310,7 @@ func (l *PostgresNetworkLookup) ByID(ctx context.Context, networkID string) (Net
 	return n, nil
 }
 
-// PostgresMapper reads the per-network Event Mapping table (§29; Phase 13's
-// frontend documented this as "what the real Conversion Engine runs at
-// ingest time").
+// PostgresMapper reads the per-network Event Mapping table (§29).
 type PostgresMapper struct {
 	db *pgxpool.Pool
 }
@@ -348,9 +344,7 @@ func (m *PostgresMapper) MapStatus(ctx context.Context, organizationID, networkI
 // used is the latest published on or before the event's date, at most
 // fx.MaxStaleDays old: reference rates skip weekends and holidays, and an
 // event before today's fixing takes yesterday's — the rate in force then,
-// never a later one. Before the 2026-10-06 audit (AN1) this demanded an exact
-// date match on a table nothing filled, so every non-USD amount had no USD
-// value.
+// never a later one (tech audit AN1).
 type PostgresFX struct {
 	db *pgxpool.Pool
 }

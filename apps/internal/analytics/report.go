@@ -123,9 +123,8 @@ type MetricValues struct {
 
 // ReportRow is one output row of Report/Timeseries/Breakdown/Dashboard —
 // Day is set (DimValues empty) for a timeseries row, DimValues is set
-// (Day nil) for a report/breakdown row; nothing in Phase 35's own API
-// surface needs both on the same row (see chstore.ReportQuery's identical
-// note).
+// (Day nil) for a report/breakdown row, and both for a report with the
+// "day" dimension.
 type ReportRow struct {
 	Day       *time.Time
 	DimValues map[chstore.ReportDimension]string
@@ -331,12 +330,9 @@ type DimensionValuesInput struct {
 
 // DimensionValues answers "what real values has this dimension actually
 // taken" — backs the report builder's filter-value dropdown
-// (apps/web/src/features/analytics/report-controls.tsx), replacing the
-// fixed mock pool that used to be the only source. Rejects a dimension
-// outside chstore.ValidDimension's 15 with the same validation error
-// Report/Breakdown/Timeseries already give for one — the frontend falls
-// back to its own mock pool for the 2 still-unbacked dimensions rather
-// than treating this as a hard failure (see lib/mock/analytics.ts).
+// (apps/web/src/features/analytics/report-controls.tsx). Rejects a
+// dimension outside chstore.ValidDimension with the same validation error
+// Report/Breakdown/Timeseries give.
 func (s *Service) DimensionValues(ctx context.Context, organizationID string, in DimensionValuesInput) ([]string, error) {
 	if organizationID == "" {
 		return nil, apierror.Validation("missing organization", nil)

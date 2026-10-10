@@ -1,34 +1,13 @@
-// Package auth implements §52/Phase 28 — authentication, sessions, and
-// role-based authorization for organizations and their memberships.
-// handler → service → repository, same layering as every other domain.
+// Package auth is authentication, sessions and role-based authorization
+// for organizations and their memberships (§52); handler → service →
+// repository like every domain.
 //
-// Scope confirmed via AskUserQuestion before this phase started:
-//   - Server-side sessions in an HTTP-only cookie, not JWTs — trivially
-//     revocable, no rotation/denylist machinery (see migration 00020's own
-//     comment on the sessions table).
-//   - Inviting a team member generates a shareable accept-invite link (a
-//     token embedded in a URL apps/web renders/copies), not a real sent
-//     email — at the time this phase shipped, this project had no SMTP/
-//     email-provider integration anywhere, the same situation Ad Account
-//     Connections hit with OAuth (no registered app to redirect through)
-//     and resolved the same way: build the real mechanism up to the
-//     boundary that requires infrastructure this environment doesn't
-//     have. That boundary has since been crossed — see Mailer below and
-//     Signup's own comment (signup's email-verification link is a real
-//     sent email) — but invites deliberately stayed a copyable link even
-//     after: an org admin sending a teammate a link they can also just
-//     paste into Slack/whatever is a reasonable product choice on its
-//     own, not merely the absence of infrastructure anymore.
-//   - RBAC permission enforcement (RequirePermission below) is wired onto
-//     this package's own team/membership endpoints only. Retrofitting it
-//     onto every pre-existing domain route (campaigns, offers, sources,
-//     ...) was confirmed via AskUserQuestion as an explicit, separate
-//     follow-up — a wide, mechanical sweep across ~15 already-shipped
-//     packages that deserves its own reviewable phase, not a silent
-//     expansion of this one. Tenant isolation (§36-TENANCY: no org ever
-//     sees another org's data) is unaffected either way — it was already
-//     enforced everywhere via org-scoped repositories and is orthogonal to
-//     role-based permission checks within one org.
+//   - Sessions are server-side, in an HTTP-only cookie, not JWTs: revocable
+//     with no rotation or denylist machinery.
+//   - An invite is a link the admin copies and passes on; sign-up
+//     verification is a sent email (Mailer).
+//   - RequirePermission gates routes by role. Tenant isolation (§36) is
+//     separate: org-scoped repositories, whatever the role.
 package auth
 
 import "time"
@@ -68,15 +47,11 @@ type UpdateOrganizationSettingsInput struct {
 	Currency *string
 }
 
-// SecuritySettings is the Settings > Security panel's own real backing —
-// §30, undesigned anywhere in FLOX-master-prompt-v3.md (confirmed by
-// grep before this was built); the mock UI's shape
-// (lib/mock/settings.ts's SecuritySettings) is the only existing design,
-// mirrored here field-for-field. Lives on the same `organizations` row
-// as OrganizationSettings (migration 00032 adds the three columns) —
-// kept as its own type/handler because it's a different UI panel with
-// different validation and a real lockout risk IPAllowlist introduces,
-// not because the underlying table differs.
+// SecuritySettings backs the Settings > Security panel (§30; the spec has
+// no design for it, the UI's shape is the design). It lives on the
+// organizations row like OrganizationSettings (migration 00032) but is its
+// own type and handler: another panel, other validation, and the lockout
+// risk an IP allowlist brings.
 type SecuritySettings struct {
 	SessionTimeoutMinutes int
 	IPAllowlist           []string
@@ -101,8 +76,8 @@ type TOTPEnrollment struct {
 }
 
 // Membership is one user's standing within one org — the join row
-// memberships/roles/users produce, denormalized for the team list/activity
-// UI Phase 28B wires this to.
+// memberships/roles/users produce, denormalized for the team list and
+// activity UI.
 type Membership struct {
 	ID           string
 	UserID       string
@@ -141,11 +116,9 @@ type SignupResult struct {
 // user who holds an active membership in more than one org (rare —
 // nothing in apps/web exposes multi-org membership yet, but memberships
 // are many-to-many by schema, so login must handle it rather than pick
-// arbitrarily). ClientIP feeds the org's own IP allowlist check (§30
-// Security) — extracted by the handler via clientip.Resolver.String, the
-// same trusted-proxy-aware extractor already used for rate limiting, not
-// a second one (a spoofable one here would make the allowlist decorative,
-// security audit finding #2).
+// arbitrarily). ClientIP feeds the org's IP allowlist check (§30
+// Security), from clientip.Resolver like the rate limits: a spoofable
+// address would make the allowlist decorative.
 type LoginInput struct {
 	Email          string
 	Password       string
@@ -175,8 +148,8 @@ type AcceptInviteInput struct {
 	ClientIP string
 }
 
-// InvitePreview is what apps/web's future accept-invite page (Phase 28B)
-// shows before the invitee sets a password — deliberately returned by an
+// InvitePreview is what apps/web's accept-invite page shows before the
+// invitee sets a password — deliberately returned by an
 // unauthenticated, token-guarded endpoint, so that page can render "You've
 // been invited to join {OrganizationName} as {RoleKey}" without the
 // invitee needing to be signed in yet (they can't be — they have no

@@ -1,18 +1,10 @@
 // Package tenant carries the current request's organization_id (§36-
 // TENANCY) and authenticated user_id through request context.
 //
-// Phase 28 (§52) replaced this package's original X-Organization-Id-header
-// stand-in with real session-cookie authentication — SessionResolver is
-// implemented by apps/internal/auth.Service, injected via NewMiddleware
-// from apps/api/main.go. This package deliberately does NOT import auth
-// (auth imports tenant, for tenant.OrgID/UserID in its own handlers/
-// permission middleware); SessionResolver is declared here, at the point
-// of use, so main.go can wire a *auth.Service into it with no import
-// cycle. Nothing downstream of this middleware changed: every handler
-// still only ever sees organization_id via OrgID(ctx), exactly as before
-// — a handler still physically cannot pull it from anywhere else, which is
-// the actual property §36-TENANCY's "never from the request body" is
-// protecting.
+// Handlers only ever get organization_id from OrgID(ctx), set here from the
+// session or API key — never from the request body. SessionResolver is
+// declared here and implemented by apps/internal/auth.Service, since auth
+// imports this package (for OrgID/UserID) and the reverse would be a cycle.
 package tenant
 
 import (
@@ -75,12 +67,9 @@ type APIKeyAuthenticator interface {
 // once globally ahead of every route (apps/internal/httpserver), already
 // resolved most requests' identity before this middleware ever runs, so
 // re-authenticating here would cost a second Postgres round trip (API
-// key hash lookup, or session lookup) per request for no reason. Direct
-// callers of NewMiddleware against a bare context (every existing test)
-// are unaffected — OrgID is never pre-set there, so this never triggers.
-// A request PeekIdentity couldn't identify (bad token, no cookie, or it
-// simply never ran) falls through to the real resolution below exactly
-// as before, including the 401 on failure.
+// key hash lookup, or session lookup) per request for no reason. A request
+// PeekIdentity couldn't identify (bad token, no cookie, or it never ran)
+// gets the full resolution below, including the 401 on failure.
 func NewMiddleware(resolver SessionResolver, apiKeys APIKeyAuthenticator, logger *slog.Logger, secureCookies bool) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -148,16 +137,13 @@ func NewMiddleware(resolver SessionResolver, apiKeys APIKeyAuthenticator, logger
 // happens downstream, per route group, via NewMiddleware — which skips
 // re-resolving when this middleware already succeeded (see its own doc
 // comment), so an authenticated request costs exactly one Postgres/
-// session round trip total, the same as before this middleware existed.
+// session round trip in total.
 //
-// This is what makes the general rate limiter able to key an API-key-
-// authenticated request by its organization instead of client IP: the
-// limiter's own key function (apps/api/main.go) reads OrgID/
-// APIKeyScope from context, and those are only ever populated this
-// early by this middleware. A high-volume integration no longer shares
-// one IP-keyed bucket with every other visitor behind the same address
-// (shared hosting, corporate NAT, ...) — closing the gap ROADMAP.md
-// flagged under "General rate limit stays IP-keyed."
+// It lets the general rate limiter key an API-key request by its
+// organization instead of client IP: the limiter's key function
+// (apps/api/main.go) reads OrgID/APIKeyScope, which only this middleware
+// sets that early. A high-volume integration then does not share one
+// bucket with every visitor behind its address (shared hosting, NAT).
 //
 // Never logs on a resolution failure — an absent or invalid credential
 // is completely normal here (most requests are either genuinely public

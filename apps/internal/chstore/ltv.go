@@ -32,9 +32,8 @@ type ClickHistory struct {
 // LTVFilter narrows which clicks' cohort anchor must fall in [From, To) —
 // see ClicksByFTDAnchor/ClicksByRegAnchor for exactly what "anchor" means
 // for each. Empty CampaignID/NetworkID/Country match any value — §26.5's
-// named filter dimensions minus "source"/"offer", which
-// apps/internal/event.Event doesn't carry yet (the same gap documented
-// since Phase 24's macro resolver and Phase 26's click_events sort key).
+// named filter dimensions minus "source"/"offer", which ltv_events does
+// not carry.
 type LTVFilter struct {
 	From       time.Time
 	To         time.Time

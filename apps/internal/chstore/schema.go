@@ -2,9 +2,7 @@
 // (§47/§48): applying the real five-table schema (schema/*.sql) —
 // click_events, tracking_events, conversion_events, cost_events,
 // postback_events — batch-writing into it, and reading back the
-// materialized aggregates it maintains. Replaces Phase 25's single
-// disposable `events` table (see schema/000_drop_phase25_schema.sql and
-// docs/analytics-pipeline.md for that history).
+// materialized aggregates it maintains (docs/analytics-pipeline.md).
 package chstore
 
 import (
@@ -30,7 +28,7 @@ const migrationsTable = "schema_migrations"
 
 // Migrate applies the schema/*.sql files not yet recorded in
 // schema_migrations, in lexical order (001_, 002_, ...), recording each
-// once all its statements succeeded (tech audit 2026-10-06, CH5). A file
+// once all its statements succeeded (tech audit CH5). A file
 // that fails part-way is not recorded and runs again from its first
 // statement next time, so a file with several statements must still be
 // safe to re-run; one that succeeded never runs again, so a new file may

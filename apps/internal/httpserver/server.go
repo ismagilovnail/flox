@@ -23,16 +23,14 @@ import (
 )
 
 // generalRateLimit/generalRateLimitWindow: a broad ceiling across every
-// domain route (§54/Phase 30) — generous enough not to bother a real
-// dashboard session (TanStack Query re-fetching several resources, ⌘K
-// searches, ...) while still bounding a scripted abuse attempt. Keyed
-// per-organization for API-key-authenticated traffic, per-IP otherwise
-// (New's own generalLimitKey param, built in apps/api/main.go) — not
-// purely per-IP the way it originally was, so one high-volume
-// integration no longer shares a bucket with unrelated traffic behind
-// the same address. Auth endpoints layer a much stricter, separate
-// limit on top of this one (apps/api/main.go) — this general limit
-// alone isn't tuned for brute-force protection.
+// domain route (§54) — generous enough not to bother a real dashboard
+// session (TanStack Query re-fetching several resources, ⌘K searches, ...)
+// while still bounding a scripted abuse attempt. Keyed per organization
+// for API-key traffic, per IP otherwise (New's generalLimitKey, built in
+// apps/api/main.go), so one high-volume integration does not share a
+// bucket with unrelated traffic behind its address. Auth endpoints add a
+// much stricter limit of their own; this one is not tuned against brute
+// force.
 const (
 	generalRateLimit       = 300
 	generalRateLimitWindow = time.Minute
@@ -51,10 +49,10 @@ type Server struct {
 
 // ch may be nil when the caller has no ClickHouse connection to offer —
 // /ready simply skips that check rather than reporting it unavailable.
-// appURL is apps/web's own origin, the one CORS-allowed origin (Phase 27:
-// the browser calls this API directly from a different origin in dev).
-// AllowCredentials must be true (§52/Phase 28): the session cookie
-// tenant.NewMiddleware now requires only travels on a cross-origin fetch
+// appURL is apps/web's origin, the one CORS-allowed origin (the browser
+// calls this API directly, from a different origin in dev).
+// AllowCredentials must be true (§52): the session cookie
+// tenant.NewMiddleware requires only travels on a cross-origin fetch
 // when the browser is told the response allows credentialed requests —
 // paired with a single explicit AllowedOrigins entry, never "*", which
 // the fetch spec forbids combining with credentials anyway.
@@ -64,9 +62,7 @@ type Server struct {
 // globally, before the general rate limit, so that generalLimitKey (also
 // built in main.go, closing over both tenant's context helpers and a
 // clientip.Resolver) can key an API-key-authenticated request by its
-// organization instead of by client IP — see PeekIdentity's own doc
-// comment for why this ordering matters and what it fixes (ROADMAP.md:
-// "General rate limit stays IP-keyed").
+// organization instead of by client IP (see PeekIdentity).
 // Option adjusts New.
 type Option func(*options)
 
@@ -143,11 +139,11 @@ func New(logger *slog.Logger, serviceName string, db Pinger, ch Pinger, appURL s
 
 	r.Get("/health", healthHandler)
 	r.Get("/ready", readyHandler(db, ch))
-	// §53/Phase 29: unauthenticated, same convention as /health — a
+	// §53: unauthenticated, same convention as /health — a
 	// scrape target on an internal network, never a route a browser hits.
 	r.Handle("/metrics", metrics.Handler())
 
-	// The API itself is versioned (tech audit 2026-10-06, API3): every
+	// The API itself is versioned (tech audit API3): every
 	// domain route lives under /v1, so a breaking change can ship as /v2
 	// beside it once integrations call the API with their keys. Health,
 	// readiness and metrics are infrastructure, not API, and stay at the

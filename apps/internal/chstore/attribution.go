@@ -13,9 +13,7 @@ import (
 	"github.com/ismagilovnail/flox/apps/internal/event"
 )
 
-// ClickResolver implements attribution.ClickResolver against click_events
-// — the resolver docs/attribution.md always said would "arrive with the
-// worker (Phase 24) and the analytical schema (Phase 26)." Both now exist.
+// ClickResolver implements attribution.ClickResolver against click_events.
 //
 // Eventual consistency: a click reaches click_events only after
 // apps/tracker enqueues it and apps/worker claims and flushes it
@@ -27,7 +25,7 @@ import (
 // store. In practice postback delay (real user time between a click and a
 // registration/deposit) dwarfs this window, and a backlog stretches it to
 // hours: such a conversion is recorded unknown_click and its click looked
-// up again by the worker (internal/reattribute, audit 2026-10-06 T1).
+// up again by the worker (internal/reattribute, tech audit T1).
 type ClickResolver struct {
 	conn driver.Conn
 	// lookupBackfill names the backfill that completes click_lookup.
@@ -93,7 +91,7 @@ func scanClick(r driver.Rows, organizationID string) (attribution.Click, error) 
 func (r *ClickResolver) ByClickID(ctx context.Context, organizationID, clickID string) (attribution.Click, error) {
 	// click_lookup is sorted by (organization_id, click_id): one granule per
 	// partition, instead of every granule of the organization in
-	// click_events (audit 2026-10-06, CH1).
+	// click_events (tech audit CH1).
 	click, err := r.queryOne(ctx, `
 		SELECT `+clickColumns+`
 		FROM click_lookup

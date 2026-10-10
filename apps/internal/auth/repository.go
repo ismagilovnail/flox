@@ -197,8 +197,8 @@ func (r *Repository) CreateSession(ctx context.Context, id, userID, orgID, token
 }
 
 // ResolveSession validates tokenHash and, in the same round trip, bumps
-// the matching membership's last_active_at (the "last active" column the
-// Team UI's member list has always expected real data for). Requiring
+// the matching membership's last_active_at (the Team list's "last
+// active"). Requiring
 // status = 'active' in the same query means suspending or removing a
 // member takes effect on their very next request — an existing session
 // cookie for a suspended/removed membership resolves to zero rows here,
@@ -206,7 +206,7 @@ func (r *Repository) CreateSession(ctx context.Context, id, userID, orgID, token
 //
 // last_active_at is written at most once per lastActiveResolution: a
 // write and a row lock on every request (dashboards poll) bought nothing
-// the Team list can show (tech audit 2026-10-06, DB4).
+// the Team list can show (tech audit DB4).
 func (r *Repository) ResolveSession(ctx context.Context, tokenHash string) (orgID, userID string, err error) {
 	err = r.db.QueryRow(ctx, `
 		WITH s AS (

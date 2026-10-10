@@ -34,7 +34,7 @@ var transientCodes = map[int]bool{
 // Rejected reports whether the ClickHouse server refused the data itself
 // (a type it cannot take, a column it does not have) — retrying the same
 // rows will fail the same way. Network errors, timeouts and transient
-// server exceptions are not rejections (audit 2026-10-06, Q2).
+// server exceptions are not rejections (tech audit Q2).
 func Rejected(err error) bool {
 	if err == nil {
 		return false

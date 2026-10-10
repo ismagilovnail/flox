@@ -6,9 +6,8 @@
 // CLAUDE.md non-negotiable #2: the full ~20-type model exists from day
 // one and is never truncated, and CPA statuses are distinct enum members,
 // never collapsed into a single "conversion" type. Adding types later is a
-// migration on live ClickHouse data, so they are all declared now even
-// though only SOURCE_CLICK and SOURCE_FILTER are actually emitted in
-// Phase 21.
+// migration on live ClickHouse data, so every type is declared here,
+// emitted or not.
 package event
 
 import "time"
@@ -118,11 +117,10 @@ func (s Subs) SubCount() int {
 }
 
 // Event is one record in the pipeline (tracker → queue → worker →
-// ClickHouse). Field set covers what Phase 21 can actually populate;
-// later phases extend it rather than redefining it.
+// ClickHouse).
 type Event struct {
 	// ID identifies the event itself, stable from its creation through
-	// every retry (audit 2026-10-06): assigned by eventbuf.Writer.Enqueue
+	// every retry (tech audit D2): assigned by eventbuf.Writer.Enqueue
 	// when empty, and for a conversion it is the postbacks row id. It is
 	// the event_queue row id (a re-sent write is a no-op) and the
 	// ClickHouse event_id the reconciliation repairs by.
@@ -201,9 +199,7 @@ type Event struct {
 	// blocked, so a buyer can tell bot-filtering from geo-filtering.
 	FilterReason string `json:"filterReason,omitempty"`
 
-	// CPA conversion fields (§45, Phase 23), set on CPA_* events only.
-	// event.Event grows per phase rather than being redefined — see the
-	// package doc.
+	// CPA conversion fields (§45), set on CPA_* events only.
 	NetworkID string `json:"networkId,omitempty"`
 
 	// Revenue/Currency are exactly as the network reported them; USDValue

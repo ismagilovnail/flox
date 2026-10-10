@@ -12,13 +12,10 @@ func healthHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 // readyHandler is readiness: "can this instance actually serve traffic."
-// Checks Postgres (since Phase 18) and ClickHouse (since Phase 25, once
-// apps/api actually queries it — internal/analytics). Redis joins this
-// check whenever a later phase wires apps/api to it, not before (a check
-// that doesn't check anything is exactly the "fake API that looks real"
-// CLAUDE.md forbids). ch is nil-able: not every caller of httpserver.New
-// has a ClickHouse connection to offer, and a nil check is skipped rather
-// than reported as failing.
+// Checks Postgres and ClickHouse. Not Redis: the API runs without it
+// (rate limits degrade, nothing fails). ch is nil-able: a caller with no
+// ClickHouse connection skips that check rather than reporting it
+// failing.
 func readyHandler(db Pinger, ch Pinger) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		checks := map[string]string{"postgres": "ok"}
