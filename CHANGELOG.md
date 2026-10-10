@@ -5,6 +5,28 @@ per-phase, matching `CLAUDE.md`'s phase protocol. The one exception is
 [Between phases], below: spec amendments and the code changes that follow from
 them land between phases and would otherwise be invisible here.
 
+## [Between phases] — queue vacuum, versioned ClickHouse migrations, server timeouts (tech audit DB3, CH5, RL5, M1)
+
+- **CH5.** ClickHouse schema files are now versioned: `schema_migrations` in ClickHouse records
+  each `schema/*.sql` once its statements succeeded, and a recorded file never runs again — so a
+  new file may be a non-idempotent `ALTER` or a data fix. api, tracker and worker migrate at start
+  under a Postgres advisory lock (`chstore.MigrateLocked`): the first applies, the rest wait and
+  find everything recorded. No separate job; deploy order unchanged. An existing database
+  re-runs its (idempotent) files once and records them.
+- **DB3.** Migration 00065: autovacuum after 1% dead tuples (floor 1000) and 1% inserts on
+  `event_queue` and `postback_attempt_queue`, after 1% dead tuples on `postback_deliveries`
+  (default was 20%). Storage parameters only, no blocking lock.
+- **RL5.** Whole-request timeouts on every HTTP server: api 5 min read/write (50 MiB bundle
+  uploads), 2 min idle; tracker 15 s / 30 s / 2 min; worker and backup health servers
+  10 s / 30 s / 1 min.
+- **M1.** `offercap.Monitor.Capped` documents why one cross-organization set is tenant-safe.
+- `docs/migrations.md`, `docs/deployment.md`, `docs/analytics-pipeline.md`, audit statuses.
+
+Tests: every schema file recorded; a second `Migrate` on a recorded schema runs only the
+version-table `CREATE`; three concurrent `MigrateLocked` succeed and release the lock. Migration
+00065 up/down/up, reloptions checked. Dev stack: all 15 versions recorded once after api, worker
+and tracker restarted. Full suite with full env, e2e `TestFullFunnel` passes.
+
 ## [Between phases] — sign-in hardening and cleanup (tech audit DB4, DB5, API2)
 
 - **API2.** `/auth/*` no longer fails open while Redis is down: `ratelimit.StrictMiddleware`

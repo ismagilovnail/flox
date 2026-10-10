@@ -60,9 +60,10 @@ rebuilding the image, not an env var fix at runtime.
    for why this is a separate step, never automatic inside apps/api's
    own startup.
 3. apps/worker, apps/api, apps/tracker — any order between these three
-   (they don't call each other directly); ClickHouse's own schema is
-   created idempotently by whichever of apps/api/apps/worker starts
-   first (apps/internal/chstore.Migrate, CREATE ... IF NOT EXISTS).
+   (they don't call each other directly); ClickHouse's schema is
+   migrated by whichever starts first, the others wait on a Postgres
+   advisory lock (apps/internal/chstore.MigrateLocked, versioned in
+   schema_migrations; docs/migrations.md).
 4. apps/web last — it only ever talks to apps/api's HTTP contract.
 ```
 

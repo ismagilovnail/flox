@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/ClickHouse/clickhouse-go/v2/lib/driver"
+	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/ismagilovnail/flox/apps/internal/attribution"
 	"github.com/ismagilovnail/flox/apps/internal/chconn"
@@ -40,10 +41,10 @@ const (
 
 // connect dials and migrates ClickHouse until it succeeds or ctx is done,
 // then serves lookups through it. The connection is closed when ctx is.
-func (c *lateClickHouse) connect(ctx context.Context, cfg config.ClickHouseConfig, logger *slog.Logger) {
+func (c *lateClickHouse) connect(ctx context.Context, db *pgxpool.Pool, cfg config.ClickHouseConfig, logger *slog.Logger) {
 	wait := chRetryMin
 	for {
-		conn, err := dial(ctx, cfg)
+		conn, err := dial(ctx, db, cfg)
 		if err == nil {
 			c.use(conn)
 			logger.Info("clickhouse connected, attribution matches real clicks")
@@ -62,12 +63,12 @@ func (c *lateClickHouse) connect(ctx context.Context, cfg config.ClickHouseConfi
 	}
 }
 
-func dial(ctx context.Context, cfg config.ClickHouseConfig) (driver.Conn, error) {
+func dial(ctx context.Context, db *pgxpool.Pool, cfg config.ClickHouseConfig) (driver.Conn, error) {
 	conn, err := chconn.NewConn(ctx, cfg)
 	if err != nil {
 		return nil, err
 	}
-	if err := chstore.Migrate(ctx, conn); err != nil {
+	if err := chstore.MigrateLocked(ctx, db, conn); err != nil {
 		_ = conn.Close()
 		return nil, err
 	}

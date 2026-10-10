@@ -187,7 +187,7 @@ func run() error {
 	// and retried by the worker (audit 2026-10-06, T1), and no offer is
 	// capped.
 	clickHouse := &lateClickHouse{}
-	go clickHouse.connect(ctx, cfg.ClickHouse, logger)
+	go clickHouse.connect(ctx, db, cfg.ClickHouse, logger)
 	var clickResolver attribution.ClickResolver = clickHouse
 	// Daily offer caps: a background snapshot, never a query on the
 	// redirect path.
@@ -281,10 +281,16 @@ func run() error {
 	handler.Register(r)
 	postbackHandler.Register(r)
 
+	// Whole-request bounds (tech audit RL5). Requests here are a redirect,
+	// a landing or PWA page, or a postback — small, so short: a slow client
+	// gives up its connection after 15 s of upload or 30 s overall.
 	httpSrv := &http.Server{
 		Addr:              cfg.HTTPAddr,
 		Handler:           r,
 		ReadHeaderTimeout: 5 * time.Second,
+		ReadTimeout:       15 * time.Second,
+		WriteTimeout:      30 * time.Second,
+		IdleTimeout:       2 * time.Minute,
 	}
 
 	go func() {

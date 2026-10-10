@@ -75,6 +75,13 @@ func NewMonitor(source Source, counter Counter, logger *slog.Logger) *Monitor {
 // Capped returns the current set of capped offer IDs. The map is replaced
 // wholesale on each refresh and must not be modified. A nil Monitor has no
 // caps, so callers need not special-case "not configured".
+//
+// One set for every organization, with no organization_id in the key, and
+// still tenant-safe (tech audit 2026-10-06, M1): offer IDs are ULIDs,
+// unique across organizations, and routing only ever looks up the offers
+// of the campaign it routes, which its own organization's config loaded.
+// Another organization's capped offer can never be one of them. Keyed by
+// anything not globally unique, this would need the organization in it.
 func (m *Monitor) Capped() map[string]struct{} {
 	if m == nil {
 		return nil

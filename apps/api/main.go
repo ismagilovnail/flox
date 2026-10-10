@@ -155,10 +155,9 @@ func run() error {
 	chConn, chErr := chconn.NewConn(ctx, cfg.ClickHouse)
 	if chErr != nil {
 		logger.Warn("clickhouse unavailable at startup, /analytics will fail until it recovers", "error", chErr)
-	} else if migrateErr := chstore.Migrate(ctx, chConn); migrateErr != nil {
-		// Idempotent (every statement is CREATE ... IF NOT EXISTS), so this
-		// is safe to run from both apps/api and apps/worker regardless of
-		// which one starts first — see chstore.Migrate's doc.
+	} else if migrateErr := chstore.MigrateLocked(ctx, db, chConn); migrateErr != nil {
+		// api, tracker and worker all migrate at start; the lock lets
+		// exactly one apply — see chstore.MigrateLocked.
 		logger.Warn("clickhouse schema migration failed, /analytics will fail until it recovers", "error", migrateErr)
 		_ = chConn.Close()
 	} else {
@@ -661,10 +660,18 @@ func run() error {
 		})
 	}
 
+	// Whole-request bounds (tech audit RL5): a client that sends or reads
+	// slowly cannot hold a connection open forever. Generous because
+	// landing bundles upload up to 50 MiB, and WriteTimeout runs from the
+	// end of the headers, so it covers the body upload too; handlers
+	// themselves stop at 30 s (httpserver's middleware.Timeout).
 	httpSrv := &http.Server{
 		Addr:              cfg.HTTPAddr,
 		Handler:           srv.Handler(),
 		ReadHeaderTimeout: 5 * time.Second,
+		ReadTimeout:       5 * time.Minute,
+		WriteTimeout:      5 * time.Minute,
+		IdleTimeout:       2 * time.Minute,
 	}
 
 	go func() {

@@ -104,7 +104,12 @@ func serve(ctx context.Context, cfg backup.Config, r *backup.Runner, logger *slo
 	mux := http.NewServeMux()
 	mux.HandleFunc("/health", func(w http.ResponseWriter, _ *http.Request) { _, _ = w.Write([]byte("ok")) })
 	mux.Handle("/metrics", promhttp.HandlerFor(r.Registry(), promhttp.HandlerOpts{}))
-	srv := &http.Server{Addr: cfg.HTTPAddr, Handler: mux, ReadHeaderTimeout: 5 * time.Second}
+	// Health and metrics only (tech audit RL5).
+	srv := &http.Server{
+		Addr: cfg.HTTPAddr, Handler: mux,
+		ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 10 * time.Second,
+		WriteTimeout: 30 * time.Second, IdleTimeout: time.Minute,
+	}
 	go func() {
 		logger.Info("backup sidecar listening", "addr", cfg.HTTPAddr, "daily_at_utc", fmtClock(cfg.At), "drill_day", cfg.DrillDay)
 		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {

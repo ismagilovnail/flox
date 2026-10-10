@@ -45,26 +45,33 @@ command reference). For a real deployment:
    `up` is safe. Nothing here needs a manual "what state is the DB in"
    investigation after a failed migration.
 
-## ClickHouse: idempotent, automatic, forward-only, no rollback
+## ClickHouse: versioned, automatic, forward-only, no rollback
 
-`apps/internal/chstore.Migrate` runs automatically at startup inside both
-`apps/api` (best-effort — a down ClickHouse degrades `/analytics`, not the
-whole control plane) and `apps/worker` (required — worker cannot do its
-job without it). Every statement is `CREATE TABLE IF NOT EXISTS` /
-`CREATE MATERIALIZED VIEW IF NOT EXISTS` (`chstore.Migrate`'s own doc
-comment) — safe to run concurrently from multiple processes, in any
-order, any number of times. This is why ClickHouse gets no goose-style
-one-shot `migrate` service in `docker-compose.test.yml`: there's nothing
-for a separate step to coordinate.
+`apps/internal/chstore.MigrateLocked` runs at startup inside `apps/api`
+(best-effort — a down ClickHouse degrades `/analytics`, not the whole
+control plane), `apps/worker` (required) and `apps/tracker` (in the
+background, with its ClickHouse connection). Since tech audit CH5:
 
-**This means ClickHouse schema changes are additive-only in practice** —
-there is no rollback mechanism and no destructive `ALTER` anywhere in
-`chstore.Migrate`. A genuine ClickHouse schema change (a new column on an
-existing table, a new materialized view) needs its own `ALTER TABLE ... IF
-NOT EXISTS`-style statement added to `chstore.Migrate`, following the same
-idempotent pattern — never a manual one-off `ALTER` run by hand against
-production, which `chstore.Migrate` wouldn't know about and couldn't
-reconcile on the next deploy.
+- **Version table.** `schema_migrations` in ClickHouse records each
+  `schema/*.sql` file (name without `.sql`) once all its statements
+  succeeded; a recorded file never runs again. So a new file may be a
+  non-idempotent `ALTER` or a one-off data fix. A file that fails part-way
+  is not recorded and re-runs from its first statement — keep a
+  multi-statement file safe to re-run, or make it one statement.
+- **One applier at a time.** ClickHouse has no locks; `MigrateLocked`
+  holds a Postgres advisory lock for the run. Processes starting together
+  wait, then find everything recorded. A process that dies holding it
+  drops its session, and Postgres releases the lock.
+- A database from before the table existed records nothing yet: on the
+  first start every file runs once more (all of them were idempotent) and
+  is recorded.
+
+**Still forward-only.** There is no down migration. During a rolling
+deploy the old binaries keep running against the new schema, so a change
+must be additive for them (a new column with a default, a new table or
+view) — never a drop or rename in the same release that stops using it.
+Never run a one-off `ALTER` by hand against production: put it in a new
+`schema/*.sql` file so every environment gets it once.
 
 ## Zero-downtime deploy ordering
 

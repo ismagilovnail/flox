@@ -314,18 +314,13 @@ to avoid colliding with MinIO's API port. `internal/chconn` always dials
 the native protocol; get this wrong and every connection attempt fails
 with a connection-refused on 9000, not an auth error.
 
-## Schema application: idempotent DDL, not a migration framework — unchanged
+## Schema application
 
-`internal/chstore.Migrate` applies `schema/*.sql` in lexical order, every
-statement `CREATE ... IF NOT EXISTS` (or `DROP ... IF EXISTS` for
-`000_drop_phase25_schema.sql`), with no version-tracking table. Both
-`apps/api` and `apps/worker` call it at startup — safe because it's
-idempotent, necessary because there's no ordering guarantee about which one
-starts first in local dev. Still a deliberate simplification, not upgraded
-in this phase: a real migration tool (or at minimum a version table) is
-warranted once this schema is meant to stop changing wholesale between
-phases — it has now been replaced once (Phase 25 → 26) and may not be the
-last time before it earns that investment.
+`internal/chstore.Migrate` applies `schema/*.sql` in lexical order, each
+file once, recorded in `schema_migrations`; at startup api, worker and
+tracker call `MigrateLocked`, which serializes them on a Postgres advisory
+lock (tech audit CH5). Details and the rules for a new file:
+`docs/migrations.md`.
 
 ## The analytics service and REST API
 

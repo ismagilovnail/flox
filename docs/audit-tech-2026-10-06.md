@@ -289,7 +289,10 @@ CREATE INDEX CONCURRENTLY postbacks_click_lookup_idx
 90 дней. Строки `success` — это source of truth, они хранятся.
 
 **DB3 [MEDIUM]. `event_queue` / `postback_attempt_queue` работают как
-очередь в Postgres.** На каждое событие: INSERT (JSONB 1–2 КБ), UPDATE на
+очередь в Postgres.** (**Статус: исправлено** — миграция 00065:
+autovacuum после 1% мёртвых строк (порог 1000) и после 1% вставок на
+`event_queue`, `postback_attempt_queue`; `postback_deliveries` — по
+мёртвым строкам. Брокер — по-прежнему Stage 3.) На каждое событие: INSERT (JSONB 1–2 КБ), UPDATE на
 claim, DELETE. На 1k событий/с это ~3k row-ops/с, нормально. На 10k/с это
 ~30k row-ops/с, ~30–60 МБ/с WAL, постоянный bloat. Нужен агрессивный
 `autovacuum_vacuum_scale_factor=0.01` на этих таблицах. Дальше Stage 2 —
@@ -360,7 +363,10 @@ CREATE MATERIALIZED VIEW click_lookup_mv TO click_lookup AS
 `tracker`/`worker`.
 
 **CH5 [LOW]. Миграции CH** применяют три бинарника параллельно на старте,
-без таблицы версий. Сейчас все операторы идемпотентны, но первая
+без таблицы версий. (**Статус: исправлено** — таблица `schema_migrations`
+в CH, каждый файл применяется один раз; бинарники мигрируют под
+advisory lock в Postgres, отдельный job не понадобился;
+`docs/migrations.md`.) Сейчас все операторы идемпотентны, но первая
 неидемпотентная миграция сломается. **Исправление:** `schema_migrations` в
 CH и применение одним job'ом.
 
@@ -514,7 +520,8 @@ type entry struct { link TrackingLink; cfg CampaignRouting; loadedAt time.Time }
 
 - **M1 [LOW].** `offercap.Monitor.Capped()` возвращает глобальный
   `map[offerID]`. Безопасно, потому что offer id — глобально уникальные
-  ULID. Это стоит зафиксировать комментарием.
+  ULID. Это стоит зафиксировать комментарием. (**Статус: исправлено** —
+  комментарий у `Capped`.)
 - **M2.** Воркеры (`event_queue`, `postback_deliveries`) обрабатывают
   строки всех тенантов в одном батче. Org сохраняется в payload, утечки нет.
   Но один тенант с флудом событий задерживает остальных: fairness нет.
@@ -756,7 +763,9 @@ POST /postback/{networkId}
 - **RL4 [MEDIUM]** (**статус: исправлено**, tracker `/ready`). Tracker `/health` не проверяет зависимости, readiness
   нет. **Исправление:** `/ready` с проверкой «PG ping ≤ 200 мс ИЛИ кэш
   конфигурации прогрет».
-- **RL5 [LOW].** У `http.Server` tracker'а и API нет
+- **RL5 [LOW].** (**Статус: исправлено** — API 5 мин / 5 мин / 2 мин
+  (загрузка бандлов до 50 МиБ), tracker 15 с / 30 с / 2 мин, health-серверы
+  worker'а и backup 10 с / 30 с / 1 мин.) У `http.Server` tracker'а и API нет
   `ReadTimeout`/`WriteTimeout`/`IdleTimeout`. Медленные клиенты держат
   соединения.
 

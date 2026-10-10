@@ -208,7 +208,7 @@ func run() error {
 		return err
 	}
 	defer ch.Close()
-	if err := chstore.Migrate(ctx, ch); err != nil {
+	if err := chstore.MigrateLocked(ctx, db, ch); err != nil {
 		logger.Error("clickhouse schema migration failed", "error", err)
 		return err
 	}
@@ -319,6 +319,10 @@ func run() error {
 		Addr:              cfg.HTTPAddr,
 		Handler:           mux,
 		ReadHeaderTimeout: 5 * time.Second,
+		// Health and metrics only (tech audit RL5).
+		ReadTimeout:  10 * time.Second,
+		WriteTimeout: 30 * time.Second,
+		IdleTimeout:  time.Minute,
 	}
 	go func() {
 		logger.Info("worker health endpoint starting", "addr", cfg.HTTPAddr, "env", cfg.Env)
