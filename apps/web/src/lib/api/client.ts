@@ -27,6 +27,12 @@
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080";
 
+/**
+ * Every API route is versioned (Go httpserver.APIPrefix). Call sites pass
+ * the route itself ("/offers"); the version is added here, in one place.
+ */
+export const API_VERSION_PREFIX = "/v1";
+
 export class ApiError extends Error {
   code: string;
   fields?: Record<string, string>;
@@ -52,7 +58,7 @@ type RequestOptions = {
 };
 
 export async function apiFetch<T>(path: string, options: RequestOptions = {}): Promise<T> {
-  const url = new URL(path, API_URL);
+  const url = new URL(API_VERSION_PREFIX + path, API_URL);
   if (options.searchParams) {
     for (const [key, value] of Object.entries(options.searchParams)) {
       if (value !== undefined) url.searchParams.set(key, value);

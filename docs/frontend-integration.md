@@ -58,6 +58,25 @@ single concrete, honestly-deliverable slice:
   isn't entered (or, for CPA, when conversions are zero — a division by
   zero, not a $0.00 acquisition cost).
 
+## API version: every route under /v1 (tech audit 2026-10-06, API3)
+
+Every apps/api domain route is served under `/v1` — `GET /v1/campaigns`,
+`POST /v1/auth/login`, and so on. Paths written elsewhere in these docs
+without a prefix (`GET /campaigns`) are relative to it. `/health`,
+`/ready` and `/metrics` stay at the root: they are for probes and
+scrapers, not API clients. The unprefixed paths answer 404 — there were no
+external clients yet, so no alias was kept.
+
+One place each side: Go `httpserver.APIPrefix` (`srv.Mux()` is the `/v1`
+router, so a domain package registers routes exactly as before) and
+apps/web `API_VERSION_PREFIX` in `src/lib/api/client.ts` (`apiFetch` adds
+it; call sites pass the route alone). A breaking change ships as `/v2`
+beside `/v1` while integrations using API keys move over.
+
+The tracker (`/t/*`, `/postback/*`, landing and PWA pages) is not
+versioned: those URLs are handed to traffic sources and networks and must
+never change.
+
 ## Entity lists: limit, offset, total (tech audit 2026-10-06, §5)
 
 `GET /offers`, `/networks`, `/landings`, `/postlandings`, `/pwas`, `/tags`,

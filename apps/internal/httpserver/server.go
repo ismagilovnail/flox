@@ -147,10 +147,22 @@ func New(logger *slog.Logger, serviceName string, db Pinger, ch Pinger, appURL s
 	// scrape target on an internal network, never a route a browser hits.
 	r.Handle("/metrics", metrics.Handler())
 
-	return &Server{mux: r, router: otelhttp.NewHandler(r, serviceName)}
+	// The API itself is versioned (tech audit 2026-10-06, API3): every
+	// domain route lives under /v1, so a breaking change can ship as /v2
+	// beside it once integrations call the API with their keys. Health,
+	// readiness and metrics are infrastructure, not API, and stay at the
+	// root where probes and scrapers look for them.
+	v1 := chi.NewRouter()
+	r.Mount(APIPrefix, v1)
+
+	return &Server{mux: v1, router: otelhttp.NewHandler(r, serviceName)}
 }
 
-// Mux is where domain packages mount their own route groups, e.g.:
+// APIPrefix is the path every domain route is served under.
+const APIPrefix = "/v1"
+
+// Mux is where domain packages mount their own route groups — under
+// APIPrefix, e.g. GET /v1/campaigns:
 //
 //	srv.Mux().Route("/campaigns", func(r chi.Router) {
 //	    r.Use(tenantMiddleware)

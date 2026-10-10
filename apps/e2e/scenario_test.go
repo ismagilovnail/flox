@@ -208,7 +208,7 @@ func (s *scenario) apiRequest(method, path string, body any) *http.Request {
 		}
 		r = bytes.NewReader(b)
 	}
-	req, err := http.NewRequest(method, s.apiBase+path, r)
+	req, err := http.NewRequest(method, s.apiBase+"/v1"+path, r)
 	if err != nil {
 		s.t.Fatalf("building request %s %s: %v", method, path, err)
 	}

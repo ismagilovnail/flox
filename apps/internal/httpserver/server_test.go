@@ -165,7 +165,7 @@ func TestSecurityHeaders(t *testing.T) {
 	for _, hsts := range []bool{false, true} {
 		srv := httpserver.New(discardLogger(), "test", okPinger{}, nil, "http://localhost:3000", limiter, keyAll, passThrough, httpserver.WithHSTS(hsts))
 		srv.Mux().Get("/thing", func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusTeapot) })
-		for _, path := range []string{"/health", "/thing", "/no-such-route"} {
+		for _, path := range []string{"/health", "/v1/thing", "/no-such-route"} {
 			rec := httptest.NewRecorder()
 			srv.Handler().ServeHTTP(rec, httptest.NewRequest(http.MethodGet, path, nil))
 			h := rec.Header()
@@ -176,6 +176,30 @@ func TestSecurityHeaders(t *testing.T) {
 			if got := h.Get("Strict-Transport-Security") != ""; got != hsts {
 				t.Errorf("hsts=%v %s: Strict-Transport-Security present = %v", hsts, path, got)
 			}
+		}
+	}
+}
+
+// Domain routes are served under /v1 only; health, readiness and metrics
+// stay at the root for probes and scrapers (tech audit API3).
+func TestDomainRoutesLiveUnderV1(t *testing.T) {
+	passThrough := func(next http.Handler) http.Handler { return next }
+	srv := httpserver.New(discardLogger(), "test", okPinger{}, nil, "http://localhost:3000",
+		ratelimit.New(nil, discardLogger()), func(*http.Request) string { return "all" }, passThrough)
+	srv.Mux().Get("/thing", func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusTeapot) })
+
+	for path, want := range map[string]int{
+		"/v1/thing":  http.StatusTeapot,
+		"/thing":     http.StatusNotFound,
+		"/health":    http.StatusOK,
+		"/ready":     http.StatusOK,
+		"/metrics":   http.StatusOK,
+		"/v1/health": http.StatusNotFound,
+	} {
+		rec := httptest.NewRecorder()
+		srv.Handler().ServeHTTP(rec, httptest.NewRequest(http.MethodGet, path, nil))
+		if rec.Code != want {
+			t.Errorf("GET %s = %d, want %d", path, rec.Code, want)
 		}
 	}
 }

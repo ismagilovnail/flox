@@ -377,6 +377,10 @@ across all five write keys, matching the same convention
 
 ## API key authentication (closed, post-Phase-34, security audit finding #4's real-auth follow-up)
 
+> Since tech audit API3 every API route is under `/v1`
+> (`GET /v1/campaigns` with the key); the paths below are relative to it
+> (`docs/frontend-integration.md`).
+
 `apps/internal/apikey` (Settings > API keys) shipped real, hashed
 credential bookkeeping — `Create`/`List`/`Revoke` — but nothing ever
 authenticated a request with one; the audit flagged this as "fake API

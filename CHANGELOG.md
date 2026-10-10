@@ -5,6 +5,22 @@ per-phase, matching `CLAUDE.md`'s phase protocol. The one exception is
 [Between phases], below: spec amendments and the code changes that follow from
 them land between phases and would otherwise be invisible here.
 
+## [Between phases] — API under /v1 (tech audit API3)
+
+- Every apps/api domain route moved under `/v1` (`GET /v1/campaigns`, `POST /v1/auth/login`, ...):
+  `httpserver.New` mounts a `/v1` router and `srv.Mux()` returns it, so no domain package changed.
+  `/health`, `/ready`, `/metrics` stay at the root for probes and Prometheus. Unprefixed paths now
+  answer 404 — no external client existed yet, so no alias was kept.
+- apps/web: `apiFetch` adds `API_VERSION_PREFIX` (`src/lib/api/client.ts`); call sites unchanged.
+- The tracker is not versioned (`/t/*`, `/postback/*` are handed to sources and networks).
+- e2e calls `/v1`. `docs/frontend-integration.md`, `docs/auth.md` (API keys), audit status.
+
+Tests: `/v1/thing` routed, `/thing` 404, health/ready/metrics at the root, `/v1/health` 404;
+security headers on `/v1` routes. Checked live: old `/campaigns` 404, `/v1/campaigns` 401 without a
+session; in the browser the campaign list and a campaign page load, every request on `/v1` (lists
+with `limit=500&offset=0`), all 200, no console errors. tsc, eslint, vitest (103), full Go suite
+with full env, e2e `TestFullFunnel` passes.
+
 ## [Between phases] — fair queues across organizations (tech audit M2/Q3)
 
 - Every queue claim took the oldest due rows of the whole table, so one organization's flood —
