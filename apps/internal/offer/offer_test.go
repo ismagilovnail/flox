@@ -9,6 +9,7 @@ import (
 
 	"github.com/ismagilovnail/flox/apps/internal/idgen"
 	"github.com/ismagilovnail/flox/apps/internal/offer"
+	"github.com/ismagilovnail/flox/apps/internal/pagination"
 )
 
 func TestCreateGetUpdateDelete(t *testing.T) {
@@ -284,7 +285,7 @@ func TestCrossTenantIsolation(t *testing.T) {
 		}
 	})
 	t.Run("list", func(t *testing.T) {
-		offers, err := svc.List(ctx, orgB)
+		offers, _, err := svc.List(ctx, orgB, pagination.Page{Limit: pagination.MaxLimit})
 		if err != nil {
 			t.Fatalf("listing as org B: %v", err)
 		}
@@ -332,4 +333,52 @@ func seedNetwork(t *testing.T, ctx context.Context, pool *pgxpool.Pool, orgID st
 		t.Fatalf("seeding network: %v", err)
 	}
 	return id
+}
+
+// Pages split the list without overlap or gaps, even when every name is
+// the same (the id breaks the tie), and carry the full total.
+func TestListPages(t *testing.T) {
+	pool := mustPool(t)
+	ctx := context.Background()
+	orgID := seedOrg(t, ctx, pool)
+	networkID := seedNetwork(t, ctx, pool, orgID)
+	svc := offer.NewService(offer.NewRepository(pool))
+
+	created := map[string]bool{}
+	for i := 0; i < 5; i++ {
+		o, err := svc.Create(ctx, orgID, offer.CreateInput{
+			NetworkID: networkID, Name: "Same Name", Countries: []string{"US"}, Payout: 1, Currency: "USD",
+			Links: []offer.LinkInput{{Label: "L", URL: "https://example.com/?c={click_id}"}},
+		})
+		if err != nil {
+			t.Fatalf("Create #%d: %v", i, err)
+		}
+		created[o.ID] = true
+	}
+
+	seen := map[string]bool{}
+	for offset := 0; offset < 5; offset += 2 {
+		page, total, err := svc.List(ctx, orgID, pagination.Page{Limit: 2, Offset: offset})
+		if err != nil {
+			t.Fatalf("List offset %d: %v", offset, err)
+		}
+		if total != 5 {
+			t.Fatalf("total = %d, want 5", total)
+		}
+		if want := min(2, 5-offset); len(page) != want {
+			t.Fatalf("page at offset %d has %d offers, want %d", offset, len(page), want)
+		}
+		for _, o := range page {
+			if seen[o.ID] {
+				t.Fatalf("offer %s on two pages", o.ID)
+			}
+			seen[o.ID] = true
+			if len(o.Links) != 1 {
+				t.Fatalf("offer %s has %d links on its page, want 1", o.ID, len(o.Links))
+			}
+		}
+	}
+	if len(seen) != len(created) {
+		t.Fatalf("pages covered %d offers, want all %d", len(seen), len(created))
+	}
 }

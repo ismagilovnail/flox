@@ -1,4 +1,5 @@
 import { apiFetch } from "@/lib/api/client";
+import { fetchAllPages } from "@/lib/api/pagination";
 
 /** Mirrors apps/internal/domain's real shape. Registrar connection (via
  * Namecheap) and DNS zone/SSL status + record management (via
@@ -62,8 +63,8 @@ export type CreateDomainInput = {
 
 export type UpdateDomainInput = Partial<CreateDomainInput>;
 
-export function listDomains(): Promise<{ domains: Domain[] }> {
-  return apiFetch("/domains");
+export function listDomains(): Promise<{ domains: Domain[]; total: number }> {
+  return fetchAllPages<"domains", Domain>("/domains", "domains");
 }
 
 export function getDomain(id: string): Promise<Domain> {

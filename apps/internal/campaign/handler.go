@@ -4,11 +4,11 @@ import (
 	"encoding/json"
 	"log/slog"
 	"net/http"
-	"strconv"
 
 	"github.com/go-chi/chi/v5"
 
 	"github.com/ismagilovnail/flox/apps/internal/apierror"
+	"github.com/ismagilovnail/flox/apps/internal/pagination"
 	"github.com/ismagilovnail/flox/apps/internal/tenant"
 )
 
@@ -43,17 +43,12 @@ func (h *Handler) Register(r chi.Router) {
 func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
 	orgID, _ := tenant.OrgID(r.Context())
 
-	filter := ListFilter{Limit: 50, Offset: 0}
-	if v := r.URL.Query().Get("limit"); v != "" {
-		if n, err := strconv.Atoi(v); err == nil {
-			filter.Limit = n
-		}
+	page, err := pagination.FromRequest(r)
+	if err != nil {
+		apierror.Write(w, h.logger, err)
+		return
 	}
-	if v := r.URL.Query().Get("offset"); v != "" {
-		if n, err := strconv.Atoi(v); err == nil {
-			filter.Offset = n
-		}
-	}
+	filter := ListFilter{Limit: page.Limit, Offset: page.Offset}
 
 	result, err := h.svc.List(r.Context(), orgID, filter)
 	if err != nil {

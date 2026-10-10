@@ -7,6 +7,7 @@
  */
 
 import { apiFetch } from "@/lib/api/client";
+import { fetchAllPages } from "@/lib/api/pagination";
 import type { CpaStatus } from "@/lib/api/conversions";
 
 export type EventMapping = {
@@ -25,8 +26,8 @@ export type CreateEventMappingInput = {
   floxStatus: CpaStatus;
 };
 
-export function listEventMappings(): Promise<{ eventMappings: EventMapping[] }> {
-  return apiFetch("/event-mappings");
+export function listEventMappings(): Promise<{ eventMappings: EventMapping[]; total: number }> {
+  return fetchAllPages<"eventMappings", EventMapping>("/event-mappings", "eventMappings");
 }
 
 export function createEventMapping(input: CreateEventMappingInput): Promise<EventMapping> {

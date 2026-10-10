@@ -12,6 +12,7 @@ import (
 
 	"github.com/ismagilovnail/flox/apps/internal/apierror"
 	"github.com/ismagilovnail/flox/apps/internal/idgen"
+	"github.com/ismagilovnail/flox/apps/internal/pagination"
 )
 
 type Repository struct {
@@ -28,18 +29,18 @@ func scanOffer(row pgx.Row) (Offer, error) {
 	return o, err
 }
 
-// List returns every offer for organizationID with its links attached —
-// two queries (offers, then every link for those offer ids) merged in Go
-// rather than one query.Rows()-per-offer link fetch or a JSON-aggregating
-// SQL query, since this stays simple and the per-org offer count is small
-// (same "unpaginated, small n" reasoning as trafficsource.List).
-func (r *Repository) List(ctx context.Context, organizationID string) ([]Offer, error) {
+// List returns one page of organizationID's offers (internal/pagination)
+// with their links attached — two queries (the page of offers, then every
+// link for those offer ids) merged in Go rather than one query per offer
+// or a JSON-aggregating SQL query.
+func (r *Repository) List(ctx context.Context, organizationID string, page pagination.Page) ([]Offer, error) {
 	rows, err := r.db.Query(ctx, `
 		SELECT `+offerColumns+`
 		FROM offers
 		WHERE organization_id = $1
-		ORDER BY name`,
-		organizationID,
+		ORDER BY name, id
+		LIMIT $2 OFFSET $3`,
+		organizationID, page.Limit, page.Offset,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("offer: listing: %w", err)
@@ -310,4 +311,9 @@ func (r *Repository) NetworkBelongsToOrg(ctx context.Context, orgID, networkID s
 		networkID, orgID,
 	).Scan(&exists)
 	return exists, err
+}
+
+// Count is how many offers rows the organization has — List's total.
+func (r *Repository) Count(ctx context.Context, organizationID string) (int, error) {
+	return pagination.Count(ctx, r.db, "offers", organizationID)
 }

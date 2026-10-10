@@ -1,4 +1,5 @@
 import { apiFetch } from "@/lib/api/client";
+import { fetchAllPages } from "@/lib/api/pagination";
 
 /** Mirrors apps/internal/network's real shape — the single client for
  * the real Networks API, used by the Networks page and by every feature
@@ -27,8 +28,8 @@ export type CreateNetworkInput = {
 
 export type UpdateNetworkInput = Partial<CreateNetworkInput> & { status?: NetworkStatus };
 
-export function listNetworks(): Promise<{ networks: Network[] }> {
-  return apiFetch("/networks");
+export function listNetworks(): Promise<{ networks: Network[]; total: number }> {
+  return fetchAllPages<"networks", Network>("/networks", "networks");
 }
 
 export function getNetwork(id: string): Promise<Network> {

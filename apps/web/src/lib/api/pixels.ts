@@ -1,4 +1,5 @@
 import { apiFetch } from "@/lib/api/client";
+import { fetchAllPages } from "@/lib/api/pagination";
 
 /** Mirrors apps/internal/pixel's real shape. */
 export type PixelStatus = "active" | "paused" | "archived";
@@ -56,8 +57,8 @@ export type CreatePixelInput = {
 
 export type UpdatePixelInput = Partial<CreatePixelInput> & { status?: PixelStatus };
 
-export function listPixels(): Promise<{ pixels: Pixel[] }> {
-  return apiFetch("/pixels");
+export function listPixels(): Promise<{ pixels: Pixel[]; total: number }> {
+  return fetchAllPages<"pixels", Pixel>("/pixels", "pixels");
 }
 
 export function getPixel(id: string): Promise<Pixel> {

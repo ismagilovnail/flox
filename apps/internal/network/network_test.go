@@ -9,6 +9,7 @@ import (
 
 	"github.com/ismagilovnail/flox/apps/internal/idgen"
 	"github.com/ismagilovnail/flox/apps/internal/network"
+	"github.com/ismagilovnail/flox/apps/internal/pagination"
 )
 
 func TestCreateGetUpdateDelete(t *testing.T) {
@@ -205,7 +206,7 @@ func TestCrossTenantIsolation(t *testing.T) {
 		}
 	})
 	t.Run("list", func(t *testing.T) {
-		networks, err := svc.List(ctx, orgB)
+		networks, _, err := svc.List(ctx, orgB, pagination.Page{Limit: pagination.MaxLimit})
 		if err != nil {
 			t.Fatalf("listing as org B: %v", err)
 		}

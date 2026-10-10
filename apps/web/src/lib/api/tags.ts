@@ -1,8 +1,9 @@
 import { apiFetch } from "@/lib/api/client";
+import { fetchAllPages } from "@/lib/api/pagination";
 import type { Tag, TagAssignment, TagColorId, TaggableEntityType } from "@/lib/tags";
 
-export function listTags(): Promise<{ tags: Tag[] }> {
-  return apiFetch("/tags");
+export function listTags(): Promise<{ tags: Tag[]; total: number }> {
+  return fetchAllPages<"tags", Tag>("/tags", "tags");
 }
 
 export function createTag(input: { name: string; color: TagColorId }): Promise<Tag> {

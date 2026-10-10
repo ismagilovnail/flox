@@ -57,7 +57,7 @@ func (r *Repository) List(ctx context.Context, orgID string, filter ListFilter) 
 		SELECT `+selectColumns+`
 		FROM campaigns
 		WHERE organization_id = $1
-		ORDER BY created_at DESC
+		ORDER BY created_at DESC, id DESC
 		LIMIT $2 OFFSET $3`,
 		orgID, filter.Limit, filter.Offset,
 	)

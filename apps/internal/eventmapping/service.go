@@ -7,6 +7,7 @@ import (
 
 	"github.com/ismagilovnail/flox/apps/internal/apierror"
 	"github.com/ismagilovnail/flox/apps/internal/idgen"
+	"github.com/ismagilovnail/flox/apps/internal/pagination"
 )
 
 const networkStatusMaxLen = 80
@@ -17,8 +18,17 @@ type Service struct {
 
 func NewService(repo *Repository) *Service { return &Service{repo: repo} }
 
-func (s *Service) List(ctx context.Context, orgID string) ([]EventMapping, error) {
-	return s.repo.List(ctx, orgID)
+// List returns one page of the organization's event_mappings and their total.
+func (s *Service) List(ctx context.Context, orgID string, page pagination.Page) ([]EventMapping, int, error) {
+	items, err := s.repo.List(ctx, orgID, page)
+	if err != nil {
+		return nil, 0, err
+	}
+	total, err := s.repo.Count(ctx, orgID)
+	if err != nil {
+		return nil, 0, err
+	}
+	return items, total, nil
 }
 
 func (s *Service) Create(ctx context.Context, orgID string, in CreateInput) (EventMapping, error) {

@@ -5,6 +5,26 @@ per-phase, matching `CLAUDE.md`'s phase protocol. The one exception is
 [Between phases], below: spec amendments and the code changes that follow from
 them land between phases and would otherwise be invisible here.
 
+## [Between phases] — paginated entity lists (tech audit §5, P3)
+
+- `GET /offers`, `/networks`, `/landings`, `/postlandings`, `/pwas`, `/tags`, `/campaigns`,
+  `/traffic-sources`, `/domains`, `/pixels`, `/event-mappings`: `?limit=` (1–500, default 500)
+  and `?offset=`, `total` beside the rows, 422 on a bad value, ordered with the id as tie-break.
+  One contract, Go `internal/pagination` (`FromRequest`, `Count`).
+- apps/web: every `list*` function reads all pages via `fetchAllPages`
+  (`src/lib/api/pagination.ts`) and returns the same shape, so tables and pickers are unchanged
+  and still client-side.
+- **Fixed:** `/campaigns` defaulted to 50 rows and the app never asked for more — campaigns past
+  the 50th were missing from the campaign list and from the campaign filters in conversions,
+  click logs, LTV and alerts.
+- Not paginated, bounded by their campaign: stream sets, tracking links, cost entries.
+- `docs/frontend-integration.md`, audit status.
+
+Tests: `pagination.FromRequest` (defaults, clamp, 422s); five offers with one name paged by two —
+no overlap, no gap, links attached, total 5; 60 campaigns listed without a limit; vitest for
+`fetchAllPages` (one page, three pages, short server pages, a shifted row kept once, empty page
+stops). tsc, eslint, vitest (103), full Go suite with full env, e2e `TestFullFunnel` passes.
+
 ## [Between phases] — late FX rates reach ClickHouse for any date (tech audit AN1, closed)
 
 - A rate that arrived after the fact repaired the USD value in Postgres, but the ClickHouse copy

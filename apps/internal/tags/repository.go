@@ -11,6 +11,7 @@ import (
 
 	"github.com/ismagilovnail/flox/apps/internal/apierror"
 	"github.com/ismagilovnail/flox/apps/internal/idgen"
+	"github.com/ismagilovnail/flox/apps/internal/pagination"
 )
 
 type Repository struct {
@@ -27,8 +28,8 @@ func scanTag(row pgx.Row) (Tag, error) {
 	return t, err
 }
 
-func (r *Repository) List(ctx context.Context, orgID string) ([]Tag, error) {
-	rows, err := r.db.Query(ctx, `SELECT `+tagColumns+` FROM tags WHERE organization_id = $1 ORDER BY name`, orgID)
+func (r *Repository) List(ctx context.Context, orgID string, page pagination.Page) ([]Tag, error) {
+	rows, err := r.db.Query(ctx, `SELECT `+tagColumns+` FROM tags WHERE organization_id = $1 ORDER BY name, id LIMIT $2 OFFSET $3`, orgID, page.Limit, page.Offset)
 	if err != nil {
 		return nil, fmt.Errorf("tags: listing: %w", err)
 	}
@@ -250,4 +251,9 @@ func (r *Repository) BulkEdit(ctx context.Context, orgID string, entityType Enti
 	}
 
 	return tx.Commit(ctx)
+}
+
+// Count is how many tags rows the organization has — List's total.
+func (r *Repository) Count(ctx context.Context, orgID string) (int, error) {
+	return pagination.Count(ctx, r.db, "tags", orgID)
 }

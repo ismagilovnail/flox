@@ -34,8 +34,10 @@ STATUS        : marketer audit closed (#1–#12, #13 platform limit). Tech audit
                 DB5 (expired auth cleanup), API2 (strict /auth limiter +
                 per-account sign-in limit), DB3 (queue autovacuum), CH5
                 (versioned CH migrations under a PG advisory lock), RL5
-                (server timeouts), M1 done.
-LAST COMMIT   : feat(fx): late rates rewrite the ClickHouse copy for any date.
+                (server timeouts), M1, entity list pagination (limit/offset/
+                total, web reads all pages) done. Left: /v1, broker (Stage 3),
+                M2/Q3 fairness, NEEDS VERIFICATION items, load test.
+LAST COMMIT   : feat(api): paginate entity lists; web reads every page.
 UNCOMMITTED   : none expected. Dev DB fresh from `make dev-fresh CONFIRM=yes`
                 (password flox-demo-2026); `make dev-status` shows what is in it.
 NEXT          : wait for the user — the next phase. CI (DO1) is the user's own

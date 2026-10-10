@@ -9,6 +9,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/ismagilovnail/flox/apps/internal/idgen"
+	"github.com/ismagilovnail/flox/apps/internal/pagination"
 	"github.com/ismagilovnail/flox/apps/internal/pwa"
 )
 
@@ -619,7 +620,7 @@ func TestCrossTenantIsolation(t *testing.T) {
 		}
 	})
 	t.Run("list", func(t *testing.T) {
-		pwas, err := svc.List(ctx, orgB)
+		pwas, _, err := svc.List(ctx, orgB, pagination.Page{Limit: pagination.MaxLimit})
 		if err != nil {
 			t.Fatalf("listing as org B: %v", err)
 		}

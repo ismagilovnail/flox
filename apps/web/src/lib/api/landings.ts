@@ -1,4 +1,5 @@
 import { apiFetch } from "@/lib/api/client";
+import { fetchAllPages } from "@/lib/api/pagination";
 
 /** Mirrors apps/internal/landing's real shape. */
 export type LandingType = "internal" | "external";
@@ -66,8 +67,8 @@ export type UploadLandingInput = {
  * against the bundle and should be made relative. */
 export type LandingUploadResult = { landing: Landing; warnings: string[] };
 
-export function listLandings(): Promise<{ landings: Landing[] }> {
-  return apiFetch("/landings");
+export function listLandings(): Promise<{ landings: Landing[]; total: number }> {
+  return fetchAllPages<"landings", Landing>("/landings", "landings");
 }
 
 export function getLanding(id: string): Promise<Landing> {

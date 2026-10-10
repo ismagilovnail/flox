@@ -17,6 +17,7 @@ import (
 	"github.com/ismagilovnail/flox/apps/internal/config"
 	"github.com/ismagilovnail/flox/apps/internal/idgen"
 	"github.com/ismagilovnail/flox/apps/internal/landing"
+	"github.com/ismagilovnail/flox/apps/internal/pagination"
 	"github.com/ismagilovnail/flox/apps/internal/storage"
 )
 
@@ -321,7 +322,7 @@ func TestCrossTenantIsolation(t *testing.T) {
 		}
 	})
 	t.Run("list", func(t *testing.T) {
-		landings, err := svc.List(ctx, orgB)
+		landings, _, err := svc.List(ctx, orgB, pagination.Page{Limit: pagination.MaxLimit})
 		if err != nil {
 			t.Fatalf("listing as org B: %v", err)
 		}

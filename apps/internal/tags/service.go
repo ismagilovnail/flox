@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/ismagilovnail/flox/apps/internal/apierror"
+	"github.com/ismagilovnail/flox/apps/internal/pagination"
 )
 
 const (
@@ -25,8 +26,17 @@ func NewService(repo *Repository) *Service {
 	return &Service{repo: repo}
 }
 
-func (s *Service) List(ctx context.Context, orgID string) ([]Tag, error) {
-	return s.repo.List(ctx, orgID)
+// List returns one page of the organization's tags and their total.
+func (s *Service) List(ctx context.Context, orgID string, page pagination.Page) ([]Tag, int, error) {
+	items, err := s.repo.List(ctx, orgID, page)
+	if err != nil {
+		return nil, 0, err
+	}
+	total, err := s.repo.Count(ctx, orgID)
+	if err != nil {
+		return nil, 0, err
+	}
+	return items, total, nil
 }
 
 func validateNameColor(name, color string) (string, error) {

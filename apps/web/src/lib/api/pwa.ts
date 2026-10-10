@@ -1,4 +1,5 @@
 import { apiFetch } from "@/lib/api/client";
+import { fetchAllPages } from "@/lib/api/pagination";
 
 /** Mirrors apps/internal/pwa's real shape. */
 export type PwaStatus = "active" | "paused" | "archived";
@@ -95,8 +96,8 @@ export type CreatePwaInput = {
 
 export type UpdatePwaInput = Partial<CreatePwaInput> & { status?: PwaStatus };
 
-export function listPwas(): Promise<{ pwas: Pwa[] }> {
-  return apiFetch("/pwas");
+export function listPwas(): Promise<{ pwas: Pwa[]; total: number }> {
+  return fetchAllPages<"pwas", Pwa>("/pwas", "pwas");
 }
 
 /** A signed apps/tracker URL for this PWA's real install page, marked as a

@@ -217,3 +217,31 @@ func seedTrafficSource(t *testing.T, ctx context.Context, pool *pgxpool.Pool, or
 	}
 	return id
 }
+
+// A list without ?limit= used to stop at 50 campaigns, and apps/web never
+// asked for more; the default is now pagination's.
+func TestListDefaultReturnsMoreThanFifty(t *testing.T) {
+	ctx := context.Background()
+	pool := mustPool(t)
+	orgID := seedOrg(t, ctx, pool)
+	sourceID := seedTrafficSource(t, ctx, pool, orgID)
+	ids := make([]string, 60)
+	for i := range ids {
+		ids[i] = idgen.New()
+	}
+	if _, err := pool.Exec(ctx, `
+		INSERT INTO campaigns (id, organization_id, traffic_source_id, name, fallback_url)
+		SELECT id, $1, $2, 'Bulk ' || id, 'https://example.com' FROM unnest($3::text[]) id`,
+		orgID, sourceID, ids); err != nil {
+		t.Fatalf("seeding campaigns: %v", err)
+	}
+
+	svc := campaign.NewService(campaign.NewRepository(pool))
+	result, err := svc.List(ctx, orgID, campaign.ListFilter{})
+	if err != nil {
+		t.Fatalf("List: %v", err)
+	}
+	if len(result.Campaigns) != 60 || result.Total != 60 {
+		t.Fatalf("List without a limit = %d campaigns (total %d), want all 60", len(result.Campaigns), result.Total)
+	}
+}

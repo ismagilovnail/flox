@@ -1,4 +1,5 @@
 import { apiFetch } from "@/lib/api/client";
+import { fetchAllPages } from "@/lib/api/pagination";
 
 /** Mirrors apps/internal/postlanding's real shape. */
 export type PostlandingStatus = "active" | "paused" | "archived";
@@ -40,8 +41,8 @@ export type CreatePostlandingInput = {
 
 export type UpdatePostlandingInput = Partial<CreatePostlandingInput> & { status?: PostlandingStatus };
 
-export function listPostlandings(): Promise<{ postlandings: Postlanding[] }> {
-  return apiFetch("/postlandings");
+export function listPostlandings(): Promise<{ postlandings: Postlanding[]; total: number }> {
+  return fetchAllPages<"postlandings", Postlanding>("/postlandings", "postlandings");
 }
 
 export function getPostlanding(id: string): Promise<Postlanding> {

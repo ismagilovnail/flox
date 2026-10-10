@@ -8,6 +8,7 @@ import (
 
 	"github.com/ismagilovnail/flox/apps/internal/apierror"
 	"github.com/ismagilovnail/flox/apps/internal/idgen"
+	"github.com/ismagilovnail/flox/apps/internal/pagination"
 )
 
 const (
@@ -25,12 +26,16 @@ func NewService(repo *Repository) *Service {
 	return &Service{repo: repo}
 }
 
+// List returns one page of campaigns and their total (internal/pagination).
+// Its default used to be 50 rows, and apps/web never asked for more: every
+// campaign past the 50th was missing from the list and from every campaign
+// filter (conversions, click logs, LTV, alerts).
 func (s *Service) List(ctx context.Context, orgID string, filter ListFilter) (ListResult, error) {
 	if filter.Limit <= 0 {
-		filter.Limit = 50
+		filter.Limit = pagination.DefaultLimit
 	}
-	if filter.Limit > 200 {
-		filter.Limit = 200
+	if filter.Limit > pagination.MaxLimit {
+		filter.Limit = pagination.MaxLimit
 	}
 	if filter.Offset < 0 {
 		filter.Offset = 0

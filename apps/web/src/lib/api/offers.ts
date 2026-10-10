@@ -1,4 +1,5 @@
 import { apiFetch } from "@/lib/api/client";
+import { fetchAllPages } from "@/lib/api/pagination";
 
 /** Mirrors apps/internal/offer's real shape — the single client for the
  * real Offers API, used by the Offers page and by the stream-set editor's
@@ -58,8 +59,8 @@ export type UpdateOfferInput = Partial<Omit<CreateOfferInput, "links">> & {
   links?: OfferLinkInput[];
 };
 
-export function listOffers(): Promise<{ offers: Offer[] }> {
-  return apiFetch("/offers");
+export function listOffers(): Promise<{ offers: Offer[]; total: number }> {
+  return fetchAllPages<"offers", Offer>("/offers", "offers");
 }
 
 export function getOffer(id: string): Promise<Offer> {

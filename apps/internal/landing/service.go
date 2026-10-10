@@ -10,6 +10,7 @@ import (
 
 	"github.com/ismagilovnail/flox/apps/internal/apierror"
 	"github.com/ismagilovnail/flox/apps/internal/idgen"
+	"github.com/ismagilovnail/flox/apps/internal/pagination"
 	"github.com/ismagilovnail/flox/apps/internal/storage"
 )
 
@@ -36,15 +37,20 @@ func NewService(repo *Repository, storageClient *storage.Client, logger *slog.Lo
 	return &Service{repo: repo, storage: storageClient, logger: logger}
 }
 
-func (s *Service) List(ctx context.Context, orgID string) ([]Landing, error) {
-	landings, err := s.repo.List(ctx, orgID)
+// List returns one page of the organization's landings and their total.
+func (s *Service) List(ctx context.Context, orgID string, page pagination.Page) ([]Landing, int, error) {
+	landings, err := s.repo.List(ctx, orgID, page)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
+	}
+	total, err := s.repo.Count(ctx, orgID)
+	if err != nil {
+		return nil, 0, err
 	}
 	for i := range landings {
 		s.decorate(&landings[i])
 	}
-	return landings, nil
+	return landings, total, nil
 }
 
 func (s *Service) Get(ctx context.Context, orgID, id string) (Landing, error) {

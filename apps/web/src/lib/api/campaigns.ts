@@ -1,4 +1,5 @@
 import { apiFetch } from "@/lib/api/client";
+import { fetchAllPages } from "@/lib/api/pagination";
 
 export type CampaignStatus = "active" | "paused" | "draft" | "archived";
 
@@ -37,7 +38,7 @@ export type CreateCampaignInput = {
 export type UpdateCampaignInput = Partial<CreateCampaignInput> & { status?: CampaignStatus };
 
 export function listCampaigns(): Promise<{ campaigns: Campaign[]; total: number }> {
-  return apiFetch("/campaigns");
+  return fetchAllPages<"campaigns", Campaign>("/campaigns", "campaigns");
 }
 
 export function getCampaign(id: string): Promise<Campaign> {

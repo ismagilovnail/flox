@@ -14,6 +14,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/ismagilovnail/flox/apps/internal/apierror"
+	"github.com/ismagilovnail/flox/apps/internal/pagination"
 )
 
 type Repository struct {
@@ -35,17 +36,16 @@ func scanDomain(row pgx.Row) (Domain, error) {
 	return d, err
 }
 
-// List returns every domain for organizationID, ordered by domain name —
-// unpaginated, matching trafficsource.Repository.List's own reasoning (a
-// tracking-link domain picker and the domains table both want the whole
-// list, and per-org domain counts are small).
-func (r *Repository) List(ctx context.Context, organizationID string) ([]Domain, error) {
+// List returns one page of organizationID's domains, ordered by domain
+// name (internal/pagination; apps/web reads every page).
+func (r *Repository) List(ctx context.Context, organizationID string, page pagination.Page) ([]Domain, error) {
 	rows, err := r.db.Query(ctx, `
 		SELECT `+selectColumns+`
 		FROM domains
 		WHERE organization_id = $1
-		ORDER BY domain`,
-		organizationID,
+		ORDER BY domain, id
+		LIMIT $2 OFFSET $3`,
+		organizationID, page.Limit, page.Offset,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("domain: listing: %w", err)
@@ -320,4 +320,9 @@ func (r *Repository) ClaimSSLChecks(ctx context.Context, limit int, issuedEvery,
 		return nil, fmt.Errorf("domain: claiming ssl checks: %w", err)
 	}
 	return pgx.CollectRows(rows, pgx.RowToStructByPos[DueSSLCheck])
+}
+
+// Count is how many domains rows the organization has — List's total.
+func (r *Repository) Count(ctx context.Context, organizationID string) (int, error) {
+	return pagination.Count(ctx, r.db, "domains", organizationID)
 }

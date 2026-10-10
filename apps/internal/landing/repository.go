@@ -11,6 +11,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/ismagilovnail/flox/apps/internal/apierror"
+	"github.com/ismagilovnail/flox/apps/internal/pagination"
 )
 
 type Repository struct {
@@ -29,13 +30,14 @@ func scanLanding(row pgx.Row) (Landing, error) {
 	return l, err
 }
 
-func (r *Repository) List(ctx context.Context, organizationID string) ([]Landing, error) {
+func (r *Repository) List(ctx context.Context, organizationID string, page pagination.Page) ([]Landing, error) {
 	rows, err := r.db.Query(ctx, `
 		SELECT `+selectColumns+`
 		FROM landings
 		WHERE organization_id = $1
-		ORDER BY name`,
-		organizationID,
+		ORDER BY name, id
+		LIMIT $2 OFFSET $3`,
+		organizationID, page.Limit, page.Offset,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("landing: listing: %w", err)
@@ -163,4 +165,9 @@ func (r *Repository) Delete(ctx context.Context, orgID, id string) error {
 		return apierror.NotFound("landing not found")
 	}
 	return nil
+}
+
+// Count is how many landings rows the organization has — List's total.
+func (r *Repository) Count(ctx context.Context, organizationID string) (int, error) {
+	return pagination.Count(ctx, r.db, "landings", organizationID)
 }

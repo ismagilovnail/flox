@@ -8,6 +8,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/ismagilovnail/flox/apps/internal/idgen"
+	"github.com/ismagilovnail/flox/apps/internal/pagination"
 	"github.com/ismagilovnail/flox/apps/internal/tags"
 )
 
@@ -68,7 +69,7 @@ func TestCreateListUpdateDeleteTag(t *testing.T) {
 		t.Fatalf("Create returned %+v, want Top Performer/green", created)
 	}
 
-	list, err := svc.List(ctx, orgID)
+	list, _, err := svc.List(ctx, orgID, pagination.Page{Limit: pagination.MaxLimit})
 	if err != nil {
 		t.Fatalf("List: %v", err)
 	}
@@ -89,7 +90,7 @@ func TestCreateListUpdateDeleteTag(t *testing.T) {
 	if err := svc.Delete(ctx, orgID, created.ID); err != nil {
 		t.Fatalf("Delete: %v", err)
 	}
-	list, err = svc.List(ctx, orgID)
+	list, _, err = svc.List(ctx, orgID, pagination.Page{Limit: pagination.MaxLimit})
 	if err != nil {
 		t.Fatalf("List after delete: %v", err)
 	}
@@ -124,7 +125,7 @@ func TestCrossOrgIsolation(t *testing.T) {
 		t.Fatalf("Create: %v", err)
 	}
 
-	listB, err := svc.List(ctx, orgB)
+	listB, _, err := svc.List(ctx, orgB, pagination.Page{Limit: pagination.MaxLimit})
 	if err != nil {
 		t.Fatalf("List (org B): %v", err)
 	}

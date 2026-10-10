@@ -12,6 +12,7 @@ import (
 	"github.com/ismagilovnail/flox/apps/internal/domain/tlsprobe"
 	"github.com/ismagilovnail/flox/apps/internal/idgen"
 	"github.com/ismagilovnail/flox/apps/internal/integrations"
+	"github.com/ismagilovnail/flox/apps/internal/pagination"
 )
 
 // domainPattern matches a bare hostname (labels separated by dots, a
@@ -94,8 +95,17 @@ func NewService(repo *Repository, credentials CredentialSource, registrar Regist
 	return &Service{repo: repo, credentials: credentials, registrar: registrar, dnsProvider: dnsProvider, trackerDNSTarget: trackerDNSTarget, prober: prober, txt: NetTXTResolver{}}
 }
 
-func (s *Service) List(ctx context.Context, orgID string) ([]Domain, error) {
-	return s.repo.List(ctx, orgID)
+// List returns one page of the organization's domains and their total.
+func (s *Service) List(ctx context.Context, orgID string, page pagination.Page) ([]Domain, int, error) {
+	items, err := s.repo.List(ctx, orgID, page)
+	if err != nil {
+		return nil, 0, err
+	}
+	total, err := s.repo.Count(ctx, orgID)
+	if err != nil {
+		return nil, 0, err
+	}
+	return items, total, nil
 }
 
 func (s *Service) Get(ctx context.Context, orgID, id string) (Domain, error) {

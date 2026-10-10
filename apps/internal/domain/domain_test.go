@@ -15,6 +15,7 @@ import (
 	"github.com/ismagilovnail/flox/apps/internal/domain/tlsprobe"
 	"github.com/ismagilovnail/flox/apps/internal/idgen"
 	"github.com/ismagilovnail/flox/apps/internal/integrations"
+	"github.com/ismagilovnail/flox/apps/internal/pagination"
 )
 
 // fakeCredentialSource/fakeRegistrar/fakeDNS let tests control Verify/
@@ -292,7 +293,7 @@ func TestListReturnsOrgsOwnDomainsOnly(t *testing.T) {
 		t.Fatalf("Create: %v", err)
 	}
 
-	domains, err := svc.List(ctx, orgA)
+	domains, _, err := svc.List(ctx, orgA, pagination.Page{Limit: pagination.MaxLimit})
 	if err != nil {
 		t.Fatalf("List: %v", err)
 	}

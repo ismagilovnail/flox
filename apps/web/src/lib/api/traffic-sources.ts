@@ -1,4 +1,5 @@
 import { apiFetch } from "@/lib/api/client";
+import { fetchAllPages } from "@/lib/api/pagination";
 
 /** Mirrors apps/internal/trafficsource's real shape (Phase: Traffic
  * Sources CRUD) — grew from Phase 27's read-only id/name/type/status
@@ -75,8 +76,8 @@ export type CreateTrafficSourceInput = {
 
 export type UpdateTrafficSourceInput = Partial<CreateTrafficSourceInput> & { status?: SourceStatus };
 
-export function listTrafficSources(): Promise<{ trafficSources: TrafficSource[] }> {
-  return apiFetch("/traffic-sources");
+export function listTrafficSources(): Promise<{ trafficSources: TrafficSource[]; total: number }> {
+  return fetchAllPages<"trafficSources", TrafficSource>("/traffic-sources", "trafficSources");
 }
 
 export function getTrafficSource(id: string): Promise<TrafficSource> {

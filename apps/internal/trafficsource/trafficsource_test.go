@@ -8,6 +8,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/ismagilovnail/flox/apps/internal/idgen"
+	"github.com/ismagilovnail/flox/apps/internal/pagination"
 	"github.com/ismagilovnail/flox/apps/internal/trafficsource"
 )
 
@@ -37,7 +38,7 @@ func TestListReturnsOrgsOwnSourcesOrderedByName(t *testing.T) {
 	seedSource(t, ctx, pool, orgB, "Org B Source", "Google")
 
 	repo := trafficsource.NewRepository(pool)
-	sources, err := repo.List(ctx, orgA)
+	sources, err := repo.List(ctx, orgA, pagination.Page{Limit: pagination.MaxLimit})
 	if err != nil {
 		t.Fatalf("List: %v", err)
 	}
@@ -60,7 +61,7 @@ func TestListEmptyIsEmptySliceNotNil(t *testing.T) {
 	orgID := seedOrg(t, ctx, pool)
 
 	repo := trafficsource.NewRepository(pool)
-	sources, err := repo.List(ctx, orgID)
+	sources, err := repo.List(ctx, orgID, pagination.Page{Limit: pagination.MaxLimit})
 	if err != nil {
 		t.Fatalf("List: %v", err)
 	}
@@ -266,7 +267,7 @@ func TestCrossTenantIsolation(t *testing.T) {
 	})
 
 	t.Run("list", func(t *testing.T) {
-		sources, err := svc.List(ctx, orgB)
+		sources, _, err := svc.List(ctx, orgB, pagination.Page{Limit: pagination.MaxLimit})
 		if err != nil {
 			t.Fatalf("listing as org B: %v", err)
 		}

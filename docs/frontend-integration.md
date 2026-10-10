@@ -58,6 +58,34 @@ single concrete, honestly-deliverable slice:
   isn't entered (or, for CPA, when conversions are zero — a division by
   zero, not a $0.00 acquisition cost).
 
+## Entity lists: limit, offset, total (tech audit 2026-10-06, §5)
+
+`GET /offers`, `/networks`, `/landings`, `/postlandings`, `/pwas`, `/tags`,
+`/campaigns`, `/traffic-sources`, `/domains`, `/pixels`, `/event-mappings`
+take `?limit=` (1–500, default 500; more is clamped to 500) and `?offset=`
+(from 0), and return the page with the list's `total`:
+`{"offers": [...], "total": 1203}`. A bad value is a 422. Rows are ordered by
+the list's own order with the id as tie-break, so pages neither overlap nor
+skip. One contract: Go `internal/pagination`.
+
+apps/web keeps its tables client-side (sort, search, filter, export over the
+whole list) and its pickers offer every entity, so every `list*` function in
+`src/lib/api` reads all pages through `fetchAllPages`
+(`src/lib/api/pagination.ts`): pages of 500 until `total`, a row that moved
+between pages kept once. That bounds one response, not the whole list — fine
+up to a few thousand entities per organization; beyond that the tables would
+need server-side sorting and search.
+
+Not paginated, each bounded by its parent: a campaign's stream sets (the
+routing editor needs all of them, in priority order), a campaign's tracking
+links, a campaign's cost entries for a date range. Already paginated their
+own way: click logs, conversions, postback logs. Small and per user: API
+keys, custom metrics, report presets.
+
+Found on the way: `/campaigns` defaulted to 50 rows and the app never asked
+for more — every campaign past the 50th was missing from the campaign list
+and from every campaign filter (conversions, click logs, LTV, alerts).
+
 ## What's still mocked, unchanged
 
 - The standalone `/analytics` report builder — a full ad-hoc report UI

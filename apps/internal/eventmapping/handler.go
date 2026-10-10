@@ -9,6 +9,7 @@ import (
 
 	"github.com/ismagilovnail/flox/apps/internal/apierror"
 	"github.com/ismagilovnail/flox/apps/internal/event"
+	"github.com/ismagilovnail/flox/apps/internal/pagination"
 	"github.com/ismagilovnail/flox/apps/internal/tenant"
 )
 
@@ -36,12 +37,17 @@ func (h *Handler) Register(r chi.Router) {
 
 func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
 	orgID, _ := tenant.OrgID(r.Context())
-	mappings, err := h.svc.List(r.Context(), orgID)
+	page, err := pagination.FromRequest(r)
 	if err != nil {
 		apierror.Write(w, h.logger, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"eventMappings": mappings})
+	mappings, total, err := h.svc.List(r.Context(), orgID, page)
+	if err != nil {
+		apierror.Write(w, h.logger, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"eventMappings": mappings, "total": total})
 }
 
 type createRequest struct {

@@ -10,6 +10,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/ismagilovnail/flox/apps/internal/apierror"
+	"github.com/ismagilovnail/flox/apps/internal/pagination"
 )
 
 type Repository struct {
@@ -30,13 +31,14 @@ func scanEventMapping(row pgx.Row) (EventMapping, error) {
 // one network — the frontend panel groups them by network client-side
 // (one card per network), matching the old mock's org-wide EVENT_MAPPINGS
 // array, so one request beats one per network.
-func (r *Repository) List(ctx context.Context, orgID string) ([]EventMapping, error) {
+func (r *Repository) List(ctx context.Context, orgID string, page pagination.Page) ([]EventMapping, error) {
 	rows, err := r.db.Query(ctx, `
 		SELECT `+selectColumns+`
 		FROM event_mappings
 		WHERE organization_id = $1
-		ORDER BY network_id, created_at`,
-		orgID,
+		ORDER BY network_id, created_at, id
+		LIMIT $2 OFFSET $3`,
+		orgID, page.Limit, page.Offset,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("eventmapping: listing: %w", err)
@@ -90,4 +92,9 @@ func (r *Repository) Delete(ctx context.Context, orgID, id string) error {
 		return apierror.NotFound("event mapping not found")
 	}
 	return nil
+}
+
+// Count is how many event_mappings rows the organization has — List's total.
+func (r *Repository) Count(ctx context.Context, orgID string) (int, error) {
+	return pagination.Count(ctx, r.db, "event_mappings", orgID)
 }

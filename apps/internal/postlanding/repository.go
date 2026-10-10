@@ -11,6 +11,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/ismagilovnail/flox/apps/internal/apierror"
+	"github.com/ismagilovnail/flox/apps/internal/pagination"
 )
 
 type Repository struct {
@@ -27,13 +28,14 @@ func scanPostlanding(row pgx.Row) (Postlanding, error) {
 	return p, err
 }
 
-func (r *Repository) List(ctx context.Context, organizationID string) ([]Postlanding, error) {
+func (r *Repository) List(ctx context.Context, organizationID string, page pagination.Page) ([]Postlanding, error) {
 	rows, err := r.db.Query(ctx, `
 		SELECT `+selectColumns+`
 		FROM postlandings
 		WHERE organization_id = $1
-		ORDER BY name`,
-		organizationID,
+		ORDER BY name, id
+		LIMIT $2 OFFSET $3`,
+		organizationID, page.Limit, page.Offset,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("postlanding: listing: %w", err)
@@ -130,4 +132,9 @@ func (r *Repository) Delete(ctx context.Context, orgID, id string) error {
 		return apierror.NotFound("postlanding not found")
 	}
 	return nil
+}
+
+// Count is how many postlandings rows the organization has — List's total.
+func (r *Repository) Count(ctx context.Context, organizationID string) (int, error) {
+	return pagination.Count(ctx, r.db, "postlandings", organizationID)
 }

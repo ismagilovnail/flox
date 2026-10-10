@@ -12,6 +12,7 @@ import (
 	"github.com/ismagilovnail/flox/apps/internal/event"
 	"github.com/ismagilovnail/flox/apps/internal/eventmapping"
 	"github.com/ismagilovnail/flox/apps/internal/idgen"
+	"github.com/ismagilovnail/flox/apps/internal/pagination"
 )
 
 func TestCreateListDelete(t *testing.T) {
@@ -32,7 +33,7 @@ func TestCreateListDelete(t *testing.T) {
 		t.Fatalf("Create result = %+v, want networkStatus=ftd floxStatus=CPA_ACCEPT", created)
 	}
 
-	list, err := svc.List(ctx, orgID)
+	list, _, err := svc.List(ctx, orgID, pagination.Page{Limit: pagination.MaxLimit})
 	if err != nil {
 		t.Fatalf("List: %v", err)
 	}
@@ -43,7 +44,7 @@ func TestCreateListDelete(t *testing.T) {
 	if err := svc.Delete(ctx, orgID, created.ID); err != nil {
 		t.Fatalf("Delete: %v", err)
 	}
-	list, err = svc.List(ctx, orgID)
+	list, _, err = svc.List(ctx, orgID, pagination.Page{Limit: pagination.MaxLimit})
 	if err != nil {
 		t.Fatalf("List after delete: %v", err)
 	}
@@ -129,7 +130,7 @@ func TestCrossTenantIsolation(t *testing.T) {
 		t.Fatal("Create against another org's network: want an error")
 	}
 
-	listB, err := svc.List(ctx, orgB)
+	listB, _, err := svc.List(ctx, orgB, pagination.Page{Limit: pagination.MaxLimit})
 	if err != nil {
 		t.Fatalf("List (org B): %v", err)
 	}

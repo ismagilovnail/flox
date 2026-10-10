@@ -8,6 +8,7 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"github.com/ismagilovnail/flox/apps/internal/apierror"
+	"github.com/ismagilovnail/flox/apps/internal/pagination"
 	"github.com/ismagilovnail/flox/apps/internal/tenant"
 )
 
@@ -40,12 +41,17 @@ func (h *Handler) Register(r chi.Router) {
 
 func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
 	orgID, _ := tenant.OrgID(r.Context())
-	sources, err := h.svc.List(r.Context(), orgID)
+	page, err := pagination.FromRequest(r)
 	if err != nil {
 		apierror.Write(w, h.logger, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"trafficSources": sources})
+	sources, total, err := h.svc.List(r.Context(), orgID, page)
+	if err != nil {
+		apierror.Write(w, h.logger, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"trafficSources": sources, "total": total})
 }
 
 func (h *Handler) get(w http.ResponseWriter, r *http.Request) {
