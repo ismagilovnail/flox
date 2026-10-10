@@ -315,7 +315,7 @@ func NewService(mapper Mapper, store Store, fx FXConverter, attr attribution.Att
 }
 
 // logAttempt reports one outcome to the postback attempt audit log. Called
-// from every exit point of Record (the main path, logError, logIgnored)
+// from every exit point of Record (commit, recordRefusal)
 // with whatever fields are known at that point — an error path before
 // mapping has no Status yet, and that's fine, an empty Status is itself
 // informative (§48's postback_events schema allows it, same as the
@@ -327,77 +327,125 @@ func (s *Service) logAttempt(ctx context.Context, p Postback, clickID string, st
 		ClickID:        clickID,
 		Status:         status,
 		EventRef:       eventRef,
-		RawStatus:      strings.TrimSpace(p.RawStatus),
+		RawStatus:      p.RawStatus,
 		Result:         result,
 		Message:        message,
 		Revenue:        p.Revenue,
-		Currency:       strings.TrimSpace(p.Currency),
+		Currency:       p.Currency,
 		OccurredAt:     p.OccurredAt,
 	})
 }
 
-// Record runs one postback through mapping, the progression check,
-// attribution, FX normalization and the dedup ledger; on success the CPA
-// event and the outgoing postback are committed with the ledger row. It never returns an error for a postback it understood and
-// handled (unmapped status, missing fields, progression refusal are all
-// ResultKind values, not errors) — err is reserved for infrastructure
-// failure, where the honest answer is "retry me," not a fabricated result.
+// Record runs one postback through validation, status mapping, the
+// progression check, attribution and FX normalization; on success the
+// ledger row, the CPA event and the outgoing postback are committed in one
+// transaction (Store.Record). It never returns an error for a postback it
+// understood and handled (unmapped status, missing fields, progression
+// refusal are all ResultKind values, not errors) — err is reserved for
+// infrastructure failure, where the honest answer is "retry me," not a
+// fabricated result.
 func (s *Service) Record(ctx context.Context, p Postback) (Result, error) {
-	clickID := strings.TrimSpace(p.ClickID)
-	rawStatus := strings.TrimSpace(p.RawStatus)
+	p = p.trimmed()
 
-	if clickID == "" {
-		return s.logError(ctx, p, "", "", "missing click_id")
-	}
-	if rawStatus == "" {
-		return s.logError(ctx, p, "", "", "missing status")
-	}
-	// The HTTP handler already answers 400 for these; this guards every other
-	// caller (postback replay) so a bad amount never reaches the ledger.
-	if p.Revenue != nil {
-		if err := CheckRevenue(*p.Revenue); err != nil {
-			return s.logError(ctx, p, clickID, "", err.Error())
+	if refusal := validate(p); refusal != "" {
+		// A postback without a status is logged without its click.
+		clickID := p.ClickID
+		if p.RawStatus == "" {
+			clickID = ""
 		}
+		return s.recordRefusal(ctx, p, clickID, "", "", ResultError, refusal)
 	}
 
-	status, err := s.mapper.MapStatus(ctx, p.OrganizationID, p.NetworkID, rawStatus)
+	status, err := s.mapper.MapStatus(ctx, p.OrganizationID, p.NetworkID, p.RawStatus)
 	if errors.Is(err, ErrUnmapped) {
-		return s.logError(ctx, p, clickID, "",
-			fmt.Sprintf("no event mapping configured for network status %q", rawStatus))
+		return s.recordRefusal(ctx, p, p.ClickID, "", "", ResultError,
+			fmt.Sprintf("no event mapping configured for network status %q", p.RawStatus))
 	}
 	if err != nil {
 		return Result{}, fmt.Errorf("conversion: mapping status: %w", err)
 	}
-
 	eventRef := eventRefFor(status, p.NetworkTxnID)
 
-	// Fast path, possibly from the Redis cache: skips attribution for an
-	// obvious replay. Store re-checks under the click's lock, which is what
-	// actually decides when two postbacks for one click race.
-	last, hasLast, err := s.store.LastStatus(ctx, p.OrganizationID, clickID)
+	refusal, err := s.checkProgression(ctx, p, status)
 	if err != nil {
-		return Result{}, fmt.Errorf("conversion: checking progression: %w", err)
+		return Result{}, err
 	}
-	if refusesProgression(last, hasLast, status) {
-		return s.logIgnored(ctx, p, clickID, status, eventRef, progressionRefusal(clickID, last))
+	if refusal != "" {
+		return s.recordRefusal(ctx, p, p.ClickID, status, eventRef, ResultIgnored, refusal)
 	}
 
+	attr, err := s.attribute(ctx, p, status)
+	if err != nil {
+		return Result{}, err
+	}
+	usdValue, revenue := s.convertRevenue(ctx, p)
+
+	return s.commit(ctx, p, newEntry(p, status, eventRef, attr, revenue, usdValue), attr)
+}
+
+// trimmed is p with every network-supplied string trimmed — once, here, so
+// no later step has to remember to.
+func (p Postback) trimmed() Postback {
+	p.ClickID = strings.TrimSpace(p.ClickID)
+	p.ExternalClickID = strings.TrimSpace(p.ExternalClickID)
+	p.RawStatus = strings.TrimSpace(p.RawStatus)
+	p.Currency = strings.TrimSpace(p.Currency)
+	p.NetworkTxnID = strings.TrimSpace(p.NetworkTxnID)
+	p.PostbackURL = strings.TrimSpace(p.PostbackURL)
+	return p
+}
+
+// validate returns why a postback cannot be recorded, or "". The HTTP
+// handler already answers 400 for a bad amount; checking it here guards
+// every other caller (postback replay) too.
+func validate(p Postback) string {
+	switch {
+	case p.ClickID == "":
+		return "missing click_id"
+	case p.RawStatus == "":
+		return "missing status"
+	}
+	if p.Revenue != nil {
+		if err := CheckRevenue(*p.Revenue); err != nil {
+			return err.Error()
+		}
+	}
+	return ""
+}
+
+// checkProgression is the fast path of §45's progression rule, possibly
+// answered from the Redis cache: it skips attribution for an obvious
+// replay. Store re-checks under the click's lock, which is what actually
+// decides when two postbacks for one click race.
+func (s *Service) checkProgression(ctx context.Context, p Postback, status event.Type) (refusal string, err error) {
+	last, hasLast, err := s.store.LastStatus(ctx, p.OrganizationID, p.ClickID)
+	if err != nil {
+		return "", fmt.Errorf("conversion: checking progression: %w", err)
+	}
+	if refusesProgression(last, hasLast, status) {
+		return progressionRefusal(p.ClickID, last), nil
+	}
+	return "", nil
+}
+
+// attribute finds the click the conversion belongs to. A failing click
+// store (ClickHouse down or not connected yet) is not an error: the
+// conversion is recorded as unknown_click with a retry, like a click that
+// has not arrived yet, and the worker attributes it once the store answers
+// — the network gets its answer without waiting on ClickHouse (audit
+// 2026-10-06, T1).
+func (s *Service) attribute(ctx context.Context, p Postback, status event.Type) (attribution.Attribution, error) {
 	attr, err := s.attribution.AttributeConversion(ctx, attribution.Conversion{
 		OrganizationID:  p.OrganizationID,
-		ClickID:         clickID,
-		ExternalClickID: strings.TrimSpace(p.ExternalClickID),
+		ClickID:         p.ClickID,
+		ExternalClickID: p.ExternalClickID,
 		Status:          status,
 		OccurredAt:      p.OccurredAt,
 	})
 	if errors.Is(err, attribution.ErrNoOrganization) {
-		return Result{}, fmt.Errorf("conversion: attributing: %w", err)
+		return attribution.Attribution{}, fmt.Errorf("conversion: attributing: %w", err)
 	}
 	if err != nil {
-		// The click store failed (ClickHouse down or not connected yet).
-		// Recorded as unknown_click with a retry, like a click that has not
-		// arrived yet: the worker attributes it once the store answers, so
-		// the network gets its answer without waiting on ClickHouse (audit
-		// 2026-10-06, T1).
 		attr = attribution.Attribution{
 			Outcome: attribution.OutcomeUnknownClick,
 			Method:  attribution.MethodNone,
@@ -405,26 +453,28 @@ func (s *Service) Record(ctx context.Context, p Postback) (Result, error) {
 		}
 	}
 	metrics.AttributionOutcomesTotal.WithLabelValues(string(attr.Outcome)).Inc()
+	return attr, nil
+}
 
-	usdValue, revenue := s.convertRevenue(ctx, p)
-
+// newEntry is the ledger row of an accepted postback, with the CPA event
+// and the outgoing postback that commit together with it.
+func newEntry(p Postback, status event.Type, eventRef string, attr attribution.Attribution, revenue, usdValue *float64) Entry {
 	var ttcMS *int64
 	if attr.Outcome.Attributed() {
 		ms := attr.TimeToConversion.Milliseconds()
 		ttcMS = &ms
 	}
-
 	entry := Entry{
 		OrganizationID:     p.OrganizationID,
 		NetworkID:          p.NetworkID,
 		AcceptDuplicates:   p.AcceptDuplicates,
-		ClickID:            clickID,
+		ClickID:            p.ClickID,
 		Status:             status,
 		EventRef:           eventRef,
-		NetworkTxnID:       strings.TrimSpace(p.NetworkTxnID),
-		RawStatus:          rawStatus,
+		NetworkTxnID:       p.NetworkTxnID,
+		RawStatus:          p.RawStatus,
 		Revenue:            revenue,
-		Currency:           strings.TrimSpace(p.Currency),
+		Currency:           p.Currency,
 		USDValue:           usdValue,
 		AttributionOutcome: string(attr.Outcome),
 		AttributedClickID:  attr.Click.ClickID,
@@ -436,30 +486,57 @@ func (s *Service) Record(ctx context.Context, p Postback) (Result, error) {
 	}
 	ev := buildEvent(p, attr, status, eventRef, revenue, usdValue)
 	entry.Event = &ev
-	if url := strings.TrimSpace(p.PostbackURL); url != "" {
+	if p.PostbackURL != "" {
 		entry.Delivery = &DeliveryRequest{
 			OrganizationID: p.OrganizationID,
 			NetworkID:      p.NetworkID,
-			ClickID:        clickID,
+			ClickID:        p.ClickID,
 			Status:         status,
-			URL:            macro.ResolveURL(url, deliveryMacroValues(p, attr, status, revenue)),
+			URL:            macro.ResolveURL(p.PostbackURL, deliveryMacroValues(p, attr, status, revenue)),
 		}
 	}
+	return entry
+}
 
+// commit writes an accepted postback. Store may still refuse it under the
+// click's lock, or note that a decline reversed an accept's payout; its
+// message is then the one reported.
+func (s *Service) commit(ctx context.Context, p Postback, entry Entry, attr attribution.Attribution) (Result, error) {
 	rec, err := s.store.Record(ctx, entry)
 	if err != nil {
 		return Result{}, fmt.Errorf("conversion: recording: %w", err)
 	}
 	message := entry.Message
 	if rec.Kind == ResultIgnored || rec.Kind == ResultSuccess {
-		// Store's word: a refusal under the lock, or a note that this
-		// decline reversed an accept's payout.
 		message = rec.Message
 	}
+	s.logAttempt(ctx, p, entry.ClickID, entry.Status, entry.EventRef, rec.Kind, message)
+	return Result{ID: rec.ID, Kind: rec.Kind, Status: entry.Status, Attribution: attr, Message: message}, nil
+}
 
-	s.logAttempt(ctx, p, clickID, status, eventRef, rec.Kind, message)
-
-	return Result{ID: rec.ID, Kind: rec.Kind, Status: status, Attribution: attr, Message: message}, nil
+// recordRefusal writes a postback refused before attribution — kind is
+// ResultError (unusable input) or ResultIgnored (progression) — to the
+// ledger and the attempt log.
+func (s *Service) recordRefusal(ctx context.Context, p Postback, clickID string, status event.Type, eventRef string, kind ResultKind, message string) (Result, error) {
+	rec, err := s.store.Record(ctx, Entry{
+		OrganizationID:   p.OrganizationID,
+		NetworkID:        p.NetworkID,
+		AcceptDuplicates: p.AcceptDuplicates,
+		ClickID:          clickID,
+		Status:           status,
+		EventRef:         eventRef,
+		RawStatus:        p.RawStatus,
+		Revenue:          p.Revenue,
+		Currency:         p.Currency,
+		NetworkTxnID:     p.NetworkTxnID,
+		Kind:             kind,
+		Message:          message,
+	})
+	if err != nil {
+		return Result{}, fmt.Errorf("conversion: logging %s: %w", kind, err)
+	}
+	s.logAttempt(ctx, p, clickID, status, eventRef, kind, message)
+	return Result{ID: rec.ID, Kind: kind, Status: status, Message: message}, nil
 }
 
 // AttributionRetryDelays is when an unknown_click conversion's click is
@@ -570,9 +647,9 @@ func progressionRefusal(clickID string, last event.Type) string {
 // still gets delivered, just without those dimensions filled in.
 func deliveryMacroValues(p Postback, attr attribution.Attribution, status event.Type, revenue *float64) macro.Values {
 	v := macro.Values{
-		ClickID:  strings.TrimSpace(p.ClickID),
+		ClickID:  p.ClickID,
 		Status:   string(status),
-		Currency: strings.TrimSpace(p.Currency),
+		Currency: p.Currency,
 	}
 	if revenue != nil {
 		v.Revenue = strconv.FormatFloat(*revenue, 'f', -1, 64)
@@ -592,11 +669,10 @@ func (s *Service) convertRevenue(ctx context.Context, p Postback) (usdValue, rev
 		return nil, nil
 	}
 	revenue = p.Revenue
-	currency := strings.TrimSpace(p.Currency)
-	if currency == "" {
+	if p.Currency == "" {
 		return nil, revenue
 	}
-	usd, ok, err := s.fx.ToUSD(ctx, currency, *p.Revenue, p.OccurredAt)
+	usd, ok, err := s.fx.ToUSD(ctx, p.Currency, *p.Revenue, p.OccurredAt)
 	if err != nil || !ok {
 		// No rate on file, or the lookup itself failed: store the
 		// conversion anyway with a nil USD value rather than inventing a
@@ -606,60 +682,15 @@ func (s *Service) convertRevenue(ctx context.Context, p Postback) (usdValue, rev
 	return &usd, revenue
 }
 
-func (s *Service) logError(ctx context.Context, p Postback, clickID string, status event.Type, message string) (Result, error) {
-	entry := Entry{
-		OrganizationID:   p.OrganizationID,
-		NetworkID:        p.NetworkID,
-		AcceptDuplicates: p.AcceptDuplicates,
-		ClickID:          clickID,
-		Status:           status,
-		RawStatus:        strings.TrimSpace(p.RawStatus),
-		Revenue:          p.Revenue,
-		Currency:         strings.TrimSpace(p.Currency),
-		NetworkTxnID:     strings.TrimSpace(p.NetworkTxnID),
-		Kind:             ResultError,
-		Message:          message,
-	}
-	rec, err := s.store.Record(ctx, entry)
-	if err != nil {
-		return Result{}, fmt.Errorf("conversion: logging error: %w", err)
-	}
-	s.logAttempt(ctx, p, clickID, status, "", ResultError, message)
-	return Result{ID: rec.ID, Kind: ResultError, Status: status, Message: message}, nil
-}
-
-func (s *Service) logIgnored(ctx context.Context, p Postback, clickID string, status event.Type, eventRef, message string) (Result, error) {
-	entry := Entry{
-		OrganizationID:   p.OrganizationID,
-		NetworkID:        p.NetworkID,
-		AcceptDuplicates: p.AcceptDuplicates,
-		ClickID:          clickID,
-		Status:           status,
-		EventRef:         eventRef,
-		RawStatus:        strings.TrimSpace(p.RawStatus),
-		Revenue:          p.Revenue,
-		Currency:         strings.TrimSpace(p.Currency),
-		NetworkTxnID:     strings.TrimSpace(p.NetworkTxnID),
-		Kind:             ResultIgnored,
-		Message:          message,
-	}
-	rec, err := s.store.Record(ctx, entry)
-	if err != nil {
-		return Result{}, fmt.Errorf("conversion: logging ignored: %w", err)
-	}
-	s.logAttempt(ctx, p, clickID, status, eventRef, ResultIgnored, message)
-	return Result{ID: rec.ID, Kind: ResultIgnored, Status: status, Message: message}, nil
-}
-
 func buildEvent(p Postback, attr attribution.Attribution, status event.Type, eventRef string, revenue, usdValue *float64) event.Event {
 	return newEvent(eventInput{
 		OrganizationID: p.OrganizationID,
-		ClickID:        strings.TrimSpace(p.ClickID),
+		ClickID:        p.ClickID,
 		NetworkID:      p.NetworkID,
 		Status:         status,
 		EventRef:       eventRef,
-		NetworkTxnID:   strings.TrimSpace(p.NetworkTxnID),
-		Currency:       strings.TrimSpace(p.Currency),
+		NetworkTxnID:   p.NetworkTxnID,
+		Currency:       p.Currency,
 		Revenue:        revenue,
 		USDValue:       usdValue,
 		At:             p.OccurredAt,
