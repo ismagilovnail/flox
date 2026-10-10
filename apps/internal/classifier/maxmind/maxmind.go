@@ -3,9 +3,8 @@
 // database files — the real vendor swapped in behind those interfaces
 // per CLAUDE.md non-negotiable #11 ("providers behind interfaces, no
 // vendor lock-in"). apps/internal/classifier.NoopGeoProvider/
-// NoopASNProvider remain the honest default when no database path is
-// configured (see docs/click-log.md's "what this does NOT change" for
-// why those were still the dev default before this package existed).
+// NoopASNProvider remain the default when no database path is
+// configured.
 //
 // City and ASN come from separate MaxMind databases (GeoLite2-City.mmdb,
 // GeoLite2-ASN.mmdb) — MaxMind's own split, not this package's choice —

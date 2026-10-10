@@ -1,11 +1,8 @@
-// Package facebookads implements adaccount.CostProvider against the real
-// Facebook Marketing API (Graph API Insights, level=campaign) — §74/
-// §27-COST, ad-spend import Phase B. This project has no live Meta app
-// credentials to exercise it against a real ad account; it's verified
-// structurally in facebookads_test.go against a fake httptest.Server
-// standing in for graph.facebook.com, matching the real endpoint's
-// documented request/response shape (confirmed via AskUserQuestion
-// before Phase B started — see docs/ad-account-connections.md).
+// Package facebookads implements adaccount.CostProvider against the Facebook
+// Marketing API (Graph API Insights, level=campaign; §74, §27-COST). It is
+// verified against a fake httptest.Server matching the documented
+// request/response shape, not against the real API (no account here; see
+// docs/ad-account-connections.md).
 package facebookads
 
 import (

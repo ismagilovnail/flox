@@ -28,11 +28,7 @@ func NewRepository(db *pgxpool.Pool, key []byte) *Repository { return &Repositor
 // refresh_token come back here still ciphertext; scanConnection decrypts
 // whichever one is present (via the repository's own key) purely to
 // compute its own last-4 preview, never returning the decrypted value
-// itself. Slicing in SQL (Phase A's original `right(access_token, 4)`)
-// stopped being possible the moment access_token became ciphertext —
-// four sliced ciphertext bytes are meaningless, not four real
-// characters, the same reason refresh_token's own preview was already
-// computed in Go.
+// itself — sliced ciphertext would be meaningless.
 const selectColumns = `id, organization_id, traffic_source_id, ad_account_id, access_token, refresh_token, timezone, created_at, updated_at`
 
 func (r *Repository) scanConnection(row pgx.Row) (Connection, error) {

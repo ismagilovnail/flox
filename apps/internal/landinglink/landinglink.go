@@ -63,8 +63,8 @@ type Claims struct {
 	// port: the tracking domain the visitor came in on, or the tracker's
 	// public host for a test link. The tracker honours the link only on
 	// that host — it serves every organization's domains, and a link
-	// valid anywhere let one organization show its PWA page or redirect
-	// from another's domain (tech audit 2026-10-06, M4).
+	// valid anywhere would let one organization show its PWA page or
+	// redirect from another's domain (tech audit M4).
 	Host     string `json:"h"`
 	IssuedAt int64  `json:"t"` // unix seconds
 

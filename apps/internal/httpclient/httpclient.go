@@ -2,10 +2,10 @@
 // ad networks (cost sync), registrars and DNS, Slack. Every one has a
 // timeout on the whole call — connect, TLS, headers, body.
 //
-// http.DefaultClient has none. Before the 2026-10-06 tech audit the cost
-// sync used it: one ad network leaving a connection open blocked the sync
-// of every organization behind it until the worker restarted, and the same
-// held for the registrar/DNS calls and the Slack alert webhook.
+// http.DefaultClient has none: one ad network leaving a connection open
+// would block the cost sync of every organization behind it until the
+// worker restarted, and the same for registrar/DNS calls and the Slack
+// alert webhook.
 //
 // A context deadline still applies; the shorter of the two wins. Outgoing
 // postbacks have their own client and a 10 s deadline per attempt

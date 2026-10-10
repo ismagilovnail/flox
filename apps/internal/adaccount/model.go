@@ -1,26 +1,16 @@
-// Package adaccount implements ad-network account connections (§74/
-// §27-COST): credential storage (Phase A) plus the CostProvider
-// interface + real Facebook Ads/TikTok Ads/Google Ads adapters (Phase
-// B/C) that pull spend through those credentials. handler → service →
-// repository, one connection per traffic source (matching
-// trafficsource.CostIntegration's own singular design).
+// Package adaccount implements ad-network account connections (§74,
+// §27-COST): credential storage plus the CostProvider interface and the
+// Facebook Ads, TikTok Ads and Google Ads adapters that pull spend through
+// those credentials. handler → service → repository, one connection per
+// traffic source (as trafficsource.CostIntegration is singular).
 //
-// Connecting an account is a manual "paste your credentials" form, not
-// an OAuth consent flow: a real OAuth flow needs a registered app with a
-// public callback URL, and none exists in this environment (confirmed
-// via AskUserQuestion before Phase A started, and again before Google
-// Ads was added). Facebook/TikTok Ads need only a long-lived access
-// token; Google Ads' own API has no equivalent (its access tokens expire
-// in ~1 hour) — an operator instead pastes a refresh token minted once
-// via Google's own OAuth playground, alongside the developer token and
-// OAuth client id/secret their own Google Ads/Cloud accounts already
-// have. The adapters in this package's facebookads/tiktokads/googleads
-// subpackages are real HTTP clients against each platform's actual API
-// shape, but this project has no live Meta/TikTok/Google app credentials
-// to exercise them against — they're verified structurally, against a
-// fake HTTP transport in tests, never against the real Graph/Marketing/
-// Ads API (confirmed via AskUserQuestion before Phase B started, same
-// for Google Ads). See docs/ad-account-connections.md.
+// Connecting is a "paste your credentials" form, not an OAuth consent
+// flow: that needs a registered app with a public callback URL. Facebook
+// and TikTok need a long-lived access token; Google Ads access tokens
+// expire in about an hour, so the operator pastes a refresh token (minted
+// once in Google's OAuth playground) with the developer token and OAuth
+// client id/secret. The adapters are tested against fake HTTP servers
+// only. See docs/ad-account-connections.md.
 package adaccount
 
 import (

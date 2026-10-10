@@ -1,10 +1,8 @@
 // Package cloudflare implements domain.DNSProviderAdapter against the
-// real Cloudflare API v4 (zones, SSL verification, DNS records) — §30's
-// DNS automation. This project has no live Cloudflare account to
-// exercise it against; it's verified structurally in cloudflare_test.go
-// against a fake httptest.Server, matching the real endpoints'
-// documented JSON response shape (confirmed via AskUserQuestion before
-// this phase started — see docs/domains-tracking-links.md).
+// Cloudflare API v4 (zones, SSL verification, DNS records; §30's DNS
+// automation). It is verified against a fake httptest.Server matching the
+// documented request/response shape, not against the real API (no account
+// here; see docs/domains-tracking-links.md).
 package cloudflare
 
 import (

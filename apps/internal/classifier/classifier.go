@@ -52,14 +52,9 @@ func New(geo GeoProvider, asn ASNProvider, bot BotDetector) *Classifier {
 // (routing.FilterField), imported here rather than redeclared.
 //
 // §40 lists 12 fields (country, region, city, device, platform, os,
-// browser, language, bot, proxy, asn, connection). This also populates
-// os_version/browser_version: they're already real, filterable
-// routing.FilterFields the frontend's filter builder has exposed since
-// Phase 8, and a User-Agent parse that produces "os" without "os_version"
-// alongside it would leave two long-standing filter fields permanently
-// dead for no reason — §40's list reads as representative, not
-// exhaustive-to-the-exclusion of fields the rest of the system already
-// depends on.
+// browser, language, bot, proxy, asn, connection). This also fills
+// os_version and browser_version, which the filter builder offers as
+// routing.FilterFields too.
 func (c *Classifier) Classify(ctx context.Context, in Input) (routing.Attributes, error) {
 	geo, err := c.Geo.Lookup(ctx, in.IP)
 	if err != nil {

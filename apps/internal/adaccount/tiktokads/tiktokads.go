@@ -1,11 +1,8 @@
-// Package tiktokads implements adaccount.CostProvider against the real
-// TikTok Business API (Marketing API v1.3) — §74/§27-COST, ad-spend
-// import Phase B. Like facebookads, this project has no live TikTok
-// developer app credentials to exercise it against a real advertiser
-// account; it's verified structurally in tiktokads_test.go against a
-// fake httptest.Server, matching the real endpoints' documented
-// request/response shape (confirmed via AskUserQuestion before Phase B
-// started — see docs/ad-account-connections.md).
+// Package tiktokads implements adaccount.CostProvider against the TikTok
+// Business API (Marketing API v1.3; §74, §27-COST). It is verified against a
+// fake httptest.Server matching the documented request/response shape, not
+// against the real API (no account here; see
+// docs/ad-account-connections.md).
 package tiktokads
 
 import (

@@ -1,11 +1,7 @@
-// Package domain implements the Domains API (§30's own-domain-parking
-// slice): handler → service → repository, matching CLAUDE.md's Go
-// architecture. Replaces apps/web's lib/mock/domains.ts + stores/domains.ts
-// — the domains/tracking_links tables (migration 00007) have existed since
-// early on and apps/tracker's own hot path (apps/internal/routingstore.
-// ResolveTrackingLink) already reads them for real; this package is the
-// missing CRUD layer that lets an operator actually populate them instead
-// of only a seed script (loadtestseed) or a test being able to.
+// Package domain implements the Domains API (§30): handler → service →
+// repository. The tracker reads domains and tracking_links on the hot path
+// (routingstore.ResolveTrackingLink); this package is how operators manage
+// them.
 //
 // Registrar connection, DNS record management, and automatic SSL issuance
 // (§30's full "real module, not a text field" vision) are real for the
@@ -14,8 +10,7 @@
 // integrations' Settings > Integrations credentials, decrypted here
 // through the CredentialSource interface (never a second copy of them).
 // GoDaddy/Route53/cloudflare_registrar/unmanaged have no adapter and stay
-// plain operator-declared, same as every registrar/provider did before
-// this phase. SSL/ExpiresAt/VerifiedAt are never client input — they
+// operator-declared. SSL/ExpiresAt/VerifiedAt are never client input — they
 // change only through a real Verify/Renew/SyncDNS call
 // (Repository.ApplyAutomationResult). Status is client input except
 // 'active', which needs the domain's DNS ownership verified first

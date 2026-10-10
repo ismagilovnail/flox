@@ -1,4 +1,4 @@
-// Package ltv is Phase 26.5's cohort/LTV engine (§26.5) — "a primary
+// Package ltv is the cohort/LTV engine (§26.5) — "a primary
 // reason teams pay for a tracker in this vertical. Do not skip."
 //
 // Like internal/routing, this package is pure: given a click's full

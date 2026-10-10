@@ -1,13 +1,7 @@
-// Package contentgallery implements FLOX's real Content Gallery: a
-// tenant-scoped media library with a flat folder structure, replacing
-// apps/web's former lib/mock/content-gallery.ts + stores/content-
-// gallery.ts "template gallery" mock — that mock modeled something the
-// reference tracker's own Content Gallery doesn't have (landing/PWA/
-// postlanding starter templates); this package instead matches the
-// reference's actual feature: a real media file library.
-// (https://adset.pro/guide_ru/galereya-kontenta). No object storage
-// existed anywhere in this repo before this package — see
-// apps/internal/storage's own doc comment.
+// Package contentgallery is the Content Gallery: a tenant-scoped media
+// library with a flat folder structure, files in object storage
+// (apps/internal/storage), like the reference tracker's
+// (https://adset.pro/guide_ru/galereya-kontenta).
 //
 // Folders don't nest (the reference's own folder panel doesn't either —
 // just a flat list you toggle between). Deleting a folder moves its files

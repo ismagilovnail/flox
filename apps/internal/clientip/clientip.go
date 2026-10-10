@@ -2,31 +2,16 @@
 // X-Forwarded-For only when the request's immediate peer is a configured
 // trusted proxy.
 //
-// This exists because of a 2026-09-06 security audit finding. Every
-// client-IP read in this codebase — apps/internal/ratelimit's own
-// ClientIP, apps/tracker's own clientIP helper, and chi's
-// middleware.RealIP mounted in front of both — took X-Forwarded-For's
-// LEFTMOST entry, unconditionally, with no notion of a trusted proxy
-// anywhere in the tree. The leftmost entry is precisely the one the
-// client itself writes, so all three were attacker-controlled. That
-// broke three things at once:
+// X-Forwarded-For's leftmost entry is written by the client. Trusting it
+// would give unlimited password attempts past the per-IP auth rate limit
+// (§54), satisfy the org IP allowlist (§30 Security) with a claimed
+// address, and let a visitor pick its own A/B arm and geo in the tracker
+// (the visit hash, §38, and the geo filters read the IP).
 //
-//   - the auth rate limit (20 requests / 15 minutes per IP, §54's only
-//     brute-force defence): rotating the header on every request gave an
-//     attacker unlimited password attempts against /auth/login;
-//   - the org IP allowlist (§30 Security): a real access control that
-//     could be satisfied by simply claiming an allowed address;
-//   - apps/tracker's visit fingerprint and geo lookup: the visit key
-//     feeds §38's deterministic weighted flow pick, and the resolved
-//     country feeds routing filters, so a spoofed header let a visitor
-//     choose its own A/B arm and defeat geo targeting.
-//
-// chi's own middleware.RealIP is deprecated upstream for exactly this
-// (GHSA-3fxj-6jh8-hvhx, GHSA-rjr7-jggh-pgcp, GHSA-9g5q-2w5x-hmxf) and
-// its doc comment points at ClientIPFromXFFTrustedProxies — which is not
-// shipped in the v5 line as of v5.3.2 (checked, not assumed), so this
-// package is that missing piece rather than a reinvention of an
-// available one.
+// chi's middleware.RealIP has that flaw (GHSA-3fxj-6jh8-hvhx,
+// GHSA-rjr7-jggh-pgcp, GHSA-9g5q-2w5x-hmxf); the
+// ClientIPFromXFFTrustedProxies its doc points at is not in chi v5
+// (checked at v5.3.2).
 //
 // # The algorithm
 //

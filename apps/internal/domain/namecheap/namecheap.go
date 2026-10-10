@@ -1,10 +1,7 @@
-// Package namecheap implements domain.RegistrarProvider against the real
-// Namecheap API (domains.getInfo/domains.renew) — §30's registrar
-// automation. This project has no live Namecheap account to exercise it
-// against; it's verified structurally in namecheap_test.go against a
-// fake httptest.Server standing in for api.namecheap.com, matching the
-// real endpoints' documented XML response shape (confirmed via
-// AskUserQuestion before this phase started — see
+// Package namecheap implements domain.RegistrarProvider against the
+// Namecheap API (domains.getInfo/domains.renew; §30's registrar automation).
+// It is verified against a fake httptest.Server matching the documented
+// request/response shape, not against the real API (no account here; see
 // docs/domains-tracking-links.md).
 package namecheap
 

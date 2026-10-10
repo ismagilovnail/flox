@@ -156,8 +156,8 @@ func (r *Repository) DailyCampaignSpend(ctx context.Context, orgID, campaignID s
 }
 
 // SpendByCampaign sums amount_usd per campaign, across every traffic
-// source and every day in [from, to] — Phase 35's report builder and
-// Overview dashboard need this (cost is only ever computable when a
+// source and every day in [from, to] — the report builder and Overview
+// dashboard need this (cost is only ever computable when a
 // report's grouping resolves to campaign granularity or coarser; see
 // apps/internal/analytics's own doc comment on why) and DailyCampaignSpend
 // above doesn't fit: that's one campaign's spend broken out by day, this

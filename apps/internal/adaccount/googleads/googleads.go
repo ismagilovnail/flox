@@ -1,11 +1,7 @@
-// Package googleads implements adaccount.CostProvider against the real
-// Google Ads API (REST, v17, searchStream/search over GAQL) — §74/
-// §27-COST, ad-spend import Phase C. Like facebookads/tiktokads, this
-// project has no live Google Ads developer-token/OAuth-app credentials
-// to exercise it against a real account; it's verified structurally in
-// googleads_test.go against a fake httptest.Server, matching the real
-// endpoints' documented request/response shape (confirmed via
-// AskUserQuestion before this phase started — see
+// Package googleads implements adaccount.CostProvider against the Google
+// Ads API (REST, v17, searchStream/search over GAQL; §74, §27-COST). It is
+// verified against a fake httptest.Server matching the documented
+// request/response shape, not against the real API (no account here; see
 // docs/ad-account-connections.md).
 //
 // Unlike Facebook/TikTok, Google Ads has no long-lived access token to

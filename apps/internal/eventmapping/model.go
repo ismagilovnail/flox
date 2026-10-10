@@ -1,9 +1,8 @@
 // Package eventmapping is the CRUD write path for event_mappings
 // (migration 00012, §29) — per-network translation from a network's own
 // raw postback status string to the canonical §43 CpaStatus. The read
-// side already existed: apps/internal/conversion.PostgresMapper.MapStatus
-// looks this table up at ingest time (Phase 23). This package never
-// duplicates that lookup — it only writes rows for the existing reader to
+// side is apps/internal/conversion.PostgresMapper.MapStatus, at ingest
+// time. This package never duplicates that lookup — it only writes rows for the existing reader to
 // load, the same relationship apps/internal/streamset has to
 // apps/internal/routingstore.
 package eventmapping

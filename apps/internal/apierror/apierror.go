@@ -38,7 +38,7 @@ func Conflict(message string) *Error {
 
 // Unauthorized means the request has no valid session/credential at all —
 // distinct from Forbidden, which means a real session exists but lacks a
-// specific permission. First use: §52/Phase 28 auth.
+// specific permission (§52).
 func Unauthorized(message string) *Error {
 	return &Error{Status: http.StatusUnauthorized, Code: "unauthorized", Message: message}
 }
@@ -59,7 +59,7 @@ func Unavailable(message string) *Error {
 }
 
 // TooManyRequests means apps/internal/ratelimit's own Redis-backed
-// counter rejected the request (§54/Phase 30) — never returned for any
+// counter rejected the request (§54) — never returned for any
 // other reason.
 func TooManyRequests(message string) *Error {
 	return &Error{Status: http.StatusTooManyRequests, Code: "rate_limited", Message: message}

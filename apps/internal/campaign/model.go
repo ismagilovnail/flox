@@ -1,4 +1,4 @@
-// Package campaign implements the Campaign API (§37, Phase 18):
+// Package campaign implements the Campaign API (§37):
 // handler → service → repository, matching CLAUDE.md's Go architecture
 // (thin handlers, business logic in service, no logic in the repository
 // beyond the SQL itself).

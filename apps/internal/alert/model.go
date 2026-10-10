@@ -1,4 +1,4 @@
-// Package alert implements alerts (marketer audit 2026-10-06, #10): rules
+// Package alert implements alerts (marketer audit #10): rules
 // an organization sets up — spend over a threshold, ROI below one, an offer
 // capped or paused, a certificate about to expire — and the notifications
 // the worker writes when one fires. Notifications show in the app's bell;

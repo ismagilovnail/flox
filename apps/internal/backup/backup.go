@@ -1,6 +1,6 @@
 // Package backup backs up FLOX's three stores to an S3-compatible bucket
-// and proves, by restoring them, that the backups work (tech audit
-// 2026-10-06, DO2; docs/backup.md).
+// and proves, by restoring them, that the backups work (tech audit DO2;
+// docs/backup.md).
 //
 //   - Postgres: WAL-G. The server archives every WAL segment to the bucket
 //     (archive_command, set on the postgres container); this package takes
@@ -16,7 +16,7 @@
 // by size and a hashed sample. Its report is kept in the bucket.
 //
 // Everything this package reports — last backup, last drill — is read back
-// from the bucket, so a restarted sidecar reports the same as before.
+// from the bucket, so it survives a restart of the sidecar.
 //
 // Bucket layout:
 //

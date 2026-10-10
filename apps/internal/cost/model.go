@@ -1,14 +1,9 @@
-// Package cost is §27-COST's manual cost entry MVP: one row per
-// (campaign, traffic source, day), joined into campaign-detail analytics
-// as Spend/Profit/ROI/CPA. Postgres cost_entries (migration 00009/00017)
-// is the only store this phase reads or writes — the ClickHouse
-// cost_events table (chstore/schema/004) stays schema-only, same as it
-// has since Phase 26: at manual-entry volume a Postgres GROUP BY answers
-// "this campaign's spend by day" directly, and nothing in this phase
-// needs the cross-dimension (country, network) breakdown ClickHouse's
-// table exists for. The sync pipeline documented in that schema file's
-// comment becomes worth building once FB/TikTok ad-spend import (§74)
-// actually produces ClickHouse-scale volume — not before.
+// Package cost is campaign spend (§27-COST): one row per (campaign,
+// traffic source, day) in Postgres cost_entries, entered by hand or synced
+// from ad accounts (internal/costsync), and joined into analytics as
+// Spend/Profit/ROI/CPA. At this volume a Postgres GROUP BY answers every
+// spend question; the ClickHouse cost_events table (chstore/schema/004) is
+// schema only.
 package cost
 
 import "time"
@@ -98,8 +93,8 @@ type DailySpend struct {
 }
 
 // CampaignSpend is one campaign's total spend across a date range, every
-// traffic source summed together — the shape Phase 35's report builder
-// and Overview dashboard need (cost per campaign, not per campaign per
+// traffic source summed together — the shape the report builder and
+// Overview dashboard need (cost per campaign, not per campaign per
 // day) rather than DailySpend's daily granularity.
 type CampaignSpend struct {
 	CampaignID   string

@@ -1,6 +1,6 @@
 // Package classifier turns a raw request (IP, User-Agent, headers) into
 // the normalized attributes internal/routing's filters evaluate against
-// (§40, Phase 20): country, region, city, device, platform, os, os_version,
+// (§40): country, region, city, device, platform, os, os_version,
 // browser, browser_version, language, bot, proxy, asn, connection_type.
 //
 // External signal (geo/ASN/bot lookups) sits behind interfaces (§74/§75,

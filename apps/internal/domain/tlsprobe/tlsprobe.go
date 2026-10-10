@@ -1,7 +1,7 @@
 // Package tlsprobe checks what certificate a domain actually serves: it
 // opens a TLS connection to the domain on port 443, the way a visitor's
 // browser would, and verifies the chain against the system roots and the
-// hostname. Marketer audit 2026-10-06, #4.
+// hostname (marketer audit #4).
 //
 // It knows nothing about who issues the certificate. Behind a proxy with
 // on-demand certificates (Caddy, docs/deployment.md) the first connection

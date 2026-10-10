@@ -27,9 +27,9 @@ func NewService(repo *Repository) *Service {
 }
 
 // List returns one page of campaigns and their total (internal/pagination).
-// Its default used to be 50 rows, and apps/web never asked for more: every
-// campaign past the 50th was missing from the list and from every campaign
-// filter (conversions, click logs, LTV, alerts).
+// apps/web reads every page: a first page alone would leave campaigns out
+// of the list and of every campaign filter (conversions, click logs, LTV,
+// alerts).
 func (s *Service) List(ctx context.Context, orgID string, filter ListFilter) (ListResult, error) {
 	if filter.Limit <= 0 {
 		filter.Limit = pagination.DefaultLimit
