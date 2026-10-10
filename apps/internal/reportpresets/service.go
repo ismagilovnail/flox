@@ -40,6 +40,12 @@ func (s *Service) Get(ctx context.Context, orgID, id string) (ReportPreset, erro
 }
 
 func (s *Service) Create(ctx context.Context, orgID, createdByUserID string, in CreateInput) (ReportPreset, error) {
+	if in.DateBasis == "" {
+		in.DateBasis = DateBasisConversion
+	}
+	if err := validateDateBasis(in.DateBasis); err != nil {
+		return ReportPreset{}, err
+	}
 	if err := validateMutable(in.Name, in.Dimensions, in.Metrics, in.Filters, in.ColumnOrder, in.ColumnWidths, in.HiddenColumns, in.GroupBy, &in.Period, in.Timezone); err != nil {
 		return ReportPreset{}, err
 	}
@@ -101,6 +107,11 @@ func (s *Service) Update(ctx context.Context, orgID, id string, in UpdateInput) 
 	if err := validateMutable(name, dims, metrics, filters, columnOrder, columnWidths, hiddenColumns, groupBy, &period, timezone); err != nil {
 		return ReportPreset{}, err
 	}
+	if in.DateBasis != nil {
+		if err := validateDateBasis(*in.DateBasis); err != nil {
+			return ReportPreset{}, err
+		}
+	}
 
 	return s.repo.Update(ctx, orgID, id, in)
 }
@@ -114,6 +125,19 @@ func (s *Service) Delete(ctx context.Context, orgID, id string) error {
 		return apierror.Conflict("the default preset can't be deleted")
 	}
 	return s.repo.Delete(ctx, orgID, id)
+}
+
+// The report date bases a preset may hold (analytics' chstore.DateBasis).
+const (
+	DateBasisConversion = "conversion"
+	DateBasisClick      = "click"
+)
+
+func validateDateBasis(b string) error {
+	if b != DateBasisConversion && b != DateBasisClick {
+		return apierror.Validation("invalid date basis", map[string]string{"dateBasis": "want conversion or click"})
+	}
+	return nil
 }
 
 func validateMutable(name string, dimensions, metrics []string, filters []Filter, columnOrder []string, columnWidths map[string]int, hiddenColumns []string, groupBy string, period *Period, timezone string) error {

@@ -112,7 +112,7 @@ func TestInsertBatchRoutesByType(t *testing.T) {
 		t.Fatal("click_events_daily_campaign must not contain CPA_ACCEPT — that's conversion_events_daily_campaign's row")
 	}
 
-	revenue, err := store.DailyCampaignRevenue(ctx, orgID, campaignID, day, day)
+	revenue, err := store.DailyCampaignRevenue(ctx, orgID, campaignID, day, day, "")
 	if err != nil {
 		t.Fatalf("DailyCampaignRevenue: %v", err)
 	}

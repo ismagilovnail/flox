@@ -82,15 +82,16 @@ func (h *Handler) campaignDaily(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"counts": resp})
 }
 
-// campaignDailyRevenue answers GET /analytics/campaigns/{campaignId}/daily-revenue?from=&to=
-// — conversion counts and USD revenue from conversion_events_daily_campaign.
+// campaignDailyRevenue answers GET /analytics/campaigns/{campaignId}/daily-revenue?from=&to=&dateBasis=
+// — conversion counts and USD revenue per day, dated by conversion (default)
+// or by click.
 func (h *Handler) campaignDailyRevenue(w http.ResponseWriter, r *http.Request) {
 	orgID, campaignID, from, to, ok := h.parseRangeParams(w, r)
 	if !ok {
 		return
 	}
 
-	revenue, err := h.svc.CampaignDailyRevenue(r.Context(), orgID, campaignID, from, to)
+	revenue, err := h.svc.CampaignDailyRevenue(r.Context(), orgID, campaignID, from, to, chstore.DateBasis(r.URL.Query().Get("dateBasis")))
 	if err != nil {
 		apierror.Write(w, h.logger, err)
 		return
@@ -190,10 +191,13 @@ type reportRowResponse struct {
 	Day     *string              `json:"day,omitempty"`
 	Dims    map[string]string    `json:"dims,omitempty"`
 	Metrics metricValuesResponse `json:"metrics"`
+	// DatedByConversion: dated by click, the row's conversions without a
+	// click, counted on their own date.
+	DatedByConversion uint64 `json:"datedByConversion,omitempty"`
 }
 
 func reportRowToResponse(row ReportRow) reportRowResponse {
-	resp := reportRowResponse{Metrics: metricValuesToResponse(row.Metrics)}
+	resp := reportRowResponse{Metrics: metricValuesToResponse(row.Metrics), DatedByConversion: row.DatedByConversion}
 	if row.Day != nil {
 		d := row.Day.Format(dateLayout)
 		resp.Day = &d
@@ -261,7 +265,8 @@ type reportRequest struct {
 		Key string `json:"key"`
 		Dir string `json:"dir"`
 	} `json:"sort"`
-	Timezone string `json:"timezone"`
+	Timezone  string `json:"timezone"`
+	DateBasis string `json:"dateBasis"`
 }
 
 // report answers POST /analytics/report — the report builder table's
@@ -280,25 +285,42 @@ func (h *Handler) report(w http.ResponseWriter, r *http.Request) {
 	}
 
 	rows, err := h.svc.Report(r.Context(), orgID, ReportInput{
-		Dims:     parseReportDims(req.Dims),
-		Filters:  parseReportFilters(req.Filters),
-		From:     from,
-		To:       to,
-		Sort:     SortSpec{Key: req.Sort.Key, Dir: req.Sort.Dir},
-		Timezone: req.Timezone,
+		Dims:      parseReportDims(req.Dims),
+		Filters:   parseReportFilters(req.Filters),
+		From:      from,
+		To:        to,
+		Sort:      SortSpec{Key: req.Sort.Key, Dir: req.Sort.Dir},
+		Timezone:  req.Timezone,
+		DateBasis: chstore.DateBasis(req.DateBasis),
 	})
 	if err != nil {
 		apierror.Write(w, h.logger, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"rows": reportRowsToResponse(rows)})
+	writeJSON(w, http.StatusOK, rowsResponse(rows))
+}
+
+// rowsResponse is the {"rows": …} answer of the report, timeseries and
+// breakdown endpoints; dated by click it also carries datedByConversion,
+// the conversions without a click across the rows.
+func rowsResponse(rows []ReportRow) map[string]any {
+	resp := map[string]any{"rows": reportRowsToResponse(rows)}
+	var dated uint64
+	for _, r := range rows {
+		dated += r.DatedByConversion
+	}
+	if dated > 0 {
+		resp["datedByConversion"] = dated
+	}
+	return resp
 }
 
 type timeseriesRequest struct {
-	Filters  []reportFilterRequest `json:"filters"`
-	From     string                `json:"from"`
-	To       string                `json:"to"`
-	Timezone string                `json:"timezone"`
+	Filters   []reportFilterRequest `json:"filters"`
+	From      string                `json:"from"`
+	To        string                `json:"to"`
+	Timezone  string                `json:"timezone"`
+	DateBasis string                `json:"dateBasis"`
 }
 
 // timeseries answers POST /analytics/timeseries — one row per day, every
@@ -318,16 +340,17 @@ func (h *Handler) timeseries(w http.ResponseWriter, r *http.Request) {
 	}
 
 	rows, err := h.svc.Timeseries(r.Context(), orgID, TimeseriesInput{
-		Filters:  parseReportFilters(req.Filters),
-		From:     from,
-		To:       to,
-		Timezone: req.Timezone,
+		Filters:   parseReportFilters(req.Filters),
+		From:      from,
+		To:        to,
+		Timezone:  req.Timezone,
+		DateBasis: chstore.DateBasis(req.DateBasis),
 	})
 	if err != nil {
 		apierror.Write(w, h.logger, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"rows": reportRowsToResponse(rows)})
+	writeJSON(w, http.StatusOK, rowsResponse(rows))
 }
 
 type breakdownRequest struct {
@@ -338,7 +361,8 @@ type breakdownRequest struct {
 	To      string                `json:"to"`
 	Limit   int                   `json:"limit"`
 	// Timezone is the IANA zone days are cut in ("" = UTC).
-	Timezone string `json:"timezone"`
+	Timezone  string `json:"timezone"`
+	DateBasis string `json:"dateBasis"`
 }
 
 // breakdown answers POST /analytics/breakdown — the bar chart's endpoint
@@ -357,25 +381,28 @@ func (h *Handler) breakdown(w http.ResponseWriter, r *http.Request) {
 	}
 
 	rows, err := h.svc.Breakdown(r.Context(), orgID, BreakdownInput{
-		Dim:      chstore.ReportDimension(req.Dim),
-		Metric:   req.Metric,
-		Filters:  parseReportFilters(req.Filters),
-		From:     from,
-		To:       to,
-		Limit:    req.Limit,
-		Timezone: req.Timezone,
+		Dim:       chstore.ReportDimension(req.Dim),
+		Metric:    req.Metric,
+		Filters:   parseReportFilters(req.Filters),
+		From:      from,
+		To:        to,
+		Limit:     req.Limit,
+		Timezone:  req.Timezone,
+		DateBasis: chstore.DateBasis(req.DateBasis),
 	})
 	if err != nil {
 		apierror.Write(w, h.logger, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"rows": reportRowsToResponse(rows)})
+	writeJSON(w, http.StatusOK, rowsResponse(rows))
 }
 
 type rangeRequest struct {
 	From     string `json:"from"`
 	To       string `json:"to"`
 	Timezone string `json:"timezone"`
+	// DateBasis: /dashboard only.
+	DateBasis string `json:"dateBasis"`
 }
 
 type funnelRequest struct {
@@ -418,12 +445,15 @@ func (h *Handler) funnel(w http.ResponseWriter, r *http.Request) {
 }
 
 type dashboardResponse struct {
-	Totals       metricValuesResponse `json:"totals"`
-	Daily        []reportRowResponse  `json:"daily"`
-	TopCampaigns []reportRowResponse  `json:"topCampaigns"`
-	TopCountries []reportRowResponse  `json:"topCountries"`
-	TopFlows     []reportRowResponse  `json:"topFlows"`
-	TopOffers    []reportRowResponse  `json:"topOffers"`
+	Totals metricValuesResponse `json:"totals"`
+	// DatedByConversion: dated by click, conversions without a click in
+	// the totals, counted on their own date.
+	DatedByConversion uint64              `json:"datedByConversion,omitempty"`
+	Daily             []reportRowResponse `json:"daily"`
+	TopCampaigns      []reportRowResponse `json:"topCampaigns"`
+	TopCountries      []reportRowResponse `json:"topCountries"`
+	TopFlows          []reportRowResponse `json:"topFlows"`
+	TopOffers         []reportRowResponse `json:"topOffers"`
 }
 
 // dashboard answers POST /analytics/dashboard — /overview's own endpoint
@@ -441,18 +471,19 @@ func (h *Handler) dashboard(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	result, err := h.svc.Dashboard(r.Context(), orgID, from, to, req.Timezone)
+	result, err := h.svc.Dashboard(r.Context(), orgID, from, to, req.Timezone, chstore.DateBasis(req.DateBasis))
 	if err != nil {
 		apierror.Write(w, h.logger, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, dashboardResponse{
-		Totals:       metricValuesToResponse(result.Totals),
-		Daily:        reportRowsToResponse(result.Daily),
-		TopCampaigns: reportRowsToResponse(result.TopCampaigns),
-		TopCountries: reportRowsToResponse(result.TopCountries),
-		TopFlows:     reportRowsToResponse(result.TopFlows),
-		TopOffers:    reportRowsToResponse(result.TopOffers),
+		Totals:            metricValuesToResponse(result.Totals),
+		DatedByConversion: result.DatedByConversion,
+		Daily:             reportRowsToResponse(result.Daily),
+		TopCampaigns:      reportRowsToResponse(result.TopCampaigns),
+		TopCountries:      reportRowsToResponse(result.TopCountries),
+		TopFlows:          reportRowsToResponse(result.TopFlows),
+		TopOffers:         reportRowsToResponse(result.TopOffers),
 	})
 }
 

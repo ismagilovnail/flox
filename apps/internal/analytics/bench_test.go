@@ -124,7 +124,7 @@ func BenchmarkCampaignDailyRevenue(b *testing.B) {
 	b.ReportAllocs()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		if _, err := svc.CampaignDailyRevenue(ctx, orgID, campaignID, from, to); err != nil {
+		if _, err := svc.CampaignDailyRevenue(ctx, orgID, campaignID, from, to, ""); err != nil {
 			b.Fatal(err)
 		}
 	}

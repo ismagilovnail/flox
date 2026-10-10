@@ -22,7 +22,7 @@ func (r *fakeRepo) DailyCampaignCounts(_ context.Context, _, _ string, _, _ time
 	return r.counts, nil
 }
 
-func (r *fakeRepo) DailyCampaignRevenue(_ context.Context, _, _ string, _, _ time.Time) ([]chstore.DailyRevenue, error) {
+func (r *fakeRepo) DailyCampaignRevenue(_ context.Context, _, _ string, _, _ time.Time, _ chstore.DateBasis) ([]chstore.DailyRevenue, error) {
 	r.revenueCalled = true
 	return r.revenue, nil
 }
@@ -98,7 +98,7 @@ func TestCampaignDailyRevenueReturnsRepositoryResult(t *testing.T) {
 
 	from := time.Date(2026, 8, 1, 0, 0, 0, 0, time.UTC)
 	to := time.Date(2026, 8, 7, 0, 0, 0, 0, time.UTC)
-	revenue, err := svc.CampaignDailyRevenue(context.Background(), "org-1", "camp-1", from, to)
+	revenue, err := svc.CampaignDailyRevenue(context.Background(), "org-1", "camp-1", from, to, "")
 	if err != nil {
 		t.Fatalf("CampaignDailyRevenue: %v", err)
 	}
@@ -112,7 +112,7 @@ func TestCampaignDailyRevenueReturnsRepositoryResult(t *testing.T) {
 
 func TestCampaignDailyRevenueRejectsSameValidationAsCounts(t *testing.T) {
 	svc := analytics.NewService(&fakeRepo{}, nil)
-	if _, err := svc.CampaignDailyRevenue(context.Background(), "", "camp-1", time.Now(), time.Now()); err == nil {
+	if _, err := svc.CampaignDailyRevenue(context.Background(), "", "camp-1", time.Now(), time.Now(), ""); err == nil {
 		t.Fatal("expected an error for a missing organization id")
 	}
 }

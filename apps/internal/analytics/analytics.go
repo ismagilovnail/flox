@@ -25,7 +25,7 @@ import (
 // pattern used throughout (EventSink, DeliveryEnqueuer, ClickHouseSink).
 type Repository interface {
 	DailyCampaignCounts(ctx context.Context, organizationID, campaignID string, from, to time.Time) ([]chstore.DailyCount, error)
-	DailyCampaignRevenue(ctx context.Context, organizationID, campaignID string, from, to time.Time) ([]chstore.DailyRevenue, error)
+	DailyCampaignRevenue(ctx context.Context, organizationID, campaignID string, from, to time.Time, basis chstore.DateBasis) ([]chstore.DailyRevenue, error)
 	ReportClicks(ctx context.Context, q chstore.ReportQuery) ([]chstore.ClickAgg, error)
 	ReportLandViews(ctx context.Context, q chstore.ReportQuery) ([]chstore.LandAgg, error)
 	ReportPwaInstalls(ctx context.Context, q chstore.ReportQuery) ([]chstore.InstallAgg, error)
@@ -102,13 +102,16 @@ func (s *Service) CampaignDaily(ctx context.Context, organizationID, campaignID 
 }
 
 // CampaignDailyRevenue returns daily (day, CPA status) conversion counts
-// and USD revenue for one campaign, from conversion_events_daily_campaign.
-func (s *Service) CampaignDailyRevenue(ctx context.Context, organizationID, campaignID string, from, to time.Time) ([]chstore.DailyRevenue, error) {
+// and USD revenue for one campaign, dated by conversion or by click.
+func (s *Service) CampaignDailyRevenue(ctx context.Context, organizationID, campaignID string, from, to time.Time, basis chstore.DateBasis) ([]chstore.DailyRevenue, error) {
 	if err := s.validateRange(organizationID, campaignID, from, to); err != nil {
 		return nil, err
 	}
+	if err := validateBasis(basis); err != nil {
+		return nil, err
+	}
 	defer observeLatency("campaign_daily_revenue")()
-	return s.repo.DailyCampaignRevenue(ctx, organizationID, campaignID, from, to)
+	return s.repo.DailyCampaignRevenue(ctx, organizationID, campaignID, from, to, basis)
 }
 
 // observeLatency times only the ClickHouse round trip (validation already

@@ -130,6 +130,9 @@ type ReportRow struct {
 	Day       *time.Time
 	DimValues map[chstore.ReportDimension]string
 	Metrics   MetricValues
+	// DatedByConversion counts, when dated by click, the row's conversions
+	// with no attributed click, which keep their own date.
+	DatedByConversion uint64
 }
 
 // ReportInput is Report's request shape — mirrors
@@ -146,6 +149,9 @@ type ReportInput struct {
 	// From/To day boundaries, so a report in another zone covers the same
 	// local days.
 	Timezone string
+	// DateBasis dates conversions by their own time or their click's
+	// ("" = by conversion; tech audit AN5).
+	DateBasis chstore.DateBasis
 }
 
 // SortSpec sorts the final, fully-derived rows — after merging and
@@ -188,11 +194,22 @@ func (s *Service) validateReportInput(dims []chstore.ReportDimension, filters []
 
 // Report is the report builder table's own endpoint — group by 0-4
 // dimensions, filter, sort, get back every §50 metric per group.
+// validateBasis refuses a date basis other than "", conversion and click.
+func validateBasis(b chstore.DateBasis) error {
+	if !b.Valid() {
+		return apierror.Validation("unknown date basis", map[string]string{"dateBasis": "want conversion or click"})
+	}
+	return nil
+}
+
 func (s *Service) Report(ctx context.Context, organizationID string, in ReportInput) ([]ReportRow, error) {
 	if organizationID == "" {
 		return nil, apierror.Validation("missing organization", nil)
 	}
 	if err := s.validateReportInput(in.Dims, in.Filters, in.From, in.To); err != nil {
+		return nil, err
+	}
+	if err := validateBasis(in.DateBasis); err != nil {
 		return nil, err
 	}
 	defer observeLatency("report")()
@@ -203,7 +220,7 @@ func (s *Service) Report(ctx context.Context, organizationID string, in ReportIn
 	}
 	dims, byDay := splitDay(in.Dims)
 
-	rows, err := s.groupedReport(ctx, organizationID, dims, byDay, in.Filters, in.From, in.To, sc)
+	rows, err := s.groupedReport(ctx, organizationID, dims, byDay, in.Filters, in.From, in.To, sc, in.DateBasis)
 	if err != nil {
 		return nil, err
 	}
@@ -218,9 +235,10 @@ func (s *Service) Report(ctx context.Context, organizationID string, in ReportIn
 // it plots without a second request (matches the instant client-side
 // switch the mock version already gave for free).
 type TimeseriesInput struct {
-	Filters  []chstore.ReportFilter
-	From, To time.Time
-	Timezone string // IANA zone days are cut in ("" = UTC)
+	Filters   []chstore.ReportFilter
+	From, To  time.Time
+	Timezone  string // IANA zone days are cut in ("" = UTC)
+	DateBasis chstore.DateBasis
 }
 
 func (s *Service) Timeseries(ctx context.Context, organizationID string, in TimeseriesInput) ([]ReportRow, error) {
@@ -230,13 +248,16 @@ func (s *Service) Timeseries(ctx context.Context, organizationID string, in Time
 	if err := s.validateReportInput(nil, in.Filters, in.From, in.To); err != nil {
 		return nil, err
 	}
+	if err := validateBasis(in.DateBasis); err != nil {
+		return nil, err
+	}
 	defer observeLatency("timeseries")()
 
 	sc, err := resolveScope(in.Timezone)
 	if err != nil {
 		return nil, err
 	}
-	rows, err := s.groupedReport(ctx, organizationID, nil, true, in.Filters, in.From, in.To, sc)
+	rows, err := s.groupedReport(ctx, organizationID, nil, true, in.Filters, in.From, in.To, sc, in.DateBasis)
 	if err != nil {
 		return nil, err
 	}
@@ -248,12 +269,13 @@ func (s *Service) Timeseries(ctx context.Context, organizationID string, in Time
 // sorted by one metric descending, capped at Limit (defaulted to 8,
 // matching aggregate.ts's own aggregateByDimension default).
 type BreakdownInput struct {
-	Dim      chstore.ReportDimension
-	Metric   string
-	Filters  []chstore.ReportFilter
-	From, To time.Time
-	Limit    int
-	Timezone string // IANA zone days are cut in ("" = UTC)
+	Dim       chstore.ReportDimension
+	Metric    string
+	Filters   []chstore.ReportFilter
+	From, To  time.Time
+	Limit     int
+	Timezone  string // IANA zone days are cut in ("" = UTC)
+	DateBasis chstore.DateBasis
 }
 
 func (s *Service) Breakdown(ctx context.Context, organizationID string, in BreakdownInput) ([]ReportRow, error) {
@@ -264,13 +286,16 @@ func (s *Service) Breakdown(ctx context.Context, organizationID string, in Break
 	if err := s.validateReportInput(dims, in.Filters, in.From, in.To); err != nil {
 		return nil, err
 	}
+	if err := validateBasis(in.DateBasis); err != nil {
+		return nil, err
+	}
 	defer observeLatency("breakdown")()
 
 	sc, err := resolveScope(in.Timezone)
 	if err != nil {
 		return nil, err
 	}
-	rows, err := s.groupedReport(ctx, organizationID, dims, false, in.Filters, in.From, in.To, sc)
+	rows, err := s.groupedReport(ctx, organizationID, dims, false, in.Filters, in.From, in.To, sc, in.DateBasis)
 	if err != nil {
 		return nil, err
 	}
@@ -339,7 +364,7 @@ func (s *Service) DimensionValues(ctx context.Context, organizationID string, in
 // Nothing here sorts or limits; that's each public method's own job,
 // since only they know what "sorted by" and "top-N" mean for their
 // specific request.
-func (s *Service) groupedReport(ctx context.Context, organizationID string, dims []chstore.ReportDimension, byDay bool, filters []chstore.ReportFilter, from, to time.Time, sc scope) ([]ReportRow, error) {
+func (s *Service) groupedReport(ctx context.Context, organizationID string, dims []chstore.ReportDimension, byDay bool, filters []chstore.ReportFilter, from, to time.Time, sc scope, basis chstore.DateBasis) ([]ReportRow, error) {
 	qFrom, qTo := sc.bounds(from, to)
 	q := chstore.ReportQuery{
 		OrganizationID: organizationID,
@@ -351,8 +376,9 @@ func (s *Service) groupedReport(ctx context.Context, organizationID string, dims
 		// here as day-precision dates (handler.go's own parsing); bounds
 		// turns them into the UTC instants of that zone's local midnights,
 		// so the whole last requested day is included.
-		From: qFrom,
-		To:   qTo,
+		From:      qFrom,
+		To:        qTo,
+		DateBasis: basis,
 	}
 
 	clickAggs, err := s.repo.ReportClicks(ctx, q)
@@ -430,6 +456,7 @@ func (s *Service) groupedReport(ctx context.Context, organizationID string, dims
 			acc.revenueUSD = &revenue
 			registrations, purchases, repurchases := a.Registrations, a.Purchases, a.Repurchases
 			acc.registrations, acc.purchases, acc.repurchases = &registrations, &purchases, &repurchases
+			acc.datedByConversion = a.DatedByConversion
 		}
 	}
 
@@ -460,9 +487,10 @@ func (s *Service) groupedReport(ctx context.Context, organizationID string, dims
 	for _, k := range order {
 		acc := merged[k]
 		rows = append(rows, ReportRow{
-			Day:       acc.day,
-			DimValues: acc.dimValues,
-			Metrics:   deriveMetrics(acc),
+			Day:               acc.day,
+			DimValues:         acc.dimValues,
+			Metrics:           deriveMetrics(acc),
+			DatedByConversion: acc.datedByConversion,
 		})
 	}
 	return rows, nil
@@ -651,6 +679,7 @@ type rowAccumulator struct {
 	registrations, purchases        *uint64
 	repurchases                     *uint64
 	costUSD                         *float64
+	datedByConversion               uint64
 }
 
 // deriveMetrics ports apps/web/src/features/analytics/aggregate.ts's
@@ -963,23 +992,28 @@ func (s *Service) Funnel(ctx context.Context, organizationID string, from, to ti
 // four "Top X" breakdowns by revenue: campaigns, countries, flows and offers
 // (the offer a click was actually routed to — chstore.DimOffer).
 type DashboardResult struct {
-	Totals       MetricValues
-	Daily        []ReportRow
-	TopCampaigns []ReportRow
-	TopCountries []ReportRow
-	TopFlows     []ReportRow
-	TopOffers    []ReportRow
+	Totals MetricValues
+	// DatedByConversion: as ReportRow's, for the totals.
+	DatedByConversion uint64
+	Daily             []ReportRow
+	TopCampaigns      []ReportRow
+	TopCountries      []ReportRow
+	TopFlows          []ReportRow
+	TopOffers         []ReportRow
 }
 
 const dashboardTopN = 5
 
 // timezone is the IANA zone days are cut in ("" = UTC).
-func (s *Service) Dashboard(ctx context.Context, organizationID string, from, to time.Time, timezone string) (DashboardResult, error) {
+func (s *Service) Dashboard(ctx context.Context, organizationID string, from, to time.Time, timezone string, basis chstore.DateBasis) (DashboardResult, error) {
 	if organizationID == "" {
 		return DashboardResult{}, apierror.Validation("missing organization", nil)
 	}
 	if to.Before(from) {
 		return DashboardResult{}, apierror.Validation("to must not be before from", map[string]string{"to": "before from"})
+	}
+	if err := validateBasis(basis); err != nil {
+		return DashboardResult{}, err
 	}
 	defer observeLatency("dashboard")()
 
@@ -987,7 +1021,7 @@ func (s *Service) Dashboard(ctx context.Context, organizationID string, from, to
 	if err != nil {
 		return DashboardResult{}, err
 	}
-	totalsRows, err := s.groupedReport(ctx, organizationID, nil, false, nil, from, to, sc)
+	totalsRows, err := s.groupedReport(ctx, organizationID, nil, false, nil, from, to, sc, basis)
 	if err != nil {
 		return DashboardResult{}, err
 	}
@@ -995,40 +1029,42 @@ func (s *Service) Dashboard(ctx context.Context, organizationID string, from, to
 	// aggregate row (see chstore's own note: an empty-result COUNT() is
 	// still a real row, not an absent one).
 	var totals MetricValues
+	var datedByConversion uint64
 	if len(totalsRows) == 1 {
-		totals = totalsRows[0].Metrics
+		totals, datedByConversion = totalsRows[0].Metrics, totalsRows[0].DatedByConversion
 	}
 
-	daily, err := s.groupedReport(ctx, organizationID, nil, true, nil, from, to, sc)
+	daily, err := s.groupedReport(ctx, organizationID, nil, true, nil, from, to, sc, basis)
 	if err != nil {
 		return DashboardResult{}, err
 	}
 	sort.Slice(daily, func(i, j int) bool { return daily[i].Day.Before(*daily[j].Day) })
 
-	topCampaigns, err := s.Breakdown(ctx, organizationID, BreakdownInput{Dim: chstore.DimCampaign, Metric: "revenue", From: from, To: to, Limit: dashboardTopN, Timezone: timezone})
+	topCampaigns, err := s.Breakdown(ctx, organizationID, BreakdownInput{Dim: chstore.DimCampaign, Metric: "revenue", From: from, To: to, Limit: dashboardTopN, Timezone: timezone, DateBasis: basis})
 	if err != nil {
 		return DashboardResult{}, err
 	}
-	topCountries, err := s.Breakdown(ctx, organizationID, BreakdownInput{Dim: chstore.DimCountry, Metric: "revenue", From: from, To: to, Limit: dashboardTopN, Timezone: timezone})
+	topCountries, err := s.Breakdown(ctx, organizationID, BreakdownInput{Dim: chstore.DimCountry, Metric: "revenue", From: from, To: to, Limit: dashboardTopN, Timezone: timezone, DateBasis: basis})
 	if err != nil {
 		return DashboardResult{}, err
 	}
-	topFlows, err := s.Breakdown(ctx, organizationID, BreakdownInput{Dim: chstore.DimFlow, Metric: "revenue", From: from, To: to, Limit: dashboardTopN, Timezone: timezone})
+	topFlows, err := s.Breakdown(ctx, organizationID, BreakdownInput{Dim: chstore.DimFlow, Metric: "revenue", From: from, To: to, Limit: dashboardTopN, Timezone: timezone, DateBasis: basis})
 	if err != nil {
 		return DashboardResult{}, err
 	}
 
-	topOffers, err := s.Breakdown(ctx, organizationID, BreakdownInput{Dim: chstore.DimOffer, Metric: "revenue", From: from, To: to, Limit: dashboardTopN, Timezone: timezone})
+	topOffers, err := s.Breakdown(ctx, organizationID, BreakdownInput{Dim: chstore.DimOffer, Metric: "revenue", From: from, To: to, Limit: dashboardTopN, Timezone: timezone, DateBasis: basis})
 	if err != nil {
 		return DashboardResult{}, err
 	}
 
 	return DashboardResult{
-		Totals:       totals,
-		Daily:        daily,
-		TopCampaigns: topCampaigns,
-		TopCountries: topCountries,
-		TopFlows:     topFlows,
-		TopOffers:    topOffers,
+		Totals:            totals,
+		DatedByConversion: datedByConversion,
+		Daily:             daily,
+		TopCampaigns:      topCampaigns,
+		TopCountries:      topCountries,
+		TopFlows:          topFlows,
+		TopOffers:         topOffers,
 	}, nil
 }

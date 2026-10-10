@@ -75,6 +75,7 @@ type createRequest struct {
 	GroupBy       string         `json:"groupBy"`
 	Period        periodRequest  `json:"period"`
 	Timezone      string         `json:"timezone"`
+	DateBasis     string         `json:"dateBasis"`
 }
 
 func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
@@ -96,6 +97,7 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 		GroupBy:       req.GroupBy,
 		Period:        req.Period.toPeriod(),
 		Timezone:      req.Timezone,
+		DateBasis:     req.DateBasis,
 	})
 	if err != nil {
 		apierror.Write(w, h.logger, err)
@@ -115,6 +117,7 @@ type updateRequest struct {
 	GroupBy       *string        `json:"groupBy"`
 	Period        *periodRequest `json:"period"`
 	Timezone      *string        `json:"timezone"`
+	DateBasis     *string        `json:"dateBasis"`
 }
 
 func (h *Handler) update(w http.ResponseWriter, r *http.Request) {
@@ -134,6 +137,7 @@ func (h *Handler) update(w http.ResponseWriter, r *http.Request) {
 		HiddenColumns: req.HiddenColumns,
 		GroupBy:       req.GroupBy,
 		Timezone:      req.Timezone,
+		DateBasis:     req.DateBasis,
 	}
 	if req.Period != nil {
 		p := req.Period.toPeriod()

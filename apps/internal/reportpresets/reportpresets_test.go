@@ -527,3 +527,43 @@ func TestPresetHiddenColumnsRoundTripUpdateAndClear(t *testing.T) {
 		t.Fatal("empty hidden column id: Create succeeded, want a validation error")
 	}
 }
+
+// Tech audit AN5: a preset remembers how its report dates conversions.
+func TestDateBasisRoundTrips(t *testing.T) {
+	pool := mustPool(t)
+	ctx := context.Background()
+	orgID, userID := seedOrgAndUser(t, ctx, pool)
+	svc := reportpresets.NewService(reportpresets.NewRepository(pool))
+
+	plain, err := svc.Create(ctx, orgID, userID, validInput("Plain"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if plain.DateBasis != "conversion" {
+		t.Fatalf("DateBasis = %q, want conversion by default", plain.DateBasis)
+	}
+
+	in := validInput("By click")
+	in.DateBasis = "click"
+	byClick, err := svc.Create(ctx, orgID, userID, in)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := svc.Get(ctx, orgID, byClick.ID); got.DateBasis != "click" {
+		t.Fatalf("stored DateBasis = %q, want click", got.DateBasis)
+	}
+	back := "conversion"
+	updated, err := svc.Update(ctx, orgID, byClick.ID, reportpresets.UpdateInput{DateBasis: &back})
+	if err != nil || updated.DateBasis != "conversion" {
+		t.Fatalf("Update: %+v, %v; want conversion", updated, err)
+	}
+
+	in.DateBasis = "postback"
+	if _, err := svc.Create(ctx, orgID, userID, in); err == nil {
+		t.Fatal("Create with an unknown date basis succeeded")
+	}
+	bad := "postback"
+	if _, err := svc.Update(ctx, orgID, byClick.ID, reportpresets.UpdateInput{DateBasis: &bad}); err == nil {
+		t.Fatal("Update with an unknown date basis succeeded")
+	}
+}

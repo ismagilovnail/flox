@@ -211,6 +211,57 @@ type ReportQuery struct {
 	// friends do this once, centrally, rather than every query method
 	// repeating a +24h adjustment).
 	From, To time.Time
+	// DateBasis dates conversions by their own time ("" or
+	// DateByConversion) or by their click's (DateByClick). Clicks, landing
+	// views and installs are dated by when they happened either way.
+	DateBasis DateBasis
+}
+
+// DateBasis is which moment a conversion is reported on (tech audit AN5).
+type DateBasis string
+
+const (
+	// DateByConversion: the day the network reported the conversion.
+	DateByConversion DateBasis = "conversion"
+	// DateByClick: the day of the click it is attributed to, so revenue
+	// lands on the same day as that click and its spend. A conversion with
+	// no attributed click has no click time and keeps its own date.
+	DateByClick DateBasis = "click"
+)
+
+// Valid reports whether b is a known basis; "" means DateByConversion.
+func (b DateBasis) Valid() bool { return b == "" || b == DateByConversion || b == DateByClick }
+
+// conversionTimeExpr is the time a conversion_events row is reported at.
+// By click, an attributed conversion's click time is its own time minus
+// time_to_conversion_ms (set at attribution, also on a retried one).
+func conversionTimeExpr(prefix string, basis DateBasis) string {
+	if basis != DateByClick {
+		return prefix + "event_at"
+	}
+	return fmt.Sprintf("if(%[1]sattribution_outcome = 'attributed', %[1]sevent_at - toIntervalMillisecond(%[1]stime_to_conversion_ms), %[1]sevent_at)", prefix)
+}
+
+// conversionRange is the WHERE condition (with its args) keeping the
+// conversion_events rows reported in [from, to). By click it still bounds
+// event_at from below — a conversion is not reported before its click, a
+// day of slack covers a network clock behind ours — so the scan starts at
+// the right partition.
+func conversionRange(prefix string, basis DateBasis, from, to time.Time) (string, []any) {
+	if basis != DateByClick {
+		return prefix + "event_at >= ? AND " + prefix + "event_at < ?", []any{from, to}
+	}
+	at := conversionTimeExpr(prefix, basis)
+	return prefix + "event_at >= ? AND " + at + " >= ? AND " + at + " < ?", []any{from.Add(-24 * time.Hour), from, to}
+}
+
+// datedByConversionExpr counts, by click, the rows that had no click time
+// and kept their own date (0 by conversion).
+func datedByConversionExpr(prefix string, basis DateBasis) string {
+	if basis != DateByClick {
+		return "toUInt64(0)"
+	}
+	return "countIf(" + prefix + "attribution_outcome != 'attributed')"
 }
 
 // ReportKey is the group-by identity a row of any of the three query
@@ -251,6 +302,9 @@ type ConversionAgg struct {
 	Registrations uint64
 	Purchases     uint64
 	Repurchases   uint64
+	// DatedByConversion counts, by click, the group's conversions with no
+	// attributed click, reported on their own date instead.
+	DatedByConversion uint64
 }
 
 // InstallAgg is the PWA_INSTALL count of one group.
@@ -467,24 +521,26 @@ func (s *EventStore) ReportConversions(ctx context.Context, q ReportQuery) ([]Co
 	if !ok {
 		return nil, fmt.Errorf("chstore: unsupported dimension in conversion report")
 	}
-	args := []any{q.OrganizationID, q.From, q.To}
+	rangeClause, rangeArgs := conversionRange("", q.DateBasis, q.From, q.To)
+	args := append([]any{q.OrganizationID}, rangeArgs...)
 	filterClause, args, ok := buildFilterClause(reportConversionColumns, q.Filters, args)
 	if !ok {
 		return nil, fmt.Errorf("chstore: unsupported filter dimension in conversion report")
 	}
 
-	selectExpr, groupByExpr := selectAndGroupByExprs(selectCols, q.ByDay, q.Timezone)
+	selectExpr, groupByExpr := selectAndGroupByExprsAt(selectCols, q.ByDay, q.Timezone, conversionTimeExpr("", q.DateBasis))
 
 	query := fmt.Sprintf(`
 		SELECT %scountIf(type IN ('CPA_ACCEPT', 'CPA_REDEP')) AS conversions,
 			sumIf(usd_value * has_usd_value, type IN `+revenueTypes+`) AS revenue_usd,
 			countIf(type = 'CPA_HOLD') AS registrations,
 			countIf(type = 'CPA_ACCEPT') AS purchases,
-			countIf(type = 'CPA_REDEP') AS repurchases
+			countIf(type = 'CPA_REDEP') AS repurchases,
+			%s AS dated_by_conversion
 		FROM conversion_events
-		WHERE organization_id = ? AND event_at >= ? AND event_at < ? AND type IN `+reportCPATypes+`%s
+		WHERE organization_id = ? AND %s AND type IN `+reportCPATypes+`%s
 		%s`,
-		selectExpr, filterClause, groupByExpr,
+		selectExpr, datedByConversionExpr("", q.DateBasis), rangeClause, filterClause, groupByExpr,
 	)
 
 	rows, err := s.conn.Query(ctx, query, args...)
@@ -496,15 +552,16 @@ func (s *EventStore) ReportConversions(ctx context.Context, q ReportQuery) ([]Co
 	var out []ConversionAgg
 	for rows.Next() {
 		dimVals, day, dest := scanDest(q.Dims, q.ByDay)
-		var conversions, registrations, purchases, repurchases uint64
+		var conversions, registrations, purchases, repurchases, datedByConversion uint64
 		var revenueUSD float64
-		dest = append(dest, &conversions, &revenueUSD, &registrations, &purchases, &repurchases)
+		dest = append(dest, &conversions, &revenueUSD, &registrations, &purchases, &repurchases, &datedByConversion)
 		if err := rows.Scan(dest...); err != nil {
 			return nil, fmt.Errorf("chstore: scanning conversion report row: %w", err)
 		}
 		out = append(out, ConversionAgg{
 			Key: scanKey(q.Dims, deref(dimVals), day), Conversions: conversions, RevenueUSD: revenueUSD,
 			Registrations: registrations, Purchases: purchases, Repurchases: repurchases,
+			DatedByConversion: datedByConversion,
 		})
 	}
 	return out, rows.Err()
@@ -539,8 +596,13 @@ func (s *EventStore) reportConversionsJoined(ctx context.Context, q ReportQuery)
 	}
 
 	const convTypes = reportCPATypes
-	// Args in placeholder order: click subquery (org, inner org/from/to), then outer WHERE.
-	args := []any{q.OrganizationID, q.OrganizationID, q.From, q.To, q.OrganizationID, q.From, q.To}
+	innerRange, innerArgs := conversionRange("", q.DateBasis, q.From, q.To)
+	outerRange, outerArgs := conversionRange("c.", q.DateBasis, q.From, q.To)
+	// Args in placeholder order: click subquery (org, inner org + range), then outer WHERE.
+	args := []any{q.OrganizationID, q.OrganizationID}
+	args = append(args, innerArgs...)
+	args = append(args, q.OrganizationID)
+	args = append(args, outerArgs...)
 	var filterClause strings.Builder
 	for _, f := range q.Filters {
 		col, ok := qualify(f.Dimension)
@@ -553,7 +615,7 @@ func (s *EventStore) reportConversionsJoined(ctx context.Context, q ReportQuery)
 
 	all := make([]string, 0, len(selectCols)+1)
 	if q.ByDay {
-		all = append(all, dayExpr("c.event_at", q.Timezone))
+		all = append(all, dayExpr(conversionTimeExpr("c.", q.DateBasis), q.Timezone))
 	}
 	all = append(all, selectCols...)
 	selectExpr, groupByExpr := "", ""
@@ -567,20 +629,21 @@ func (s *EventStore) reportConversionsJoined(ctx context.Context, q ReportQuery)
 			sumIf(c.usd_value * c.has_usd_value, c.type IN `+revenueTypes+`) AS revenue_usd,
 			countIf(c.type = 'CPA_HOLD') AS registrations,
 			countIf(c.type = 'CPA_ACCEPT') AS purchases,
-			countIf(c.type = 'CPA_REDEP') AS repurchases
+			countIf(c.type = 'CPA_REDEP') AS repurchases,
+			%s AS dated_by_conversion
 		FROM conversion_events AS c
 		LEFT JOIN (
 			SELECT click_id, any(os) AS os, any(browser) AS browser, any(language) AS language
 			FROM click_events
 			WHERE organization_id = ? AND type = 'SOURCE_CLICK' AND click_id IN (
 				SELECT click_id FROM conversion_events
-				WHERE organization_id = ? AND event_at >= ? AND event_at < ? AND type IN %s
+				WHERE organization_id = ? AND %s AND type IN %s
 			)
 			GROUP BY click_id
 		) AS k ON c.click_id = k.click_id
-		WHERE c.organization_id = ? AND c.event_at >= ? AND c.event_at < ? AND c.type IN %s%s
+		WHERE c.organization_id = ? AND %s AND c.type IN %s%s
 		%s`,
-		selectExpr, convTypes, convTypes, filterClause.String(), groupByExpr,
+		selectExpr, datedByConversionExpr("c.", q.DateBasis), innerRange, convTypes, outerRange, convTypes, filterClause.String(), groupByExpr,
 	)
 
 	rows, err := s.conn.Query(ctx, query, args...)
@@ -592,15 +655,16 @@ func (s *EventStore) reportConversionsJoined(ctx context.Context, q ReportQuery)
 	var out []ConversionAgg
 	for rows.Next() {
 		dimVals, day, dest := scanDest(q.Dims, q.ByDay)
-		var conversions, registrations, purchases, repurchases uint64
+		var conversions, registrations, purchases, repurchases, datedByConversion uint64
 		var revenueUSD float64
-		dest = append(dest, &conversions, &revenueUSD, &registrations, &purchases, &repurchases)
+		dest = append(dest, &conversions, &revenueUSD, &registrations, &purchases, &repurchases, &datedByConversion)
 		if err := rows.Scan(dest...); err != nil {
 			return nil, fmt.Errorf("chstore: scanning joined conversion report row: %w", err)
 		}
 		out = append(out, ConversionAgg{
 			Key: scanKey(q.Dims, deref(dimVals), day), Conversions: conversions, RevenueUSD: revenueUSD,
 			Registrations: registrations, Purchases: purchases, Repurchases: repurchases,
+			DatedByConversion: datedByConversion,
 		})
 	}
 	return out, rows.Err()
@@ -770,9 +834,15 @@ func dayExpr(col, tz string) string {
 // requires — GROUP BY with an empty list is a syntax error, not "group
 // everything into one row" the way omitting the clause already means).
 func selectAndGroupByExprs(cols []string, byDay bool, tz string) (selectExpr, groupByExpr string) {
+	return selectAndGroupByExprsAt(cols, byDay, tz, "event_at")
+}
+
+// selectAndGroupByExprsAt is selectAndGroupByExprs with the day cut from
+// timeExpr instead of event_at.
+func selectAndGroupByExprsAt(cols []string, byDay bool, tz, timeExpr string) (selectExpr, groupByExpr string) {
 	all := make([]string, 0, len(cols)+1)
 	if byDay {
-		all = append(all, dayExpr("event_at", tz))
+		all = append(all, dayExpr(timeExpr, tz))
 	}
 	all = append(all, cols...)
 

@@ -38,7 +38,7 @@ type reportFakeRepo struct {
 func (r *reportFakeRepo) DailyCampaignCounts(context.Context, string, string, time.Time, time.Time) ([]chstore.DailyCount, error) {
 	return nil, nil
 }
-func (r *reportFakeRepo) DailyCampaignRevenue(context.Context, string, string, time.Time, time.Time) ([]chstore.DailyRevenue, error) {
+func (r *reportFakeRepo) DailyCampaignRevenue(context.Context, string, string, time.Time, time.Time, chstore.DateBasis) ([]chstore.DailyRevenue, error) {
 	return nil, nil
 }
 func (r *reportFakeRepo) ReportClicks(_ context.Context, q chstore.ReportQuery) ([]chstore.ClickAgg, error) {
@@ -609,7 +609,7 @@ func TestDashboardTopOffers(t *testing.T) {
 		{Key: dimKey(chstore.DimOffer, "offer-small"), Conversions: 1, RevenueUSD: 10},
 		{Key: dimKey(chstore.DimOffer, "offer-big"), Conversions: 3, RevenueUSD: 300},
 	}}
-	result, err := analytics.NewService(repo, nil).Dashboard(context.Background(), "org-1", time.Now().AddDate(0, 0, -7), time.Now(), "")
+	result, err := analytics.NewService(repo, nil).Dashboard(context.Background(), "org-1", time.Now().AddDate(0, 0, -7), time.Now(), "", "")
 	if err != nil {
 		t.Fatalf("Dashboard: %v", err)
 	}
@@ -624,7 +624,7 @@ func TestDashboardTopOffers(t *testing.T) {
 func TestDashboardNewOrganizationIsAllZeros(t *testing.T) {
 	svc := analytics.NewService(&reportFakeRepo{}, &fakeCost{})
 
-	result, err := svc.Dashboard(context.Background(), "org-1", time.Now().AddDate(0, 0, -7), time.Now(), "")
+	result, err := svc.Dashboard(context.Background(), "org-1", time.Now().AddDate(0, 0, -7), time.Now(), "", "")
 	if err != nil {
 		t.Fatalf("Dashboard: %v", err)
 	}
@@ -704,7 +704,7 @@ func TestDashboardCutsDaysInTheRequestedTimezone(t *testing.T) {
 	svc := analytics.NewService(repo, nil)
 	day := time.Date(2026, 8, 10, 0, 0, 0, 0, time.UTC)
 
-	if _, err := svc.Dashboard(context.Background(), "org-1", day, day, "Europe/Moscow"); err != nil {
+	if _, err := svc.Dashboard(context.Background(), "org-1", day, day, "Europe/Moscow", ""); err != nil {
 		t.Fatalf("Dashboard: %v", err)
 	}
 	q := repo.lastClickQuery
@@ -714,7 +714,7 @@ func TestDashboardCutsDaysInTheRequestedTimezone(t *testing.T) {
 		t.Fatalf("query = %+v, want Moscow local-midnight bounds 9 Aug 21:00Z .. 10 Aug 21:00Z", q)
 	}
 
-	if _, err := svc.Dashboard(context.Background(), "org-1", day, day, "Mars/Olympus"); err == nil {
+	if _, err := svc.Dashboard(context.Background(), "org-1", day, day, "Mars/Olympus", ""); err == nil {
 		t.Fatal("unknown timezone succeeded, want a validation error")
 	}
 }

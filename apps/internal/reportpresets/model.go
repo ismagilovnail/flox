@@ -81,10 +81,13 @@ type ReportPreset struct {
 	GroupBy        string         `json:"groupBy"`
 	Period         Period         `json:"period"`
 	Timezone       string         `json:"timezone"`
-	IsDefault      bool           `json:"isDefault"`
-	CreatedByID    *string        `json:"createdByUserId,omitempty"`
-	CreatedAt      time.Time      `json:"createdAt"`
-	UpdatedAt      time.Time      `json:"updatedAt"`
+	// DateBasis is how the report dates conversions: "conversion" or
+	// "click" (tech audit AN5).
+	DateBasis   string    `json:"dateBasis"`
+	IsDefault   bool      `json:"isDefault"`
+	CreatedByID *string   `json:"createdByUserId,omitempty"`
+	CreatedAt   time.Time `json:"createdAt"`
+	UpdatedAt   time.Time `json:"updatedAt"`
 }
 
 // CreateInput and UpdateInput never carry IsDefault — the default preset is
@@ -104,6 +107,8 @@ type CreateInput struct {
 	GroupBy       string
 	Period        Period
 	Timezone      string
+	// DateBasis: "" means "conversion".
+	DateBasis string
 }
 
 type UpdateInput struct {
@@ -121,6 +126,7 @@ type UpdateInput struct {
 	GroupBy       *string
 	Period        *Period
 	Timezone      *string
+	DateBasis     *string
 }
 
 // defaultPresetSeed is what Repository.EnsureDefault creates the very

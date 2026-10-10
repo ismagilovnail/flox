@@ -63,18 +63,31 @@ func (s *EventStore) DailyCampaignCounts(ctx context.Context, organizationID, ca
 	return out, nil
 }
 
-// DailyCampaignRevenue reads conversion_events_daily_campaign for one
-// campaign over [from, to]. Same SUM(...) requirement as
-// DailyCampaignCounts, for the same reason.
-func (s *EventStore) DailyCampaignRevenue(ctx context.Context, organizationID, campaignID string, from, to time.Time) ([]DailyRevenue, error) {
-	rows, err := s.conn.Query(ctx, `
+// DailyCampaignRevenue is one campaign's conversions and USD revenue per
+// UTC day and status over [from, to]. By conversion it reads the rollup
+// conversion_events_daily_campaign (same SUM(...) requirement as
+// DailyCampaignCounts, for the same reason); by click it reads
+// conversion_events, since the rollup only knows the conversion's own day.
+func (s *EventStore) DailyCampaignRevenue(ctx context.Context, organizationID, campaignID string, from, to time.Time, basis DateBasis) ([]DailyRevenue, error) {
+	query, args := `
 		SELECT day, type, sum(event_count) AS event_count, sum(revenue_usd) AS revenue_usd
 		FROM conversion_events_daily_campaign
 		WHERE organization_id = ? AND campaign_id = ? AND day >= ? AND day <= ?
 		GROUP BY day, type
-		ORDER BY day, type`,
-		organizationID, campaignID, from.Format("2006-01-02"), to.Format("2006-01-02"),
-	)
+		ORDER BY day, type`, []any{organizationID, campaignID, from.Format("2006-01-02"), to.Format("2006-01-02")}
+	if basis == DateByClick {
+		start := time.Date(from.Year(), from.Month(), from.Day(), 0, 0, 0, 0, time.UTC)
+		end := time.Date(to.Year(), to.Month(), to.Day()+1, 0, 0, 0, 0, time.UTC)
+		rangeClause, rangeArgs := conversionRange("", basis, start, end)
+		query = `
+		SELECT ` + dayExpr(conversionTimeExpr("", basis), "") + `, type, count() AS event_count, sum(usd_value * has_usd_value) AS revenue_usd
+		FROM conversion_events
+		WHERE organization_id = ? AND campaign_id = ? AND ` + rangeClause + `
+		GROUP BY day, type
+		ORDER BY day, type`
+		args = append([]any{organizationID, campaignID}, rangeArgs...)
+	}
+	rows, err := s.conn.Query(ctx, query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("chstore: querying daily campaign revenue: %w", err)
 	}
