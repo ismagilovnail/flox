@@ -135,7 +135,14 @@ scoped phase; none blocks anything that ships today.
 | `cloudflare_registrar` has no adapter, though Cloudflare works as a DNS provider | `apps/internal/domain/model.go` |
 | SMS/email 2FA as an alternative delivery channel (TOTP only today) | `apps/internal/totp` |
 | Video upload/transcoding in Content Gallery (images only today) | needs a real ffmpeg/worker pipeline |
-| Flows have no top-level list view, so no "View statistics" drill-in row | flows live nested inside a campaign's edit page |
+| Pixels never fire: no event reaches Facebook/TikTok/… from the tracker or the worker | pixel CRUD and stream-set attachment exist; sending does not (`docs/spec-conformance-2026-10-11.md`) |
+| Campaign list has no Clicks/Conversions/Revenue/Spend/Profit/ROI columns; custom metrics' "Campaigns Table" target therefore shows nowhere | `apps/web/src/features/campaigns/campaign-columns.tsx` |
+| No Push section (sidebar §17, NOTIFICATION_* events) | not started |
+| Cost: no CSV import, no per-country spend | `apps/internal/cost` |
+| Organization base currency is stored but reports are always USD | §50-FX |
+| LTV filters source/offer; `cpa_decline`/`cpa_trash` report metrics | `ltv_events` lacks the columns; report registry |
+| Content Gallery has no system content/templates; flows list has no tags; flow nodes show no analytics summary; no "empty subs %" diagnostic | see the conformance doc |
+| No API-key rotation; `audit_logs` covers team and settings only; no tracker test for an inactive campaign | §54, §58 |
 | Postlanding stage serving + `postlanding` report dimension | the tracker doesn't serve postlandings yet (no POSTLANDING_VIEW is emitted) — next; then follow `pwa`'s pattern (`docs/pwa-serving.md`, `chstore/schema/010`) |
 | PWA types `external`/`ios_app`, landing `asPwa`, push from installed PWAs | no target-URL fields exist for the two types; `docs/pwa-serving.md` "Not done" |
 | `network` report dimension | unblocked (an offer's network is known at routing time) — not yet asked for; same pattern as `offer` |
@@ -143,6 +150,7 @@ scoped phase; none blocks anything that ships today.
 | `TRUSTED_PROXIES` still on its default (no real reverse proxy/LB/CDN deployed yet) | set it once real infrastructure exists in front of `apps/api`/`apps/tracker` |
 | `golang.org/x/crypto/openpgp` (`GO-2026-5932`) has no upstream fix | permanent, accepted, unreachable — this codebase only imports `bcrypt`; see `docs/security.md` Known limitations |
 
-Full acceptance criteria per phase: `docs/FLOX-master-prompt-v3.md`.
+Full acceptance criteria per phase: `docs/FLOX-master-prompt-v3.md`; their
+state on 2026-10-11, phase by phase: `docs/spec-conformance-2026-10-11.md`.
 Definition of Done (applies to every phase): `CLAUDE.md` → "DEFINITION OF
 DONE".

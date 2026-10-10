@@ -947,9 +947,8 @@ type FunnelStep struct {
 	Value uint64
 }
 
-// funnelSteps is the exact §43 order
-// apps/web/src/lib/mock/analytics.ts's own FUNNEL_STEPS listed — kept
-// here, not re-derived from event.All, since the funnel is a specific
+// funnelSteps is §43's canonical funnel order — kept here, not
+// re-derived from event.All, since the funnel is a specific
 // eight-stage subsequence of the full ~20-type model, not "every type in
 // declaration order."
 var funnelSteps = []string{
