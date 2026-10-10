@@ -1,8 +1,7 @@
 // Package postbacklog carries postback attempts — both directions,
 // internal/conversion's incoming outcomes and internal/postback's outgoing
 // delivery attempts — into ClickHouse's postback_events table (§48), the
-// rich per-attempt log migration 00008 (Phase 17) earmarked for once
-// ClickHouse existed.
+// per-attempt log.
 //
 // A Postgres-backed FOR UPDATE SKIP LOCKED queue (postback_attempt_queue,
 // migration 00016) feeding a batching Flusher, run by apps/worker. The

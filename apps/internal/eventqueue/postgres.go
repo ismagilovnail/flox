@@ -63,7 +63,7 @@ func (q *PostgresQueue) EnqueueBatch(ctx context.Context, events []event.Event) 
 	// (event_queue.organization_id is a foreign key). The buffer mixes
 	// organizations, so retry per organization: the others are written, the
 	// failing one is dropped for good instead of being retried forever, and
-	// eventbuf is told exactly which events to retry (audit 2026-10-06, RL2).
+	// eventbuf is told exactly which events to retry (tech audit RL2).
 	byOrg := map[string][]event.Event{}
 	var order []string
 	for _, e := range events {

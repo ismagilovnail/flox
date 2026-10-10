@@ -157,9 +157,8 @@ func (h *Handler) track(w http.ResponseWriter, r *http.Request) {
 	ev := buildEvent(link, result, attrs, params, clickID, ip, r)
 	// The destination's macros ({click_id}, {sub1}…) are resolved once, here:
 	// the recorded event, and the signed landing/PWA links that carry
-	// ev.Destination onward, all hold the URL the visitor actually reaches.
-	// Before the 2026-10-06 audit (T7) the offer got a literal "{click_id}"
-	// and a network could never send back a postback that matches a click.
+	// ev.Destination onward, all hold the URL the visitor actually reaches —
+	// so the network gets the real click id to send back (tech audit T7).
 	macros := clickMacros(ev)
 	ev.Destination = macro.ResolveURL(result.Destination, macros)
 
@@ -328,9 +327,3 @@ func hostWithoutPort(host string) string {
 	}
 	return host
 }
-
-// A per-request clientIP helper used to live here, trusting X-Forwarded-
-// For's first entry unconditionally — the same client-controlled value
-// as apps/internal/ratelimit's own former ClientIP (security audit
-// finding #2). Both are replaced by *clientip.Resolver, which only
-// honours the header from a configured trusted proxy; see Handler.clientIP.

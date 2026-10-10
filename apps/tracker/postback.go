@@ -23,14 +23,14 @@ import (
 
 // A client IP with this many refused postbacks (unknown network, wrong
 // secret) within the window gets 429 for the rest of it, before any
-// Postgres lookup (tech audit 2026-10-06, P4). Accepted postbacks never
+// Postgres lookup (tech audit P4). Accepted postbacks never
 // count, so a network's replay of any size is not limited.
 const (
 	postbackFailureLimit  = 30
 	postbackFailureWindow = 10 * time.Minute
 )
 
-// PostbackHandler is Phase 23's conversion engine endpoint (§45):
+// PostbackHandler is the conversion engine's endpoint (§45):
 //
 //	GET/POST /postback/{networkId}
 //
@@ -112,14 +112,11 @@ func (h *PostbackHandler) handle(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// §54/Phase 30: {networkId} alone used to be the only check — any
-	// client that observed or guessed it could POST arbitrary conversion
-	// data as that network. secret is the value embedded in the incoming
-	// postback URL FLOX hands the network operator (migration 00021,
-	// network.Service.Create/RegeneratePostbackSecret); an empty stored
-	// hash (a network created before this existed, or one that somehow
-	// still has the '' sentinel) can never match any hashed input, so it
-	// safely rejects every postback rather than needing a separate check.
+	// §54: {networkId} alone is guessable, so the incoming postback URL
+	// FLOX hands the network operator carries a secret (migration 00021,
+	// network.Service.Create/RegeneratePostbackSecret). An empty stored
+	// hash can never match any hashed input, so it rejects every postback
+	// without a separate check.
 	if !validPostbackSecret(r.FormValue("secret"), network.PostbackSecretHash) {
 		writeJSON(w, http.StatusUnauthorized, postbackResponse{Result: "error", Message: "invalid or missing secret"})
 		return

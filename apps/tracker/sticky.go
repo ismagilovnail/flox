@@ -30,12 +30,12 @@ type stickyCookie struct {
 
 func stickyCookieName(campaignID string) string { return "sf_" + campaignID }
 
-// stickySigner signs and checks sticky cookies (tech audit 2026-10-06,
-// T5). An unsigned cookie was taken as is: anyone who saw a real visit's
-// values could set one and skip the stream set's geo/bot filters straight
-// into its flow, and with keepClickId write any click_id into the chain.
-// Now a cookie the tracker did not issue is ignored — the visit is routed
-// as a new one and gets a fresh, signed cookie.
+// stickySigner signs and checks sticky cookies (tech audit T5). Unsigned,
+// anyone who saw a real visit's values could set one and skip the stream
+// set's geo/bot filters straight into its flow, and with keepClickId write
+// any click_id into the chain. A cookie the tracker did not issue is
+// ignored: the visit is routed as a new one and gets a fresh, signed
+// cookie.
 //
 // The signature covers the campaign too, so a cookie cannot be moved to
 // another campaign; the key (STICKY_COOKIE_KEY) is shared by every tracker

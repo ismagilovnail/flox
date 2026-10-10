@@ -12,7 +12,7 @@ import (
 
 // A failed batch is retried with exponential backoff and, when the
 // ClickHouse server keeps rejecting it, dead-lettered — see pgqueue.Fail
-// (audit 2026-10-06, Q2).
+// (tech audit Q2).
 
 // ClickHouseSink is the narrow slice of chstore.EventStore Flusher needs —
 // enough to stay decoupled from ClickHouse's own client type, the same

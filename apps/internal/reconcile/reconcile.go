@@ -1,9 +1,9 @@
 // Package reconcile checks that ClickHouse holds exactly the conversions
-// Postgres recorded (audit 2026-10-06, §12/§17). Postgres `postbacks` is the
+// Postgres recorded (tech audit §12/§17). Postgres `postbacks` is the
 // source of truth; ClickHouse `conversion_events` is a copy that travels
-// through the outbox, the worker's queue and its retries — every path this
-// audit fixed (a dropped event, a dead-lettered batch, a retried write whose
-// commit had in fact landed) shows up here as a difference.
+// through the outbox, the worker's queue and its retries — a dropped event,
+// a dead-lettered batch or a retried write whose commit had in fact landed
+// shows up here as a difference.
 //
 // It compares, per (organization, UTC day, status), the number of events
 // and their USD sum, the way reports would: an accept or redeposit counts

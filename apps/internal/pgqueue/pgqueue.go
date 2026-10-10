@@ -5,7 +5,7 @@
 // Requeue/the reaper keep it. A retry claims exactly that batch again — never
 // re-mixed with fresh rows — because the ClickHouse insert is deduplicated by
 // a token derived from batch_id, and one token over different rows would
-// make ClickHouse silently drop the new ones (audit 2026-10-06, D2).
+// make ClickHouse silently drop the new ones (tech audit D2).
 package pgqueue
 
 import (
@@ -165,7 +165,7 @@ func queryStrings(ctx context.Context, tx pgx.Tx, sql string, args ...any) ([]st
 	return out, rs.Err()
 }
 
-// Backoff and dead-lettering of failed batches (audit 2026-10-06, Q2).
+// Backoff and dead-lettering of failed batches (tech audit Q2).
 const (
 	// MaxRejectedAttempts is how many times a batch the ClickHouse server
 	// rejected is tried before it is dead-lettered.

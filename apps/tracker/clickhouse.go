@@ -24,9 +24,9 @@ var errClickHouseNotConnected = errors.New("tracker: clickhouse not connected ye
 
 // lateClickHouse is the tracker's ClickHouse, connected in the background.
 // A ClickHouse that is down when the tracker starts must not block the
-// redirect path (CLAUDE.md #9) — and before the 2026-10-06 audit (T1) it
-// left attribution on an empty in-memory resolver until the next restart.
-// Now the tracker keeps trying and switches over the moment it connects.
+// redirect path (CLAUDE.md #9) or leave attribution without clicks until a
+// restart (tech audit T1): the tracker keeps trying and switches over the
+// moment it connects.
 type lateClickHouse struct {
 	resolver atomic.Pointer[chstore.ClickResolver]
 	events   atomic.Pointer[chstore.EventStore]

@@ -1,5 +1,5 @@
 // Package queuestats publishes the state of apps/worker's Postgres queues
-// (audit 2026-10-06, §14): open rows by status and how long the oldest due
+// (tech audit §14): open rows by status and how long the oldest due
 // row has been waiting. Depth alone misses a stalled queue that happens to
 // be small; the age does not.
 package queuestats

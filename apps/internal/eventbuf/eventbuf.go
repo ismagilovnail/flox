@@ -15,8 +15,8 @@
 // a hung redirect is a lost click — but it must be *visible*, so drops are
 // counted and logged rather than silently swallowed.
 //
-// A failed sink write is retried with backoff, not thrown away (audit
-// 2026-10-06, RL2: one Postgres blip used to lose the whole batch). While a
+// A failed sink write is retried with backoff, not thrown away (tech audit
+// RL2): one Postgres blip must not lose the batch. While a
 // batch is being retried, new events wait in the buffer; only if the
 // outage outlasts the buffer do they start being dropped. On Close, retries
 // get ShutdownRetryBudget and whatever is still unwritten is counted as
@@ -35,9 +35,8 @@ import (
 	"github.com/ismagilovnail/flox/apps/internal/idgen"
 )
 
-// Sink is where flushed batches go. The real implementation (Phase 24's
-// worker consuming a durable queue into ClickHouse) replaces the default
-// without the tracker changing at all.
+// Sink is where flushed batches go: the Postgres event_queue or the NATS
+// stream, both drained by apps/worker into ClickHouse.
 //
 // A Sink writes a batch atomically: a plain error means none of it was
 // written and the whole batch is retried. A Sink that wrote part of a batch,
@@ -273,9 +272,8 @@ func (w *Writer) write(batch []event.Event) {
 
 // Close stops accepting new events, drains the buffer, and waits for the
 // final flush. Safe to call more than once: apps/tracker closes explicitly
-// before logging its stats and again in a defer for early returns, and the
-// second close of done used to panic every clean shutdown (audit
-// 2026-10-06, RL3).
+// before logging its stats and again in a defer for early returns (tech
+// audit RL3).
 func (w *Writer) Close() {
 	w.closeOnce.Do(func() {
 		w.closed.Store(true)

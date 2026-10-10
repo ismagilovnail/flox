@@ -1,11 +1,10 @@
 // Package reattribute looks up the click of an unknown_click conversion
-// again (audit 2026-10-06, T1).
+// again (tech audit T1).
 //
 // A click reaches ClickHouse through eventbuf → event_queue → the worker's
 // flush: seconds normally, hours during a backlog or an outage. A postback
-// arriving in that window used to be written off as unknown_click for
-// good. Now internal/conversion records it at once — its CPA event and
-// outgoing postback leave immediately — and schedules a row in
+// arriving in that window is recorded at once by internal/conversion — its
+// CPA event and outgoing postback leave immediately — with a row in
 // attribution_retries in the same transaction. This package retries on
 // conversion.AttributionRetryDelays. When the click turns up:
 //

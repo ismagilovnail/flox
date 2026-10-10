@@ -17,10 +17,9 @@ var ErrClickNotFound = errors.New("attribution: click not found")
 // query cannot be forgotten at one call site, and a resolver that never
 // returns another tenant's click makes leaking one impossible upstream.
 //
-// The real implementation reads ClickHouse and arrives with the worker
-// (Phase 24) and the analytical schema (Phase 26); §7 puts raw high-volume
-// traffic events there, and §47 forbids serving them from Postgres. Until
-// then MemoryResolver below stands in.
+// The production implementation reads ClickHouse (chstore.ClickResolver):
+// §7 puts raw high-volume traffic events there, and §47 forbids serving them
+// from Postgres.
 type ClickResolver interface {
 	// ByClickID returns the single click with this id, or ErrClickNotFound.
 	ByClickID(ctx context.Context, organizationID, clickID string) (Click, error)
@@ -36,18 +35,8 @@ type ClickResolver interface {
 	ByExternalClickID(ctx context.Context, organizationID, externalClickID string) ([]Click, error)
 }
 
-// MemoryResolver is the honest stand-in until clicks are queryable for real.
-//
-// The tracker currently hands events to eventbuf's LogSink, which is explicitly
-// not durable storage, so there is nothing to query yet. Rather than pretend —
-// by, say, quietly adding a clicks table to Postgres that §7 says does not
-// belong there — this keeps clicks in a map and says so. It is what the
-// conformance tests run against, and it is what a local end-to-end walkthrough
-// of Phase 23's postback path can be wired to before Phase 24 lands.
-//
-// It is NOT production storage: per-process, unbounded, and gone on restart.
-// Replacing it means implementing ClickResolver against ClickHouse; nothing in
-// this package changes.
+// MemoryResolver keeps clicks in a map, for tests and benchmarks. It is NOT
+// production storage: per-process, unbounded, and gone on restart.
 type MemoryResolver struct {
 	mu sync.RWMutex
 

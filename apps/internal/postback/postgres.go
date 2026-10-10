@@ -38,10 +38,8 @@ func (s *PostgresStore) Enqueue(ctx context.Context, in EnqueueInput) (string, e
 
 // InsertTx queues a delivery inside the transaction that records its source
 // conversion (conversion.DeliveryWriter): the conversion and its outgoing
-// postback commit together or not at all. Before this a failed insert here
-// was only logged, after the network had already been told "success", and
-// its retry came back as a duplicate — the delivery was lost for good
-// (audit 2026-10-06, D1).
+// postback commit together or not at all (tech audit D1): a delivery is
+// never lost after the network has been told "success".
 func (s *PostgresStore) InsertTx(ctx context.Context, tx pgx.Tx, req conversion.DeliveryRequest) error {
 	_, err := insertDelivery(ctx, tx, "postback_deliveries", EnqueueInput{
 		OrganizationID:   req.OrganizationID,
@@ -86,11 +84,11 @@ const claimedColumns = `pd.id, pd.organization_id, pd.network_id, pd.source_post
 // replicas polling at the same instant can never both claim the same
 // delivery.
 //
-// Fairly across organizations (tech audit 2026-10-06, M2; internal/pgqueue
-// fair.go): each organization with deliveries waiting gets its share of the
-// claim first, its oldest due ones, then the rest of the batch goes to the
-// oldest due deliveries of anyone. A partner endpoint that hangs and piles
-// up retries for one organization no longer fills every batch.
+// Fairly across organizations (tech audit M2; internal/pgqueue fair.go):
+// each organization with deliveries waiting gets its share of the claim
+// first, its oldest due ones, then the rest of the batch goes to the oldest
+// due deliveries of anyone. A partner endpoint that hangs and piles up
+// retries for one organization does not fill every batch.
 func (s *PostgresStore) ClaimDue(ctx context.Context, limit int) ([]Delivery, error) {
 	tx, err := s.db.Begin(ctx)
 	if err != nil {

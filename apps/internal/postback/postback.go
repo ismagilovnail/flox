@@ -1,4 +1,4 @@
-// Package postback is Phase 24's outgoing postback engine (§46): it
+// Package postback is the outgoing postback engine (§46): it
 // delivers a macro-resolved URL to a network for every conversion
 // internal/conversion records, off the incoming postback request's
 // critical path (CLAUDE.md #9's spirit — never block on an outbound

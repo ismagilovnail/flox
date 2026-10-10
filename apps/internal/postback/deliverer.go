@@ -23,9 +23,9 @@ type HTTPClient interface {
 }
 
 // DefaultConcurrency is how many attempts of one claimed batch run at once.
-// One at a time, a partner endpoint that hangs held the whole batch for
-// attemptTimeout per delivery, and every other organization's postbacks
-// in it waited (tech audit 2026-10-06, M2).
+// One at a time, a partner endpoint that hangs would hold the whole batch
+// for attemptTimeout per delivery, and every other organization's
+// postbacks in it would wait (tech audit M2).
 const DefaultConcurrency = 10
 
 // Deliverer claims due deliveries and attempts them.
@@ -64,7 +64,7 @@ func (d *Deliverer) RunOnce(ctx context.Context, limit int) (int, error) {
 		}
 		if ctx.Err() != nil {
 			// Stopping: hand the rest of the claim back instead of leaving
-			// it 'processing' (audit 2026-10-06, Q1).
+			// it 'processing' (tech audit Q1).
 			d.release(ctx, deliveries[i:])
 			break
 		}

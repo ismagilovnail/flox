@@ -8,9 +8,8 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
-// Fair claiming (tech audit 2026-10-06, M2). A claim used to take the
-// oldest due rows of the whole table, so one organization flooding a queue
-// put every other organization's rows behind its backlog. Now a claim first
+// Fair claiming (tech audit M2): one organization flooding a queue must not
+// put every other organization's rows behind its backlog. A claim first
 // takes a share from each organization with rows waiting — up to
 // Quota(limit, n) of each one's oldest — and fills what is left of the
 // batch oldest-first from anyone, so spare capacity is never left idle.
@@ -22,8 +21,8 @@ import (
 // so with more organizations than that, every one gets its turn.
 //
 // Order within an organization stays oldest-first. Across organizations
-// there is no order — never was one for ClickHouse, whose aggregates do not
-// depend on it (audit Q3).
+// there is no order — ClickHouse's aggregates do not depend on it (tech
+// audit Q3).
 
 // Querier is the slice of pgx the skip scan needs.
 type Querier interface {

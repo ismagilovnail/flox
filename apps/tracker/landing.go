@@ -22,7 +22,7 @@ const landClickPath = "/lc/"
 
 // landingDecision is what track() does with a routed flow's landing
 // stage. The zero value means "no landing stage applies": redirect to the
-// destination exactly as before landings were served.
+// destination.
 type landingDecision struct {
 	externalURL string                    // redirect here instead of the destination
 	page        *routingstore.LandingPage // serve this internal landing

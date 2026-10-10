@@ -4,8 +4,8 @@
 // Every queue claims rows by flipping them to 'processing'. A worker that
 // dies between the claim and its delete/requeue (SIGKILL, OOM, a node
 // going away) leaves them there, and nothing else ever claims a
-// 'processing' row — before this package those events never reached
-// ClickHouse and those postbacks were never sent (audit 2026-10-06, Q1).
+// 'processing' row: without the reaper those events would never reach
+// ClickHouse and those postbacks never be sent (tech audit Q1).
 //
 // The reaper is the backstop, not the normal path: a clean shutdown
 // finishes or requeues its batch itself (see the flushers and

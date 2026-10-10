@@ -86,12 +86,12 @@ func (f *Flusher[T]) RunOnce(ctx context.Context, limit int) (int, error) {
 	}
 
 	// Once claimed, the batch is finished on a context the shutdown signal
-	// cannot cancel: cancelling the insert and then the requeue with it left
-	// the rows 'processing' forever on every deploy (audit 2026-10-06, Q1).
+	// cannot cancel: cancelling the insert and the requeue with it would
+	// leave the rows 'processing' on every deploy (tech audit Q1).
 	// PollLoop stops claiming new batches; this one completes or goes back.
 	insertCtx, cancelInsert := detached(ctx, insertTimeout)
 	// The batch's id makes the insert idempotent: a retry of a batch that
-	// partly or fully landed adds nothing (audit 2026-10-06, D2).
+	// partly or fully landed adds nothing (tech audit D2).
 	insertCtx = chstore.WithBatchID(insertCtx, claimed[0].BatchID)
 	insertStart := time.Now()
 	insertErr := f.cfg.Insert(insertCtx, batch)
@@ -105,7 +105,7 @@ func (f *Flusher[T]) RunOnce(ctx context.Context, limit int) (int, error) {
 
 	if insertErr != nil {
 		// Backoff on every failure; dead-letter only what the ClickHouse
-		// server itself keeps rejecting (audit 2026-10-06, Q2).
+		// server itself keeps rejecting (tech audit Q2).
 		rejected := chstore.Rejected(insertErr)
 		dead, failErr := f.consumer.Fail(cleanupCtx, ids, rejected, insertErr.Error())
 		switch {

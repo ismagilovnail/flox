@@ -30,10 +30,8 @@ import (
 // Conversion is the inbound claim: a CPA network telling us that a click it
 // received turned into something.
 //
-// It carries only what attribution needs to do its job. Phase 23 (§45) extends
-// this type with the money and deduplication fields — revenue, currency, the
-// network's transaction id — rather than redefining it, the same way
-// event.Event grows per phase.
+// It carries only what attribution needs; the money and deduplication fields
+// live on conversion.Postback (§45).
 type Conversion struct {
 	// OrganizationID scopes the lookup. It comes from the credential the
 	// postback authenticated with — the API key or the org-scoped postback
@@ -52,8 +50,8 @@ type Conversion struct {
 
 	// Status is the CPA status being reported. Attribution deliberately does
 	// not branch on it — a hold and a redeposit are attributed by exactly the
-	// same evidence — but it travels with the conversion because Phase 23's
-	// deduplication and progression rules need it.
+	// same evidence — but it travels with the conversion because the
+	// deduplication and progression rules (internal/conversion) need it.
 	Status event.Type
 
 	// OccurredAt is when the network says the conversion happened.
@@ -157,9 +155,9 @@ func (o Outcome) Attributed() bool { return o == OutcomeAttributed }
 //
 // An unattributed result is a first-class answer, not an error: the postback
 // was received, understood and recorded, and the conversion simply has no
-// click to hang on. Phase 23 stores it either way — an unattributed conversion
-// that is invisible is indistinguishable from one that never arrived, and
-// those need very different responses.
+// click to hang on. internal/conversion stores it either way: an
+// unattributed conversion that is invisible is indistinguishable from one
+// that never arrived, and those need very different responses.
 type Attribution struct {
 	Outcome Outcome
 	Method  Method

@@ -7,16 +7,8 @@ import (
 	"github.com/ismagilovnail/flox/apps/internal/event"
 )
 
-// LogSink is the honest default until the real pipeline exists (§43:
-// Tracker → Event Queue → Worker → ClickHouse; the worker is Phase 24 and
-// ClickHouse ingestion comes with it). It emits one structured log line
-// per event so the tracker is genuinely observable today, and makes no
-// pretence of durability — it is explicitly NOT a queue, and events are
-// gone when the process exits.
-//
-// Swapping in the durable queue producer later touches this file only:
-// the Writer, the tracker hot path, and the event model all stay as they
-// are, because they only ever see the Sink interface.
+// LogSink emits one structured log line per event. It is NOT durable:
+// events are gone when the process exits.
 type LogSink struct {
 	Logger *slog.Logger
 }
