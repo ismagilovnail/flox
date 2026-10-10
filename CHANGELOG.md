@@ -5,6 +5,14 @@ per-phase, matching `CLAUDE.md`'s phase protocol. The one exception is
 [Between phases], below: spec amendments and the code changes that follow from
 them land between phases and would otherwise be invisible here.
 
+## [Between phases] — Dead code removed, ROADMAP corrected
+
+- `apps/web/src/lib/mock/analytics.ts` deleted: nothing imported it since the filter popover
+  offers only real values. ROADMAP and `docs/analytics-report-api.md` no longer say it backs the
+  report builder.
+- `eventbuf.LogSink` deleted: unused since events go to the queue or the NATS stream.
+- The CQ1 entry's "found on the way" note is resolved by this.
+
 ## [Between phases] — Comments state invariants, not history (tech audit CQ1)
 
 The last open item of the tech audit.

@@ -37,10 +37,8 @@ Request/response shapes: `apps/internal/analytics/handler.go`'s
 
 ## `dimension-values`: real filter-value suggestions, not a fixed mock pool
 
-Closes a gap this doc's own "Frontend integration" section used to flag:
-`dimensionValues()` (`lib/mock/analytics.ts`) was the *only* source the
-report builder's filter popover had for suggesting values to filter
-on — a fixed, hand-written list, never the real data. `chstore.
+The report builder's filter popover suggests values that really occur.
+`chstore.
 EventStore.DistinctValues` answers "what values has this dimension
 actually taken" against `click_events` (never `conversion_events` — every
 backed dimension already has a column there, the wider whitelist, and a
@@ -60,10 +58,9 @@ dimensions (`postlanding`/`network`) 400s, same
 as `/analytics/report` already does for one. The frontend's
 `useDimensionValues` hook (`retry: false` — a 400 here is deterministic,
 not transient) treats that rejection as expected, not an error to
-surface: `AddFilterPopover` (`report-controls.tsx`) falls back to
-`lib/mock/analytics.ts`'s pool for those 2, and also as the query's own
-brief loading-state placeholder for the 15 real ones. A *successful*
-response wins outright the moment it lands, even when empty (a brand-new
+surface: `AddFilterPopover` (`report-controls.tsx`) then offers no value
+and disables "Add filter" — while loading too. A *successful*
+response is used as is, even when empty (a brand-new
 organization with no real events yet) — CLAUDE.md #6's "no fabricated
 data" bar applies here the same way it does to cost: a genuine "nothing
 yet" must render as nothing, never as a plausible-looking placeholder
@@ -326,14 +323,9 @@ one), `reportpresets` (round trip).
   view's own default until Report Presets gets its own integration phase.
   Documented here rather than silently reconciled, since fixing it means
   deciding what "now" means for a feature this phase didn't touch.
-- ~~`dimensionValues()` (`lib/mock/analytics.ts`) still backs the filter
-  popover's value dropdown — no "distinct values seen for dimension X"
-  endpoint exists~~ — closed, see `dimension-values` above.
-  `lib/mock/analytics.ts` still backs the loading-state placeholder and
-  the 2 still-unbacked dimensions. Filtering by an arbitrary value still
-  round-trips to the real API correctly regardless of its source; a
-  value that never occurs in real event data just yields a legitimate
-  empty report, not an error.
+- ~~The filter popover's values came from a fixed mock pool~~ — closed,
+  see `dimension-values` above; the mock (`lib/mock/analytics.ts`) is
+  deleted.
 - `TopCampaigns`/`TopFlows` display the raw `campaign_id`/`flow_id` as
   both `id` and `name` — `chstore`'s dimension whitelist resolves to those
   raw ID columns, no name join exists yet. Honest but not pretty; a real

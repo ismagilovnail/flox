@@ -60,10 +60,8 @@ Statuses below were re-verified against the tree during the 2026-09-05 audit
 Phases 2–14.9 were built frontend-first against mock contracts, as §83
 requires. Phase 34's audit found seven of those had never been taken through
 a backend-integration phase; every one has since been closed (see the second
-table). No feature in `apps/web` reads mock data today — the two files left
-under `lib/mock/` are the role/permission vocabulary (`team.ts`) and the
-report builder's filter-value suggestion pool (`analytics.ts`, a real
-documented gap, below).
+table). No feature in `apps/web` reads mock data today — the one file left under
+`lib/mock/` is the role/permission vocabulary (`team.ts`).
 
 ## Post-34, user-scoped
 
