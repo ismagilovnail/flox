@@ -5,6 +5,26 @@ per-phase, matching `CLAUDE.md`'s phase protocol. The one exception is
 [Between phases], below: spec amendments and the code changes that follow from
 them land between phases and would otherwise be invisible here.
 
+## [Between phases] — Tech audit §16: cross-tenant route walk, slow Postgres
+
+Two of the three tests the audit's §16 still lacked; the third, a load test in the target
+network, needs production-like infrastructure.
+
+- `api/tenant_isolation_routes_test.go`: the real router (`chi.Walk`), signed in as
+  organization A's owner, calls every route with a path parameter using organization B's ids —
+  and nested routes with A's parent and B's child. Each answer must equal the answer for an id
+  that exists nowhere (no existence oracle), show none of B's ids, and leave every B row in every
+  table with `organization_id` unchanged; list routes must not show B's ids. A new
+  parameterised route fails the test until its resource kind is seeded. Verified by removing
+  the org filter from the tag delete: caught twice (different answer, changed row).
+- `apps/api/main.go`: `buildServer` (stores and every route) split from `run`, so the test
+  walks exactly what production serves.
+- `metrics.RegisterPgxPool` replaces an earlier pool of the same service instead of panicking.
+- `tracker/pg_latency_test.go`: a TCP proxy holds every Postgres reply 5 s; 200 clicks on a
+  known link stay at p95 ≤ 50 ms from the routing cache, an unknown link fails at
+  `LoadTimeout`.
+- Audit document: §16 at 10 of 11, Testing 6 → 7, total 72 → 73.
+
 ## [Between phases] — Postback refusal limit, tech audit statuses
 
 Closes tech audit P4 and brings the audit document up to date.
