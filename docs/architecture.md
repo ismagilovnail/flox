@@ -248,6 +248,10 @@ accepted into a channel nobody reads. §43's durable queue and its ClickHouse
 consumer arrive with `apps/worker` (Phase 24); until then the sink is an
 honest structured-log writer behind the same `Sink` interface.
 
+Since 2026-10-10 the sink is NATS JetStream when `NATS_URL` is set, with
+the Postgres queue as fallback; conversions stay in Postgres
+(`docs/event-stream.md`).
+
 ### Tracking links resolve by host + slug
 
 `tracking_links` is unique on `(domain_id, slug)`, so a slug is

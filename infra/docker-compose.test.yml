@@ -99,6 +99,21 @@ services:
       timeout: 5s
       retries: 10
 
+  nats:
+    image: nats:2.10-alpine
+    # JetStream on, stored on the volume; :8222 serves /healthz and the
+    # monitoring endpoints. The tracker's event stream (internal/eventstream).
+    command: ["-js", "-sd", "/data", "-m", "8222"]
+    ports:
+      - "4223:4222" # offset from dev's 4222
+    volumes:
+      - nats_test_data:/data
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8222/healthz?js-enabled-only=true"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
   minio:
     image: minio/minio:latest
     command: server /data --console-address ":9001"
@@ -198,12 +213,15 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      nats:
+        condition: service_healthy
     environment:
       DATABASE_URL: postgres://flox:flox@postgres:5432/flox?sslmode=disable
       CLICKHOUSE_URL: http://clickhouse:8123
       CLICKHOUSE_DATABASE: flox
       CLICKHOUSE_USER: flox
       CLICKHOUSE_PASSWORD: ""
+      NATS_URL: nats://nats:4222
       REDIS_URL: redis://redis:6379/0
       # Internal landings (docs/landings.md, "Serving visitors"): the
       # click-link signing key (dev-only value, matches .env.example), and
@@ -232,12 +250,15 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      nats:
+        condition: service_healthy
     environment:
       DATABASE_URL: postgres://flox:flox@postgres:5432/flox?sslmode=disable
       CLICKHOUSE_URL: http://clickhouse:8123
       CLICKHOUSE_DATABASE: flox
       CLICKHOUSE_USER: flox
       CLICKHOUSE_PASSWORD: ""
+      NATS_URL: nats://nats:4222
       ADACCOUNT_ENCRYPTION_KEY: "KatbgYl+Kd4KPI5T0hKfwZRYsij/t7g7fVomXdjhW/c="
       # Same dev-only value as the api's: alerts read the Slack webhook
       # apps/api encrypted (internal/alert).
@@ -299,5 +320,6 @@ volumes:
   postgres_test_data:
   clickhouse_test_data:
   redis_test_data:
+  nats_test_data:
   minio_test_data:
   backup_test_drill:

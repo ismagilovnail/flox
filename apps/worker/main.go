@@ -68,6 +68,7 @@ import (
 	"github.com/ismagilovnail/flox/apps/internal/domain/tlsprobe"
 	"github.com/ismagilovnail/flox/apps/internal/errtrack"
 	"github.com/ismagilovnail/flox/apps/internal/eventqueue"
+	"github.com/ismagilovnail/flox/apps/internal/eventstream"
 	"github.com/ismagilovnail/flox/apps/internal/fx"
 	"github.com/ismagilovnail/flox/apps/internal/fx/ecb"
 	"github.com/ismagilovnail/flox/apps/internal/integrations"
@@ -354,6 +355,31 @@ func run() error {
 
 	logger.Info("ad spend sync scheduler starting", "interval", costSyncInterval)
 	start(func() { costSyncScheduler.RunLoop(ctx, costSyncInterval) })
+
+	// The JetStream event stream (internal/eventstream), when configured:
+	// tracker events arrive there; event_queue above still carries
+	// conversions and whatever the tracker could not publish. The
+	// topology is retried in the background so a NATS outage at start
+	// delays only this loop.
+	if cfg.NATSURL != "" {
+		nc, js, err := eventstream.Connect(cfg.NATSURL, "flox-worker", logger)
+		if err != nil {
+			logger.Error("nats connection failed", "error", err)
+			return err
+		}
+		defer nc.Close()
+		start(func() {
+			cons, err := eventstream.EnsureTopologyLoop(ctx, js, eventstream.Topology{Replicas: cfg.NATSStreamReplicas}, logger)
+			if err != nil {
+				return
+			}
+			logger.Info("nats event stream consumer starting", "stream", eventstream.StreamName, "consumer", eventstream.ConsumerName)
+			go eventstream.PollPending(ctx, cons, queueDepthPollInterval, logger)
+			eventstream.NewConsumer(cons, chEvents, eventQueue, eventstream.ConsumerConfig{}, logger).Run(ctx)
+		})
+	} else {
+		logger.Warn("NATS_URL not set, events arrive through the postgres event_queue only")
+	}
 
 	logger.Info("event queue depth poller starting", "interval", queueDepthPollInterval)
 	start(func() { eventqueue.PollDepth(ctx, eventQueue, metrics.EventQueueDepth, queueDepthPollInterval, logger) })

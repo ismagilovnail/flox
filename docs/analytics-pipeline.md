@@ -240,6 +240,12 @@ the multiplication makes that exact rather than approximate.
 
 ## The queue: `event_queue` (Postgres) — unchanged since Phase 25
 
+> Since 2026-10-10, with `NATS_URL` set, the tracker's events travel
+> through NATS JetStream instead, and `event_queue` carries conversions,
+> the tracker's fallback and batches the stream gave up on
+> (`docs/event-stream.md`). Everything below still describes
+> `event_queue` itself.
+
 STACK has no message broker, so the queue in "Tracker -> Event Queue ->
 Worker -> ClickHouse" is Postgres — the same `FOR UPDATE SKIP LOCKED`
 job-queue pattern `postback_deliveries` (Phase 24) established. A row is

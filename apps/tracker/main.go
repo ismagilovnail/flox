@@ -29,6 +29,7 @@ import (
 	"github.com/ismagilovnail/flox/apps/internal/errtrack"
 	"github.com/ismagilovnail/flox/apps/internal/eventbuf"
 	"github.com/ismagilovnail/flox/apps/internal/eventqueue"
+	"github.com/ismagilovnail/flox/apps/internal/eventstream"
 	"github.com/ismagilovnail/flox/apps/internal/landinglink"
 	"github.com/ismagilovnail/flox/apps/internal/logging"
 	"github.com/ismagilovnail/flox/apps/internal/metrics"
@@ -120,7 +121,29 @@ func run() error {
 	// replaces the structured-log stand-in this used through Phase 24 —
 	// exactly the one-line swap that design promised, because everything
 	// upstream only ever sees the eventbuf.Sink interface.
-	events := eventbuf.New(eventqueue.NewSink(eventqueue.NewPostgresQueue(db)), logger, eventbuf.Config{})
+	//
+	// With NATS_URL set, events go to the JetStream stream instead and the
+	// queue only takes what NATS refuses (internal/eventstream). The
+	// connection opens first so it closes after the buffer's final flush.
+	var sink eventbuf.Sink = eventqueue.NewSink(eventqueue.NewPostgresQueue(db))
+	if cfg.NATSURL != "" {
+		nc, js, err := eventstream.Connect(cfg.NATSURL, "flox-tracker", logger)
+		if err != nil {
+			logger.Error("nats connection failed", "error", err)
+			return err
+		}
+		defer nc.Close()
+		topology := eventstream.Topology{Replicas: cfg.NATSStreamReplicas}
+		go func() {
+			if _, err := eventstream.EnsureTopologyLoop(ctx, js, topology, logger); err == nil {
+				logger.Info("nats event stream ready", "stream", eventstream.StreamName)
+			}
+		}()
+		sink = eventstream.NewSink(js, topology, sink, logger)
+	} else {
+		logger.Warn("NATS_URL not set, events go through the postgres event_queue")
+	}
+	events := eventbuf.New(sink, logger, eventbuf.Config{})
 	defer events.Close()
 	metrics.RegisterEventBufStats(events)
 

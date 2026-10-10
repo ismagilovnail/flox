@@ -5,6 +5,36 @@ per-phase, matching `CLAUDE.md`'s phase protocol. The one exception is
 [Between phases], below: spec amendments and the code changes that follow from
 them land between phases and would otherwise be invisible here.
 
+## [Between phases] — tracker events through NATS JetStream (audit: broker, Stage 3)
+
+- New `internal/eventstream`: with `NATS_URL` set the tracker publishes its buffered events to
+  the JetStream stream `FLOX_EVENTS` and the worker writes them to ClickHouse; the Postgres
+  `event_queue` keeps conversions (one transaction with the postback, CLAUDE.md #3), the
+  tracker's fallback and batches the stream gave up on. Without `NATS_URL` nothing changes.
+- Exactly once in ClickHouse: one message = one tracker batch (≤ 512 KB) with
+  `Nats-Msg-Id = <first event id>-<count>` (deterministic split, so retries reuse ids; JetStream
+  10-min duplicate window), and each message is its own insert under the dedup token
+  `nats:<id>` (audit D2).
+- Failures: certainly-refused publishes (NATS down, never connected, no stream, stream full)
+  go to Postgres at once; unanswered ones retry on NATS only for 30 s, then Postgres. A
+  message ClickHouse rejects 10 times moves to `event_queue` (split + dead-letter there).
+  Work-queue retention, discard-new, 10 GB / 7 days, replicas `NATS_STREAM_REPLICAS`.
+- Dev/test compose: `nats:2.10-alpine` with JetStream (ports 4222 / 4223). Metrics
+  `flox_eventstream_*`; five alerts (`promtool`: 31 rules OK). `docs/event-stream.md`;
+  architecture, analytics-pipeline, deployment, environment, performance, audit, CLAUDE.md
+  STACK updated.
+
+Tests (real NATS, own stream per test): every event once in ClickHouse with a republished
+batch deduplicated by the stream; a failed insert redelivered; 10 failures hand off to
+Postgres and ack; missing stream and NATS down fall back to Postgres immediately; split is
+deterministic and bounded; error classification; unknown outcomes never fall back within the
+grace. Mutation check: a non-deterministic message id fails the split and dedup tests.
+Found while testing: before the first connect, a publish fails with "headers not supported" —
+now treated as refused (it was being held for NATS). Full Go suite with full env + NATS_URL;
+e2e `TestFullFunnel` passes through NATS (tracker published 180, worker consumed 180).
+Load (60 s steps, counted in ClickHouse): 8k–20k/s no loss, Postgres 0–0.5% CPU (was 100% at
+8k/s); 25k/s 0.22% dropped — the tracker's flush loop.
+
 ## [Between phases] — end-to-end load test: no loss to 8k clicks/s, drops at 12k/s
 
 - vegeta against the docker tracker, each click followed into ClickHouse after the queue

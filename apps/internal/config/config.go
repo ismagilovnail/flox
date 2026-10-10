@@ -143,6 +143,13 @@ type Config struct {
 	ClickHouse  ClickHouseConfig
 	RedisURL    string
 	S3          S3Config
+
+	// NATSURL turns on the JetStream event stream (internal/eventstream):
+	// the tracker publishes its events there and the worker writes them to
+	// ClickHouse. Unset, events go through the Postgres event_queue as
+	// before. NATSStreamReplicas: 1 for a single server, 3 in a cluster.
+	NATSURL            string
+	NATSStreamReplicas int
 }
 
 type ClickHouseConfig struct {
@@ -241,6 +248,10 @@ func load(portVar, portDefault, defaultServiceName string, ch chLimits) (Config,
 	if err != nil {
 		return Config{}, err
 	}
+	natsReplicas, err := parseNonNegative("NATS_STREAM_REPLICAS", 1)
+	if err != nil {
+		return Config{}, err
+	}
 
 	return Config{
 		Env:      getEnv("NODE_ENV", "development"),
@@ -284,6 +295,9 @@ func load(portVar, portDefault, defaultServiceName string, ch chLimits) (Config,
 			MaxMemoryUsage:   int64(memory),
 		},
 		RedisURL: getEnv("REDIS_URL", ""),
+
+		NATSURL:            getEnv("NATS_URL", ""),
+		NATSStreamReplicas: natsReplicas,
 		S3: S3Config{
 			Endpoint:        getEnv("S3_ENDPOINT", ""),
 			Region:          getEnv("S3_REGION", ""),

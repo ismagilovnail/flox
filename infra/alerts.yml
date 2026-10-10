@@ -113,6 +113,63 @@ groups:
           summary: "Postgres event_queue backlog is growing"
           description: "flox_event_queue_depth has been above 10,000 for 10m — apps/worker's flush loop is falling behind. Events are not yet lost (still durable in Postgres) but analytics/attribution are increasingly stale until this drains."
 
+      - alert: EventStreamFallingBackToPostgres
+        # internal/eventstream: NATS refused the tracker's events (down,
+        # stream missing or full) and they went to Postgres event_queue
+        # instead. Nothing is lost, but Postgres carries the click load again
+        # — the ceiling the stream exists to remove (docs/event-stream.md).
+        expr: rate(flox_eventstream_fallback_total[5m]) > 0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "apps/tracker is writing events to Postgres because NATS refuses them"
+          description: "flox_eventstream_fallback_total has been increasing for 5m. Check NATS health, the FLOX_EVENTS stream (nats stream info FLOX_EVENTS) and whether it is full (max bytes)."
+
+      - alert: EventStreamPublishUnanswered
+        # A publish without an answer is retried on NATS only, so a maybe-
+        # stored message is not also written to Postgres; events wait in
+        # the tracker's buffer meanwhile (30s grace, then Postgres).
+        expr: rate(flox_eventstream_publish_errors_total{kind="unknown"}[5m]) > 0
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "NATS is not answering the tracker's publishes"
+          description: "flox_eventstream_publish_errors_total{kind=\"unknown\"} has been increasing for 2m — publishes time out. Events wait in apps/tracker's buffer; once it fills they are dropped (EventLossDetected)."
+
+      - alert: EventStreamBacklogGrowing
+        # One message is one tracker batch (up to 500 events): a thousand
+        # pending messages is up to half a million events not yet in
+        # ClickHouse. The 2026-10-10 load test never saw more than 11.
+        expr: flox_eventstream_pending_messages > 1000
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "NATS event stream backlog is growing"
+          description: "flox_eventstream_pending_messages has been above 1,000 for 10m — apps/worker is not keeping up or ClickHouse is failing. Events are durable in JetStream (until the stream's max age, 7 days) but analytics are stale."
+
+      - alert: EventStreamHandedOffToPostgres
+        # ClickHouse rejected a message 10 deliveries in a row; the worker
+        # moved its events to event_queue, whose flusher splits the batch
+        # and dead-letters the bad event (QueueBatchesDeadLettered).
+        expr: increase(flox_eventstream_handed_off_total[15m]) > 0
+        labels:
+          severity: warning
+        annotations:
+          summary: "ClickHouse keeps rejecting a NATS event batch"
+          description: "flox_eventstream_handed_off_total increased — a batch failed 10 times and moved to Postgres event_queue. Check apps/worker logs for the ClickHouse error."
+
+      - alert: EventStreamUndecodableMessages
+        # Not an event batch at all: terminated, its events (if any) lost.
+        expr: increase(flox_eventstream_undecodable_total[15m]) > 0
+        labels:
+          severity: critical
+        annotations:
+          summary: "The NATS event stream carried messages that are not event batches"
+          description: "flox_eventstream_undecodable_total increased — something other than apps/tracker publishes to flox.events, or a tracker and worker version disagree on the format. Those messages were dropped."
+
   - name: flox.infra
     rules:
       - alert: ConversionsDiverge

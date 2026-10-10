@@ -204,6 +204,18 @@ the most recently used keys and stay. Any `volatile-*` policy also works
 `maxmemory`; managed Redis that disables `CONFIG` logs it as unverified
 instead — check the provider's parameter group by hand then.
 
+### NATS JetStream (event stream)
+
+With `NATS_URL` set the tracker publishes its events to the
+`FLOX_EVENTS` stream and the worker writes them to ClickHouse
+(`docs/event-stream.md`). Production: a JetStream cluster of 3 servers,
+each with a persistent volume (the stream is file-backed, up to 10 GB),
+and `NATS_STREAM_REPLICAS=3`. The stream and consumer are created by the
+binaries themselves. A NATS outage loses nothing: the tracker falls back
+to Postgres `event_queue`, the worker reads both. Monitor the server at
+`:8222` (or prometheus-nats-exporter) besides FLOX's own
+`flox_eventstream_*` metrics.
+
 ## Monitoring and alerting
 
 `docs/observability.md` (Phase 29) already covers the nine tracked

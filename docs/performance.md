@@ -188,7 +188,13 @@ batches of 500, one `INSERT … ON CONFLICT` per event in a pgx batch, written
 one batch after another. The worker was nearly idle. Redirects themselves
 stayed fast (p99 3.5 ms); only the analytics row was lost.
 
-**So:** one tracker on one Postgres keeps every click up to ~8k/s
+**Follow-up:** the same day the tracker's events moved to NATS JetStream
+(`docs/event-stream.md`): one tracker then carried 20k/s (1.2M/min) with no
+loss and Postgres idle; at 25k/s it dropped 0.22%, its own flush loop the
+limit. The table above is the Postgres-queue path, still used without
+`NATS_URL`.
+
+**So (Postgres queue):** one tracker on one Postgres keeps every click up to ~8k/s
 (~480k/min) on this machine; the safe planning figure is lower — a cloud
 Postgres adds network round trips to each batch, and real traffic is
 bursty. Before a broker, the cheap steps are `COPY` into `event_queue`,

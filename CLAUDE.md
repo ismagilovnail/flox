@@ -43,9 +43,11 @@ STATUS        : marketer audit closed (#1–#12, #13 platform limit). Tech audit
                 changes), R2 (Redis maxmemory + allkeys-lru in compose, startup
                 check; prod Redis config at deploy), end-to-end load test (no
                 loss to 8k clicks/s; drops at 12k/s — the tracker's serial
-                writer into event_queue). Left: broker (Stage 3; being
-                discussed), DO3 (needs target platform).
-LAST COMMIT   : docs(perf): end-to-end load test.
+                writer into event_queue), NATS JetStream event stream (one
+                tracker: 20k clicks/s no loss, Postgres idle; PG fallback;
+                conversions stay in PG). NEXT PHASE: DO3 — Kubernetes
+                deployment (the user asked for it, 2026-10-10).
+LAST COMMIT   : feat(events): tracker events through NATS JetStream.
 UNCOMMITTED   : none expected. Dev DB fresh from `make dev-fresh CONFIRM=yes`
                 (password flox-demo-2026); `make dev-status` shows what is in it.
 NEXT          : wait for the user — the next phase. CI (DO1) is the user's own
@@ -108,7 +110,8 @@ slog/zerolog · OpenTelemetry.
 
 **Data:** PostgreSQL (control plane) · ClickHouse (high-volume events + analytics)
 · Redis (cache, rate limits, sticky CACHE only, postback dedup) · S3-compatible
-object storage.
+object storage · NATS JetStream (tracker events → worker; conversions stay in
+the Postgres queue — docs/event-stream.md).
 
 **Architecture:** modular monolith. `apps/tracker` and `apps/worker` are separate
 binaries inside the same Go module, sharing `internal/routing` and

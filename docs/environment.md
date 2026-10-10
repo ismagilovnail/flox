@@ -115,6 +115,16 @@ a reason to leave it unauthenticated on a real network.
 It also needs `maxmemory` and an evicting policy (`allkeys-lru`) —
 `docs/deployment.md`, "Redis memory".
 
+### NATS
+
+`NATS_URL` (tracker, worker) — the JetStream event stream
+(`docs/event-stream.md`). Dev/test compose: `nats://nats:4222`; from the
+host `nats://localhost:4222` (test: `4223`). Unset: events go through the
+Postgres `event_queue` as before. Production: the cluster's client URL,
+with credentials (`nats://user:pass@host:4222`) if the server requires
+them. `NATS_STREAM_REPLICAS` — stream replicas, `1` (default) for a single
+server, `3` in a cluster.
+
 ### S3-compatible object storage
 
 Content Gallery files (`apps/internal/storage`; `apps/api` creates the
