@@ -21,8 +21,8 @@ referenced below as §N).
 ```
 CURRENT PHASE : AUDIT FOLLOW-UPS (between phases)
 STATUS        : marketer audit closed (#1–#12, #13 platform limit). Tech audit:
-                P0/P1 done except DO1 (CI, the user's call); AN1 marked partial
-                in the audit. P2 done: T5 (signed sticky cookies,
+                P0/P1 done except DO1 (CI, the user's call); AN1 closed
+                (late FX rates rewrite ClickHouse for any date). P2 done: T5 (signed sticky cookies,
                 STICKY_COOKIE_KEY required by the tracker), API1, outbound
                 timeouts, CH3/DB2 (only logs expire — owner's decision,
                 docs/retention.md), CH4 (query limits per binary, cancel on
@@ -35,7 +35,7 @@ STATUS        : marketer audit closed (#1–#12, #13 platform limit). Tech audit
                 per-account sign-in limit), DB3 (queue autovacuum), CH5
                 (versioned CH migrations under a PG advisory lock), RL5
                 (server timeouts), M1 done.
-LAST COMMIT   : feat(clickhouse): versioned migrations; queue vacuum and server timeouts.
+LAST COMMIT   : feat(fx): late rates rewrite the ClickHouse copy for any date.
 UNCOMMITTED   : none expected. Dev DB fresh from `make dev-fresh CONFIRM=yes`
                 (password flox-demo-2026); `make dev-status` shows what is in it.
 NEXT          : wait for the user — the next phase. CI (DO1) is the user's own

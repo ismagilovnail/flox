@@ -32,7 +32,9 @@ or 90 days on an empty table. Rates are upserted by `(currency, rate_date)`.
 
 The latest rate published **on or before** the event's UTC date, at most
 `fx.MaxStaleDays` (7) old — the same rule in `conversion.PostgresFX` (new
-conversions and cost entries) and in the repair below. Weekends and
+conversions and cost entries) and in the repair below. For a conversion the
+event's date is `event_at`: the network's `event_time` when it sent one
+(`docs/conversion.md`), else when the postback arrived. Weekends and
 holidays use the last fixing; an event before today's fixing uses
 yesterday's. Never a later rate, never today's rate for a past event.
 
@@ -40,16 +42,28 @@ yesterday's. Never a later rate, never today's rate for a past event.
 
 After each sync, `fx.Store.RepairUSD` fills `postbacks.usd_value` and
 `cost_entries.amount_usd` that are NULL and now have a rate (an event that
-arrived before the first sync, or while the provider was down).
+arrived before the first sync, or while the provider was down). A decline
+that reversed an accept which had no USD value yet (`reversal_usd_value`
+NULL, `docs/conversion.md` "Chargebacks") takes the accept's repaired
+value, so the two still net to zero.
 
 Costs are read from Postgres only, so ROI is right as soon as the repair
-runs. **The ClickHouse copy of a conversion (`conversion_events`, and the
-`ltv_events` / `conversion_events_daily_campaign` views built from it) is
-not repaired by this step** — it keeps `has_usd_value = 0` until the
-reconciliation sees the bucket's USD sum differ and rewrites the event from
-Postgres (`docs/analytics-pipeline.md`, "Reconciliation"). The worker does
-that for the last 3 days every hour; for older days run
-`make reconcile FROM=… TO=…` once the rates are in.
+runs. Conversions are summed from their ClickHouse copy
+(`conversion_events`, and the `ltv_events` / `conversion_events_daily_campaign`
+views built from it), so `RepairUSD` also returns the buckets
+(organization, UTC day, status) whose USD values changed, and the worker
+rewrites exactly those from Postgres right after
+(`reconcile.Reconciler.RepairBuckets` — the reconciliation's own repair,
+`docs/analytics-pipeline.md`). That works for any date, not only the
+hourly reconciliation's last 3 days (tech audit AN1).
+
+Two gaps, both caught by `make reconcile FROM=… TO=…`:
+
+- if the ClickHouse rewrite fails (ClickHouse down during the sync), the
+  next sync has nothing left to repair in Postgres and does not retry it;
+  the hourly reconciliation still covers the last 3 days;
+- a bucket with more than `reconcile.MaxRepairsPerRun` (1000) conversions
+  to rewrite is skipped and logged at error level.
 
 ## Monitoring
 

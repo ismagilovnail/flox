@@ -361,12 +361,6 @@ func run() error {
 	// 2026-10-06, §14) — depth alone misses a small stalled queue.
 	start(func() { queuestats.Poll(ctx, db, queueDepthPollInterval, logger) })
 
-	if fxProvider != nil {
-		fxSyncer := fx.NewSyncer(fxProvider, fx.NewStore(db), logger)
-		logger.Info("fx rate sync starting", "provider", cfg.FXProvider, "interval", fxSyncInterval)
-		start(func() { fxSyncer.RunLoop(ctx, fxSyncInterval) })
-	}
-
 	// Postgres postbacks vs ClickHouse conversion_events, hourly over the
 	// last 3 days (internal/reconcile): every lost, duplicated or mis-summed
 	// conversion shows up in flox_reconciliation_mismatched_buckets.
@@ -375,6 +369,22 @@ func run() error {
 	start(func() {
 		reconciler.RunLoop(ctx, reconcileInterval, reconcile.Window{Lookback: 72 * time.Hour, Settle: 30 * time.Minute})
 	})
+
+	if fxProvider != nil {
+		// USD values filled in after the fact are rewritten in ClickHouse
+		// for whatever day they belong to (tech audit AN1, docs/fx.md).
+		fxSyncer := fx.NewSyncer(fxProvider, fx.NewStore(db), logger).
+			OnRepaired(func(ctx context.Context, buckets []fx.Bucket) error {
+				bs := make([]reconcile.Bucket, len(buckets))
+				for i, b := range buckets {
+					bs[i] = reconcile.Bucket{OrganizationID: b.OrganizationID, Day: b.Day, Status: b.Status}
+				}
+				_, err := reconciler.RepairBuckets(ctx, bs)
+				return err
+			})
+		logger.Info("fx rate sync starting", "provider", cfg.FXProvider, "interval", fxSyncInterval)
+		start(func() { fxSyncer.RunLoop(ctx, fxSyncInterval) })
+	}
 
 	// unknown_click conversions whose click was not in ClickHouse yet: looked
 	// up again for ~7 hours, then rewritten in Postgres and ClickHouse

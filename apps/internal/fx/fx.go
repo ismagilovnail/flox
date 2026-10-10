@@ -21,8 +21,10 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"sort"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/ismagilovnail/flox/apps/internal/metrics"
@@ -70,7 +72,7 @@ func (s *Store) OldestMissingDate(ctx context.Context) (time.Time, bool, error) 
 	var d *time.Time
 	err := s.db.QueryRow(ctx, `
 		SELECT least(
-		  (SELECT min((created_at AT TIME ZONE 'UTC')::date) FROM postbacks
+		  (SELECT min((event_at AT TIME ZONE 'UTC')::date) FROM postbacks
 		   WHERE usd_value IS NULL AND revenue IS NOT NULL AND currency <> ''),
 		  (SELECT min(entry_date) FROM cost_entries WHERE amount_usd IS NULL))`,
 	).Scan(&d)
@@ -110,39 +112,102 @@ func (s *Store) Upsert(ctx context.Context, rates []Rate) error {
 type Repaired struct {
 	Postbacks   int64
 	CostEntries int64
+	// Reversals counts declines whose chargeback got its USD value from
+	// the accept they reverse, now that the accept has one.
+	Reversals int64
+	// Buckets are the recorded conversions whose USD value changed, by
+	// (organization, UTC day, status) — what the ClickHouse copy must be
+	// rewritten for (Syncer.OnRepaired).
+	Buckets []Bucket
+}
+
+// Bucket is one (organization, UTC day of event_at, status) slice of
+// recorded conversions — the reconciliation's bucket.
+type Bucket struct {
+	OrganizationID string
+	Day            string // YYYY-MM-DD
+	Status         string
 }
 
 // RepairUSD fills USD values that are NULL and now have a rate, using the
-// same lookup rule as conversion.PostgresFX. Rows in a currency no provider
-// publishes stay NULL — "no rate" is never turned into zero.
+// same lookup rule as conversion.PostgresFX — by the conversion's event
+// time (event_at; the network's event_time when it sent one), as the live
+// path does. Rows in a currency no provider publishes stay NULL — "no rate"
+// is never turned into zero.
 //
-// Only Postgres is repaired. The ClickHouse copy of a conversion keeps
-// has_usd_value = 0 (repairing it is an open follow-up, docs/fx.md); costs
-// are read from Postgres only, so ROI is correct as soon as this runs.
+// A decline that reversed an accept with no USD value yet has a NULL
+// reversal_usd_value; once the accept is repaired the reversal takes the
+// same value, so the two still net to zero.
+//
+// Costs are read from Postgres only, so ROI is correct as soon as this
+// runs. Conversions are also summed from their ClickHouse copy, which this
+// does not touch: Buckets says which ones to rewrite.
 func (s *Store) RepairUSD(ctx context.Context) (Repaired, error) {
 	var out Repaired
-	tag, err := s.db.Exec(ctx, `
+	buckets := map[Bucket]bool{}
+	collect := func(rows pgx.Rows) (int64, error) {
+		defer rows.Close()
+		var n int64
+		for rows.Next() {
+			var b Bucket
+			var counts bool
+			if err := rows.Scan(&b.OrganizationID, &b.Day, &b.Status, &counts); err != nil {
+				return n, err
+			}
+			n++
+			if counts {
+				buckets[b] = true
+			}
+		}
+		return n, rows.Err()
+	}
+	// counts: only recorded incoming conversions have a ClickHouse copy.
+	const returning = `
+		RETURNING p.organization_id, to_char(p.event_at AT TIME ZONE 'UTC', 'YYYY-MM-DD'), p.status,
+		          p.result = 'success' AND p.direction = 'incoming'`
+
+	rows, err := s.db.Query(ctx, `
 		UPDATE postbacks p
 		SET usd_value = round(p.revenue * x.rate_to_usd, 4)
 		FROM (
 		  SELECT m.id, CASE WHEN upper(m.currency) = 'USD' THEN 1::numeric ELSE (
 		    SELECT rate_to_usd FROM fx_rates
 		    WHERE currency = upper(m.currency)
-		      AND rate_date <= (m.created_at AT TIME ZONE 'UTC')::date
-		      AND rate_date >  (m.created_at AT TIME ZONE 'UTC')::date - $1::int
+		      AND rate_date <= (m.event_at AT TIME ZONE 'UTC')::date
+		      AND rate_date >  (m.event_at AT TIME ZONE 'UTC')::date - $1::int
 		    ORDER BY rate_date DESC LIMIT 1) END AS rate_to_usd
 		  FROM postbacks m
 		  WHERE m.usd_value IS NULL AND m.revenue IS NOT NULL AND m.currency <> ''
 		) x
-		WHERE p.id = x.id AND x.rate_to_usd IS NOT NULL`,
+		WHERE p.id = x.id AND x.rate_to_usd IS NOT NULL`+returning,
 		MaxStaleDays,
 	)
 	if err != nil {
 		return out, fmt.Errorf("fx: repairing postbacks usd_value: %w", err)
 	}
-	out.Postbacks = tag.RowsAffected()
+	if out.Postbacks, err = collect(rows); err != nil {
+		return out, fmt.Errorf("fx: repairing postbacks usd_value: %w", err)
+	}
 
-	tag, err = s.db.Exec(ctx, `
+	// The accept a decline reversed is the click's recorded CPA_ACCEPT
+	// (one per click: the dedup key) — the value the record path copied.
+	rows, err = s.db.Query(ctx, `
+		UPDATE postbacks p
+		SET reversal_usd_value = a.usd_value
+		FROM postbacks a
+		WHERE p.reversal_revenue IS NOT NULL AND p.reversal_usd_value IS NULL
+		  AND p.result = 'success' AND p.status IN ('CPA_DECLINE', 'CPA_TRASH')
+		  AND a.organization_id = p.organization_id AND a.click_id = p.click_id
+		  AND a.status = 'CPA_ACCEPT' AND a.result = 'success' AND a.direction = 'incoming'
+		  AND a.usd_value IS NOT NULL`+returning)
+	if err != nil {
+		return out, fmt.Errorf("fx: repairing postbacks reversal_usd_value: %w", err)
+	}
+	if out.Reversals, err = collect(rows); err != nil {
+		return out, fmt.Errorf("fx: repairing postbacks reversal_usd_value: %w", err)
+	}
+
+	tag, err := s.db.Exec(ctx, `
 		UPDATE cost_entries c
 		SET amount_usd = round(c.amount * x.rate_to_usd, 4)
 		FROM (
@@ -162,6 +227,20 @@ func (s *Store) RepairUSD(ctx context.Context) (Repaired, error) {
 		return out, fmt.Errorf("fx: repairing cost_entries amount_usd: %w", err)
 	}
 	out.CostEntries = tag.RowsAffected()
+
+	for b := range buckets {
+		out.Buckets = append(out.Buckets, b)
+	}
+	sort.Slice(out.Buckets, func(i, j int) bool {
+		a, b := out.Buckets[i], out.Buckets[j]
+		if a.Day != b.Day {
+			return a.Day < b.Day
+		}
+		if a.OrganizationID != b.OrganizationID {
+			return a.OrganizationID < b.OrganizationID
+		}
+		return a.Status < b.Status
+	})
 	return out, nil
 }
 
@@ -177,10 +256,20 @@ var _ SyncStore = (*Store)(nil)
 
 // Syncer pulls rates and repairs USD values; apps/worker runs it on a timer.
 type Syncer struct {
-	provider Provider
-	store    SyncStore
-	logger   *slog.Logger
-	now      func() time.Time
+	provider   Provider
+	store      SyncStore
+	logger     *slog.Logger
+	now        func() time.Time
+	onRepaired func(ctx context.Context, buckets []Bucket) error
+}
+
+// OnRepaired sets what runs after a repair changed recorded conversions'
+// USD values: apps/worker rewrites their ClickHouse copy
+// (reconcile.Reconciler.RepairBuckets), so reports pick the values up on
+// any date, not only within the hourly reconciliation's last 3 days.
+func (s *Syncer) OnRepaired(fn func(ctx context.Context, buckets []Bucket) error) *Syncer {
+	s.onRepaired = fn
+	return s
 }
 
 func NewSyncer(provider Provider, store SyncStore, logger *slog.Logger) *Syncer {
@@ -225,13 +314,22 @@ func (s *Syncer) RunOnce(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+	if s.onRepaired != nil && len(repaired.Buckets) > 0 {
+		// Postgres is already repaired; a failure here leaves the
+		// ClickHouse copy to the hourly reconciliation (last 3 days) or
+		// make reconcile — the next RepairUSD finds nothing to return.
+		if err := s.onRepaired(ctx, repaired.Buckets); err != nil {
+			return fmt.Errorf("fx: rewriting %d repaired conversion buckets in clickhouse: %w", len(repaired.Buckets), err)
+		}
+	}
 
 	if latest, ok, err := s.store.LatestDate(ctx); err == nil && ok {
 		metrics.FXLatestRateAgeSeconds.Set(s.now().Sub(latest).Seconds())
 	}
 	s.logger.Info("fx rates synced",
 		"since", since.Format(time.DateOnly), "rates", len(rates),
-		"repaired_postbacks", repaired.Postbacks, "repaired_cost_entries", repaired.CostEntries)
+		"repaired_postbacks", repaired.Postbacks, "repaired_reversals", repaired.Reversals,
+		"repaired_cost_entries", repaired.CostEntries, "rewritten_buckets", len(repaired.Buckets))
 	return nil
 }
 

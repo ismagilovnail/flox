@@ -178,3 +178,32 @@ func minTime(a, b time.Time) time.Time {
 	}
 	return b
 }
+
+// RepairBuckets rewrites the ClickHouse copy of the given buckets from
+// Postgres, whatever their date — what fx.Syncer asks for after it filled
+// in USD values (fx.Store.RepairUSD), so a rate that arrived late reaches
+// reports for any day, not only the hourly run's last 3 days (tech audit
+// AN1). Each bucket gets its own MaxRepairsPerRun budget; a bucket over it
+// is skipped and counted, left to make reconcile.
+func (r *Reconciler) RepairBuckets(ctx context.Context, buckets []Bucket) (Repaired, error) {
+	var out Repaired
+	for _, b := range buckets {
+		day, err := time.Parse(time.DateOnly, b.Day)
+		if err != nil {
+			return out, fmt.Errorf("reconcile: bucket day %q: %w", b.Day, err)
+		}
+		got, err := r.Repair(ctx, []Mismatch{{Bucket: b}}, day, day.AddDate(0, 0, 1))
+		if err != nil {
+			return out, err
+		}
+		out.Reemitted += got.Reemitted
+		out.Deleted += got.Deleted
+		out.Unmatched += got.Unmatched
+		out.Skipped += got.Skipped
+	}
+	if out.Skipped > 0 {
+		r.logger.Error("repaired fx values not rewritten in clickhouse: bucket over the repair budget, run make reconcile",
+			"skipped", out.Skipped, "budget", MaxRepairsPerRun)
+	}
+	return out, nil
+}

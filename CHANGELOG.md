@@ -5,6 +5,28 @@ per-phase, matching `CLAUDE.md`'s phase protocol. The one exception is
 [Between phases], below: spec amendments and the code changes that follow from
 them land between phases and would otherwise be invisible here.
 
+## [Between phases] — late FX rates reach ClickHouse for any date (tech audit AN1, closed)
+
+- A rate that arrived after the fact repaired the USD value in Postgres, but the ClickHouse copy
+  of a conversion — what Revenue is summed from — was fixed only by the hourly reconciliation,
+  which looks at the last 3 days; older days needed `make reconcile` by hand.
+- Now `fx.Store.RepairUSD` returns the (organization, day, status) buckets it changed and the
+  worker's FX sync rewrites exactly those in ClickHouse (`reconcile.RepairBuckets`, the
+  reconciliation's own event-by-event repair) for whatever day they are on.
+- Found on the way: the repair looked rates up by `created_at` (arrival) while the live path uses
+  `event_at` (the network's `event_time`, T3) — a conversion sent with an event time got another
+  day's rate, or none. Repair and the sync's look-back now use `event_at`.
+- Found on the way: a decline reversing an accept that had no USD value yet kept
+  `reversal_usd_value` NULL forever, so once the accept was repaired its revenue counted and the
+  chargeback did not. The repair now gives the reversal the accept's value.
+- `docs/fx.md` (the remaining gaps: a failed ClickHouse rewrite is not retried by the next sync;
+  a bucket over 1000 rewrites is skipped and logged — both covered by `make reconcile`).
+
+Tests: a rate on the event date, 20 days before arrival, is the one used; the reversal follows the
+accept; buckets only for recorded incoming conversions; end to end, a conversion 50 days old with
+no USD value gets it in `conversion_events` and the daily aggregate after one sync. Full suite with
+full env, e2e `TestFullFunnel` passes.
+
 ## [Between phases] — queue vacuum, versioned ClickHouse migrations, server timeouts (tech audit DB3, CH5, RL5, M1)
 
 - **CH5.** ClickHouse schema files are now versioned: `schema_migrations` in ClickHouse records

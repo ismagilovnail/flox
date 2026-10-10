@@ -60,8 +60,8 @@ func TestUpsertAndRepairUSD(t *testing.T) {
 	seedPostback := func(currency string, at time.Time) string {
 		id := idgen.New()
 		mustExec(t, pool, `
-			INSERT INTO postbacks (id, organization_id, network_id, click_id, status, direction, result, revenue, currency, created_at)
-			VALUES ($1, $2, $3, $4, 'CPA_ACCEPT', 'incoming', 'success', 10, $5, $6)`,
+			INSERT INTO postbacks (id, organization_id, network_id, click_id, status, direction, result, revenue, currency, created_at, event_at)
+			VALUES ($1, $2, $3, $4, 'CPA_ACCEPT', 'incoming', 'success', 10, $5, $6, $6)`,
 			id, orgID, networkID, idgen.New(), currency, at)
 		return id
 	}
@@ -124,5 +124,80 @@ func mustExec(t *testing.T, pool *pgxpool.Pool, sql string, args ...any) {
 	t.Helper()
 	if _, err := pool.Exec(context.Background(), sql, args...); err != nil {
 		t.Fatalf("exec %q: %v", sql, err)
+	}
+}
+
+// The rate is the one on the conversion's event date (event_at, the
+// network's event_time), as on the live path — not the day the postback
+// arrived. A decline that reversed an accept with no USD value gets it once
+// the accept does. Only recorded incoming conversions are buckets to
+// rewrite in ClickHouse.
+func TestRepairUSDByEventTimeWithReversalsAndBuckets(t *testing.T) {
+	pool := mustPool(t)
+	ctx := context.Background()
+	store := fx.NewStore(pool)
+
+	orgID, networkID := idgen.New(), idgen.New()
+	mustExec(t, pool, `INSERT INTO organizations (id, name) VALUES ($1, 'fx event time test')`, orgID)
+	t.Cleanup(func() {
+		_, _ = pool.Exec(context.Background(), `DELETE FROM organizations WHERE id = $1`, orgID)
+		_, _ = pool.Exec(context.Background(), `DELETE FROM fx_rates WHERE currency = $1`, testCurrency)
+	})
+	mustExec(t, pool, `INSERT INTO networks (id, organization_id, name) VALUES ($1, $2, 'n')`, networkID, orgID)
+
+	// A rate only on the event date, 20 days before the postback arrived.
+	eventDay := time.Date(2026, 9, 1, 0, 0, 0, 0, time.UTC)
+	arrived := eventDay.AddDate(0, 0, 20).Add(10 * time.Hour)
+	if err := store.Upsert(ctx, []fx.Rate{{Currency: testCurrency, Date: eventDay, RateToUSD: 3}}); err != nil {
+		t.Fatalf("Upsert: %v", err)
+	}
+
+	clickID := idgen.New()
+	accept, decline, dup := idgen.New(), idgen.New(), idgen.New()
+	mustExec(t, pool, `
+		INSERT INTO postbacks (id, organization_id, network_id, click_id, status, direction, result, revenue, currency, created_at, event_at)
+		VALUES ($1, $2, $3, $4, 'CPA_ACCEPT', 'incoming', 'success', 10, $5, $6, $7)`,
+		accept, orgID, networkID, clickID, testCurrency, arrived, eventDay.Add(9*time.Hour))
+	mustExec(t, pool, `
+		INSERT INTO postbacks (id, organization_id, network_id, click_id, status, direction, result, created_at, event_at,
+		                       reversal_revenue, reversal_currency)
+		VALUES ($1, $2, $3, $4, 'CPA_DECLINE', 'incoming', 'success', $5, $5, 10, $6)`,
+		decline, orgID, networkID, clickID, arrived.Add(time.Hour), testCurrency)
+	mustExec(t, pool, `
+		INSERT INTO postbacks (id, organization_id, network_id, click_id, status, direction, result, revenue, currency, created_at, event_at)
+		VALUES ($1, $2, $3, $4, 'CPA_ACCEPT', 'incoming', 'duplicate', 10, $5, $6, $7)`,
+		dup, orgID, networkID, clickID, testCurrency, arrived, eventDay.Add(9*time.Hour))
+
+	repaired, err := store.RepairUSD(ctx)
+	if err != nil {
+		t.Fatalf("RepairUSD: %v", err)
+	}
+
+	var acceptUSD, reversalUSD *float64
+	if err := pool.QueryRow(ctx, `SELECT usd_value::float8 FROM postbacks WHERE id = $1`, accept).Scan(&acceptUSD); err != nil {
+		t.Fatal(err)
+	}
+	if acceptUSD == nil || *acceptUSD != 30 {
+		t.Fatalf("accept usd = %v, want 30 (the event date's rate, not the arrival's)", acceptUSD)
+	}
+	if err := pool.QueryRow(ctx, `SELECT reversal_usd_value::float8 FROM postbacks WHERE id = $1`, decline).Scan(&reversalUSD); err != nil {
+		t.Fatal(err)
+	}
+	if reversalUSD == nil || *reversalUSD != 30 {
+		t.Fatalf("decline reversal usd = %v, want 30 (the accept's value, so they net to zero)", reversalUSD)
+	}
+
+	var mine []fx.Bucket
+	for _, b := range repaired.Buckets {
+		if b.OrganizationID == orgID {
+			mine = append(mine, b)
+		}
+	}
+	want := []fx.Bucket{
+		{OrganizationID: orgID, Day: "2026-09-01", Status: "CPA_ACCEPT"},
+		{OrganizationID: orgID, Day: arrived.Format(time.DateOnly), Status: "CPA_DECLINE"},
+	}
+	if len(mine) != len(want) || mine[0] != want[0] || mine[1] != want[1] {
+		t.Fatalf("buckets = %+v, want %+v (one per recorded conversion, by event day; not the duplicate)", mine, want)
 	}
 }
