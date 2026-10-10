@@ -183,7 +183,7 @@ func TestPwaTestLinkRecordsNothing(t *testing.T) {
 
 	tok := landinglink.NewSigner(testLinkKey).Sign(landinglink.Claims{
 		OrganizationID: fx.orgID, ClickID: "test-1", PwaID: pwaID, Destination: "http://app.example/pwa/" + pwaID,
-		IssuedAt: time.Now().Unix(), Test: true,
+		IssuedAt: time.Now().Unix(), Test: true, Host: "localhost",
 	})
 	base := "/pwa/" + tok + "/"
 	page := get(h, "localhost", base)

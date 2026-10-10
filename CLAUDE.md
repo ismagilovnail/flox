@@ -37,9 +37,9 @@ STATUS        : marketer audit closed (#1–#12, #13 platform limit). Tech audit
                 (server timeouts), M1, entity list pagination (limit/offset/
                 total, web reads all pages), M2/Q3 (fair queue claims,
                 parallel postback delivery), API3 (every API route under /v1)
-                done. Left: broker (Stage 3), NEEDS VERIFICATION items
-                (M4, R2, AN4, DO3), load test in the target network.
-LAST COMMIT   : feat(api): serve every API route under /v1.
+                done, M4 (verified; links bound to their host). Left: AN4,
+                broker (Stage 3), R2/DO3 (need prod infra), load test.
+LAST COMMIT   : fix(tracker): honour signed landing/PWA links only on their host.
 UNCOMMITTED   : none expected. Dev DB fresh from `make dev-fresh CONFIRM=yes`
                 (password flox-demo-2026); `make dev-status` shows what is in it.
 NEXT          : wait for the user — the next phase. CI (DO1) is the user's own

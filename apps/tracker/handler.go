@@ -203,7 +203,7 @@ func (h *Handler) track(w http.ResponseWriter, r *http.Request) {
 	}
 	if ev.PwaID != "" {
 		outcome = outcomeRedirected
-		token := h.links.Sign(clickClaims(ev, params, ""))
+		token := h.links.Sign(clickClaims(ev, params, "", r.Host))
 		http.Redirect(w, r, pwaURL(requestOrigin(r), token), http.StatusFound)
 		return
 	}

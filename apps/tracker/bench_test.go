@@ -279,7 +279,7 @@ func BenchmarkLandClick(b *testing.B) {
 	b.Cleanup(closeEvents)
 	tok := landinglink.NewSigner(testLinkKey).Sign(landinglink.Claims{
 		OrganizationID: "org", CampaignID: "camp", ClickID: "click", FlowID: "flow", LandingID: "lnd",
-		Destination: landingTestOffer, IssuedAt: time.Now().Unix(), Subs: []string{"a"},
+		Destination: landingTestOffer, IssuedAt: time.Now().Unix(), Subs: []string{"a"}, Host: "t.example",
 	})
 
 	b.ReportAllocs()

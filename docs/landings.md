@@ -148,6 +148,11 @@ landing, destination, config version, issue time, and the click's utm/
 sub/external-click-id/referrer — 30-day max age. Signed because the
 destination is in it: unsigned, `/lc/` would be an open redirect on every
 customer's tracking domain and a way to inject LAND_CLICKs into any org.
+Bound to its host (tech audit M4): the token carries the tracking host it
+was issued on (`Claims.Host`, lowercase, no port), and the tracker honours
+it only there — it serves every organization's domains, and a link valid
+anywhere let one organization redirect, or show its PWA page, from
+another's domain. A token without a host is rejected.
 Why a token and not a lookup: click rows reach ClickHouse asynchronously
 (may not exist yet a second later), and Redis is cache-only (CLAUDE.md
 #4).

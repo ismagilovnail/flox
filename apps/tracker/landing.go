@@ -76,7 +76,7 @@ func (h *Handler) decideLanding(r *http.Request, orgID string, loaded routingsto
 // link back to this tracker. The caller has already enqueued the
 // SOURCE_CLICK; LAND_VIEW is recorded here, on the same click_id.
 func (h *Handler) serveLanding(w http.ResponseWriter, r *http.Request, d landingDecision, ev event.Event, params params) {
-	trackURL := requestOrigin(r) + landClickPath + h.links.Sign(clickClaims(ev, params, d.landingID))
+	trackURL := requestOrigin(r) + landClickPath + h.links.Sign(clickClaims(ev, params, d.landingID, r.Host))
 
 	assetBase := ""
 	if h.assets != nil && d.page.BundlePrefix != "" {
@@ -101,8 +101,11 @@ func (h *Handler) serveLanding(w http.ResponseWriter, r *http.Request, d landing
 // clickClaims is everything a signed onward link (landing click-through,
 // PWA page) carries from the original click: routing + attribution
 // context, and which funnel stages (PWA) still lie ahead.
-func clickClaims(ev event.Event, params params, landingID string) landinglink.Claims {
+// clickClaims are the claims of a link issued on host (the request's
+// Host): it is honoured only there (Claims.Host).
+func clickClaims(ev event.Event, params params, landingID, host string) landinglink.Claims {
 	return landinglink.Claims{
+		Host:            landinglink.NormalizeHost(host),
 		OrganizationID:  ev.OrganizationID,
 		CampaignID:      ev.CampaignID,
 		ClickID:         ev.ClickID,
@@ -148,7 +151,9 @@ func (h *Handler) landClick(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	claims, err := h.links.Verify(chi.URLParam(r, "token"), time.Now())
-	if err != nil {
+	if err != nil || !claims.OnHost(r.Host) {
+		// Another domain's link — even another organization's — is not
+		// honoured here (tech audit M4).
 		http.NotFound(w, r)
 		return
 	}

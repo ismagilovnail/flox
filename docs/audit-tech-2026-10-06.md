@@ -545,6 +545,14 @@ type entry struct { link TrackingLink; cfg CampaignRouting; loadedAt time.Time }
   (`landinglink`) — нужно убедиться, что `org` в claims сверяется с
   резолвленным ресурсом во всех handler'ах `/l/*` и `/pwa/*`. Беглый
   просмотр это подтверждает, но полного разбора `tracker/pwa.go` не было.
+  (**Статус: проверено и исправлено.** Org сверяется везде: лендинг, PWA и
+  комментарии грузятся с фильтром по `organization_id` из claims; токены
+  выпускаются только из org-scoped данных (routing config, `pwa.TestLink`
+  через `GetByID(orgID, …)`). Найдено другое: токен не был привязан к
+  домену — tracker обслуживает домены всех организаций, и `/lc/` и
+  `/pwa/` чужого токена работали на любом из них (PWA-страница и редирект
+  организации A на домене организации B). Теперь в claims хост выпуска,
+  на другом хосте — 404; `docs/landings.md`, `docs/pwa-serving.md`.)
 
 ---
 

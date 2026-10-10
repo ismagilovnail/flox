@@ -5,6 +5,24 @@ per-phase, matching `CLAUDE.md`'s phase protocol. The one exception is
 [Between phases], below: spec amendments and the code changes that follow from
 them land between phases and would otherwise be invisible here.
 
+## [Between phases] — signed landing/PWA links bound to their host (tech audit M4)
+
+- Verified M4: every `/lc/*` and `/pwa/*` handler loads its landing, PWA and comments filtered by
+  the token's organization, and tokens are only minted from organization-scoped data (the routing
+  config; the constructor's test link via `GetByID(orgID, …)`).
+- **Fixed** what the check turned up: a token was valid on any host, and the tracker serves every
+  organization's domains — organization A could show its PWA page, or redirect to its offer, from
+  organization B's tracking domain (e.g. with a constructor test link). Tokens now carry the host
+  they were issued on (`landinglink.Claims.Host`, lowercase, no port); `/lc/` and every `/pwa/`
+  route answer 404 on any other host. Test links are bound to `TRACKER_PUBLIC_URL`'s host. A token
+  without a host is rejected — no production yet; a dev PWA installed earlier must be reinstalled.
+- `docs/landings.md`, `docs/pwa-serving.md`, audit status.
+
+Tests: `OnHost` (case, port, IPv6, no host), a host-less token fails to verify; a served landing's
+click link 404s on another host and works on its own (other case, with a port), every PWA route
+404s on another host and records no PWA_INSTALL/OPEN, exactly one LAND_CLICK; the test link is
+honoured on the tracker host only. Full suite with full env, e2e `TestFullFunnel` passes.
+
 ## [Between phases] — API under /v1 (tech audit API3)
 
 - Every apps/api domain route moved under `/v1` (`GET /v1/campaigns`, `POST /v1/auth/login`, ...):

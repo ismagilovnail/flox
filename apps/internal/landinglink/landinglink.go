@@ -23,6 +23,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net"
 	"strings"
 	"time"
 )
@@ -58,7 +59,14 @@ type Claims struct {
 	// records no events, so testing never pollutes analytics.
 	Test          bool  `json:"tst,omitempty"`
 	ConfigVersion int64 `json:"v,omitempty"`
-	IssuedAt      int64 `json:"t"` // unix seconds
+	// Host is the host the link was issued for, lowercase and without a
+	// port: the tracking domain the visitor came in on, or the tracker's
+	// public host for a test link. The tracker honours the link only on
+	// that host — it serves every organization's domains, and a link
+	// valid anywhere let one organization show its PWA page or redirect
+	// from another's domain (tech audit 2026-10-06, M4).
+	Host     string `json:"h"`
+	IssuedAt int64  `json:"t"` // unix seconds
 
 	// Pass-through attribution parameters from the original click, so a
 	// LAND_CLICK row filters by utm/sub exactly like its SOURCE_CLICK.
@@ -145,10 +153,25 @@ func (s *Signer) verify(token string, now time.Time, checkAge bool) (Claims, err
 	if checkAge && now.Sub(issued) > MaxAge {
 		return Claims{}, ErrInvalid
 	}
-	if c.OrganizationID == "" || c.ClickID == "" || c.Destination == "" {
+	if c.OrganizationID == "" || c.ClickID == "" || c.Destination == "" || c.Host == "" {
 		return Claims{}, ErrInvalid
 	}
 	return c, nil
+}
+
+// NormalizeHost is how a Claims.Host is written and compared: lowercase,
+// without a port.
+func NormalizeHost(hostport string) string {
+	h := hostport
+	if host, _, err := net.SplitHostPort(hostport); err == nil {
+		h = host
+	}
+	return strings.ToLower(h)
+}
+
+// OnHost reports whether c may be used on a request to hostport.
+func (c Claims) OnHost(hostport string) bool {
+	return c.Host != "" && c.Host == NormalizeHost(hostport)
 }
 
 func (s *Signer) mac(payload string) []byte {

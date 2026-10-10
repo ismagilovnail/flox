@@ -2,6 +2,7 @@ package pwa
 
 import (
 	"context"
+	"net/url"
 	"strings"
 	"time"
 
@@ -33,7 +34,13 @@ func (s *Service) TestLink(ctx context.Context, orgID, id string) (string, error
 	if s.testLinks == nil {
 		return "", apierror.Unavailable("test links are not configured (LANDING_LINK_KEY / TRACKER_PUBLIC_URL)")
 	}
+	tracker, err := url.Parse(s.testLinks.TrackerURL)
+	if err != nil || tracker.Host == "" {
+		return "", apierror.Unavailable("TRACKER_PUBLIC_URL is not a valid URL")
+	}
 	token := s.testLinks.Signer.Sign(landinglink.Claims{
+		// Honoured only on the tracker's own public host (Claims.Host).
+		Host:           landinglink.NormalizeHost(tracker.Host),
 		OrganizationID: orgID,
 		CampaignID:     "",
 		ClickID:        "test-" + idgen.New(),

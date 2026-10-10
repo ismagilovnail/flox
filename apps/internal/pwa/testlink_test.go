@@ -50,6 +50,11 @@ func TestTestLink(t *testing.T) {
 	if !c.Test || c.PwaID != p.ID || c.OrganizationID != orgA || c.Destination != "http://localhost:3000/pwa/"+p.ID {
 		t.Fatalf("claims = %+v, want a Test link for this PWA back to its editor", c)
 	}
+	// Honoured only on the tracker's public host, not on any customer's
+	// tracking domain (tech audit M4).
+	if !c.OnHost("localhost:8081") || c.OnHost("customer.example") {
+		t.Fatalf("test link host = %q, want localhost only", c.Host)
+	}
 
 	if _, err := svc.TestLink(ctx, orgB, p.ID); err == nil {
 		t.Fatal("org B minted a test link for org A's PWA")

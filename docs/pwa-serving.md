@@ -38,6 +38,13 @@ stay bound to the original click_id for as long as the app is installed.
 | `GET /pwa/{t}/open` | installed app's start_url → PWA_OPEN → 302 destination |
 | `GET /pwa/{t}/continue` | "continue without installing" → 302 destination, no event |
 
+Every route answers 404 on any host but the one the token was issued
+for (`Claims.Host`, tech audit M4): another tracking domain — another
+organization's included — cannot serve this PWA. The constructor's test
+link is bound to the tracker's public host (`TRACKER_PUBLIC_URL`). Tokens
+issued before the host was added are rejected; an app installed from one
+must be installed again.
+
 The manifest and `open` accept tokens older than the 30-day link max age
 (`Signer.VerifyAnyAge` — signature still required): an installed app has
 to keep working. A PWA paused or deleted after the link was issued sends

@@ -86,7 +86,9 @@ func (h *Handler) pwaClaims(r *http.Request, anyAge bool) (landinglink.Claims, b
 		verify = h.links.VerifyAnyAge
 	}
 	c, err := verify(chi.URLParam(r, "token"), time.Now())
-	if err != nil || c.PwaID == "" {
+	// Only on the host the link was issued for: the tracker serves every
+	// organization's domains (tech audit M4).
+	if err != nil || c.PwaID == "" || !c.OnHost(r.Host) {
 		return landinglink.Claims{}, false
 	}
 	return c, true

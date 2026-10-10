@@ -293,7 +293,7 @@ func TestLandClickRejectsBadTokens(t *testing.T) {
 	h, sink, closeEvents := newLandingHandler(t, pool, true)
 
 	forged := landinglink.NewSigner([]byte("ffffffffffffffffffffffffffffffff")).Sign(landinglink.Claims{
-		OrganizationID: "o", ClickID: "k", Destination: "https://evil.example", IssuedAt: 1 << 31,
+		OrganizationID: "o", ClickID: "k", Destination: "https://evil.example", IssuedAt: 1 << 31, Host: "any.example",
 	})
 	for _, path := range []string{"/lc/garbage", "/lc/a.b", "/lc/" + forged} {
 		if rec := get(h, "any.example", path); rec.Code != http.StatusNotFound {
@@ -452,4 +452,57 @@ func testPool(t *testing.T) *pgxpool.Pool {
 	}
 	t.Cleanup(pool.Close)
 	return pool
+}
+
+// A link issued on one tracking domain is not honoured on another — the
+// tracker serves every organization's domains, so a link valid anywhere let
+// one organization redirect, or show its PWA page, from another's domain
+// (tech audit M4).
+func TestSignedLinksOnlyOnTheirOwnHost(t *testing.T) {
+	pool := testPool(t)
+	h, sink, closeEvents := newLandingHandler(t, pool, true)
+
+	// The landing click link.
+	fx := seedLandingFixture(t, pool, internalLanding(landing.StatusActive))
+	m := trackURLInPage.FindStringSubmatch(get(h, fx.host, "/t/go").Body.String())
+	if m == nil {
+		t.Fatal("no trackUrl in the served landing")
+	}
+	path := strings.TrimPrefix(m[1], "http://"+fx.host)
+	if rec := get(h, "victim.example", path); rec.Code != http.StatusNotFound {
+		t.Fatalf("landing click link on another host = %d, want 404", rec.Code)
+	}
+	if rec := get(h, strings.ToUpper(fx.host)+":8081", path); rec.Code != http.StatusFound {
+		t.Fatalf("landing click link on its own host (other case and port) = %d, want 302", rec.Code)
+	}
+
+	// The PWA page and every route under it.
+	var pwaID string
+	pfx := seedFlowFixture(t, pool, nil, withPwa(t, pool, &pwaID, streamset.PwaTypeInternal, false))
+	base := strings.TrimPrefix(get(h, pfx.host, "/t/go").Header().Get("Location"), "http://"+pfx.host)
+	for _, p := range []string{base, base + "manifest.webmanifest", base + "open", base + "continue"} {
+		if rec := get(h, "victim.example", p); rec.Code != http.StatusNotFound {
+			t.Fatalf("GET %s on another host = %d, want 404", p, rec.Code)
+		}
+	}
+	if rec := post(h, "victim.example", base+"installed"); rec.Code != http.StatusNotFound {
+		t.Fatalf("POST installed on another host = %d, want 404", rec.Code)
+	}
+	if rec := get(h, pfx.host, base); rec.Code != http.StatusOK {
+		t.Fatalf("PWA page on its own host = %d, want 200", rec.Code)
+	}
+
+	closeEvents()
+	landClicks := 0
+	for _, e := range sink.events {
+		if e.Type == event.LandClick {
+			landClicks++
+		}
+		if e.Type == event.PwaInstall || e.Type == event.PwaOpen {
+			t.Fatalf("a link on another host recorded %s", e.Type)
+		}
+	}
+	if landClicks != 1 {
+		t.Fatalf("LAND_CLICK events = %d, want 1 (own host only)", landClicks)
+	}
 }
