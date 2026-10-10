@@ -59,8 +59,10 @@ STATUS        : marketer audit closed (#1–#12, #13 platform limit). Tech audit
                 DO1, AN5, CQ1, CQ3 partly, load test in target network.
                 §16 tests: PG latency (tracker, TCP proxy) and cross-tenant
                 walk of every API route (buildServer split from run) done;
-                B's ids in request bodies/queries covered too.
-LAST COMMIT   : test(api): cross-tenant ids in request bodies and queries.
+                B's ids in request bodies/queries covered too. Load test and
+                DO1 closed by the owner. CQ3 done (Record in steps). Open:
+                AN5, CQ1.
+LAST COMMIT   : refactor(conversion): Record in steps (CQ3).
 UNCOMMITTED   : none expected. Dev DB fresh from `make dev-fresh CONFIRM=yes`
                 (password flox-demo-2026); `make dev-status` shows what is in it.
 NEXT          : wait for the user — the next phase. CI (DO1) is the user's own

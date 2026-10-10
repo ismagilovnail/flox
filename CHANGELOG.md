@@ -5,6 +5,18 @@ per-phase, matching `CLAUDE.md`'s phase protocol. The one exception is
 [Between phases], below: spec amendments and the code changes that follow from
 them land between phases and would otherwise be invisible here.
 
+## [Between phases] — conversion.Service.Record in steps (tech audit CQ3)
+
+No behaviour change.
+
+- `Record` reads as its steps: `trimmed` (every network-supplied string trimmed once, instead
+  of a `TrimSpace` at each use), `validate`, status mapping, `checkProgression`, `attribute`
+  (with the unknown_click fallback), `convertRevenue`, `newEntry` (ledger row + CPA event +
+  outgoing postback), `commit`. `logError`/`logIgnored` are one `recordRefusal`.
+- `record_steps_test.go` pins what the refactor could have shifted silently — trimming across
+  ledger, FX, event and delivery; which refusals keep the click id — and passes on the code
+  before and after.
+
 ## [Between phases] — Cross-tenant ids in request bodies and queries
 
 The route walk covered ids in the path; this covers ids in bodies and query strings.
