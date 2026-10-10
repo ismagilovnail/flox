@@ -5,6 +5,22 @@ per-phase, matching `CLAUDE.md`'s phase protocol. The one exception is
 [Between phases], below: spec amendments and the code changes that follow from
 them land between phases and would otherwise be invisible here.
 
+## [Between phases] — Comments state invariants, not history (tech audit CQ1)
+
+The last open item of the tech audit.
+
+- 198 comment blocks in Go (tests excluded) that retold phase and audit history — "Phase N",
+  "before the audit this…", "used to", "confirmed via AskUserQuestion" — now say what the code
+  guarantees and why. History stays in this file and the audit; audit items are referenced by
+  short tags such as `(tech audit T3)`.
+- Comments that had gone stale are corrected: the cost sync also runs on the worker's schedule,
+  reads are permission-gated, the routing simulator has no mock left, the worker runs far more
+  than "three loops".
+- Comment-only, checked per file by comparing the AST with comments stripped against the
+  previous commit. 8182 → 7837 comment lines; lint findings unchanged (79 before and after);
+  full suite green. Not touched: test files, apps/web, long comments that tell no history.
+- Found on the way, not changed (code, not comments): `eventbuf.LogSink` is unused.
+
 ## [Between phases] — Reports by click date (tech audit AN5)
 
 ROI per campaign day: revenue can now sit on the day of its click, beside that day's clicks and

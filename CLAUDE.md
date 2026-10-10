@@ -61,9 +61,10 @@ STATUS        : marketer audit closed (#1–#12, #13 platform limit). Tech audit
                 walk of every API route (buildServer split from run) done;
                 B's ids in request bodies/queries covered too. Load test and
                 DO1 closed by the owner. CQ3 done (Record in steps). AN5 done
-                (reports by click date, dateBasis, migration 00068). Open:
-                CQ1.
-LAST COMMIT   : feat(analytics): reports by click date (AN5).
+                (reports by click date, dateBasis, migration 00068). CQ1 done
+                (comments: invariants, not history). Tech audit fully closed;
+                left: prod restore drill after deployment.
+LAST COMMIT   : docs(audit): CQ1 closed, tech audit complete.
 UNCOMMITTED   : none expected. Dev DB fresh from `make dev-fresh CONFIRM=yes`
                 (password flox-demo-2026); `make dev-status` shows what is in it.
 NEXT          : wait for the user — the next phase. CI (DO1) is the user's own
