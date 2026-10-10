@@ -40,7 +40,7 @@ func TestEnqueueClaimAndDelete(t *testing.T) {
 	// isolation (it's a transit queue, not tenant-scoped reads).
 	var mine []eventqueue.QueuedEvent
 	for _, c := range claimed {
-		if c.Event.ClickID == clickID {
+		if c.Value.ClickID == clickID {
 			mine = append(mine, c)
 		}
 	}
@@ -50,9 +50,9 @@ func TestEnqueueClaimAndDelete(t *testing.T) {
 
 	types := map[event.Type]bool{}
 	for _, c := range mine {
-		types[c.Event.Type] = true
-		if c.Event.OrganizationID != orgID {
-			t.Fatalf("claimed event organization_id = %q, want %q", c.Event.OrganizationID, orgID)
+		types[c.Value.Type] = true
+		if c.Value.OrganizationID != orgID {
+			t.Fatalf("claimed event organization_id = %q, want %q", c.Value.OrganizationID, orgID)
 		}
 	}
 	if !types[event.SourceClick] || !types[event.LandView] {
@@ -65,7 +65,7 @@ func TestEnqueueClaimAndDelete(t *testing.T) {
 		t.Fatalf("ClaimDue (second): %v", err)
 	}
 	for _, c := range claimedAgain {
-		if c.Event.ClickID == clickID {
+		if c.Value.ClickID == clickID {
 			t.Fatalf("claimed a 'processing' event a second time: %+v", c)
 		}
 	}
@@ -104,7 +104,7 @@ func TestRequeuePutsRowsBackAsDueAtNextAttemptAt(t *testing.T) {
 	}
 	var id string
 	for _, c := range claimed {
-		if c.Event.ClickID == clickID {
+		if c.Value.ClickID == clickID {
 			id = c.ID
 		}
 	}
@@ -185,7 +185,7 @@ func TestDepthReflectsQueuedAndProcessingNotDeleted(t *testing.T) {
 	}
 	var ids []string
 	for _, c := range claimed {
-		if c.Event.ClickID == clickID {
+		if c.Value.ClickID == clickID {
 			ids = append(ids, c.ID)
 		}
 	}

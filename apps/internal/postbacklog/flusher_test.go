@@ -85,8 +85,8 @@ func (f *fakeCH) InsertPostbackAttempts(_ context.Context, attempts []chstore.Po
 
 func TestFlusherSuccessDeletesClaimedAttempts(t *testing.T) {
 	consumer := newFakeConsumer(
-		postbacklog.QueuedAttempt{ID: "a1", Attempt: chstore.PostbackAttempt{Direction: "incoming"}},
-		postbacklog.QueuedAttempt{ID: "a2", Attempt: chstore.PostbackAttempt{Direction: "outgoing"}},
+		postbacklog.QueuedAttempt{ID: "a1", Value: chstore.PostbackAttempt{Direction: "incoming"}},
+		postbacklog.QueuedAttempt{ID: "a2", Value: chstore.PostbackAttempt{Direction: "outgoing"}},
 	)
 	ch := &fakeCH{}
 	f := postbacklog.NewFlusher(consumer, ch, quietLogger())
@@ -108,7 +108,7 @@ func TestFlusherSuccessDeletesClaimedAttempts(t *testing.T) {
 
 func TestFlusherFailureRequeuesWholeBatch(t *testing.T) {
 	consumer := newFakeConsumer(
-		postbacklog.QueuedAttempt{ID: "a1", Attempt: chstore.PostbackAttempt{Direction: "incoming"}},
+		postbacklog.QueuedAttempt{ID: "a1", Value: chstore.PostbackAttempt{Direction: "incoming"}},
 	)
 	ch := &fakeCH{fail: true}
 	f := postbacklog.NewFlusher(consumer, ch, quietLogger())

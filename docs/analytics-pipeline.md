@@ -97,14 +97,13 @@ closes that gap for real, not just with a schema:
   (success, retrying, dead) now also calls `d.logAttempt(...)` via the same
   pattern.
 
-Both feed `internal/postbacklog` — a near-duplicate of `internal/eventqueue`
-(Postgres `FOR UPDATE SKIP LOCKED` queue, `postback_attempt_queue`,
-migration 00016; a `Flusher` batching into ClickHouse) rather than a
-generalized/shared implementation. The payload shapes
-(`chstore.PostbackAttempt` vs `event.Event`) are genuinely different and
-there is nothing else to share beyond the SQL pattern itself — duplicating
-~150 lines of proven, tested code was judged lower-risk than a generics
-refactor touching Phase 25's already-shipped `eventqueue` mid-project.
+Both feed `internal/postbacklog` (Postgres `FOR UPDATE SKIP LOCKED` queue,
+`postback_attempt_queue`, migration 00016; a `Flusher` batching into
+ClickHouse). Its consumer side and `Flusher` are `internal/pgqueue`'s
+generic `Queue[T]` / `Flusher[T]`, shared with `internal/eventqueue`
+(tech audit CQ2): claim, delete, requeue, reap, dead-letter, the detached
+insert/cleanup contexts and the idempotent batch id exist once. Each queue
+package keeps only its producer and its ClickHouse insert.
 `postbacklog.ConversionAttemptLogger` and `.DeliveryAttemptLogger` adapt
 `Producer` to each package's own `AttemptLogger` interface, so neither
 `internal/conversion` nor `internal/postback` needs to import this package

@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"strings"
-	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
@@ -20,7 +19,11 @@ import (
 
 // PostgresQueue implements both Producer and Consumer against event_queue
 // (migration 00015).
+//
+// The consumer side — claim, delete, requeue, reap, dead-letter, depth — is
+// pgqueue.Queue's (tech audit CQ2); this package adds how events get in.
 type PostgresQueue struct {
+	*pgqueue.Queue[event.Event]
 	db *pgxpool.Pool
 	// table is event_queue; tests point it at a private copy so the
 	// dev-stack worker polling the real queue cannot take their rows.
@@ -28,7 +31,11 @@ type PostgresQueue struct {
 }
 
 func NewPostgresQueue(db *pgxpool.Pool) *PostgresQueue {
-	return &PostgresQueue{db: db, table: "event_queue"}
+	return newPostgresQueue(db, "event_queue")
+}
+
+func newPostgresQueue(db *pgxpool.Pool, table string) *PostgresQueue {
+	return &PostgresQueue{Queue: pgqueue.NewQueue[event.Event](db, table, "eventqueue"), db: db, table: table}
 }
 
 var (
@@ -155,76 +162,4 @@ func insert(ctx context.Context, db batchSender, table string, events []event.Ev
 		}
 	}
 	return nil
-}
-
-func (q *PostgresQueue) ClaimDue(ctx context.Context, limit int) ([]QueuedEvent, error) {
-	batchID, rows, err := pgqueue.ClaimBatch(ctx, q.db, q.table, limit)
-	if err != nil {
-		return nil, fmt.Errorf("eventqueue: %w", err)
-	}
-	out := make([]QueuedEvent, 0, len(rows))
-	for _, r := range rows {
-		var e event.Event
-		if err := json.Unmarshal(r.Payload, &e); err != nil {
-			return nil, fmt.Errorf("eventqueue: unmarshaling event %s: %w", r.ID, err)
-		}
-		out = append(out, QueuedEvent{ID: r.ID, BatchID: batchID, Event: e})
-	}
-	return out, nil
-}
-
-func (q *PostgresQueue) Delete(ctx context.Context, ids []string) error {
-	if len(ids) == 0 {
-		return nil
-	}
-	if _, err := q.db.Exec(ctx, `DELETE FROM `+q.table+` WHERE id = ANY($1)`, ids); err != nil {
-		return fmt.Errorf("eventqueue: deleting delivered events: %w", err)
-	}
-	return nil
-}
-
-func (q *PostgresQueue) Requeue(ctx context.Context, ids []string, next time.Time) error {
-	if len(ids) == 0 {
-		return nil
-	}
-	if _, err := q.db.Exec(ctx,
-		`UPDATE `+q.table+` SET status = 'queued', claimed_at = NULL, next_attempt_at = $2 WHERE id = ANY($1)`,
-		ids, next,
-	); err != nil {
-		return fmt.Errorf("eventqueue: requeueing events: %w", err)
-	}
-	return nil
-}
-
-// Depth counts rows not yet delivered to ClickHouse — both 'queued' (due
-// or waiting for next_attempt_at) and 'processing' (claimed by a Flusher,
-// mid-InsertBatch) — for §53's event_queue_depth gauge (see PollDepth).
-// 'processing' rows are normally claimed and cleared within one RunOnce,
-// but counting only 'queued' would undercount the true backlog during a
-// slow ClickHouse insert.
-func (q *PostgresQueue) Depth(ctx context.Context) (int, error) {
-	var n int
-	if err := q.db.QueryRow(ctx, `SELECT count(*) FROM `+q.table+` WHERE status IN ('queued', 'processing')`).Scan(&n); err != nil {
-		return 0, fmt.Errorf("eventqueue: counting queue depth: %w", err)
-	}
-	return n, nil
-}
-
-// ReapStuck implements queuereaper.Reaper: claims older than olderThan
-// belong to a worker that died mid-batch and go back to the queue, due now.
-func (q *PostgresQueue) ReapStuck(ctx context.Context, olderThan time.Duration) (int64, error) {
-	tag, err := q.db.Exec(ctx, `
-		UPDATE `+q.table+`
-		SET status = 'queued', claimed_at = NULL, next_attempt_at = now()
-		WHERE status = 'processing' AND claimed_at < now() - $1::interval`,
-		olderThan,
-	)
-	if err != nil {
-		return 0, fmt.Errorf("eventqueue: reaping stuck claims: %w", err)
-	}
-	return tag.RowsAffected(), nil
-}
-
-func (q *PostgresQueue) Fail(ctx context.Context, ids []string, rejected bool, lastError string) (bool, error) {
-	return pgqueue.Fail(ctx, q.db, q.table, ids, rejected, lastError)
 }

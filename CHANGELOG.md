@@ -5,6 +5,22 @@ per-phase, matching `CLAUDE.md`'s phase protocol. The one exception is
 [Between phases], below: spec amendments and the code changes that follow from
 them land between phases and would otherwise be invisible here.
 
+## [Between phases] — one Postgres queue implementation (tech audit CQ2)
+
+- `internal/eventqueue` and `internal/postbacklog` each had their own claim, delete, requeue,
+  reap, dead-letter and flusher code — near-identical, so every queue fix (Q1 reaper, Q2
+  dead-letter, D2 batch id) had to land twice.
+- Now `internal/pgqueue` holds it once: `Queue[T]` (consumer side over a table with a JSON
+  payload of `T`) and `Flusher[T]` (claim → idempotent ClickHouse insert on a detached context →
+  delete or fail/dead-letter, plus `PollLoop`). Each package keeps its producer, its ClickHouse
+  insert and its metrics; `QueuedEvent` / `QueuedAttempt` are `pgqueue.Item[T]` (payload in
+  `Value`). No behaviour or schema change.
+- `docs/analytics-pipeline.md`, audit CQ2 status.
+
+Tests: existing eventqueue/postbacklog suites (claim, requeue, reap, shutdown, dead-letter) run
+against the shared code unchanged apart from the field rename; full suite with full env, e2e
+`TestFullFunnel` passes.
+
 ## [Between phases] — domain ownership verification (tech audit T6 / S4)
 
 - A domain tracked as soon as any organization added it: `status` was client input (default

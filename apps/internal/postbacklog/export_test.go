@@ -9,5 +9,5 @@ import (
 // NewPostgresQueueOnTable is NewPostgresQueue over another table shaped like
 // postback_attempt_queue (testpg.PrivateTable).
 func NewPostgresQueueOnTable(db *pgxpool.Pool, logger *slog.Logger, table string) *PostgresQueue {
-	return &PostgresQueue{db: db, logger: logger, table: table}
+	return newPostgresQueue(db, logger, table)
 }

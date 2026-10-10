@@ -22,16 +22,16 @@ referenced below as §N).
 CURRENT PHASE : AUDIT FOLLOW-UPS (between phases)
 STATUS        : marketer audit closed (#1–#12, #13 platform limit). Tech audit:
                 P0/P1 done except DO1 (CI, the user's call); AN1 marked partial
-                in the audit. P2 in progress: T5 (signed sticky cookies,
+                in the audit. P2 done: T5 (signed sticky cookies,
                 STICKY_COOKIE_KEY required by the tracker), API1, outbound
                 timeouts, CH3/DB2 (only logs expire — owner's decision,
                 docs/retention.md), CH4 (query limits per binary, cancel on
                 client close, 422 query_too_heavy), T3 (event_time on
                 postbacks), DO4 (explicit CA certs in the tracker), S2
                 (security headers; no script-src yet — srcdoc preview),
-                T6 (domain ownership via TXT) done; next CQ2 (generic
-                pgqueue), then P3.
-LAST COMMIT   : feat(domains): verify ownership before a domain tracks.
+                T6 (domain ownership via TXT), CQ2 (generic pgqueue) done —
+                P2 closed; next P3.
+LAST COMMIT   : refactor(queue): one generic Postgres queue for events and postback logs.
 UNCOMMITTED   : none expected. Dev DB fresh from `make dev-fresh CONFIRM=yes`
                 (password flox-demo-2026); `make dev-status` shows what is in it.
 NEXT          : wait for the user — the next phase. CI (DO1) is the user's own

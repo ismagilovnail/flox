@@ -33,7 +33,7 @@ func TestPostgresQueueEnqueueClaimAndDelete(t *testing.T) {
 	}
 	var mine []postbacklog.QueuedAttempt
 	for _, c := range claimed {
-		if c.Attempt.ClickID == clickID {
+		if c.Value.ClickID == clickID {
 			mine = append(mine, c)
 		}
 	}
@@ -43,9 +43,9 @@ func TestPostgresQueueEnqueueClaimAndDelete(t *testing.T) {
 
 	directions := map[string]bool{}
 	for _, c := range mine {
-		directions[c.Attempt.Direction] = true
-		if c.Attempt.OrganizationID != orgID {
-			t.Fatalf("claimed attempt organization_id = %q, want %q", c.Attempt.OrganizationID, orgID)
+		directions[c.Value.Direction] = true
+		if c.Value.OrganizationID != orgID {
+			t.Fatalf("claimed attempt organization_id = %q, want %q", c.Value.OrganizationID, orgID)
 		}
 	}
 	if !directions["incoming"] || !directions["outgoing"] {
@@ -84,7 +84,7 @@ func TestPostgresQueueRequeue(t *testing.T) {
 	}
 	var id string
 	for _, c := range claimed {
-		if c.Attempt.ClickID == clickID {
+		if c.Value.ClickID == clickID {
 			id = c.ID
 		}
 	}

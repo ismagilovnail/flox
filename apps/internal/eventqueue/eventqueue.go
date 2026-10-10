@@ -12,19 +12,13 @@ package eventqueue
 
 import (
 	"context"
-	"time"
 
 	"github.com/ismagilovnail/flox/apps/internal/event"
+	"github.com/ismagilovnail/flox/apps/internal/pgqueue"
 )
 
 // QueuedEvent is one row claimed from the queue.
-type QueuedEvent struct {
-	ID string
-	// BatchID is shared by every row claimed together and kept across
-	// retries; the ClickHouse insert is deduplicated by it (pgqueue).
-	BatchID string
-	Event   event.Event
-}
+type QueuedEvent = pgqueue.Item[event.Event]
 
 // Producer is what apps/tracker's event writer needs — see Sink (sink.go),
 // which adapts this to eventbuf.Sink.
@@ -36,26 +30,5 @@ type Producer interface {
 	EnqueueBatch(ctx context.Context, events []event.Event) error
 }
 
-// Consumer is what apps/worker's flush loop needs.
-type Consumer interface {
-	// ClaimDue atomically claims one batch — a whole earlier batch that is
-	// due for retry, or up to limit fresh rows (FOR UPDATE SKIP LOCKED) —
-	// marking it 'processing' so a second worker replica can't also claim
-	// it. Every returned row carries the same BatchID.
-	ClaimDue(ctx context.Context, limit int) ([]QueuedEvent, error)
-
-	// Delete permanently removes rows once their batch is durably in
-	// ClickHouse.
-	Delete(ctx context.Context, ids []string) error
-
-	// Requeue puts claimed rows back to 'queued', due again at
-	// next_attempt_at — used when a ClickHouse batch insert fails, so the
-	// whole batch is retried together rather than row by row.
-	Requeue(ctx context.Context, ids []string, next time.Time) error
-
-	// Fail records a failed ClickHouse insert for a claimed batch: it is
-	// retried with backoff, or — when the server rejected it
-	// (chstore.Rejected) too many times — dead-lettered. Reports whether it
-	// was (pgqueue.Fail).
-	Fail(ctx context.Context, ids []string, rejected bool, lastError string) (dead bool, err error)
-}
+// Consumer is what apps/worker's flush loop needs (pgqueue.Consumer).
+type Consumer = pgqueue.Consumer[event.Event]

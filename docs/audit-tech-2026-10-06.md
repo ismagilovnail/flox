@@ -1020,7 +1020,9 @@ reaper.
   написано, что CH-down на старте даёт `unknown_click`: известный дефект
   задокументирован, но не исправлен. История решений должна жить в `docs/`,
   а в коде — инварианты.
-- **CQ2.** Почти идентичные `eventqueue` и `postbacklog` (claim, requeue,
+- **CQ2.** (**Статус: исправлено** — `pgqueue.Queue[T]` и `pgqueue.Flusher[T]`;
+  в `eventqueue` и `postbacklog` остались только producer и insert в CH.)
+  Почти идентичные `eventqueue` и `postbacklog` (claim, requeue,
   delete, flusher) — это осознанное дублирование. Reaper и dead-letter
   придётся добавлять дважды. Стоит сделать общий
   `pgqueue.Queue[T]` (Go generics).

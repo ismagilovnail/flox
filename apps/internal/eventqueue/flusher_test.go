@@ -87,8 +87,8 @@ func (f *fakeCH) InsertBatch(_ context.Context, events []event.Event) error {
 
 func TestFlusherSuccessDeletesClaimedEvents(t *testing.T) {
 	consumer := newFakeConsumer(
-		eventqueue.QueuedEvent{ID: "e1", Event: event.Event{Type: event.SourceClick}},
-		eventqueue.QueuedEvent{ID: "e2", Event: event.Event{Type: event.LandView}},
+		eventqueue.QueuedEvent{ID: "e1", Value: event.Event{Type: event.SourceClick}},
+		eventqueue.QueuedEvent{ID: "e2", Value: event.Event{Type: event.LandView}},
 	)
 	ch := &fakeCH{}
 	f := eventqueue.NewFlusher(consumer, ch, quietLogger())
@@ -113,8 +113,8 @@ func TestFlusherSuccessDeletesClaimedEvents(t *testing.T) {
 
 func TestFlusherFailureRequeuesWholeBatch(t *testing.T) {
 	consumer := newFakeConsumer(
-		eventqueue.QueuedEvent{ID: "e1", Event: event.Event{Type: event.SourceClick}},
-		eventqueue.QueuedEvent{ID: "e2", Event: event.Event{Type: event.LandView}},
+		eventqueue.QueuedEvent{ID: "e1", Value: event.Event{Type: event.SourceClick}},
+		eventqueue.QueuedEvent{ID: "e2", Value: event.Event{Type: event.LandView}},
 	)
 	ch := &fakeCH{fail: true}
 	f := eventqueue.NewFlusher(consumer, ch, quietLogger())
