@@ -41,9 +41,11 @@ STATUS        : marketer audit closed (#1–#12, #13 platform limit). Tech audit
                 (account zone stored, reports note a different zone), read
                 gating (every route group needs its read key; no self role
                 changes), R2 (Redis maxmemory + allkeys-lru in compose, startup
-                check; prod Redis config at deploy). Left: broker (Stage 3),
-                DO3 (needs target platform), load test.
-LAST COMMIT   : fix(redis): evict instead of refusing writes when full.
+                check; prod Redis config at deploy), end-to-end load test (no
+                loss to 8k clicks/s; drops at 12k/s — the tracker's serial
+                writer into event_queue). Left: broker (Stage 3; being
+                discussed), DO3 (needs target platform).
+LAST COMMIT   : docs(perf): end-to-end load test.
 UNCOMMITTED   : none expected. Dev DB fresh from `make dev-fresh CONFIRM=yes`
                 (password flox-demo-2026); `make dev-status` shows what is in it.
 NEXT          : wait for the user — the next phase. CI (DO1) is the user's own

@@ -157,6 +157,45 @@ The click-through never touches a database. Both stay ~40× under the
 `BenchmarkTrack_Parallel` had been panicking on a nil `clientIP` since
 the trusted-proxy fix — fixed in the same change.)
 
+## End-to-end capacity (2026-10-10)
+
+The Phase 31 load test stopped at the Postgres queue. This one follows each
+click the whole way — tracker (docker, routing cache on) → `event_queue` →
+worker → ClickHouse `click_events` — and counts what arrived. Same machine
+(Ryzen 7 7745HX, 16 threads), everything on it: vegeta, tracker, worker,
+Postgres, ClickHouse and unrelated containers. One tracker, one worker.
+Rows counted in ClickHouse after the queue drained; `-redirects=-1` (with
+`0` this vegeta counts every 302 as an error).
+
+| Rate | Per minute | Duration | p50 | p95 | p99 | max | Arrived in ClickHouse | Queue drained after stop |
+|---:|---:|---:|---:|---:|---:|---:|---|---:|
+| 500/s | 30k | 120 s | 0.13 ms | 0.17 ms | 0.22 ms | 2.4 ms | 60,000 / 60,000 | 2 s |
+| 1,000/s | 60k | 60 s | 0.12 ms | 0.17 ms | 0.22 ms | 7.9 ms | 60,000 / 60,000 | 1 s |
+| 2,000/s | 120k | 60 s | 0.13 ms | 0.18 ms | 0.26 ms | 2.6 ms | 120,000 / 120,000 | 2 s |
+| 4,000/s | 240k | 60 s | 0.13 ms | 0.19 ms | 0.31 ms | 5.1 ms | 239,998 / 239,998 | 0 s |
+| 8,000/s | 480k | 60 s | 0.15 ms | 0.27 ms | 0.46 ms | 8.2 ms | 480,000 / 480,000 | — |
+| 12,000/s | 720k | 60 s | 0.11 ms | 0.31 ms | 3.5 ms | 434 ms | **~467,600 / 720,003 — 252,396 dropped** | — |
+
+CPU at mid-run (`docker stats`, 100% = one core): 4k/s — tracker 33%,
+Postgres 21%, worker ~0%; 8k/s — tracker 81%, Postgres 102%, ClickHouse 66%,
+worker 23%; 12k/s — tracker 90%, Postgres 56%, worker 7%.
+
+**Where it breaks:** at 12k/s the tracker's in-memory buffer (10,000
+events) filled and `eventbuf` dropped events by design (the redirect never
+waits) — `flox_events_buffer_dropped_total` and the ClickHouse shortfall
+agree. The limit is the tracker → Postgres write: one flush goroutine,
+batches of 500, one `INSERT … ON CONFLICT` per event in a pgx batch, written
+one batch after another. The worker was nearly idle. Redirects themselves
+stayed fast (p99 3.5 ms); only the analytics row was lost.
+
+**So:** one tracker on one Postgres keeps every click up to ~8k/s
+(~480k/min) on this machine; the safe planning figure is lower — a cloud
+Postgres adds network round trips to each batch, and real traffic is
+bursty. Before a broker, the cheap steps are `COPY` into `event_queue`,
+more than one flush goroutine, and tracker replicas (each has its own
+buffer). Not measured here: postbacks under load, landing pages (2 events
+per click), many campaigns (cache misses), a network between services.
+
 ## Conclusion
 
 At every scale tested, `apps/tracker`'s redirect path is measured at
@@ -213,7 +252,7 @@ go test ./internal/routing/... ./internal/classifier/... ./internal/routingstore
 # Load test
 go run ./cmd/loadtestseed seed
 DATABASE_URL=... CLICKHOUSE_URL=... REDIS_URL=... TRACKER_URL=http://localhost:8081 go run ./tracker &
-vegeta attack -targets=targets.http -rate=1000/1s -duration=15s -redirects=0 | vegeta report
+vegeta attack -targets=targets.http -rate=1000/1s -duration=15s -redirects=-1 | vegeta report
 curl -s localhost:8081/metrics | grep flox_events_
 go run ./cmd/loadtestseed cleanup <orgId>
 ```

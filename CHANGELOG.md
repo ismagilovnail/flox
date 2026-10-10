@@ -5,6 +5,16 @@ per-phase, matching `CLAUDE.md`'s phase protocol. The one exception is
 [Between phases], below: spec amendments and the code changes that follow from
 them land between phases and would otherwise be invisible here.
 
+## [Between phases] — end-to-end load test: no loss to 8k clicks/s, drops at 12k/s
+
+- vegeta against the docker tracker, each click followed into ClickHouse after the queue
+  drained. 500/s (30k/min) for 2 min through 8,000/s (480k/min) for 1 min: every click
+  arrived, p99 ≤ 0.46 ms. 12,000/s: the tracker's 10k-event buffer filled and 252,396 of
+  720,003 clicks were dropped (counter and ClickHouse shortfall agree); redirects still p99
+  3.5 ms. The bottleneck is the tracker's single serial writer into `event_queue`, not the
+  worker. `docs/performance.md` "End-to-end capacity"; no code changed. Load-test org removed
+  from Postgres and ClickHouse.
+
 ## [Between phases] — Redis evicts instead of refusing writes when full (tech audit R2)
 
 - The LastStatus cache keeps ~100 bytes per converted click for 30 days (~1 GB at 10M
