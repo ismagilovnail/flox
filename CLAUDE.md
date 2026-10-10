@@ -35,9 +35,10 @@ STATUS        : marketer audit closed (#1–#12, #13 platform limit). Tech audit
                 per-account sign-in limit), DB3 (queue autovacuum), CH5
                 (versioned CH migrations under a PG advisory lock), RL5
                 (server timeouts), M1, entity list pagination (limit/offset/
-                total, web reads all pages) done. Left: /v1, broker (Stage 3),
-                M2/Q3 fairness, NEEDS VERIFICATION items, load test.
-LAST COMMIT   : feat(api): paginate entity lists; web reads every page.
+                total, web reads all pages), M2/Q3 (fair queue claims,
+                parallel postback delivery) done. Left: /v1, broker
+                (Stage 3), NEEDS VERIFICATION items, load test.
+LAST COMMIT   : feat(queue): fair claims across organizations; parallel postback delivery.
 UNCOMMITTED   : none expected. Dev DB fresh from `make dev-fresh CONFIRM=yes`
                 (password flox-demo-2026); `make dev-status` shows what is in it.
 NEXT          : wait for the user — the next phase. CI (DO1) is the user's own

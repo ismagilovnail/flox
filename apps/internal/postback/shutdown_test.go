@@ -30,7 +30,8 @@ func TestDelivererReleasesUnattemptedClaimsOnShutdown(t *testing.T) {
 		}
 		return statusResponse(http.StatusOK)
 	}}
-	d := postback.NewDeliverer(store, client, &fakeAttemptLogger{}, quietLogger())
+	// One at a time, so "the first request" is the only one in flight.
+	d := postback.NewDeliverer(store, client, &fakeAttemptLogger{}, quietLogger()).WithConcurrency(1)
 
 	n, err := d.RunOnce(ctx, 10)
 	if err != nil {

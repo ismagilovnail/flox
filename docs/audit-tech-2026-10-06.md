@@ -530,7 +530,11 @@ type entry struct { link TrackingLink; cfg CampaignRouting; loadedAt time.Time }
 - **M2.** Воркеры (`event_queue`, `postback_deliveries`) обрабатывают
   строки всех тенантов в одном батче. Org сохраняется в payload, утечки нет.
   Но один тенант с флудом событий задерживает остальных: fairness нет.
-  P3.
+  P3. (**Статус: исправлено** — справедливый claim во всех трёх очередях:
+  доля каждой организации, затем FIFO на остаток; организации находятся
+  skip-scan'ом по индексу (миграция 00066), с ротацией стартовой точки;
+  исходящие postback'и в пачке идут параллельно, до 10 сразу;
+  `docs/analytics-pipeline.md`, `docs/postback-delivery.md`.)
 - **M3.** Логи: `click_id`/`network_id` пишутся вместе с `organization_id`.
   PII (IP, UA) в логи tracker'а не попадает. ✔
 - **M4. NEEDS VERIFICATION:** подписанные ссылки лендингов и PWA
@@ -610,7 +614,9 @@ WHERE status='processing' AND claimed_at < now() - interval '5 minutes';
 
 **Q3 [MEDIUM]. Нет fairness и упорядочивания.** Порядок событий одного
 `click_id` не гарантирован. Для CH это нормально: агрегаты не зависят от
-порядка.
+порядка. (**Статус: fairness — исправлено, см. M2; порядок — оставлен
+как есть и задокументирован: внутри организации от старых к новым, между
+организациями порядка нет.**)
 
 **Может ли один conversion/postback обработаться дважды?**
 

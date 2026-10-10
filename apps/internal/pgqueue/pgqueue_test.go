@@ -32,15 +32,24 @@ func queueTable(t *testing.T) (*pgxpool.Pool, string) {
 	if _, err := pool.Exec(context.Background(), `
 		CREATE TABLE `+table+` (
 		  id text PRIMARY KEY, payload jsonb NOT NULL DEFAULT '{}',
+		  organization_id text NOT NULL DEFAULT '`+defaultOrg+`',
 		  status text NOT NULL DEFAULT 'queued',
 		  next_attempt_at timestamptz NOT NULL DEFAULT now(),
 		  claimed_at timestamptz, batch_id text,
 		  attempts integer NOT NULL DEFAULT 0, last_error text NOT NULL DEFAULT '', dead_at timestamptz)`); err != nil {
 		t.Fatalf("creating %s: %v", table, err)
 	}
+	// As migration 00066's fair claim index.
+	if _, err := pool.Exec(context.Background(), `CREATE INDEX ON `+table+` (organization_id, next_attempt_at, id)
+		WHERE status = 'queued' AND batch_id IS NULL`); err != nil {
+		t.Fatalf("indexing %s: %v", table, err)
+	}
 	t.Cleanup(func() { _, _ = pool.Exec(context.Background(), `DROP TABLE `+table) })
 	return pool, table
 }
+
+// defaultOrg owns rows enqueue adds; fairness tests name their own.
+const defaultOrg = "01TESTORGANIZATION00000000"
 
 func enqueue(t *testing.T, pool *pgxpool.Pool, table string, n int) {
 	t.Helper()

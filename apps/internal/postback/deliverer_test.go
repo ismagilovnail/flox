@@ -285,3 +285,44 @@ func TestClaimedDeliveryCarriesStatus(t *testing.T) {
 		t.Fatalf("claimed = %+v, want one CPA_ACCEPT delivery", claimed)
 	}
 }
+
+// A partner endpoint that hangs no longer holds the rest of the batch: the
+// other deliveries complete while it is still waiting (tech audit M2).
+func TestSlowEndpointDoesNotHoldTheBatch(t *testing.T) {
+	store := newFakeStore(
+		postback.Delivery{ID: "slow", URL: "https://slow.example/1"},
+		postback.Delivery{ID: "a", URL: "https://fast.example/a"},
+		postback.Delivery{ID: "b", URL: "https://fast.example/b"},
+	)
+	unblock := make(chan struct{})
+	fastDone := make(chan struct{}, 2)
+	client := &fakeHTTPClient{respond: func(req *http.Request) (*http.Response, error) {
+		if req.URL.Host == "slow.example" {
+			<-unblock
+		} else {
+			fastDone <- struct{}{}
+		}
+		return statusResponse(http.StatusOK)
+	}}
+	d := postback.NewDeliverer(store, client, &fakeAttemptLogger{}, quietLogger())
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		if _, err := d.RunOnce(context.Background(), 10); err != nil {
+			t.Errorf("RunOnce: %v", err)
+		}
+	}()
+	for i := 0; i < 2; i++ {
+		select {
+		case <-fastDone:
+		case <-time.After(5 * time.Second):
+			t.Fatal("fast deliveries waited behind the hanging one")
+		}
+	}
+	close(unblock)
+	<-done
+	if got := store.markCount("success"); got != 3 {
+		t.Fatalf("success marks = %d, want 3", got)
+	}
+}

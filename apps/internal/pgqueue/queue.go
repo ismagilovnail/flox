@@ -28,6 +28,8 @@ type Queue[T any] struct {
 	table string
 	// name prefixes errors: the queue's package name.
 	name string
+	// rot carries the fair claim's starting organization between claims.
+	rot Rotation
 }
 
 // NewQueue serves table, a queue table name constant — never input.
@@ -40,7 +42,7 @@ func (q *Queue[T]) Table() string { return q.table }
 
 // ClaimDue claims one batch (ClaimBatch) and decodes its payloads.
 func (q *Queue[T]) ClaimDue(ctx context.Context, limit int) ([]Item[T], error) {
-	batchID, rows, err := ClaimBatch(ctx, q.db, q.table, limit)
+	batchID, rows, err := ClaimBatchRotating(ctx, q.db, q.table, limit, &q.rot)
 	if err != nil {
 		return nil, fmt.Errorf("%s: %w", q.name, err)
 	}

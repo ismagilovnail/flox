@@ -6,6 +6,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"sync"
 	"time"
 
 	"github.com/ismagilovnail/flox/apps/internal/metrics"
@@ -21,39 +22,65 @@ type HTTPClient interface {
 	Do(req *http.Request) (*http.Response, error)
 }
 
+// DefaultConcurrency is how many attempts of one claimed batch run at once.
+// One at a time, a partner endpoint that hangs held the whole batch for
+// attemptTimeout per delivery, and every other organization's postbacks
+// in it waited (tech audit 2026-10-06, M2).
+const DefaultConcurrency = 10
+
 // Deliverer claims due deliveries and attempts them.
 type Deliverer struct {
-	store    Store
-	client   HTTPClient
-	attempts AttemptLogger
-	logger   *slog.Logger
+	store       Store
+	client      HTTPClient
+	attempts    AttemptLogger
+	logger      *slog.Logger
+	concurrency int
 }
 
 func NewDeliverer(store Store, client HTTPClient, attempts AttemptLogger, logger *slog.Logger) *Deliverer {
-	return &Deliverer{store: store, client: client, attempts: attempts, logger: logger}
+	return &Deliverer{store: store, client: client, attempts: attempts, logger: logger, concurrency: DefaultConcurrency}
 }
 
-// RunOnce claims up to limit due deliveries and attempts each one,
-// returning how many were claimed.
+// WithConcurrency sets how many attempts run at once (at least 1).
+func (d *Deliverer) WithConcurrency(n int) *Deliverer {
+	d.concurrency = max(1, n)
+	return d
+}
+
+// RunOnce claims up to limit due deliveries and attempts them, up to
+// d.concurrency at a time, returning how many were claimed once every
+// started attempt has finished.
 func (d *Deliverer) RunOnce(ctx context.Context, limit int) (int, error) {
 	deliveries, err := d.store.ClaimDue(ctx, limit)
 	if err != nil {
 		return 0, err
 	}
+	slots := make(chan struct{}, d.concurrency)
+	var wg sync.WaitGroup
 	for i, del := range deliveries {
+		select {
+		case slots <- struct{}{}:
+		case <-ctx.Done():
+		}
 		if ctx.Err() != nil {
 			// Stopping: hand the rest of the claim back instead of leaving
 			// it 'processing' (audit 2026-10-06, Q1).
 			d.release(ctx, deliveries[i:])
 			break
 		}
-		// An attempt already started runs to completion on its own
-		// deadline — cancelling it mid-request would lose the outcome of a
-		// postback the partner may already have received.
-		attemptCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), attemptTimeout+bookkeepingTimeout)
-		d.attempt(attemptCtx, del)
-		cancel()
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			defer func() { <-slots }()
+			// An attempt already started runs to completion on its own
+			// deadline — cancelling it mid-request would lose the outcome
+			// of a postback the partner may already have received.
+			attemptCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), attemptTimeout+bookkeepingTimeout)
+			defer cancel()
+			d.attempt(attemptCtx, del)
+		}()
 	}
+	wg.Wait()
 	return len(deliveries), nil
 }
 

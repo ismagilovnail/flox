@@ -66,6 +66,15 @@ receive a delivery twice; a delivery is never silently lost (audit
   postback URLs — a query string, not a request body.
 - **10s per-attempt timeout** (`attemptTimeout` in `deliverer.go`). A
   network's endpoint hanging must not stall the whole poll loop.
+- **Fair, parallel batches** (tech audit 2026-10-06, M2). A claim (20
+  deliveries) gives every organization with deliveries waiting its share
+  of its oldest due ones first, then fills up oldest-first — the same fair
+  claim as the event queues (`docs/analytics-pipeline.md`), so a partner
+  that keeps failing and piles up retries for one organization no longer
+  fills every batch. The batch's attempts run up to 10 at a time
+  (`DefaultConcurrency`): one at a time, a hanging endpoint held the batch
+  for 10 s per delivery. On shutdown, attempts already started finish and
+  the rest go back to the queue.
 - **Exponential backoff, 8 attempts, ~21 hours total span**
   (`postback.Backoff`/`MaxAttempts`). Not specified by §46; chosen so a
   network's multi-hour outage still gets delivered without retrying forever.

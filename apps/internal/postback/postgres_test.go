@@ -241,3 +241,55 @@ func seedOrg(t *testing.T, ctx context.Context, pool *pgxpool.Pool) string {
 	})
 	return id
 }
+
+// One organization's pile of due deliveries (a partner that keeps failing)
+// no longer fills every claim: the other organization's delivery is in the
+// first batch although it is the newest (tech audit M2).
+func TestPostgresStoreClaimIsFairAcrossOrganizations(t *testing.T) {
+	pool := mustPool(t)
+	ctx := context.Background()
+	table := testpg.PrivateTable(t, pool, "postback_deliveries")
+	store := postback.NewPostgresStoreOnTable(pool, table)
+
+	enqueue := func(orgID string, n int, age time.Duration) []string {
+		t.Helper()
+		networkID := seedNetwork(t, ctx, pool, orgID)
+		sourceID := seedPostback(t, ctx, pool, orgID, networkID, "click-"+idgen.New(), "CPA_ACCEPT")
+		var ids []string
+		for i := 0; i < n; i++ {
+			id, err := store.Enqueue(ctx, postback.EnqueueInput{
+				OrganizationID: orgID, NetworkID: networkID, SourcePostbackID: sourceID,
+				ClickID: "c", Status: event.CpaAccept, URL: "https://net.example/pb",
+			})
+			if err != nil {
+				t.Fatalf("Enqueue: %v", err)
+			}
+			if _, err := pool.Exec(ctx, `UPDATE `+table+` SET next_attempt_at = now() - make_interval(secs => $2) WHERE id = $1`,
+				id, age.Seconds()-float64(i)); err != nil {
+				t.Fatal(err)
+			}
+			ids = append(ids, id)
+		}
+		return ids
+	}
+	busy, quiet := seedOrg(t, ctx, pool), seedOrg(t, ctx, pool)
+	enqueue(busy, 30, time.Hour)
+	quietIDs := enqueue(quiet, 1, time.Second)
+
+	claimed, err := store.ClaimDue(ctx, 5)
+	if err != nil {
+		t.Fatalf("ClaimDue: %v", err)
+	}
+	if len(claimed) != 5 {
+		t.Fatalf("claimed %d, want a full batch of 5", len(claimed))
+	}
+	var gotQuiet bool
+	for _, d := range claimed {
+		if d.ID == quietIDs[0] {
+			gotQuiet = true
+		}
+	}
+	if !gotQuiet {
+		t.Fatal("the quiet organization's delivery waited behind the busy one's backlog")
+	}
+}

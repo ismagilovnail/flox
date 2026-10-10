@@ -305,6 +305,26 @@ id.
 `postback_attempt_queue` follows the same rules. `flox_queue_reaped_total{queue}`
 counts every reaped row — any increase means a worker died mid-batch.
 
+### Claims are fair across organizations (audit 2026-10-06, M2/Q3)
+
+A fresh batch used to be the oldest due rows of the whole queue, so one
+organization's flood put every other organization behind its backlog. Now
+(`internal/pgqueue`, fair.go) a claim first takes each organization's
+share — up to ⌈limit / organizations⌉ of its oldest rows — and fills the
+rest of the batch oldest-first from anyone, so a lone busy organization
+still gets the whole capacity. The organizations with rows waiting are
+found by a skip scan over `(organization_id, next_attempt_at, id)`
+(migration 00066): one index probe each, never a scan of the backlog. One
+claim looks at up to `limit` organizations; a rotation starts each claim
+after the last one reached, so with more organizations than that, all of
+them get their turn. Retry batches are unchanged (claimed whole, first).
+
+Order: oldest-first within an organization; none across organizations,
+and none was ever guaranteed across a click's events either (Q3) —
+ClickHouse aggregates do not depend on insert order.
+
+`postback_deliveries` is claimed the same way (`docs/postback-delivery.md`).
+
 ## ClickHouse over HTTP, not native protocol
 
 `infra/docker-compose.dev.yml` exposes only ClickHouse's HTTP interface

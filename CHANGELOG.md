@@ -5,6 +5,29 @@ per-phase, matching `CLAUDE.md`'s phase protocol. The one exception is
 [Between phases], below: spec amendments and the code changes that follow from
 them land between phases and would otherwise be invisible here.
 
+## [Between phases] — fair queues across organizations (tech audit M2/Q3)
+
+- Every queue claim took the oldest due rows of the whole table, so one organization's flood —
+  or a partner endpoint that kept failing and piled up retries — put every other organization
+  behind its backlog.
+- Now a claim (`event_queue`, `postback_attempt_queue`, `postback_deliveries`) first takes each
+  waiting organization's share, up to ⌈limit / organizations⌉ of its oldest due rows, then fills
+  the batch oldest-first from anyone. Organizations are found by a skip scan over a new
+  `(organization_id, next_attempt_at, id)` index (migration 00066, CONCURRENTLY) — one index
+  probe each — and a rotation moves the starting point so that with more organizations than
+  one claim's limit every one gets its turn. Retry batches are unchanged.
+- Outgoing postbacks in a batch are attempted up to 10 at a time (`postback.DefaultConcurrency`);
+  one at a time, a hanging endpoint held the batch 10 s per delivery. Shutdown still finishes
+  attempts in flight and releases the rest.
+- Q3: order stays oldest-first within an organization, none across them — documented.
+- `docs/analytics-pipeline.md`, `docs/postback-delivery.md`, audit statuses.
+
+Tests: a 100-row flood plus two small organizations — a batch of 10 holds all of the small ones'
+rows and the flood's 5 oldest; five organizations, limit 2 — three claims reach all five; a busy
+organization's 30 older due deliveries do not keep the quiet one's out of a 5-delivery claim; a
+hanging endpoint does not hold the batch's other deliveries (with `-race`). Index use checked
+with EXPLAIN. Full suite with full env, e2e `TestFullFunnel` passes.
+
 ## [Between phases] — paginated entity lists (tech audit §5, P3)
 
 - `GET /offers`, `/networks`, `/landings`, `/postlandings`, `/pwas`, `/tags`, `/campaigns`,

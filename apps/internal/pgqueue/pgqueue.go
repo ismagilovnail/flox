@@ -31,9 +31,17 @@ const retryCandidates = 10
 
 // ClaimBatch claims a due batch from table: a whole retry batch first, so a
 // failed insert is retried before newer work, otherwise up to limit fresh
-// rows under a new batch id. table must be a queue table name constant,
-// never input. An empty result means nothing is due.
+// rows under a new batch id — each organization's fair share first, then
+// the oldest of the rest (fair.go). table must be a queue table name
+// constant, never input. An empty result means nothing is due.
 func ClaimBatch(ctx context.Context, db *pgxpool.Pool, table string, limit int) (string, []Row, error) {
+	return ClaimBatchRotating(ctx, db, table, limit, nil)
+}
+
+// ClaimBatchRotating is ClaimBatch with rot carrying the fair share's
+// starting organization from one claim to the next (a Queue keeps one);
+// nil starts every claim from the first organization.
+func ClaimBatchRotating(ctx context.Context, db *pgxpool.Pool, table string, limit int, rot *Rotation) (string, []Row, error) {
 	tx, err := db.Begin(ctx)
 	if err != nil {
 		return "", nil, fmt.Errorf("pgqueue: beginning claim on %s: %w", table, err)
@@ -42,7 +50,16 @@ func ClaimBatch(ctx context.Context, db *pgxpool.Pool, table string, limit int) 
 
 	batchID, rows, err := claimRetry(ctx, tx, table)
 	if err == nil && len(rows) == 0 {
-		batchID, rows, err = claimFresh(ctx, tx, table, limit)
+		batchID = idgen.New()
+		rows, err = claimFair(ctx, tx, table, limit, batchID, rot)
+		if err == nil && len(rows) < limit {
+			var rest []Row
+			rest, err = claimFresh(ctx, tx, table, limit-len(rows), batchID)
+			rows = append(rows, rest...)
+		}
+		if len(rows) == 0 {
+			batchID = ""
+		}
 	}
 	if err != nil {
 		return "", nil, err
@@ -93,8 +110,8 @@ func claimRetry(ctx context.Context, tx pgx.Tx, table string) (string, []Row, er
 	return "", nil, nil
 }
 
-func claimFresh(ctx context.Context, tx pgx.Tx, table string, limit int) (string, []Row, error) {
-	batchID := idgen.New()
+// claimFresh claims up to limit of the oldest fresh rows under batchID.
+func claimFresh(ctx context.Context, tx pgx.Tx, table string, limit int, batchID string) ([]Row, error) {
 	rows, err := queryRows(ctx, tx, `
 		WITH due AS (
 			SELECT id FROM `+table+`
@@ -109,12 +126,9 @@ func claimFresh(ctx context.Context, tx pgx.Tx, table string, limit int) (string
 		WHERE q.id = due.id
 		RETURNING q.id, q.payload`, limit, batchID)
 	if err != nil {
-		return "", nil, fmt.Errorf("pgqueue: claiming due rows on %s: %w", table, err)
+		return nil, fmt.Errorf("pgqueue: claiming due rows on %s: %w", table, err)
 	}
-	if len(rows) == 0 {
-		return "", nil, nil
-	}
-	return batchID, rows, nil
+	return rows, nil
 }
 
 func queryRows(ctx context.Context, tx pgx.Tx, sql string, args ...any) ([]Row, error) {
