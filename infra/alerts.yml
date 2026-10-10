@@ -344,13 +344,15 @@ groups:
           description: "The newest {{ $labels.store }} backup in the bucket is older than a day. Check the backup sidecar's log (`make backup-list`, flox_backup_failures_total)."
 
       - alert: BackupNeverTaken
-        expr: up{job="flox-backup"} == 1 unless on() flox_backup_last_success_timestamp_seconds{store="postgres"}
+        # Per store the sidecar covers (flox_backup_store_enabled): Postgres
+        # is 0 with BACKUP_POSTGRES=off, a managed Postgres's own PITR.
+        expr: flox_backup_store_enabled == 1 unless on(store) flox_backup_last_success_timestamp_seconds
         for: 26h
         labels:
           severity: critical
         annotations:
-          summary: "the backup bucket has no Postgres base backup"
-          description: "The sidecar has run for a day without a single base backup in the bucket."
+          summary: "the backup bucket has no {{ $labels.store }} backup"
+          description: "The sidecar has run for a day without a single {{ $labels.store }} backup in the bucket."
 
       - alert: WALArchivingFailing
         # Every WAL segment that fails to archive is lost from PITR, and

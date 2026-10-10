@@ -80,8 +80,8 @@ spec:
               valueFrom: {secretKeyRef: {name: flox-secrets, key: LANDING_LINK_KEY, optional: true}}
             - name: SENTRY_DSN
               valueFrom: {secretKeyRef: {name: flox-secrets, key: SENTRY_DSN, optional: true}}
-            # GeoIP databases (docs/geoip.md): mount .mmdb files at /geoip
-            # (see the geoip volume below); missing files fall back to no geo.
+            # GeoIP databases (docs/geoip.md); missing files fall back to no
+            # geo. components/geoip fills /geoip and repoints these.
             - name: GEOIP_CITY_DB_PATH
               value: /geoip/GeoLite2-City.mmdb
             - name: GEOIP_ASN_DB_PATH
@@ -115,8 +115,7 @@ spec:
               mountPath: /geoip
               readOnly: true
       volumes:
-        # Replace with a volume holding the MaxMind databases (a PVC kept
-        # current by geoipupdate, or an image-volume) — overlays patch it.
+        # Empty without components/geoip, which copies the databases in.
         - name: geoip
           emptyDir: {}
 ---

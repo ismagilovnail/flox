@@ -122,7 +122,8 @@ It also needs `maxmemory` and an evicting policy (`allkeys-lru`) —
 host `nats://localhost:4222` (test: `4223`). Unset: events go through the
 Postgres `event_queue` as before. Production: the cluster's client URL,
 with credentials (`nats://user:pass@host:4222`) if the server requires
-them. `NATS_STREAM_REPLICAS` — stream replicas, `1` (default) for a single
+them — the Kubernetes NATS does (`NATS_PASSWORD`, `docs/kubernetes.md`);
+logs mask the password. `NATS_STREAM_REPLICAS` — stream replicas, `1` (default) for a single
 server, `3` in a cluster. `NATS_STREAM_MAX_MB` — the stream's size on disk,
 `10240` (default); it must fit the server's `max_file_store`, otherwise
 JetStream refuses to create the stream and every event goes through the
@@ -143,6 +144,7 @@ Read by the backup sidecar (`apps/cmd/backup`, `docs/backup.md`).
 |---|---|---|
 | `BACKUP_S3_ENDPOINT` / `_REGION` / `_BUCKET` / `_ACCESS_KEY_ID` / `_SECRET_ACCESS_KEY` | dev MinIO, bucket `flox-backups` | An **off-site** bucket — another provider or region than the databases and `S3_BUCKET`. Refused if equal to `S3_BUCKET` on the same host. Credentials limited to that bucket. |
 | `BACKUP_CLICKHOUSE_S3_ENDPOINT` | `BACKUP_S3_ENDPOINT` | Set only when the ClickHouse server reaches the bucket by another URL than the sidecar |
+| `BACKUP_POSTGRES` | `walg` | `off`: no Postgres backup here (a managed Postgres's own PITR); ClickHouse and files only |
 | `BACKUP_DATABASE_URL` | `DATABASE_URL` | A role allowed `pg_backup_start`/`pg_backup_stop`/`pg_switch_wal` (superuser, or granted them) |
 | `BACKUP_AT` | `03:00` | Daily run, UTC |
 | `BACKUP_KEEP_POSTGRES` / `BACKUP_KEEP_CLICKHOUSE` | `14` / `14` | Base backups / ClickHouse backups kept. The Postgres PITR window is the oldest kept base backup to now. |

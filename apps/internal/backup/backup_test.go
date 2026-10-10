@@ -44,9 +44,20 @@ func TestConfigFromEnv(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if c.At != 3*time.Hour || c.KeepPostgres != 14 || c.KeepClickHouse != 14 || c.DrillDay != 1 ||
+		if !c.Postgres || c.At != 3*time.Hour || c.KeepPostgres != 14 || c.KeepClickHouse != 14 || c.DrillDay != 1 ||
 			c.ClickHouseS3Endpoint != "http://backup:9000" || c.DatabaseURL != base["DATABASE_URL"] {
 			t.Errorf("config = %+v", c)
+		}
+	})
+	t.Run("postgres off needs no database", func(t *testing.T) {
+		set(t, map[string]string{"BACKUP_POSTGRES": "off", "DATABASE_URL": ""})
+		c, err := ConfigFromEnv()
+		if err != nil || c.Postgres {
+			t.Errorf("Postgres = %v, %v; want off and no error", c.Postgres, err)
+		}
+		set(t, map[string]string{"BACKUP_POSTGRES": "", "DATABASE_URL": ""})
+		if _, err := ConfigFromEnv(); err == nil || !strings.Contains(err.Error(), "DATABASE_URL") {
+			t.Errorf("walg without a database: err = %v", err)
 		}
 	})
 	t.Run("backup database url wins", func(t *testing.T) {
@@ -61,6 +72,7 @@ func TestConfigFromEnv(t *testing.T) {
 		want string
 	}{
 		{"missing bucket", map[string]string{"BACKUP_S3_BUCKET": ""}, "BACKUP_S3_BUCKET"},
+		{"unknown postgres mode", map[string]string{"BACKUP_POSTGRES": "pgbackrest"}, "BACKUP_POSTGRES"},
 		{"bad clock", map[string]string{"BACKUP_AT": "3am"}, "BACKUP_AT"},
 		{"keep zero", map[string]string{"BACKUP_KEEP_POSTGRES": "0"}, "BACKUP_KEEP_POSTGRES"},
 		{"drill day 31", map[string]string{"BACKUP_DRILL_DAY": "31"}, "BACKUP_DRILL_DAY"},

@@ -7,10 +7,14 @@
 # DNS points at its load balancer address (TRACKER_DNS_TARGET).
 # externalTrafficPolicy: Local keeps the visitor's IP for X-Forwarded-For.
 #
-# One replica: certificates live on a ReadWriteOnce volume. To run several,
-# give Caddy shared storage (an RWX volume or a storage module such as
-# Redis) first, or each replica requests its own certificates and hits the
-# CA's rate limits.
+# Two replicas sharing one certificate volume (ReadWriteMany): Caddy
+# instances on the same storage act as one cluster — a certificate is
+# issued once (they lock through the storage), every replica loads it from
+# there, and an ACME challenge started by one is answered by whichever
+# replica the CA reaches. The volume needs a StorageClass that offers
+# ReadWriteMany (EFS, Filestore, Azure Files, NFS, CephFS, Longhorn RWX);
+# overlays/production names it. Not Redis: FLOX's Redis evicts keys when
+# full (allkeys-lru), and a certificate must never be evicted.
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -18,9 +22,11 @@ metadata:
   labels:
     app.kubernetes.io/name: edge
 spec:
-  replicas: 1
+  replicas: 2
   strategy:
-    type: Recreate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
   selector:
     matchLabels:
       app.kubernetes.io/name: edge
@@ -35,6 +41,13 @@ spec:
       securityContext:
         seccompProfile:
           type: RuntimeDefault
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: edge
       containers:
         - name: caddy
           image: caddy:2.10-alpine
@@ -55,6 +68,10 @@ spec:
             tcpSocket: {port: http}
             initialDelaySeconds: 10
             periodSeconds: 10
+          # The load balancer stops sending before Caddy stops.
+          lifecycle:
+            preStop:
+              sleep: {seconds: 5}
           resources:
             requests: {cpu: 250m, memory: 128Mi}
             limits: {memory: 512Mi}
@@ -78,16 +95,17 @@ spec:
             name: flox-edge-caddyfile
         - name: data
           persistentVolumeClaim:
-            claimName: edge-certificates
+            claimName: edge-certificates-shared
         - name: config
           emptyDir: {}
 ---
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
-  name: edge-certificates
+  name: edge-certificates-shared
 spec:
-  accessModes: [ReadWriteOnce]
+  # Shared by every replica (above).
+  accessModes: [ReadWriteMany]
   resources:
     requests:
       storage: 1Gi
@@ -110,3 +128,13 @@ spec:
     - name: https
       port: 443
       targetPort: https
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: edge
+spec:
+  maxUnavailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: edge

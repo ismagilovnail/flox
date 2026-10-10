@@ -8,6 +8,9 @@
 //
 // It runs in the backup sidecar (apps/cmd/backup/Dockerfile): it needs
 // wal-g, pg_ctl, and the live Postgres data directory mounted read-only.
+// With BACKUP_POSTGRES=off (a managed Postgres, its provider's PITR) it
+// backs up ClickHouse and the files bucket only, and needs none of them
+// (target backup-remote, infra/k8s/components/backup).
 package main
 
 import (
@@ -49,9 +52,11 @@ func run(cmd string) error {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	pg, err := backup.NewPostgres(cfg.DatabaseURL, cfg.PGData, cfg.DrillDir, cfg.Target)
-	if err != nil {
-		return err
+	var pg *backup.Postgres
+	if cfg.Postgres {
+		if pg, err = backup.NewPostgres(cfg.DatabaseURL, cfg.PGData, cfg.DrillDir, cfg.Target); err != nil {
+			return err
+		}
 	}
 	conn, err := chconn.NewConn(ctx, cfg.ClickHouse)
 	if err != nil {
@@ -93,7 +98,7 @@ func run(cmd string) error {
 		return nil
 	case "list":
 		s, err := r.Status(ctx)
-		printStatus(s)
+		printStatus(s, cfg.Postgres)
 		return err
 	default:
 		return fmt.Errorf("unknown command %q (serve, now, drill, list)", cmd)
@@ -143,20 +148,24 @@ func printReport(rep backup.Report) {
 	fmt.Printf("\nrestore drill %s in %s (report drills/%s.json)\n", verdict, rep.FinishedAt.Sub(rep.StartedAt).Round(time.Second), rep.Name)
 }
 
-func printStatus(s backup.Status) {
-	fmt.Println("postgres base backups (PITR from the oldest to the last archived WAL):")
-	for _, b := range s.Postgres {
-		fmt.Printf("  %s  %s  %s\n", b.FinishTime.UTC().Format(time.DateTime), b.Name, mb(b.CompressedSize))
-	}
-	if len(s.Postgres) == 0 {
-		fmt.Println("  none")
-	}
-	if a := s.Archiver; a != nil {
-		state := "ok"
-		if a.Failing() {
-			state = "FAILING since " + a.LastFailed.UTC().Format(time.DateTime)
+func printStatus(s backup.Status, withPostgres bool) {
+	if withPostgres {
+		fmt.Println("postgres base backups (PITR from the oldest to the last archived WAL):")
+		for _, b := range s.Postgres {
+			fmt.Printf("  %s  %s  %s\n", b.FinishTime.UTC().Format(time.DateTime), b.Name, mb(b.CompressedSize))
 		}
-		fmt.Printf("  wal archiving: %s, last archived %s at %s\n", state, orNone(a.LastArchivedWAL), stamp(a.LastArchived))
+		if len(s.Postgres) == 0 {
+			fmt.Println("  none")
+		}
+		if a := s.Archiver; a != nil {
+			state := "ok"
+			if a.Failing() {
+				state = "FAILING since " + a.LastFailed.UTC().Format(time.DateTime)
+			}
+			fmt.Printf("  wal archiving: %s, last archived %s at %s\n", state, orNone(a.LastArchivedWAL), stamp(a.LastArchived))
+		}
+	} else {
+		fmt.Println("postgres: not backed up here (BACKUP_POSTGRES=off, the provider's PITR)")
 	}
 	fmt.Println("clickhouse backups:")
 	fmt.Printf("  %s\n", orNone(strings.Join(s.ClickHouse, ", ")))

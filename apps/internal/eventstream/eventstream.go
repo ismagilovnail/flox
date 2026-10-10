@@ -114,7 +114,7 @@ func Connect(url, name string, logger *slog.Logger) (*nats.Conn, jetstream.JetSt
 			logger.Warn("nats disconnected", "error", err)
 		}),
 		nats.ReconnectHandler(func(c *nats.Conn) {
-			logger.Info("nats reconnected", "url", c.ConnectedUrl())
+			logger.Info("nats reconnected", "url", c.ConnectedUrlRedacted())
 		}),
 	)
 	if err != nil {

@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Deploys one overlay in the order FLOX needs (docs/kubernetes.md):
-#   1. namespace, config, Secret (if the overlay has one), data stores, NATS
+#   1. namespace, config, Secret (if the overlay has one), data stores, NATS,
+#      the GeoIP server (trackers copy its databases when they start)
 #   2. the Postgres migration Job — waits for it to succeed
 #   3. the workloads, then waits for every rollout
 #
@@ -12,7 +13,7 @@ overlay=${1:?usage: deploy.sh <overlay dir>}
 ns=flox
 kc=(kubectl)
 [[ -n "${KUBE_CONTEXT:-}" ]] && kc+=(--context "$KUBE_CONTEXT")
-apps='app.kubernetes.io/name notin (api,tracker,worker,web,edge)'
+apps='app.kubernetes.io/name notin (api,tracker,worker,web,edge,backup)'
 
 echo "==> context: $("${kc[@]}" config current-context 2>/dev/null || true)${KUBE_CONTEXT:+ (forced: $KUBE_CONTEXT)}"
 
@@ -22,8 +23,8 @@ if ! "${kc[@]}" -n "$ns" get secret flox-secrets >/dev/null 2>&1; then
   echo "Secret $ns/flox-secrets is missing — create it first (infra/k8s/secrets.env.example)." >&2
   exit 1
 fi
-for sts in $("${kc[@]}" -n "$ns" get statefulset -o name); do
-  "${kc[@]}" -n "$ns" rollout status "$sts" --timeout=10m
+for w in $("${kc[@]}" -n "$ns" get statefulset -o name) $("${kc[@]}" -n "$ns" get deployment -o name -l app.kubernetes.io/name=geoip); do
+  "${kc[@]}" -n "$ns" rollout status "$w" --timeout=10m
 done
 
 echo "==> 2/3 migrations"
@@ -45,7 +46,7 @@ done
 
 echo "==> 3/3 workloads"
 "${kc[@]}" apply -k "$overlay"
-for d in api tracker worker web edge; do
-  "${kc[@]}" -n "$ns" rollout status "deployment/$d" --timeout=10m
+for d in $("${kc[@]}" -n "$ns" get deployment -o name -l 'app.kubernetes.io/name in (api,tracker,worker,web,edge,backup)'); do
+  "${kc[@]}" -n "$ns" rollout status "$d" --timeout=10m
 done
 echo "==> done"

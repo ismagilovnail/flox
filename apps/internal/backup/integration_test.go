@@ -3,6 +3,7 @@ package backup
 import (
 	"bytes"
 	"context"
+	"log/slog"
 	"os"
 	"strings"
 	"testing"
@@ -184,6 +185,69 @@ func TestObjectsMirrorAndDrill(t *testing.T) {
 	}
 	if failed := failedChecks(o.Drill(ctx)); !strings.Contains(failed, "b/3.png") {
 		t.Fatalf("drill failures = %q, want b/3.png missing", failed)
+	}
+}
+
+// With BACKUP_POSTGRES=off (a managed Postgres) the runner backs up,
+// drills and reports ClickHouse and the files alone, and says which stores
+// it covers.
+func TestRunnerWithoutPostgres(t *testing.T) {
+	tg := testTarget(t)
+	conn := testClickHouse(t)
+	ctx := context.Background()
+	db := "flox_backup_test_" + strings.ToLower(idgen.New())
+	for _, q := range []string{
+		"CREATE DATABASE " + db,
+		"CREATE TABLE " + db + ".events (id UInt32) ENGINE = MergeTree ORDER BY id",
+		"INSERT INTO " + db + ".events SELECT number FROM numbers(20)",
+	} {
+		if err := conn.Exec(ctx, q); err != nil {
+			t.Fatalf("%s: %v", q, err)
+		}
+	}
+	t.Cleanup(func() {
+		_ = conn.Exec(context.Background(), "DROP DATABASE IF EXISTS "+db+" SYNC")
+		_ = conn.Exec(context.Background(), "DROP DATABASE IF EXISTS "+db+"_drill SYNC")
+	})
+	ch, err := NewClickHouse(conn, db, tg, envOr("BACKUP_TEST_CLICKHOUSE_S3_ENDPOINT", "http://minio:9000"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	r, err := NewRunner(Config{Target: tg, KeepClickHouse: 3}, nil, ch, nil, slog.New(slog.DiscardHandler))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if err := r.BackupAll(ctx); err != nil {
+		t.Fatalf("BackupAll: %v", err)
+	}
+	rep, err := r.Drill(ctx)
+	if err != nil || !rep.OK {
+		t.Fatalf("Drill = %+v, %v", rep, err)
+	}
+	for _, c := range rep.Checks {
+		if c.Store != StoreClickHouse {
+			t.Errorf("drill checked %s", c.Store)
+		}
+	}
+	s, err := r.Status(ctx)
+	if err != nil || s.Postgres != nil || s.Archiver != nil || len(s.ClickHouse) != 1 || s.LastGoodDrill == nil {
+		t.Fatalf("Status = %+v, %v", s, err)
+	}
+
+	r.Refresh(ctx)
+	enabled := map[string]float64{}
+	families, _ := r.Registry().Gather()
+	for _, f := range families {
+		if f.GetName() != "flox_backup_store_enabled" {
+			continue
+		}
+		for _, m := range f.GetMetric() {
+			enabled[m.GetLabel()[0].GetValue()] = m.GetGauge().GetValue()
+		}
+	}
+	if enabled[StorePostgres] != 0 || enabled[StoreClickHouse] != 1 || enabled[StoreObjects] != 0 || len(enabled) != 3 {
+		t.Errorf("store_enabled = %v", enabled)
 	}
 }
 

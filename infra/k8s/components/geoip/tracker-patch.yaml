@@ -1,0 +1,44 @@
+# Copies the databases from the geoip server before the tracker starts.
+# Best effort, as GeoIP is in the tracker itself (docs/geoip.md): with the
+# server unreachable the tracker starts without geo and logs it.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: tracker
+spec:
+  template:
+    spec:
+      initContainers:
+        - name: geoip
+          image: flox/tracker
+          command:
+            - sh
+            - -c
+            - |
+              for f in city asn; do
+                wget -q -T 60 -O "/geoip/$f.tmp" "http://geoip:8080/$f.mmdb" &&
+                  mv "/geoip/$f.tmp" "/geoip/$f.mmdb" ||
+                  { rm -f "/geoip/$f.tmp"; echo "geoip: no $f database from http://geoip:8080 — starting without it" >&2; }
+              done
+              ls -l /geoip
+          resources:
+            requests: {cpu: 50m, memory: 32Mi}
+            limits: {memory: 64Mi}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: {drop: [ALL]}
+          volumeMounts:
+            - name: geoip
+              mountPath: /geoip
+      containers:
+        - name: tracker
+          env:
+            - name: GEOIP_CITY_DB_PATH
+              value: /geoip/city.mmdb
+            - name: GEOIP_ASN_DB_PATH
+              value: /geoip/asn.mmdb
+      volumes:
+        - name: geoip
+          emptyDir:
+            sizeLimit: 512Mi

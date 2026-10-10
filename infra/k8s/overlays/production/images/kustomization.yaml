@@ -9,3 +9,4 @@ images:
   - {name: flox/tracker, newName: registry.example.com/flox/tracker, newTag: "1.0.0"}
   - {name: flox/worker, newName: registry.example.com/flox/worker, newTag: "1.0.0"}
   - {name: flox/web, newName: registry.example.com/flox/web, newTag: "1.0.0"}
+  - {name: flox/backup-remote, newName: registry.example.com/flox/backup-remote, newTag: "1.0.0"}

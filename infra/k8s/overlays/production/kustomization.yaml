@@ -2,7 +2,9 @@
 #
 # Expected in the cluster: an ingress controller (class nginx), cert-manager
 # with a ClusterIssuer `letsencrypt`, metrics-server (HPA), a CNI enforcing
-# NetworkPolicy, a default StorageClass. Postgres, ClickHouse, Redis and S3
+# NetworkPolicy, a default StorageClass and a ReadWriteMany one (the edge's
+# shared certificates, below), egress to download.db-ip.com (GeoIP).
+# Postgres, ClickHouse, Redis and S3
 # are external (managed or operator-run) — their addresses go in
 # flox-config below and in the Secret.
 #
@@ -21,6 +23,9 @@ resources:
 
 components:
   - ../../components/nats
+  - ../../components/geoip
+  # ClickHouse and the files bucket; Postgres is the provider's PITR.
+  - ../../components/backup
   - images
 
 configMapGenerator:
@@ -36,8 +41,18 @@ configMapGenerator:
       - S3_BUCKET=flox
       - MAIL_FROM=FLOX <no-reply@example.com>
       - ACME_EMAIL=ops@example.com
+      # Off-site: another provider or region than S3_ENDPOINT.
+      - BACKUP_S3_ENDPOINT=https://backup.example.com
+      - BACKUP_S3_REGION=us-east-1
+      - BACKUP_S3_BUCKET=flox-backups
 
 patches:
+  # A StorageClass offering ReadWriteMany (base/edge.yaml).
+  - target: {kind: PersistentVolumeClaim, name: edge-certificates-shared}
+    patch: |-
+      - op: add
+        path: /spec/storageClassName
+        value: example-rwx
   - target: {kind: Ingress, name: flox}
     patch: |-
       - op: replace

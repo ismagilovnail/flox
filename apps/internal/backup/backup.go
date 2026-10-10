@@ -64,6 +64,11 @@ type Config struct {
 	// reaches it: BACKUP ... TO S3 is run by the server, not by us.
 	ClickHouseS3Endpoint string
 
+	// Postgres: back up Postgres with WAL-G (BACKUP_POSTGRES=walg, the
+	// default). Off (BACKUP_POSTGRES=off) for a managed Postgres, whose
+	// provider's PITR covers it: WAL-G needs the live data directory and
+	// the server's archive_command, which a managed one does not give.
+	Postgres bool
 	// DatabaseURL connects as a role that may run pg_backup_start and
 	// pg_switch_wal (a superuser, or one granted them).
 	DatabaseURL string
@@ -110,6 +115,13 @@ func ConfigFromEnv() (Config, error) {
 		HTTPAddr: env("BACKUP_HTTP_ADDR", ":8083"),
 	}
 	c.ClickHouseS3Endpoint = env("BACKUP_CLICKHOUSE_S3_ENDPOINT", c.Target.Endpoint)
+	switch mode := env("BACKUP_POSTGRES", "walg"); mode {
+	case "walg":
+		c.Postgres = true
+	case "off":
+	default:
+		return Config{}, fmt.Errorf("BACKUP_POSTGRES: want walg or off, got %q", mode)
+	}
 
 	var err error
 	if c.At, err = parseClock(env("BACKUP_AT", "03:00")); err != nil {
@@ -132,12 +144,16 @@ func ConfigFromEnv() (Config, error) {
 		*v.dst = n
 	}
 
-	var missing []string
-	for k, v := range map[string]string{
+	required := map[string]string{
 		"BACKUP_S3_ENDPOINT": c.Target.Endpoint, "BACKUP_S3_BUCKET": c.Target.Bucket,
 		"BACKUP_S3_ACCESS_KEY_ID": c.Target.AccessKeyID, "BACKUP_S3_SECRET_ACCESS_KEY": c.Target.SecretAccessKey,
-		"BACKUP_DATABASE_URL or DATABASE_URL": c.DatabaseURL, "CLICKHOUSE_URL": c.ClickHouse.URL,
-	} {
+		"CLICKHOUSE_URL": c.ClickHouse.URL,
+	}
+	if c.Postgres {
+		required["BACKUP_DATABASE_URL or DATABASE_URL"] = c.DatabaseURL
+	}
+	var missing []string
+	for k, v := range required {
 		if v == "" {
 			missing = append(missing, k)
 		}

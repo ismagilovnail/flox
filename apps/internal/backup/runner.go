@@ -44,7 +44,7 @@ type Report struct {
 type Runner struct {
 	cfg        Config
 	bucket     *bucket
-	postgres   *Postgres
+	postgres   *Postgres // nil: BACKUP_POSTGRES=off
 	clickhouse *ClickHouse
 	objects    *Objects // nil: no files bucket configured
 	logger     *slog.Logger
@@ -56,7 +56,15 @@ func NewRunner(cfg Config, pg *Postgres, ch *ClickHouse, objects *Objects, logge
 	if err != nil {
 		return nil, err
 	}
-	return &Runner{cfg: cfg, bucket: b, postgres: pg, clickhouse: ch, objects: objects, logger: logger, metrics: newMetrics()}, nil
+	m := newMetrics()
+	for store, on := range map[string]bool{StorePostgres: pg != nil, StoreClickHouse: true, StoreObjects: objects != nil} {
+		if on {
+			m.enabled.WithLabelValues(store).Set(1)
+		} else {
+			m.enabled.WithLabelValues(store).Set(0)
+		}
+	}
+	return &Runner{cfg: cfg, bucket: b, postgres: pg, clickhouse: ch, objects: objects, logger: logger, metrics: m}, nil
 }
 
 // Registry is what /metrics serves.
@@ -111,12 +119,14 @@ func (r *Runner) BackupAll(ctx context.Context) error {
 		r.metrics.duration.WithLabelValues(store).Set(time.Since(started).Seconds())
 		r.logger.Info("backup done", "store", store, "took", time.Since(started).Round(time.Second).String())
 	}
-	run(StorePostgres, func() error {
-		if err := r.postgres.Backup(ctx); err != nil {
-			return err
-		}
-		return r.postgres.Prune(ctx, r.cfg.KeepPostgres)
-	})
+	if r.postgres != nil {
+		run(StorePostgres, func() error {
+			if err := r.postgres.Backup(ctx); err != nil {
+				return err
+			}
+			return r.postgres.Prune(ctx, r.cfg.KeepPostgres)
+		})
+	}
 	run(StoreClickHouse, func() error {
 		if _, err := r.clickhouse.Backup(ctx, time.Now()); err != nil {
 			return err
@@ -145,7 +155,9 @@ func (r *Runner) Drill(ctx context.Context) (Report, error) {
 	rep := Report{StartedAt: time.Now().UTC()}
 	rep.Name = name(rep.StartedAt)
 	r.logger.Info("restore drill starting")
-	rep.Checks = append(rep.Checks, r.postgres.Drill(ctx)...)
+	if r.postgres != nil {
+		rep.Checks = append(rep.Checks, r.postgres.Drill(ctx)...)
+	}
 	rep.Checks = append(rep.Checks, r.clickhouse.Drill(ctx)...)
 	if r.objects != nil {
 		rep.Checks = append(rep.Checks, r.objects.Drill(ctx)...)
@@ -188,12 +200,14 @@ func (r *Runner) Status(ctx context.Context) (Status, error) {
 		}
 	}
 	var err error
-	s.Postgres, err = r.postgres.List(ctx)
-	keep(err)
-	if a, err := r.postgres.Archiver(ctx); err == nil {
-		s.Archiver = &a
-	} else {
+	if r.postgres != nil {
+		s.Postgres, err = r.postgres.List(ctx)
 		keep(err)
+		if a, err := r.postgres.Archiver(ctx); err == nil {
+			s.Archiver = &a
+		} else {
+			keep(err)
+		}
 	}
 	s.ClickHouse, err = r.clickhouse.List(ctx)
 	keep(err)
@@ -268,6 +282,7 @@ func (r *Runner) Refresh(ctx context.Context) {
 
 type metrics struct {
 	registry        *prometheus.Registry
+	enabled         *prometheus.GaugeVec
 	lastSuccess     *prometheus.GaugeVec
 	duration        *prometheus.GaugeVec
 	size            *prometheus.GaugeVec
@@ -285,6 +300,8 @@ func newMetrics() *metrics {
 	const ns = "flox_backup"
 	m := &metrics{
 		registry: prometheus.NewRegistry(),
+		enabled: prometheus.NewGaugeVec(prometheus.GaugeOpts{Namespace: ns, Name: "store_enabled",
+			Help: "1 for each store this sidecar backs up (postgres is 0 with BACKUP_POSTGRES=off)."}, []string{"store"}),
 		lastSuccess: prometheus.NewGaugeVec(prometheus.GaugeOpts{Namespace: ns, Name: "last_success_timestamp_seconds",
 			Help: "When the newest backup in the bucket finished, by store."}, []string{"store"}),
 		duration: prometheus.NewGaugeVec(prometheus.GaugeOpts{Namespace: ns, Name: "last_duration_seconds",
@@ -304,6 +321,6 @@ func newMetrics() *metrics {
 		refreshErrors: prometheus.NewCounter(prometheus.CounterOpts{Namespace: ns, Name: "status_errors_total",
 			Help: "Failures reading the backup status back from the bucket or Postgres."}),
 	}
-	m.registry.MustRegister(m.lastSuccess, m.duration, m.size, m.kept, m.failures, m.drill, m.walFailing, m.walLastArchived, m.refreshErrors)
+	m.registry.MustRegister(m.enabled, m.lastSuccess, m.duration, m.size, m.kept, m.failures, m.drill, m.walFailing, m.walLastArchived, m.refreshErrors)
 	return m
 }

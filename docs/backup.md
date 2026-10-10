@@ -29,6 +29,12 @@ ClickHouse has its own backup.
   It mounts the live data directory **read-only** (WAL-G reads it for the
   base backup) and a scratch volume for the drill — the drill restores
   the whole Postgres database there, so give it the database's size.
+- **Managed Postgres** (Kubernetes, `docs/kubernetes.md`):
+  `BACKUP_POSTGRES=off` leaves Postgres to the provider's PITR and backs
+  up ClickHouse and the files only — no WAL-G, no data directory, no
+  `BACKUP_DATABASE_URL` (Dockerfile target `backup-remote`).
+  `flox_backup_store_enabled{store}` says which stores a sidecar covers;
+  `BackupNeverTaken` watches each enabled one.
 - The sidecar creates the bucket if it is missing (dev). In production
   create it beforehand with versioning or object lock, so a leaked
   credential cannot delete the backups.

@@ -45,3 +45,5 @@ images:
     newTag: latest
   - name: flox/web
     newTag: latest
+  - name: flox/backup-remote
+    newTag: latest

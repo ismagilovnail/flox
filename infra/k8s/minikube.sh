@@ -19,6 +19,7 @@ case "${1:-}" in
     docker build -q -f apps/api/Dockerfile --target migrate -t flox/api-migrate:local apps/
     docker build -q -f apps/tracker/Dockerfile --target tracker -t flox/tracker:local apps/
     docker build -q -f apps/worker/Dockerfile --target worker -t flox/worker:local apps/
+    docker build -q -f apps/cmd/backup/Dockerfile --target backup-remote -t flox/backup-remote:local apps/
     # MinIO has no public images any more: take the one the compose stack
     # already pulled (docker images minio/minio) under its release tag.
     minio=minio/minio:RELEASE.2025-09-07T16-13-09Z

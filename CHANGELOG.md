@@ -5,6 +5,37 @@ per-phase, matching `CLAUDE.md`'s phase protocol. The one exception is
 [Between phases], below: spec amendments and the code changes that follow from
 them land between phases and would otherwise be invisible here.
 
+## [Between phases] — Kubernetes: backups, edge HA, GeoIP, NATS login
+
+Closes the four gaps the first Kubernetes version listed.
+
+- Backups: `flox-backup` gets `BACKUP_POSTGRES=off` (managed Postgres = the provider's PITR;
+  WAL-G needs the data directory). `components/backup` runs it in the 33 MB `backup-remote`
+  image: ClickHouse + files bucket nightly, monthly drill. New `flox_backup_store_enabled{store}`;
+  `BackupNeverTaken` now watches every enabled store (it would have fired forever with Postgres
+  off, and never covered ClickHouse).
+- Edge: 2 replicas on one ReadWriteMany certificate volume (Caddy coordinates issuance and
+  ACME challenges through the storage), rolling updates, PDB, `preStop`. The claim is renamed
+  `edge-certificates-shared` — access modes are immutable; `docs/kubernetes.md` has the
+  certificate copy for existing installs.
+- GeoIP: `components/geoip` — one pod keeps DB-IP Lite current (`update.sh`, daily check,
+  monthly download, atomic replace) and serves it; tracker pods copy it in an init container
+  (best effort); CronJob on the 4th rolls the trackers (Role: patch `deployment/tracker` only).
+- NATS: clients log in (`NATS_PASSWORD`); the reconnect log masked nothing before — it now
+  prints `ConnectedUrlRedacted()`.
+- PodMonitor: `job` relabeled to `flox-<app>` and `backup` added — `infra/alerts.yml`'s
+  `up{job="flox-…"}` alerts could never fire under the Prometheus Operator.
+
+Verified in minikube: every rollout; trackers load the databases (8.8.8.8 → US/AS15169, 1.1.1.1
+→ AU/AS13335, 77.88.8.8 → RU/AS13238 in ClickHouse, through the password-protected NATS);
+`flox-backup now / drill / list` (drill PASSED, Postgres reported as not covered); both edge
+replicas proxy and share one volume; the CronJob restarts the tracker and its account cannot
+patch `deployment/api`. Found there: the caddy binary needs `NET_BIND_SERVICE` in the
+capability set to exec; RWO→RWX on an existing claim is refused. NATS login checked against a
+real server (no / wrong password refused). Tests: `BACKUP_POSTGRES` config, the runner without
+Postgres on real ClickHouse + MinIO; full Go suite with full env, e2e `TestFullFunnel` passes;
+`promtool` 31 rules; `check.sh` + server dry run of the minikube overlays.
+
 ## [Between phases] — Kubernetes deployment (audit DO3)
 
 - `infra/k8s` (Kustomize, `kubectl apply -k`): base api / tracker / worker / web / edge (Caddy,

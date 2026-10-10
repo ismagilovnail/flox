@@ -9,8 +9,16 @@ spec:
     matchExpressions:
       - key: app.kubernetes.io/name
         operator: In
-        values: [api, tracker, worker]
+        values: [api, tracker, worker, backup]
   podMetricsEndpoints:
     - port: http
       path: /metrics
       interval: 15s
+      # infra/alerts.yml matches job="flox-api", "flox-tracker",
+      # "flox-worker", "flox-backup" (the compose scrape jobs); without
+      # this every target here would be job="flox/flox" and the down
+      # alerts would never fire.
+      relabelings:
+        - sourceLabels: [__meta_kubernetes_pod_label_app_kubernetes_io_name]
+          targetLabel: job
+          replacement: flox-$1

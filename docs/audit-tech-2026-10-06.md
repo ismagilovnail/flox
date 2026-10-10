@@ -868,7 +868,10 @@ Error tracking (Sentry или аналог) не подключён. Паник�
   (**Статус: исправлено** — Kubernetes-манифесты на Kustomize в `infra/k8s`:
   requests/limits, PDB, HPA, grace-периоды, probes, non-root/read-only,
   Job миграций перед выкаткой, NATS-кластер; проверено развёртыванием в
-  minikube. `docs/kubernetes.md`. Пробел: бэкапы ClickHouse и бакета в k8s.)
+  minikube. `docs/kubernetes.md`. Пробелы первой версии закрыты: бэкапы
+  ClickHouse и бакета (`components/backup`, `BACKUP_POSTGRES=off` — Postgres
+  на PITR провайдера), edge в 2 реплики на общем RWX-томе, GeoIP
+  (`components/geoip`), вход в NATS по паролю.)
 - **DO4 [MEDIUM].** (**Статус: проверено и закреплено** — на `alpine:3.21` бандл уже был в базовом образе (`ca-certificates-bundle`), Go-TLS из образа tracker'а работал; теперь `ca-certificates` ставится явно, чтобы смена базового образа его не убрала.) В runtime-образе tracker'а нет `ca-certificates`
   (`apps/tracker/Dockerfile`). При managed-PG с `sslmode=verify-full`,
   Redis с TLS (`rediss://`) или HTTPS-ClickHouse tracker не стартует или не

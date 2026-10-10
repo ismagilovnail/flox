@@ -3,6 +3,10 @@
 #
 #   docker build -f apps/cmd/backup/Dockerfile --target postgres -t flox/postgres apps/
 #   docker build -f apps/cmd/backup/Dockerfile --target backup   -t flox/backup   apps/
+#   docker build -f apps/cmd/backup/Dockerfile --target backup-remote -t flox/backup-remote apps/
+#
+# backup-remote is ClickHouse and the files bucket only (BACKUP_POSTGRES=off):
+# for Kubernetes with a managed Postgres (infra/k8s/components/backup).
 #
 # Both targets sit on postgres:16-alpine, the image the database already
 # runs: the same data directory format, the same pg_ctl for the drill, the
@@ -38,5 +42,17 @@ RUN mkdir -p /var/lib/flox-drill && chown postgres:postgres /var/lib/flox-drill
 USER postgres
 EXPOSE 8083
 HEALTHCHECK --interval=30s --timeout=5s CMD wget -q --spider http://127.0.0.1:8083/health || exit 1
+ENTRYPOINT ["flox-backup"]
+CMD ["serve"]
+
+# ---------- ClickHouse + files only (BACKUP_POSTGRES=off) ----------
+# No wal-g, no Postgres: a managed Postgres is its provider's PITR, and
+# WAL-G cannot reach its data directory anyway.
+FROM alpine:3.21 AS backup-remote
+RUN apk add --no-cache ca-certificates && adduser -D -u 10001 -h /app app
+COPY --from=builder /out/flox-backup /usr/local/bin/flox-backup
+ENV BACKUP_POSTGRES=off
+USER app
+EXPOSE 8083
 ENTRYPOINT ["flox-backup"]
 CMD ["serve"]

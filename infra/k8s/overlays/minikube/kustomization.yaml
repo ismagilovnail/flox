@@ -16,6 +16,8 @@ components:
   - ../../components/nats
   - ../../components/nats-single
   - ../../components/dev-datastores
+  - ../../components/geoip
+  - ../../components/backup
   - images
 
 configMapGenerator:
@@ -30,6 +32,9 @@ configMapGenerator:
       - S3_ENDPOINT=http://minio:9000
       - S3_PUBLIC_ENDPOINT=http://localhost:9000
       - ACME_EMAIL=dev@flox.local
+      # Backups into the same MinIO, as in the compose stack.
+      - BACKUP_S3_ENDPOINT=http://minio:9000
+      - BACKUP_S3_BUCKET=flox-backups
 
 secretGenerator:
   - name: flox-secrets
@@ -39,7 +44,10 @@ secretGenerator:
     literals:
       - DATABASE_URL=postgres://flox:flox@postgres:5432/flox?sslmode=disable
       - REDIS_URL=redis://redis:6379/0
-      - NATS_URL=nats://nats:4222
+      - NATS_PASSWORD=flox-nats-dev
+      - NATS_URL=nats://flox:flox-nats-dev@nats:4222
+      - BACKUP_S3_ACCESS_KEY_ID=flox-minio-admin
+      - BACKUP_S3_SECRET_ACCESS_KEY=flox-minio-secret
       - S3_ACCESS_KEY_ID=flox-minio-admin
       - S3_SECRET_ACCESS_KEY=flox-minio-secret
       - STICKY_COOKIE_KEY=qTA7h7I11yKvJn3xWZQQHKGN2Jvc6WFgS7qVIWW/qy8=

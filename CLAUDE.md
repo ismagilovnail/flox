@@ -47,8 +47,11 @@ STATUS        : marketer audit closed (#1–#12, #13 platform limit). Tech audit
                 tracker: 20k clicks/s no loss, Postgres idle; PG fallback;
                 conversions stay in PG). DO3 — Kubernetes (Kustomize in
                 infra/k8s, production + minikube overlays, migrate Job,
-                NATS cluster; verified in minikube; docs/kubernetes.md) done.
-LAST COMMIT   : feat(infra): Kubernetes deployment.
+                NATS cluster; verified in minikube; docs/kubernetes.md) done,
+                its gaps closed (ClickHouse/bucket backups with
+                BACKUP_POSTGRES=off, edge 2 replicas on RWX, GeoIP component,
+                NATS login).
+LAST COMMIT   : feat(infra): k8s backups, edge HA, GeoIP, NATS login.
 UNCOMMITTED   : none expected. Dev DB fresh from `make dev-fresh CONFIRM=yes`
                 (password flox-demo-2026); `make dev-status` shows what is in it.
 NEXT          : wait for the user — the next phase. CI (DO1) is the user's own

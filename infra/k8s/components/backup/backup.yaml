@@ -1,0 +1,84 @@
+# One replica on purpose: two would each run the nightly backup.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: backup
+  labels:
+    app.kubernetes.io/name: backup
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: backup
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: backup
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8083"
+        prometheus.io/path: /metrics
+    spec:
+      # A backup or drill in progress is cut off on stop; the next night
+      # runs again, and the drill only reads the backups.
+      terminationGracePeriodSeconds: 30
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: backup
+          image: flox/backup-remote
+          args: ["serve"]
+          ports:
+            - name: http
+              containerPort: 8083
+          envFrom:
+            - configMapRef:
+                name: flox-config
+          env:
+            - name: BACKUP_POSTGRES
+              value: "off"
+            - name: CLICKHOUSE_PASSWORD
+              valueFrom: {secretKeyRef: {name: flox-secrets, key: CLICKHOUSE_PASSWORD, optional: true}}
+            - name: S3_ACCESS_KEY_ID
+              valueFrom: {secretKeyRef: {name: flox-secrets, key: S3_ACCESS_KEY_ID, optional: true}}
+            - name: S3_SECRET_ACCESS_KEY
+              valueFrom: {secretKeyRef: {name: flox-secrets, key: S3_SECRET_ACCESS_KEY, optional: true}}
+            - name: BACKUP_S3_ACCESS_KEY_ID
+              valueFrom: {secretKeyRef: {name: flox-secrets, key: BACKUP_S3_ACCESS_KEY_ID}}
+            - name: BACKUP_S3_SECRET_ACCESS_KEY
+              valueFrom: {secretKeyRef: {name: flox-secrets, key: BACKUP_S3_SECRET_ACCESS_KEY}}
+          readinessProbe:
+            httpGet: {path: /health, port: http}
+            periodSeconds: 10
+          livenessProbe:
+            httpGet: {path: /health, port: http}
+            initialDelaySeconds: 10
+            periodSeconds: 30
+          resources:
+            requests: {cpu: 50m, memory: 64Mi}
+            limits: {memory: 512Mi}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: {drop: [ALL]}
+---
+# Metrics (flox_backup_*, alerts in infra/alerts.yml).
+apiVersion: v1
+kind: Service
+metadata:
+  name: backup
+  labels:
+    app.kubernetes.io/name: backup
+spec:
+  selector:
+    app.kubernetes.io/name: backup
+  ports:
+    - name: http
+      port: 8083
+      targetPort: http

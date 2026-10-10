@@ -38,6 +38,8 @@ spec:
           env:
             - name: POD_NAME
               valueFrom: {fieldRef: {fieldPath: metadata.name}}
+            - name: NATS_PASSWORD
+              valueFrom: {secretKeyRef: {name: flox-secrets, key: NATS_PASSWORD}}
           ports:
             - {name: client, containerPort: 4222}
             - {name: cluster, containerPort: 6222}
@@ -124,9 +126,10 @@ spec:
     matchLabels:
       app.kubernetes.io/name: nats
 ---
-# The server has no client authentication configured; this keeps it to the
-# tracker and worker (and its own cluster routes). Needs a CNI that enforces
-# NetworkPolicy. Monitoring (:8222) is open inside the namespace.
+# Clients authenticate (nats.conf, NATS_PASSWORD); on top of that this keeps
+# the client port to the tracker and worker and the route port (no route
+# authentication) to the NATS pods themselves. Needs a CNI that enforces
+# NetworkPolicy. Monitoring (:8222, read-only) is open inside the namespace.
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:

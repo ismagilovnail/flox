@@ -60,6 +60,12 @@ Neither this repo nor this session created a MaxMind account — that step
 is the user's own to take if ever wanted; DB-IP Lite is what's actually
 live right now.
 
+## Kubernetes
+
+`infra/k8s/components/geoip` downloads DB-IP Lite once a month inside the
+cluster and copies it into each tracker pod at start, as `city.mmdb` and
+`asn.mmdb` (`docs/kubernetes.md`, GeoIP).
+
 ## `infra/geoip/` is gitignored either way
 
 Both vendors' terms require re-downloading rather than redistributing —

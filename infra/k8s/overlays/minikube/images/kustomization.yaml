@@ -8,3 +8,4 @@ images:
   - {name: flox/tracker, newTag: local}
   - {name: flox/worker, newTag: local}
   - {name: flox/web, newTag: local}
+  - {name: flox/backup-remote, newTag: local}

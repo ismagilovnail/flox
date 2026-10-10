@@ -1,0 +1,14 @@
+# Nightly ClickHouse and files-bucket backups with a monthly restore drill
+# (internal/backup, docs/backup.md), BACKUP_POSTGRES=off: Postgres is
+# managed here and its provider's PITR is the Postgres backup.
+#
+# flox-config needs BACKUP_S3_ENDPOINT and BACKUP_S3_BUCKET (off-site, never
+# S3_BUCKET); the Secret needs BACKUP_S3_ACCESS_KEY_ID and
+# BACKUP_S3_SECRET_ACCESS_KEY. The ClickHouse server itself writes the
+# backup (BACKUP ... TO S3), so it must reach BACKUP_S3_ENDPOINT — or set
+# BACKUP_CLICKHOUSE_S3_ENDPOINT to the address it does reach.
+apiVersion: kustomize.config.k8s.io/v1alpha1
+kind: Component
+
+resources:
+  - backup.yaml
