@@ -1,5 +1,10 @@
 import { DomainList } from "@/features/domains/domain-list";
+import { RequirePermission } from "@/components/shell/require-permission";
 
 export default function Page() {
-  return <DomainList />;
+  return (
+    <RequirePermission permission="campaign.read">
+      <DomainList />
+    </RequirePermission>
+  );
 }

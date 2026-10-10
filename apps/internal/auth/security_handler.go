@@ -30,7 +30,10 @@ func NewSecurityHandler(svc *Service, logger *slog.Logger, clientIP *clientip.Re
 
 func (h *SecurityHandler) Register(r chi.Router) {
 	requireWrite := h.svc.RequirePermission("settings.write", h.logger)
-	r.Get("/security", h.get)
+	// The organization's security policy is settings: reading it needs
+	// settings.write too (Settings → Security shows it only then; the
+	// personal 2FA card on that tab uses /auth/totp).
+	r.With(requireWrite).Get("/security", h.get)
 	r.With(requireWrite).Patch("/security", h.update)
 }
 

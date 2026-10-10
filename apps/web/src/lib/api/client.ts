@@ -33,6 +33,18 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080";
  */
 export const API_VERSION_PREFIX = "/v1";
 
+/** API error codes whose message the app shows in the user's language
+ * (common:apiErrors.*) instead of the server's English text — wherever the
+ * error ends up (toasts, error states, forms). */
+export const TRANSLATED_ERROR_CODES = new Set(["forbidden", "query_too_heavy"]);
+
+let translateErrorCode: ((code: string) => string) | undefined;
+
+/** Set by I18nProvider in the browser: how a translated code reads now. */
+export function setApiErrorTranslator(fn: ((code: string) => string) | undefined) {
+  translateErrorCode = fn;
+}
+
 export class ApiError extends Error {
   code: string;
   fields?: Record<string, string>;
@@ -83,7 +95,9 @@ export async function apiFetch<T>(path: string, options: RequestOptions = {}): P
 
   if (!res.ok) {
     const code = (data?.code as string) ?? "unknown";
-    const message = (data?.message as string) ?? `Request failed with status ${res.status}`;
+    const serverMessage = (data?.message as string) ?? `Request failed with status ${res.status}`;
+    const message =
+      translateErrorCode && TRANSLATED_ERROR_CODES.has(code) ? translateErrorCode(code) : serverMessage;
     throw new ApiError(res.status, code, message, data?.fields);
   }
 

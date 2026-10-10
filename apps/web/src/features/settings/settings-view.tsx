@@ -4,6 +4,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useTranslation } from "react-i18next";
 
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { usePermission } from "@/hooks/use-auth";
 import { OrganizationPanel } from "@/features/settings/organization-panel";
 import { ApiKeysPanel } from "@/features/settings/api-keys-panel";
 import { IntegrationsPanel } from "@/features/settings/integrations-panel";
@@ -12,14 +13,18 @@ import { CustomMetricsList } from "@/features/custom-metrics/custom-metrics-list
 import { AlertsPanel } from "@/features/alerts/alerts-panel";
 
 const TABS = ["organization", "api-keys", "integrations", "alerts", "security", "custom-metrics"];
+/** Tabs whose data the API serves only with settings.write. */
+const SETTINGS_WRITE_TABS = ["api-keys", "integrations", "alerts"];
 
 export function SettingsView() {
   const { t } = useTranslation(["settings", "alerts"]);
   const searchParams = useSearchParams();
   const router = useRouter();
   const pathname = usePathname();
+  const canManage = usePermission("settings.write");
+  const tabs = canManage ? TABS : TABS.filter((tab) => !SETTINGS_WRITE_TABS.includes(tab));
   const requested = searchParams.get("tab") ?? "";
-  const tab = TABS.includes(requested) ? requested : "organization";
+  const tab = tabs.includes(requested) ? requested : "organization";
 
   // The tab lives in the URL so a link (the notification bell's) can open one.
   function selectTab(value: string) {
@@ -35,9 +40,9 @@ export function SettingsView() {
       <Tabs value={tab} onValueChange={selectTab}>
         <TabsList className="h-auto flex-wrap">
           <TabsTrigger value="organization">{t("tabs.organization")}</TabsTrigger>
-          <TabsTrigger value="api-keys">{t("tabs.apiKeys")}</TabsTrigger>
-          <TabsTrigger value="integrations">{t("tabs.integrations")}</TabsTrigger>
-          <TabsTrigger value="alerts">{t("alerts:tab")}</TabsTrigger>
+          {canManage && <TabsTrigger value="api-keys">{t("tabs.apiKeys")}</TabsTrigger>}
+          {canManage && <TabsTrigger value="integrations">{t("tabs.integrations")}</TabsTrigger>}
+          {canManage && <TabsTrigger value="alerts">{t("alerts:tab")}</TabsTrigger>}
           <TabsTrigger value="security">{t("tabs.security")}</TabsTrigger>
           <TabsTrigger value="custom-metrics">{t("tabs.customMetrics")}</TabsTrigger>
         </TabsList>
@@ -45,15 +50,19 @@ export function SettingsView() {
         <TabsContent value="organization">
           <OrganizationPanel />
         </TabsContent>
-        <TabsContent value="api-keys">
-          <ApiKeysPanel />
-        </TabsContent>
-        <TabsContent value="integrations">
-          <IntegrationsPanel />
-        </TabsContent>
-        <TabsContent value="alerts">
-          <AlertsPanel />
-        </TabsContent>
+        {canManage && (
+          <>
+            <TabsContent value="api-keys">
+              <ApiKeysPanel />
+            </TabsContent>
+            <TabsContent value="integrations">
+              <IntegrationsPanel />
+            </TabsContent>
+            <TabsContent value="alerts">
+              <AlertsPanel />
+            </TabsContent>
+          </>
+        )}
         <TabsContent value="security">
           <SecurityPanel />
         </TabsContent>

@@ -38,9 +38,11 @@ STATUS        : marketer audit closed (#1–#12, #13 platform limit). Tech audit
                 total, web reads all pages), M2/Q3 (fair queue claims,
                 parallel postback delivery), API3 (every API route under /v1)
                 done, M4 (verified; links bound to their host), AN4
-                (account zone stored, reports note a different zone). Left:
+                (account zone stored, reports note a different zone), read
+                gating (every route group needs its read key; no self role
+                changes). Left:
                 broker (Stage 3), R2/DO3 (need prod infra), load test.
-LAST COMMIT   : feat(cost): keep the ad account's zone; reports note spend days.
+LAST COMMIT   : feat(auth): gate every route group by its read permission.
 UNCOMMITTED   : none expected. Dev DB fresh from `make dev-fresh CONFIRM=yes`
                 (password flox-demo-2026); `make dev-status` shows what is in it.
 NEXT          : wait for the user — the next phase. CI (DO1) is the user's own

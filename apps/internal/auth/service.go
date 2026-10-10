@@ -634,6 +634,9 @@ func (s *Service) UpdateMembership(ctx context.Context, orgID, actorUserID, memb
 	if in.Status != nil && *in.Status != "active" && *in.Status != "suspended" {
 		return Membership{}, apierror.Validation("invalid status", map[string]string{"status": "must be active or suspended"})
 	}
+	if err := s.refuseSelf(ctx, orgID, actorUserID, membershipID); err != nil {
+		return Membership{}, err
+	}
 
 	if _, err := s.repo.UpdateMembership(ctx, orgID, membershipID, in); err != nil {
 		return Membership{}, err
@@ -654,11 +657,29 @@ func (s *Service) UpdateMembership(ctx context.Context, orgID, actorUserID, memb
 }
 
 func (s *Service) RemoveMember(ctx context.Context, orgID, actorUserID, membershipID string) error {
+	if err := s.refuseSelf(ctx, orgID, actorUserID, membershipID); err != nil {
+		return err
+	}
 	if err := s.repo.DeleteMembership(ctx, orgID, membershipID); err != nil {
 		return err
 	}
 	actor := actorUserID
 	_ = s.repo.RecordActivity(ctx, idgen.New(), orgID, &actor, "team.removed", "membership", membershipID)
+	return nil
+}
+
+// refuseSelf stops a member changing their own role or status or removing
+// themselves: one click could lock an Admin out of the team they manage,
+// with nobody but the Owner able to undo it. Another Admin or the Owner
+// does it instead.
+func (s *Service) refuseSelf(ctx context.Context, orgID, actorUserID, membershipID string) error {
+	m, err := s.repo.GetMembership(ctx, orgID, membershipID)
+	if err != nil {
+		return err
+	}
+	if m.UserID == actorUserID {
+		return apierror.Forbidden("you cannot change or remove your own membership")
+	}
 	return nil
 }
 

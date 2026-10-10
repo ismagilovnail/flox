@@ -40,7 +40,9 @@
   },
   "states": {
     "loading": "Loading",
-    "errorTitle": "Something went wrong"
+    "errorTitle": "Something went wrong",
+    "noAccessTitle": "No access",
+    "noAccessDescription": "Your role does not include this section. Ask an owner or admin if you need it."
   },
   "status": {
     "active": "Active",
@@ -86,6 +88,7 @@
     "values": "Values"
   },
   "apiErrors": {
-    "query_too_heavy": "This report needs more time or memory than allowed. Narrow the date range or remove a breakdown."
+    "query_too_heavy": "This report needs more time or memory than allowed. Narrow the date range or remove a breakdown.",
+    "forbidden": "You don't have permission for this action."
   }
 }

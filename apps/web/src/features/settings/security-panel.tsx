@@ -20,7 +20,7 @@ import { LoadingState } from "@/components/ui/loading-state";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
-import { useConfirmTOTP, useDisableTOTP, useEnrollTOTP, useTOTPStatus } from "@/hooks/use-auth";
+import { useConfirmTOTP, useDisableTOTP, useEnrollTOTP, usePermission, useTOTPStatus } from "@/hooks/use-auth";
 import { useSecuritySettings, useUpdateSecuritySettings } from "@/hooks/use-security";
 import { ApiError } from "@/lib/api/client";
 
@@ -283,38 +283,46 @@ function PersonalTOTPCard() {
 }
 
 export function SecurityPanel() {
+  const canManage = usePermission("settings.write");
+  return (
+    <div className="flex flex-col gap-6">
+      {canManage && <OrganizationSecurityCard />}
+      <PersonalTOTPCard />
+    </div>
+  );
+}
+
+/** The organization's security policy — read and written only with
+ * settings.write (GET /security refuses it otherwise). */
+function OrganizationSecurityCard() {
   const { t } = useTranslation("settings");
   const securityQuery = useSecuritySettings();
 
   return (
-    <div className="flex flex-col gap-6">
-      <Card>
-        <CardHeader>
-          <CardTitle>{t("security.title")}</CardTitle>
-          <CardDescription>{t("security.description")}</CardDescription>
-        </CardHeader>
-        <CardContent>
-          {securityQuery.isPending && <LoadingState label={t("security.loading")} />}
-          {securityQuery.isError && (
-            <ErrorState
-              title={t("security.loadError")}
-              description={securityQuery.error.message}
-              onRetry={() => securityQuery.refetch()}
-            />
-          )}
-          {securityQuery.data && (
-            <SecurityForm
-              security={{
-                twoFactorRequired: securityQuery.data.twoFactorRequired,
-                sessionTimeoutMinutes: securityQuery.data.sessionTimeoutMinutes,
-                ipAllowlist: securityQuery.data.ipAllowlist.join("\n"),
-              }}
-            />
-          )}
-        </CardContent>
-      </Card>
-
-      <PersonalTOTPCard />
-    </div>
+    <Card>
+      <CardHeader>
+        <CardTitle>{t("security.title")}</CardTitle>
+        <CardDescription>{t("security.description")}</CardDescription>
+      </CardHeader>
+      <CardContent>
+        {securityQuery.isPending && <LoadingState label={t("security.loading")} />}
+        {securityQuery.isError && (
+          <ErrorState
+            title={t("security.loadError")}
+            description={securityQuery.error.message}
+            onRetry={() => securityQuery.refetch()}
+          />
+        )}
+        {securityQuery.data && (
+          <SecurityForm
+            security={{
+              twoFactorRequired: securityQuery.data.twoFactorRequired,
+              sessionTimeoutMinutes: securityQuery.data.sessionTimeoutMinutes,
+              ipAllowlist: securityQuery.data.ipAllowlist.join("\n"),
+            }}
+          />
+        )}
+      </CardContent>
+    </Card>
   );
 }

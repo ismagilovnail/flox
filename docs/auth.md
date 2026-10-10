@@ -328,9 +328,9 @@ one is not.
 
 - **`/analytics`'s five POST endpoints** (`report`, `timeseries`,
   `breakdown`, `funnel`, `dashboard`) are POST only because they carry a
-  JSON query body — they read ClickHouse and write nothing. They are not
-  gated on `analytics.read` either: all six roles hold it, so the check
-  would reject nobody and read as a control that isn't one.
+  JSON query body — they read ClickHouse and write nothing (since
+  2026-10-10 the group is read-gated on `analytics.read`, see Read
+  gating below).
 - **`POST /campaigns/{id}/routing/simulate`** resolves routing in memory
   and persists nothing — a read-only role can still explain why a click
   would route where it does (§72).
@@ -374,6 +374,51 @@ Duplicate/Regenerate-secret buttons and the ~14 route-level create pages
 across all five write keys, matching the same convention
 `features/team/member-list.tsx` established first.
 
+
+## Read gating (closed 2026-10-10, tech audit follow-up)
+
+"Reads stay open to any member" above left the Team page's "View …" rows
+decorative: a **Viewer** (no `offer.read`, no `source.read`) still read
+offers, networks, event mappings, postback logs and traffic sources
+through the API. Every tenant route group in `apps/api/main.go` now
+mounts `readGate(<key>)` — the same `RequirePermission`, on the whole
+group. A write inside still needs its write key; every role holding a
+write key also holds the matching read.
+
+| Read key | Route groups |
+| --- | --- |
+| `campaign.read` | `/campaigns` (+ stream sets, tracking links, cost entries, routing simulate), `/flows`, `/domains` |
+| `offer.read` | `/offers`, `/offer-caps`, `/networks`, `/event-mappings`, `/postback-logs` |
+| `source.read` | `/traffic-sources`, `/traffic-sources/{id}/connection` |
+| `content.read` | `/landings`, `/pwas`, `/postlandings`, `/pixels`, `/tags`, `/content-gallery` |
+| `analytics.read` | `/analytics`, `/analytics/ltv`, `/conversions`, `/click-log` |
+| `custom_metric.read` / `report_preset.read` / `referral.read` | their own groups |
+| `settings.write` | `/integrations`, `/alert-rules`, `/api-keys`, `GET /security` — there is no `settings.read`; these are settings, and only settings managers see them |
+
+This supersedes the "not gated on `analytics.read`" bullet above: the
+check now rejects nobody today, but a role without it later is refused
+rather than silently allowed. Only `/notifications` stays open (every
+member reads their own), the `openToEveryMember` list in
+`apps/api/rbac_read_coverage_test.go`, which fails on any new tenant
+group without a read gate.
+
+API keys follow the scope tiers: a `read` or `write` key no longer reads
+the four `settings.write` groups — only an `admin` key does.
+
+Members also cannot change their own role or status or remove themselves
+(`403`) — one click could lock an Admin out of the team they manage;
+another Admin or the Owner does it.
+
+**Frontend.** Nav items carry the read key; each section's pages wrap in
+`RequirePermission` (`components/shell/require-permission.tsx`), which
+shows "No access" instead of a 403 error. Settings hides API keys,
+integrations, alerts and the org security card without `settings.write`
+(the personal 2FA card stays). `useOffers`/`useNetworks`/
+`useEventMappings`/`useOfferCaps`/`useTrafficSources` return empty lists
+without their read key, so pages that only label things by offer or
+source name (campaigns, analytics for a Viewer) keep working and show
+ids. A `forbidden` API error reads in the user's language wherever it is
+shown (`TRANSLATED_ERROR_CODES` in `lib/api/client.ts`).
 
 ## API key authentication (closed, post-Phase-34, security audit finding #4's real-auth follow-up)
 

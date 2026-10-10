@@ -5,6 +5,27 @@ per-phase, matching `CLAUDE.md`'s phase protocol. The one exception is
 [Between phases], below: spec amendments and the code changes that follow from
 them land between phases and would otherwise be invisible here.
 
+## [Between phases] — every route group gated by its read permission; no self role changes
+
+- Only writes were permission-gated: a Viewer (no `offer.read`/`source.read`) still read offers,
+  networks, event mappings, postback logs and traffic sources through the API. Every tenant route
+  group now mounts `readGate(<key>.read)`; `/integrations`, `/alert-rules`, `/api-keys` and
+  `GET /security` need `settings.write` (no `settings.read` exists). Only `/notifications` stays
+  open. `read`/`write` API keys lose the four settings groups; `admin` keys keep them.
+- A member can no longer change their own role or status or remove themselves (403).
+- Web: nav items carry their read key; section pages show "No access" (EN/RU) instead of a 403
+  error; Settings hides API keys, integrations, alerts and the org security card without
+  `settings.write` (personal 2FA stays); offer/network/source lists read as empty without their
+  key so campaign and analytics pages keep working for a Viewer; `forbidden` errors are
+  translated wherever shown.
+- `docs/auth.md` "Read gating".
+
+Tests: `TestEveryTenantRouteGroupIsReadGated` (fails on a new tenant group without a read gate),
+`TestCannotChangeOrRemoveOwnMembership`. tsc, eslint, vitest (103), full Go suite with full env,
+e2e `TestFullFunnel` passes. Known: `chconn` `TestLimitsStopAHeavyQuery` failed once in the full
+run (driver could not decode the limit exception mid-stream) and passed 3/3 reruns — pre-existing
+flake, unrelated.
+
 ## [Between phases] — spend days in the ad account's zone, said in reports (tech audit AN4)
 
 - Verified: Facebook, TikTok and Google Ads all report daily spend in the ad account's own time

@@ -2,6 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
+import { usePermission } from "@/hooks/use-auth";
 import {
   activateOffer,
   archiveOffer,
@@ -21,15 +22,25 @@ const offerKey = (id: string) => ["offers", id] as const;
 
 /** The cap snapshot refreshes every 30 s on the server. */
 export function useOfferCaps() {
-  return useQuery({ queryKey: ["offer-caps"], queryFn: listOfferCaps, refetchInterval: 60_000 });
+  const canRead = usePermission("offer.read");
+  return useQuery({
+    queryKey: ["offer-caps"],
+    queryFn: canRead ? listOfferCaps : async () => ({ caps: [], available: false }),
+    refetchInterval: canRead ? 60_000 : false,
+  });
 }
 
+/** Without offer.read (a Viewer) the list is empty rather than a 403:
+ * pages that only label things with offer names (campaigns, analytics)
+ * keep working and show ids instead. */
 export function useOffers() {
-  return useQuery({ queryKey: offersKey, queryFn: listOffers });
+  const canRead = usePermission("offer.read");
+  return useQuery({ queryKey: offersKey, queryFn: canRead ? listOffers : async () => ({ offers: [], total: 0 }) });
 }
 
 export function useOffer(id: string) {
-  return useQuery({ queryKey: offerKey(id), queryFn: () => getOffer(id), enabled: !!id });
+  const canRead = usePermission("offer.read");
+  return useQuery({ queryKey: offerKey(id), queryFn: () => getOffer(id), enabled: !!id && canRead });
 }
 
 export function useCreateOffer() {

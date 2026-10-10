@@ -2,6 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
+import { usePermission } from "@/hooks/use-auth";
 import {
   createEventMapping,
   deleteEventMapping,
@@ -12,7 +13,11 @@ import {
 const eventMappingsKey = ["event-mappings"] as const;
 
 export function useEventMappings() {
-  return useQuery({ queryKey: eventMappingsKey, queryFn: listEventMappings });
+  const canRead = usePermission("offer.read");
+  return useQuery({
+    queryKey: eventMappingsKey,
+    queryFn: canRead ? listEventMappings : async () => ({ eventMappings: [], total: 0 }),
+  });
 }
 
 export function useCreateEventMapping() {

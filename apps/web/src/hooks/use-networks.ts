@@ -2,6 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
+import { usePermission } from "@/hooks/use-auth";
 import {
   activateNetwork,
   archiveNetwork,
@@ -19,12 +20,15 @@ import {
 const networksKey = ["networks"] as const;
 const networkKey = (id: string) => ["networks", id] as const;
 
+/** Empty without offer.read — see useOffers. */
 export function useNetworks() {
-  return useQuery({ queryKey: networksKey, queryFn: listNetworks });
+  const canRead = usePermission("offer.read");
+  return useQuery({ queryKey: networksKey, queryFn: canRead ? listNetworks : async () => ({ networks: [], total: 0 }) });
 }
 
 export function useNetwork(id: string) {
-  return useQuery({ queryKey: networkKey(id), queryFn: () => getNetwork(id), enabled: !!id });
+  const canRead = usePermission("offer.read");
+  return useQuery({ queryKey: networkKey(id), queryFn: () => getNetwork(id), enabled: !!id && canRead });
 }
 
 export function useCreateNetwork() {

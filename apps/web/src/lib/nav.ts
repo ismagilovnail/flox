@@ -56,49 +56,49 @@ export const NAV_GROUPS: NavGroup[] = [
     items: [{ label: "items.overview", href: "/overview", icon: LayoutDashboardIcon }],
   },
   {
-    items: [{ label: "items.analytics", href: "/analytics", icon: BarChart3Icon }],
+    items: [{ label: "items.analytics", href: "/analytics", icon: BarChart3Icon, requiredPermission: "analytics.read" }],
   },
   {
     label: "groups.traffic",
     items: [
-      { label: "items.campaigns", href: "/campaigns", icon: MegaphoneIcon },
-      { label: "items.flows", href: "/flows", icon: GitBranchIcon },
-      { label: "items.clickLog", href: "/click-log", icon: ListIcon },
-      { label: "items.trafficSources", href: "/traffic-sources", icon: RadioIcon },
-      { label: "items.offers", href: "/offers", icon: TagIcon },
-      { label: "items.networks", href: "/networks", icon: NetworkIcon },
+      { label: "items.campaigns", href: "/campaigns", icon: MegaphoneIcon, requiredPermission: "campaign.read" },
+      { label: "items.flows", href: "/flows", icon: GitBranchIcon, requiredPermission: "campaign.read" },
+      { label: "items.clickLog", href: "/click-log", icon: ListIcon, requiredPermission: "analytics.read" },
+      { label: "items.trafficSources", href: "/traffic-sources", icon: RadioIcon, requiredPermission: "source.read" },
+      { label: "items.offers", href: "/offers", icon: TagIcon, requiredPermission: "offer.read" },
+      { label: "items.networks", href: "/networks", icon: NetworkIcon, requiredPermission: "offer.read" },
     ],
   },
   {
     label: "groups.pages",
     items: [
-      { label: "items.landings", href: "/landings", icon: GlobeIcon },
-      { label: "items.pwa", href: "/pwa", icon: SmartphoneIcon },
-      { label: "items.postlanding", href: "/postlanding", icon: FileTextIcon },
+      { label: "items.landings", href: "/landings", icon: GlobeIcon, requiredPermission: "content.read" },
+      { label: "items.pwa", href: "/pwa", icon: SmartphoneIcon, requiredPermission: "content.read" },
+      { label: "items.postlanding", href: "/postlanding", icon: FileTextIcon, requiredPermission: "content.read" },
     ],
   },
   {
-    items: [{ label: "items.domains", href: "/domains", icon: LinkIcon }],
+    items: [{ label: "items.domains", href: "/domains", icon: LinkIcon, requiredPermission: "campaign.read" }],
   },
   {
     label: "groups.conversions",
     items: [
-      { label: "items.conversions", href: "/conversions", icon: CheckCircle2Icon },
-      { label: "items.postbacks", href: "/postbacks", icon: SendIcon },
-      { label: "items.pixels", href: "/pixels", icon: TargetIcon },
+      { label: "items.conversions", href: "/conversions", icon: CheckCircle2Icon, requiredPermission: "analytics.read" },
+      { label: "items.postbacks", href: "/postbacks", icon: SendIcon, requiredPermission: "offer.read" },
+      { label: "items.pixels", href: "/pixels", icon: TargetIcon, requiredPermission: "content.read" },
     ],
   },
   {
     label: "groups.insights",
     items: [
-      { label: "items.ltvCohorts", href: "/ltv-cohorts", icon: TrendingUpIcon },
+      { label: "items.ltvCohorts", href: "/ltv-cohorts", icon: TrendingUpIcon, requiredPermission: "analytics.read" },
     ],
   },
   {
     label: "groups.growth",
     items: [
-      { label: "items.referral", href: "/referral", icon: GiftIcon },
-      { label: "items.contentGallery", href: "/content-gallery", icon: ImagesIcon },
+      { label: "items.referral", href: "/referral", icon: GiftIcon, requiredPermission: "referral.read" },
+      { label: "items.contentGallery", href: "/content-gallery", icon: ImagesIcon, requiredPermission: "content.read" },
     ],
   },
   {

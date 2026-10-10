@@ -3,6 +3,7 @@
 import * as React from "react";
 import { I18nextProvider } from "react-i18next";
 
+import { setApiErrorTranslator } from "@/lib/api/client";
 import { createI18nInstance, LOCALE_COOKIE, type Locale } from "@/lib/i18n/config";
 
 /**
@@ -56,6 +57,13 @@ export function I18nProvider({ children, initialLocale }: { children: React.Reac
     return () => {
       instance.off("languageChanged", onLanguageChanged);
     };
+  }, [instance]);
+
+  React.useEffect(() => {
+    // API errors with a known code read in the current language wherever
+    // they are shown (lib/api/client.ts).
+    setApiErrorTranslator((code) => instance.t(`apiErrors.${code}`, { ns: "common" }));
+    return () => setApiErrorTranslator(undefined);
   }, [instance]);
 
   return <I18nextProvider i18n={instance}>{children}</I18nextProvider>;

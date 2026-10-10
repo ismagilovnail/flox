@@ -1440,3 +1440,50 @@ func TestPermissionGrantsMatchTheSeededPolicy(t *testing.T) {
 		}
 	}
 }
+
+// An Admin cannot change their own role or status or remove themselves —
+// one click would lock them out of the team they manage. Another member
+// with team.write can (tech audit follow-up, 2026-10-10).
+func TestCannotChangeOrRemoveOwnMembership(t *testing.T) {
+	pool := mustPool(t)
+	svc := newService(pool)
+	ctx := context.Background()
+	owner := signupOrg(t, ctx, pool, svc, "Self Change Org", uniqueEmail(t, pool))
+
+	inviteURL, err := svc.Invite(ctx, owner.Organization.ID, owner.User.ID, auth.InviteInput{Name: "Ada", Email: uniqueEmail(t, pool), RoleKey: "Admin"})
+	if err != nil {
+		t.Fatalf("Invite: %v", err)
+	}
+	accepted, err := svc.AcceptInvite(ctx, auth.AcceptInviteInput{Token: tokenFromURL(t, inviteURL), Name: "Ada", Password: "adas-long-password"})
+	if err != nil || accepted.Session == nil {
+		t.Fatalf("AcceptInvite: %v", err)
+	}
+	admin := accepted.Session.User.ID
+	members, err := svc.ListMembers(ctx, owner.Organization.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var adminMembership string
+	for _, m := range members {
+		if m.UserID == admin {
+			adminMembership = m.ID
+		}
+	}
+
+	viewer, suspended := "Viewer", "suspended"
+	for name, in := range map[string]auth.UpdateMembershipInput{"role": {RoleKey: &viewer}, "status": {Status: &suspended}} {
+		_, err := svc.UpdateMembership(ctx, owner.Organization.ID, admin, adminMembership, in)
+		var apiErr *apierror.Error
+		if !errors.As(err, &apiErr) || apiErr.Status != http.StatusForbidden {
+			t.Fatalf("admin changing own %s: err = %v, want 403", name, err)
+		}
+	}
+	if err := svc.RemoveMember(ctx, owner.Organization.ID, admin, adminMembership); err == nil {
+		t.Fatal("admin removed themselves")
+	}
+
+	// The Owner still can.
+	if _, err := svc.UpdateMembership(ctx, owner.Organization.ID, owner.User.ID, adminMembership, auth.UpdateMembershipInput{RoleKey: &viewer}); err != nil {
+		t.Fatalf("owner changing the admin's role: %v", err)
+	}
+}

@@ -2,6 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
+import { usePermission } from "@/hooks/use-auth";
 import {
   activateTrafficSource,
   archiveTrafficSource,
@@ -18,12 +19,18 @@ import {
 const sourcesKey = ["traffic-sources"] as const;
 const sourceKey = (id: string) => ["traffic-sources", id] as const;
 
+/** Empty without source.read (a Viewer) rather than a 403 — see useOffers. */
 export function useTrafficSources() {
-  return useQuery({ queryKey: sourcesKey, queryFn: listTrafficSources });
+  const canRead = usePermission("source.read");
+  return useQuery({
+    queryKey: sourcesKey,
+    queryFn: canRead ? listTrafficSources : async () => ({ trafficSources: [], total: 0 }),
+  });
 }
 
 export function useTrafficSource(id: string) {
-  return useQuery({ queryKey: sourceKey(id), queryFn: () => getTrafficSource(id), enabled: !!id });
+  const canRead = usePermission("source.read");
+  return useQuery({ queryKey: sourceKey(id), queryFn: () => getTrafficSource(id), enabled: !!id && canRead });
 }
 
 /** Every mutation invalidates the list — same "refetch rather than

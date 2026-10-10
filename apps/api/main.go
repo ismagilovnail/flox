@@ -328,6 +328,14 @@ func run() error {
 	requireSourceWrite := authSvc.RequirePermission("source.write", logger)
 	requireContentWrite := authSvc.RequirePermission("content.write", logger)
 	requireSettingsWrite := authSvc.RequirePermission("settings.write", logger)
+	// readGate guards a whole route group with its read permission (the
+	// Team page's "View …" rows). Writes inside still need their own
+	// write permission; every role holding one also holds the read. Before
+	// this only team.read was checked, so a Viewer without offer.read or
+	// source.read still read offers and sources.
+	readGate := func(permission string) func(http.Handler) http.Handler {
+		return authSvc.RequirePermission(permission, logger)
+	}
 
 	// signup/login/accept-invite are POST (mutating) but pre-session, so
 	// they can't go through tenantMiddleware (which requires a cookie
@@ -369,18 +377,21 @@ func run() error {
 	campaignHandler := campaign.NewHandler(campaignSvc, requireCampaignWrite, logger)
 	srv.Mux().Route("/campaigns", func(r chi.Router) {
 		r.Use(tenantMiddleware)
+		r.Use(readGate("campaign.read"))
 		campaignHandler.Register(r)
 	})
 
 	trafficSourceHandler := trafficsource.NewHandler(trafficsource.NewService(trafficsource.NewRepository(db)), requireSourceWrite, logger)
 	srv.Mux().Route("/traffic-sources", func(r chi.Router) {
 		r.Use(tenantMiddleware)
+		r.Use(readGate("source.read"))
 		trafficSourceHandler.Register(r)
 	})
 
 	trackingLinkHandler := trackinglink.NewHandler(trackinglink.NewService(trackinglink.NewRepository(db)), requireCampaignWrite, logger)
 	srv.Mux().Route("/campaigns/{campaignId}/tracking-links", func(r chi.Router) {
 		r.Use(tenantMiddleware)
+		r.Use(readGate("campaign.read"))
 		trackingLinkHandler.Register(r)
 	})
 
@@ -395,6 +406,7 @@ func run() error {
 	)
 	srv.Mux().Route("/integrations", func(r chi.Router) {
 		r.Use(tenantMiddleware)
+		r.Use(readGate("settings.write"))
 		integrationsHandler.Register(r)
 	})
 
@@ -410,18 +422,21 @@ func run() error {
 	)
 	srv.Mux().Route("/domains", func(r chi.Router) {
 		r.Use(tenantMiddleware)
+		r.Use(readGate("campaign.read"))
 		domainHandler.Register(r)
 	})
 
 	networkHandler := network.NewHandler(network.NewService(network.NewRepository(db)), requireOfferWrite, logger)
 	srv.Mux().Route("/networks", func(r chi.Router) {
 		r.Use(tenantMiddleware)
+		r.Use(readGate("offer.read"))
 		networkHandler.Register(r)
 	})
 
 	landingHandler := landing.NewHandler(landing.NewService(landing.NewRepository(db), storageClient, logger), requireContentWrite, logger)
 	srv.Mux().Route("/landings", func(r chi.Router) {
 		r.Use(tenantMiddleware)
+		r.Use(readGate("content.read"))
 		landingHandler.Register(r)
 	})
 
@@ -438,12 +453,14 @@ func run() error {
 	pwaHandler := pwa.NewHandler(pwaSvc, requireContentWrite, logger)
 	srv.Mux().Route("/pwas", func(r chi.Router) {
 		r.Use(tenantMiddleware)
+		r.Use(readGate("content.read"))
 		pwaHandler.Register(r)
 	})
 
 	contentGalleryHandler := contentgallery.NewHandler(contentgallery.NewService(contentgallery.NewRepository(db), storageClient), requireContentWrite, logger)
 	srv.Mux().Route("/content-gallery", func(r chi.Router) {
 		r.Use(tenantMiddleware)
+		r.Use(readGate("content.read"))
 		contentGalleryHandler.Register(r)
 	})
 
@@ -451,6 +468,7 @@ func run() error {
 	alertHandler := alert.NewHandler(alert.NewService(alert.NewRepository(db)), requireSettingsWrite, logger)
 	srv.Mux().Route("/alert-rules", func(r chi.Router) {
 		r.Use(tenantMiddleware)
+		r.Use(readGate("settings.write"))
 		alertHandler.RegisterRules(r)
 	})
 	srv.Mux().Route("/notifications", func(r chi.Router) {
@@ -461,6 +479,7 @@ func run() error {
 	tagsHandler := tags.NewHandler(tags.NewService(tags.NewRepository(db)), requireContentWrite, logger)
 	srv.Mux().Route("/tags", func(r chi.Router) {
 		r.Use(tenantMiddleware)
+		r.Use(readGate("content.read"))
 		tagsHandler.Register(r)
 	})
 
@@ -471,6 +490,7 @@ func run() error {
 	)
 	srv.Mux().Route("/custom-metrics", func(r chi.Router) {
 		r.Use(tenantMiddleware)
+		r.Use(readGate("custom_metric.read"))
 		customMetricsHandler.Register(r)
 	})
 
@@ -481,6 +501,7 @@ func run() error {
 	)
 	srv.Mux().Route("/api-keys", func(r chi.Router) {
 		r.Use(tenantMiddleware)
+		r.Use(readGate("settings.write"))
 		apiKeyHandler.Register(r)
 	})
 
@@ -491,6 +512,7 @@ func run() error {
 	)
 	srv.Mux().Route("/report-presets", func(r chi.Router) {
 		r.Use(tenantMiddleware)
+		r.Use(readGate("report_preset.read"))
 		reportPresetsHandler.Register(r)
 	})
 
@@ -501,34 +523,39 @@ func run() error {
 	)
 	srv.Mux().Route("/referral", func(r chi.Router) {
 		r.Use(tenantMiddleware)
+		r.Use(readGate("referral.read"))
 		referralHandler.Register(r)
 	})
 
 	postlandingHandler := postlanding.NewHandler(postlanding.NewService(postlanding.NewRepository(db)), requireContentWrite, logger)
 	srv.Mux().Route("/postlandings", func(r chi.Router) {
 		r.Use(tenantMiddleware)
+		r.Use(readGate("content.read"))
 		postlandingHandler.Register(r)
 	})
 
 	pixelHandler := pixel.NewHandler(pixel.NewService(pixel.NewRepository(db)), requireContentWrite, logger)
 	srv.Mux().Route("/pixels", func(r chi.Router) {
 		r.Use(tenantMiddleware)
+		r.Use(readGate("content.read"))
 		pixelHandler.Register(r)
 	})
 
 	offerHandler := offer.NewHandler(offer.NewService(offer.NewRepository(db)), requireOfferWrite, logger)
 	srv.Mux().Route("/offers", func(r chi.Router) {
 		r.Use(tenantMiddleware)
+		r.Use(readGate("offer.read"))
 		offerHandler.Register(r)
 	})
 
 	// Today's count per capped offer, from the snapshot routing uses — the
 	// offers list's "cap reached" badge.
-	srv.Mux().With(tenantMiddleware).Get("/offer-caps", offercap.Handler(offerCaps))
+	srv.Mux().With(tenantMiddleware, readGate("offer.read")).Get("/offer-caps", offercap.Handler(offerCaps))
 
 	eventMappingHandler := eventmapping.NewHandler(eventmapping.NewService(eventmapping.NewRepository(db)), requireOfferWrite, logger)
 	srv.Mux().Route("/event-mappings", func(r chi.Router) {
 		r.Use(tenantMiddleware)
+		r.Use(readGate("offer.read"))
 		eventMappingHandler.Register(r)
 	})
 
@@ -536,6 +563,7 @@ func run() error {
 	costHandler := cost.NewHandler(costSvc, requireCampaignWrite, logger)
 	srv.Mux().Route("/campaigns/{campaignId}/cost-entries", func(r chi.Router) {
 		r.Use(tenantMiddleware)
+		r.Use(readGate("campaign.read"))
 		costHandler.Register(r)
 	})
 
@@ -557,6 +585,7 @@ func run() error {
 	}), requireSourceWrite, logger)
 	srv.Mux().Route("/traffic-sources/{id}/connection", func(r chi.Router) {
 		r.Use(tenantMiddleware)
+		r.Use(readGate("source.read"))
 		adAccountHandler.Register(r)
 		costSyncHandler.Register(r)
 	})
@@ -564,10 +593,12 @@ func run() error {
 	streamSetHandler := streamset.NewHandler(streamset.NewService(streamset.NewRepository(db)), requireCampaignWrite, logger)
 	srv.Mux().Route("/campaigns/{campaignId}/stream-sets", func(r chi.Router) {
 		r.Use(tenantMiddleware)
+		r.Use(readGate("campaign.read"))
 		streamSetHandler.Register(r)
 	})
 	srv.Mux().Route("/flows", func(r chi.Router) {
 		r.Use(tenantMiddleware)
+		r.Use(readGate("campaign.read"))
 		streamSetHandler.RegisterFlows(r)
 	})
 
@@ -576,6 +607,7 @@ func run() error {
 	)
 	srv.Mux().Route("/campaigns/{campaignId}/routing/simulate", func(r chi.Router) {
 		r.Use(tenantMiddleware)
+		r.Use(readGate("campaign.read"))
 		routingSimulateHandler.Register(r)
 	})
 
@@ -586,6 +618,7 @@ func run() error {
 		analyticsHandler := analytics.NewHandler(analyticsSvc, logger)
 		srv.Mux().Route("/analytics", func(r chi.Router) {
 			r.Use(tenantMiddleware)
+			r.Use(readGate("analytics.read"))
 			analyticsHandler.Register(r)
 		})
 
@@ -593,18 +626,21 @@ func run() error {
 		ltvHandler := ltv.NewHandler(ltvSvc, logger)
 		srv.Mux().Route("/analytics/ltv", func(r chi.Router) {
 			r.Use(tenantMiddleware)
+			r.Use(readGate("analytics.read"))
 			ltvHandler.Register(r)
 		})
 
 		conversionsHandler := conversions.NewHandler(conversions.NewService(events), logger)
 		srv.Mux().Route("/conversions", func(r chi.Router) {
 			r.Use(tenantMiddleware)
+			r.Use(readGate("analytics.read"))
 			conversionsHandler.Register(r)
 		})
 
 		clickLogsHandler := clicklogs.NewHandler(clicklogs.NewService(events), logger)
 		srv.Mux().Route("/click-log", func(r chi.Router) {
 			r.Use(tenantMiddleware)
+			r.Use(readGate("analytics.read"))
 			clickLogsHandler.Register(r)
 		})
 
@@ -656,6 +692,7 @@ func run() error {
 		)
 		srv.Mux().Route("/postback-logs", func(r chi.Router) {
 			r.Use(tenantMiddleware)
+			r.Use(readGate("offer.read"))
 			postbackLogsHandler.Register(r)
 		})
 	}

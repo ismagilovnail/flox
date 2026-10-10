@@ -1,5 +1,10 @@
 import { CampaignList } from "@/features/campaigns/campaign-list";
+import { RequirePermission } from "@/components/shell/require-permission";
 
 export default function Page() {
-  return <CampaignList />;
+  return (
+    <RequirePermission permission="campaign.read">
+      <CampaignList />
+    </RequirePermission>
+  );
 }
