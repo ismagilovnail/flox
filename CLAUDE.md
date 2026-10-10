@@ -53,7 +53,11 @@ STATUS        : marketer audit closed (#1–#12, #13 platform limit). Tech audit
                 NATS login), then NATS route login (NATS_ROUTE_PASSWORD) and
                 GeoIP hot reload (tracker swaps a changed .mmdb within a
                 minute; geoip-sync sidecar replaces the restart CronJob).
-LAST COMMIT   : feat(infra): NATS route login, GeoIP without restarts.
+                P4 (postback refusal limit per IP) done; audit doc statuses
+                and 2026-10-10 re-score (72/100, YES WITH CONDITIONS: load
+                test in target network, prod restore drill). Still open:
+                DO1, AN5, CQ1, CQ3 partly, 3 tests from §16.
+LAST COMMIT   : feat(tracker): postback refusal limit; audit statuses.
 UNCOMMITTED   : none expected. Dev DB fresh from `make dev-fresh CONFIRM=yes`
                 (password flox-demo-2026); `make dev-status` shows what is in it.
 NEXT          : wait for the user — the next phase. CI (DO1) is the user's own

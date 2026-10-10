@@ -480,7 +480,10 @@ type entry struct { link TrackingLink; cfg CampaignRouting; loadedAt time.Time }
     каждый запрос стоит 1 SELECT, на валидный slug — 6 SELECT и INSERT.
     На `/postback/{validUlid}` — SELECT по `networks`. Миллион запросов
     означает миллион и больше запросов в PG. Защищает только кэш с negative
-    cache (§5) и лимит на edge (WAF/LB).
+    cache (§5) и лимит на edge (WAF/LB). (**Статус:** `/t/*` закрыт кэшем
+    маршрутизации с negative cache (RL1); `/postback/*` — лимитом отказов
+    по IP (P4). Объём от валидной сети с верным секретом — по-прежнему
+    задача edge.)
 
 ---
 
@@ -674,7 +677,14 @@ WHERE status='processing' AND claimed_at < now() - interval '5 minutes';
   атомарны. Параллельные HOLD и ACCEPT для одного клика (реплей вместе с
   live) обе проходят проверку, и HOLD записывается после ACCEPT.
 - **P3 [MEDIUM].** S3 (NaN/Inf/overflow).
-- **P4 [LOW].** Лимита на `/postback` нет (см. API).
+- **P4 [LOW].** Лимита на `/postback` нет (см. API). (**Статус:
+  исправлено** — tracker считает отказы по IP клиента: 30 postback'ов с
+  неизвестной сетью или неверным секретом за 10 минут блокируют IP до
+  конца окна, ответ 429 до запроса в Postgres (`ratelimit.Failures`).
+  Принятые postback'и, дубли и 400 не считаются, поэтому реплей сети
+  любого объёма лимит не задевает. Без Redis счёт идёт в процессе, как у
+  `/auth/*`. Метка `rate_limited` в `flox_postback_incoming_total`;
+  `docs/security.md` §3.)
 
 **Целевая архитектура postback-обработки:**
 
@@ -750,7 +760,8 @@ POST /postback/{networkId}
   `docs/analytics-report-api.md`.)
 - **AN5 [LOW].** Конверсии датируются временем конверсии, а не клика. Это
   стандарт, но для ROI по дням кампании нужен режим «по дате клика» (cohort).
-  LTV-модуль частично это покрывает.
+  LTV-модуль частично это покрывает. (**Статус: открыто** — режима «по дате
+  клика» в отчётах нет; когорты по дате клика есть только в LTV.)
 
 **Могут ли dashboard и raw расходиться?** Да, по трём механизмам:
 
@@ -818,8 +829,9 @@ POST /postback/{networkId}
   latency;
 - `infra/alerts.yml` с 8 разумными алертами, включая `EventLossDetected`.
 
-**Не хватает (минимальный набор):** (**статус: добавлено всё, кроме сверки PG↔CH и
-error tracking** — см. `docs/observability.md`)
+**Не хватает (минимальный набор):** (**статус: добавлено всё** — см.
+`docs/observability.md`; сверка PG↔CH — `internal/reconcile`
+(`reconciliation_mismatched_buckets`), error tracking — `internal/errtrack`)
 
 | Метрика | Зачем |
 |---|---|
@@ -876,7 +888,8 @@ Error tracking (Sentry или аналог) не подключён. Паник�
   (`apps/tracker/Dockerfile`). При managed-PG с `sslmode=verify-full`,
   Redis с TLS (`rediss://`) или HTTPS-ClickHouse tracker не стартует или не
   подключится.
-- **DO5.** ClickHouse только по HTTP без TLS (`chconn`).
+- **DO5.** ClickHouse только по HTTP без TLS (`chconn`). (**Статус:
+  исправлено** в CH4 — TLS при `CLICKHOUSE_URL=https://…`.)
 
 **Можно ли задеплоить новую версию без потери clicks/conversions?**
 
@@ -903,22 +916,24 @@ Error tracking (Sentry или аналог) не подключён. Паник�
 
 **Пробелы — тесты, которые надо добавить:**
 
-| Тест | Что ловит |
-|---|---|
-| Worker: отменить ctx посреди `RunOnce`, затем reaper, затем строки снова `queued` и доставлены | Q1 |
-| `InsertBatch`: clicks ок, tracking падает, retry → нет дублей в CH (по `event_id`) | D2 |
-| 50 параллельных postback'ов (HOLD/ACCEPT/REDEP вперемешку) на один click → итоговый статус не HOLD, ровно одна строка на `(click,status,ref)` | D3 |
-| Postback, где insert в `postback_deliveries` падает → вся операция откатывается, ответ 500 | D1 |
-| Postback до появления клика в CH → через N секунд конверсия атрибутирована | T1 |
-| `revenue=NaN`, `Inf`, `-5`, `1e15` → 400 | S3 |
-| Поддельная sticky cookie → игнорируется | T5 |
-| PG «чёрная дыра» (toxiproxy, latency 5 с) → redirect p95 ≤ 50 мс из кэша | RL1 |
-| Нагрузочный тест в целевой сети (tracker и PG на разных хостах), 1k/5k rps, 30 мин, сверка `enqueued == persisted in CH` | §5 |
-| Кросс-тенант: API-ключ org A + ID ресурсов org B на **каждом** маршруте (табличный тест по роутеру) | Регрессии tenancy |
-| Shutdown tracker'а → exit code 0 | RL3 |
+| Тест | Что ловит | Статус (2026-10-10) |
+|---|---|---|
+| Worker: отменить ctx посреди `RunOnce`, затем reaper, затем строки снова `queued` и доставлены | Q1 | ✔ `TestReapStuck…`, `TestDelivererReleasesUnattemptedClaimsOnShutdown` |
+| `InsertBatch`: clicks ок, tracking падает, retry → нет дублей в CH (по `event_id`) | D2 | ✔ `TestRetriedBatchIsNotDuplicated` |
+| 50 параллельных postback'ов (HOLD/ACCEPT/REDEP вперемешку) на один click → итоговый статус не HOLD, ровно одна строка на `(click,status,ref)` | D3 | ✔ `TestConcurrentHoldAndAcceptNeverEndOnHold` |
+| Postback, где insert в `postback_deliveries` падает → вся операция откатывается, ответ 500 | D1 | ✔ `TestRecordRollsBackEverythingWhenTheOutboxFails` |
+| Postback до появления клика в CH → через N секунд конверсия атрибутирована | T1 | ✔ `internal/reattribute` (`TestClickTurnsUp…`) |
+| `revenue=NaN`, `Inf`, `-5`, `1e15` → 400 | S3 | ✔ `TestPostbackRejectsInvalidRevenue` |
+| Поддельная sticky cookie → игнорируется | T5 | ✔ `TestStickyCookieNotIssuedHereIsIgnored` |
+| PG «чёрная дыра» (toxiproxy, latency 5 с) → redirect p95 ≤ 50 мс из кэша | RL1 | частично: `TestClicksSurvivePostgresOutage` (PG недоступен); задержки 5 с и p95 не проверяются |
+| Нагрузочный тест в целевой сети (tracker и PG на разных хостах), 1k/5k rps, 30 мин, сверка `enqueued == persisted in CH` | §5 | нет: только локально (8k/s через PG, 20k/s через NATS без потерь) |
+| Кросс-тенант: API-ключ org A + ID ресурсов org B на **каждом** маршруте (табличный тест по роутеру) | Регрессии tenancy | частично: изоляция в тестах каждого пакета, обход роутера только на права чтения (`rbac_read_coverage_test.go`) |
+| Shutdown tracker'а → exit code 0 | RL3 | ✔ `TestCloseIsIdempotent`, `TestDeadSinkIsGivenUpOnAtShutdown` |
 
 Тестов на сбои, гонки и конкурентность фактически нет: в `_test.go`
-используется только одно место с `WaitGroup`/`t.Parallel`.
+используется только одно место с `WaitGroup`/`t.Parallel`. (**Статус на
+2026-10-10:** 8 из 11 тестов таблицы есть; открыты задержка PG, нагрузка в
+целевой сети и табличный кросс-тенант-тест по всем маршрутам.)
 
 ---
 
@@ -1080,7 +1095,8 @@ reaper.
   теряются реальные контракты. Например, в `docs/attribution.md` прямо
   написано, что CH-down на старте даёт `unknown_click`: известный дефект
   задокументирован, но не исправлен. История решений должна жить в `docs/`,
-  а в коде — инварианты.
+  а в коде — инварианты. (**Статус: открыто** — сплошной чистки
+  комментариев не было; новый код пишется с короткими комментариями.)
 - **CQ2.** (**Статус: исправлено** — `pgqueue.Queue[T]` и `pgqueue.Flusher[T]`;
   в `eventqueue` и `postbacklog` остались только producer и insert в CH.)
   Почти идентичные `eventqueue` и `postbacklog` (claim, requeue,
@@ -1089,11 +1105,15 @@ reaper.
   `pgqueue.Queue[T]` (Go generics).
 - **CQ3.** `conversion.Service.Record` смешивает валидацию, атрибуцию, FX,
   запись и три побочных эффекта. После outbox'а это станет «одна транзакция
-  + worker».
+  + worker». (**Статус: частично** — побочные эффекты теперь в одной
+  транзакции (D1), атрибуция с повтором в worker'е (T1); валидация,
+  атрибуция и FX по-прежнему в `Record`.)
 - **CQ4.** `eventbuf.Close` не идемпотентен (RL3); `Requeue`/`Delete` на
   родительском ctx (Q1). Это один класс ошибок: «cleanup на отменённом
   контексте». Стоит проверить остальные места поиском по `defer`/`Close` и
-  `ctx` в shutdown-путях.
+  `ctx` в shutdown-путях. (**Статус: исправлено в найденных местах** —
+  `pgqueue` делает cleanup на `context.WithoutCancel`, `Close` идемпотентен
+  (RL3); отдельной сплошной проверки shutdown-путей не было.)
 
 **Наиболее проблемные участки:**
 
@@ -1123,44 +1143,50 @@ reaper.
 | DO1 | HIGH | — | Нет CI |
 | DO2 | HIGH | — | Нет автоматизированных бэкапов и restore-drill |
 
+**Статус на 2026-10-10:** закрыты все, кроме DO1 (CI — решение владельца).
+
 ---
 
 ## 22. Prioritized Remediation Plan
 
 | Priority | Problem | Impact | Probability | Fix | Effort |
 |---|---|---|---|---|---|
-| **P0** | Q1: зависшие `processing` (3 очереди) | Потеря кликов, конверсий и S2S в отчётах | Высокая (каждый деплой) | `claimed_at` + reaper; `context.WithoutCancel` для Requeue/Delete/Mark*; `wg.Wait` в worker'е | 1 д |
-| **P0** | D1: outbox для конверсий | PG ≠ CH, потеря S2S | Средняя | Одна транзакция: `postbacks` + `event_queue` + `postback_deliveries`; доставка с ошибкой → 500 | 1.5 д |
-| **P0** | AN1: FX | Revenue и ROI неверны для не-USD | 100% при не-USD | FX-провайдер + daily job + «последний курс ≤ даты» + backfill | 2 д |
-| **P0** | D2: идемпотентность CH | Завышение кликов и выручки | Средняя | `event_id` + ReplacingMergeTree, или стабильный батч + dedup token | 2 д |
-| **P0** | RL2: retry в eventbuf | Потеря событий при сбое PG | Средняя | Retry с backoff, затем spill на диск | 1 д |
-| **P0** | S3: валидация revenue | NaN ломает отчёты, poison-ретраи | Низкая | `isFinite`, диапазон | 0.25 д |
-| **P0** | DO1: CI | Регрессии в деньгах | Высокая | GH Actions: go test (full env через compose), tsc, eslint, build, goose up/down | 1 д |
-| **P1** | A1/RL1: кэш конфига + deadline + `statement_timeout` | Outage при деградации PG; потолок ~1k rps | Средняя | In-proc кэш, singleflight, stale-on-error, LISTEN/NOTIFY, negative cache | 2–3 д |
-| **P1** | T1: отложенная атрибуция + reconnect CH | Потерянная атрибуция | Высокая при backlog | `pending_attribution` + retry в worker'е; lazy CH; 503 при недоступном CH | 2 д |
-| **P1** | CH1: `click_lookup` | Postback-путь непригоден на 100М+ | 100% при росте | Таблица + MV, или bloom-индекс | 1 д |
-| **P1** | DB1: индекс `postbacks` | То же для PG | 100% при росте | `CREATE INDEX CONCURRENTLY` | 0.1 д |
-| **P1** | D3/R1: advisory lock для progression | HOLD после ACCEPT | Низкая–средняя | В той же транзакции, что D1 | 0.5 д |
-| **P1** | DO2: бэкапы, PITR, restore-drill | Невосстановимая потеря | Низкая | Managed PITR + `BACKUP` CH в S3 + runbook | 1–2 д |
-| **P1** | RL4: readiness tracker'а; RL3: `sync.Once` в Close | LB шлёт трафик на мёртвый инстанс; ложные падения | Средняя | `/ready`, `Once` | 0.25 д |
-| **P1** | Метрики §14 (возраст очередей, пул, postback incoming, attribution outcome, reconciliation) | Слепые зоны | — | Prometheus + alerts | 1.5 д |
-| **P1** | Q2: dead-letter `event_queue` | Ядовитый батч блокирует очередь | Низкая | `attempt_count` + split + dead | 1 д |
-| **P2** | T5: HMAC sticky cookie | Обход фильтров, подмена `click_id` | Средняя | Подпись + валидация ULID | 0.5 д |
-| **P2** | API1: атомарный rate-limit | Вечный 429 | Низкая | Lua / `EXPIRE NX` | 0.25 д |
+| **P0** | ✔ Q1: зависшие `processing` (3 очереди) | Потеря кликов, конверсий и S2S в отчётах | Высокая (каждый деплой) | `claimed_at` + reaper; `context.WithoutCancel` для Requeue/Delete/Mark*; `wg.Wait` в worker'е | 1 д |
+| **P0** | ✔ D1: outbox для конверсий | PG ≠ CH, потеря S2S | Средняя | Одна транзакция: `postbacks` + `event_queue` + `postback_deliveries`; доставка с ошибкой → 500 | 1.5 д |
+| **P0** | ✔ AN1: FX | Revenue и ROI неверны для не-USD | 100% при не-USD | FX-провайдер + daily job + «последний курс ≤ даты» + backfill | 2 д |
+| **P0** | ✔ D2: идемпотентность CH | Завышение кликов и выручки | Средняя | `event_id` + ReplacingMergeTree, или стабильный батч + dedup token | 2 д |
+| **P0** | ✔ RL2: retry в eventbuf | Потеря событий при сбое PG | Средняя | Retry с backoff, затем spill на диск | 1 д |
+| **P0** | ✔ S3: валидация revenue | NaN ломает отчёты, poison-ретраи | Низкая | `isFinite`, диапазон | 0.25 д |
+| **P0** | DO1: CI — **открыто, решение владельца** | Регрессии в деньгах | Высокая | GH Actions: go test (full env через compose), tsc, eslint, build, goose up/down | 1 д |
+| **P1** | ✔ A1/RL1: кэш конфига + deadline + `statement_timeout` | Outage при деградации PG; потолок ~1k rps | Средняя | In-proc кэш, singleflight, stale-on-error, LISTEN/NOTIFY, negative cache | 2–3 д |
+| **P1** | ✔ T1: отложенная атрибуция + reconnect CH | Потерянная атрибуция | Высокая при backlog | `pending_attribution` + retry в worker'е; lazy CH; 503 при недоступном CH | 2 д |
+| **P1** | ✔ CH1: `click_lookup` | Postback-путь непригоден на 100М+ | 100% при росте | Таблица + MV, или bloom-индекс | 1 д |
+| **P1** | ✔ DB1: индекс `postbacks` | То же для PG | 100% при росте | `CREATE INDEX CONCURRENTLY` | 0.1 д |
+| **P1** | ✔ D3/R1: advisory lock для progression | HOLD после ACCEPT | Низкая–средняя | В той же транзакции, что D1 | 0.5 д |
+| **P1** | ✔ DO2: бэкапы, PITR, restore-drill | Невосстановимая потеря | Низкая | Managed PITR + `BACKUP` CH в S3 + runbook | 1–2 д |
+| **P1** | ✔ RL4: readiness tracker'а; RL3: `sync.Once` в Close | LB шлёт трафик на мёртвый инстанс; ложные падения | Средняя | `/ready`, `Once` | 0.25 д |
+| **P1** | ✔ Метрики §14 (возраст очередей, пул, postback incoming, attribution outcome, reconciliation) | Слепые зоны | — | Prometheus + alerts | 1.5 д |
+| **P1** | ✔ Q2: dead-letter `event_queue` | Ядовитый батч блокирует очередь | Низкая | `attempt_count` + split + dead | 1 д |
+| **P2** | ✔ T5: HMAC sticky cookie | Обход фильтров, подмена `click_id` | Средняя | Подпись + валидация ULID | 0.5 д |
+| **P2** | ✔ API1: атомарный rate-limit | Вечный 429 | Низкая | Lua / `EXPIRE NX` | 0.25 д |
 | **P2** | ✔ Таймауты внешних HTTP-клиентов (`http.DefaultClient`) — исправлено | Зависание cost sync | Низкая | `&http.Client{Timeout: 30s}` | 0.25 д |
-| **P2** | CH3/DB2: TTL и партиционирование `postbacks` | Рост диска и стоимости | 100% со временем | TTL, партиции, retention job | 1 д |
-| **P2** | CH4: профили и квоты CH, TLS | Отчёты душат атрибуцию | Средняя | Users/profiles, `max_execution_time` | 0.5 д |
-| **P2** | T3: `event_time` в postback | Сдвиг конверсий и FX | Средняя | Опциональный параметр | 0.5 д |
-| **P2** | DO4: CA-сертификаты в образе tracker'а | Не подключится к TLS-PG/Redis | Средняя | `apk add ca-certificates` | 0.1 д |
-| **P2** | S2: CSP / frame-ancestors / HSTS | Clickjacking | Низкая | Заголовки в `next.config.ts` и API | 0.25 д |
-| **P2** | T6: верификация доменов | Squatting | Низкая | TXT-challenge | 1 д |
-| **P2** | CQ2: общий `pgqueue[T]` | Двойная поддержка | — | Рефакторинг | 1 д |
+| **P2** | ✔ CH3/DB2: TTL и партиционирование `postbacks` | Рост диска и стоимости | 100% со временем | TTL, партиции, retention job | 1 д |
+| **P2** | ✔ CH4: профили и квоты CH, TLS | Отчёты душат атрибуцию | Средняя | Users/profiles, `max_execution_time` | 0.5 д |
+| **P2** | ✔ T3: `event_time` в postback | Сдвиг конверсий и FX | Средняя | Опциональный параметр | 0.5 д |
+| **P2** | ✔ DO4: CA-сертификаты в образе tracker'а | Не подключится к TLS-PG/Redis | Средняя | `apk add ca-certificates` | 0.1 д |
+| **P2** | ✔ S2: CSP / frame-ancestors / HSTS | Clickjacking | Низкая | Заголовки в `next.config.ts` и API | 0.25 д |
+| **P2** | ✔ T6: верификация доменов | Squatting | Низкая | TXT-challenge | 1 д |
+| **P2** | ✔ CQ2: общий `pgqueue[T]` | Двойная поддержка | — | Рефакторинг | 1 д |
 | **P3** | ✔ DB4: throttle `last_active_at` — исправлено | Write amplification | — | `WHERE … < now()-1m` | 0.1 д |
-| **P3** | T4/AN3: вычитание отмен | Завышенная выручка при chargeback'ах | По бизнесу | Решение по спецификации | 1 д |
+| **P3** | ✔ T4/AN3: вычитание отмен | Завышенная выручка при chargeback'ах | По бизнесу | Решение по спецификации | 1 д |
 | **P3** | ✔ Брокер вместо PG-очереди — NATS JetStream для событий tracker'а (`docs/event-stream.md`); конверсии остаются в PG | Потолок ~2–3k rps (замер: 8k без потерь, 12k — потери) | При росте | Stage 3 | 5–8 д |
 | **P3** | ✔ Пагинация справочников, `/v1` — исправлено | — | — | — | 1 д |
 
 **P0 итого: ~8–9 дней. P1: ~11–13 дней.**
+
+**Статус на 2026-10-10:** план выполнен целиком, кроме DO1. Сверх плана
+закрыты P3-пункты DB3, DB5, CH5, API2, API3, M1–M4, AN4, R2, DO3, P4.
+Открыты: DO1, AN5, CQ1, частично CQ3 и три теста из §16.
 
 ---
 
@@ -1179,6 +1205,22 @@ reaper.
 | DevOps | **3/10** | Dockerfiles хорошие; нет CI, нет автоматических бэкапов, нет манифестов оркестрации |
 | Code quality | **7/10** | Читаемо и консистентно; перегруженные комментарии, дублированные очереди |
 | **Итого** | **53/100** | |
+
+### Переоценка 2026-10-10
+
+| Область | Было | Стало | Почему |
+|---|---:|---:|---|
+| Architecture | 7 | **8** | Outbox, кэш маршрутизации, NATS JetStream для событий tracker'а |
+| Tracking correctness | 4 | **8** | Нет известных путей потери и дублей (Q1, D1, D2, RL2, T1, T5 закрыты); минус — нет режима «по дате клика» (AN5) |
+| Database | 5 | **8** | Индексы, `click_lookup`, retention, версионированные миграции CH |
+| Performance | 6 | **7** | 8k кликов/с через PG и 20k/с через NATS без потерь — но только локально, не в целевой сети |
+| Security | 7 | **8** | Подпись sticky, домены по TXT, заголовки, лимиты auth и postback; нет `script-src` |
+| Reliability | 3 | **7** | Reaper, retry, dead-letter, stale-on-error, readiness, бэкапы с drill; drill и k8s проверены на dev и minikube, не в production |
+| Observability | 6 | **8** | Метрики §14, сверка PG↔CH, error tracking |
+| Testing | 5 | **6** | 8 из 11 тестов §16; нет CI, нагрузки в целевой сети, табличного кросс-тенант-теста |
+| DevOps | 3 | **5** | Kubernetes, бэкапы, CA; нет CI |
+| Code quality | 7 | **7** | `pgqueue[T]`; комментарии (CQ1) и `Record` (CQ3) как были |
+| **Итого** | **53** | **72/100** | |
 
 ---
 
@@ -1214,3 +1256,21 @@ reaper.
 4. PITR для PG и бэкап CH проверены восстановлением.
 5. Нагрузочный тест 1k rps, 30 минут, **в целевой сети**, со сверкой
    `requests == click_events` и `postbacks success == conversion_events`.
+
+### Статус условий на 2026-10-10
+
+1. P0 закрыты, кроме DO1 (CI — решение владельца). Тесты из §16 на каждый
+   закрытый P0 есть. ✔ кроме CI
+2. Кэш конфигурации со stale-on-error и `statement_timeout`. ✔
+3. Метрики возраста очередей, зависших claim'ов, исхода атрибуции и сверки
+   с алертами. ✔
+4. PITR и бэкап CH проверены восстановлением — на dev-стеке
+   (2026-10-09, `docs/backup.md`). На production-инфраструктуре — после
+   развёртывания.
+5. Нагрузочный тест в целевой сети — **не выполнен**: замеры только
+   локальные.
+
+**Вердикт на 2026-10-10: YES, WITH CONDITIONS** — после нагрузочного
+теста в целевой сети и restore-drill на production-инфраструктуре; CI
+(DO1) владелец решает сам, без него каждый merge проверяется только
+вручную.

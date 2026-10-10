@@ -5,6 +5,21 @@ per-phase, matching `CLAUDE.md`'s phase protocol. The one exception is
 [Between phases], below: spec amendments and the code changes that follow from
 them land between phases and would otherwise be invisible here.
 
+## [Between phases] — Postback refusal limit, tech audit statuses
+
+Closes tech audit P4 and brings the audit document up to date.
+
+- `/postback/{networkId}` limits refusals per client IP: 30 postbacks refused as an unknown
+  network or a wrong secret within 10 minutes block the IP for the rest of the window, 429
+  before any Postgres lookup. Accepted postbacks, duplicates and 400s never count, so a
+  network's replay of any size is not limited. New `ratelimit.Failures` (Blocked reads, Record
+  counts; in process while Redis fails or is not configured). New result label `rate_limited`
+  on `flox_postback_incoming_total`. `docs/security.md` §3.
+- `docs/audit-tech-2026-10-06.md`: statuses for P4, DO5, AN5, CQ1, CQ3, CQ4, the §14 note, the
+  §16 test table (8 of 11 present) and every §21/§22 row; a 2026-10-10 re-score (53 → 72) and
+  the §24 conditions — YES, WITH CONDITIONS pending a load test in the target network and a
+  restore drill on production infrastructure; CI (DO1) stays the owner's call.
+
 ## [Between phases] — NATS route login, GeoIP without restarts
 
 Closes the two gaps the previous entry left in `docs/kubernetes.md`.
