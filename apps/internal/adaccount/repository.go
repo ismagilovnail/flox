@@ -33,13 +33,13 @@ func NewRepository(db *pgxpool.Pool, key []byte) *Repository { return &Repositor
 // four sliced ciphertext bytes are meaningless, not four real
 // characters, the same reason refresh_token's own preview was already
 // computed in Go.
-const selectColumns = `id, organization_id, traffic_source_id, ad_account_id, access_token, refresh_token, created_at, updated_at`
+const selectColumns = `id, organization_id, traffic_source_id, ad_account_id, access_token, refresh_token, timezone, created_at, updated_at`
 
 func (r *Repository) scanConnection(row pgx.Row) (Connection, error) {
 	var c Connection
 	var encryptedAccessToken *string
 	var encryptedRefreshToken *string
-	if err := row.Scan(&c.ID, &c.OrganizationID, &c.TrafficSourceID, &c.AdAccountID, &encryptedAccessToken, &encryptedRefreshToken, &c.CreatedAt, &c.UpdatedAt); err != nil {
+	if err := row.Scan(&c.ID, &c.OrganizationID, &c.TrafficSourceID, &c.AdAccountID, &encryptedAccessToken, &encryptedRefreshToken, &c.Timezone, &c.CreatedAt, &c.UpdatedAt); err != nil {
 		return Connection{}, err
 	}
 	encryptedSecret := encryptedAccessToken
@@ -114,7 +114,10 @@ func (r *Repository) Connect(ctx context.Context, id, orgID, trafficSourceID str
 			developer_token = EXCLUDED.developer_token,
 			client_id = EXCLUDED.client_id,
 			client_secret = EXCLUDED.client_secret,
-			refresh_token = EXCLUDED.refresh_token
+			refresh_token = EXCLUDED.refresh_token,
+			-- Another account is another zone: learned again at its first sync.
+			timezone = CASE WHEN ad_account_connections.ad_account_id = EXCLUDED.ad_account_id
+			                THEN ad_account_connections.timezone ELSE '' END
 		RETURNING `+selectColumns,
 		id, orgID, trafficSourceID, in.AdAccountID, accessToken, developerToken, clientID, clientSecret, refreshToken,
 	)
@@ -256,4 +259,16 @@ func (r *Repository) TrafficSourceCostIntegration(ctx context.Context, orgID, tr
 		return "", false, err
 	}
 	return costIntegration, true, nil
+}
+
+// SetTimezone records the ad account's IANA zone, learned by a sync
+// (tech audit AN4). tz must already be a valid zone name.
+func (r *Repository) SetTimezone(ctx context.Context, orgID, trafficSourceID, tz string) error {
+	if _, err := r.db.Exec(ctx, `
+		UPDATE ad_account_connections SET timezone = $3
+		WHERE organization_id = $1 AND traffic_source_id = $2 AND timezone <> $3`,
+		orgID, trafficSourceID, tz); err != nil {
+		return fmt.Errorf("adaccount: recording account timezone: %w", err)
+	}
+	return nil
 }

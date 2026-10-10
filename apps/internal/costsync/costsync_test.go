@@ -225,3 +225,61 @@ func seedCampaign(t *testing.T, ctx context.Context, pool *pgxpool.Pool, orgID, 
 	}
 	return id
 }
+
+// A sync keeps the ad account's zone (only a real IANA one), synced spend
+// reports it, manual spend does not, and connecting another account
+// forgets it (tech audit AN4).
+func TestSyncRecordsTheAccountTimezone(t *testing.T) {
+	pool := mustPool(t)
+	ctx := context.Background()
+	orgID := seedOrg(t, ctx, pool)
+	sourceID := seedTrafficSource(t, ctx, pool, orgID, "facebook_ads")
+	campaignID := seedCampaign(t, ctx, pool, orgID, sourceID, "fb_camp_1")
+
+	adAccountRepo := adaccount.NewRepository(pool, testKey)
+	accounts := adaccount.NewService(adAccountRepo)
+	if _, err := accounts.Connect(ctx, orgID, sourceID, adaccount.ConnectInput{AdAccountID: "act_1", AccessToken: "test-token-1234567890"}); err != nil {
+		t.Fatalf("connect: %v", err)
+	}
+	costSvc := cost.NewService(cost.NewRepository(pool), conversion.NewPostgresFX(pool))
+	day := time.Date(2026, 1, 10, 0, 0, 0, 0, time.UTC)
+	provider := &fakeProvider{}
+	svc := costsync.NewService(adAccountRepo, campaign.NewRepository(pool), costSvc, costsync.Providers{FacebookAds: provider})
+	connectionTZ := func() string {
+		t.Helper()
+		c, err := adAccountRepo.GetByTrafficSourceID(ctx, orgID, sourceID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return c.Timezone
+	}
+
+	provider.records = []adaccount.DailyCampaignSpendRecord{{Date: day, ExternalCampaignID: "fb_camp_1", Amount: 5, Currency: "USD", Timezone: "Mars/Base"}}
+	if res, err := svc.Sync(ctx, orgID, sourceID, day, day); err != nil || res.AccountTimezone != "" || connectionTZ() != "" {
+		t.Fatalf("an invalid zone: result %+v, err %v, stored %q; want nothing stored", res, err, connectionTZ())
+	}
+
+	provider.records[0].Timezone = "America/Los_Angeles"
+	res, err := svc.Sync(ctx, orgID, sourceID, day, day)
+	if err != nil || res.AccountTimezone != "America/Los_Angeles" || connectionTZ() != "America/Los_Angeles" {
+		t.Fatalf("result %+v, err %v, stored %q; want America/Los_Angeles", res, err, connectionTZ())
+	}
+
+	// Manual spend on another day has no zone of its own.
+	if _, err := costSvc.Upsert(ctx, orgID, campaignID, cost.UpsertInput{EntryDate: day.AddDate(0, 0, 5), Amount: 1, Currency: "USD"}); err != nil {
+		t.Fatalf("manual entry: %v", err)
+	}
+	if zones, err := costSvc.AccountTimezones(ctx, orgID, day, day); err != nil || len(zones) != 1 || zones[0] != "America/Los_Angeles" {
+		t.Fatalf("zones on the synced day = %v, %v", zones, err)
+	}
+	if zones, err := costSvc.AccountTimezones(ctx, orgID, day.AddDate(0, 0, 5), day.AddDate(0, 0, 5)); err != nil || len(zones) != 0 {
+		t.Fatalf("zones on a manual-only day = %v, %v; want none", zones, err)
+	}
+
+	if _, err := accounts.Connect(ctx, orgID, sourceID, adaccount.ConnectInput{AdAccountID: "act_2", AccessToken: "test-token-0987654321"}); err != nil {
+		t.Fatalf("reconnect: %v", err)
+	}
+	if tz := connectionTZ(); tz != "" {
+		t.Fatalf("another account kept the old zone %q", tz)
+	}
+}

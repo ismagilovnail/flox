@@ -38,5 +38,9 @@
     "saveError": "Couldn't save spend",
     "removed": "Entry removed",
     "removeError": "Couldn't remove entry"
+  },
+  "timezoneNotice": {
+    "title": "Spend is daily in the ad account's time zone",
+    "description": "{{zones}} reports spend per day in its own time zone, this report cuts clicks by {{timezone}}. A day's cost and that day's clicks are hours apart, so daily cost and ROI are approximate; totals over whole weeks or months are barely affected."
   }
 }

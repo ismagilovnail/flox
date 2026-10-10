@@ -143,6 +143,11 @@ func (s *Service) DailySpendForOrg(ctx context.Context, orgID string, from, to t
 	return s.repo.DailySpendForOrg(ctx, orgID, from, to)
 }
 
+// AccountTimezones: the zones synced spend in [from, to] is cut in.
+func (s *Service) AccountTimezones(ctx context.Context, orgID string, from, to time.Time) ([]string, error) {
+	return s.repo.AccountTimezones(ctx, orgID, from, to)
+}
+
 func validateUpsert(in UpsertInput) map[string]string {
 	fields := map[string]string{}
 	if in.EntryDate.IsZero() {

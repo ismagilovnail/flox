@@ -37,13 +37,16 @@ import (
 // operator can recognize which credential is connected without exposing
 // it.
 type Connection struct {
-	ID              string    `json:"id"`
-	OrganizationID  string    `json:"organizationId"`
-	TrafficSourceID string    `json:"trafficSourceId"`
-	AdAccountID     string    `json:"adAccountId"`
-	TokenPreview    string    `json:"tokenPreview"`
-	CreatedAt       time.Time `json:"createdAt"`
-	UpdatedAt       time.Time `json:"updatedAt"`
+	ID              string `json:"id"`
+	OrganizationID  string `json:"organizationId"`
+	TrafficSourceID string `json:"trafficSourceId"`
+	AdAccountID     string `json:"adAccountId"`
+	TokenPreview    string `json:"tokenPreview"`
+	// Timezone is the ad account's own IANA zone, the one its daily spend
+	// is cut in — '' until a sync has learned it (tech audit AN4).
+	Timezone  string    `json:"timezone"`
+	CreatedAt time.Time `json:"createdAt"`
+	UpdatedAt time.Time `json:"updatedAt"`
 }
 
 // ConnectInput both creates a new connection and replaces an existing
@@ -106,10 +109,15 @@ type CostProvider interface {
 }
 
 type DailyCampaignSpendRecord struct {
+	// Date is a calendar day in the ad account's own time zone (Timezone)
+	// — every platform reports daily spend that way.
 	Date               time.Time
 	ExternalCampaignID string
 	Amount             float64
 	Currency           string
+	// Timezone is the ad account's IANA zone as the platform reports it,
+	// '' when it could not be learned (tech audit AN4).
+	Timezone string
 }
 
 // ConnectionRef identifies one connected ad account for a trusted, Go-only

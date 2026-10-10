@@ -16,6 +16,14 @@ import (
 func TestDailySpendByCampaign(t *testing.T) {
 	var gotPaths []string
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/act_12345" {
+			// The account's zone (tech audit AN4).
+			if r.URL.Query().Get("fields") != "timezone_name" || r.URL.Query().Get("access_token") != "test-token" {
+				t.Errorf("account request query = %v", r.URL.Query())
+			}
+			_, _ = w.Write([]byte(`{"timezone_name": "America/Los_Angeles", "id": "act_12345"}`))
+			return
+		}
 		gotPaths = append(gotPaths, r.URL.Path)
 
 		if r.URL.Query().Get("access_token") != "test-token" {
@@ -57,13 +65,43 @@ func TestDailySpendByCampaign(t *testing.T) {
 		t.Fatalf("records[0].Date = %v, want %v", records[0].Date, from)
 	}
 	if len(gotPaths) != 1 {
-		t.Fatalf("server was hit %d times, want 1 (no pagination expected)", len(gotPaths))
+		t.Fatalf("insights was hit %d times, want 1 (no pagination expected)", len(gotPaths))
+	}
+	for _, r := range records {
+		if r.Timezone != "America/Los_Angeles" {
+			t.Fatalf("record timezone = %q, want the account's", r.Timezone)
+		}
+	}
+}
+
+// The account lookup failing never fails the spend: the zone is only for
+// the report's note (tech audit AN4).
+func TestDailySpendByCampaignWithoutAccountTimezone(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/act_1" {
+			w.WriteHeader(http.StatusForbidden)
+			_, _ = w.Write([]byte(`{"error": {"message": "no permission"}}`))
+			return
+		}
+		_, _ = w.Write([]byte(`{"data": [{"campaign_id": "c1", "spend": "1", "account_currency": "EUR", "date_start": "2026-01-01"}], "paging": {}}`))
+	}))
+	defer server.Close()
+
+	adapter := &facebookads.Adapter{BaseURL: server.URL, HTTPClient: server.Client()}
+	day := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	records, err := adapter.DailySpendByCampaign(context.Background(), adaccount.Credentials{AdAccountID: "1", AccessToken: "t"}, day, day)
+	if err != nil || len(records) != 1 || records[0].Timezone != "" {
+		t.Fatalf("records = %+v, err = %v; want the spend with no zone", records, err)
 	}
 }
 
 func TestDailySpendByCampaignFollowsPagination(t *testing.T) {
 	var calls int
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/act_1" {
+			_, _ = w.Write([]byte(`{"timezone_name": "UTC"}`))
+			return
+		}
 		calls++
 		w.Header().Set("Content-Type", "application/json")
 		if r.URL.Query().Get("after") == "" {

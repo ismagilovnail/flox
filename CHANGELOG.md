@@ -5,6 +5,31 @@ per-phase, matching `CLAUDE.md`'s phase protocol. The one exception is
 [Between phases], below: spec amendments and the code changes that follow from
 them land between phases and would otherwise be invisible here.
 
+## [Between phases] — spend days in the ad account's zone, said in reports (tech audit AN4)
+
+- Verified: Facebook, TikTok and Google Ads all report daily spend in the ad account's own time
+  zone, and costsync stores that calendar day as `entry_date`; reports cut clicks by the report
+  zone, so a day of spend and a day of clicks can be hours apart.
+- The sync now learns the account's zone — Facebook `act_{id}?fields=timezone_name` (one extra
+  call, best effort), TikTok `advertiser/info` `display_timezone`/`timezone` (already fetched),
+  Google `customer.time_zone` (same GAQL query) — and keeps it on
+  `ad_account_connections.timezone` (migration 00067) when it is a valid IANA zone; connecting
+  another account clears it. The sync result reports it (`accountTimezone`).
+- `POST /analytics/cost-timezones` names the zones of synced spend in the range whose UTC offset
+  differs from the report's at either end of the range; the overview and the report builder show
+  a note (EN/RU) when any. Manual spend has no zone. No re-cutting — that needs hourly spend.
+- Not verified against the real platforms (no accounts here); field names follow their docs and
+  are tested on fakes. A wrong guess only means no note.
+- `docs/analytics-report-api.md`, audit AN4/D5.
+
+Tests: each adapter carries the zone (Facebook also without it when the account call fails); a
+sync stores a valid zone and ignores an invalid one, manual spend has none, reconnecting another
+account clears it; `CostTimezones` by offset (Berlin vs Paris same, UTC vs London across the
+March DST change differs, unknown report zone rejected). In the browser, with a temporary
+America/Los_Angeles connection and one synced entry (removed after): the note shows on the
+overview and the report builder; the endpoint names the zone for UTC and Berlin and nothing for
+Los Angeles or Vancouver. tsc, eslint, vitest, full Go suite with full env, e2e passes.
+
 ## [Between phases] — signed landing/PWA links bound to their host (tech audit M4)
 
 - Verified M4: every `/lc/*` and `/pwa/*` handler loads its landing, PWA and comments filtered by

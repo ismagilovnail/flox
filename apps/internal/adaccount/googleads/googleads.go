@@ -79,6 +79,9 @@ type searchResponse struct {
 		} `json:"campaign"`
 		Customer struct {
 			CurrencyCode string `json:"currencyCode"`
+			// TimeZone is the account's IANA zone, the one segments.date
+			// is cut in (tech audit AN4).
+			TimeZone string `json:"timeZone"`
 		} `json:"customer"`
 		Segments struct {
 			Date string `json:"date"`
@@ -122,7 +125,7 @@ func (a *Adapter) DailySpendByCampaign(ctx context.Context, creds adaccount.Cred
 
 	customerID := strings.ReplaceAll(creds.AdAccountID, "-", "")
 	query := fmt.Sprintf(
-		`SELECT campaign.id, customer.currency_code, segments.date, metrics.cost_micros
+		`SELECT campaign.id, customer.currency_code, customer.time_zone, segments.date, metrics.cost_micros
 		 FROM campaign
 		 WHERE segments.date BETWEEN '%s' AND '%s'`,
 		from.Format(dateLayout), to.Format(dateLayout),
@@ -173,6 +176,7 @@ func (a *Adapter) DailySpendByCampaign(ctx context.Context, creds adaccount.Cred
 				ExternalCampaignID: row.Campaign.ID,
 				Amount:             costMicros / 1_000_000, // Google Ads reports cost in micros: 1,000,000 micros = 1 unit of the account's currency.
 				Currency:           row.Customer.CurrencyCode,
+				Timezone:           row.Customer.TimeZone,
 			})
 		}
 

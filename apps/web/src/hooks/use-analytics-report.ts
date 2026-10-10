@@ -2,7 +2,7 @@
 
 import { useQuery } from "@tanstack/react-query";
 
-import { getReport, getTimeseries, getFunnel, getDashboardReport, getDimensionValues } from "@/lib/api/analytics";
+import { getReport, getTimeseries, getFunnel, getDashboardReport, getDimensionValues, getCostTimezones } from "@/lib/api/analytics";
 import type { DimensionKey } from "@/features/analytics/registry";
 import type { FilterCondition } from "@/features/analytics/aggregate";
 
@@ -62,5 +62,13 @@ export function useDimensionValues(dim: DimensionKey, from: Date, to: Date, opti
     queryFn: () => getDimensionValues(dim, from, to),
     retry: false,
     enabled: options?.enabled,
+  });
+}
+
+/** Ad-account zones that cut spend into other days than the report (AN4). */
+export function useCostTimezones(from: Date, to: Date, timezone?: string) {
+  return useQuery({
+    queryKey: ["analytics-cost-timezones", iso(from), iso(to), timezone],
+    queryFn: () => getCostTimezones(from, to, timezone),
   });
 }

@@ -14,6 +14,7 @@ import { TopTable } from "@/features/dashboard/top-tables";
 import { metricsFromApi, performanceRowFromApi } from "@/features/dashboard/metrics";
 import { useDimensionValueLabel } from "@/features/analytics/use-dimension-value-label";
 import { useDashboardReport } from "@/hooks/use-analytics-report";
+import { CostTimezoneNotice } from "@/features/analytics/cost-timezone-notice";
 import { useOrganization } from "@/hooks/use-organization";
 import { useLocale } from "@/hooks/use-locale";
 import { useApiErrorMessage } from "@/hooks/use-api-error-message";
@@ -88,6 +89,8 @@ function DashboardContent({ timezone }: { timezone: string }) {
         <h1 className="text-2xl font-semibold tracking-tight">{t("title")}</h1>
         <DateRangePicker value={range} onChange={setRange} timezone={timezone} />
       </div>
+
+      <CostTimezoneNotice from={from} to={to} timezone={timezone} />
 
       <div className="flex flex-col gap-1.5">
         <KpiGrid current={currentMetrics} previous={previousMetrics} />

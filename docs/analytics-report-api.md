@@ -25,6 +25,7 @@ querystring).
 | `POST /analytics/funnel` | The §43 8-stage funnel's per-stage totals for a range. |
 | `POST /analytics/dashboard` | `/overview`'s endpoint — KPI totals, a daily series, and three Top-N breakdowns (campaigns/countries/flows). |
 | `POST /analytics/dimension-values` | The report builder's filter-value dropdown — real distinct values seen for one dimension, most-common first (below). |
+| `POST /analytics/cost-timezones` | `{from, to, timezone}` → `{"mismatched": [...]}`: the ad-account zones whose daily spend in the range is cut in other days than the report (below). |
 
 Request/response shapes: `apps/internal/analytics/handler.go`'s
 `reportRequest`/`timeseriesRequest`/`breakdownRequest`/`rangeRequest`/
@@ -221,6 +222,33 @@ by-country report, by-device breakdown, etc. — returns `cost`/`profit`/
 data on file must render as "—", never a fabricated 0. `MetricValues`
 (the wire shape) makes this a real JSON `null` on every nullable field,
 not a sentinel value.
+
+## Spend days are the ad account's days (tech audit AN4)
+
+Facebook (`date_start` with `time_increment=1`), TikTok (`stat_time_day`)
+and Google Ads (`segments.date`) report spend per calendar day **in the ad
+account's own time zone**, and `cost_entries.entry_date` keeps that day. A
+report cuts clicks by its own zone, so with an account in
+America/Los_Angeles and a report in UTC, "Oct 10" of spend and "Oct 10" of
+clicks are 7–8 hours apart. Daily totals cannot be re-cut without hourly
+spend; over weeks or months the edges barely matter.
+
+So the report says so instead. The sync learns each account's zone
+(Facebook `act_{id}?fields=timezone_name`, one extra call; TikTok
+`advertiser/info` `display_timezone`, falling back to `timezone`; Google
+`customer.time_zone` in the same GAQL query) and keeps it on
+`ad_account_connections.timezone` (migration 00067) when it is a zone Go
+knows; connecting another account clears it. `POST
+/analytics/cost-timezones` lists the zones of synced spend in the range
+whose UTC offset differs from the report zone's at the start or end of the
+range (a DST change counts; Berlin and Paris do not differ). The overview
+and the report builder show a note when the list is not empty
+(`CostTimezoneNotice`). Manual spend has no zone and is never named.
+
+Not verified against the real platforms (no accounts here): the field
+names follow their API documentation and are tested against fakes. A wrong
+guess only means no zone is stored and no note is shown — the spend itself
+does not depend on it.
 
 ## Frontend integration
 

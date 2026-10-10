@@ -44,6 +44,7 @@ func (h *Handler) Register(r chi.Router) {
 	r.Post("/breakdown", h.breakdown)
 	r.Post("/funnel", h.funnel)
 	r.Post("/dashboard", h.dashboard)
+	r.Post("/cost-timezones", h.costTimezones)
 	r.Post("/dimension-values", h.dimensionValues)
 }
 
@@ -453,6 +454,29 @@ func (h *Handler) dashboard(w http.ResponseWriter, r *http.Request) {
 		TopFlows:     reportRowsToResponse(result.TopFlows),
 		TopOffers:    reportRowsToResponse(result.TopOffers),
 	})
+}
+
+// costTimezones answers POST /analytics/cost-timezones — the ad-account
+// zones whose daily spend in the range is cut in other days than the
+// report's (tech audit AN4); the report pages show a note when any.
+func (h *Handler) costTimezones(w http.ResponseWriter, r *http.Request) {
+	orgID, _ := tenant.OrgID(r.Context())
+	var req rangeRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		apierror.Write(w, h.logger, apierror.Validation("invalid JSON body", nil))
+		return
+	}
+	from, to, err := parseDateRangeBody(req.From, req.To)
+	if err != nil {
+		apierror.Write(w, h.logger, err)
+		return
+	}
+	zones, err := h.svc.CostTimezones(r.Context(), orgID, from, to, req.Timezone)
+	if err != nil {
+		apierror.Write(w, h.logger, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"mismatched": zones})
 }
 
 type dimensionValuesRequest struct {

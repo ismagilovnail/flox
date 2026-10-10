@@ -291,3 +291,31 @@ func (r *Repository) DailySpendForOrg(ctx context.Context, orgID string, from, t
 	}
 	return out, rows.Err()
 }
+
+// AccountTimezones lists the ad-account zones of the synced spend in
+// [from, to]: each entry's traffic source's connection zone, where a sync
+// has learned it (tech audit AN4). Manual entries have none.
+func (r *Repository) AccountTimezones(ctx context.Context, orgID string, from, to time.Time) ([]string, error) {
+	rows, err := r.db.Query(ctx, `
+		SELECT DISTINCT ac.timezone
+		FROM cost_entries ce
+		JOIN ad_account_connections ac
+		  ON ac.organization_id = ce.organization_id AND ac.traffic_source_id = ce.traffic_source_id
+		WHERE ce.organization_id = $1 AND ce.entry_date >= $2 AND ce.entry_date <= $3
+		  AND ce.source <> 'manual' AND ac.timezone <> ''
+		ORDER BY 1`,
+		orgID, from, to)
+	if err != nil {
+		return nil, fmt.Errorf("cost: listing ad account timezones: %w", err)
+	}
+	defer rows.Close()
+	var out []string
+	for rows.Next() {
+		var tz string
+		if err := rows.Scan(&tz); err != nil {
+			return nil, fmt.Errorf("cost: listing ad account timezones: %w", err)
+		}
+		out = append(out, tz)
+	}
+	return out, rows.Err()
+}

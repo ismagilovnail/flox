@@ -158,5 +158,40 @@ func (a *Adapter) DailySpendByCampaign(ctx context.Context, creds adaccount.Cred
 		next = body.Paging.Next
 	}
 
+	if len(records) > 0 {
+		// Insights dates are calendar days in the account's own zone,
+		// which the rows do not carry — one more call (tech audit AN4).
+		// Best effort: spend is right without it, only the report's
+		// "different zone" note needs it.
+		tz := a.accountTimezone(ctx, client, baseURL, creds)
+		for i := range records {
+			records[i].Timezone = tz
+		}
+	}
 	return records, nil
+}
+
+// accountTimezone reads GET /act_{id}?fields=timezone_name, "" on any
+// failure.
+func (a *Adapter) accountTimezone(ctx context.Context, client *http.Client, baseURL string, creds adaccount.Credentials) string {
+	q := url.Values{}
+	q.Set("fields", "timezone_name")
+	q.Set("access_token", creds.AccessToken)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet,
+		baseURL+"/act_"+url.PathEscape(creds.AdAccountID)+"?"+q.Encode(), nil)
+	if err != nil {
+		return ""
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		return ""
+	}
+	defer resp.Body.Close()
+	var body struct {
+		TimezoneName string `json:"timezone_name"`
+	}
+	if resp.StatusCode != http.StatusOK || json.NewDecoder(resp.Body).Decode(&body) != nil {
+		return ""
+	}
+	return body.TimezoneName
 }

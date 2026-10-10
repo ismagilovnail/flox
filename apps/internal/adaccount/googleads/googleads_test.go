@@ -53,7 +53,7 @@ func TestDailySpendByCampaign(t *testing.T) {
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(`{
 			"results": [
-				{"campaign": {"id": "c1"}, "customer": {"currencyCode": "USD"}, "segments": {"date": "2026-01-01"}, "metrics": {"costMicros": "12500000"}},
+				{"campaign": {"id": "c1"}, "customer": {"currencyCode": "USD", "timeZone": "Europe/Berlin"}, "segments": {"date": "2026-01-01"}, "metrics": {"costMicros": "12500000"}},
 				{"campaign": {"id": "c2"}, "customer": {"currencyCode": "USD"}, "segments": {"date": "2026-01-01"}, "metrics": {"costMicros": "3750000"}}
 			]
 		}`))
@@ -69,6 +69,9 @@ func TestDailySpendByCampaign(t *testing.T) {
 	}
 	if len(records) != 2 {
 		t.Fatalf("records = %d, want 2", len(records))
+	}
+	if records[0].Timezone != "Europe/Berlin" {
+		t.Fatalf("records[0].Timezone = %q, want customer.time_zone", records[0].Timezone)
 	}
 	if records[0].ExternalCampaignID != "c1" || records[0].Amount != 12.5 || records[0].Currency != "USD" {
 		t.Fatalf("records[0] = %+v, unexpected (costMicros should divide by 1,000,000)", records[0])

@@ -4,6 +4,9 @@ import (
 	"context"
 	"fmt"
 	"time"
+	// accountTimezone validates zone names: the zone database must ship
+	// in the binary (the alpine images have none).
+	_ "time/tzdata"
 
 	"github.com/ismagilovnail/flox/apps/internal/adaccount"
 	"github.com/ismagilovnail/flox/apps/internal/apierror"
@@ -88,6 +91,12 @@ func (s *Service) Sync(ctx context.Context, orgID, trafficSourceID string, from,
 	}
 
 	result := Result{RecordsFetched: len(records)}
+	if tz := accountTimezone(records); tz != "" {
+		if err := s.adAccountRepo.SetTimezone(ctx, orgID, trafficSourceID, tz); err != nil {
+			return result, err
+		}
+		result.AccountTimezone = tz
+	}
 	seenUnmatched := map[string]bool{}
 	for _, rec := range records {
 		campaigns, err := s.campaignRepo.ListByExternalID(ctx, orgID, trafficSourceID, rec.ExternalCampaignID)
@@ -119,4 +128,19 @@ func (s *Service) Sync(ctx context.Context, orgID, trafficSourceID string, from,
 	}
 
 	return result, nil
+}
+
+// accountTimezone is the ad account's zone as the records name it, when
+// it is a zone Go knows (reports compare offsets with it).
+func accountTimezone(records []adaccount.DailyCampaignSpendRecord) string {
+	for _, r := range records {
+		if r.Timezone == "" {
+			continue
+		}
+		if _, err := time.LoadLocation(r.Timezone); err == nil {
+			return r.Timezone
+		}
+		return ""
+	}
+	return ""
 }

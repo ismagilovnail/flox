@@ -53,6 +53,9 @@ type CostSource interface {
 	CampaignSpendByDay(ctx context.Context, organizationID string, from, to time.Time) ([]cost.CampaignDaySpend, error)
 	SourceSpendByDay(ctx context.Context, organizationID string, from, to time.Time) ([]cost.SourceDaySpend, error)
 	DailySpendForOrg(ctx context.Context, organizationID string, from, to time.Time) ([]cost.DailySpend, error)
+	// AccountTimezones: the ad-account zones synced spend in [from, to] is
+	// cut in (CostTimezones).
+	AccountTimezones(ctx context.Context, organizationID string, from, to time.Time) ([]string, error)
 }
 
 // maxRangeDays bounds how wide a query can ask for. Not in §47 — a

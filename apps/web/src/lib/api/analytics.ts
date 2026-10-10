@@ -148,3 +148,15 @@ export function getDashboardReport(from: Date, to: Date, timezone?: string): Pro
     topOffers: res.topOffers.map((r) => toReportRow(r, ["offer"])),
   }));
 }
+
+/**
+ * The ad-account time zones whose daily spend in the range is cut in other
+ * days than the report's (Go analytics.CostTimezones, tech audit AN4) —
+ * empty when they all match or there is no synced spend.
+ */
+export function getCostTimezones(from: Date, to: Date, timezone?: string): Promise<string[]> {
+  return apiFetch<{ mismatched: string[] }>("/analytics/cost-timezones", {
+    method: "POST",
+    body: { from: formatDate(from), to: formatDate(to), timezone },
+  }).then((res) => res.mismatched);
+}

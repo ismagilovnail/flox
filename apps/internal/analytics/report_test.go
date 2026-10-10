@@ -73,6 +73,7 @@ type fakeCost struct {
 	campaignDay []cost.CampaignDaySpend
 	sourceDay   []cost.SourceDaySpend
 	byDay       []cost.DailySpend
+	zones       []string
 }
 
 func (c *fakeCost) SpendByCampaign(context.Context, string, time.Time, time.Time) ([]cost.CampaignSpend, error) {
@@ -87,6 +88,10 @@ func (c *fakeCost) SourceSpendByDay(context.Context, string, time.Time, time.Tim
 func (c *fakeCost) SpendBySource(context.Context, string, time.Time, time.Time) ([]cost.SourceSpend, error) {
 	return c.bySource, nil
 }
+func (c *fakeCost) AccountTimezones(context.Context, string, time.Time, time.Time) ([]string, error) {
+	return c.zones, nil
+}
+
 func (c *fakeCost) DailySpendForOrg(context.Context, string, time.Time, time.Time) ([]cost.DailySpend, error) {
 	return c.byDay, nil
 }

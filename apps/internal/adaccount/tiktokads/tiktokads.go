@@ -63,6 +63,10 @@ type advertiserInfoResponse struct {
 		List []struct {
 			AdvertiserID string `json:"advertiser_id"`
 			Currency     string `json:"currency"`
+			// The account's zone: display_timezone is the IANA name
+			// (e.g. "America/Los_Angeles"), timezone an Etc/GMT±n form.
+			Timezone        string `json:"timezone"`
+			DisplayTimezone string `json:"display_timezone"`
 		} `json:"list"`
 	} `json:"data"`
 }
@@ -103,7 +107,7 @@ func (a *Adapter) DailySpendByCampaign(ctx context.Context, creds adaccount.Cred
 		baseURL = DefaultBaseURL
 	}
 
-	currency, err := a.fetchCurrency(ctx, client, baseURL, creds)
+	currency, tz, err := a.fetchAdvertiserInfo(ctx, client, baseURL, creds)
 	if err != nil {
 		return nil, err
 	}
@@ -165,6 +169,7 @@ func (a *Adapter) DailySpendByCampaign(ctx context.Context, creds adaccount.Cred
 				ExternalCampaignID: row.Dimensions.CampaignID,
 				Amount:             amount,
 				Currency:           currency,
+				Timezone:           tz,
 			})
 		}
 
@@ -176,13 +181,14 @@ func (a *Adapter) DailySpendByCampaign(ctx context.Context, creds adaccount.Cred
 	return records, nil
 }
 
-// fetchCurrency looks up the advertiser account's own currency via
+// fetchAdvertiserInfo looks up the advertiser account's currency and zone via
 // GET /advertiser/info/ — a separate call because TikTok's reporting
-// endpoint does not include currency in its per-row response.
-func (a *Adapter) fetchCurrency(ctx context.Context, client *http.Client, baseURL string, creds adaccount.Credentials) (string, error) {
+// endpoint does not include the account's currency or time zone (the zone
+// its stat_time_day is cut in, tech audit AN4) in its per-row response.
+func (a *Adapter) fetchAdvertiserInfo(ctx context.Context, client *http.Client, baseURL string, creds adaccount.Credentials) (currency, timezone string, err error) {
 	ids, err := json.Marshal([]string{creds.AdAccountID})
 	if err != nil {
-		return "", fmt.Errorf("tiktokads: encoding advertiser_ids: %w", err)
+		return "", "", fmt.Errorf("tiktokads: encoding advertiser_ids: %w", err)
 	}
 
 	q := url.Values{}
@@ -191,25 +197,30 @@ func (a *Adapter) fetchCurrency(ctx context.Context, client *http.Client, baseUR
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, reqURL, nil)
 	if err != nil {
-		return "", fmt.Errorf("tiktokads: building advertiser info request: %w", err)
+		return "", "", fmt.Errorf("tiktokads: building advertiser info request: %w", err)
 	}
 	req.Header.Set(accessTokenHdr, creds.AccessToken)
 
 	resp, err := client.Do(req)
 	if err != nil {
-		return "", fmt.Errorf("tiktokads: calling advertiser info: %w", err)
+		return "", "", fmt.Errorf("tiktokads: calling advertiser info: %w", err)
 	}
 	defer resp.Body.Close()
 
 	var body advertiserInfoResponse
 	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
-		return "", fmt.Errorf("tiktokads: decoding advertiser info response (status %d): %w", resp.StatusCode, err)
+		return "", "", fmt.Errorf("tiktokads: decoding advertiser info response (status %d): %w", resp.StatusCode, err)
 	}
 	if body.Code != 0 {
-		return "", fmt.Errorf("tiktokads: advertiser info api error (code %d): %s", body.Code, body.Message)
+		return "", "", fmt.Errorf("tiktokads: advertiser info api error (code %d): %s", body.Code, body.Message)
 	}
 	if len(body.Data.List) == 0 {
-		return "", fmt.Errorf("tiktokads: advertiser info returned no results for account %s", creds.AdAccountID)
+		return "", "", fmt.Errorf("tiktokads: advertiser info returned no results for account %s", creds.AdAccountID)
 	}
-	return body.Data.List[0].Currency, nil
+	info := body.Data.List[0]
+	timezone = info.DisplayTimezone
+	if timezone == "" {
+		timezone = info.Timezone
+	}
+	return info.Currency, timezone, nil
 }

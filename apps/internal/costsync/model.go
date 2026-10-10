@@ -33,6 +33,10 @@ type Result struct {
 	EntriesWritten                int      `json:"entriesWritten"`
 	UnmatchedExternalCampaignIDs  []string `json:"unmatchedExternalCampaignIds"`
 	UnmatchedExternalCampaignsMax bool     `json:"unmatchedExternalCampaignIdsTruncated"`
+	// AccountTimezone is the ad account's zone this sync learned — the
+	// zone its daily spend is cut in (tech audit AN4); '' when the
+	// platform did not say or named no valid IANA zone.
+	AccountTimezone string `json:"accountTimezone"`
 }
 
 const maxUnmatchedListed = 20

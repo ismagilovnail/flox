@@ -16,6 +16,7 @@ import { FunnelChart } from "@/features/analytics/funnel-chart";
 import type { FilterCondition } from "@/features/analytics/aggregate";
 import { METRICS, metricLabel, formatMetric, type DimensionKey } from "@/features/analytics/registry";
 import { useReport, useTimeseries, useFunnelReport } from "@/hooks/use-analytics-report";
+import { CostTimezoneNotice } from "@/features/analytics/cost-timezone-notice";
 import { useOrganization } from "@/hooks/use-organization";
 import { todayInZone } from "@/lib/timezones";
 import { EMPTY_CUSTOM_METRICS, useCustomMetrics } from "@/hooks/use-custom-metrics";
@@ -145,6 +146,7 @@ function AnalyticsContent({ orgTimezone }: { orgTimezone: string }) {
 
       <ReportPresetBar state={state} onApply={onChange} />
       <ReportControls state={state} onChange={onChange} />
+      <CostTimezoneNotice from={from} to={to} timezone={state.timezone} />
 
       {compareRows && (
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">

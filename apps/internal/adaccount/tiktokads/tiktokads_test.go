@@ -22,7 +22,7 @@ func newFakeServer(t *testing.T, reportPages ...string) *httptest.Server {
 
 		switch r.URL.Path {
 		case "/advertiser/info/":
-			_, _ = w.Write([]byte(`{"code":0,"message":"OK","data":{"list":[{"advertiser_id":"123","currency":"USD"}]}}`))
+			_, _ = w.Write([]byte(`{"code":0,"message":"OK","data":{"list":[{"advertiser_id":"123","currency":"USD","timezone":"Etc/GMT+8","display_timezone":"America/Los_Angeles"}]}}`))
 		case "/report/integrated/get/":
 			if call >= len(reportPages) {
 				t.Fatalf("report endpoint called %d times, only %d fake pages configured", call+1, len(reportPages))
@@ -59,6 +59,9 @@ func TestDailySpendByCampaign(t *testing.T) {
 	}
 	if len(records) != 2 {
 		t.Fatalf("records = %d, want 2", len(records))
+	}
+	if records[0].Timezone != "America/Los_Angeles" {
+		t.Fatalf("records[0].Timezone = %q, want the advertiser's display_timezone", records[0].Timezone)
 	}
 	if records[0].ExternalCampaignID != "c1" || records[0].Amount != 12.50 || records[0].Currency != "USD" {
 		t.Fatalf("records[0] = %+v, unexpected", records[0])
