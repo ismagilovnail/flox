@@ -4,7 +4,8 @@
 // STACK section already names for Redis.
 //
 // Fails OPEN on a Redis error: allows the request through and logs a
-// warning, rather than rejecting it. Same "a cache being down degrades
+// warning, rather than rejecting it — except StrictMiddleware (/auth/*),
+// which falls back to counting in process. Same "a cache being down degrades
 // protection, never availability" stance every other Redis-optional path
 // in this codebase already takes (apps/internal/conversion.RedisStore
 // falls through to Postgres directly; apps/tracker's own sticky lookups
@@ -24,6 +25,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"sync"
 	"time"
 
 	"github.com/redis/go-redis/v9"
@@ -80,15 +82,32 @@ func (l *Limiter) Allow(ctx context.Context, key string, limit int, window time.
 // allowed through (see package doc); a 429 is written, and next is never
 // called, only when Allow genuinely reports the limit exceeded.
 func (l *Limiter) Middleware(keyPrefix string, keyFunc func(r *http.Request) string, limit int, window time.Duration) func(http.Handler) http.Handler {
+	return l.middleware(keyPrefix, keyFunc, limit, window, nil)
+}
+
+// StrictMiddleware is Middleware for routes that must stay limited while
+// Redis is down — /auth/*, where failing open meant unlimited password
+// guessing for the outage (tech audit 2026-10-06, API2). On a Redis error
+// it counts in this process instead: per replica, so N replicas allow up
+// to N× the limit, but bounded, and still no outage of its own.
+func (l *Limiter) StrictMiddleware(keyPrefix string, keyFunc func(r *http.Request) string, limit int, window time.Duration) func(http.Handler) http.Handler {
+	return l.middleware(keyPrefix, keyFunc, limit, window, newLocalCounter())
+}
+
+func (l *Limiter) middleware(keyPrefix string, keyFunc func(r *http.Request) string, limit int, window time.Duration, fallback *localCounter) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			key := "ratelimit:" + keyPrefix + ":" + keyFunc(r)
 			allowed, err := l.Allow(r.Context(), key, limit, window)
 			if err != nil {
 				metrics.RedisErrorsTotal.WithLabelValues("ratelimit").Inc()
-				l.logger.Warn("rate limit check failed, allowing request", "error", err, "key_prefix", keyPrefix)
-				next.ServeHTTP(w, r)
-				return
+				if fallback == nil {
+					l.logger.Warn("rate limit check failed, allowing request", "error", err, "key_prefix", keyPrefix)
+					next.ServeHTTP(w, r)
+					return
+				}
+				l.logger.Warn("rate limit check failed, counting in process", "error", err, "key_prefix", keyPrefix)
+				allowed = fallback.allow(key, limit, window, time.Now())
 			}
 			if !allowed {
 				apierror.Write(w, l.logger, apierror.TooManyRequests("too many requests, try again later"))
@@ -105,3 +124,42 @@ func (l *Limiter) Middleware(keyPrefix string, keyFunc func(r *http.Request) str
 // allowlist bypassable by rotating the header. Callers now take a
 // *clientip.Resolver (apps/internal/clientip), which only honours the
 // header from a configured trusted proxy.
+
+// localCounter is StrictMiddleware's in-process fixed window, used only
+// while Redis fails.
+type localCounter struct {
+	mu        sync.Mutex
+	windows   map[string]localWindow
+	lastSweep time.Time
+}
+
+type localWindow struct {
+	count int
+	ends  time.Time
+}
+
+func newLocalCounter() *localCounter {
+	return &localCounter{windows: map[string]localWindow{}}
+}
+
+func (c *localCounter) allow(key string, limit int, window time.Duration, now time.Time) bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	// Over windows go once per window, so keys from rotating IPs cannot
+	// pile up for the length of an outage.
+	if now.Sub(c.lastSweep) >= window {
+		for k, w := range c.windows {
+			if !now.Before(w.ends) {
+				delete(c.windows, k)
+			}
+		}
+		c.lastSweep = now
+	}
+	w, ok := c.windows[key]
+	if !ok || !now.Before(w.ends) {
+		w = localWindow{ends: now.Add(window)}
+	}
+	w.count++
+	c.windows[key] = w
+	return w.count <= limit
+}

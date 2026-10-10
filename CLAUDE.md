@@ -30,8 +30,10 @@ STATUS        : marketer audit closed (#1–#12, #13 platform limit). Tech audit
                 postbacks), DO4 (explicit CA certs in the tracker), S2
                 (security headers; no script-src yet — srcdoc preview),
                 T6 (domain ownership via TXT), CQ2 (generic pgqueue) done —
-                P2 closed; next P3.
-LAST COMMIT   : refactor(queue): one generic Postgres queue for events and postback logs.
+                P2 closed. P3 started: DB4 (last_active_at once a minute),
+                DB5 (expired auth cleanup), API2 (strict /auth limiter +
+                per-account sign-in limit) done.
+LAST COMMIT   : feat(auth): per-account sign-in limit, strict auth limiter, expired auth cleanup.
 UNCOMMITTED   : none expected. Dev DB fresh from `make dev-fresh CONFIRM=yes`
                 (password flox-demo-2026); `make dev-status` shows what is in it.
 NEXT          : wait for the user — the next phase. CI (DO1) is the user's own

@@ -56,6 +56,7 @@ import (
 	"github.com/ismagilovnail/flox/apps/internal/adaccount/tiktokads"
 	"github.com/ismagilovnail/flox/apps/internal/alert"
 	"github.com/ismagilovnail/flox/apps/internal/analytics"
+	"github.com/ismagilovnail/flox/apps/internal/auth"
 	"github.com/ismagilovnail/flox/apps/internal/campaign"
 	"github.com/ismagilovnail/flox/apps/internal/chconn"
 	"github.com/ismagilovnail/flox/apps/internal/chstore"
@@ -385,6 +386,12 @@ func run() error {
 		logger.Info("postback retention starting", "older_than_days", days, "interval", retention.Interval)
 		start(func() { expire.RunLoop(ctx, retention.Interval) })
 	}
+
+	// Expired sessions, sign-in steps, invite and verification tokens and
+	// over login-failure windows (internal/retention, tech audit DB5).
+	expiredAuth := &retention.ExpiredAuth{DB: db, LoginFailureWindow: auth.LoginFailureWindow, Logger: logger}
+	logger.Info("expired auth cleanup starting", "interval", retention.Interval)
+	start(func() { expiredAuth.RunLoop(ctx, retention.Interval) })
 
 	// Every domain's SSL status from a real TLS connection to it
 	// (internal/sslcheck, marketer audit #4).

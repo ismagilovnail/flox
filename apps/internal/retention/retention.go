@@ -13,6 +13,8 @@
 // click_id, status, event_ref) has to stay one global constraint
 // (CLAUDE.md #3). A batched DELETE over a partial index does the same job.
 //
+// Sign-in state past its expiry: see ExpiredAuth (auth.go, DB5).
+//
 // ClickHouse: see chstore.SetPostbackLogTTL.
 //
 // This is maintenance across every organization, like the queue reapers:

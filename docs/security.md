@@ -91,6 +91,22 @@ brute-force protection.
   for the actual brute-force/credential-stuffing concern those two routes
   carry, not general dashboard traffic; stays IP-keyed (pre-session, no
   identity to key by yet).
+- `/auth/*` does **not** fail open (tech audit API2): its middleware is
+  `StrictMiddleware`, which on a Redis error counts in the API process
+  instead — per replica, so N replicas allow up to N× the limit, but
+  bounded. A Redis round trip that fails costs the request ~0.5 s of
+  go-redis dial retries first.
+- Per account, independent of Redis and of the IP: 10 failed sign-ins in
+  15 minutes lock that email's sign-in until the window ends
+  (`internal/auth/loginfailures.go`, Postgres `login_failures`, migration
+  00063). A wrong second-factor code counts like a wrong password, and the
+  count is cleared only when a session is issued — so knowing the password
+  does not buy unlimited code guesses. Keyed by sha256 of the lowercased
+  email, not the user: an email with no account locks the same way, so
+  the 429 reveals nothing about which accounts exist. While locked even
+  the right password gets 429. The trade-off: anyone can keep an
+  account's sign-in locked by failing on purpose (20 tries per 15 min per
+  IP are enough); existing sessions are unaffected.
 - **Not** applied to `apps/tracker`'s redirect hot path — a synchronous
   Redis round trip on every click would blow the p50/p95 budget outright.
   Click-volume protection there is an infrastructure concern (CDN/load
@@ -207,8 +223,10 @@ where a campaign needs it.
 - `urlsafety` validates IPv4/IPv6 private/loopback/link-local/metadata
   ranges; it does not maintain a cloud-provider-specific IP allowlist
   beyond the generic `169.254.0.0/16` metadata range.
-- Rate limiting is per-IP only — a distributed attacker (many source IPs)
-  is not throttled by this layer; that's an infrastructure/WAF concern.
+- The request rate limit is per-IP — a distributed attacker (many source
+  IPs) is not throttled by it; that's an infrastructure/WAF concern. One
+  account's password is still bounded by the per-account limit (§3);
+  spraying one password across many accounts is not.
 - No CSP/security-header hardening (`X-Frame-Options`, `Content-Security-
   Policy`, ...) — out of scope for this phase, not requested.
 - ~~API keys authenticate nothing (audit finding #4)~~ — closed, see §6

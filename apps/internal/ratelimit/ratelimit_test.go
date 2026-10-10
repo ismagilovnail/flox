@@ -196,3 +196,47 @@ func TestMiddlewareRejectsOverLimitAndFailsOpenOnNilClient(t *testing.T) {
 		}
 	})
 }
+
+// deadRedis is a client whose every command fails: nothing listens on
+// port 1.
+func deadRedis(t *testing.T) *redis.Client {
+	t.Helper()
+	client := redis.NewClient(&redis.Options{Addr: "127.0.0.1:1", MaxRetries: -1, DialTimeout: 100 * time.Millisecond, DialerRetryTimeout: time.Millisecond})
+	t.Cleanup(func() { _ = client.Close() })
+	return client
+}
+
+func serve(h http.Handler, ip string) int {
+	req := httptest.NewRequest(http.MethodPost, "/auth/login", nil)
+	req.RemoteAddr = ip + ":1234"
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	return rec.Code
+}
+
+func TestStrictMiddlewareCountsInProcessWhileRedisIsDown(t *testing.T) {
+	limiter := ratelimit.New(deadRedis(t), discardLogger())
+	keyFunc := func(r *http.Request) string { return r.RemoteAddr }
+	ok := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) })
+
+	strict := limiter.StrictMiddleware("auth", keyFunc, 3, time.Minute)(ok)
+	for i := 1; i <= 3; i++ {
+		if code := serve(strict, "10.0.0.1"); code != http.StatusOK {
+			t.Fatalf("request #%d = %d, want 200", i, code)
+		}
+	}
+	if code := serve(strict, "10.0.0.1"); code != http.StatusTooManyRequests {
+		t.Fatalf("4th request with Redis down = %d, want 429", code)
+	}
+	if code := serve(strict, "10.0.0.2"); code != http.StatusOK {
+		t.Fatalf("another IP = %d, want 200 (own window)", code)
+	}
+
+	// The plain middleware still fails open.
+	open := limiter.Middleware("api", keyFunc, 3, time.Minute)(ok)
+	for i := 1; i <= 5; i++ {
+		if code := serve(open, "10.0.0.1"); code != http.StatusOK {
+			t.Fatalf("fail-open request #%d = %d, want 200", i, code)
+		}
+	}
+}

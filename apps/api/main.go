@@ -347,7 +347,9 @@ func run() error {
 		authRateLimit       = 20
 		authRateLimitWindow = 15 * time.Minute
 	)
-	authLimit := limiter.Middleware("auth", clientIP.String, authRateLimit, authRateLimitWindow)
+	// Strict: still limited, in process, while Redis is down (tech audit
+	// API2); the per-account limit in Postgres (internal/auth) holds too.
+	authLimit := limiter.StrictMiddleware("auth", clientIP.String, authRateLimit, authRateLimitWindow)
 	srv.Mux().Group(func(r chi.Router) {
 		r.Use(csrfCheck)
 		r.Use(authLimit)

@@ -194,6 +194,17 @@ func (s *Service) sendVerificationEmail(ctx context.Context, to, token string) e
 func (s *Service) Login(ctx context.Context, in LoginInput) (LoginOutcome, error) {
 	email := strings.TrimSpace(strings.ToLower(in.Email))
 
+	// Before the password, so a locked account cannot be guessed into —
+	// and keyed by email, so it locks the same whether the account exists
+	// (see loginfailures.go).
+	locked, err := s.repo.LoginLocked(ctx, email)
+	if err != nil {
+		return LoginOutcome{}, err
+	}
+	if locked {
+		return LoginOutcome{}, errLoginLocked()
+	}
+
 	row, found, err := s.repo.findUserByEmail(ctx, email)
 	if err != nil {
 		return LoginOutcome{}, err
@@ -203,6 +214,9 @@ func (s *Service) Login(ctx context.Context, in LoginInput) (LoginOutcome, error
 		hashToCheck = row.PasswordHash
 	}
 	if !checkPassword(hashToCheck, in.Password) || !found {
+		if err := s.repo.RecordLoginFailure(ctx, email); err != nil {
+			return LoginOutcome{}, err
+		}
 		return LoginOutcome{}, apierror.Unauthorized("invalid email or password")
 	}
 	// Checked only after the password is confirmed correct — revealing
@@ -262,6 +276,12 @@ func (s *Service) createSession(ctx context.Context, userID, orgID, userName, us
 	}
 	expiresAt := time.Now().Add(time.Duration(timeoutMinutes) * time.Minute)
 	if err := s.repo.CreateSession(ctx, idgen.New(), userID, orgID, tokenHash, expiresAt); err != nil {
+		return Result{}, err
+	}
+	// Failed sign-ins are forgotten here, once a session exists — not on a
+	// right password: with a second factor, a right password would wipe
+	// the wrong codes before they added up.
+	if err := s.repo.ClearLoginFailures(ctx, userEmail); err != nil {
 		return Result{}, err
 	}
 	return Result{
@@ -910,6 +930,12 @@ func (s *Service) VerifyPendingLogin(ctx context.Context, pendingToken, code str
 		// login, same trade CLAUDE.md already makes for VerifyEmail/invite
 		// tokens elsewhere in this file.
 		_ = s.repo.DeletePendingTOTPLogin(ctx, pending.ID)
+		// A wrong code spends the same per-account budget as a wrong
+		// password: knowing the password must not buy unlimited code
+		// guesses, one fresh sign-in each.
+		if err := s.repo.RecordLoginFailureForUser(ctx, pending.UserID); err != nil {
+			return Result{}, err
+		}
 		return Result{}, apierror.Unauthorized("incorrect code")
 	}
 

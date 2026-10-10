@@ -5,6 +5,30 @@ per-phase, matching `CLAUDE.md`'s phase protocol. The one exception is
 [Between phases], below: spec amendments and the code changes that follow from
 them land between phases and would otherwise be invisible here.
 
+## [Between phases] — sign-in hardening and cleanup (tech audit DB4, DB5, API2)
+
+- **API2.** `/auth/*` no longer fails open while Redis is down: `ratelimit.StrictMiddleware`
+  counts in the API process instead (per replica, bounded). New per-account limit in Postgres,
+  independent of Redis and IP: 10 failed sign-ins in 15 minutes lock that email's sign-in (429,
+  even for the right password) until the window ends (`login_failures`, migration 00063). A wrong
+  second-factor code counts like a wrong password; the count clears only when a session is
+  issued, so a known password does not buy unlimited code guesses. Keyed by sha256 of the email,
+  so an email with no account locks the same way and the 429 reveals nothing. Trade-off: anyone
+  can keep an account's sign-in locked by failing on purpose; sessions are untouched.
+- **DB4.** `ResolveSession` wrote `last_active_at` (and took a row lock) on every API request; now
+  at most once a minute — session and membership read in one query, the write only when due.
+- **DB5.** `retention.ExpiredAuth`, hourly in the worker: deletes expired `sessions` and
+  `pending_totp_logins` and over `login_failures` windows; clears expired invite and
+  email-verification tokens but keeps the rows (the invite stays on the Team page, resend works).
+  Index `sessions(expires_at)`, migration 00064 (CONCURRENTLY).
+- `docs/security.md` §3, `docs/retention.md`, audit statuses.
+
+Tests: lock after 10 failures and the window ending; an email with no account locks the same;
+10 wrong TOTP codes with the right password lock; `last_active_at` not rewritten within a minute,
+rewritten after, suspended membership still rejected; strict limiter returns 429 with Redis
+unreachable while the plain one fails open; `ExpiredAuth` clears only expired rows. Migrations
+up/down/up. Full suite with full env, e2e `TestFullFunnel` passes.
+
 ## [Between phases] — one Postgres queue implementation (tech audit CQ2)
 
 - `internal/eventqueue` and `internal/postbacklog` each had their own claim, delete, requeue,

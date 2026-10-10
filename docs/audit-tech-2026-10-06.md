@@ -295,13 +295,17 @@ claim, DELETE. На 1k событий/с это ~3k row-ops/с, нормальн
 `autovacuum_vacuum_scale_factor=0.01` на этих таблицах. Дальше Stage 2 —
 брокер (§19).
 
-**DB4 [LOW]. `ResolveSession` делает `UPDATE memberships SET last_active_at`
+**DB4 [LOW].** (**Статус: исправлено** — запись не чаще раза в минуту, чтение сессии и membership одним запросом.) **`ResolveSession` делает `UPDATE memberships SET last_active_at`
 на каждый API-запрос** (`auth/repository.go:206`). Это запись и row lock на
 каждый GET, а дашборды поллят. **Исправление:** обновлять не чаще раза в
 минуту (`WHERE last_active_at < now() - interval '1 min'`).
 
 **DB5 [LOW]. Нет очистки протухших `sessions`, `pending_totp_logins`,
-инвайтов.** Нужна cron-задача в worker'е.
+инвайтов.** Нужна cron-задача в worker'е. (**Статус: исправлено** —
+`retention.ExpiredAuth`, ежечасно: просроченные сессии и TOTP-шаги
+удаляются, у просроченных инвайтов и токенов подтверждения почты
+обнуляется токен, строка остаётся; индекс `sessions(expires_at)`,
+миграция 00064; `docs/retention.md`.)
 
 **Хорошо:** ULID (сортируемые), `organization_id` во всех tenant-таблицах,
 FK, CHECK-ограничения статусов, `numeric(14,4)` для денег в PG, goose
@@ -443,7 +447,12 @@ type entry struct { link TrackingLink; cfg CampaignRouting; loadedAt time.Time }
   навсегда. **Исправление:** Lua-скрипт или
   `SET key 0 EX window NX` + `INCR`, либо `INCR` + `EXPIRE ... NX` в одном
   `MULTI`.
-- **API2 [LOW].** При недоступном Redis лимитер пропускает всё. Для `/auth/*`
+- **API2 [LOW].** (**Статус: исправлено** — `/auth/*` при недоступном
+  Redis считает в памяти процесса (`StrictMiddleware`); лимит на аккаунт
+  в Postgres: 10 неудачных входов за 15 мин, неверный TOTP-код считается
+  так же, ключ — хэш email, поэтому блокировка не раскрывает
+  существование аккаунта; `docs/security.md` §3.)
+  При недоступном Redis лимитер пропускает всё. Для `/auth/*`
   это неограниченный перебор паролей на время простоя Redis. Лимита на
   аккаунт (а не на IP) нет. **Исправление:** fail-closed для auth-группы или
   счётчик неудачных входов в `users`.
@@ -1094,7 +1103,7 @@ reaper.
 | **P2** | S2: CSP / frame-ancestors / HSTS | Clickjacking | Низкая | Заголовки в `next.config.ts` и API | 0.25 д |
 | **P2** | T6: верификация доменов | Squatting | Низкая | TXT-challenge | 1 д |
 | **P2** | CQ2: общий `pgqueue[T]` | Двойная поддержка | — | Рефакторинг | 1 д |
-| **P3** | DB4: throttle `last_active_at` | Write amplification | — | `WHERE … < now()-1m` | 0.1 д |
+| **P3** | ✔ DB4: throttle `last_active_at` — исправлено | Write amplification | — | `WHERE … < now()-1m` | 0.1 д |
 | **P3** | T4/AN3: вычитание отмен | Завышенная выручка при chargeback'ах | По бизнесу | Решение по спецификации | 1 д |
 | **P3** | Брокер вместо PG-очереди | Потолок ~2–3k rps | При росте | Stage 3 | 5–8 д |
 | **P3** | Пагинация справочников, `/v1` | — | — | — | 1 д |

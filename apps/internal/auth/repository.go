@@ -203,18 +203,26 @@ func (r *Repository) CreateSession(ctx context.Context, id, userID, orgID, token
 // member takes effect on their very next request — an existing session
 // cookie for a suspended/removed membership resolves to zero rows here,
 // not a stale success.
+//
+// last_active_at is written at most once per lastActiveResolution: a
+// write and a row lock on every request (dashboards poll) bought nothing
+// the Team list can show (tech audit 2026-10-06, DB4).
 func (r *Repository) ResolveSession(ctx context.Context, tokenHash string) (orgID, userID string, err error) {
 	err = r.db.QueryRow(ctx, `
 		WITH s AS (
-			SELECT organization_id, user_id FROM sessions
-			WHERE token_hash = $1 AND expires_at > now()
+			SELECT s.organization_id, s.user_id, m.id AS membership_id, m.last_active_at
+			FROM sessions s
+			JOIN memberships m ON m.organization_id = s.organization_id AND m.user_id = s.user_id
+			WHERE s.token_hash = $1 AND s.expires_at > now() AND m.status = 'active'
+		), touch AS (
+			UPDATE memberships m
+			SET last_active_at = now()
+			FROM s
+			WHERE m.id = s.membership_id
+			  AND (s.last_active_at IS NULL OR s.last_active_at < now() - make_interval(secs => $2))
 		)
-		UPDATE memberships m
-		SET last_active_at = now()
-		FROM s
-		WHERE m.organization_id = s.organization_id AND m.user_id = s.user_id AND m.status = 'active'
-		RETURNING s.organization_id, s.user_id`,
-		tokenHash,
+		SELECT organization_id, user_id FROM s`,
+		tokenHash, lastActiveResolution.Seconds(),
 	).Scan(&orgID, &userID)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return "", "", apierror.Unauthorized("session expired or invalid")
