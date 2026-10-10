@@ -85,6 +85,10 @@ services:
 
   redis:
     image: redis:7-alpine
+    # Bounded, and evicting the least recently used key when full — the
+    # default noeviction fails every write once full, and the rate limiter
+    # then lets everything through (docs/deployment.md, audit R2).
+    command: ["redis-server", "--maxmemory", "256mb", "--maxmemory-policy", "allkeys-lru"]
     ports:
       - "6380:6379" # offset from dev's 6379
     volumes:

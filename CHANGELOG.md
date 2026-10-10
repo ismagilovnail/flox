@@ -5,6 +5,23 @@ per-phase, matching `CLAUDE.md`'s phase protocol. The one exception is
 [Between phases], below: spec amendments and the code changes that follow from
 them land between phases and would otherwise be invisible here.
 
+## [Between phases] — Redis evicts instead of refusing writes when full (tech audit R2)
+
+- The LastStatus cache keeps ~100 bytes per converted click for 30 days (~1 GB at 10M
+  conversions a month). Redis's default `noeviction` fails every write once full; the cache
+  falls through to Postgres, but the rate limiter fails open — the `/auth` limits would stop.
+- Dev and test compose run Redis with `--maxmemory 256mb --maxmemory-policy allkeys-lru`.
+- `rediscache.CheckEviction`: `apps/api` and `apps/tracker` read `maxmemory*` at start and log a
+  WARN on `noeviction` or no `maxmemory`; when `CONFIG` is disabled (managed Redis) it logs that
+  the policy is unverified. Never fails startup — Redis is cache only.
+- `docs/deployment.md` "Redis memory" (production requirement), `docs/environment.md`, audit R2.
+
+Tests: `TestEvictionProblem` (noeviction, empty policy, no maxmemory refused; allkeys/volatile
+policies accepted); `TestComposeRedisEvicts` reads the Redis REDIS_URL points at — failed on
+the old dev Redis (`noeviction`), passes after recreating it. Live: with the policy set back to
+`noeviction` the rebuilt api logged the WARN; after restoring `allkeys-lru` and restarting, no
+WARN, `/health` 200. Full Go suite with full env, e2e passes.
+
 ## [Between phases] — every route group gated by its read permission; no self role changes
 
 - Only writes were permission-gated: a Viewer (no `offer.read`/`source.read`) still read offers,

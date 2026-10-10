@@ -187,6 +187,7 @@ func run() error {
 			logger.Warn("redis unavailable at startup, rate limiting and conversion progression checks degrade", "error", redisErr)
 		} else {
 			defer client.Close()
+			rediscache.CheckEviction(ctx, client, logger)
 			rdb = client
 		}
 	} else {

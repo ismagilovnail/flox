@@ -213,6 +213,7 @@ func run() error {
 			logger.Warn("redis unavailable at startup, conversion progression checks will read Postgres directly", "error", err)
 		} else {
 			defer rdb.Close()
+			rediscache.CheckEviction(ctx, rdb, logger)
 			convStore = conversion.NewRedisStore(convStore, rdb, logger)
 		}
 	} else {

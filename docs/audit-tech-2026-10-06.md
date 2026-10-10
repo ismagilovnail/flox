@@ -568,7 +568,12 @@ sticky живёт в cookie).
 - **R2.** Ключи `flox:conversion:last-status:*` растут на каждый
   сконвертировавшийся click по ~100 байт × 30 дней. На 10М конверсий в месяц
   это около 1 ГБ. Нужен `maxmemory-policy allkeys-lru`. NEEDS VERIFICATION:
-  конфиг Redis в production.
+  конфиг Redis в production. (**Статус: исправлено в коде и compose** — dev/test Redis
+  запускается с `--maxmemory 256mb --maxmemory-policy allkeys-lru`; api и
+  tracker при старте читают политику (`rediscache.CheckEviction`) и пишут WARN
+  на `noeviction` или без `maxmemory`. Требование к production — в
+  `docs/deployment.md`, «Redis memory». Настроить сам production-Redis — при
+  деплое.)
 - **Что должно быть:**
   - кэш — routing config (в процессе), `LastStatus`, negative 404;
   - persistent — PG (конфиг, `postbacks`) и CH (события);

@@ -182,6 +182,28 @@ datastore: `apps/worker`'s postback-delivery HTTP transport
 (`MaxIdleConns: 100`, `apps/worker/main.go`), sized for the partner
 webhooks it calls, not for Postgres/ClickHouse/Redis.
 
+### Redis memory (audit R2)
+
+Every key FLOX writes expires, but the conversion `LastStatus` cache
+(`flox:conversion:last-status:*`) lives 30 days: about 100 bytes per
+converted click, ~1 GB at 10M conversions a month. Redis's default
+`maxmemory-policy noeviction` fails **every** write once memory is full —
+the cache then only falls through to Postgres, but the rate limiter fails
+open and the `/auth` limits silently stop. Production Redis needs:
+
+```text
+maxmemory <bounded, e.g. 1gb>
+maxmemory-policy allkeys-lru
+```
+
+With LRU the oldest cache entries go first; live rate-limit counters are
+the most recently used keys and stay. Any `volatile-*` policy also works
+(every key has a TTL). Dev and test compose run Redis with `256mb` and
+`allkeys-lru`. `apps/api` and `apps/tracker` read the policy at start
+(`rediscache.CheckEviction`) and log a WARN on `noeviction` or no
+`maxmemory`; managed Redis that disables `CONFIG` logs it as unverified
+instead — check the provider's parameter group by hand then.
+
 ## Monitoring and alerting
 
 `docs/observability.md` (Phase 29) already covers the nine tracked

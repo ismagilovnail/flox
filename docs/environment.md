@@ -112,6 +112,8 @@ postback-dedup only, never sticky's source of truth) already means a
 Redis outage degrades rather than corrupts (`apps/internal/conversion`,
 `apps/tracker/sticky.go` both documented fallback paths), but that's not
 a reason to leave it unauthenticated on a real network.
+It also needs `maxmemory` and an evicting policy (`allkeys-lru`) —
+`docs/deployment.md`, "Redis memory".
 
 ### S3-compatible object storage
 
