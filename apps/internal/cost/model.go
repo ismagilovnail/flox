@@ -8,12 +8,9 @@ package cost
 
 import "time"
 
-// Source identifies where an Entry's amount came from — cost_entries'
-// own CHECK constraint (migration 00009, widened by 00034 for
-// google_ads) has always allowed facebook_ads/tiktok_ads alongside
-// manual, but nothing in this package wrote or read anything but
-// "manual" until the ad-spend sync (§74, Phase B/C) started calling
-// Service.UpsertFromSync.
+// Source identifies where an Entry's amount came from: "manual", or the ad
+// network the sync (§74, Service.UpsertFromSync) pulled it from —
+// cost_entries' CHECK constraint (migrations 00009, 00034).
 type Source string
 
 const (

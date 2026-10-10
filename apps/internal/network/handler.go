@@ -93,7 +93,7 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 }
 
 // createResponse embeds Network's own fields alongside postbackSecret —
-// the ONE response that ever carries the plaintext secret (§54/Phase 30:
+// the ONE response that ever carries the plaintext secret (§54:
 // CreateResult's own doc comment). regeneratePostbackSecret below returns
 // just the secret string, deliberately not re-echoing the whole network.
 type createResponse struct {

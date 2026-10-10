@@ -41,10 +41,8 @@ var _ domain.DNSProviderAdapter = (*Adapter)(nil)
 // under (e.g. "track.example.com" -> "example.com") — a real Cloudflare
 // zone is always registered for the apex domain, never a subdomain.
 // This is a naive last-two-labels heuristic: it does not handle
-// multi-part public suffixes (e.g. "example.co.uk") correctly. Accepted
-// for now — this package is verified structurally only, against no live
-// zone, and a real deployment can extend this if a customer's domain
-// actually needs a public-suffix-list lookup.
+// multi-part public suffixes (e.g. "example.co.uk") correctly; such a
+// domain needs a public-suffix-list lookup here.
 func apexDomain(domainName string) string {
 	labels := strings.Split(domainName, ".")
 	if len(labels) <= 2 {

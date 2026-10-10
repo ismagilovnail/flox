@@ -14,10 +14,8 @@ import (
 // It has no fields, and that is the point: the engine holds no state and no
 // entropy. Every decision is a pure function of (configuration, attributes,
 // sticky cookie, visit key), so two replicas resolve the same request the same
-// way and a restart changes nothing (§38). It used to carry an injectable
-// Rand01 for the weighted pick; the draw is now a hash of RequestContext's
-// VisitKey, which is both reproducible and uniform, so there is nothing left
-// to inject.
+// way and a restart changes nothing (§38). The weighted draw is a hash of
+// RequestContext's VisitKey, reproducible and uniform.
 type Engine struct{}
 
 var _ Router = (*Engine)(nil)

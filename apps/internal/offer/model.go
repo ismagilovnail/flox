@@ -1,4 +1,4 @@
-// Package offer implements the Offer API (§27/Phase 11): handler →
+// Package offer implements the Offer API (§27): handler →
 // service → repository, modeling the real hierarchy the spec names —
 // Network → Offer → Offer Link. An Offer always belongs to a Network
 // (offers.network_id is NOT NULL) and always carries at least one Offer

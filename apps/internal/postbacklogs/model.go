@@ -14,10 +14,9 @@
 // the decoupled IncomingRecorder/IncomingNetworkLookup interfaces below —
 // this package still never imports apps/internal/conversion directly (see
 // apps/internal/conversion/replay.go for the adapters that satisfy them).
-// See docs/postback-logs.md for why incoming and outgoing replay shipped
-// as separate phases. Not to be confused with apps/internal/postbacklog
-// (singular) — Phase 24's write-side queue/producer that feeds
-// postback_events in the first place, untouched by this package.
+// See docs/postback-logs.md. Not to be confused with
+// apps/internal/postbacklog (singular), the write side that feeds
+// postback_events.
 package postbacklogs
 
 import "time"

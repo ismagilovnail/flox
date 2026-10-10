@@ -14,11 +14,8 @@ const (
 )
 
 // JSON tags below match the frontend's ConditionTrace/GroupTrace/
-// StreamSetEvaluation/FlowCandidate field names exactly (lib/routing-
-// simulate.ts, retired by Phase 27 in favor of these types going over
-// the wire directly) — the doc comment above was written with exactly
-// this reuse in mind, so /routing/simulate needs no separate DTO layer
-// for these nested shapes.
+// StreamSetEvaluation/FlowCandidate field names exactly, so
+// /routing/simulate needs no separate DTO layer for these nested shapes.
 type Trace struct {
 	Kind   TraceKind `json:"kind"`
 	Passed bool      `json:"passed"`
@@ -69,7 +66,7 @@ type FlowCandidate struct {
 
 // Explanation is the full "why" behind a RouteResult — everything §72
 // asks a route decision to be able to answer, at the depth the frontend
-// Routing Simulator (Phase 10) already renders. Router.Explain returns
+// Routing Simulator renders. Router.Explain returns
 // this alongside the spec-exact RouteResult; Resolve (the interface method
 // §38 specifies) only returns RouteResult; both share one evaluation pass
 // under the hood, so nothing here can drift from what Resolve actually

@@ -7,9 +7,8 @@
 //
 // Two callers: outgoing postback delivery (§46) and apps/tracker, which
 // resolves a flow's offer/redirect URL and an external landing's URL at
-// click time — before the 2026-10-06 audit (T7) it redirected with the
-// literal "{click_id}", so a network never got the click id it must echo
-// back in its postback. {payout} and {source} are part of the shared token
+// click time, so a network gets the click id it must echo back in its
+// postback (tech audit T7). {payout} and {source} are part of the shared token
 // vocabulary (the frontend's token picker lists them) but neither caller
 // has them, so this resolver does not recognize them. They pass through
 // literally, same as a typo would — see Resolve's doc for why that's the

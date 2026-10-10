@@ -9,8 +9,7 @@ import (
 
 // RegisterPgxPool exposes a Postgres pool's own statistics, labelled by
 // the binary it belongs to. Pool exhaustion is the first thing to break
-// under load (audit 2026-10-06, §14), and every binary used to run on
-// pgx's default size with nothing showing how close it was.
+// under load (tech audit §14).
 //
 // A second pool for the same service replaces the first: a test that
 // builds the API more than once in one process must not panic on a

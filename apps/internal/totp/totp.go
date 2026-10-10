@@ -1,11 +1,8 @@
-// Package totp implements real per-user TOTP two-factor authentication —
-// §30's "Security" settings sub-panel, undesigned anywhere in
-// FLOX-master-prompt-v3.md (confirmed by grep before this package was
-// written): the mock UI's org-wide "require 2FA" toggle is the only
-// existing design, so enrollment/verification/backup-codes here are new
-// product design built on the standard, Google-Authenticator-compatible
-// TOTP algorithm (RFC 6238) via github.com/pquerna/otp, not a spec
-// transcription.
+// Package totp implements per-user TOTP two-factor authentication — §30's
+// Security panel. The spec has no design for it, so enrollment,
+// verification and backup codes are FLOX's own, on the standard
+// Google-Authenticator-compatible algorithm (RFC 6238) via
+// github.com/pquerna/otp.
 package totp
 
 import (

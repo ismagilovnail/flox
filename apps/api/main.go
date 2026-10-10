@@ -337,16 +337,10 @@ func buildServer(ctx context.Context, cfg config.Config, logger *slog.Logger, re
 		httpserver.WithRecoverer(errtrack.Middleware(reporter, logger)),
 		httpserver.WithHSTS(cfg.Env != "development"))
 
-	// §52 RBAC. Until the 2026-09-06 audit, RequirePermission gated only
-	// /team, /security and the four features whose own phases wired it
-	// (integrations, custom metrics, API keys, report presets, referral) —
-	// so the role -> permission policy migrations 00001/00020 seed was
-	// almost entirely unenforced: any member of any role, Viewer included,
-	// could create, edit and delete campaigns, offers, networks, traffic
-	// sources, domains and stream sets (i.e. rewrite live routing) through
-	// the API, with the frontend's hidden buttons the only thing in the
-	// way. These five cover every remaining mutating route; reads stay open
-	// to any member of the org, matching this codebase's existing split.
+	// §52 RBAC: every mutating route needs its write permission, every
+	// tenant route group its read permission (readGate) — the frontend's
+	// hidden buttons are never the only guard (rbac_coverage_test.go,
+	// rbac_read_coverage_test.go).
 	requireCampaignWrite := authSvc.RequirePermission("campaign.write", logger)
 	requireOfferWrite := authSvc.RequirePermission("offer.write", logger)
 	requireSourceWrite := authSvc.RequirePermission("source.write", logger)
@@ -590,13 +584,9 @@ func buildServer(ctx context.Context, cfg config.Config, logger *slog.Logger, re
 		costHandler.Register(r)
 	})
 
-	// Ad-spend sync (§74/§27-COST, Phase B): "Sync now" pulls a traffic
-	// source's connected ad account's daily campaign spend and writes it
-	// into cost_entries. No live Meta/TikTok app credentials exist in
-	// this environment, so the adapters below are wired for real but only
-	// ever verified structurally (see facebookads_test.go/tiktokads_test.go);
-	// nothing prevents pointing them at the real Graph/Business API once
-	// real credentials exist. Registered in the same Route() block as
+	// Ad-spend sync (§74/§27-COST): "Sync now" pulls a traffic source's
+	// connected ad account's daily campaign spend and writes it into
+	// cost_entries. The adapters are tested against fake servers only. Registered in the same Route() block as
 	// adAccountHandler (both mount under /traffic-sources/{id}/connection)
 	// — chi panics if two separate Route() calls claim the identical
 	// pattern, so this can't be two Mount points even though the two

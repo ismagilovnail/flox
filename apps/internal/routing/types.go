@@ -1,18 +1,15 @@
 // Package routing is the single source of truth for routing decisions
-// (§6-SHARED, §38, Phase 19) — stream-set priority, AND/OR filter
-// evaluation, weighted flow selection, sticky assignment. It is consumed
-// by apps/tracker and apps/worker (once they exist) and by the
-// /routing/simulate HTTP endpoint (Phase 27); there is no second
-// implementation anywhere, including the frontend Routing Simulator, which
-// runs against a mock of this exact contract until Phase 27 swaps it for
-// the real thing (docs/routing.md, ARCHITECTURE.md §6-SHARED decision:
-// Strategy A).
+// (§6-SHARED, §38) — stream-set priority, AND/OR filter evaluation,
+// weighted flow selection, sticky assignment. apps/tracker routes with it
+// and apps/api's /routing/simulate explains with it; there is no second
+// implementation anywhere, the frontend Routing Simulator included
+// (docs/routing.md, ARCHITECTURE.md §6-SHARED: Strategy A).
 //
 // Deliberately independent of net/http and of any database driver (§38:
 // "Keep routing independent from HTTP handlers"): Resolve is a pure
 // function of (already-loaded configuration, already-classified request
 // attributes) → decision. Tracking-link resolution, campaign lookup,
-// traffic classification (bot/proxy scoring — Phase 20), and in-app
+// traffic classification (bot/proxy scoring), and in-app
 // WebView bounce detection all happen in the caller, before Resolve is
 // ever invoked; that boundary is deliberate, not an oversight, and is
 // spelled out case-by-case in the conformance fixture (fixture_test.go).
@@ -114,8 +111,7 @@ const (
 )
 
 // Flow is one weighted destination candidate under a Stream Set — mirrors
-// apps/web's Flow type (stream-sets.ts) and the flows table (Phase 17
-// migrations), minus the landing/pwa/postlanding "stage" fields, which
+// apps/web's Flow type (stream-sets.ts) and the flows table, minus the landing/pwa/postlanding "stage" fields, which
 // affect what the tracker serves *after* routing decides a flow, not the
 // routing decision itself.
 type Flow struct {

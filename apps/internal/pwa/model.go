@@ -82,14 +82,13 @@ type Pwa struct {
 	AgeRating           string `json:"ageRating"`
 	Category            string `json:"category"`
 	InteractiveElements string `json:"interactiveElements"`
-	// ContainsAds/InAppPurchases replace what used to be a hardcoded
-	// "no ads or paid content" line in the preview — an assertion the
-	// app made about every PWA with nothing behind it.
+	// ContainsAds/InAppPurchases are what the preview says about ads and
+	// paid content — the operator's answer, never a default claim.
 	ContainsAds    bool `json:"containsAds"`
 	InAppPurchases bool `json:"inAppPurchases"`
 	// UpdatedDate is the listing's own "updated on" date, as YYYY-MM-DD.
 	// nil means never entered: the preview hides the row rather than
-	// falling back to today, which is what it used to print.
+	// showing today.
 	UpdatedDate *string   `json:"updatedDate,omitempty"`
 	Status      Status    `json:"status"`
 	CreatedAt   time.Time `json:"createdAt"`

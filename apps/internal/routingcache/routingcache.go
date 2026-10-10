@@ -1,10 +1,8 @@
 // Package routingcache keeps apps/tracker's routing reads in memory, so a
-// click no longer needs Postgres (audit 2026-10-06, RL1/A1).
-//
-// Before it, every click ran six sequential Postgres queries
-// (routingstore.ResolveTrackingLink + LoadRoutingConfig) with no deadline:
-// a slow database made every redirect slow, and a down one turned every
-// click into a 502.
+// click does not need Postgres (tech audit RL1): uncached, every click
+// runs six sequential queries (routingstore.ResolveTrackingLink +
+// LoadRoutingConfig), a slow database makes every redirect slow, and a
+// down one turns every click into a 502.
 //
 // For each read (tracking link, campaign routing config, internal landing
 // page, PWA page):

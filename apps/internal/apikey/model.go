@@ -1,5 +1,5 @@
 // Package apikey implements the Settings > API keys panel (§30) — real
-// CRUD over the api_keys table (migration 00010, schema-only until now).
+// CRUD over the api_keys table (migration 00010).
 // Same one-way-hash-at-rest precedent as sessions/invite tokens
 // (apps/internal/auth/crypto.go's own doc comment): only key_hash is
 // ever persisted, the full key exists only in the create response, shown

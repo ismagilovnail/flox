@@ -1,9 +1,9 @@
 // Package fx keeps fx_rates filled (§50-FX, CLAUDE.md #7) and repairs the
 // USD values that were stored while a rate was missing.
 //
-// Until the 2026-10-06 audit (AN1) nothing wrote fx_rates at all: every
-// non-USD payout and spend was stored with a NULL USD value, so it dropped
-// out of Revenue, Cost and ROI. apps/worker now runs a Syncer on a timer:
+// Without rates every non-USD payout and spend has a NULL USD value and
+// drops out of Revenue, Cost and ROI (tech audit AN1). apps/worker runs a
+// Syncer on a timer:
 //
 //  1. pull reference rates from a Provider (internal/fx/ecb by default —
 //     behind an interface, CLAUDE.md #11) and upsert them;

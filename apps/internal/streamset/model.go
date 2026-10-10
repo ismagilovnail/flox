@@ -1,12 +1,9 @@
 // Package streamset implements the write path for Stream Sets, their
-// recursive AND/OR filter trees, and their weighted Flows (§21/§39,
-// Phase 7-9). The read path — loading this exact schema into the pure
-// decision engine's types and evaluating a route — already exists
-// (apps/internal/routingstore + apps/internal/routing, used by the
-// tracker's hot path) and stays the single source of truth for routing
-// decisions (CLAUDE.md #1); this package only ever writes rows for that
-// existing reader to later load, never re-implements matching or
-// weighted selection itself.
+// recursive AND/OR filter trees, and their weighted Flows (§21/§39). The
+// read path — apps/internal/routingstore loading them for
+// apps/internal/routing — is the single source of truth for routing
+// decisions (CLAUDE.md #1); this package only writes rows for it, never
+// re-implements matching or weighted selection.
 //
 // FilterField/FilterOperator/Joiner/DestinationKind/StreamSetStatus are
 // reused directly from internal/routing rather than redefined — one

@@ -52,7 +52,7 @@ const (
 
 // All is every event type in the model, declaration-ordered. Used by
 // validation and by anything that needs to enumerate the model (e.g. the
-// ClickHouse enum definition in a later phase) without re-listing it and
+// ClickHouse schema) without re-listing it and
 // risking drift.
 var All = []Type{
 	SourceClick, SourceFilter,

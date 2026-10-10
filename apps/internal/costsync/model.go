@@ -1,12 +1,11 @@
-// Package costsync is the ad-spend sync orchestrator (§74/§27-COST,
-// Phase B): pulls a traffic source's connected ad account's daily
+// Package costsync is the ad-spend sync orchestrator (§74/§27-COST):
+// pulls a traffic source's connected ad account's daily
 // campaign spend through an adaccount.CostProvider adapter, matches
 // each record to FLOX campaign(s) via campaign.Repository.ListByExternalID
 // (migration 00019), and writes matches into cost_entries via
-// cost.Service.UpsertFromSync. Triggered manually for now ("Sync now" in
-// the UI, POST /traffic-sources/{id}/connection/sync) — no scheduler
-// exists in this environment to run it on a cron, and none is needed to
-// prove the sync itself is correct.
+// cost.Service.UpsertFromSync. Run by "Sync now" in the UI (POST
+// /traffic-sources/{id}/connection/sync) and on apps/worker's schedule
+// (Scheduler).
 package costsync
 
 import "github.com/ismagilovnail/flox/apps/internal/adaccount"

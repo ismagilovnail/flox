@@ -1,5 +1,5 @@
 // Package pagination is the one limit/offset contract of the API's entity
-// lists (offers, networks, landings, ... — tech audit 2026-10-06, §5 "lists
+// lists (offers, networks, landings, ... — tech audit §5 "lists
 // without LIMIT"): ?limit=&offset=, at most MaxLimit rows a response, and
 // the list's total beside the rows, so a client knows when it has them all.
 // apps/web reads every page (src/lib/api/pagination.ts) and keeps its
@@ -23,7 +23,7 @@ import (
 const (
 	// MaxLimit bounds one response; DefaultLimit is what a request without
 	// ?limit= gets — the same, so a client that never pages sees every row
-	// of a list up to MaxLimit, exactly as before lists were bounded.
+	// of a list up to MaxLimit.
 	MaxLimit     = 500
 	DefaultLimit = MaxLimit
 )

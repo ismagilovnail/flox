@@ -1,4 +1,4 @@
-// Package network implements the Network API (§27/Phase 11):
+// Package network implements the Network API (§27):
 // handler → service → repository, mirroring internal/trafficsource's
 // shape closely — both are flat, team-managed entities with no nested
 // children, referenced by other domains (campaigns reference traffic
@@ -54,7 +54,7 @@ type UpdateInput struct {
 // here, once, and nowhere else: Network itself (returned by every other
 // read — List/Get/Update/Duplicate) never carries it, matching the one-
 // way-hash-at-rest precedent this shares with apps/internal/auth's
-// session/invite tokens (§54/Phase 30).
+// session/invite tokens (§54).
 type CreateResult struct {
 	Network        Network
 	PostbackSecret string

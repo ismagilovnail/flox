@@ -1,10 +1,7 @@
-// Package trafficsource implements the Traffic Source API (§27/Phase 11):
-// handler → service → repository, matching CLAUDE.md's Go architecture.
-// Phase 27 landed a deliberately read-only List (a campaign form's source
-// picker needed one, nothing else did yet); this phase grows it into full
-// CRUD — create/edit/pause/activate/archive/duplicate, mirroring
-// internal/campaign's own shape closely since the two packages solve the
-// same "list of team-managed entities a campaign references" problem.
+// Package trafficsource implements the Traffic Source API (§27):
+// handler → service → repository, matching CLAUDE.md's Go architecture,
+// shaped like internal/campaign — both are team-managed entities a
+// campaign references.
 package trafficsource
 
 import "time"

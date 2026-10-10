@@ -128,11 +128,8 @@ type WindowResult struct {
 // CohortKey identifies one row of a cohort table: a period bucket plus
 // §26.5's filterable dimensions actually available in the event pipeline
 // today (campaign, network — the "cpa/network" filter — and country).
-// "source" and "offer" are named by §26.5 too but apps/internal/event.Event
-// carries neither traffic_source_id nor offer_id yet — the same
-// pre-existing gap apps/internal/macro's {source} token and Phase 26's
-// click_events sort key both already document. Grouping by them is future
-// work once that propagation exists, not silently approximated here.
+// "source" and "offer" are named by §26.5 too, but ltv_events carries
+// neither, and they are not approximated here.
 type CohortKey struct {
 	Period     CohortPeriod
 	Bucket     string
@@ -219,7 +216,7 @@ func (a *accumulator) addClick(anchorDate time.Time, deposits []chstore.Deposit)
 			// A chargeback: it carries the reversed accept's payout,
 			// negated (0 when it reversed nothing), and nets it out of the
 			// revenue — in the window of the decline's own date. Not a
-			// deposit (audit 2026-10-06, T4/AN3).
+			// deposit (tech audit T4).
 		default:
 			continue // CPA_HOLD never contributes to deposit sums/windows
 		}

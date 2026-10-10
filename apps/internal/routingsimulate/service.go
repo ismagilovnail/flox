@@ -118,12 +118,9 @@ func stickyNote(enabled bool) string {
 	return "Sticky flow isn't enabled on this campaign — every visit is evaluated fresh."
 }
 
-// deriveVisitKey mirrors the frontend's own deriveVisitKey exactly
-// (formerly lib/routing-simulate.ts): sorted non-empty field=value pairs
-// joined by "|". Kept identical on both sides isn't load-bearing for
-// correctness (the server is now the only place a real pick happens),
-// but it means a request that produced one pick against the old mock
-// still produces the same key shape against the real engine.
+// deriveVisitKey builds the simulator's visit key: sorted non-empty
+// field=value pairs joined by "|", so the same attributes always give the
+// same pick.
 func deriveVisitKey(attrs map[string]string) string {
 	keys := make([]string, 0, len(attrs))
 	for k, v := range attrs {

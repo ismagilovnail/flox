@@ -1,4 +1,4 @@
-// Package reportpresets implements §27.5 (Phase 14.7) — a saved, reusable
+// Package reportpresets implements §27.5 — a saved, reusable
 // report-builder configuration: {dimensions, metrics, groupBy, period,
 // timezone}. Presets are team-scoped (organization-wide, not per-user) per
 // the spec's own wording — see migration 00030's doc comment for why that

@@ -132,7 +132,7 @@ func (r *Repository) Disconnect(ctx context.Context, orgID, trafficSourceID stri
 }
 
 // CredentialsByTrafficSourceID returns the real access token for a
-// trusted, Go-only caller (the ad-spend sync, §74/§27-COST Phase B) —
+// trusted, Go-only caller (the ad-spend sync, §74/§27-COST) —
 // structurally separate from GetByTrafficSourceID's Connection return
 // (no AccessToken field at all, see Connection's own doc comment above
 // selectColumns) so there is no HTTP-reachable code path that could ever

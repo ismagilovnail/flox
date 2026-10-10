@@ -1,6 +1,6 @@
 // Package tlsask answers a TLS proxy's question "may I get a certificate
 // for this hostname?" — Caddy's on_demand_tls `ask` endpoint
-// (docs/deployment.md). Marketer audit 2026-10-06, #4.
+// (docs/deployment.md; marketer audit #4).
 //
 // The answer is yes only for a hostname some organization has added on the
 // Domains page. Without this check anyone could point a name at the

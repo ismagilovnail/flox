@@ -77,7 +77,7 @@ func NewMonitor(source Source, counter Counter, logger *slog.Logger) *Monitor {
 // caps, so callers need not special-case "not configured".
 //
 // One set for every organization, with no organization_id in the key, and
-// still tenant-safe (tech audit 2026-10-06, M1): offer IDs are ULIDs,
+// still tenant-safe (tech audit M1): offer IDs are ULIDs,
 // unique across organizations, and routing only ever looks up the offers
 // of the campaign it routes, which its own organization's config loaded.
 // Another organization's capped offer can never be one of them. Keyed by

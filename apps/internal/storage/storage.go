@@ -1,8 +1,6 @@
 // Package storage is the one S3-compatible object-storage client this repo
-// has (CLAUDE.md lists "S3-compatible object storage" as part of the
-// stack; apps/internal/config.S3Config has existed since Phase 16, but
-// nothing connected to it until now — see that file's own comment).
-// First consumer: apps/internal/contentgallery. Built against minio-go,
+// has (config.S3Config), used for the content gallery, landing bundles and
+// assets. Built against minio-go,
 // which speaks the S3 API generically — it works the same against the
 // dev/test stack's own minio container (infra/docker-compose.*.yml) and
 // against a real S3-compatible provider in production, no code change.

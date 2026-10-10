@@ -176,7 +176,7 @@ type Result struct {
 // (Login, VerifyEmail's auto-login, AcceptInvite) actually resolves to
 // once §30 Security is in play — a real session is only one of three
 // possibilities now:
-//   - Session set: no second factor needed, exactly the old behavior.
+//   - Session set: no second factor needed.
 //   - RequiresTOTP: this user already has TOTP enabled — PendingToken
 //     must be exchanged at POST /auth/login/totp along with a live code
 //     or a backup code.

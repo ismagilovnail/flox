@@ -68,7 +68,7 @@ func (s *Service) Upsert(ctx context.Context, orgID, campaignID string, in Upser
 }
 
 // UpsertFromSync is Upsert's Go-only counterpart for the ad-spend sync
-// (§74/§27-COST, Phase B) — never reachable from any HTTP route
+// (§74/§27-COST) — never reachable from any HTTP route
 // (apps/internal/costsync calls it directly), and source must be a real
 // ad-network value, never SourceManual, so a sync can never masquerade
 // as (and silently overwrite the provenance of) an operator's own

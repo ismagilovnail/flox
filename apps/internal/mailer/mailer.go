@@ -62,8 +62,8 @@ func New(rawURL, fromAddr string) (*Client, error) {
 
 // sendTimeout bounds one message end to end: dial, TLS, AUTH, DATA. Signup
 // sends inside the request, so a relay that accepts the connection and then
-// stalls must not hold the request — smtp.SendMail, used before the
-// 2026-10-06 tech audit, has no context and no deadline at all.
+// stalls must not hold the request — smtp.SendMail has no context and no
+// deadline at all.
 const sendTimeout = 30 * time.Second
 
 // Send implements auth.Mailer: what smtp.SendMail does (STARTTLS when the
@@ -142,10 +142,7 @@ func (c *Client) send(ctx context.Context, to string, msg []byte) error {
 
 // buildMessage is a minimal RFC 5322 message: headers, a blank line, then
 // the plain-text body. No HTML/multipart — every email this codebase
-// sends so far is one short paragraph plus a link, matching the plain
-// invite-URL-in-a-JSON-response the invite flow already sends the same
-// content as (before this package existed, that link never left the app;
-// now it also goes out as this).
+// sends is one short paragraph plus a link.
 func buildMessage(from, to, subject, body string) []byte {
 	var b strings.Builder
 	fmt.Fprintf(&b, "From: %s\r\n", from)

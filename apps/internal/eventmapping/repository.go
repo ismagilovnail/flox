@@ -29,8 +29,7 @@ func scanEventMapping(row pgx.Row) (EventMapping, error) {
 
 // List returns every mapping across the whole organization, not scoped to
 // one network — the frontend panel groups them by network client-side
-// (one card per network), matching the old mock's org-wide EVENT_MAPPINGS
-// array, so one request beats one per network.
+// (one card per network), so one request beats one per network.
 func (r *Repository) List(ctx context.Context, orgID string, page pagination.Page) ([]EventMapping, error) {
 	rows, err := r.db.Query(ctx, `
 		SELECT `+selectColumns+`

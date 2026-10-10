@@ -500,8 +500,8 @@ func (s *Service) RequirePermission(permissionKey string, logger *slog.Logger) f
 
 // apiKeyScopeAllows maps an API key's flat "read"/"write"/"admin" scope
 // onto the 18-key permission vocabulary as coarse tiers, purely by key
-// suffix — no DB query, unlike a session's HasPermission. Confirmed via
-// AskUserQuestion (the finding-#4 follow-up): read = every *.read key;
+// suffix — no DB query, unlike a session's HasPermission: read = every
+// *.read key;
 // write = read plus every *.write key EXCEPT team.write/settings.write
 // (an integration key was never meant to manage the team roster or org
 // security settings, even at its most permissive non-admin tier); admin =

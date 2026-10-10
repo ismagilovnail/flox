@@ -1,4 +1,4 @@
-// Package metrics is the single place every §53/Phase 29 Prometheus
+// Package metrics is the single place every §53 Prometheus
 // collector is defined — apps/api, apps/tracker, and apps/worker each
 // import it and expose Handler() at GET /metrics on their own port; each
 // binary is a separate OS process with its own default Prometheus

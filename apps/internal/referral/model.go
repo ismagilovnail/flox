@@ -1,4 +1,4 @@
-// Package referral implements §30.7 (Phase 14.8) — a real, tenant-scoped
+// Package referral implements §30.7 — a real, tenant-scoped
 // (org-refers-org) referral program: a persistent code/link per org, real
 // attribution of new signups that use it, an append-only ledger of
 // accrual/adjustment/payout_paid transactions, and a pending -> approved

@@ -1,5 +1,5 @@
 // Package sslcheck is the worker loop that keeps every domain's SSL status
-// true to what the domain actually serves (marketer audit 2026-10-06, #4).
+// true to what the domain actually serves (marketer audit #4).
 // Each tick it claims the domains due for a check, opens a TLS connection
 // to each (internal/domain/tlsprobe) and records the outcome.
 //
