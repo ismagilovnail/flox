@@ -3,6 +3,8 @@
 // redirect hot path. It runs:
 //   - outgoing postback delivery (internal/postback, §46): due
 //     postback_deliveries, with backoff and a dead-letter state;
+//   - pixel delivery (internal/pixelsend, §29): events sent server-side
+//     to the ad platforms of each click's stream set's pixels;
 //   - the event pipeline (internal/eventqueue, internal/eventstream; §43,
 //     §47): tracker events into ClickHouse's click, tracking and
 //     conversion tables (docs/analytics-pipeline.md, docs/event-stream.md);
@@ -57,6 +59,8 @@ import (
 	"github.com/ismagilovnail/flox/apps/internal/logging"
 	"github.com/ismagilovnail/flox/apps/internal/metrics"
 	"github.com/ismagilovnail/flox/apps/internal/offercap"
+	"github.com/ismagilovnail/flox/apps/internal/pixel"
+	"github.com/ismagilovnail/flox/apps/internal/pixelsend"
 	"github.com/ismagilovnail/flox/apps/internal/postback"
 	"github.com/ismagilovnail/flox/apps/internal/postbacklog"
 	"github.com/ismagilovnail/flox/apps/internal/postgres"
@@ -75,6 +79,12 @@ import (
 const (
 	postbackPollBatchSize = 20
 	postbackPollIdle      = 5 * time.Second
+)
+
+// pixelPollBatchSize/pixelPollIdle: the same shape for pixel deliveries.
+const (
+	pixelPollBatchSize = 20
+	pixelPollIdle      = 5 * time.Second
 )
 
 // eventPollBatchSize/eventPollIdle: same shape, sized for click/tracking
@@ -226,6 +236,12 @@ func run() error {
 		logger.Error("ad account encryption key configuration failed", "error", err)
 		return err
 	}
+	// Pixels' access tokens, read back to send events (internal/pixelsend).
+	pixelKey, err := pixel.ParseKey(cfg.PixelEncryptionKey)
+	if err != nil {
+		logger.Error("pixel encryption key configuration failed", "error", err)
+		return err
+	}
 	// Reference FX rates: without them every non-USD payout and spend has no
 	// USD value and drops out of Revenue/Cost/ROI (tech audit AN1).
 	// Same "fail loudly at boot" bar as the key above: a typo must not
@@ -277,8 +293,18 @@ func run() error {
 		postbacklog.NewDeliveryAttemptLogger(attemptLogQueue),
 		logger,
 	)
+	// Pixels (internal/pixelsend): the platforms' APIs and generic pixel
+	// URLs, through the same dial-time SSRF guard as postbacks — a generic
+	// pixel's URL is operator-supplied too.
+	pixelStore := pixelsend.NewPostgresStore(db)
+	pixelDeliverer := pixelsend.NewDeliverer(pixelStore, pixel.NewRepository(db, pixelKey), pixelsend.Senders(postbackClient), logger)
+	clickResolver := chstore.NewClickResolver(ch)
+
+	// Tracker events reach ClickHouse through this sink, which first
+	// queues the ones a pixel reports (PWA_INSTALL) for their pixels.
+	eventSink := &pixelsend.TriggerSink{Next: chEvents, Queue: pixelStore, Clicks: clickResolver, Logger: logger}
 	eventQueue := eventqueue.NewPostgresQueue(db)
-	flusher := eventqueue.NewFlusher(eventQueue, chEvents, logger)
+	flusher := eventqueue.NewFlusher(eventQueue, eventSink, logger)
 	attemptFlusher := postbacklog.NewFlusher(attemptLogQueue, chEvents, logger)
 
 	// A bare mux for orchestration liveness probes + the Prometheus
@@ -320,6 +346,9 @@ func run() error {
 	logger.Info("postback delivery poll loop starting", "batch_size", postbackPollBatchSize, "idle", postbackPollIdle)
 	start(func() { deliverer.PollLoop(ctx, postbackPollBatchSize, postbackPollIdle) })
 
+	logger.Info("pixel delivery poll loop starting", "batch_size", pixelPollBatchSize, "idle", pixelPollIdle)
+	start(func() { pixelDeliverer.PollLoop(ctx, pixelPollBatchSize, pixelPollIdle) })
+
 	logger.Info("event flush poll loop starting", "batch_size", eventPollBatchSize, "idle", eventPollIdle)
 	start(func() { flusher.PollLoop(ctx, eventPollBatchSize, eventPollIdle) })
 
@@ -348,7 +377,7 @@ func run() error {
 			}
 			logger.Info("nats event stream consumer starting", "stream", eventstream.StreamName, "consumer", eventstream.ConsumerName)
 			go eventstream.PollPending(ctx, cons, queueDepthPollInterval, logger)
-			eventstream.NewConsumer(cons, chEvents, eventQueue, eventstream.ConsumerConfig{}, logger).Run(ctx)
+			eventstream.NewConsumer(cons, eventSink, eventQueue, eventstream.ConsumerConfig{}, logger).Run(ctx)
 		})
 	} else {
 		logger.Warn("NATS_URL not set, events arrive through the postgres event_queue only")
@@ -388,7 +417,7 @@ func run() error {
 	// unknown_click conversions whose click was not in ClickHouse yet: looked
 	// up again for ~7 hours, then rewritten in Postgres and ClickHouse
 	// (internal/reattribute, tech audit T1).
-	retrier := reattribute.New(db, conversion.NewPostgresStore(db), chstore.NewClickResolver(ch), chEvents, logger)
+	retrier := reattribute.New(db, conversion.NewPostgresStore(db), clickResolver, chEvents, logger).WithPixels(pixelStore)
 	logger.Info("attribution retry starting", "interval", reattributeInterval)
 	start(func() { retrier.RunLoop(ctx, reattributeInterval, reattributeBatchSize) })
 
@@ -397,6 +426,14 @@ func run() error {
 	if days := cfg.RetentionFailedPostbacksDays; days > 0 {
 		expire := &retention.FailedPostbacks{DB: db, Age: time.Duration(days) * 24 * time.Hour, Logger: logger}
 		logger.Info("postback retention starting", "older_than_days", days, "interval", retention.Interval)
+		start(func() { expire.RunLoop(ctx, retention.Interval) })
+	}
+
+	// Sent and dead-lettered pixel deliveries, which hold visitors' IPs and
+	// user agents (internal/retention).
+	if days := cfg.RetentionPixelDeliveriesDays; days > 0 {
+		expire := &retention.PixelDeliveries{DB: db, Age: time.Duration(days) * 24 * time.Hour, Logger: logger}
+		logger.Info("pixel delivery retention starting", "older_than_days", days, "interval", retention.Interval)
 		start(func() { expire.RunLoop(ctx, retention.Interval) })
 	}
 
@@ -444,6 +481,7 @@ func run() error {
 		"event_queue":            eventQueue,
 		"postback_attempt_queue": attemptLogQueue,
 		"postback_deliveries":    deliveryStore,
+		"pixel_deliveries":       pixelStore,
 	} {
 		start(func() { queuereaper.RunLoop(ctx, name, r, queuereaper.Interval, queuereaper.StuckAfter, logger) })
 	}

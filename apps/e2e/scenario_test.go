@@ -97,9 +97,12 @@ type scenario struct {
 	campaignID      string
 	streamSetID     string
 	flowID          string
-	domain          string
-	slug            string
-	clickID         string
+	// genericPixelID / fbPixelID are the stream set's pixels (§29).
+	genericPixelID string
+	fbPixelID      string
+	domain         string
+	slug           string
+	clickID        string
 	// redirectClickID is the click id the tracker put into the landing URL
 	// ({click_id} macro) — what a real partner receives and echoes back.
 	redirectClickID string
@@ -181,6 +184,7 @@ func TestFullFunnel(t *testing.T) {
 	s.createOffer()
 	s.createLanding()
 	s.createCampaign()
+	s.createPixels()
 	s.createStreamSetWithFlowAndFilter()
 	s.enterCost()
 	s.generateTrackingURL()
@@ -190,6 +194,7 @@ func TestFullFunnel(t *testing.T) {
 	s.receiveConversions()
 	s.attributeConversion()
 	s.sendPostback()
+	s.firePixels()
 	s.analyticsAndLTV()
 }
 
@@ -425,6 +430,31 @@ func (s *scenario) createCampaign() {
 // HeuristicBotDetector regardless of geo/ASN vendor wiring (unlike a
 // country filter, which Phase 31's own load test found doesn't match in
 // this dev environment).
+// createPixels makes the two pixels the stream set fires: a generic one
+// whose URL cannot resolve (.invalid) — the worker really tries it and
+// retries — and a facebook one with a token but no pixel id, which the
+// worker refuses for good after decrypting its credentials.
+func (s *scenario) createPixels() {
+	s.t.Helper()
+	var generic, fb struct {
+		ID string `json:"id"`
+	}
+	s.post("/pixels", map[string]any{
+		"name": "E2E Generic Pixel", "provider": "generic",
+		"url":    "https://pixel.e2e.invalid/p?c={click_id}&e={status}",
+		"events": []string{"CPA_HOLD", "CPA_ACCEPT"},
+	}, &generic, http.StatusCreated)
+	s.post("/pixels", map[string]any{
+		"name": "E2E Facebook Pixel", "provider": "facebook", "pixelId": "",
+		"accessToken": "e2e-token", "events": []string{"CPA_ACCEPT"},
+	}, &fb, http.StatusCreated)
+	if generic.ID == "" || fb.ID == "" {
+		s.t.Fatal("create pixels: no id in the response")
+	}
+	s.genericPixelID, s.fbPixelID = generic.ID, fb.ID
+	s.t.Logf("created pixels %s (generic) and %s (facebook)", generic.ID, fb.ID)
+}
+
 func (s *scenario) createStreamSetWithFlowAndFilter() {
 	s.t.Helper()
 	var resp struct {
@@ -468,7 +498,7 @@ func (s *scenario) createStreamSetWithFlowAndFilter() {
 				},
 			},
 		},
-		"pixelIds": []string{},
+		"pixelIds": []string{s.genericPixelID, s.fbPixelID},
 	}, &resp, http.StatusCreated)
 	if resp.ID == "" || len(resp.Flows) != 1 || resp.Flows[0].ID == "" {
 		s.t.Fatalf("create stream set: unexpected response shape: %+v", resp)
@@ -818,6 +848,68 @@ func (s *scenario) sendPostback() {
 		}
 	}
 	s.t.Log("outbound postback deliveries enqueued and macro-resolved for CPA_HOLD/CPA_ACCEPT/CPA_REDEP")
+}
+
+// firePixels: every conversion attributed to the click is queued for the
+// stream set's pixels that report its status — the generic pixel's hold and
+// accept, the facebook pixel's accept, never a redeposit neither reports —
+// keyed by the conversion's postbacks row, and the worker attempts each.
+func (s *scenario) firePixels() {
+	s.t.Helper()
+	ctx := context.Background()
+	type row struct{ pixelID, eventType, status, message string }
+	var rows []row
+	ok := pollUntil(s.t, 30*time.Second, 500*time.Millisecond, func() bool {
+		rs, err := s.pg.Query(ctx, `
+			SELECT d.pixel_id, d.event_type, d.delivery_status, d.message
+			FROM pixel_deliveries d
+			JOIN postbacks p ON p.id = d.source_event_id AND p.organization_id = d.organization_id AND p.result = 'success'
+			WHERE d.organization_id = $1 AND d.click_id = $2
+			ORDER BY d.pixel_id, d.event_type`, s.orgID, s.clickID)
+		if err != nil {
+			s.t.Fatalf("querying pixel_deliveries: %v", err)
+		}
+		defer rs.Close()
+		rows = rows[:0]
+		attempted := true
+		for rs.Next() {
+			var r row
+			if err := rs.Scan(&r.pixelID, &r.eventType, &r.status, &r.message); err != nil {
+				s.t.Fatalf("scanning pixel_deliveries: %v", err)
+			}
+			rows = append(rows, r)
+			attempted = attempted && r.status != "queued" && r.status != "processing"
+		}
+		return len(rows) == 3 && attempted
+	})
+	if !ok {
+		s.t.Fatalf("fire pixels: deliveries = %+v, want 3 attempted (generic hold+accept, facebook accept)", rows)
+	}
+	for _, r := range rows {
+		switch {
+		case r.pixelID == s.genericPixelID && (r.eventType == "CPA_HOLD" || r.eventType == "CPA_ACCEPT"):
+			if r.status != "retrying" || !strings.Contains(r.message, "request failed") {
+				s.t.Fatalf("generic %s delivery = %s %q, want retrying after a failed request", r.eventType, r.status, r.message)
+			}
+		case r.pixelID == s.fbPixelID && r.eventType == "CPA_ACCEPT":
+			if r.status != "dead" || !strings.Contains(r.message, "pixel id is empty") {
+				s.t.Fatalf("facebook delivery = %s %q, want dead: pixel id is empty", r.status, r.message)
+			}
+		default:
+			s.t.Fatalf("unexpected pixel delivery %+v", r)
+		}
+	}
+	var log struct {
+		Deliveries []struct {
+			EventType string `json:"eventType"`
+			Status    string `json:"status"`
+		} `json:"deliveries"`
+	}
+	s.get("/pixels/"+s.genericPixelID+"/deliveries", &log, http.StatusOK)
+	if len(log.Deliveries) != 2 {
+		s.t.Fatalf("generic pixel's delivery log = %+v, want its 2 deliveries", log.Deliveries)
+	}
+	s.t.Log("pixel deliveries queued per stream-set pixel and attempted by the worker")
 }
 
 // analyticsAndLTV closes the funnel: the click and the revenue it drove

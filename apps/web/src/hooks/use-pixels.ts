@@ -8,6 +8,8 @@ import {
   createPixel,
   duplicatePixel,
   getPixel,
+  getPixelEventNameDefaults,
+  listPixelDeliveries,
   listPixels,
   pausePixel,
   updatePixel,
@@ -24,6 +26,21 @@ export function usePixels() {
 
 export function usePixel(id: string) {
   return useQuery({ queryKey: pixelKey(id), queryFn: () => getPixel(id), enabled: !!id });
+}
+
+/** The pixel's recent deliveries, refreshed while the page is open so a
+ * test conversion shows up without a reload. */
+export function usePixelDeliveries(id: string) {
+  return useQuery({
+    queryKey: ["pixels", id, "deliveries"],
+    queryFn: () => listPixelDeliveries(id),
+    enabled: !!id,
+    refetchInterval: 15_000,
+  });
+}
+
+export function usePixelEventNameDefaults() {
+  return useQuery({ queryKey: ["pixels", "event-names"], queryFn: getPixelEventNameDefaults, staleTime: Infinity });
 }
 
 export function useCreatePixel() {

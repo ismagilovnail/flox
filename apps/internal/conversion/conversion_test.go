@@ -745,3 +745,42 @@ func TestStoreRefusalUnderLockWins(t *testing.T) {
 		t.Fatalf("side effects of a refused postback: events=%d deliveries=%d, want 0/0", events.count(), deliveries.count())
 	}
 }
+
+// Pixels: an attributed conversion carries its click's stream set and the
+// matching data for the platform; without a click there is no stream set
+// and nothing for pixels.
+func TestRecordAttachesPixelEventOnlyWhenAttributed(t *testing.T) {
+	mapper := newFakeMapper()
+	mapper.set("net-1", "sale", event.CpaAccept)
+	store := newFakeStore(&fakeEvents{}, &fakeDeliveries{})
+	click := attribution.Click{
+		ClickID: "click-1", OrganizationID: orgA, StreamSetID: "ss-1", CampaignID: "camp-1",
+		OccurredAt: time.Date(2026, 8, 20, 10, 0, 0, 0, time.UTC),
+		IP:         "203.0.113.9", UserAgent: "UA", FBClickID: "fb-1", TTClickID: "tt-1",
+	}
+	svc := conversion.NewService(mapper, store, &fakeFX{rates: map[string]float64{"EUR": 1.1}},
+		&fakeAttribution{outcome: attribution.OutcomeAttributed, click: click}, &fakeAttempts{})
+
+	p := postback("net-1", "click-1", "sale")
+	rev := 10.0
+	p.Revenue, p.Currency = &rev, "EUR"
+	if _, err := svc.Record(ctx(), p); err != nil {
+		t.Fatal(err)
+	}
+	px := store.records[len(store.records)-1].Pixel
+	if px == nil {
+		t.Fatal("attributed conversion has no pixel event")
+	}
+	if px.StreamSetID != "ss-1" || px.Type != event.CpaAccept || px.IP != click.IP || px.FBClickID != "fb-1" ||
+		!px.ClickAt.Equal(click.OccurredAt) || px.USDValue == nil || *px.USDValue != 11 || px.Macros.CampaignID != "camp-1" {
+		t.Fatalf("pixel event = %+v", px)
+	}
+
+	svc = conversion.NewService(mapper, store, &fakeFX{}, &fakeAttribution{outcome: attribution.OutcomeUnknownClick}, &fakeAttempts{})
+	if _, err := svc.Record(ctx(), postback("net-1", "click-2", "sale")); err != nil {
+		t.Fatal(err)
+	}
+	if px := store.records[len(store.records)-1].Pixel; px != nil {
+		t.Fatalf("unattributed conversion has a pixel event: %+v", px)
+	}
+}

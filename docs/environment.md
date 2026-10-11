@@ -190,6 +190,7 @@ needs no configuration at all.
 | Variable | Dev value | Staging/production |
 |---|---|---|
 | `RETENTION_FAILED_POSTBACKS_DAYS` (worker) | `90` | Days a postback that was not recorded (duplicate/error/ignored) is kept in Postgres; `0` keeps them. Successes are never deleted. `docs/retention.md` |
+| `RETENTION_PIXEL_DELIVERIES_DAYS` (worker) | `30` | Days a sent or dead-lettered pixel delivery (it holds the visitor's IP and user agent) is kept in Postgres; `0` keeps them. Rows still to send are never deleted. `docs/pixels.md` |
 | `RETENTION_POSTBACK_LOG_MONTHS` (worker) | `13` | TTL of ClickHouse's postback attempt log, applied by the worker at start; `0` removes it. Lowering it deletes older log rows at the next merges. |
 
 ### FX rates
@@ -212,6 +213,12 @@ With a DSN, every ERROR log record (with its attributes) and every panic in
 an HTTP handler or a worker loop is sent, asynchronously; visitor IPs and
 headers are not attached. A malformed DSN fails the binary at boot.
 `internal/errtrack`.
+
+### Pixels
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `PIXEL_ENCRYPTION_KEY` (api, worker) | dev key in compose / `.env.example` | **Required** — both refuse to start without it. 32 random bytes, base64. Encrypts pixels' ad platform access tokens (AES-256-GCM): the api writes them, the worker reads them back to send events (`docs/pixels.md`). Its own key, separate from the integration and ad account keys. Changing it makes every saved token unreadable — each pixel's token has to be pasted again. |
 
 ### Alerts
 

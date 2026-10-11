@@ -203,6 +203,8 @@ services:
       # Also set on the worker service below — apps/worker's own ad-spend
       # sync needs the same key to decrypt Google Ads credentials.
       ADACCOUNT_ENCRYPTION_KEY: "KatbgYl+Kd4KPI5T0hKfwZRYsij/t7g7fVomXdjhW/c="
+      # Pixels' access tokens (apps/internal/pixel) — dev-only, as above.
+      PIXEL_ENCRYPTION_KEY: "F3TfKSy0V/JjydrKPdIFyN7Xu9s8ScgiQ0kXEBHGd08="
       # PWA constructor "open test page" links (internal/pwa/testlink.go):
       # same click-link key apps/tracker verifies with, and the tracker's
       # browser-reachable URL.
@@ -327,6 +329,8 @@ services:
       # (§74/§27-COST) needs it to decrypt Google Ads credentials
       # apps/api encrypted at Connect time.
       ADACCOUNT_ENCRYPTION_KEY: "KatbgYl+Kd4KPI5T0hKfwZRYsij/t7g7fVomXdjhW/c="
+      # Pixels' access tokens (apps/internal/pixel) — dev-only, as above.
+      PIXEL_ENCRYPTION_KEY: "F3TfKSy0V/JjydrKPdIFyN7Xu9s8ScgiQ0kXEBHGd08="
       # Same dev-only value as the api's: alerts read the Slack webhook
       # apps/api encrypted (internal/alert).
       INTEGRATION_ENCRYPTION_KEY: "wLE0wIEHBNnfVfq8d62JDEAltM4frTgYmPi8XAv1QpY="

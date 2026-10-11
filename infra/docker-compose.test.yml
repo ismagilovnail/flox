@@ -194,6 +194,8 @@ services:
       TOTP_ENCRYPTION_KEY: "IXkldrBTvgfDhIxzUBn3MrRAJq7Gh7z8mQ5UhBC4DRo="
       INTEGRATION_ENCRYPTION_KEY: "wLE0wIEHBNnfVfq8d62JDEAltM4frTgYmPi8XAv1QpY="
       ADACCOUNT_ENCRYPTION_KEY: "KatbgYl+Kd4KPI5T0hKfwZRYsij/t7g7fVomXdjhW/c="
+      # Pixels' access tokens (apps/internal/pixel) — dev-only, as above.
+      PIXEL_ENCRYPTION_KEY: "F3TfKSy0V/JjydrKPdIFyN7Xu9s8ScgiQ0kXEBHGd08="
       # PWA constructor "open test page" links (internal/pwa/testlink.go):
       # same click-link key apps/tracker verifies with, and the tracker's
       # browser-reachable URL.
@@ -260,6 +262,8 @@ services:
       CLICKHOUSE_PASSWORD: ""
       NATS_URL: nats://nats:4222
       ADACCOUNT_ENCRYPTION_KEY: "KatbgYl+Kd4KPI5T0hKfwZRYsij/t7g7fVomXdjhW/c="
+      # Pixels' access tokens (apps/internal/pixel) — dev-only, as above.
+      PIXEL_ENCRYPTION_KEY: "F3TfKSy0V/JjydrKPdIFyN7Xu9s8ScgiQ0kXEBHGd08="
       # Same dev-only value as the api's: alerts read the Slack webhook
       # apps/api encrypted (internal/alert).
       INTEGRATION_ENCRYPTION_KEY: "wLE0wIEHBNnfVfq8d62JDEAltM4frTgYmPi8XAv1QpY="

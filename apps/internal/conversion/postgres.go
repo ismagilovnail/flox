@@ -28,6 +28,9 @@ type PostgresStore struct {
 	// transaction; nil for read-only users of the store, which then refuse
 	// to record an entry that carries one.
 	deliveries DeliveryWriter
+	// pixels queues a success's pixel events in the same transaction; nil:
+	// the store records conversions without sending them to pixels.
+	pixels PixelWriter
 }
 
 func NewPostgresStore(db *pgxpool.Pool) *PostgresStore { return &PostgresStore{db: db} }
@@ -35,7 +38,13 @@ func NewPostgresStore(db *pgxpool.Pool) *PostgresStore { return &PostgresStore{d
 // WithDeliveries returns the store set up to record conversions with their
 // outgoing postbacks (internal/postback.PostgresStore).
 func (s *PostgresStore) WithDeliveries(w DeliveryWriter) *PostgresStore {
-	return &PostgresStore{db: s.db, deliveries: w}
+	return &PostgresStore{db: s.db, deliveries: w, pixels: s.pixels}
+}
+
+// WithPixels returns the store set up to also queue conversions for their
+// stream set's pixels (internal/pixelsend.Store).
+func (s *PostgresStore) WithPixels(w PixelWriter) *PostgresStore {
+	return &PostgresStore{db: s.db, deliveries: s.deliveries, pixels: w}
 }
 
 var _ Store = (*PostgresStore)(nil)
@@ -227,8 +236,8 @@ func (s *PostgresStore) recordSuccess(ctx context.Context, tx pgx.Tx, e Entry) (
 		return Recorded{}, fmt.Errorf("conversion: recording success: %w", err)
 	}
 
-	// The outbox: the CPA event and the outgoing postback commit with the
-	// row or not at all (tech audit D1).
+	// The outbox: the CPA event, the outgoing postback and the pixel events
+	// commit with the row or not at all (tech audit D1).
 	if e.Event != nil {
 		ev := *e.Event
 		// The conversion's event is identified by its postbacks row, so
@@ -246,6 +255,13 @@ func (s *PostgresStore) recordSuccess(ctx context.Context, tx pgx.Tx, e Entry) (
 		req.SourcePostbackID = returnedID
 		if err := s.deliveries.InsertTx(ctx, tx, req); err != nil {
 			return Recorded{}, fmt.Errorf("conversion: queueing outgoing postback: %w", err)
+		}
+	}
+	if e.Pixel != nil && s.pixels != nil {
+		ev := *e.Pixel
+		ev.SourceEventID = returnedID
+		if err := s.pixels.InsertTx(ctx, tx, ev); err != nil {
+			return Recorded{}, fmt.Errorf("conversion: queueing pixel events: %w", err)
 		}
 	}
 	if e.RetryAttribution {

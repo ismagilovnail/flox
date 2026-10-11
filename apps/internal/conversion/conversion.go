@@ -38,6 +38,7 @@ import (
 	"github.com/ismagilovnail/flox/apps/internal/event"
 	"github.com/ismagilovnail/flox/apps/internal/macro"
 	"github.com/ismagilovnail/flox/apps/internal/metrics"
+	"github.com/ismagilovnail/flox/apps/internal/pixel"
 )
 
 // Postback is the inbound claim, already stripped of HTTP concerns.
@@ -181,6 +182,11 @@ type Entry struct {
 	// Delivery.SourcePostbackID is filled in by Store.
 	Event    *event.Event
 	Delivery *DeliveryRequest
+	// Pixel is the event for the pixels of the attributed click's stream
+	// set (internal/pixelsend), nil when the conversion is not attributed
+	// to a click that went through one. Written in the same transaction;
+	// Pixel.SourceEventID is filled in by Store.
+	Pixel *pixel.Event
 
 	// Reversal is filled in by Store, under the click's lock: a CPA_DECLINE
 	// or CPA_TRASH recorded while the click stands accepted reverses that
@@ -264,6 +270,12 @@ type DeliveryRequest struct {
 // owns the delivery queue, so this package never imports it.
 type DeliveryWriter interface {
 	InsertTx(ctx context.Context, tx pgx.Tx, req DeliveryRequest) error
+}
+
+// PixelWriter queues a conversion's event for its stream set's pixels inside
+// the transaction that records it — implemented by internal/pixelsend.
+type PixelWriter interface {
+	InsertTx(ctx context.Context, tx pgx.Tx, ev pixel.Event) error
 }
 
 // AttemptRecord is what Service reports to the postback attempt audit log
@@ -483,6 +495,7 @@ func newEntry(p Postback, status event.Type, eventRef string, attr attribution.A
 	}
 	ev := buildEvent(p, attr, status, eventRef, revenue, usdValue)
 	entry.Event = &ev
+	entry.Pixel = pixelEvent(p, attr, status, revenue, usdValue)
 	if p.PostbackURL != "" {
 		entry.Delivery = &DeliveryRequest{
 			OrganizationID: p.OrganizationID,
@@ -659,6 +672,46 @@ func deliveryMacroValues(p Postback, attr attribution.Attribution, status event.
 		v.Subs = attr.Click.Subs
 	}
 	return v
+}
+
+// pixelEvent is the conversion as its click's stream set's pixels report
+// it, or nil: pixels belong to a stream set, so only a conversion attributed
+// to a click that went through one has any.
+func pixelEvent(p Postback, attr attribution.Attribution, status event.Type, revenue, usdValue *float64) *pixel.Event {
+	if !attr.Outcome.Attributed() || attr.Click.StreamSetID == "" {
+		return nil
+	}
+	c := attr.Click
+	return &pixel.Event{
+		OrganizationID: p.OrganizationID,
+		StreamSetID:    c.StreamSetID,
+		Type:           status,
+		EventAt:        p.OccurredAt,
+		ClickID:        c.ClickID,
+		ClickAt:        c.OccurredAt,
+		Revenue:        revenue,
+		Currency:       p.Currency,
+		USDValue:       usdValue,
+		IP:             c.IP,
+		UserAgent:      c.UserAgent,
+		FBClickID:      c.FBClickID,
+		TTClickID:      c.TTClickID,
+		Macros:         deliveryMacroValues(p, attr, status, revenue),
+	}
+}
+
+// PixelEventFor is the pixel event of a stored conversion attributed after
+// it was recorded (internal/reattribute), or nil when its click went
+// through no stream set. Its pixels had nothing to go on before, so they
+// get it now.
+func PixelEventFor(c StoredConversion, click attribution.Click) *pixel.Event {
+	p := Postback{OrganizationID: c.OrganizationID, ClickID: c.ClickID, Currency: c.Currency, OccurredAt: c.EventAt}
+	attr := attribution.Attribution{Outcome: attribution.Outcome(c.AttributionOutcome), Click: click}
+	ev := pixelEvent(p, attr, c.Status, c.Revenue, c.USDValue)
+	if ev != nil {
+		ev.SourceEventID = c.ID
+	}
+	return ev
 }
 
 func (s *Service) convertRevenue(ctx context.Context, p Postback) (usdValue, revenue *float64) {

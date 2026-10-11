@@ -16,16 +16,21 @@ type backfill struct{ name, sql string }
 
 const clickLookupBackfill = "click_lookup_v1"
 
+// clickLookupColumns names every click_lookup column, so the copy does not
+// depend on the table's column order (schema/015 appended some).
+const clickLookupColumns = `organization_id, click_id, event_at,
+	campaign_id, stream_set_id, flow_id, external_click_id,
+	country, region, city, device, platform, os,
+	utm_source, utm_medium, utm_campaign, utm_content, utm_term,
+	sub1, sub2, sub3, sub4, sub5, sub6, sub7, sub8, sub9, sub10,
+	landing_id, offer_id, pwa_id, traffic_source_id,
+	ip, user_agent, fb_click_id, tt_click_id`
+
 var backfills = []backfill{
 	{
 		name: clickLookupBackfill,
-		sql: `INSERT INTO click_lookup
-			SELECT organization_id, click_id, event_at,
-			       campaign_id, stream_set_id, flow_id, external_click_id,
-			       country, region, city, device, platform, os,
-			       utm_source, utm_medium, utm_campaign, utm_content, utm_term,
-			       sub1, sub2, sub3, sub4, sub5, sub6, sub7, sub8, sub9, sub10,
-			       landing_id, offer_id, pwa_id, traffic_source_id
+		sql: `INSERT INTO click_lookup (` + clickLookupColumns + `)
+			SELECT ` + clickLookupColumns + `
 			FROM click_events
 			WHERE type = 'SOURCE_CLICK'`,
 	},

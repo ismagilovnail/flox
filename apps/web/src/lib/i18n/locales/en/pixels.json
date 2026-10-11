@@ -15,7 +15,7 @@
     "updated": "Updated"
   },
   "form": {
-    "description": "Client-side ad-platform pixels, fired on the events you pick so the platform can optimize delivery.",
+    "description": "FLOX sends the events you pick to the ad platform server-side, matched to the ad click, so the platform can optimize delivery. The pixel fires for clicks that went through a stream set it is attached to.",
     "nameLabel": "Name",
     "namePlaceholder": "Facebook — Sweeps conversions",
     "providerLabel": "Provider",
@@ -30,8 +30,26 @@
     "validation": {
       "nameMin": "Name must be at least 2 characters",
       "pixelIdMax": "Pixel ID must be at most 80 characters",
-      "eventsRequired": "Select at least one event"
-    }
+      "eventsRequired": "Select at least one event",
+      "urlRequired": "Enter an absolute http(s) URL"
+    },
+    "pixelIdLabel_facebook": "Pixel ID (dataset ID)",
+    "pixelIdLabel_tiktok": "Pixel code",
+    "pixelIdLabel_snapchat": "Pixel ID",
+    "accessTokenLabel": "Access token",
+    "accessTokenPlaceholder": "Conversions API access token",
+    "accessTokenSaved": "Saved — ends in {{last4}}. Type to replace",
+    "accessTokenHint": "Stored encrypted and never shown again.",
+    "accessTokenRemove": "Remove the saved token",
+    "testEventCodeLabel": "Test event code",
+    "testEventCodeHint": "Events go to the platform's test view instead of live data. Clear it to go live.",
+    "urlLabel": "URL",
+    "urlHint": "Called with GET for every event. {status} is the event name below.",
+    "eventNamesLabel": "Event names",
+    "eventNamesHint": "What each event is reported as. Empty uses the platform standard event shown.",
+    "eventNameAria": "Platform event name for {{event}}",
+    "twitterTitle": "X (Twitter) pixels cannot send events",
+    "twitterDescription": "X's Conversions API needs OAuth 1.0a app credentials FLOX does not have. This pixel sends nothing; move it to another provider or archive it."
   },
   "list": {
     "title": "Pixels",
@@ -63,6 +81,30 @@
     "duplicate": "Duplicate",
     "archive": "Archive",
     "archiveConfirmTitle": "Archive \"{{name}}\"?",
-    "archiveConfirmDescription": "Archived pixels stop firing on new events. This can be reversed later."
+    "archiveConfirmDescription": "Archived pixels stop sending new events. This can be reversed later."
+  },
+  "deliveries": {
+    "title": "Deliveries",
+    "description": "The last 100 events sent to the platform and how it answered. Updates every 15 seconds.",
+    "loading": "Loading deliveries…",
+    "loadError": "Couldn't load deliveries",
+    "emptyTitle": "Nothing sent yet",
+    "emptyDescription": "Events appear here once a click through an attached stream set reaches a selected event.",
+    "columns": {
+      "when": "When",
+      "event": "Event",
+      "click": "Click",
+      "status": "Status",
+      "attempts": "Attempts",
+      "http": "HTTP",
+      "message": "Message"
+    },
+    "status": {
+      "queued": "Queued",
+      "processing": "Sending",
+      "success": "Sent",
+      "retrying": "Retrying",
+      "dead": "Failed"
+    }
   }
 }

@@ -56,6 +56,7 @@ is what tells them apart on a dashboard).
 | `event_queue_depth` | `flox_event_queue_depth` | `eventqueue.PollDepth`, a new goroutine in `apps/worker/main.go`, polling `PostgresQueue.Depth` (new method) every 15s |
 | `event_loss` (enqueued vs persisted) | `flox_events_enqueued_total`, `flox_events_buffer_dropped_total`, `flox_events_queue_written_total`, `flox_events_queue_write_failed_total` (all `apps/tracker`, from `eventbuf.Writer.Stats()`) **+** `flox_events_persisted_total`, `flox_events_requeued_total` (`apps/worker`, from `eventqueue.Flusher`) | See "Why event_loss is two counters, not one" below |
 | `postback_success` / `postback_failure` | `flox_postback_deliveries_total{outcome}` | `postback.Deliverer.logAttempt` — outcome is `success`/`retrying`/`dead` |
+| — (pixels, §29) | `flox_pixel_deliveries_total{provider,outcome}` | `pixelsend.Deliverer.record` — outcome is `success`/`retrying`/`dead` |
 | `analytics_latency` | `flox_analytics_query_latency_seconds{endpoint}` | `analytics.Service.CampaignDaily`/`CampaignDailyRevenue` — the ClickHouse round trip only, `endpoint` is `campaign_daily`/`campaign_daily_revenue` |
 
 ### Why `event_loss` is two counters, not one
@@ -158,12 +159,12 @@ alone can only serve one path.
 | `flox_postback_incoming_total{result}`, `flox_postback_incoming_latency_seconds` | tracker | Incoming postbacks by result — the engine's (`success`, `duplicate`, `ignored`, `error`) or a refusal before it (`unknown_network`, `unauthorized`, `bad_request`, `rate_limited`, `internal_error`) |
 | `flox_attribution_outcomes_total{outcome}` | tracker, api | `attributed`, `unknown_click`, `no_identifier`, `ambiguous_external_click_id` |
 | `flox_reattributions_total{outcome}`, `flox_attribution_retries_pending` | worker (`internal/reattribute`) | `unknown_click` conversions looked up again: `attributed` (rewritten) or `gave_up` (still no click after ~7 h); how many wait |
-| `flox_queue_rows{queue,status}`, `flox_queue_oldest_due_age_seconds{queue}` | worker (`internal/queuestats`, every 15 s) | Open rows per status (incl. `dead`) and how long the oldest due row has waited past due, for `event_queue`, `postback_attempt_queue`, `postback_deliveries` |
+| `flox_queue_rows{queue,status}`, `flox_queue_oldest_due_age_seconds{queue}` | worker (`internal/queuestats`, every 15 s) | Open rows per status (incl. `dead`) and how long the oldest due row has waited past due, for `event_queue`, `postback_attempt_queue`, `postback_deliveries`, `pixel_deliveries` |
 | `flox_queue_dead_lettered_total{queue}`, `flox_queue_reaped_total{queue}` | worker | Batches parked as dead; claims returned from a dead worker |
 | `flox_pg_pool_conns{service,state}`, `flox_pg_pool_acquires_total{service,kind}`, `flox_pg_pool_acquire_wait_seconds_total{service}` | api, tracker, worker | Postgres pool use; `kind="empty"` = an acquire that had to wait |
 | `flox_routing_cache_requests_total{table,result}`, `flox_routing_cache_invalidations_total` | tracker | Routing served from memory, stale, missed, failing |
 | `flox_events_queue_write_retries_total` | tracker | Event writes retried after a Postgres failure |
-| `flox_retention_deleted_total{table}` | worker | Rows the retention job deleted (`postbacks`: not-recorded postbacks past `RETENTION_FAILED_POSTBACKS_DAYS`; `docs/retention.md`) |
+| `flox_retention_deleted_total{table}` | worker | Rows the retention job deleted (`postbacks`: not-recorded postbacks past `RETENTION_FAILED_POSTBACKS_DAYS`; `pixel_deliveries`: finished ones past `RETENTION_PIXEL_DELIVERIES_DAYS`; `docs/retention.md`) |
 | `flox_sticky_cookies_rejected_total{reason}` | tracker | Sticky cookies ignored: `unsigned` (issued before signing, or forged), `bad_signature` (forged, another key or campaign), `malformed` (signed, ids not ULIDs — a bug). Steady `bad_signature` is someone trying (tech audit T5) |
 | `flox_fx_sync_total{outcome}`, `flox_fx_latest_rate_age_seconds`, `flox_fx_rate_missing_total` | worker, tracker, api | FX rate sync and amounts stored without a USD value (no currency label: the code comes from requests) |
 | `flox_redis_errors_total{op}` | tracker, api | Redis failures that fell back (`conversion_last_status`, `ratelimit`) |

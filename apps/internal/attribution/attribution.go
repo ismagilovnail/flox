@@ -96,6 +96,14 @@ type Click struct {
 	UTMContent  string
 	UTMTerm     string
 	Subs        event.Subs
+
+	// What an ad platform matches a conversion to its ad click by
+	// (internal/pixelsend): the visitor's IP and user agent and the
+	// platform's own click id. Not copied onto the conversion event.
+	IP        string
+	UserAgent string
+	FBClickID string
+	TTClickID string
 }
 
 // Method names the evidence a conversion was attributed on. Stored with the

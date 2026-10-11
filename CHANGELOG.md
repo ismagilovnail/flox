@@ -5,6 +5,38 @@ per-phase, matching `CLAUDE.md`'s phase protocol. The one exception is
 [Between phases], below: spec amendments and the code changes that follow from
 them land between phases and would otherwise be invisible here.
 
+## [Phase 13b] — Pixels send events (server-side)
+
+Closes gap 1 of `docs/spec-conformance-2026-10-11.md`: pixels were saved and attached to
+stream sets, but nothing was ever sent. `docs/pixels.md` "Sending".
+
+- **Sending** (`internal/pixelsend`, §74 `PixelProvider`): Facebook Conversions API, TikTok
+  Events API, Snapchat Conversions API and generic GET URL templates (macros), sent by the
+  worker. Matched by IP, user agent, `fbc`/`ttclid` and SHA-256 of the click id; value in USD
+  at the event date's rate, never a made-up 0; platform event names per provider, overridable
+  per event; test event codes.
+- **Queue** `pixel_deliveries` (migration 00069): one row per (pixel, source event), the event
+  id doubles as the platform's dedup `event_id`. CPA events are queued in the conversion's own
+  transaction (tracker and api replay), late-attributed conversions by `reattribute`,
+  `PWA_INSTALL` by a sink in front of the worker's ClickHouse writer. Fair claim, retries on
+  the postback schedule, a platform's 4xx is final, reaper, queue stats, metric
+  `flox_pixel_deliveries_total{provider,outcome}`, retention `RETENTION_PIXEL_DELIVERIES_DAYS`
+  (30).
+- **Credentials**: access tokens AES-256-GCM under the new required `PIXEL_ENCRYPTION_KEY`
+  (api, worker; compose, `.env.example`, k8s); the API shows only the last 4 characters.
+- **Matching data**: ClickHouse `click_lookup` carries `ip`, `user_agent`, `fb_click_id`,
+  `tt_click_id` (`schema/015`); the backfill names its columns.
+- **Twitter/X**: cannot be created or switched to (Conversions API needs OAuth 1.0a), existing
+  pixels kept and editable. `TG_JOIN`/`NOTIFICATION_SUBSCRIBE` no longer offered — nothing
+  produces them.
+- **UI**: provider-specific fields (write-only token, test code, URL with macro picker, event
+  names with platform defaults), a Deliveries card on the pixel page; en + ru.
+- **Tests**: sender contracts against fake platforms, queue/deliverer/trigger and isolation on
+  Postgres, the outbox transaction, reattribution, `toPixelInput`; `TestFullFunnel` now checks
+  the stream set's pixels get the conversions and the real worker attempts them.
+- Not verified in a browser: the Chrome extension was not connected; the API flow was checked
+  with curl against the running stack.
+
 ## [Between phases] — Dead code removed, ROADMAP corrected
 
 - `apps/web/src/lib/mock/analytics.ts` deleted: nothing imported it since the filter popover

@@ -62,6 +62,8 @@ spec:
               valueFrom: {secretKeyRef: {name: flox-secrets, key: INTEGRATION_ENCRYPTION_KEY, optional: true}}
             - name: ADACCOUNT_ENCRYPTION_KEY
               valueFrom: {secretKeyRef: {name: flox-secrets, key: ADACCOUNT_ENCRYPTION_KEY, optional: true}}
+            - name: PIXEL_ENCRYPTION_KEY
+              valueFrom: {secretKeyRef: {name: flox-secrets, key: PIXEL_ENCRYPTION_KEY, optional: true}}
             - name: SENTRY_DSN
               valueFrom: {secretKeyRef: {name: flox-secrets, key: SENTRY_DSN, optional: true}}
           readinessProbe:

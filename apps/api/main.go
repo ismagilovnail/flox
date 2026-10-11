@@ -57,6 +57,7 @@ import (
 	"github.com/ismagilovnail/flox/apps/internal/offer"
 	"github.com/ismagilovnail/flox/apps/internal/offercap"
 	"github.com/ismagilovnail/flox/apps/internal/pixel"
+	"github.com/ismagilovnail/flox/apps/internal/pixelsend"
 	"github.com/ismagilovnail/flox/apps/internal/postback"
 	"github.com/ismagilovnail/flox/apps/internal/postbacklog"
 	"github.com/ismagilovnail/flox/apps/internal/postbacklogs"
@@ -307,6 +308,13 @@ func buildServer(ctx context.Context, cfg config.Config, logger *slog.Logger, re
 		return nil, nil, err
 	}
 
+	// Pixels' access tokens (apps/internal/pixel), the same bar.
+	pixelKey, err := pixel.ParseKey(cfg.PixelEncryptionKey)
+	if err != nil {
+		logger.Error("pixel encryption key configuration failed", "error", err)
+		return nil, nil, err
+	}
+
 	// One apikey.Service both authenticates Bearer requests (tenant
 	// middleware) and serves the Settings > API keys routes below.
 	apiKeySvc := apikey.NewService(apikey.NewRepository(db), logger)
@@ -551,7 +559,7 @@ func buildServer(ctx context.Context, cfg config.Config, logger *slog.Logger, re
 		postlandingHandler.Register(r)
 	})
 
-	pixelHandler := pixel.NewHandler(pixel.NewService(pixel.NewRepository(db)), requireContentWrite, logger)
+	pixelHandler := pixel.NewHandler(pixel.NewService(pixel.NewRepository(db, pixelKey)), requireContentWrite, logger)
 	srv.Mux().Route("/pixels", func(r chi.Router) {
 		r.Use(tenantMiddleware)
 		r.Use(readGate("content.read"))
@@ -663,7 +671,7 @@ func buildServer(ctx context.Context, cfg config.Config, logger *slog.Logger, re
 		// depend on it. The block runs only with ClickHouse connected, so
 		// attribution needs no fallback. rdb is the client from above.
 		postbackStore := postback.NewPostgresStore(db)
-		var convStore conversion.Store = conversion.NewPostgresStore(db).WithDeliveries(postbackStore)
+		var convStore conversion.Store = conversion.NewPostgresStore(db).WithDeliveries(postbackStore).WithPixels(pixelsend.NewPostgresStore(db))
 		if rdb != nil {
 			convStore = conversion.NewRedisStore(convStore, rdb, logger)
 		} else {

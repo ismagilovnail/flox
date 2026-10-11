@@ -17,7 +17,9 @@
 // Step 3 runs only once Postgres is right, so a crash in between leaves a
 // retry row that repeats step 3 alone (attributed_at set). The outgoing
 // postback has already gone without the click's subs: a second one would
-// count the conversion twice at the source, so none is sent.
+// count the conversion twice at the source, so none is sent. Its pixels are
+// different: without a click they had no stream set and got nothing, so the
+// attributed conversion is queued for them in step 1's transaction.
 package reattribute
 
 import (
@@ -73,7 +75,10 @@ type Retrier struct {
 	conversions Conversions
 	attribution *attribution.Service
 	events      Events
-	logger      *slog.Logger
+	// pixels queues a conversion attributed on retry for its click's
+	// stream set's pixels; nil sends none.
+	pixels conversion.PixelWriter
+	logger *slog.Logger
 	// retries and queue are attribution_retries and event_queue; tests
 	// point them at private copies so the dev worker does not take their
 	// rows (testpg.PrivateTable).
@@ -83,6 +88,13 @@ type Retrier struct {
 func New(db *pgxpool.Pool, conversions Conversions, clicks attribution.ClickResolver, events Events, logger *slog.Logger) *Retrier {
 	return &Retrier{db: db, conversions: conversions, attribution: attribution.NewService(clicks), events: events, logger: logger,
 		retries: "attribution_retries", queue: "event_queue"}
+}
+
+// WithPixels sets where conversions attributed on retry are queued for
+// their pixels (internal/pixelsend).
+func (r *Retrier) WithPixels(w conversion.PixelWriter) *Retrier {
+	r.pixels = w
+	return r
 }
 
 // due is one claimed attribution_retries row.
@@ -197,7 +209,7 @@ func (r *Retrier) process(ctx context.Context, d due) error {
 	ev := conversion.EventFor(c, &attr.Click)
 
 	if !d.attributed {
-		done, err := r.attributePostgres(ctx, d, attr, ev)
+		done, err := r.attributePostgres(ctx, d, c, attr, ev)
 		if err != nil || done {
 			return err
 		}
@@ -236,7 +248,7 @@ func (r *Retrier) miss(ctx context.Context, d due) error {
 // attributePostgres writes the attribution to the postbacks row and, when
 // the event has not been flushed yet, into its event_queue row. done means
 // nothing is left for ClickHouse.
-func (r *Retrier) attributePostgres(ctx context.Context, d due, attr attribution.Attribution, ev event.Event) (done bool, err error) {
+func (r *Retrier) attributePostgres(ctx context.Context, d due, c conversion.StoredConversion, attr attribution.Attribution, ev event.Event) (done bool, err error) {
 	payload, err := json.Marshal(ev)
 	if err != nil {
 		return false, fmt.Errorf("reattribute: encoding event: %w", err)
@@ -265,6 +277,13 @@ func (r *Retrier) attributePostgres(ctx context.Context, d due, attr attribution
 		d.organizationID, d.postbackID, payload)
 	if err != nil {
 		return false, fmt.Errorf("reattribute: rewriting queued event: %w", err)
+	}
+	if r.pixels != nil {
+		if pe := conversion.PixelEventFor(c, attr.Click); pe != nil {
+			if err := r.pixels.InsertTx(ctx, tx, *pe); err != nil {
+				return false, fmt.Errorf("reattribute: queueing pixel events: %w", err)
+			}
+		}
 	}
 	done = tag.RowsAffected() == 1
 	if done {

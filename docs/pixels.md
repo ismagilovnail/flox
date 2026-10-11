@@ -1,4 +1,129 @@
-# Pixels (§29) — wired to a real Postgres-backed API
+# Pixels (§29)
+
+A pixel reports FLOX events to an ad platform so the platform can optimize
+delivery. **Sending** (below) is how events reach the platform; the
+sections after it describe the CRUD phase that came first.
+
+## Sending (server-side, §29 / §74 `PixelProvider`)
+
+Until 2026-10-11 pixels were saved and attached to stream sets but nothing
+was ever sent (`docs/spec-conformance-2026-10-11.md`, gap 1). Now:
+
+### Which events, which pixels
+
+A pixel sends the events it is set to (`events`) for clicks that went
+through a stream set it is attached to (`stream_set_pixels`), while it is
+active. Reportable events (`pixel.ValidEventTypes`): `PWA_INSTALL`,
+`CPA_HOLD`, `CPA_ACCEPT`, `CPA_REDEP` — what FLOX produces and a platform
+optimizes for. `TG_JOIN` and `NOTIFICATION_SUBSCRIBE` were offered before
+but nothing produces them, so they were dropped (an old pixel loses them on
+its next save).
+
+| Event | Queued by | When |
+|---|---|---|
+| `CPA_*` | `conversion.PostgresStore.Record`, in the conversion's own transaction (`conversion.PixelWriter`) | the conversion is recorded as a success and attributed to a click with a stream set |
+| `CPA_*`, attributed late | `reattribute`, in the transaction that writes the attribution | an `unknown_click` conversion whose click turns up: its pixels had no stream set to go on before, so — unlike the outgoing postback, which already left — they get it now |
+| `PWA_INSTALL` | `pixelsend.TriggerSink`, wrapping the worker's ClickHouse writer (event queue flusher and NATS consumer) | the event is taken off the stream, before it is written |
+
+Unattributed conversions reach no pixel: pixels belong to a stream set,
+and only the click knows which one.
+
+### Queue: `pixel_deliveries` (migration 00069)
+
+One row per (pixel, source event), `UNIQUE (pixel_id, source_event_id)`:
+a retried batch or transaction never queues twice. `source_event_id` is
+the conversion's `postbacks` row id or the tracker event's id, and is also
+sent as the platform's `event_id`, which the platforms deduplicate on — so
+a resend after a crash is not counted twice either.
+
+`payload` is a `pixel.Event` captured when the event happened: type, time,
+click id and click time, revenue/currency and the USD value at the event
+date's rate (§50-FX), the visitor's IP, user agent, `fbclid`/`ttclid`, and
+the macro values for generic URLs. For conversions these come from the
+attributed click — `click_lookup` gained `ip`, `user_agent`,
+`fb_click_id`, `tt_click_id` (ClickHouse `schema/015`; clicks from before
+it have them empty). For `PWA_INSTALL` the IP/UA are the install request's
+and the platform click ids come from the click (`ClickResolver`).
+
+Same mechanics as `postback_deliveries`: fair claim across organizations
+(`internal/pgqueue`), 10 sends at a time, 10 s per send, the reaper returns
+abandoned claims, `queuestats` reports depth and age. Finished rows are
+deleted after `RETENTION_PIXEL_DELIVERIES_DAYS` (default 30) — they hold IPs
+and user agents.
+
+### Outcomes
+
+- 2xx (TikTok: body `code` 0) → `success`.
+- No response, timeout, 5xx, 429/408, Facebook throttling codes, TikTok
+  40100/5xxxx → `retrying` on the postback schedule
+  (`postback.NextAttemptDelay`, 8 attempts over ~21 h), then `dead`.
+- Any other refusal (bad token, unknown pixel, 4xx) → `dead` at once:
+  repeating the same request cannot succeed. So is a pixel that cannot
+  send as configured (no pixel id, no token, no URL) or was paused after
+  the event was queued. The message says which.
+- Deleted pixel: its rows go with it (`ON DELETE CASCADE`).
+
+Unlike outgoing postbacks, which retry every failure, a platform's 4xx is
+final: these APIs answer 4xx for configuration errors (token, pixel id),
+and retrying them for 21 hours only hides the problem from the delivery log.
+
+### Providers (`internal/pixelsend`, one `Sender` each)
+
+| Provider | API | Auth | Matching data sent |
+|---|---|---|---|
+| facebook | Meta Conversions API `POST graph.facebook.com/v21.0/{pixel}/events`, `action_source=website` | `access_token` query parameter | `client_ip_address`, `client_user_agent`, `fbc` = `fb.1.{click ms}.{fbclid}`, `external_id` = SHA-256(click id) |
+| tiktok | Events API 2.0 `POST business-api.tiktok.com/open_api/v1.3/event/track/`, `event_source=web` | `Access-Token` header | `ttclid`, `ip`, `user_agent`, `external_id` = SHA-256(click id) |
+| snapchat | Conversions API v3 `POST tr.snapchat.com/v3/{pixel}/events`, `action_source=WEB` | `access_token` query parameter | `client_ip_address`, `client_user_agent`, `external_id` = SHA-256(click id) |
+| generic | `GET` of the pixel's URL template, macros resolved (`internal/macro`); `{status}` is the event name | — | whatever the template asks for |
+| twitter | none: cannot be created or switched to; existing ones are kept, editable, and send nothing | X's Conversions API needs OAuth 1.0a app + user credentials (4 secrets) FLOX does not have — the owner's decision 2026-10-11 | — |
+
+- **Value**: USD at the event date's rate when known, else the reported
+  amount in its own currency, else none — never a made-up 0. Facebook
+  rejects a `Purchase` without a value; that shows up in the log.
+- **Event names**: per provider defaults (`pixel.DefaultEventNames`: FB
+  Lead/Purchase/CompleteRegistration, TikTok SubmitForm/CompletePayment/
+  CompleteRegistration, Snap SIGN_UP/PURCHASE), overridable per event
+  (`event_names`). `GET /v1/pixels/event-names` serves the defaults to the
+  form.
+- **Test mode**: `test_event_code` (Facebook, TikTok) sends to the
+  platform's test view.
+- The tokens are in the query string for Facebook and Snapchat (their
+  documented way): transport errors are reported without the URL
+  (`*url.Error` unwrapped), and the event itself is never logged (§54).
+- `event_source_url` is not sent: FLOX does not keep the landing URL of a
+  click. Meta lists it as recommended for website events.
+- All calls go through the worker's `SafeDialContext` client (SSRF guard,
+  §54) — a generic pixel's URL is operator-supplied.
+
+### Credentials
+
+`access_token` is AES-256-GCM ciphertext under `PIXEL_ENCRYPTION_KEY`
+(api writes, worker reads; both refuse to start without it). The API never
+returns it: `hasAccessToken` + `accessTokenLast4`. PATCH without
+`accessToken` keeps it, `""` removes it. Duplicating a pixel copies the
+ciphertext without decrypting. Switching to generic drops the token, pixel
+id and test code; a platform provider drops the URL.
+
+### UI
+
+The pixel form shows the fields of the chosen provider (pixel id, token —
+write-only, "Saved — ends in …", remove checkbox —, test code; or the URL
+with the macro picker) and an event name per selected event with the
+platform default as placeholder. The pixel page has a **Deliveries** card:
+the last 100 deliveries with status, attempts, HTTP code and the
+platform's error message, refreshed every 15 s.
+
+### Not done
+
+- Twitter/X sending (see above).
+- A "send test event" button (today: set the test event code and send a
+  test conversion through the funnel).
+- Browser-side pixels (`fbq` on landings): FLOX's own landings could load
+  them, but server-side covers every landing type and needs no page change.
+
+---
+
+# History: the CRUD phase
 
 Fourth slice of the Landing/PWA/Postlanding/Pixels CRUD candidate list,
 after [Postlanding](postlanding.md). `pixels` was already migrated

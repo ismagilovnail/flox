@@ -135,7 +135,7 @@ scoped phase; none blocks anything that ships today.
 | `cloudflare_registrar` has no adapter, though Cloudflare works as a DNS provider | `apps/internal/domain/model.go` |
 | SMS/email 2FA as an alternative delivery channel (TOTP only today) | `apps/internal/totp` |
 | Video upload/transcoding in Content Gallery (images only today) | needs a real ffmpeg/worker pipeline |
-| Pixels never fire: no event reaches Facebook/TikTok/… from the tracker or the worker | pixel CRUD and stream-set attachment exist; sending does not (`docs/spec-conformance-2026-10-11.md`) |
+| Pixels: Twitter/X sending (OAuth 1.0a), a "send test event" button, `event_source_url` | sending works for Facebook/TikTok/Snapchat/generic — `docs/pixels.md` "Not done" |
 | Campaign list has no Clicks/Conversions/Revenue/Spend/Profit/ROI columns; custom metrics' "Campaigns Table" target therefore shows nowhere | `apps/web/src/features/campaigns/campaign-columns.tsx` |
 | No Push section (sidebar §17, NOTIFICATION_* events) | not started |
 | Cost: no CSV import, no per-country spend | `apps/internal/cost` |

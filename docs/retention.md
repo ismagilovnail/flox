@@ -7,6 +7,7 @@ conversion or an invoice rests on is kept.
 |---|---|---|---|
 | Postbacks recorded as conversions (`result = 'success'`) | Postgres `postbacks` | forever | Source of truth for revenue, dedup (CLAUDE.md #3) and the status progression |
 | Postbacks not recorded (`duplicate`, `error`, `ignored`) | Postgres `postbacks` | `RETENTION_FAILED_POSTBACKS_DAYS`, default 90 | A log of what a network sent; nothing reads them back. Network replays make them most of the table |
+| Pixel deliveries, sent or dead-lettered | Postgres `pixel_deliveries` | `RETENTION_PIXEL_DELIVERIES_DAYS`, default 30 | A send log carrying the visitor's IP and user agent the platform matched on (§54); the pixel page shows the last 100 |
 | Postback attempt log (in and out) | ClickHouse `postback_events` | `RETENTION_POSTBACK_LOG_MONTHS`, default 13 | What the Postback Logs screen shows; a year plus a month covers a yearly dispute |
 | Clicks, landing/PWA events, conversions, LTV, click lookup, costs | ClickHouse `click_events`, `tracking_events`, `conversion_events`, `ltv_events`, `click_lookup`, `cost_events` | forever | Every report reads them for any period; a TTL would empty old reports without a word, and a conversion on a click older than the TTL would become `unknown_click` |
 | Daily aggregates | ClickHouse `*_daily_*` | forever | Small |

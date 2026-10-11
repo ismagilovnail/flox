@@ -15,6 +15,10 @@
 //
 // Sign-in state past its expiry: see ExpiredAuth (auth.go, DB5).
 //
+// pixel_deliveries rows that are finished (sent or dead-lettered) carry the
+// visitor's IP and user agent the platform matched on; they go after
+// RETENTION_PIXEL_DELIVERIES_DAYS (PixelDeliveries).
+//
 // ClickHouse: see chstore.SetPostbackLogTTL.
 //
 // This is maintenance across every organization, like the queue reapers:
@@ -88,6 +92,61 @@ func (f *FailedPostbacks) RunLoop(ctx context.Context, interval time.Duration) {
 			f.Logger.Warn("retention run failed", "error", err)
 		case n > 0:
 			f.Logger.Info("expired postbacks deleted", "rows", n, "older_than", f.Age.String())
+		}
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C:
+		}
+	}
+}
+
+// PixelDeliveries deletes finished pixel_deliveries rows once they are
+// older than Age. Rows still to send are never deleted.
+type PixelDeliveries struct {
+	DB     *pgxpool.Pool
+	Age    time.Duration
+	Batch  int // 0: DefaultBatch
+	Logger *slog.Logger
+}
+
+// RunOnce deletes every expired row, batch by batch, and returns how many.
+func (p *PixelDeliveries) RunOnce(ctx context.Context) (int64, error) {
+	batch := p.Batch
+	if batch <= 0 {
+		batch = DefaultBatch
+	}
+	var total int64
+	for {
+		tag, err := p.DB.Exec(ctx, `
+			DELETE FROM pixel_deliveries WHERE id IN (
+				SELECT id FROM pixel_deliveries
+				WHERE delivery_status IN ('success', 'dead') AND created_at < now() - make_interval(secs => $1)
+				LIMIT $2)`,
+			p.Age.Seconds(), batch)
+		if err != nil {
+			return total, fmt.Errorf("retention: deleting pixel deliveries: %w", err)
+		}
+		n := tag.RowsAffected()
+		total += n
+		metrics.RetentionDeletedTotal.WithLabelValues("pixel_deliveries").Add(float64(n))
+		if n < int64(batch) {
+			return total, nil
+		}
+	}
+}
+
+// RunLoop runs RunOnce every interval until ctx is done.
+func (p *PixelDeliveries) RunLoop(ctx context.Context, interval time.Duration) {
+	t := time.NewTicker(interval)
+	defer t.Stop()
+	for {
+		n, err := p.RunOnce(ctx)
+		switch {
+		case err != nil && ctx.Err() == nil:
+			p.Logger.Warn("pixel delivery retention run failed", "error", err)
+		case n > 0:
+			p.Logger.Info("expired pixel deliveries deleted", "rows", n, "older_than", p.Age.String())
 		}
 		select {
 		case <-ctx.Done():

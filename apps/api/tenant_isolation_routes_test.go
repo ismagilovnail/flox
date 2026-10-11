@@ -219,7 +219,7 @@ func newIsolationEnv(t *testing.T) *isolationEnv {
 	if dsn == "" {
 		t.Skip("DATABASE_URL not set, skipping integration test")
 	}
-	for _, k := range []string{"TOTP_ENCRYPTION_KEY", "INTEGRATION_ENCRYPTION_KEY", "ADACCOUNT_ENCRYPTION_KEY"} {
+	for _, k := range []string{"TOTP_ENCRYPTION_KEY", "INTEGRATION_ENCRYPTION_KEY", "ADACCOUNT_ENCRYPTION_KEY", "PIXEL_ENCRYPTION_KEY"} {
 		if os.Getenv(k) == "" {
 			key := make([]byte, 32)
 			_, _ = rand.Read(key)
@@ -579,7 +579,7 @@ func seedEveryKind(t *testing.T, ctx context.Context, pool *pgxpool.Pool, orgID,
 	must("postlanding", err)
 	ids["postlanding"] = psl.ID
 
-	px, err := pixel.NewService(pixel.NewRepository(pool)).Create(ctx, orgID, pixel.CreateInput{
+	px, err := pixel.NewService(pixel.NewRepository(pool, make([]byte, 32))).Create(ctx, orgID, pixel.CreateInput{
 		Name: name("Pixel"), Provider: pixel.ProviderFacebook, PixelID: "1029384756102938", Events: []string{"CPA_ACCEPT"},
 	})
 	must("pixel", err)
@@ -782,6 +782,7 @@ var notReferences = map[string]string{
 	"adAccountId":                  "the ad platform's own account id",
 	"clientId":                     "the ad platform's OAuth client id",
 	"pixelId":                      "the ad platform's pixel id",
+	"sourceEventId":                "pixel.Event, a queue payload FLOX writes itself — never read from a request",
 	"externalCampaignId":           "the traffic source's own campaign id",
 	"externalClickId":              "the traffic source's click id, a string, not a row",
 	"fbClickId":                    "Facebook's click id",

@@ -34,6 +34,7 @@ import (
 	"github.com/ismagilovnail/flox/apps/internal/logging"
 	"github.com/ismagilovnail/flox/apps/internal/metrics"
 	"github.com/ismagilovnail/flox/apps/internal/offercap"
+	"github.com/ismagilovnail/flox/apps/internal/pixelsend"
 	"github.com/ismagilovnail/flox/apps/internal/postback"
 	"github.com/ismagilovnail/flox/apps/internal/postbacklog"
 	"github.com/ismagilovnail/flox/apps/internal/postgres"
@@ -216,9 +217,11 @@ func run() error {
 	// Redis is optional (§45: "REDIS UNAVAILABLE: fall through and record
 	// the event"): the redirect path never touches it, and PostgresStore
 	// alone is correct — the cache only saves a round trip. The store
-	// records a conversion, its CPA event and its outgoing postback in one
-	// transaction (tech audit D1).
-	var convStore conversion.Store = conversion.NewPostgresStore(db).WithDeliveries(postback.NewPostgresStore(db))
+	// records a conversion, its CPA event, its outgoing postback and its
+	// pixel events in one transaction (tech audit D1).
+	var convStore conversion.Store = conversion.NewPostgresStore(db).
+		WithDeliveries(postback.NewPostgresStore(db)).
+		WithPixels(pixelsend.NewPostgresStore(db))
 	// Without Redis the refused-postback limit counts in this process.
 	limiter := ratelimit.New(nil, logger)
 	if cfg.RedisURL != "" {

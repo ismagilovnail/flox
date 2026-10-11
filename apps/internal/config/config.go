@@ -68,6 +68,11 @@ type Config struct {
 	// plain text (migration 00018) — this key never touches it.
 	AdAccountEncryptionKey string
 
+	// PixelEncryptionKey (same shape, its own key) encrypts pixels'
+	// access tokens (internal/pixel): apps/api writes them, apps/worker
+	// reads them back to send conversion events to the ad platform.
+	PixelEncryptionKey string
+
 	// SentryDSN enables error tracking (internal/errtrack) — any tracker
 	// that speaks the Sentry protocol. Empty: off. SentryEnvironment labels
 	// events; it defaults to Env.
@@ -82,10 +87,13 @@ type Config struct {
 	// FailedPostbacksDays: postbacks rows that were not recorded
 	// (duplicate/error/ignored) are deleted after this many days; 0 keeps
 	// them. PostbackLogMonths: TTL of ClickHouse's postback_events attempt
-	// log; 0 removes it. Successful conversions and the report tables are
-	// never expired.
+	// log; 0 removes it. PixelDeliveriesDays: sent and dead-lettered
+	// pixel_deliveries rows (they hold visitors' IPs and user agents) are
+	// deleted after this many days; 0 keeps them. Successful conversions
+	// and the report tables are never expired.
 	RetentionFailedPostbacksDays int
 	RetentionPostbackLogMonths   int
+	RetentionPixelDeliveriesDays int
 
 	// LandingLinkKey is the HMAC key (32+ raw bytes, base64-encoded)
 	// apps/tracker signs internal landings' click links with
@@ -244,6 +252,10 @@ func load(portVar, portDefault, defaultServiceName string, ch chLimits) (Config,
 	if err != nil {
 		return Config{}, err
 	}
+	pixelDays, err := parseNonNegative("RETENTION_PIXEL_DELIVERIES_DAYS", 30)
+	if err != nil {
+		return Config{}, err
+	}
 	natsReplicas, err := parseNonNegative("NATS_STREAM_REPLICAS", 1)
 	if err != nil {
 		return Config{}, err
@@ -265,12 +277,14 @@ func load(portVar, portDefault, defaultServiceName string, ch chLimits) (Config,
 		TOTPEncryptionKey:        getEnv("TOTP_ENCRYPTION_KEY", ""),
 		IntegrationEncryptionKey: getEnv("INTEGRATION_ENCRYPTION_KEY", ""),
 		AdAccountEncryptionKey:   getEnv("ADACCOUNT_ENCRYPTION_KEY", ""),
+		PixelEncryptionKey:       getEnv("PIXEL_ENCRYPTION_KEY", ""),
 		LandingLinkKey:           getEnv("LANDING_LINK_KEY", ""),
 		StickyCookieKey:          getEnv("STICKY_COOKIE_KEY", ""),
 		FXProvider:               getEnv("FX_PROVIDER", "ecb"),
 
 		RetentionFailedPostbacksDays: failedDays,
 		RetentionPostbackLogMonths:   logMonths,
+		RetentionPixelDeliveriesDays: pixelDays,
 		SentryDSN:                    getEnv("SENTRY_DSN", ""),
 		SentryEnvironment:            getEnv("SENTRY_ENVIRONMENT", ""),
 		TrackerPublicURL:             getEnv("TRACKER_PUBLIC_URL", ""),

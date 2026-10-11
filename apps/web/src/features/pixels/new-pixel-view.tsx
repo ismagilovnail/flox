@@ -7,7 +7,7 @@ import { useTranslation } from "react-i18next";
 import { PermissionDeniedState } from "@/components/ui/permission-denied-state";
 import { usePermission } from "@/hooks/use-auth";
 import { useCreatePixel } from "@/hooks/use-pixels";
-import { PixelForm, type PixelFormValues } from "@/features/pixels/pixel-form";
+import { PixelForm, toPixelInput, type PixelFormValues } from "@/features/pixels/pixel-form";
 
 export function NewPixelView() {
   const { t } = useTranslation("pixels");
@@ -16,8 +16,11 @@ export function NewPixelView() {
   const createPixel = useCreatePixel();
 
   function handleSubmit(values: PixelFormValues) {
+    // A new pixel starts active; the status field applies once it exists.
+    const input = toPixelInput(values);
+    delete input.status;
     createPixel.mutate(
-      { name: values.name, provider: values.provider, pixelId: values.pixelId, events: values.events },
+      input,
       {
         onSuccess: (created) => {
           toast(t("toast.created"), { description: values.name });

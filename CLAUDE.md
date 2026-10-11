@@ -19,58 +19,23 @@ referenced below as §N).
 ## CURRENT STATE — UPDATE THIS EVERY PHASE
 
 ```
-CURRENT PHASE : AUDIT FOLLOW-UPS (between phases)
-STATUS        : marketer audit closed (#1–#12, #13 platform limit). Tech audit:
-                P0/P1 done except DO1 (CI, the user's call); AN1 closed
-                (late FX rates rewrite ClickHouse for any date). P2 done: T5 (signed sticky cookies,
-                STICKY_COOKIE_KEY required by the tracker), API1, outbound
-                timeouts, CH3/DB2 (only logs expire — owner's decision,
-                docs/retention.md), CH4 (query limits per binary, cancel on
-                client close, 422 query_too_heavy), T3 (event_time on
-                postbacks), DO4 (explicit CA certs in the tracker), S2
-                (security headers; no script-src yet — srcdoc preview),
-                T6 (domain ownership via TXT), CQ2 (generic pgqueue) done —
-                P2 closed. P3 started: DB4 (last_active_at once a minute),
-                DB5 (expired auth cleanup), API2 (strict /auth limiter +
-                per-account sign-in limit), DB3 (queue autovacuum), CH5
-                (versioned CH migrations under a PG advisory lock), RL5
-                (server timeouts), M1, entity list pagination (limit/offset/
-                total, web reads all pages), M2/Q3 (fair queue claims,
-                parallel postback delivery), API3 (every API route under /v1)
-                done, M4 (verified; links bound to their host), AN4
-                (account zone stored, reports note a different zone), read
-                gating (every route group needs its read key; no self role
-                changes), R2 (Redis maxmemory + allkeys-lru in compose, startup
-                check; prod Redis config at deploy), end-to-end load test (no
-                loss to 8k clicks/s; drops at 12k/s — the tracker's serial
-                writer into event_queue), NATS JetStream event stream (one
-                tracker: 20k clicks/s no loss, Postgres idle; PG fallback;
-                conversions stay in PG). DO3 — Kubernetes (Kustomize in
-                infra/k8s, production + minikube overlays, migrate Job,
-                NATS cluster; verified in minikube; docs/kubernetes.md) done,
-                its gaps closed (ClickHouse/bucket backups with
-                BACKUP_POSTGRES=off, edge 2 replicas on RWX, GeoIP component,
-                NATS login), then NATS route login (NATS_ROUTE_PASSWORD) and
-                GeoIP hot reload (tracker swaps a changed .mmdb within a
-                minute; geoip-sync sidecar replaces the restart CronJob).
-                P4 (postback refusal limit per IP) done; audit doc statuses
-                and 2026-10-10 re-score (72/100, YES WITH CONDITIONS: load
-                test in target network, prod restore drill). Still open:
-                DO1, AN5, CQ1, CQ3 partly, load test in target network.
-                §16 tests: PG latency (tracker, TCP proxy) and cross-tenant
-                walk of every API route (buildServer split from run) done;
-                B's ids in request bodies/queries covered too. Load test and
-                DO1 closed by the owner. CQ3 done (Record in steps). AN5 done
-                (reports by click date, dateBasis, migration 00068). CQ1 done
-                (comments: invariants, not history). Tech audit fully closed;
-                left: prod restore drill after deployment.
-LAST COMMIT   : docs(audit): CQ1 closed, tech audit complete.
-UNCOMMITTED   : none expected. Dev DB fresh from `make dev-fresh CONFIRM=yes`
-                (password flox-demo-2026); `make dev-status` shows what is in it.
-NEXT          : wait for the user — the next phase. CI (DO1) is the user's own
-                decision — do not set it up. Run go test with the full env line
-                AND check e2e did not skip (memory: flox-full-test-env); wait
-                for air rebuilds before e2e.
+CURRENT PHASE : PHASE 13b — PIXELS SEND EVENTS (closed)
+STATUS        : Tech and marketer audits closed; spec conformance check
+                2026-10-11 (docs/spec-conformance-2026-10-11.md) found 15
+                gaps. Gap 1 (pixels never fire) closed: server-side sending
+                (internal/pixelsend) to Facebook CAPI / TikTok Events API /
+                Snapchat CAPI / generic URL via pixel_deliveries; tokens
+                under PIXEL_ENCRYPTION_KEY; twitter not creatable. Browser
+                pass not done (Chrome extension disconnected) — API checked
+                with curl. Left: gaps 2–15 of the conformance doc, prod
+                restore drill after deployment.
+LAST COMMIT   : feat(pixels): server-side event sending.
+UNCOMMITTED   : none expected. Dev DB at migration 00069, CH schema 015.
+NEXT          : wait for the user — the next gap (campaign list metrics is
+                gap 2). CI (DO1) is the user's own decision — do not set it
+                up. Run go test with the full env line AND check e2e did not
+                skip (memory: flox-full-test-env); chconn's
+                TestLimitsStopAHeavyQuery flakes under the full parallel run.
 ```
 
 > At the end of every phase: update the four lines above, add a CHANGELOG entry,

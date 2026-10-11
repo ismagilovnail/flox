@@ -31,7 +31,9 @@ func NewHandler(svc *Service, requireWrite func(http.Handler) http.Handler, logg
 func (h *Handler) Register(r chi.Router) {
 	r.Get("/", h.list)
 	r.With(h.requireWrite).Post("/", h.create)
+	r.Get("/event-names", h.eventNames)
 	r.Get("/{id}", h.get)
+	r.Get("/{id}/deliveries", h.deliveries)
 	r.With(h.requireWrite).Patch("/{id}", h.update)
 	r.With(h.requireWrite).Delete("/{id}", h.delete)
 	r.With(h.requireWrite).Post("/{id}/duplicate", h.duplicate)
@@ -64,11 +66,31 @@ func (h *Handler) get(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, p)
 }
 
+// eventNames is the platform event every FLOX event is reported as by
+// default, per provider — what the form shows until an override is typed.
+func (h *Handler) eventNames(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, http.StatusOK, map[string]any{"defaults": DefaultEventNames})
+}
+
+func (h *Handler) deliveries(w http.ResponseWriter, r *http.Request) {
+	orgID, _ := tenant.OrgID(r.Context())
+	items, err := h.svc.Deliveries(r.Context(), orgID, chi.URLParam(r, "id"))
+	if err != nil {
+		apierror.Write(w, h.logger, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"deliveries": items})
+}
+
 type createRequest struct {
-	Name     string   `json:"name"`
-	Provider Provider `json:"provider"`
-	PixelID  string   `json:"pixelId"`
-	Events   []string `json:"events"`
+	Name          string            `json:"name"`
+	Provider      Provider          `json:"provider"`
+	PixelID       string            `json:"pixelId"`
+	Events        []string          `json:"events"`
+	AccessToken   string            `json:"accessToken"`
+	TestEventCode string            `json:"testEventCode"`
+	URL           string            `json:"url"`
+	EventNames    map[string]string `json:"eventNames"`
 }
 
 func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
@@ -81,10 +103,14 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 	}
 
 	p, err := h.svc.Create(r.Context(), orgID, CreateInput{
-		Name:     req.Name,
-		Provider: req.Provider,
-		PixelID:  req.PixelID,
-		Events:   req.Events,
+		Name:          req.Name,
+		Provider:      req.Provider,
+		PixelID:       req.PixelID,
+		Events:        req.Events,
+		AccessToken:   req.AccessToken,
+		TestEventCode: req.TestEventCode,
+		URL:           req.URL,
+		EventNames:    req.EventNames,
 	})
 	if err != nil {
 		apierror.Write(w, h.logger, err)
@@ -93,12 +119,17 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusCreated, p)
 }
 
+// updateRequest: accessToken left out keeps the token, "" removes it.
 type updateRequest struct {
-	Name     *string   `json:"name"`
-	Provider *Provider `json:"provider"`
-	PixelID  *string   `json:"pixelId"`
-	Events   *[]string `json:"events"`
-	Status   *Status   `json:"status"`
+	Name          *string            `json:"name"`
+	Provider      *Provider          `json:"provider"`
+	PixelID       *string            `json:"pixelId"`
+	Events        *[]string          `json:"events"`
+	AccessToken   *string            `json:"accessToken"`
+	TestEventCode *string            `json:"testEventCode"`
+	URL           *string            `json:"url"`
+	EventNames    *map[string]string `json:"eventNames"`
+	Status        *Status            `json:"status"`
 }
 
 func (h *Handler) update(w http.ResponseWriter, r *http.Request) {
@@ -111,11 +142,15 @@ func (h *Handler) update(w http.ResponseWriter, r *http.Request) {
 	}
 
 	p, err := h.svc.Update(r.Context(), orgID, chi.URLParam(r, "id"), UpdateInput{
-		Name:     req.Name,
-		Provider: req.Provider,
-		PixelID:  req.PixelID,
-		Events:   req.Events,
-		Status:   req.Status,
+		Name:          req.Name,
+		Provider:      req.Provider,
+		PixelID:       req.PixelID,
+		Events:        req.Events,
+		AccessToken:   req.AccessToken,
+		TestEventCode: req.TestEventCode,
+		URL:           req.URL,
+		EventNames:    req.EventNames,
+		Status:        req.Status,
 	})
 	if err != nil {
 		apierror.Write(w, h.logger, err)

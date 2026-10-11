@@ -8,6 +8,23 @@ export type PixelProvider = "facebook" | "tiktok" | "snapchat" | "twitter" | "ge
 
 export const PIXEL_PROVIDERS: PixelProvider[] = ["facebook", "tiktok", "snapchat", "twitter", "generic"];
 
+/** Providers a pixel can be created with or switched to: every one that
+ * sends (pixel.Provider.Sends). Twitter/X's Conversions API needs OAuth
+ * 1.0a app credentials FLOX does not have — existing twitter pixels stay
+ * editable but send nothing. */
+export const SENDING_PIXEL_PROVIDERS: PixelProvider[] = ["facebook", "tiktok", "snapchat", "generic"];
+
+/** Providers that authenticate with the pixel's access token (all but
+ * generic, which calls its URL). */
+export function providerUsesToken(p: PixelProvider): boolean {
+  return p !== "generic";
+}
+
+/** Providers with a test event code (Snapchat has none). */
+export function providerHasTestCode(p: PixelProvider): boolean {
+  return p === "facebook" || p === "tiktok";
+}
+
 /** Display label i18n key per provider — the stored/wire value is always
  * the map key (raw, untranslated), same pattern as traffic-sources.ts's
  * SOURCE_TYPE_I18N_KEY. See docs/frontend-i18n.md. */
@@ -20,19 +37,10 @@ export const PIXEL_PROVIDER_I18N_KEY: Record<PixelProvider, string> = {
 };
 
 /**
- * Curated subset of the full §43 event model a conversion pixel plausibly
- * fires on — matches pixel.ValidEventTypes exactly. The full canonical
- * event enum belongs to the Conversions/Postbacks domain; don't duplicate
- * it here, just reference the same string values.
+ * The §43 events a pixel can report — matches pixel.ValidEventTypes
+ * exactly: the events FLOX produces that an ad platform optimizes for.
  */
-export const PIXEL_EVENT_TYPES = [
-  "PWA_INSTALL",
-  "CPA_HOLD",
-  "CPA_ACCEPT",
-  "CPA_REDEP",
-  "TG_JOIN",
-  "NOTIFICATION_SUBSCRIBE",
-] as const;
+export const PIXEL_EVENT_TYPES = ["PWA_INSTALL", "CPA_HOLD", "CPA_ACCEPT", "CPA_REDEP"] as const;
 
 export type PixelEventType = (typeof PIXEL_EVENT_TYPES)[number];
 
@@ -43,6 +51,15 @@ export type Pixel = {
   provider: PixelProvider;
   pixelId: string;
   events: PixelEventType[];
+  /** The token itself is never returned — only whether one is set and its
+   * last 4 characters. */
+  hasAccessToken: boolean;
+  accessTokenLast4: string;
+  testEventCode: string;
+  /** Generic provider's GET URL template (macros). */
+  url: string;
+  /** Per-event override of the platform event name. */
+  eventNames: Partial<Record<PixelEventType, string>>;
   status: PixelStatus;
   createdAt: string;
   updatedAt: string;
@@ -53,9 +70,33 @@ export type CreatePixelInput = {
   provider: PixelProvider;
   pixelId: string;
   events: PixelEventType[];
+  accessToken?: string;
+  testEventCode?: string;
+  url?: string;
+  eventNames?: Partial<Record<PixelEventType, string>>;
 };
 
+/** accessToken left out keeps the token; "" removes it. */
 export type UpdatePixelInput = Partial<CreatePixelInput> & { status?: PixelStatus };
+
+export type PixelDeliveryStatus = "queued" | "processing" | "success" | "retrying" | "dead";
+
+/** One row of a pixel's delivery log (pixel_deliveries). */
+export type PixelDelivery = {
+  id: string;
+  eventType: PixelEventType;
+  clickId: string;
+  status: PixelDeliveryStatus;
+  attemptCount: number;
+  responseStatusCode: number | null;
+  message: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+/** The platform event each FLOX event is sent as by default, per provider
+ * (pixel.DefaultEventNames) — the form's placeholders. */
+export type PixelEventNameDefaults = Partial<Record<PixelProvider, Partial<Record<PixelEventType, string>>>>;
 
 export function listPixels(): Promise<{ pixels: Pixel[]; total: number }> {
   return fetchAllPages<"pixels", Pixel>("/pixels", "pixels");
@@ -63,6 +104,14 @@ export function listPixels(): Promise<{ pixels: Pixel[]; total: number }> {
 
 export function getPixel(id: string): Promise<Pixel> {
   return apiFetch(`/pixels/${id}`);
+}
+
+export function listPixelDeliveries(id: string): Promise<{ deliveries: PixelDelivery[] }> {
+  return apiFetch(`/pixels/${id}/deliveries`);
+}
+
+export function getPixelEventNameDefaults(): Promise<{ defaults: PixelEventNameDefaults }> {
+  return apiFetch("/pixels/event-names");
 }
 
 export function createPixel(input: CreatePixelInput): Promise<Pixel> {

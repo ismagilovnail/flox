@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/ClickHouse/clickhouse-go/v2/lib/driver"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/ismagilovnail/flox/apps/internal/attribution"
@@ -20,6 +21,7 @@ import (
 	"github.com/ismagilovnail/flox/apps/internal/conversion"
 	"github.com/ismagilovnail/flox/apps/internal/event"
 	"github.com/ismagilovnail/flox/apps/internal/idgen"
+	"github.com/ismagilovnail/flox/apps/internal/pixel"
 	"github.com/ismagilovnail/flox/apps/internal/reattribute"
 	"github.com/ismagilovnail/flox/apps/internal/testpg"
 )
@@ -361,5 +363,44 @@ func TestRetryLooksUpOnlyItsOwnOrganizationsClicks(t *testing.T) {
 	}
 	if attempt, _, _, ok := h.retry(c.ID); !ok || attempt != 1 {
 		t.Errorf("retry = attempt %d present %v, want a miss (attempt 1)", attempt, ok)
+	}
+}
+
+// pixelProbe records the pixel events queued in the attribution's
+// transaction.
+type pixelProbe struct{ got []pixel.Event }
+
+func (p *pixelProbe) InsertTx(_ context.Context, _ pgx.Tx, ev pixel.Event) error {
+	p.got = append(p.got, ev)
+	return nil
+}
+
+// A conversion recorded without its click had no stream set, so its pixels
+// got nothing; attributed on retry, it is queued for them with the click's
+// stream set and the conversion's own id.
+func TestAttributedOnRetryQueuesPixelEvent(t *testing.T) {
+	h := newHarness(t)
+	probe := &pixelProbe{}
+	h.retrier.WithPixels(probe)
+	clickID := idgen.New()
+	c := h.unknownClick(clickID)
+	h.due(c.ID, 0)
+	streamSet := idgen.New()
+	if err := h.store.InsertBatch(chstore.WithBatchID(context.Background(), idgen.New()), []event.Event{{
+		ID: idgen.New(), Type: event.SourceClick, EventAt: h.conversionAt.Add(-time.Hour), OrganizationID: h.orgID,
+		CampaignID: h.campaignID, StreamSetID: streamSet, ClickID: clickID, IP: "203.0.113.5", UserAgent: "UA", FBClickID: "fb-r",
+	}}); err != nil {
+		t.Fatal(err)
+	}
+
+	h.run()
+
+	h.wantAttributed(c.ID, clickID)
+	if len(probe.got) != 1 {
+		t.Fatalf("pixel events = %d, want 1", len(probe.got))
+	}
+	ev := probe.got[0]
+	if ev.SourceEventID != c.ID || ev.StreamSetID != streamSet || ev.Type != event.CpaAccept || ev.IP != "203.0.113.5" || ev.FBClickID != "fb-r" {
+		t.Fatalf("pixel event = %+v", ev)
 	}
 }

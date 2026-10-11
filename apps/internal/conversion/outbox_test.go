@@ -12,6 +12,7 @@ import (
 	"github.com/ismagilovnail/flox/apps/internal/conversion"
 	"github.com/ismagilovnail/flox/apps/internal/event"
 	"github.com/ismagilovnail/flox/apps/internal/idgen"
+	"github.com/ismagilovnail/flox/apps/internal/pixel"
 	pbstore "github.com/ismagilovnail/flox/apps/internal/postback"
 )
 
@@ -225,5 +226,61 @@ func TestRecordStampsTheEventTime(t *testing.T) {
 	}
 	if !eventAt.Equal(received) {
 		t.Fatalf("event_at = %s, want the event's %s (created_at is %s)", eventAt.UTC(), received, createdAt.UTC())
+	}
+}
+
+// pixelProbe records the pixel event queued in the record's transaction,
+// and can fail it.
+type pixelProbe struct {
+	got      []pixel.Event
+	failWith error
+}
+
+func (p *pixelProbe) InsertTx(_ context.Context, _ pgx.Tx, ev pixel.Event) error {
+	p.got = append(p.got, ev)
+	return p.failWith
+}
+
+// Pixels: an attributed conversion's pixel event commits with it, carrying
+// the postbacks row id the platform deduplicates on; a failure to queue it
+// rolls the conversion back like any other part of the outbox.
+func TestRecordQueuesPixelEventInSameTransaction(t *testing.T) {
+	pool := mustPool(t)
+	ctx := context.Background()
+	orgID := seedOrg(t, ctx, pool)
+	networkID := seedNetwork(t, ctx, pool, orgID, false)
+	probe := &pixelProbe{}
+	store := conversion.NewPostgresStore(pool).WithDeliveries(pbstore.NewPostgresStore(pool)).WithPixels(probe)
+
+	clickID := idgen.New()
+	entry := successEntry(orgID, networkID, clickID, event.CpaAccept)
+	entry.Pixel = &pixel.Event{OrganizationID: orgID, StreamSetID: "ss-1", Type: event.CpaAccept, ClickID: clickID}
+	rec, err := store.Record(ctx, entry)
+	if err != nil || rec.Kind != conversion.ResultSuccess {
+		t.Fatalf("Record = %+v, %v", rec, err)
+	}
+	if len(probe.got) != 1 || probe.got[0].SourceEventID != rec.ID {
+		t.Fatalf("pixel events = %+v, want one with source event id %q", probe.got, rec.ID)
+	}
+	if _, err := store.Record(ctx, entry); err != nil {
+		t.Fatal(err)
+	}
+	if len(probe.got) != 1 {
+		t.Fatalf("a duplicate queued another pixel event (%d)", len(probe.got))
+	}
+
+	failing := conversion.NewPostgresStore(pool).WithDeliveries(pbstore.NewPostgresStore(pool)).WithPixels(&pixelProbe{failWith: errors.New("pixel queue down")})
+	clickID = idgen.New()
+	entry = successEntry(orgID, networkID, clickID, event.CpaAccept)
+	entry.Pixel = &pixel.Event{OrganizationID: orgID, StreamSetID: "ss-1", Type: event.CpaAccept, ClickID: clickID}
+	if _, err := failing.Record(ctx, entry); err == nil {
+		t.Fatal("Record succeeded although its pixel event could not be queued")
+	}
+	var rows int
+	if err := pool.QueryRow(ctx, `SELECT count(*) FROM postbacks WHERE click_id = $1`, clickID).Scan(&rows); err != nil {
+		t.Fatal(err)
+	}
+	if rows != 0 {
+		t.Fatalf("postbacks rows after a failed pixel queue = %d, want 0", rows)
 	}
 }
