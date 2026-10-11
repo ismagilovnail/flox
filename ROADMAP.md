@@ -136,7 +136,7 @@ scoped phase; none blocks anything that ships today.
 | SMS/email 2FA as an alternative delivery channel (TOTP only today) | `apps/internal/totp` |
 | Video upload/transcoding in Content Gallery (images only today) | needs a real ffmpeg/worker pipeline |
 | Pixels: Twitter/X sending (OAuth 1.0a), a "send test event" button, `event_source_url` | sending works for Facebook/TikTok/Snapchat/generic — `docs/pixels.md` "Not done" |
-| Campaign list has no Clicks/Conversions/Revenue/Spend/Profit/ROI columns; custom metrics' "Campaigns Table" target therefore shows nowhere | `apps/web/src/features/campaigns/campaign-columns.tsx` |
+| Campaign list: "Copy tracking URL" in the row (a campaign can have several links — which one to copy is undecided) | `apps/web/src/features/campaigns/campaign-row-actions.tsx` |
 | No Push section (sidebar §17, NOTIFICATION_* events) | not started |
 | Cost: no CSV import, no per-country spend | `apps/internal/cost` |
 | Organization base currency is stored but reports are always USD | §50-FX |

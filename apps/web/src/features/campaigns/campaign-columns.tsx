@@ -4,8 +4,14 @@ import type { TFunction } from "i18next";
 
 import { dataTableFeatures } from "@/components/ui/data-table";
 import { Badge } from "@/components/ui/badge";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Mono } from "@/components/ui/typography";
 import { RelativeTime } from "@/components/ui/relative-time";
-import type { Campaign, CampaignStatus } from "@/lib/api/campaigns";
+import type { CampaignStatus } from "@/lib/api/campaigns";
+import type { CustomMetric } from "@/lib/custom-metrics";
+import { evaluateFormula } from "@/lib/formula-engine";
+import { METRICS, formatMetric, metricLabel } from "@/features/analytics/registry";
+import { CAMPAIGN_TABLE_METRICS, type CampaignRow } from "@/features/campaigns/campaign-metrics";
 import { CampaignRowActions } from "@/features/campaigns/campaign-row-actions";
 import { TagBadgeList } from "@/features/tags/tag-badge-list";
 
@@ -16,17 +22,50 @@ const STATUS_VARIANT: Record<CampaignStatus, "success" | "warning" | "outline" |
   archived: "secondary",
 };
 
-/** Volume/revenue columns (clicks/conversions/revenue/spend/profit/ROI)
- * that the Phase 13-era mock table showed are gone here — the real
- * Campaign model carries none of them, and a per-row bulk analytics
- * rollup across every campaign in the list doesn't exist yet (only a
- * single-campaign query, apps/internal/analytics). See
- * docs/frontend-integration.md. sourceNameById resolves each row's
- * trafficSourceId to a display name — the real API returns only the id. */
+/** A metric cell: a skeleton while the period's report loads, nothing when
+ * it failed (the list shows the error above the table), else the value —
+ * "—" for a null, which is how a missing cost reads (CLAUDE.md #6). */
+function metricCell(row: CampaignRow, loading: boolean, value: (row: CampaignRow) => number | null, format: (v: number | null) => string) {
+  if (!row.metrics) return loading ? <Skeleton className="ml-auto h-4 w-12" /> : null;
+  return <Mono className="block text-right">{format(value(row))}</Mono>;
+}
+
+/** sourceNameById resolves each row's trafficSourceId to a display name —
+ * the real API returns only the id. The metric columns read the period's
+ * numbers each row carries (withCampaignMetrics); customMetrics are the
+ * ones published to the campaigns table, evaluated per row by the same
+ * formula engine as the report builder, on the table's metrics only. */
 export function campaignColumns(
   t: TFunction,
   sourceNameById: Record<string, string>,
-): ColumnDef<typeof dataTableFeatures, Campaign>[] {
+  customMetrics: CustomMetric[] = [],
+  metricsLoading = false,
+): ColumnDef<typeof dataTableFeatures, CampaignRow>[] {
+  const metricColumns: ColumnDef<typeof dataTableFeatures, CampaignRow>[] = [
+    ...CAMPAIGN_TABLE_METRICS.map((key): ColumnDef<typeof dataTableFeatures, CampaignRow> => {
+      const format = METRICS.find((m) => m.key === key)!.format;
+      return {
+        id: key,
+        header: key === "cost" ? t("columns.spend", { ns: "campaigns" }) : metricLabel(t, key),
+        accessorFn: (row) => row.metrics?.[key] ?? null,
+        sortUndefined: "last",
+        cell: ({ row }) => metricCell(row.original, metricsLoading, (r) => r.metrics?.[key] ?? null, (v) => formatMetric(v, format)),
+      };
+    }),
+    ...customMetrics.map((cm): ColumnDef<typeof dataTableFeatures, CampaignRow> => ({
+      id: `cm_${cm.id}`,
+      header: cm.name,
+      accessorFn: (row) => (row.metrics ? evaluateFormula(cm.formula, row.metrics) : null),
+      cell: ({ row }) =>
+        metricCell(
+          row.original,
+          metricsLoading,
+          (r) => (r.metrics ? evaluateFormula(cm.formula, r.metrics) : null),
+          (v) => formatMetric(v, cm.format),
+        ),
+    })),
+  ];
+
   return [
     {
       accessorKey: "name",
@@ -58,6 +97,7 @@ export function campaignColumns(
       // on every render, so it always reflects the current sourceNameById.
       cell: ({ row }) => sourceNameById[row.original.trafficSourceId] ?? row.original.trafficSourceId,
     },
+    ...metricColumns,
     {
       id: "tags",
       header: t("columns.tags", { ns: "campaigns" }),

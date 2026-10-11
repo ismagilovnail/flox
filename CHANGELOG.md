@@ -5,6 +5,23 @@ per-phase, matching `CLAUDE.md`'s phase protocol. The one exception is
 [Between phases], below: spec amendments and the code changes that follow from
 them land between phases and would otherwise be invisible here.
 
+## [Phase 6b] — Campaign list metrics
+
+Closes gap 2 of `docs/spec-conformance-2026-10-11.md`.
+
+- The campaign list shows Clicks, Conversions, Revenue, Spend, Profit and ROI for a period —
+  last 30 days by default, in the organization's time zone, with the dashboard's date-basis
+  switch and cost time-zone notice. One `/analytics/report` call grouped by `campaign`; no new
+  backend and no second metric implementation.
+- A campaign with no report row had no events and no spend: 0 traffic, Spend/Profit/ROI "—"
+  (CLAUDE.md #6). The unfiltered report already includes campaigns with spend but no clicks.
+- Custom metrics published to "Campaigns Table" appear as columns, evaluated by the report
+  builder's formula engine on the table's six metrics — the same set
+  `SURFACE_AVAILABLE_METRIC_IDS.campaigns_table` allows (a test keeps the two equal).
+- Loading: skeleton cells; a failed report shows an error with retry above the table.
+- Not done: "Copy tracking URL" in the row (ROADMAP). Not verified in a browser (Chrome
+  extension disconnected); the report call was checked against the running API.
+
 ## [Phase 13b] — Pixels send events (server-side)
 
 Closes gap 1 of `docs/spec-conformance-2026-10-11.md`: pixels were saved and attached to

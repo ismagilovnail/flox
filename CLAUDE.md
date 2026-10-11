@@ -19,23 +19,22 @@ referenced below as §N).
 ## CURRENT STATE — UPDATE THIS EVERY PHASE
 
 ```
-CURRENT PHASE : PHASE 13b — PIXELS SEND EVENTS (closed)
-STATUS        : Tech and marketer audits closed; spec conformance check
-                2026-10-11 (docs/spec-conformance-2026-10-11.md) found 15
-                gaps. Gap 1 (pixels never fire) closed: server-side sending
-                (internal/pixelsend) to Facebook CAPI / TikTok Events API /
-                Snapchat CAPI / generic URL via pixel_deliveries; tokens
-                under PIXEL_ENCRYPTION_KEY; twitter not creatable. Browser
-                pass not done (Chrome extension disconnected) — API checked
-                with curl. Left: gaps 2–15 of the conformance doc, prod
-                restore drill after deployment.
-LAST COMMIT   : feat(pixels): server-side event sending.
+CURRENT PHASE : PHASE 6b — CAMPAIGN LIST METRICS (closed)
+STATUS        : Spec conformance gaps (docs/spec-conformance-2026-10-11.md):
+                1 pixels (server-side sending, internal/pixelsend) and 2
+                campaign list metrics (period report by campaign + custom
+                metrics "Campaigns Table") closed. Browser pass of both not
+                done (Chrome extension disconnected) — API checked with curl.
+                Left: gaps 3–15, prod restore drill after deployment.
+LAST COMMIT   : feat(campaigns): metrics in the campaign list.
 UNCOMMITTED   : none expected. Dev DB at migration 00069, CH schema 015.
-NEXT          : wait for the user — the next gap (campaign list metrics is
-                gap 2). CI (DO1) is the user's own decision — do not set it
-                up. Run go test with the full env line AND check e2e did not
-                skip (memory: flox-full-test-env); chconn's
-                TestLimitsStopAHeavyQuery flakes under the full parallel run.
+NEXT          : wait for the user — next gap is 3 (postlanding serving +
+                postlanding/network dimensions). Browser-check pixels and the
+                campaign list once the extension is connected. CI (DO1) is
+                the user's own decision — do not set it up. Run go test with
+                the full env line AND check e2e did not skip (memory:
+                flox-full-test-env); chconn's TestLimitsStopAHeavyQuery
+                flakes under the full parallel run.
 ```
 
 > At the end of every phase: update the four lines above, add a CHANGELOG entry,

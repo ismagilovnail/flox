@@ -7,14 +7,16 @@
     "emptyDescription": "Create your first campaign to start routing traffic.",
     "loading": "Loading campaigns…",
     "loadError": "Couldn't load campaigns",
-    "editTagsButton": "Edit Tags"
+    "editTagsButton": "Edit Tags",
+    "metricsError": "Couldn't load the period's numbers"
   },
   "columns": {
     "name": "Name",
     "status": "Status",
     "source": "Source",
     "tags": "Tags",
-    "updated": "Updated"
+    "updated": "Updated",
+    "spend": "Spend"
   },
   "detail": {
     "loading": "Loading campaign…",
