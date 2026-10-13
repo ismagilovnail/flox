@@ -120,7 +120,9 @@
     "interactiveElementsPlaceholder": "Покупки в приложении",
     "updatedDateLabel": "Дата обновления",
     "containsAdsLabel": "Есть реклама",
-    "inAppPurchasesLabel": "Покупки в приложении"
+    "inAppPurchasesLabel": "Покупки в приложении",
+    "pushEnabledLabel": "Запрашивать уведомления",
+    "pushEnabledHint": "При запуске установленное приложение предложит посетителю разрешить push-уведомления для рассылок из раздела Push."
   },
   "preview": {
     "title": "Живое превью",

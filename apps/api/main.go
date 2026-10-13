@@ -63,6 +63,7 @@ import (
 	"github.com/ismagilovnail/flox/apps/internal/postbacklogs"
 	"github.com/ismagilovnail/flox/apps/internal/postgres"
 	"github.com/ismagilovnail/flox/apps/internal/postlanding"
+	"github.com/ismagilovnail/flox/apps/internal/push"
 	"github.com/ismagilovnail/flox/apps/internal/pwa"
 	"github.com/ismagilovnail/flox/apps/internal/ratelimit"
 	"github.com/ismagilovnail/flox/apps/internal/rediscache"
@@ -517,6 +518,20 @@ func buildServer(ctx context.Context, cfg config.Config, logger *slog.Logger, re
 		r.Use(tenantMiddleware)
 		r.Use(readGate("custom_metric.read"))
 		customMetricsHandler.Register(r)
+	})
+
+	// Web Push (internal/push, docs/push.md): subscribers and broadcasts.
+	// The VAPID keys live with the worker; the api only needs to know a
+	// pair exists, to refuse broadcasts nothing could send.
+	pushHandler := push.NewHandler(
+		push.NewService(push.NewRepository(db), cfg.PushVAPIDPublicKey != ""),
+		authSvc.RequirePermission("push.write", logger),
+		logger,
+	)
+	srv.Mux().Route("/push", func(r chi.Router) {
+		r.Use(tenantMiddleware)
+		r.Use(readGate("push.read"))
+		pushHandler.Register(r)
 	})
 
 	apiKeyHandler := apikey.NewHandler(

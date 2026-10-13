@@ -20,12 +20,12 @@ type Repository struct {
 
 func NewRepository(db *pgxpool.Pool) *Repository { return &Repository{db: db} }
 
-const selectColumns = `id, organization_id, name, short_name, theme_color, background_color, theme_auto, show_header, show_bottom_nav, header_title, header_logo_url, icon_url, start_url, bounce_in_app_webview, developer, description, rating, rating_count, downloads_label, size_mb, screenshots, whats_new, rating_stars_5, rating_stars_4, rating_stars_3, rating_stars_2, rating_stars_1, version, age_rating, category, interactive_elements, contains_ads, in_app_purchases, to_char(updated_date, 'YYYY-MM-DD'), status, created_at, updated_at`
+const selectColumns = `id, organization_id, name, short_name, theme_color, background_color, theme_auto, show_header, show_bottom_nav, push_enabled, header_title, header_logo_url, icon_url, start_url, bounce_in_app_webview, developer, description, rating, rating_count, downloads_label, size_mb, screenshots, whats_new, rating_stars_5, rating_stars_4, rating_stars_3, rating_stars_2, rating_stars_1, version, age_rating, category, interactive_elements, contains_ads, in_app_purchases, to_char(updated_date, 'YYYY-MM-DD'), status, created_at, updated_at`
 
 func scanPwa(row pgx.Row) (Pwa, error) {
 	var p Pwa
 	err := row.Scan(
-		&p.ID, &p.OrganizationID, &p.Name, &p.ShortName, &p.ThemeColor, &p.BackgroundColor, &p.ThemeAuto, &p.ShowHeader, &p.ShowBottomNav, &p.HeaderTitle, &p.HeaderLogoURL,
+		&p.ID, &p.OrganizationID, &p.Name, &p.ShortName, &p.ThemeColor, &p.BackgroundColor, &p.ThemeAuto, &p.ShowHeader, &p.ShowBottomNav, &p.PushEnabled, &p.HeaderTitle, &p.HeaderLogoURL,
 		&p.IconURL, &p.StartURL, &p.BounceInAppWebview, &p.Developer, &p.Description,
 		&p.Rating, &p.RatingCount, &p.DownloadsLabel, &p.SizeMB, &p.Screenshots, &p.WhatsNew,
 		&p.RatingStars5, &p.RatingStars4, &p.RatingStars3, &p.RatingStars2, &p.RatingStars1,
@@ -77,14 +77,14 @@ func (r *Repository) GetByID(ctx context.Context, orgID, id string) (Pwa, error)
 
 func (r *Repository) Create(ctx context.Context, id, orgID string, in CreateInput) (Pwa, error) {
 	row := r.db.QueryRow(ctx, `
-		INSERT INTO pwas (id, organization_id, name, short_name, theme_color, background_color, theme_auto, show_header, show_bottom_nav, header_title, header_logo_url, icon_url, start_url, bounce_in_app_webview, developer, description, rating, rating_count, downloads_label, size_mb, screenshots, whats_new, rating_stars_5, rating_stars_4, rating_stars_3, rating_stars_2, rating_stars_1, version, age_rating, category, interactive_elements, contains_ads, in_app_purchases, updated_date)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34::date)
+		INSERT INTO pwas (id, organization_id, name, short_name, theme_color, background_color, theme_auto, show_header, show_bottom_nav, header_title, header_logo_url, icon_url, start_url, bounce_in_app_webview, developer, description, rating, rating_count, downloads_label, size_mb, screenshots, whats_new, rating_stars_5, rating_stars_4, rating_stars_3, rating_stars_2, rating_stars_1, version, age_rating, category, interactive_elements, contains_ads, in_app_purchases, updated_date, push_enabled)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34::date, $35)
 		RETURNING `+selectColumns,
 		id, orgID, in.Name, in.ShortName, in.ThemeColor, in.BackgroundColor, in.ThemeAuto, in.ShowHeader, in.ShowBottomNav, in.HeaderTitle, in.HeaderLogoURL, in.IconURL, in.StartURL, in.BounceInAppWebview,
 		in.Developer, in.Description, in.Rating, in.RatingCount, in.DownloadsLabel, in.SizeMB,
 		in.Screenshots, in.WhatsNew, in.RatingStars5, in.RatingStars4, in.RatingStars3, in.RatingStars2, in.RatingStars1,
 		in.Version, in.AgeRating, in.Category, in.InteractiveElements,
-		in.ContainsAds, in.InAppPurchases, in.UpdatedDate,
+		in.ContainsAds, in.InAppPurchases, in.UpdatedDate, in.PushEnabled,
 	)
 	return scanPwa(row)
 }
@@ -117,6 +117,9 @@ func (r *Repository) Update(ctx context.Context, orgID, id string, in UpdateInpu
 	}
 	if in.ShowBottomNav != nil {
 		sets = append(sets, "show_bottom_nav = "+arg(*in.ShowBottomNav))
+	}
+	if in.PushEnabled != nil {
+		sets = append(sets, "push_enabled = "+arg(*in.PushEnabled))
 	}
 	if in.HeaderTitle != nil {
 		sets = append(sets, "header_title = "+arg(*in.HeaderTitle))

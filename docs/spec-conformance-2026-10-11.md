@@ -51,6 +51,13 @@
   сеть постбэка. История заполнена один раз по `offer_id`. Измерение
   `network` в отчётах, «Посмотреть статистику» в списке сетей.
   `docs/analytics-report-api.md`.
+- **2026-10-13 — Push (расхождение 5).** Раздел Push в меню: подписки из
+  установленных PWA (переключатель у PWA, страница запроса при запуске,
+  NOTIFICATION_REQUEST/SUBSCRIBE/DECLINE), рассылки «отправить сейчас» на
+  сегмент с очередью в worker через Web Push (VAPID), счётчики
+  доставлено/ошибки/открыто, NOTIFICATION_CLICK и UNSUBSCRIBE. Права
+  `push.read`/`push.write`. Без отложенных и триггерных рассылок и без
+  push-метрик в отчётах. `docs/push.md`.
 
 ## По фазам
 
@@ -59,7 +66,7 @@
 | 0 Repository inspection | ✔ | `ARCHITECTURE.md` §6-SHARED: Strategy A | — |
 | 1 Product foundation | ✔ | README, ARCHITECTURE, PRODUCT, ROADMAP, `.env.example` | — |
 | 2 Design system | ◐ | Компоненты §16 в `components/ui` (Combobox = `searchable-select`, Drawer = `sheet`, CommandMenu = `command`) | Нет отдельного **DataGrid** (только DataTable) — мелочь |
-| 3 Application shell | ◐ | Сайдбар, ⌘K, workspace selector, уведомления, user menu, mobile nav | В сайдбаре нет **Reports** (роль играет Analytics) и **Push** — раздела push-уведомлений нет вовсе |
+| 3 Application shell | ◐ | Сайдбар (с Push с 2026-10-13), ⌘K, workspace selector, уведомления, user menu, mobile nav | В сайдбаре нет **Reports** (роль играет Analytics) |
 | 4 Dashboard | ✔ | KPI, 4 графика, 4 «Top»-таблицы, «—» без расхода | — |
 | 5 Analytics | ✔ | Таблица/линия/столбцы/воронка из 8 шагов §43, все 16 измерений §19 (плюс `stream_set`; `postlanding` и `network` с 2026-10-13), все метрики | — |
 | 6 Campaigns | ◐ | Список с метриками за период (с 2026-10-11), создание, детальная, настройки; Open/Pause/Duplicate/Archive | Copy tracking URL — только на странице кампании, не в строке |
@@ -86,7 +93,7 @@
 | 20 Classifier | ✔ | Все поля, Geo/ASN/Bot за интерфейсами | — |
 | 21 Tracking engine | ✔ | Отдельный бинарник, асинхронная запись, p50/p95 в бюджете | — |
 | 42 Tracking link | ◐ | click_id (ULID), utm, sub1–10, fbclid/ttclid/external_click_id | Нет диагностики **«% трафика с пустыми sub»** — `Subs.SubCount` есть, но в отчёты не выведен |
-| 43 Event model | ◐ | Все ~20 типов в enum и схеме ClickHouse | Генерируются 9 (SOURCE_CLICK/FILTER, LAND_VIEW/CLICK, POSTLANDING_VIEW/CLICK, PWA_VIEW/OPEN/INSTALL); **IOS_INSTALL, NOTIFICATION_*, TG_*** не создаёт никто |
+| 43 Event model | ◐ | Все ~20 типов в enum и схеме ClickHouse | Генерируются 14 (SOURCE_CLICK/FILTER, LAND_VIEW/CLICK, POSTLANDING_VIEW/CLICK, PWA_VIEW/OPEN/INSTALL, NOTIFICATION_REQUEST/SUBSCRIBE/DECLINE/UNSUBSCRIBE/CLICK); **IOS_INSTALL, TG_*** не создаёт никто |
 | 22 Attribution | ✔ | click_id / external_click_id, без выдумывания, повторная атрибуция | — |
 | 23 Conversion engine | ✔ | Ключ (click_id, status, event_ref), progression, acceptDuplicates, FX на дату события, outbox | Быстрый путь Redis хранит последний статус, дедуп — уникальный индекс PG (корректно; Redis-ключа дедупа как такового нет) |
 | 24 Postback engine | ✔ | Очередь, ретраи, dead-letter, все 6 статусов, справедливая выдача | — |
@@ -116,8 +123,9 @@
    фаза 5).~~ Закрыто 2026-10-13.
 4. ~~Измерение `network` и «View statistics» у сетей (фаза 5, §27.5).~~
    Закрыто 2026-10-13.
-5. Нет раздела Push (сайдбар §17, события NOTIFICATION_*, «Push» в категориях
-   кастомных метрик).
+5. ~~Нет раздела Push (сайдбар §17, события NOTIFICATION_*).~~ Закрыто
+   2026-10-13 (подписки и рассылки; push-метрики в кастомных метриках —
+   по-прежнему только каталог).
 
 **Неполные (функция есть, урезана):**
 

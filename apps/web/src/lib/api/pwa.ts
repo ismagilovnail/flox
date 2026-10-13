@@ -17,6 +17,8 @@ export type Pwa = {
   showHeader: boolean;
   /** Show the install page's bottom bar with the menu buttons. */
   showBottomNav: boolean;
+  /** The installed app asks its visitor for push notifications on launch (docs/push.md). */
+  pushEnabled: boolean;
   /** Own title/logo for the top bar; empty = "Apps" and the default mark. */
   headerTitle: string;
   headerLogoUrl: string;

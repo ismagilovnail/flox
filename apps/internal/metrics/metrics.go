@@ -302,6 +302,14 @@ var (
 		Help:      "Pixel event delivery attempts to ad platforms, by provider and outcome (success|retrying|dead).",
 	}, []string{"provider", "outcome"})
 
+	// PushDeliveriesTotal: apps/internal/pushsend.Deliverer — push
+	// notification send attempts by outcome (delivered|gone|retry|failed).
+	PushDeliveriesTotal = promauto.NewCounterVec(prometheus.CounterOpts{
+		Namespace: namespace,
+		Name:      "push_deliveries_total",
+		Help:      "Push notification send attempts, by outcome (delivered|gone|retry|failed).",
+	}, []string{"outcome"})
+
 	// AnalyticsQueryLatencySeconds: apps/internal/analytics — endpoint
 	// names the specific query (e.g. "campaign_daily").
 	AnalyticsQueryLatencySeconds = promauto.NewHistogramVec(prometheus.HistogramOpts{

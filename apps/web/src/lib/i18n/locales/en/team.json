@@ -39,6 +39,8 @@
     "report_preset_write": "Edit report presets",
     "referral_read": "View the referral program",
     "referral_write": "Manage referral payouts and adjustments",
+    "push_read": "View push subscribers and broadcasts",
+    "push_write": "Send push broadcasts",
     "team_read": "View the team",
     "team_write": "Invite and manage members",
     "settings_write": "Change organization settings, domains, API keys, integrations, alerts"

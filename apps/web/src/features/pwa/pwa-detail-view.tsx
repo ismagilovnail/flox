@@ -20,6 +20,7 @@ function toFormValues(pwa: Pwa, comments: PwaComment[]): PwaFormValues {
     themeAuto: pwa.themeAuto,
     showHeader: pwa.showHeader,
     showBottomNav: pwa.showBottomNav,
+    pushEnabled: pwa.pushEnabled,
     headerTitle: pwa.headerTitle,
     headerLogoUrl: pwa.headerLogoUrl,
     iconUrl: pwa.iconUrl,

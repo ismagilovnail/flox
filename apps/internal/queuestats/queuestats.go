@@ -29,6 +29,7 @@ var queues = []queue{
 	{"postback_attempt_queue", "status", []string{"queued", "processing", "dead"}, []string{"queued"}},
 	{"postback_deliveries", "delivery_status", []string{"queued", "retrying", "processing"}, []string{"queued", "retrying"}},
 	{"pixel_deliveries", "delivery_status", []string{"queued", "retrying", "processing"}, []string{"queued", "retrying"}},
+	{"push_deliveries", "delivery_status", []string{"queued", "retrying", "processing"}, []string{"queued", "retrying"}},
 }
 
 // Poll refreshes the gauges every interval until ctx is done, starting now.

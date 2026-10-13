@@ -39,6 +39,9 @@ type Pwa struct {
 	ShowHeader bool `json:"showHeader"`
 	// ShowBottomNav: the bottom bar with the menu buttons.
 	ShowBottomNav bool `json:"showBottomNav"`
+	// PushEnabled: the installed app asks its visitor for notifications
+	// on launch (docs/push.md).
+	PushEnabled bool `json:"pushEnabled"`
 	// HeaderTitle/HeaderLogoURL brand the top bar; empty = default "Apps" and mark.
 	HeaderTitle   string `json:"headerTitle"`
 	HeaderLogoURL string `json:"headerLogoUrl"`
@@ -103,6 +106,7 @@ type CreateInput struct {
 	ThemeAuto           bool
 	ShowHeader          bool
 	ShowBottomNav       bool
+	PushEnabled         bool
 	HeaderTitle         string
 	HeaderLogoURL       string
 	IconURL             string
@@ -147,6 +151,7 @@ type UpdateInput struct {
 	ThemeAuto           *bool
 	ShowHeader          *bool
 	ShowBottomNav       *bool
+	PushEnabled         *bool
 	HeaderTitle         *string
 	HeaderLogoURL       *string
 	IconURL             *string

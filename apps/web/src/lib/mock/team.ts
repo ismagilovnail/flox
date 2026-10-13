@@ -46,6 +46,8 @@ export type Permission =
   | "report_preset.write"
   | "referral.read"
   | "referral.write"
+  | "push.read"
+  | "push.write"
   | "team.read"
   | "team.write"
   | "settings.write";
@@ -66,6 +68,8 @@ export const PERMISSIONS: Permission[] = [
   "report_preset.write",
   "referral.read",
   "referral.write",
+  "push.read",
+  "push.write",
   "team.read",
   "team.write",
   "settings.write",
@@ -81,6 +85,7 @@ const UNIVERSAL_READS: Permission[] = [
   "custom_metric.read",
   "report_preset.read",
   "referral.read",
+  "push.read",
 ];
 
 export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
@@ -96,6 +101,7 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     "content.write",
     "custom_metric.write",
     "report_preset.write",
+    "push.write",
     "team.read",
   ],
   Buyer: [...UNIVERSAL_READS, "campaign.write", "offer.read", "source.read", "source.write"],

@@ -26,6 +26,8 @@ import (
 	"net"
 	"strings"
 	"time"
+
+	"github.com/ismagilovnail/flox/apps/internal/event"
 )
 
 // MaxAge bounds how long after the landing was served its click link is
@@ -205,4 +207,41 @@ func ExpandSubs(subs []string) [10]string {
 	var out [10]string
 	copy(out[:], subs)
 	return out
+}
+
+// Event is an event of type t at at on the link's journey: its routing and
+// attribution context. Geo and device are the caller's to fill in — the
+// tracker re-derives them from the request, a push send from the
+// subscription.
+func (c Claims) Event(t event.Type, at time.Time) event.Event {
+	return event.Event{
+		Type:           t,
+		EventAt:        at,
+		OrganizationID: c.OrganizationID,
+		CampaignID:     c.CampaignID,
+		ClickID:        c.ClickID,
+
+		StreamSetID:     c.StreamSetID,
+		FlowID:          c.FlowID,
+		Destination:     c.Destination,
+		ConfigVersion:   c.ConfigVersion,
+		LandingID:       c.LandingID,
+		OfferID:         c.OfferID,
+		NetworkID:       c.NetworkID,
+		PwaID:           c.PwaID,
+		PostlandingID:   c.PostlandingID,
+		TrafficSourceID: c.TrafficSourceID,
+		Referrer:        c.Referrer,
+
+		UTMSource:   c.UTMSource,
+		UTMMedium:   c.UTMMedium,
+		UTMCampaign: c.UTMCampaign,
+		UTMContent:  c.UTMContent,
+		UTMTerm:     c.UTMTerm,
+		Subs:        ExpandSubs(c.Subs),
+
+		ExternalClickID: c.ExternalClickID,
+		FBClickID:       c.FBClickID,
+		TTClickID:       c.TTClickID,
+	}
 }

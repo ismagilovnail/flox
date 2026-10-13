@@ -17,7 +17,8 @@
 //
 // pixel_deliveries rows that are finished (sent or dead-lettered) carry the
 // visitor's IP and user agent the platform matched on; they go after
-// RETENTION_PIXEL_DELIVERIES_DAYS (PixelDeliveries).
+// RETENTION_PIXEL_DELIVERIES_DAYS (FinishedDeliveries; push_deliveries the
+// same under RETENTION_PUSH_DELIVERIES_DAYS).
 //
 // ClickHouse: see chstore.SetPostbackLogTTL.
 //
@@ -101,17 +102,26 @@ func (f *FailedPostbacks) RunLoop(ctx context.Context, interval time.Duration) {
 	}
 }
 
-// PixelDeliveries deletes finished pixel_deliveries rows once they are
-// older than Age. Rows still to send are never deleted.
-type PixelDeliveries struct {
+// Delivery queues FinishedDeliveries expires: tables shaped like
+// pixel_deliveries (00069) and push_deliveries (00070).
+const (
+	PixelDeliveriesTable = "pixel_deliveries"
+	PushDeliveriesTable  = "push_deliveries"
+)
+
+// FinishedDeliveries deletes a delivery queue's finished rows (sent or
+// dead-lettered) once they are older than Age. Rows still to send are
+// never deleted. Table is one of the constants above, never input.
+type FinishedDeliveries struct {
 	DB     *pgxpool.Pool
+	Table  string
 	Age    time.Duration
 	Batch  int // 0: DefaultBatch
 	Logger *slog.Logger
 }
 
 // RunOnce deletes every expired row, batch by batch, and returns how many.
-func (p *PixelDeliveries) RunOnce(ctx context.Context) (int64, error) {
+func (p *FinishedDeliveries) RunOnce(ctx context.Context) (int64, error) {
 	batch := p.Batch
 	if batch <= 0 {
 		batch = DefaultBatch
@@ -119,17 +129,17 @@ func (p *PixelDeliveries) RunOnce(ctx context.Context) (int64, error) {
 	var total int64
 	for {
 		tag, err := p.DB.Exec(ctx, `
-			DELETE FROM pixel_deliveries WHERE id IN (
-				SELECT id FROM pixel_deliveries
+			DELETE FROM `+p.Table+` WHERE id IN (
+				SELECT id FROM `+p.Table+`
 				WHERE delivery_status IN ('success', 'dead') AND created_at < now() - make_interval(secs => $1)
 				LIMIT $2)`,
 			p.Age.Seconds(), batch)
 		if err != nil {
-			return total, fmt.Errorf("retention: deleting pixel deliveries: %w", err)
+			return total, fmt.Errorf("retention: deleting %s: %w", p.Table, err)
 		}
 		n := tag.RowsAffected()
 		total += n
-		metrics.RetentionDeletedTotal.WithLabelValues("pixel_deliveries").Add(float64(n))
+		metrics.RetentionDeletedTotal.WithLabelValues(p.Table).Add(float64(n))
 		if n < int64(batch) {
 			return total, nil
 		}
@@ -137,16 +147,16 @@ func (p *PixelDeliveries) RunOnce(ctx context.Context) (int64, error) {
 }
 
 // RunLoop runs RunOnce every interval until ctx is done.
-func (p *PixelDeliveries) RunLoop(ctx context.Context, interval time.Duration) {
+func (p *FinishedDeliveries) RunLoop(ctx context.Context, interval time.Duration) {
 	t := time.NewTicker(interval)
 	defer t.Stop()
 	for {
 		n, err := p.RunOnce(ctx)
 		switch {
 		case err != nil && ctx.Err() == nil:
-			p.Logger.Warn("pixel delivery retention run failed", "error", err)
+			p.Logger.Warn("delivery retention run failed", "table", p.Table, "error", err)
 		case n > 0:
-			p.Logger.Info("expired pixel deliveries deleted", "rows", n, "older_than", p.Age.String())
+			p.Logger.Info("expired deliveries deleted", "table", p.Table, "rows", n, "older_than", p.Age.String())
 		}
 		select {
 		case <-ctx.Done():

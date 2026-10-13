@@ -134,6 +134,8 @@ type PwaPage struct {
 	ShowHeader bool
 	// ShowBottomNav: render the bottom bar with the menu buttons.
 	ShowBottomNav bool
+	// PushEnabled: the installed app asks for notifications on launch.
+	PushEnabled bool
 	// HeaderTitle/HeaderLogoURL brand the top bar; empty = default.
 	HeaderTitle, HeaderLogoURL string
 	Status                     string
@@ -534,7 +536,7 @@ func (s *Store) LoadLandingPage(ctx context.Context, orgID, landingID string) (L
 func (s *Store) LoadPwaPage(ctx context.Context, orgID, pwaID string) (PwaPage, error) {
 	var p PwaPage
 	err := s.db.QueryRow(ctx, `
-		SELECT name, short_name, theme_color, background_color, theme_auto, show_header, show_bottom_nav, header_title, header_logo_url, icon_url, developer, description,
+		SELECT name, short_name, theme_color, background_color, theme_auto, show_header, show_bottom_nav, push_enabled, header_title, header_logo_url, icon_url, developer, description,
 		       screenshots, bounce_in_app_webview, status,
 		       whats_new, version, category, interactive_elements, contains_ads, in_app_purchases,
 		       COALESCE(to_char(updated_date, 'YYYY-MM-DD'), ''),
@@ -545,7 +547,7 @@ func (s *Store) LoadPwaPage(ctx context.Context, orgID, pwaID string) (PwaPage, 
 		FROM pwas
 		WHERE id = $1 AND organization_id = $2`,
 		pwaID, orgID,
-	).Scan(&p.Name, &p.ShortName, &p.ThemeColor, &p.BackgroundColor, &p.ThemeAuto, &p.ShowHeader, &p.ShowBottomNav, &p.HeaderTitle, &p.HeaderLogoURL, &p.IconURL, &p.Developer, &p.Description,
+	).Scan(&p.Name, &p.ShortName, &p.ThemeColor, &p.BackgroundColor, &p.ThemeAuto, &p.ShowHeader, &p.ShowBottomNav, &p.PushEnabled, &p.HeaderTitle, &p.HeaderLogoURL, &p.IconURL, &p.Developer, &p.Description,
 		&p.Screenshots, &p.BounceInAppWebview, &p.Status,
 		&p.WhatsNew, &p.Version, &p.Category, &p.InteractiveElements, &p.ContainsAds, &p.InAppPurchases, &p.UpdatedDate,
 		&p.Rating, &p.RatingCount, &p.DownloadsLabel, &p.SizeMB, &p.AgeRating,

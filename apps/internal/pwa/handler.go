@@ -117,6 +117,7 @@ type createRequest struct {
 	ThemeAuto           bool     `json:"themeAuto"`
 	ShowHeader          *bool    `json:"showHeader"`
 	ShowBottomNav       *bool    `json:"showBottomNav"`
+	PushEnabled         bool     `json:"pushEnabled"`
 	HeaderTitle         string   `json:"headerTitle"`
 	HeaderLogoURL       string   `json:"headerLogoUrl"`
 	IconURL             string   `json:"iconUrl"`
@@ -161,6 +162,7 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 		ThemeAuto:           req.ThemeAuto,
 		ShowHeader:          defaultOn(req.ShowHeader),
 		ShowBottomNav:       defaultOn(req.ShowBottomNav),
+		PushEnabled:         req.PushEnabled,
 		HeaderTitle:         req.HeaderTitle,
 		HeaderLogoURL:       req.HeaderLogoURL,
 		IconURL:             req.IconURL,
@@ -202,6 +204,7 @@ type updateRequest struct {
 	ThemeAuto           *bool     `json:"themeAuto"`
 	ShowHeader          *bool     `json:"showHeader"`
 	ShowBottomNav       *bool     `json:"showBottomNav"`
+	PushEnabled         *bool     `json:"pushEnabled"`
 	HeaderTitle         *string   `json:"headerTitle"`
 	HeaderLogoURL       *string   `json:"headerLogoUrl"`
 	IconURL             *string   `json:"iconUrl"`
@@ -247,6 +250,7 @@ func (h *Handler) update(w http.ResponseWriter, r *http.Request) {
 		ThemeAuto:           req.ThemeAuto,
 		ShowHeader:          req.ShowHeader,
 		ShowBottomNav:       req.ShowBottomNav,
+		PushEnabled:         req.PushEnabled,
 		HeaderTitle:         req.HeaderTitle,
 		HeaderLogoURL:       req.HeaderLogoURL,
 		IconURL:             req.IconURL,

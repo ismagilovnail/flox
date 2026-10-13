@@ -108,6 +108,7 @@ export function buildPwaFormSchema(t: TFunction) {
     themeAuto: z.boolean(),
     showHeader: z.boolean(),
     showBottomNav: z.boolean(),
+    pushEnabled: z.boolean(),
     headerTitle: z
       .string()
       .max(40, t("form.validation.headerTitleMax", { ns: "pwa" })),
@@ -244,6 +245,7 @@ export function PwaForm({
       themeAuto: false,
       showHeader: true,
       showBottomNav: true,
+      pushEnabled: false,
       headerTitle: "",
       headerLogoUrl: "",
       iconUrl: "",
@@ -675,6 +677,24 @@ export function PwaForm({
                     checked={field.value}
                     onCheckedChange={field.onChange}
                     aria-label={t("form.showBottomNavAria", { ns: "pwa" })}
+                  />
+                )}
+              />
+            </div>
+
+            <div className="flex items-center justify-between rounded-md border border-border p-2.5">
+              <div>
+                <p className="text-sm font-medium">{t("form.pushEnabledLabel", { ns: "pwa" })}</p>
+                <p className="text-xs text-muted-foreground">{t("form.pushEnabledHint", { ns: "pwa" })}</p>
+              </div>
+              <Controller
+                control={control}
+                name="pushEnabled"
+                render={({ field }) => (
+                  <Switch
+                    checked={field.value}
+                    onCheckedChange={field.onChange}
+                    aria-label={t("form.pushEnabledLabel", { ns: "pwa" })}
                   />
                 )}
               />

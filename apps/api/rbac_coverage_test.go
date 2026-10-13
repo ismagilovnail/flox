@@ -54,6 +54,7 @@ var deliberatelyOpen = map[string]string{
 	"analytics.costTimezones":   "read-only query, POST only for its body",
 	"analytics.dimensionValues": "read-only query, POST only for its body",
 	"routingsimulate.simulate":  "in-memory simulation, persists nothing",
+	"push.audience":             "read-only count, POST only for its body",
 	// Deliberate product decision, documented in the Referral phase:
 	// requesting a payout is open to every role; approving/paying is not.
 	"referral.requestPayout": "open to all roles by design; approve/pay are gated",

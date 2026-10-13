@@ -147,7 +147,7 @@ func internalLanding(status landing.Status) landing.Landing {
 	}
 }
 
-func newLandingHandler(tb testing.TB, pool *pgxpool.Pool, withLinks bool) (http.Handler, *captureSink, func()) {
+func newLandingHandler(tb testing.TB, pool *pgxpool.Pool, withLinks bool, opts ...func(*Handler)) (http.Handler, *captureSink, func()) {
 	tb.Helper()
 	sink := &captureSink{}
 	events := eventbuf.New(sink, slog.New(slog.NewTextHandler(io.Discard, nil)), eventbuf.Config{})
@@ -171,6 +171,9 @@ func newLandingHandler(tb testing.TB, pool *pgxpool.Pool, withLinks bool) (http.
 	}
 	if withLinks {
 		h.links = landinglink.NewSigner(testLinkKey)
+	}
+	for _, opt := range opts {
+		opt(h)
 	}
 	r := chi.NewRouter()
 	h.Register(r)

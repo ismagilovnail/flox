@@ -51,6 +51,11 @@ type Handler struct {
 	// caps is the background snapshot of offers at their daily cap; nil
 	// (no ClickHouse) means no offer is capped.
 	caps *offercap.Monitor
+	// push stores installed apps' subscriptions and counts notification
+	// clicks (push.go); nil, or no vapidPublicKey (PUSH_VAPID_PUBLIC_KEY
+	// unset), means no app asks for notifications.
+	push           pushStore
+	vapidPublicKey string
 }
 
 func (h *Handler) Register(r chi.Router) {

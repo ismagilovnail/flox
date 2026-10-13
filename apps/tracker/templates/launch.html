@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="{{.Lang}}">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>{{.Name}}</title>
+<style>
+  :root { color-scheme: light dark; --accent: {{.Accent}}; }
+  body { margin: 0; min-height: 100vh; display: flex; align-items: center; justify-content: center;
+         font: 16px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; background: Canvas; color: CanvasText; }
+  .card { width: min(360px, calc(100vw - 32px)); text-align: center; padding: 24px 16px; }
+  .card[hidden] { display: none; }
+  img { width: 72px; height: 72px; border-radius: 18px; }
+  h1 { font-size: 20px; margin: 16px 0 8px; }
+  p { margin: 0 0 20px; opacity: .75; }
+  button { display: block; width: 100%; padding: 12px; border-radius: 10px; font: inherit; cursor: pointer; }
+  #allow { background: var(--accent); color: #fff; border: 0; margin-bottom: 8px; }
+  #later { background: transparent; color: inherit; border: 1px solid color-mix(in srgb, CanvasText 25%, transparent); }
+</style>
+</head>
+<body>
+<div class="card" id="ask" hidden>
+  {{if .Icon}}<img src="{{.Icon}}" alt="">{{end}}
+  <h1>{{index .Copy "title"}}</h1>
+  <p>{{index .Copy "text"}}</p>
+  <button id="allow" type="button">{{index .Copy "allow"}}</button>
+  <button id="later" type="button">{{index .Copy "later"}}</button>
+</div>
+<script>
+(function () {
+  var KEY = {{.VAPIDKey}};
+  var NEXT = "go";
+  var STORE = "flox-push:" + location.pathname.replace(/[^/]*$/, "");
+  var left = false;
+
+  function go() {
+    if (left) return;
+    left = true;
+    location.replace(NEXT);
+  }
+
+  function post(path, body) {
+    var init = { method: "POST", keepalive: true };
+    if (body) {
+      init.headers = { "Content-Type": "application/json" };
+      init.body = JSON.stringify(body);
+    }
+    return fetch(path, init).catch(function () { return null; });
+  }
+
+  function keyBytes(b64) {
+    var s = (b64 + "===".slice((b64.length + 3) % 4)).replace(/-/g, "+").replace(/_/g, "/");
+    var raw = atob(s), out = new Uint8Array(raw.length);
+    for (var i = 0; i < raw.length; i++) out[i] = raw.charCodeAt(i);
+    return out;
+  }
+
+  // Subscribes (or finds the existing subscription) and stores it once per
+  // endpoint: a launch with nothing new posts nothing.
+  function subscribe() {
+    return navigator.serviceWorker.register("sw.js", { scope: "./" })
+      .then(function () { return navigator.serviceWorker.ready; })
+      .then(function (reg) {
+        return reg.pushManager.getSubscription().then(function (s) {
+          return s || reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: keyBytes(KEY) });
+        });
+      })
+      .then(function (s) {
+        var j = s.toJSON(), sent = null;
+        try { sent = localStorage.getItem(STORE); } catch (e) {}
+        if (sent === j.endpoint) return;
+        return post("push/subscribe", { endpoint: j.endpoint, keys: j.keys }).then(function (r) {
+          if (r && r.ok) { try { localStorage.setItem(STORE, j.endpoint); } catch (e) {} }
+        });
+      });
+  }
+
+  // Never strand the visitor once the app is on its way: a browser that
+  // never settles the permission or the subscription still lets it go on.
+  // Not while the card waits for the visitor's own choice.
+  function guard() { setTimeout(go, 15000); }
+
+  var supported = "Notification" in window && "serviceWorker" in navigator && "PushManager" in window;
+  if (!supported || Notification.permission === "denied") {
+    go();
+    return;
+  }
+  if (Notification.permission === "granted") {
+    guard();
+    subscribe().catch(function () {}).then(go);
+    return;
+  }
+
+  // The permission prompt needs a tap (Safari requires one, Chrome quiets
+  // prompts without one), so the app asks with its own card first.
+  document.getElementById("ask").hidden = false;
+  document.getElementById("later").addEventListener("click", go);
+  document.getElementById("allow").addEventListener("click", function () {
+    this.disabled = true;
+    guard();
+    post("push/request");
+    Promise.resolve(Notification.requestPermission())
+      .then(function (p) { return p === "granted" ? subscribe() : post("push/decline"); })
+      .catch(function () {})
+      .then(go);
+  });
+})();
+</script>
+</body>
+</html>

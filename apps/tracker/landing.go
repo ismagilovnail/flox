@@ -183,53 +183,24 @@ func (h *Handler) landClick(w http.ResponseWriter, r *http.Request) {
 }
 
 func landClickEvent(c landinglink.Claims, attrs routing.Attributes, ip net.IP, r *http.Request) event.Event {
-	return event.Event{
-		Type:           event.LandClick,
-		EventAt:        time.Now().UTC(),
-		OrganizationID: c.OrganizationID,
-		CampaignID:     c.CampaignID,
-		ClickID:        c.ClickID,
-
-		StreamSetID:     c.StreamSetID,
-		FlowID:          c.FlowID,
-		Destination:     c.Destination,
-		ConfigVersion:   c.ConfigVersion,
-		LandingID:       c.LandingID,
-		OfferID:         c.OfferID,
-		NetworkID:       c.NetworkID,
-		PwaID:           c.PwaID,
-		PostlandingID:   c.PostlandingID,
-		TrafficSourceID: c.TrafficSourceID,
-
-		Country:        attrs[routing.FieldCountry],
-		Region:         attrs[routing.FieldRegion],
-		City:           attrs[routing.FieldCity],
-		Device:         attrs[routing.FieldDevice],
-		Platform:       attrs[routing.FieldPlatform],
-		OS:             attrs[routing.FieldOS],
-		OSVersion:      attrs[routing.FieldOSVersion],
-		Browser:        attrs[routing.FieldBrowser],
-		BrowserVersion: attrs[routing.FieldBrowserVersion],
-		Language:       attrs[routing.FieldLanguage],
-		IsBot:          attrs[routing.FieldBot] == "1",
-		IsProxy:        attrs[routing.FieldProxy] == "1",
-		ASN:            attrs[routing.FieldASN],
-		ConnectionType: attrs[routing.FieldConnectionType],
-		IP:             ip.String(),
-		UserAgent:      r.UserAgent(),
-		Referrer:       c.Referrer,
-
-		UTMSource:   c.UTMSource,
-		UTMMedium:   c.UTMMedium,
-		UTMCampaign: c.UTMCampaign,
-		UTMContent:  c.UTMContent,
-		UTMTerm:     c.UTMTerm,
-		Subs:        landinglink.ExpandSubs(c.Subs),
-
-		ExternalClickID: c.ExternalClickID,
-		FBClickID:       c.FBClickID,
-		TTClickID:       c.TTClickID,
-	}
+	ev := c.Event(event.LandClick, time.Now().UTC())
+	ev.Country = attrs[routing.FieldCountry]
+	ev.Region = attrs[routing.FieldRegion]
+	ev.City = attrs[routing.FieldCity]
+	ev.Device = attrs[routing.FieldDevice]
+	ev.Platform = attrs[routing.FieldPlatform]
+	ev.OS = attrs[routing.FieldOS]
+	ev.OSVersion = attrs[routing.FieldOSVersion]
+	ev.Browser = attrs[routing.FieldBrowser]
+	ev.BrowserVersion = attrs[routing.FieldBrowserVersion]
+	ev.Language = attrs[routing.FieldLanguage]
+	ev.IsBot = attrs[routing.FieldBot] == "1"
+	ev.IsProxy = attrs[routing.FieldProxy] == "1"
+	ev.ASN = attrs[routing.FieldASN]
+	ev.ConnectionType = attrs[routing.FieldConnectionType]
+	ev.IP = ip.String()
+	ev.UserAgent = r.UserAgent()
+	return ev
 }
 
 // requestOrigin is the scheme + host the visitor reached this tracker on

@@ -38,6 +38,7 @@ import (
 	"github.com/ismagilovnail/flox/apps/internal/postback"
 	"github.com/ismagilovnail/flox/apps/internal/postbacklog"
 	"github.com/ismagilovnail/flox/apps/internal/postgres"
+	"github.com/ismagilovnail/flox/apps/internal/push"
 	"github.com/ismagilovnail/flox/apps/internal/ratelimit"
 	"github.com/ismagilovnail/flox/apps/internal/rediscache"
 	"github.com/ismagilovnail/flox/apps/internal/routing"
@@ -192,6 +193,13 @@ func run() error {
 		logger.Warn("internal landings disabled: flows with one redirect straight to their destination", "error", err)
 	} else {
 		handler.links = landinglink.NewSigner(key)
+	}
+	// Web Push (docs/push.md): installed apps ask for notifications only
+	// with a VAPID public key to subscribe with.
+	handler.push = push.NewRepository(db)
+	handler.vapidPublicKey = cfg.PushVAPIDPublicKey
+	if cfg.PushVAPIDPublicKey == "" {
+		logger.Warn("push not configured (PUSH_VAPID_PUBLIC_KEY): installed PWAs will not ask for notifications")
 	}
 	if assets, err := storage.NewClient(cfg.S3); err != nil {
 		logger.Warn("object storage not configured, internal landings are served without asset base URLs", "error", err)

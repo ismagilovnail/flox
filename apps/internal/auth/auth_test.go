@@ -1382,12 +1382,12 @@ func TestPermissionGrantsMatchTheSeededPolicy(t *testing.T) {
 
 	universalReads := []string{
 		"campaign.read", "analytics.read", "content.read",
-		"custom_metric.read", "report_preset.read", "referral.read",
+		"custom_metric.read", "report_preset.read", "referral.read", "push.read",
 	}
 	all := append(append([]string{}, universalReads...),
 		"campaign.write", "offer.read", "offer.write", "source.read", "source.write",
 		"content.write", "custom_metric.write", "report_preset.write", "referral.write",
-		"team.read", "team.write", "settings.write",
+		"team.read", "team.write", "settings.write", "push.write",
 	)
 
 	want := map[string][]string{
@@ -1395,7 +1395,7 @@ func TestPermissionGrantsMatchTheSeededPolicy(t *testing.T) {
 		"Admin": all,
 		"Manager": append(append([]string{}, universalReads...),
 			"campaign.write", "offer.read", "offer.write", "source.read", "source.write",
-			"content.write", "custom_metric.write", "report_preset.write", "team.read"),
+			"content.write", "custom_metric.write", "report_preset.write", "team.read", "push.write"),
 		"Buyer":   append(append([]string{}, universalReads...), "campaign.write", "offer.read", "source.read", "source.write"),
 		"Analyst": append(append([]string{}, universalReads...), "offer.read", "source.read"),
 		"Viewer":  universalReads,

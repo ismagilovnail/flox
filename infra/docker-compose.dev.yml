@@ -171,6 +171,7 @@ services:
       mailhog:
         condition: service_started
     environment:
+      PUSH_VAPID_PUBLIC_KEY: "BNb_S-ZK4Yyjj83ASuHGNg2zOEJSAaJKnZTxO9Odl3uIh5xspXvbn_0GGLNbNeYpktH902Cwp6VSy1tDRYoFYrU"
       DATABASE_URL: postgres://flox:flox@postgres:5432/flox?sslmode=disable
       CLICKHOUSE_URL: http://clickhouse:8123
       CLICKHOUSE_DATABASE: flox
@@ -252,6 +253,7 @@ services:
       nats:
         condition: service_healthy
     environment:
+      PUSH_VAPID_PUBLIC_KEY: "BNb_S-ZK4Yyjj83ASuHGNg2zOEJSAaJKnZTxO9Odl3uIh5xspXvbn_0GGLNbNeYpktH902Cwp6VSy1tDRYoFYrU"
       DATABASE_URL: postgres://flox:flox@postgres:5432/flox?sslmode=disable
       CLICKHOUSE_URL: http://clickhouse:8123
       CLICKHOUSE_DATABASE: flox
@@ -312,6 +314,9 @@ services:
       nats:
         condition: service_healthy
     environment:
+      PUSH_VAPID_PUBLIC_KEY: "BNb_S-ZK4Yyjj83ASuHGNg2zOEJSAaJKnZTxO9Odl3uIh5xspXvbn_0GGLNbNeYpktH902Cwp6VSy1tDRYoFYrU"
+      PUSH_VAPID_PRIVATE_KEY: "6nSzoSNsEJGtd3kQGYD-2T8PoWZcjhTStFS3415XtFc"
+      PUSH_VAPID_SUBJECT: "mailto:dev@flox.local"
       DATABASE_URL: postgres://flox:flox@postgres:5432/flox?sslmode=disable
       CLICKHOUSE_URL: http://clickhouse:8123
       CLICKHOUSE_DATABASE: flox

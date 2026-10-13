@@ -52,6 +52,7 @@ func (h *Handler) registerPwa(r chi.Router) {
 	r.Post(pwaPathPrefix+"{token}/installed", h.pwaInstalled)
 	r.Get(pwaPathPrefix+"{token}/open", h.pwaOpen)
 	r.Get(pwaPathPrefix+"{token}/continue", h.pwaContinue)
+	h.registerPush(r)
 }
 
 // decidePwa returns the flow's PWA id when its PWA stage applies: enabled,
@@ -206,12 +207,26 @@ func (h *Handler) pwaManifest(w http.ResponseWriter, r *http.Request) {
 // pwaServiceWorker: installability needs a registered worker with a fetch
 // handler. This one only passes requests through — no caching, so a
 // visitor never sees a stale page and nothing about the click is stored.
+// It also shows push notifications and opens their click-through URL
+// (push.go, docs/push.md).
 func (h *Handler) pwaServiceWorker(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/javascript; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-cache")
 	_, _ = w.Write([]byte(`self.addEventListener("install", function () { self.skipWaiting(); });
 self.addEventListener("activate", function (e) { e.waitUntil(self.clients.claim()); });
 self.addEventListener("fetch", function (e) { e.respondWith(fetch(e.request)); });
+self.addEventListener("push", function (e) {
+  var d = {};
+  try { d = e.data ? e.data.json() : {}; } catch (err) {}
+  e.waitUntil(self.registration.showNotification(d.title || "", {
+    body: d.body || "", icon: d.icon || undefined, image: d.image || undefined, data: { url: d.url || "" }
+  }));
+});
+self.addEventListener("notificationclick", function (e) {
+  e.notification.close();
+  var url = e.notification.data && e.notification.data.url;
+  if (url) e.waitUntil(self.clients.openWindow(url));
+});
 `))
 }
 
@@ -237,6 +252,16 @@ func (h *Handler) pwaOpen(w http.ResponseWriter, r *http.Request) {
 	if !c.Test {
 		open.Type = event.PwaOpen
 		h.events.Enqueue(open)
+	}
+	// A PWA that asks for notifications shows its launch page first; it
+	// continues through pwaGo (push.go).
+	if page, ok := h.loadPwa(r, c); ok && h.pushReady(c, page.PushEnabled) {
+		body, err := renderLaunch(page.Name, page.IconURL, page.ThemeColor, h.vapidPublicKey, pageLang(r))
+		if err == nil {
+			writeHTML(w, body)
+			return
+		}
+		h.logger.Error("rendering launch page", "error", err, "pwa_id", c.PwaID)
 	}
 	h.continueOnward(w, r, c, func() event.Event { return open })
 }

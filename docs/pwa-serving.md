@@ -35,7 +35,7 @@ stay bound to the original click_id for as long as the app is installed.
 | `GET /pwa/{t}/manifest.webmanifest` | web app manifest: name, short_name, description, colors, icon (192 + 512 entries), `display: standalone`, `scope = /pwa/{t}/`, `start_url = /pwa/{t}/open` |
 | `GET /pwa/{t}/sw.js` | pass-through service worker (fetch handler for installability, no caching) |
 | `POST /pwa/{t}/installed` | the page's beacon on `appinstalled` / accepted prompt → PWA_INSTALL |
-| `GET /pwa/{t}/open` | installed app's start_url → PWA_OPEN → 302 destination |
+| `GET /pwa/{t}/open` | installed app's start_url → PWA_OPEN → the next stage; a PWA with push on shows its notifications launch page first (`docs/push.md`) |
 | `GET /pwa/{t}/continue` | "continue without installing" → 302 destination, no event |
 
 Every route answers 404 on any host but the one the token was issued
@@ -145,7 +145,6 @@ secure context, so install works in dev without TLS.
 
 - The landing's `asPwa` flag; PWA types `external`/`ios_app` (no URL
   fields exist for them).
-- Push notifications (`NOTIFICATION_*`) from the installed app.
 
 ## Verified
 

@@ -82,6 +82,7 @@ var segmentKinds = map[string]string{
 	"report-presets":  "reportPreset",
 	"tags":            "tag",
 	"members":         "member",
+	"broadcasts":      "broadcast",
 	"traffic-sources": "trafficSource",
 }
 
@@ -650,6 +651,17 @@ func seedEveryKind(t *testing.T, ctx context.Context, pool *pgxpool.Pool, orgID,
 	must("payout", err)
 	ids["payout"] = payout.ID
 
+	// A push subscriber and a broadcast, written directly: a broadcast
+	// sent through the service would queue deliveries the dev worker sends.
+	ids["broadcast"] = idgen.New()
+	_, err = pool.Exec(ctx, `INSERT INTO push_subscriptions (id, organization_id, pwa_id, campaign_id, endpoint, p256dh, auth, link_token, origin)
+		VALUES ($1, $2, $3, $4, $5, 'k', 'a', 't', 'https://t.example')`,
+		idgen.New(), orgID, ids["pwa"], ids["campaign"], "https://push.invalid/"+idgen.New())
+	must("push subscription", err)
+	_, err = pool.Exec(ctx, `INSERT INTO push_broadcasts (id, organization_id, name, title, target, total) VALUES ($1, $2, $3, 'Hi', 'destination', 1)`,
+		ids["broadcast"], orgID, name("Broadcast"))
+	must("push broadcast", err)
+
 	for _, kind := range segmentKinds {
 		if ids[kind] == "" {
 			t.Fatalf("seedEveryKind does not seed %q", kind)
@@ -768,6 +780,10 @@ func referenceCases(env *isolationEnv) []refCase {
 		{http.MethodPost, "/auth/login", map[string]string{"organizationId": "org"}, false,
 			func(ref func(string) string) any {
 				return map[string]any{"email": env.c.email[env.orgA], "password": isoPassword, "organizationId": ref("organizationId")}
+			}},
+		{http.MethodPost, "/push/audience", map[string]string{"pwaIds": "pwa", "campaignIds": "campaign"}, false,
+			func(ref func(string) string) any {
+				return map[string]any{"pwaIds": []string{ref("pwaIds")}, "campaignIds": []string{ref("campaignIds")}}
 			}},
 		{http.MethodPost, "/content-gallery/files/delete", map[string]string{"ids": "file"}, false,
 			func(ref func(string) string) any { return map[string]any{"ids": []string{ref("ids")}} }},

@@ -27,7 +27,8 @@
     "referral": "Referral",
     "contentGallery": "Content Gallery",
     "team": "Team",
-    "settings": "Settings"
+    "settings": "Settings",
+    "push": "Push"
   },
   "commandPalette": {
     "defaultGroupHeading": "Go to",

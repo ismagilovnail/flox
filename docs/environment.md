@@ -191,6 +191,7 @@ needs no configuration at all.
 |---|---|---|
 | `RETENTION_FAILED_POSTBACKS_DAYS` (worker) | `90` | Days a postback that was not recorded (duplicate/error/ignored) is kept in Postgres; `0` keeps them. Successes are never deleted. `docs/retention.md` |
 | `RETENTION_PIXEL_DELIVERIES_DAYS` (worker) | `30` | Days a sent or dead-lettered pixel delivery (it holds the visitor's IP and user agent) is kept in Postgres; `0` keeps them. Rows still to send are never deleted. `docs/pixels.md` |
+| `RETENTION_PUSH_DELIVERIES_DAYS` (worker) | `30` | Days a finished push delivery is kept; its broadcast keeps the counts. `0` keeps them. `docs/push.md` |
 | `RETENTION_POSTBACK_LOG_MONTHS` (worker) | `13` | TTL of ClickHouse's postback attempt log, applied by the worker at start; `0` removes it. Lowering it deletes older log rows at the next merges. |
 
 ### FX rates
@@ -219,6 +220,7 @@ headers are not attached. A malformed DSN fails the binary at boot.
 | Variable | Default | Purpose |
 |---|---|---|
 | `PIXEL_ENCRYPTION_KEY` (api, worker) | dev key in compose / `.env.example` | **Required** — both refuse to start without it. 32 random bytes, base64. Encrypts pixels' ad platform access tokens (AES-256-GCM): the api writes them, the worker reads them back to send events (`docs/pixels.md`). Its own key, separate from the integration and ad account keys. Changing it makes every saved token unreadable — each pixel's token has to be pasted again. |
+| `PUSH_VAPID_PUBLIC_KEY` (api, tracker, worker), `PUSH_VAPID_PRIVATE_KEY`, `PUSH_VAPID_SUBJECT` (worker) | dev pair in compose / `.env.example` | Web Push VAPID key pair (base64url, as webpush-go's `GenerateVAPIDKeys` writes them) and a `mailto:`/`https:` contact. Unset: PWAs never ask for notifications, the api refuses broadcasts (503), the worker leaves them queued. One pair per deployment; changing it ends every existing subscription. `docs/push.md` |
 
 ### Alerts
 

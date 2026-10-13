@@ -5,6 +5,43 @@ per-phase, matching `CLAUDE.md`'s phase protocol. The one exception is
 [Between phases], below: spec amendments and the code changes that follow from
 them land between phases and would otherwise be invisible here.
 
+## [Phase 30.9] — Push: subscriptions and broadcasts
+
+Closes gap 5 of `docs/spec-conformance-2026-10-11.md`. `docs/push.md`. Scope (owner, 2026-10-13):
+subscriptions and broadcasts sent now; no scheduled/triggered broadcasts, no push metrics in reports.
+Web Push through github.com/SherClockHolmes/webpush-go (owner's choice over a stdlib implementation).
+
+- **Subscribing:** a PWA's new "Ask for notifications" switch (`pwas.push_enabled`). The installed
+  app's launch (`/pwa/{t}/open`) shows a short card — "Allow notifications / Not now" — then
+  continues through `/pwa/{t}/go`. NOTIFICATION_REQUEST / SUBSCRIBE / DECLINE on the install click;
+  the subscription (`push_subscriptions`, migration 00070) is bound to that click. Endpoints must be
+  https on a known push service and are dialed through the SSRF guard (§54).
+- **Push section** (sidebar, `push.read`; sending `push.write` for Owner/Admin/Manager): broadcasts
+  with delivered/failed/in-queue/opened/CTR, a "New broadcast" sheet (title, text, icon, image, click
+  target — the subscriber's offer or a URL with the click's macros — and PWA/campaign/country
+  filters, live audience count, preview, confirm) and subscribers (totals, by PWA/campaign/country,
+  list).
+- **Sending:** `internal/pushsend` in the worker — fair-claimed `push_deliveries` queue, VAPID +
+  RFC 8291 encryption, TTL 24 h; 404/410 ends the subscription and records
+  NOTIFICATION_UNSUBSCRIBE; retries at most 4 attempts. Counters live on the broadcast; finished
+  delivery rows are deleted after `RETENTION_PUSH_DELIVERIES_DAYS` (30). Metric
+  `flox_push_deliveries_total{outcome}`.
+- **Opens:** a notification's click (`/pwa/{t}/push/click/{delivery}`) records NOTIFICATION_CLICK,
+  counts the open once per delivery and leads to the target.
+- Config: `PUSH_VAPID_PUBLIC_KEY` / `PUSH_VAPID_PRIVATE_KEY` / `PUSH_VAPID_SUBJECT` (dev pair in
+  compose and `.env.example`), `RETENTION_PUSH_DELIVERIES_DAYS`.
+- Refactors on the way: `landinglink.Claims.Event` builds an event from a link (tracker and push
+  share it); `retention.FinishedDeliveries` expires pixel and push deliveries alike.
+- Found by the live test and fixed: the launch page's 15-second guard ran from page load and took
+  the visitor away while the card waited for their choice; it now starts after the choice. The
+  tracker's dev hot reload now also watches `.html` (its pages are `go:embed` templates).
+- Tests: `internal/push`, `internal/pushsend` (incl. the real sender against a local server),
+  `tracker/push_test.go`; the RBAC and tenant-isolation route walks and the seeded role policy
+  extended for `/push`.
+- Live in Chrome: a real FCM subscription from the demo campaign's PWA, a broadcast sent from the
+  UI, FCM 201, the notification shown and clicked; CTR 100% in the list and the full event chain
+  on one click in ClickHouse.
+
 ## [Phase 11b] — Network report dimension
 
 Closes gap 4 of `docs/spec-conformance-2026-10-11.md`. `docs/analytics-report-api.md`.

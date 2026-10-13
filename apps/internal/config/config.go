@@ -73,6 +73,14 @@ type Config struct {
 	// reads them back to send conversion events to the ad platform.
 	PixelEncryptionKey string
 
+	// Web Push (internal/push, docs/push.md). PushVAPIDPublicKey goes to
+	// the browser when a PWA subscribes (apps/tracker); the worker signs
+	// and encrypts with both keys and identifies itself with
+	// PushVAPIDSubject (a mailto: or https: contact). Unset: no PWA asks
+	// for notifications and broadcasts cannot be created. One pair per
+	// deployment — changing it ends every existing subscription.
+	PushVAPIDPublicKey, PushVAPIDPrivateKey, PushVAPIDSubject string
+
 	// SentryDSN enables error tracking (internal/errtrack) — any tracker
 	// that speaks the Sentry protocol. Empty: off. SentryEnvironment labels
 	// events; it defaults to Env.
@@ -94,6 +102,10 @@ type Config struct {
 	RetentionFailedPostbacksDays int
 	RetentionPostbackLogMonths   int
 	RetentionPixelDeliveriesDays int
+	// RetentionPushDeliveriesDays: finished push_deliveries rows are
+	// deleted after this many days (a broadcast keeps its own counts); 0
+	// keeps them.
+	RetentionPushDeliveriesDays int
 
 	// LandingLinkKey is the HMAC key (32+ raw bytes, base64-encoded)
 	// apps/tracker signs internal landings' click links with
@@ -256,6 +268,10 @@ func load(portVar, portDefault, defaultServiceName string, ch chLimits) (Config,
 	if err != nil {
 		return Config{}, err
 	}
+	pushDays, err := parseNonNegative("RETENTION_PUSH_DELIVERIES_DAYS", 30)
+	if err != nil {
+		return Config{}, err
+	}
 	natsReplicas, err := parseNonNegative("NATS_STREAM_REPLICAS", 1)
 	if err != nil {
 		return Config{}, err
@@ -278,6 +294,9 @@ func load(portVar, portDefault, defaultServiceName string, ch chLimits) (Config,
 		IntegrationEncryptionKey: getEnv("INTEGRATION_ENCRYPTION_KEY", ""),
 		AdAccountEncryptionKey:   getEnv("ADACCOUNT_ENCRYPTION_KEY", ""),
 		PixelEncryptionKey:       getEnv("PIXEL_ENCRYPTION_KEY", ""),
+		PushVAPIDPublicKey:       getEnv("PUSH_VAPID_PUBLIC_KEY", ""),
+		PushVAPIDPrivateKey:      getEnv("PUSH_VAPID_PRIVATE_KEY", ""),
+		PushVAPIDSubject:         getEnv("PUSH_VAPID_SUBJECT", ""),
 		LandingLinkKey:           getEnv("LANDING_LINK_KEY", ""),
 		StickyCookieKey:          getEnv("STICKY_COOKIE_KEY", ""),
 		FXProvider:               getEnv("FX_PROVIDER", "ecb"),
@@ -285,6 +304,7 @@ func load(portVar, portDefault, defaultServiceName string, ch chLimits) (Config,
 		RetentionFailedPostbacksDays: failedDays,
 		RetentionPostbackLogMonths:   logMonths,
 		RetentionPixelDeliveriesDays: pixelDays,
+		RetentionPushDeliveriesDays:  pushDays,
 		SentryDSN:                    getEnv("SENTRY_DSN", ""),
 		SentryEnvironment:            getEnv("SENTRY_ENVIRONMENT", ""),
 		TrackerPublicURL:             getEnv("TRACKER_PUBLIC_URL", ""),

@@ -27,7 +27,8 @@
     "referral": "Реферальная программа",
     "contentGallery": "Галерея контента",
     "team": "Команда",
-    "settings": "Настройки"
+    "settings": "Настройки",
+    "push": "Push"
   },
   "commandPalette": {
     "defaultGroupHeading": "Перейти",

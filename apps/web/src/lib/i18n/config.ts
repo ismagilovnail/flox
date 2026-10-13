@@ -53,6 +53,7 @@ import enFlows from "@/lib/i18n/locales/en/flows.json";
 import enAlerts from "@/lib/i18n/locales/en/alerts.json";
 import enLtv from "@/lib/i18n/locales/en/ltv.json";
 import enContentGallery from "@/lib/i18n/locales/en/contentGallery.json";
+import enPush from "@/lib/i18n/locales/en/push.json";
 import enCustomMetrics from "@/lib/i18n/locales/en/customMetrics.json";
 import enTags from "@/lib/i18n/locales/en/tags.json";
 import enReferral from "@/lib/i18n/locales/en/referral.json";
@@ -83,6 +84,7 @@ import ruFlows from "@/lib/i18n/locales/ru/flows.json";
 import ruAlerts from "@/lib/i18n/locales/ru/alerts.json";
 import ruLtv from "@/lib/i18n/locales/ru/ltv.json";
 import ruContentGallery from "@/lib/i18n/locales/ru/contentGallery.json";
+import ruPush from "@/lib/i18n/locales/ru/push.json";
 import ruCustomMetrics from "@/lib/i18n/locales/ru/customMetrics.json";
 import ruTags from "@/lib/i18n/locales/ru/tags.json";
 import ruReferral from "@/lib/i18n/locales/ru/referral.json";
@@ -128,6 +130,7 @@ export const NAMESPACES = [
   "tags",
   "customMetrics",
   "contentGallery",
+  "push",
 ] as const;
 
 const resources = {
@@ -155,6 +158,7 @@ const resources = {
     alerts: enAlerts,
     ltv: enLtv,
     contentGallery: enContentGallery,
+    push: enPush,
     customMetrics: enCustomMetrics,
     tags: enTags,
     referral: enReferral,
@@ -186,6 +190,7 @@ const resources = {
     alerts: ruAlerts,
     ltv: ruLtv,
     contentGallery: ruContentGallery,
+    push: ruPush,
     customMetrics: ruCustomMetrics,
     tags: ruTags,
     referral: ruReferral,

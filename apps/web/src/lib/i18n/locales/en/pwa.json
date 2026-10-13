@@ -120,7 +120,9 @@
     "interactiveElementsPlaceholder": "In-game purchases",
     "updatedDateLabel": "Updated on",
     "containsAdsLabel": "Contains ads",
-    "inAppPurchasesLabel": "In-app purchases"
+    "inAppPurchasesLabel": "In-app purchases",
+    "pushEnabledLabel": "Ask for notifications",
+    "pushEnabledHint": "On launch, the installed app asks the visitor to allow push notifications, for broadcasts from the Push section."
   },
   "preview": {
     "title": "Live preview",

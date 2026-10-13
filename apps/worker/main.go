@@ -5,6 +5,8 @@
 //     postback_deliveries, with backoff and a dead-letter state;
 //   - pixel delivery (internal/pixelsend, §29): events sent server-side
 //     to the ad platforms of each click's stream set's pixels;
+//   - push delivery (internal/pushsend, docs/push.md): broadcasts sent
+//     to installed PWAs' subscribers through their push services;
 //   - the event pipeline (internal/eventqueue, internal/eventstream; §43,
 //     §47): tracker events into ClickHouse's click, tracking and
 //     conversion tables (docs/analytics-pipeline.md, docs/event-stream.md);
@@ -65,6 +67,7 @@ import (
 	"github.com/ismagilovnail/flox/apps/internal/postback"
 	"github.com/ismagilovnail/flox/apps/internal/postbacklog"
 	"github.com/ismagilovnail/flox/apps/internal/postgres"
+	"github.com/ismagilovnail/flox/apps/internal/pushsend"
 	"github.com/ismagilovnail/flox/apps/internal/queuereaper"
 	"github.com/ismagilovnail/flox/apps/internal/queuestats"
 	"github.com/ismagilovnail/flox/apps/internal/reattribute"
@@ -86,6 +89,13 @@ const (
 const (
 	pixelPollBatchSize = 20
 	pixelPollIdle      = 5 * time.Second
+)
+
+// pushPollBatchSize/pushPollIdle: push deliveries — a broadcast queues a
+// row per subscriber at once, so batches are larger.
+const (
+	pushPollBatchSize = 100
+	pushPollIdle      = 2 * time.Second
 )
 
 // eventPollBatchSize/eventPollIdle: same shape, sized for click/tracking
@@ -309,6 +319,19 @@ func run() error {
 	pixelStore := pixelsend.NewPostgresStore(db)
 	pixelDeliverer := pixelsend.NewDeliverer(pixelStore, pixel.NewRepository(db, pixelKey), pixelsend.Senders(postbackClient), logger)
 	clickResolver := chstore.NewClickResolver(ch)
+	// Push broadcasts (internal/pushsend, docs/push.md): to the push
+	// services subscriptions name, through the same dial-time SSRF guard —
+	// an endpoint comes from a browser.
+	pushStore := pushsend.NewPostgresStore(db)
+	var pushDeliverer *pushsend.Deliverer
+	if cfg.PushVAPIDPublicKey != "" && cfg.PushVAPIDPrivateKey != "" {
+		pushDeliverer = pushsend.NewDeliverer(pushStore, &pushsend.WebPush{
+			Client: postbackClient, PublicKey: cfg.PushVAPIDPublicKey, PrivateKey: cfg.PushVAPIDPrivateKey,
+			Subject: cfg.PushVAPIDSubject, TTL: 24 * 60 * 60,
+		}, chEvents, logger)
+	} else {
+		logger.Warn("push not configured (PUSH_VAPID_*): broadcasts stay queued")
+	}
 
 	// Tracker events reach ClickHouse through this sink, which first
 	// queues the ones a pixel reports (PWA_INSTALL) for their pixels.
@@ -358,6 +381,11 @@ func run() error {
 
 	logger.Info("pixel delivery poll loop starting", "batch_size", pixelPollBatchSize, "idle", pixelPollIdle)
 	start(func() { pixelDeliverer.PollLoop(ctx, pixelPollBatchSize, pixelPollIdle) })
+
+	if pushDeliverer != nil {
+		logger.Info("push delivery poll loop starting", "batch_size", pushPollBatchSize, "idle", pushPollIdle)
+		start(func() { pushDeliverer.PollLoop(ctx, pushPollBatchSize, pushPollIdle) })
+	}
 
 	logger.Info("event flush poll loop starting", "batch_size", eventPollBatchSize, "idle", eventPollIdle)
 	start(func() { flusher.PollLoop(ctx, eventPollBatchSize, eventPollIdle) })
@@ -442,8 +470,14 @@ func run() error {
 	// Sent and dead-lettered pixel deliveries, which hold visitors' IPs and
 	// user agents (internal/retention).
 	if days := cfg.RetentionPixelDeliveriesDays; days > 0 {
-		expire := &retention.PixelDeliveries{DB: db, Age: time.Duration(days) * 24 * time.Hour, Logger: logger}
+		expire := &retention.FinishedDeliveries{DB: db, Table: retention.PixelDeliveriesTable, Age: time.Duration(days) * 24 * time.Hour, Logger: logger}
 		logger.Info("pixel delivery retention starting", "older_than_days", days, "interval", retention.Interval)
+		start(func() { expire.RunLoop(ctx, retention.Interval) })
+	}
+	// Finished push deliveries; their broadcasts keep the counts.
+	if days := cfg.RetentionPushDeliveriesDays; days > 0 {
+		expire := &retention.FinishedDeliveries{DB: db, Table: retention.PushDeliveriesTable, Age: time.Duration(days) * 24 * time.Hour, Logger: logger}
+		logger.Info("push delivery retention starting", "older_than_days", days, "interval", retention.Interval)
 		start(func() { expire.RunLoop(ctx, retention.Interval) })
 	}
 
@@ -492,6 +526,7 @@ func run() error {
 		"postback_attempt_queue": attemptLogQueue,
 		"postback_deliveries":    deliveryStore,
 		"pixel_deliveries":       pixelStore,
+		"push_deliveries":        pushStore,
 	} {
 		start(func() { queuereaper.RunLoop(ctx, name, r, queuereaper.Interval, queuereaper.StuckAfter, logger) })
 	}
