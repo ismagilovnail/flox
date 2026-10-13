@@ -73,7 +73,15 @@ type fakeCost struct {
 	campaignDay []cost.CampaignDaySpend
 	sourceDay   []cost.SourceDaySpend
 	byDay       []cost.DailySpend
+	byCountry   []cost.CountryDaySpend
 	zones       []string
+
+	lastCountryScope *cost.CountryScope
+}
+
+func (c *fakeCost) SpendByCountry(_ context.Context, _ string, _, _ time.Time, scope cost.CountryScope) ([]cost.CountryDaySpend, error) {
+	c.lastCountryScope = &scope
+	return c.byCountry, nil
 }
 
 func (c *fakeCost) SpendByCampaign(context.Context, string, time.Time, time.Time) ([]cost.CampaignSpend, error) {
@@ -805,5 +813,105 @@ func TestReportKeepsSpendWithoutEvents(t *testing.T) {
 	}
 	if len(rows) != 1 {
 		t.Fatalf("filtered report = %+v, want only the campaign with events", rows)
+	}
+}
+
+func TestReportCostByCountry(t *testing.T) {
+	d1 := time.Date(2026, 8, 1, 0, 0, 0, 0, time.UTC)
+	d2 := time.Date(2026, 8, 2, 0, 0, 0, 0, time.UTC)
+	clicks := []chstore.ClickAgg{
+		{Key: dimKey(chstore.DimCountry, "DE"), Clicks: 100},
+		{Key: dimKey(chstore.DimCountry, "FR"), Clicks: 50},
+		{Key: dimKey(chstore.DimCountry, ""), Clicks: 5}, // unknown country: never the unsplit spend
+	}
+	report := func(t *testing.T, costSrc *fakeCost, filters []chstore.ReportFilter) map[string]*float64 {
+		t.Helper()
+		svc := analytics.NewService(&reportFakeRepo{clicks: clicks}, costSrc)
+		rows, err := svc.Report(context.Background(), "org-1", analytics.ReportInput{
+			Dims: []chstore.ReportDimension{chstore.DimCountry}, Filters: filters, From: d1, To: d2,
+		})
+		if err != nil {
+			t.Fatalf("Report: %v", err)
+		}
+		out := map[string]*float64{}
+		for _, r := range rows {
+			out[r.DimValues[chstore.DimCountry]] = r.Metrics.Cost
+		}
+		return out
+	}
+
+	t.Run("split spend sums over the period and adds countries with no traffic", func(t *testing.T) {
+		got := report(t, &fakeCost{byCountry: []cost.CountryDaySpend{
+			{Day: d1, Country: "DE", AmountUSD: 10}, {Day: d2, Country: "DE", AmountUSD: 15},
+			{Day: d1, Country: "ES", AmountUSD: 7},
+		}}, nil)
+		if got["DE"] == nil || *got["DE"] != 25 {
+			t.Fatalf("DE cost = %v, want 25", got["DE"])
+		}
+		if got["FR"] != nil || got[""] != nil {
+			t.Fatalf("FR/unknown cost = %v / %v, want nil (no spend entered for them)", got["FR"], got[""])
+		}
+		if got["ES"] == nil || *got["ES"] != 7 {
+			t.Fatalf("ES cost = %v, want a row with 7 (spend, no traffic)", got["ES"])
+		}
+	})
+
+	t.Run("any unsplit spend in the period leaves every country without cost", func(t *testing.T) {
+		got := report(t, &fakeCost{byCountry: []cost.CountryDaySpend{
+			{Day: d1, Country: "DE", AmountUSD: 10}, {Day: d2, Country: "", AmountUSD: 30},
+		}}, nil)
+		for c, v := range got {
+			if v != nil {
+				t.Fatalf("%q cost = %v, want nil: the unsplit 30 has no country", c, *v)
+			}
+		}
+	})
+
+	t.Run("campaign and source filters narrow the spend", func(t *testing.T) {
+		src := &fakeCost{byCountry: []cost.CountryDaySpend{{Day: d1, Country: "DE", AmountUSD: 10}}}
+		got := report(t, src, []chstore.ReportFilter{{Dimension: chstore.DimCampaign, Value: "camp-a"}, {Dimension: chstore.DimSource, Value: "src-1"}})
+		if src.lastCountryScope == nil || *src.lastCountryScope != (cost.CountryScope{CampaignID: "camp-a", TrafficSourceID: "src-1"}) {
+			t.Fatalf("scope = %+v, want camp-a / src-1", src.lastCountryScope)
+		}
+		if got["DE"] == nil || *got["DE"] != 10 {
+			t.Fatalf("DE cost = %v, want 10", got["DE"])
+		}
+	})
+
+	t.Run("a filter cost cannot follow drops cost", func(t *testing.T) {
+		src := &fakeCost{byCountry: []cost.CountryDaySpend{{Day: d1, Country: "DE", AmountUSD: 10}}}
+		got := report(t, src, []chstore.ReportFilter{{Dimension: chstore.DimDevice, Value: "mobile"}})
+		if got["DE"] != nil || src.lastCountryScope != nil {
+			t.Fatalf("DE cost = %v (scope %+v), want nil and no query", got["DE"], src.lastCountryScope)
+		}
+	})
+}
+
+func TestReportCostByCountryAndDay(t *testing.T) {
+	d1 := time.Date(2026, 8, 1, 0, 0, 0, 0, time.UTC)
+	d2 := time.Date(2026, 8, 2, 0, 0, 0, 0, time.UTC)
+	repo := &reportFakeRepo{clicks: []chstore.ClickAgg{
+		{Key: dayKey(d1, chstore.DimCountry, "DE"), Clicks: 10},
+		{Key: dayKey(d2, chstore.DimCountry, "DE"), Clicks: 10},
+	}}
+	// Day 2 holds an unsplit total: only day 2 loses its country cost.
+	svc := analytics.NewService(repo, &fakeCost{byCountry: []cost.CountryDaySpend{
+		{Day: d1, Country: "DE", AmountUSD: 4}, {Day: d2, Country: "DE", AmountUSD: 6}, {Day: d2, Country: "", AmountUSD: 9},
+	}})
+	rows, err := svc.Report(context.Background(), "org-1", analytics.ReportInput{
+		Dims: []chstore.ReportDimension{chstore.DimCountry, analytics.DimDay}, From: d1, To: d2,
+		Sort: analytics.SortSpec{Key: "day", Dir: "asc"},
+	})
+	if err != nil {
+		t.Fatalf("Report: %v", err)
+	}
+	if len(rows) != 2 {
+		t.Fatalf("rows = %d, want 2", len(rows))
+	}
+	if c := rows[0].Metrics.Cost; c == nil || *c != 4 {
+		t.Fatalf("day 1 DE cost = %v, want 4", c)
+	}
+	if c := rows[1].Metrics.Cost; c != nil {
+		t.Fatalf("day 2 DE cost = %v, want nil (day 2 has unsplit spend)", *c)
 	}
 }

@@ -715,6 +715,10 @@ func referenceCases(env *isolationEnv) []refCase {
 			func(ref func(string) string) any {
 				return map[string]any{"trafficSourceId": ref("trafficSourceId"), "entryDate": today, "amount": 5, "currency": "USD"}
 			}},
+		{http.MethodPost, "/campaigns/{campaign}/cost-entries/import", map[string]string{"trafficSourceId": "trafficSource"}, false,
+			func(ref func(string) string) any {
+				return map[string]any{"csv": "date,amount,currency,traffic_source_id\n" + today + ",5,USD," + ref("trafficSourceId") + "\n"}
+			}},
 		{http.MethodPost, "/event-mappings", map[string]string{"networkId": "network"}, false,
 			func(ref func(string) string) any {
 				return map[string]any{"networkId": ref("networkId"), "networkStatus": strings.ToLower(idgen.New()[16:]), "floxStatus": "CPA_ACCEPT"}

@@ -5,6 +5,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   deleteCostEntry,
   getCampaignDailySpend,
+  importCostEntries,
   listCostEntries,
   upsertCostEntry,
   type UpsertCostEntryInput,
@@ -56,6 +57,17 @@ export function useDeleteCostEntry(campaignId: string) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (id: string) => deleteCostEntry(campaignId, id),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: entriesKey(campaignId) });
+      qc.invalidateQueries({ queryKey: dailySpendKey(campaignId) });
+    },
+  });
+}
+
+export function useImportCostEntries(campaignId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (csv: string) => importCostEntries(campaignId, csv),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: entriesKey(campaignId) });
       qc.invalidateQueries({ queryKey: dailySpendKey(campaignId) });

@@ -39,8 +39,11 @@ type Entry struct {
 	CampaignID      string
 	TrafficSourceID *string
 	EntryDate       time.Time
-	Amount          float64
-	Currency        string
+	// Country is ISO 3166-1 alpha-2, or "" for spend not split by country
+	// (migration 00071).
+	Country  string
+	Amount   float64
+	Currency string
 	// AmountUSD is nil when no fx_rates row exists yet for
 	// (Currency, EntryDate) — CLAUDE.md #6/#7: never invented as 0.
 	AmountUSD       *float64
@@ -66,9 +69,15 @@ type Entry struct {
 // written day and a manually-entered day for the same (campaign[,
 // traffic source], date) are mutually exclusive — whichever writes last
 // wins, intentional, not an oversight.
+//
+// Country joins the identity: a day can hold a row per country. A day of a
+// (campaign, source) is either one total (Country "") or split by country,
+// never both — Upsert refuses the mix with ErrSplitConflict, so a day's
+// rows always add up to its spend.
 type UpsertInput struct {
 	TrafficSourceID *string
 	EntryDate       time.Time
+	Country         string
 	Amount          float64
 	Currency        string
 }
@@ -118,6 +127,21 @@ type SourceDaySpend struct {
 // builder's `source` dimension is the traffic source of the click's
 // campaign, so cost is attributed the same way (via the campaign), not via
 // cost_entries.traffic_source_id, which is an optional per-entry tag.
+// CountryDaySpend is one (day, country) of spend. Country "" is spend
+// not split by country (every synced entry, and manual day totals).
+type CountryDaySpend struct {
+	Day       time.Time
+	Country   string
+	AmountUSD float64
+}
+
+// CountryScope narrows SpendByCountry to the report's own filters: a
+// campaign and/or the traffic source campaigns are on. "" does not narrow.
+type CountryScope struct {
+	CampaignID      string
+	TrafficSourceID string
+}
+
 type SourceSpend struct {
 	TrafficSourceID string
 	AmountUSD       float64

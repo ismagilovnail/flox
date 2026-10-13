@@ -283,3 +283,39 @@ func TestSyncRecordsTheAccountTimezone(t *testing.T) {
 		t.Fatalf("another account kept the old zone %q", tz)
 	}
 }
+
+func TestSyncKeepsADaySplitByCountry(t *testing.T) {
+	pool := mustPool(t)
+	ctx := context.Background()
+	orgID := seedOrg(t, ctx, pool)
+	sourceID := seedTrafficSource(t, ctx, pool, orgID, "facebook_ads")
+	campaignID := seedCampaign(t, ctx, pool, orgID, sourceID, "fb_split")
+
+	adAccountRepo := adaccount.NewRepository(pool, testKey)
+	if _, err := adaccount.NewService(adAccountRepo).Connect(ctx, orgID, sourceID, adaccount.ConnectInput{
+		AdAccountID: "act_split", AccessToken: "test-token-1234567890",
+	}); err != nil {
+		t.Fatalf("connecting ad account: %v", err)
+	}
+	costSvc := cost.NewService(cost.NewRepository(pool), conversion.NewPostgresFX(pool))
+	split, other := time.Date(2026, 1, 12, 0, 0, 0, 0, time.UTC), time.Date(2026, 1, 13, 0, 0, 0, 0, time.UTC)
+	if _, err := costSvc.Upsert(ctx, orgID, campaignID, cost.UpsertInput{TrafficSourceID: &sourceID, EntryDate: split, Country: "DE", Amount: 8, Currency: "USD"}); err != nil {
+		t.Fatalf("manual DE entry: %v", err)
+	}
+
+	svc := costsync.NewService(adAccountRepo, campaign.NewRepository(pool), costSvc, costsync.Providers{FacebookAds: &fakeProvider{records: []adaccount.DailyCampaignSpendRecord{
+		{Date: split, ExternalCampaignID: "fb_split", Amount: 20, Currency: "USD"},
+		{Date: other, ExternalCampaignID: "fb_split", Amount: 5, Currency: "USD"},
+	}}})
+	result, err := svc.Sync(ctx, orgID, sourceID, split, other)
+	if err != nil {
+		t.Fatalf("Sync: %v", err)
+	}
+	if result.EntriesWritten != 1 || result.EntriesSkippedSplit != 1 {
+		t.Fatalf("written/skipped = %d/%d, want 1/1", result.EntriesWritten, result.EntriesSkippedSplit)
+	}
+	entries, err := costSvc.List(ctx, orgID, campaignID, cost.ListFilter{From: split, To: split})
+	if err != nil || len(entries) != 1 || entries[0].Country != "DE" || entries[0].Amount != 8 {
+		t.Fatalf("split day = %+v, %v, want only the manual DE 8", entries, err)
+	}
+}

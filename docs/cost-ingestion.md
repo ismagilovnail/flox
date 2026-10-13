@@ -1,7 +1,8 @@
 # Cost Ingestion (Phase 27-COST, §27-COST)
 
 "Profit / ROI / ROAS are meaningless without spend. Do NOT leave cost as an
-afterthought." Manual cost entry per campaign/source/day, implemented in
+afterthought." Manual cost entry and CSV import per campaign/source/day/
+country, implemented in
 `apps/internal/cost`, backed by Postgres `cost_entries` (migrations
 00009/00017), joined into the campaign-detail Overview as real Spend/
 Profit/ROI/CPA — dropped entirely in Phase 27 pending exactly this work.
@@ -109,3 +110,35 @@ not started here. `source` isn't exposed as client-settable on the
 upsert endpoint either: the server always writes `'manual'`, since
 exposing the field with no real writer for `'facebook_ads'`/`'tiktok_ads'`
 would present an unfinished feature as available.
+
+## Country and CSV import (gap 6, 2026-10-13)
+
+`cost_entries.country` (00071): ISO 3166-1 alpha-2, or `''` for spend not
+split by country — every row before 00071 and every synced row (the ad
+platforms' daily campaign spend has no country). The country joins the
+identity, so the unique indexes are `(campaign, [source,] day, country)`.
+
+**A day is one total or a split, never both.** For one (campaign, source
+key, day), `Repository.Upsert` refuses a country row when a total exists
+and a total when country rows exist (`ErrSplitConflict`, 409), under a
+transaction advisory lock on the day so two writers cannot both pass the
+check. So a day's rows always add up to its spend, and `DailyCampaignSpend`
+/ `SpendByCampaign` keep summing them unchanged. The sync hitting a day an
+operator split by hand skips it (`Result.entriesSkippedSplit`) instead of
+adding the platform total on top.
+
+**Report by country** — see `docs/analytics-report-api.md` ("Cost joins at
+campaign, source or country granularity"): any unsplit spend in the period
+(or day) leaves countries without cost rather than understating it.
+
+**CSV import** — `POST /campaigns/{campaignId}/cost-entries/import`, body
+`{"csv": "..."}` (2 MB, 5000 rows), `campaign.write`. The campaign comes from
+the route. Header-named columns in any order: `date`, `amount`, `currency`
+required; `country`, `traffic_source_id` optional. An unknown column rejects
+the file (a misspelt `country` would otherwise land every row as a total).
+`;` files with decimal commas (European spreadsheet exports) and a UTF-8 BOM
+are accepted. The import is all or nothing: every line is validated first
+(same rules as the form, plus duplicates and total-vs-split inside the file),
+then written in one transaction; a refused file answers 422 with errors
+keyed `line N` / `file`, which the Cost tab lists. Rows are manual entries
+and overwrite the same (source, day, country).

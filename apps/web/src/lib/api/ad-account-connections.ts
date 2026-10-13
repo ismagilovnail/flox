@@ -49,6 +49,8 @@ export function disconnectAdAccount(trafficSourceId: string): Promise<void> {
 export type SyncResult = {
   recordsFetched: number;
   entriesWritten: number;
+  /** Days an operator split by country by hand: left as they are. */
+  entriesSkippedSplit: number;
   unmatchedExternalCampaignIds: string[] | null;
   unmatchedExternalCampaignIdsTruncated: boolean;
 };

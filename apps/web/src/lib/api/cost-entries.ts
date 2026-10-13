@@ -6,6 +6,8 @@ export type CostEntry = {
   campaignId: string;
   trafficSourceId: string | null;
   entryDate: string;
+  /** ISO 3166-1 alpha-2, or "" for the day's total (not split by country). */
+  country: string;
   amount: number;
   currency: string;
   amountUsd: number | null;
@@ -18,6 +20,7 @@ export type DailySpend = { day: string; amountUsd: number; allConverted: boolean
 export type UpsertCostEntryInput = {
   trafficSourceId?: string | null;
   entryDate: string;
+  country?: string;
   amount: number;
   currency: string;
 };
@@ -34,6 +37,13 @@ export function listCostEntries(campaignId: string, from: Date, to: Date): Promi
 
 export function upsertCostEntry(campaignId: string, input: UpsertCostEntryInput): Promise<CostEntry> {
   return apiFetch(`/campaigns/${campaignId}/cost-entries`, { method: "POST", body: input });
+}
+
+/** CSV import (apps/internal/cost/csvimport.go): all rows or none. A
+ * rejected file comes back as an ApiError whose `fields` are keyed
+ * "line N" / "file". */
+export function importCostEntries(campaignId: string, csv: string): Promise<{ written: number }> {
+  return apiFetch(`/campaigns/${campaignId}/cost-entries/import`, { method: "POST", body: { csv } });
 }
 
 export function deleteCostEntry(campaignId: string, id: string): Promise<void> {

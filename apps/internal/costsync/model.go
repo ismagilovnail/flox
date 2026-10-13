@@ -28,8 +28,11 @@ type Providers struct {
 // EntriesWritten still tells the operator the true unmatched count even
 // once the list itself is truncated.
 type Result struct {
-	RecordsFetched                int      `json:"recordsFetched"`
-	EntriesWritten                int      `json:"entriesWritten"`
+	RecordsFetched int `json:"recordsFetched"`
+	EntriesWritten int `json:"entriesWritten"`
+	// EntriesSkippedSplit: days an operator split by country by hand. The
+	// platform's day total would double them, so they keep the split.
+	EntriesSkippedSplit           int      `json:"entriesSkippedSplit"`
 	UnmatchedExternalCampaignIDs  []string `json:"unmatchedExternalCampaignIds"`
 	UnmatchedExternalCampaignsMax bool     `json:"unmatchedExternalCampaignIdsTruncated"`
 	// AccountTimezone is the ad account's zone this sync learned — the

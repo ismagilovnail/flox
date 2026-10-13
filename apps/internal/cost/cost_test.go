@@ -2,12 +2,15 @@ package cost_test
 
 import (
 	"context"
+	"errors"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/ismagilovnail/flox/apps/internal/apierror"
 	"github.com/ismagilovnail/flox/apps/internal/conversion"
 	"github.com/ismagilovnail/flox/apps/internal/cost"
 	"github.com/ismagilovnail/flox/apps/internal/idgen"
@@ -450,4 +453,180 @@ func seedCampaign(t *testing.T, ctx context.Context, pool *pgxpool.Pool, orgID s
 		t.Fatalf("seeding campaign: %v", err)
 	}
 	return id
+}
+
+func TestCountrySplitDay(t *testing.T) {
+	pool := mustPool(t)
+	ctx := context.Background()
+	orgID := seedOrg(t, ctx, pool)
+	campaignID := seedCampaign(t, ctx, pool, orgID)
+	svc := cost.NewService(cost.NewRepository(pool), conversion.NewPostgresFX(pool))
+	day := time.Date(2026, 3, 1, 0, 0, 0, 0, time.UTC)
+
+	for country, amount := range map[string]float64{"de": 30, "FR": 12} {
+		if _, err := svc.Upsert(ctx, orgID, campaignID, cost.UpsertInput{EntryDate: day, Country: country, Amount: amount, Currency: "USD"}); err != nil {
+			t.Fatalf("upsert %s: %v", country, err)
+		}
+	}
+	// Same country again overwrites, it does not stack.
+	if _, err := svc.Upsert(ctx, orgID, campaignID, cost.UpsertInput{EntryDate: day, Country: "DE", Amount: 40, Currency: "USD"}); err != nil {
+		t.Fatalf("re-upsert DE: %v", err)
+	}
+	entries, err := svc.List(ctx, orgID, campaignID, cost.ListFilter{From: day, To: day})
+	if err != nil || len(entries) != 2 {
+		t.Fatalf("List = %d entries, %v, want 2 (one per country)", len(entries), err)
+	}
+
+	t.Run("a day total is refused on a split day", func(t *testing.T) {
+		_, err := svc.Upsert(ctx, orgID, campaignID, cost.UpsertInput{EntryDate: day, Amount: 99, Currency: "USD"})
+		if !errors.Is(err, cost.ErrSplitConflict) {
+			t.Fatalf("err = %v, want ErrSplitConflict", err)
+		}
+	})
+	t.Run("a country is refused on a total day", func(t *testing.T) {
+		other := day.AddDate(0, 0, 1)
+		if _, err := svc.Upsert(ctx, orgID, campaignID, cost.UpsertInput{EntryDate: other, Amount: 5, Currency: "USD"}); err != nil {
+			t.Fatalf("total: %v", err)
+		}
+		_, err := svc.Upsert(ctx, orgID, campaignID, cost.UpsertInput{EntryDate: other, Country: "DE", Amount: 1, Currency: "USD"})
+		if !errors.Is(err, cost.ErrSplitConflict) {
+			t.Fatalf("err = %v, want ErrSplitConflict", err)
+		}
+	})
+	t.Run("a bad country code is a validation error", func(t *testing.T) {
+		if _, err := svc.Upsert(ctx, orgID, campaignID, cost.UpsertInput{EntryDate: day, Country: "DEU", Amount: 1, Currency: "USD"}); err == nil {
+			t.Fatal("DEU accepted, want a validation error")
+		}
+	})
+	t.Run("daily spend sums the countries", func(t *testing.T) {
+		spend, err := svc.DailyCampaignSpend(ctx, orgID, campaignID, day, day)
+		if err != nil || len(spend) != 1 || spend[0].AmountUSD != 52 {
+			t.Fatalf("daily spend = %+v, %v, want one day of 52", spend, err)
+		}
+	})
+	t.Run("spend by country, scoped and tenant-isolated", func(t *testing.T) {
+		got, err := svc.SpendByCountry(ctx, orgID, day, day.AddDate(0, 0, 1), cost.CountryScope{CampaignID: campaignID})
+		if err != nil {
+			t.Fatalf("SpendByCountry: %v", err)
+		}
+		by := map[string]float64{}
+		for _, c := range got {
+			by[c.Day.Format("01-02")+" "+c.Country] = c.AmountUSD
+		}
+		if len(by) != 3 || by["03-01 DE"] != 40 || by["03-01 FR"] != 12 || by["03-02 "] != 5 {
+			t.Fatalf("spend by country = %v, want DE 40 / FR 12 on day 1 and an unsplit 5 on day 2", by)
+		}
+		if got, _ := svc.SpendByCountry(ctx, orgID, day, day, cost.CountryScope{CampaignID: idgen.New()}); len(got) != 0 {
+			t.Fatalf("another campaign's scope = %v, want empty", got)
+		}
+		if got, _ := svc.SpendByCountry(ctx, orgID, day, day, cost.CountryScope{TrafficSourceID: idgen.New()}); len(got) != 0 {
+			t.Fatalf("another source's scope = %v, want empty", got)
+		}
+		if got, _ := svc.SpendByCountry(ctx, seedOrg(t, ctx, pool), day, day, cost.CountryScope{}); len(got) != 0 {
+			t.Fatalf("another org = %v, want empty", got)
+		}
+	})
+}
+
+func TestParseCSV(t *testing.T) {
+	t.Run("comma file, any column order", func(t *testing.T) {
+		lines, errs := cost.ParseCSV(strings.NewReader("Country,Date,Amount,Currency\nde,2026-03-01,10.5,usd\n\n,2026-03-02,7,EUR\n"))
+		if len(errs) > 0 {
+			t.Fatalf("errs = %v", errs)
+		}
+		if len(lines) != 2 || lines[0].Line != 2 || lines[0].Country != "de" || lines[0].Amount != 10.5 || lines[1].Line != 4 || lines[1].Country != "" {
+			t.Fatalf("lines = %+v", lines)
+		}
+	})
+	t.Run("every bad line is named at once", func(t *testing.T) {
+		_, errs := cost.ParseCSV(strings.NewReader("date,country,amount,currency\n2026-03-01,DEU,1,USD\n03/01/2026,DE,1,USD\n2026-03-01,DE,-1,USD\n"))
+		if len(errs) != 3 || !strings.HasPrefix(errs["line 2"], "country:") || !strings.HasPrefix(errs["line 4"], "amount:") {
+			t.Fatalf("errs = %v, want lines 2, 3 and 4", errs)
+		}
+	})
+	t.Run("semicolon file with a BOM and decimal commas", func(t *testing.T) {
+		lines, errs := cost.ParseCSV(strings.NewReader("\uFEFFdate;amount;currency\n2026-03-01;12,75;EUR\n"))
+		if len(errs) > 0 || len(lines) != 1 || lines[0].Amount != 12.75 {
+			t.Fatalf("lines = %+v, errs = %v", lines, errs)
+		}
+	})
+	for name, tc := range map[string]struct{ csv, key string }{
+		"unknown column":  {"date,amount,currency,contry\n", "file"},
+		"missing column":  {"date,amount\n", "file"},
+		"no rows":         {"date,amount,currency\n", "file"},
+		"bad date":        {"date,amount,currency\n2026-03-01,1,USD\n03/01/2026,1,USD\n", "line 3"},
+		"bad amount":      {"date,amount,currency\n2026-03-01,ten,USD\n", "line 2"},
+		"bad currency":    {"date,amount,currency\n2026-04-03,1,DOLLARS\n", "line 2"},
+		"bad country":     {"date,amount,currency,country\n2026-03-01,1,USD,DEU\n", "line 2"},
+		"malformed quote": {"date,amount,currency\n2026-03-01,\"1,USD\n", "line 2"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			if _, errs := cost.ParseCSV(strings.NewReader(tc.csv)); errs[tc.key] == "" {
+				t.Fatalf("errs = %v, want one under %q", errs, tc.key)
+			}
+		})
+	}
+}
+
+func TestImport(t *testing.T) {
+	pool := mustPool(t)
+	ctx := context.Background()
+	orgID := seedOrg(t, ctx, pool)
+	campaignID := seedCampaign(t, ctx, pool, orgID)
+	srcID := seedTrafficSource(t, ctx, pool, orgID)
+	svc := cost.NewService(cost.NewRepository(pool), conversion.NewPostgresFX(pool))
+	day := time.Date(2026, 4, 1, 0, 0, 0, 0, time.UTC)
+
+	parse := func(t *testing.T, csv string) []cost.ImportLine {
+		t.Helper()
+		lines, errs := cost.ParseCSV(strings.NewReader(csv))
+		if len(errs) > 0 {
+			t.Fatalf("ParseCSV: %v", errs)
+		}
+		return lines
+	}
+	count := func(t *testing.T) int {
+		t.Helper()
+		entries, err := svc.List(ctx, orgID, campaignID, cost.ListFilter{From: day, To: day.AddDate(0, 0, 5)})
+		if err != nil {
+			t.Fatalf("List: %v", err)
+		}
+		return len(entries)
+	}
+
+	n, err := svc.Import(ctx, orgID, campaignID, parse(t, "date,country,amount,currency,traffic_source_id\n"+
+		"2026-04-01,DE,10,USD,\n2026-04-01,FR,5,USD,\n2026-04-02,,7,USD,"+srcID+"\n"))
+	if err != nil || n != 3 || count(t) != 3 {
+		t.Fatalf("Import = %d, %v; entries = %d, want 3 written", n, err, count(t))
+	}
+	// Importing again overwrites: still 3 entries.
+	if n, err := svc.Import(ctx, orgID, campaignID, parse(t, "date,country,amount,currency\n2026-04-01,DE,11,USD\n")); err != nil || n != 1 || count(t) != 3 {
+		t.Fatalf("re-import = %d, %v; entries = %d, want 3", n, err, count(t))
+	}
+
+	for name, tc := range map[string]struct{ csv, key string }{
+		"duplicate day and country":   {"date,country,amount,currency\n2026-04-03,DE,1,USD\n2026-04-03,de,2,USD\n", "line 3"},
+		"total and split in one file": {"date,country,amount,currency\n2026-04-03,DE,1,USD\n2026-04-03,,2,USD\n", "line 3"},
+		"another org's source":        {"date,amount,currency,traffic_source_id\n2026-04-03,1,USD," + seedTrafficSource(t, ctx, pool, seedOrg(t, ctx, pool)) + "\n", "line 2"},
+		// Line 2 is fine; line 3 meets the split day 04-01 already holds:
+		// nothing of the file is written.
+		"conflict with what is stored": {"date,amount,currency\n2026-04-04,3,USD\n2026-04-01,9,USD\n", "line 3"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			_, err := svc.Import(ctx, orgID, campaignID, parse(t, tc.csv))
+			var apiErr *apierror.Error
+			if !errors.As(err, &apiErr) || apiErr.Fields[tc.key] == "" {
+				t.Fatalf("err = %v, want a validation error on %q", err, tc.key)
+			}
+			if count(t) != 3 {
+				t.Fatalf("entries = %d after a refused import, want 3 — the import must be all or nothing", count(t))
+			}
+		})
+	}
+
+	t.Run("another org's campaign", func(t *testing.T) {
+		if _, err := svc.Import(ctx, seedOrg(t, ctx, pool), campaignID, parse(t, "date,amount,currency\n2026-04-05,1,USD\n")); err == nil {
+			t.Fatal("imported into another org's campaign")
+		}
+	})
 }

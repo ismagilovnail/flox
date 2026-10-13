@@ -5,6 +5,34 @@ per-phase, matching `CLAUDE.md`'s phase protocol. The one exception is
 [Between phases], below: spec amendments and the code changes that follow from
 them land between phases and would otherwise be invisible here.
 
+## [Phase 30.10] — Cost: per-country spend and CSV import
+
+Closes gap 6 of `docs/spec-conformance-2026-10-11.md` (§27-COST "manual cost entry / CSV import per
+campaign/source/day/country"). `docs/cost-ingestion.md`, `docs/analytics-report-api.md`.
+
+- **Country on spend:** `cost_entries.country` (migration 00071; ISO alpha-2, `''` = not split), part
+  of the entry's identity. A (campaign, source, day) is one total or a split by country, never both —
+  `Repository.Upsert` checks it under an advisory lock and answers 409 otherwise, so a day's rows
+  always add up. The Cost tab has a Country field and column.
+- **Report by country:** `[country]` (and `[country, day]`) is now cost-eligible
+  (`attachCountryCost`). Any spend without a country in the period (or day) — every synced day, manual
+  day totals — leaves countries at "—" instead of understating cost. Campaign/source filters narrow the
+  spend; other filters give "—". A country with spend and no traffic is still a row.
+- **CSV import:** `POST /campaigns/{id}/cost-entries/import` (`campaign.write`); columns `date`,
+  `amount`, `currency`, optional `country`, `traffic_source_id`; `;` files with decimal commas and a BOM
+  accepted; unknown columns rejected. All or nothing in one transaction; a refused file lists every bad
+  line. Cost tab: "Import CSV" card with a template download.
+- **Sync:** a day an operator split by country is skipped, not doubled (`entriesSkippedSplit`, shown in
+  the sync result).
+- Found in the browser pass and fixed: the Country select overflowed into Amount; a file was first
+  rejected only for its unparsable lines — every bad line is now named at once.
+- Tests: `internal/cost` (split rule, `SpendByCountry` scope and tenancy, parser, import incl.
+  all-or-nothing), `internal/analytics` (country cost rules), `internal/costsync` (split day kept), the
+  tenant-isolation reference walk covers the import's `traffic_source_id`. Migration down tested with
+  split rows (folds them; mixed currencies fold to USD).
+- Separate fix: `TestWebPushSends` looked for "Hi" in ~4 KB of ciphertext and failed ~4% of runs; it
+  now looks for a long marker.
+
 ## [Phase 30.9] — Push: subscriptions and broadcasts
 
 Closes gap 5 of `docs/spec-conformance-2026-10-11.md`. `docs/push.md`. Scope (owner, 2026-10-13):

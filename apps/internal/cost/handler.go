@@ -3,6 +3,7 @@ package cost
 import (
 	"encoding/json"
 	"net/http"
+	"strings"
 	"time"
 
 	"log/slog"
@@ -35,6 +36,7 @@ func NewHandler(svc *Service, requireWrite func(http.Handler) http.Handler, logg
 func (h *Handler) Register(r chi.Router) {
 	r.Get("/", h.list)
 	r.With(h.requireWrite).Post("/", h.upsert)
+	r.With(h.requireWrite).Post("/import", h.importCSV)
 	r.With(h.requireWrite).Delete("/{id}", h.delete)
 	// Colocated with the CRUD it summarizes rather than under /analytics:
 	// unlike click/revenue analytics, spend never depends on ClickHouse
@@ -48,6 +50,7 @@ type entryResponse struct {
 	CampaignID      string   `json:"campaignId"`
 	TrafficSourceID *string  `json:"trafficSourceId"`
 	EntryDate       string   `json:"entryDate"`
+	Country         string   `json:"country"`
 	Amount          float64  `json:"amount"`
 	Currency        string   `json:"currency"`
 	AmountUSD       *float64 `json:"amountUsd"`
@@ -62,6 +65,7 @@ func toResponse(e Entry) entryResponse {
 		CampaignID:      e.CampaignID,
 		TrafficSourceID: e.TrafficSourceID,
 		EntryDate:       e.EntryDate.Format(dateLayout),
+		Country:         e.Country,
 		Amount:          e.Amount,
 		Currency:        e.Currency,
 		AmountUSD:       e.AmountUSD,
@@ -96,6 +100,7 @@ func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
 type upsertRequest struct {
 	TrafficSourceID *string `json:"trafficSourceId"`
 	EntryDate       string  `json:"entryDate"`
+	Country         string  `json:"country"`
 	Amount          float64 `json:"amount"`
 	Currency        string  `json:"currency"`
 }
@@ -119,6 +124,7 @@ func (h *Handler) upsert(w http.ResponseWriter, r *http.Request) {
 	e, err := h.svc.Upsert(r.Context(), orgID, campaignID, UpsertInput{
 		TrafficSourceID: req.TrafficSourceID,
 		EntryDate:       entryDate,
+		Country:         req.Country,
 		Amount:          req.Amount,
 		Currency:        req.Currency,
 	})
@@ -127,6 +133,36 @@ func (h *Handler) upsert(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, toResponse(e))
+}
+
+// maxImportBytes bounds the import body: MaxImportRows lines of a few
+// dozen bytes, with room to spare.
+const maxImportBytes = 2 << 20
+
+type importRequest struct {
+	CSV string `json:"csv"`
+}
+
+func (h *Handler) importCSV(w http.ResponseWriter, r *http.Request) {
+	orgID, _ := tenant.OrgID(r.Context())
+	campaignID := chi.URLParam(r, "campaignId")
+
+	var req importRequest
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, maxImportBytes)).Decode(&req); err != nil {
+		apierror.Write(w, h.logger, apierror.Validation("invalid JSON body, or the file is over 2 MB", nil))
+		return
+	}
+	lines, errs := ParseCSV(strings.NewReader(req.CSV))
+	if len(errs) > 0 {
+		apierror.Write(w, h.logger, apierror.Validation("invalid cost import", errs))
+		return
+	}
+	written, err := h.svc.Import(r.Context(), orgID, campaignID, lines)
+	if err != nil {
+		apierror.Write(w, h.logger, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]int{"written": written})
 }
 
 type dailySpendResponse struct {

@@ -1,7 +1,7 @@
 {
   "form": {
     "title": "Add or update spend",
-    "description": "One entry per day (optionally per source) — entering a day that already has spend updates it, it never stacks.",
+    "description": "One entry per day, optionally per source and per country — entering a day that already has spend updates it, it never stacks. A day is either one total or split by country, not both.",
     "dateLabel": "Date",
     "sourceLabel": "Source",
     "allSources": "All sources",
@@ -13,14 +13,18 @@
       "required": "Required",
       "amountInvalid": "Must be a non-negative number",
       "currencyInvalid": "3-letter code, e.g. USD"
-    }
+    },
+    "countryLabel": "Country",
+    "allCountries": "Day total"
   },
   "columns": {
     "date": "Date",
     "source": "Source",
     "amount": "Amount",
     "amountUsd": "USD",
-    "pendingFxRate": "pending FX rate"
+    "pendingFxRate": "pending FX rate",
+    "country": "Country",
+    "noCountry": "Total"
   },
   "list": {
     "deleteAria": "Delete entry",
@@ -42,5 +46,17 @@
   "timezoneNotice": {
     "title": "Spend is daily in the ad account's time zone",
     "description": "{{zones}} reports spend per day in its own time zone, this report cuts clicks by {{timezone}}. A day's cost and that day's clicks are hours apart, so daily cost and ROI are approximate; totals over whole weeks or months are barely affected."
+  },
+  "import": {
+    "title": "Import CSV",
+    "description": "Columns: date (YYYY-MM-DD), amount, currency, and optionally country (2-letter code; empty = day total) and traffic_source_id. Rows overwrite the same day/country. The file is imported whole or not at all.",
+    "chooseFile": "Choose CSV file",
+    "template": "Download template",
+    "importing": "Importing…",
+    "success": "Spend imported",
+    "successDescription": "{{count}} entries written",
+    "error": "File not imported",
+    "errorsTitle": "Nothing was imported. Fix these rows and try again:",
+    "readError": "Couldn't read the file"
   }
 }

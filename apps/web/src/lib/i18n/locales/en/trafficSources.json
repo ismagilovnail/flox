@@ -96,6 +96,7 @@
       "title": "Last sync result",
       "recordsFetched": "Records fetched",
       "entriesWritten": "Cost entries written",
+      "entriesSkippedSplit": "Days kept split by country",
       "unmatchedTitle": "Unmatched external campaign IDs",
       "unmatchedHint": "No FLOX campaign has this External campaign ID yet — set it on a campaign's Settings tab to start matching.",
       "unmatchedTruncated": "and more not shown"

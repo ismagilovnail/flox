@@ -3,6 +3,8 @@ package cost
 import (
 	"context"
 	"fmt"
+	"math"
+	"regexp"
 	"strings"
 	"time"
 
@@ -28,10 +30,7 @@ func NewService(repo *Repository, fx FXConverter) *Service {
 }
 
 func (s *Service) Upsert(ctx context.Context, orgID, campaignID string, in UpsertInput) (Entry, error) {
-	in.Currency = strings.ToUpper(strings.TrimSpace(in.Currency))
-	if in.TrafficSourceID != nil && strings.TrimSpace(*in.TrafficSourceID) == "" {
-		in.TrafficSourceID = nil
-	}
+	in = normalize(in)
 
 	if fields := validateUpsert(in); len(fields) > 0 {
 		return Entry{}, apierror.Validation("invalid cost entry", fields)
@@ -80,10 +79,7 @@ func (s *Service) Upsert(ctx context.Context, orgID, campaignID string, in Upser
 // tenant-isolation gap (CLAUDE.md #5 is about never trusting a
 // client-supplied id; campaignID here was never client-supplied).
 func (s *Service) UpsertFromSync(ctx context.Context, orgID, campaignID string, in UpsertInput, source Source) (Entry, error) {
-	in.Currency = strings.ToUpper(strings.TrimSpace(in.Currency))
-	if in.TrafficSourceID != nil && strings.TrimSpace(*in.TrafficSourceID) == "" {
-		in.TrafficSourceID = nil
-	}
+	in = normalize(in)
 
 	if fields := validateUpsert(in); len(fields) > 0 {
 		return Entry{}, apierror.Validation("invalid cost entry", fields)
@@ -139,6 +135,10 @@ func (s *Service) SpendBySource(ctx context.Context, orgID string, from, to time
 	return s.repo.SpendBySource(ctx, orgID, from, to)
 }
 
+func (s *Service) SpendByCountry(ctx context.Context, orgID string, from, to time.Time, scope CountryScope) ([]CountryDaySpend, error) {
+	return s.repo.SpendByCountry(ctx, orgID, from, to, scope)
+}
+
 func (s *Service) DailySpendForOrg(ctx context.Context, orgID string, from, to time.Time) ([]DailySpend, error) {
 	return s.repo.DailySpendForOrg(ctx, orgID, from, to)
 }
@@ -148,13 +148,23 @@ func (s *Service) AccountTimezones(ctx context.Context, orgID string, from, to t
 	return s.repo.AccountTimezones(ctx, orgID, from, to)
 }
 
+// normalize upper-cases the codes and turns a blank traffic source into none.
+func normalize(in UpsertInput) UpsertInput {
+	in.Currency = strings.ToUpper(strings.TrimSpace(in.Currency))
+	in.Country = strings.ToUpper(strings.TrimSpace(in.Country))
+	if in.TrafficSourceID != nil && strings.TrimSpace(*in.TrafficSourceID) == "" {
+		in.TrafficSourceID = nil
+	}
+	return in
+}
+
 func validateUpsert(in UpsertInput) map[string]string {
 	fields := map[string]string{}
 	if in.EntryDate.IsZero() {
 		fields["entryDate"] = "required"
 	}
-	if in.Amount < 0 {
-		fields["amount"] = "must not be negative"
+	if in.Amount < 0 || math.IsNaN(in.Amount) || math.IsInf(in.Amount, 0) {
+		fields["amount"] = "must be a number, not negative"
 	}
 	if len(in.Currency) != 3 {
 		fields["currency"] = "must be a 3-letter currency code"
@@ -162,5 +172,10 @@ func validateUpsert(in UpsertInput) map[string]string {
 	if in.TrafficSourceID != nil && !idgen.IsValid(*in.TrafficSourceID) {
 		fields["trafficSourceId"] = "invalid id"
 	}
+	if in.Country != "" && !countryCode.MatchString(in.Country) {
+		fields["country"] = "must be an ISO 3166-1 alpha-2 code"
+	}
 	return fields
 }
+
+var countryCode = regexp.MustCompile(`^[A-Z]{2}$`)

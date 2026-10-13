@@ -181,9 +181,10 @@ under these dimensions and filters, not `null`.
   splits it out, sets `ByDay`, and the row comes back with both `day` and the
   other `dims`. It counts toward the max-4 limit, can be a sort key (`"day"`),
   and is valid in a saved preset (dimensions and group-by). Per-day cost is
-  attached for no other dimension, `[campaign]` or `[source]`
+  attached for no other dimension, `[campaign]`, `[source]` or `[country]`
   (`attachDailyCost`: `DailySpendForOrg`, `CampaignSpendByDay`,
-  `SourceSpendByDay`); any other combination gets `null` cost, as before.
+  `SourceSpendByDay`; `attachCountryCost`: `SpendByCountry`); any other
+  combination gets `null` cost, as before.
 - **`timezone`** (IANA name, `""`/`UTC` = UTC) is accepted by `report`,
   `timeseries` and `funnel`. It moves the day boundary (`toDate(event_at,
   'tz')`) and the From/To window (local midnights converted to UTC instants),
@@ -223,15 +224,27 @@ done; done | docker exec -i infra-clickhouse-1 clickhouse-client --user flox -d 
 
 Events whose campaign no longer exists in Postgres stay `''`.
 
-## Cost joins only at campaign granularity or coarser
+## Cost joins at campaign, source or country granularity
 
-`cost_entries` (Postgres) is campaign+day grained — no country/device/os/…
-breakdown exists to join against. `Service.costEligible` allows a cost
-join only when `dims` is empty, `[campaign]`, or `[source]`. For `[source]`
+`cost_entries` (Postgres) is campaign+day grained, optionally split by
+country (00071) — no device/os/… breakdown exists to join against.
+`Service.costEligible` allows a cost join only when `dims` is empty,
+`[campaign]`, `[source]` or `[country]`. For `[source]`
 cost is rolled up through the campaign (`cost.SpendBySource`: each entry counts
 toward `campaigns.traffic_source_id`, the same attribution clicks use), not
-through the entry's optional own `traffic_source_id` tag. Every other dimension combination —
-by-country report, by-device breakdown, etc. — returns `cost`/`profit`/
+through the entry's optional own `traffic_source_id` tag.
+
+For `[country]` (`attachCountryCost`), cost is the spend entered for that
+country. Spend entered without a country (every synced day, and manual day
+totals) cannot be split, so a period — or a day, with `day` — holding any
+of it gives every country `null` cost: the split part alone would understate
+cost and overstate ROI. Campaign and source filters narrow the spend
+(`cost.CountryScope`); a filter on anything else, or two values of one,
+gives `null` cost. Unfiltered, a country with spend and no traffic is still
+a row. The `""` (unknown) country of the events never takes the unsplit
+spend.
+
+Every other dimension combination — by-device breakdown, etc. — returns `cost`/`profit`/
 `roi`/`roas`/`cpc`/`cpa` as `null` for every row, per CLAUDE.md #6: no cost
 data on file must render as "—", never a fabricated 0. `MetricValues`
 (the wire shape) makes this a real JSON `null` on every nullable field,

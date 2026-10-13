@@ -9,6 +9,7 @@ import (
 
 	"github.com/ismagilovnail/flox/apps/internal/apierror"
 	"github.com/ismagilovnail/flox/apps/internal/chstore"
+	"github.com/ismagilovnail/flox/apps/internal/cost"
 )
 
 // maxReportDims bounds how many dimensions one report can group by at
@@ -474,7 +475,7 @@ func (s *Service) groupedReport(ctx context.Context, organizationID string, dims
 				return acc
 			}
 		}
-		if err := s.attachCost(ctx, organizationID, dims, byDay, from, to, merged, addRow); err != nil {
+		if err := s.attachCost(ctx, organizationID, dims, byDay, filters, from, to, merged, addRow); err != nil {
 			return nil, err
 		}
 	}
@@ -492,24 +493,28 @@ func (s *Service) groupedReport(ctx context.Context, organizationID string, dims
 	return rows, nil
 }
 
-// costEligible reports whether dims resolves to campaign or traffic-source
-// granularity (alone) or coarser — the only shapes cost_entries (Postgres,
-// campaign+day grained, rolled up to a source through the campaign) can
-// answer. No country/device/os/... breakdown exists to join against.
+// costEligible reports whether dims resolves to campaign, traffic-source
+// or country granularity (alone) or coarser — the only shapes cost_entries
+// (Postgres, campaign+day[+country] grained, rolled up to a source through
+// the campaign) can answer. No device/os/... breakdown exists to join
+// against.
 func costEligible(dims []chstore.ReportDimension) bool {
 	if len(dims) == 0 {
 		return true
 	}
-	return len(dims) == 1 && (dims[0] == chstore.DimCampaign || dims[0] == chstore.DimSource)
+	return len(dims) == 1 && (dims[0] == chstore.DimCampaign || dims[0] == chstore.DimSource || dims[0] == chstore.DimCountry)
 }
 
 // attachCost fills acc.costUSD (and leaves it nil where CLAUDE.md #6
 // requires) for every row groupedReport has already built. addRow, when
 // not nil, creates the row for a campaign or source that has spend but no
 // row yet (per-period reports only).
-func (s *Service) attachCost(ctx context.Context, organizationID string, dims []chstore.ReportDimension, byDay bool, from, to time.Time, merged map[string]*rowAccumulator, addRow func(map[chstore.ReportDimension]string) *rowAccumulator) error {
+func (s *Service) attachCost(ctx context.Context, organizationID string, dims []chstore.ReportDimension, byDay bool, filters []chstore.ReportFilter, from, to time.Time, merged map[string]*rowAccumulator, addRow func(map[chstore.ReportDimension]string) *rowAccumulator) error {
 	if !costEligible(dims) {
 		return nil // every acc.costUSD stays nil — no dimension breakdown cost_entries can answer
+	}
+	if len(dims) == 1 && dims[0] == chstore.DimCountry {
+		return s.attachCountryCost(ctx, organizationID, byDay, filters, from, to, merged, addRow)
 	}
 
 	if byDay {
@@ -591,6 +596,89 @@ func (s *Service) attachCost(ctx context.Context, organizationID string, dims []
 				v := c.AmountUSD
 				addRow(map[chstore.ReportDimension]string{chstore.DimCampaign: c.CampaignID}).costUSD = &v
 			}
+		}
+	}
+	return nil
+}
+
+// attachCountryCost fills cost per country (per (country, day) when byDay).
+// Spend entered without a country (Country "": every synced day, and manual
+// day totals) cannot be split, so a period — or a day, when byDay — that
+// holds any of it leaves every country's cost nil: showing the split part
+// alone would understate cost and overstate ROI (CLAUDE.md #6). Filters
+// narrow the spend only by campaign and traffic source; a report filtered
+// by anything else, or by two values of one, gets no cost — which spend
+// matches it is unknown.
+func (s *Service) attachCountryCost(ctx context.Context, organizationID string, byDay bool, filters []chstore.ReportFilter, from, to time.Time, merged map[string]*rowAccumulator, addRow func(map[chstore.ReportDimension]string) *rowAccumulator) error {
+	var scope cost.CountryScope
+	for _, f := range filters {
+		var field *string
+		switch f.Dimension {
+		case chstore.DimCampaign:
+			field = &scope.CampaignID
+		case chstore.DimSource:
+			field = &scope.TrafficSourceID
+		default:
+			return nil
+		}
+		if *field != "" && *field != f.Value {
+			return nil
+		}
+		*field = f.Value
+	}
+	spend, err := s.cost.SpendByCountry(ctx, organizationID, from, to, scope)
+	if err != nil {
+		return fmt.Errorf("analytics: querying spend by country: %w", err)
+	}
+
+	dayKey := func(t time.Time) string { return t.Format("2006-01-02") }
+	// bucket is the day when byDay, "" for the whole period.
+	bucket := func(t time.Time) string {
+		if byDay {
+			return dayKey(t)
+		}
+		return ""
+	}
+	unsplit := map[string]bool{}
+	by := map[string]float64{} // country|bucket
+	for _, c := range spend {
+		if c.Country == "" {
+			if c.AmountUSD != 0 {
+				unsplit[bucket(c.Day)] = true
+			}
+			continue
+		}
+		by[c.Country+"|"+bucket(c.Day)] += c.AmountUSD
+	}
+
+	seen := map[string]bool{}
+	for _, acc := range merged {
+		b := ""
+		if byDay {
+			if acc.day == nil {
+				continue
+			}
+			b = dayKey(*acc.day)
+		}
+		k := acc.dimValues[chstore.DimCountry] + "|" + b
+		seen[k] = true
+		if unsplit[b] {
+			continue
+		}
+		if usd, ok := by[k]; ok {
+			v := usd
+			acc.costUSD = &v
+		}
+	}
+	// Per-period only, like the campaign and source rows: a country with
+	// spend but no traffic is still a row.
+	if addRow != nil && !byDay && !unsplit[""] {
+		for k, usd := range by {
+			if seen[k] {
+				continue
+			}
+			v := usd
+			addRow(map[chstore.ReportDimension]string{chstore.DimCountry: strings.TrimSuffix(k, "|")}).costUSD = &v
 		}
 	}
 	return nil

@@ -5,7 +5,7 @@ import { toast } from "sonner";
 import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { Trash2Icon } from "lucide-react";
+import { DownloadIcon, Trash2Icon, UploadIcon } from "lucide-react";
 import type { ColumnDef } from "@tanstack/react-table";
 import { useTranslation } from "react-i18next";
 import type { TFunction } from "i18next";
@@ -28,12 +28,15 @@ import { DataTable, dataTableFeatures } from "@/components/ui/data-table";
 import { LoadingState } from "@/components/ui/loading-state";
 import { ErrorState } from "@/components/ui/error-state";
 import { formatUsd } from "@/lib/format";
+import { ApiError } from "@/lib/api/client";
+import { countryOptions } from "@/lib/countries";
 import { usePermission } from "@/hooks/use-auth";
 import { useTrafficSources } from "@/hooks/use-traffic-sources";
-import { useCostEntries, useDeleteCostEntry, useUpsertCostEntry } from "@/hooks/use-cost-entries";
+import { useCostEntries, useDeleteCostEntry, useImportCostEntries, useUpsertCostEntry } from "@/hooks/use-cost-entries";
 import type { CostEntry } from "@/lib/api/cost-entries";
 
 const ALL_SOURCES = "__all__";
+const NO_COUNTRY = "__total__";
 
 /** Factory, not a module-level const — see source-form-sheet.tsx's
  * buildSourceFormSchema for why (Zod messages are user-facing text and
@@ -42,6 +45,7 @@ function buildCostEntrySchema(t: TFunction) {
   return z.object({
     entryDate: z.string().min(1, t("form.validation.required", { ns: "cost" })),
     trafficSourceId: z.string(),
+    country: z.string(),
     amount: z
       .string()
       .min(1, t("form.validation.required", { ns: "cost" }))
@@ -64,6 +68,11 @@ function costEntryColumns(
 ): ColumnDef<typeof dataTableFeatures, CostEntry>[] {
   return [
     { accessorKey: "entryDate", header: t("columns.date", { ns: "cost" }) },
+    {
+      id: "country",
+      header: t("columns.country", { ns: "cost" }),
+      accessorFn: (row) => row.country || t("columns.noCountry", { ns: "cost" }),
+    },
     {
       id: "source",
       header: t("columns.source", { ns: "cost" }),
@@ -110,11 +119,13 @@ function costEntryColumns(
   ];
 }
 
-/** §27-COST's MVP: manual cost entry per campaign/source/day. Re-submitting
- * the same (source, date) via the form updates that day in place — the
- * backend upserts, it never stacks (apps/internal/cost). */
+/** §27-COST's MVP: manual cost entry per campaign/source/day/country, and
+ * CSV import. Re-submitting the same (source, date, country) updates that
+ * entry in place — the backend upserts, it never stacks
+ * (apps/internal/cost). */
 export function CampaignCostEntries({ campaignId }: { campaignId: string }) {
-  const { t } = useTranslation("cost");
+  const { t, i18n } = useTranslation("cost");
+  const countries = React.useMemo(() => countryOptions(i18n.language), [i18n.language]);
   const canWrite = usePermission("campaign.write");
   const entriesQuery = useCostEntries(campaignId);
   const sourcesQuery = useTrafficSources();
@@ -132,7 +143,7 @@ export function CampaignCostEntries({ campaignId }: { campaignId: string }) {
 
   const form = useForm<CostEntryFormValues>({
     resolver: zodResolver(buildCostEntrySchema(t)),
-    defaultValues: { entryDate: today(), trafficSourceId: ALL_SOURCES, amount: "0", currency: "USD" },
+    defaultValues: { entryDate: today(), trafficSourceId: ALL_SOURCES, country: NO_COUNTRY, amount: "0", currency: "USD" },
   });
 
   function onSubmit(values: CostEntryFormValues) {
@@ -140,6 +151,7 @@ export function CampaignCostEntries({ campaignId }: { campaignId: string }) {
       {
         entryDate: values.entryDate,
         trafficSourceId: values.trafficSourceId === ALL_SOURCES ? null : values.trafficSourceId,
+        country: values.country === NO_COUNTRY ? "" : values.country,
         amount: Number(values.amount),
         currency: values.currency.toUpperCase(),
       },
@@ -152,7 +164,7 @@ export function CampaignCostEntries({ campaignId }: { campaignId: string }) {
               currency: values.currency.toUpperCase(),
             }),
           });
-          form.reset({ entryDate: today(), trafficSourceId: ALL_SOURCES, amount: "0", currency: "USD" });
+          form.reset({ entryDate: today(), trafficSourceId: ALL_SOURCES, country: NO_COUNTRY, amount: "0", currency: "USD" });
         },
         onError: (err) => toast.error(t("toast.saveError"), { description: err.message }),
       },
@@ -188,7 +200,7 @@ export function CampaignCostEntries({ campaignId }: { campaignId: string }) {
             <CardDescription>{t("form.description")}</CardDescription>
           </CardHeader>
           <CardContent>
-            <form onSubmit={handleSubmit(onSubmit)} className="grid max-w-2xl grid-cols-2 gap-4 sm:grid-cols-4">
+            <form onSubmit={handleSubmit(onSubmit)} className="grid max-w-4xl grid-cols-2 gap-4 sm:grid-cols-5 [&>div]:min-w-0">
               <div className="grid gap-1.5">
                 <Label htmlFor="entryDate">{t("form.dateLabel")}</Label>
                 <Input id="entryDate" type="date" {...register("entryDate")} aria-invalid={!!errors.entryDate} />
@@ -210,6 +222,29 @@ export function CampaignCostEntries({ campaignId }: { campaignId: string }) {
                         {sources.map((s) => (
                           <SelectItem key={s.id} value={s.id}>
                             {s.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  )}
+                />
+              </div>
+
+              <div className="grid gap-1.5">
+                <Label htmlFor="country">{t("form.countryLabel")}</Label>
+                <Controller
+                  control={control}
+                  name="country"
+                  render={({ field }) => (
+                    <Select value={field.value} onValueChange={field.onChange}>
+                      <SelectTrigger id="country" className="w-full">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value={NO_COUNTRY}>{t("form.allCountries")}</SelectItem>
+                        {countries.map((c) => (
+                          <SelectItem key={c.value} value={c.value}>
+                            {c.value} · {c.label}
                           </SelectItem>
                         ))}
                       </SelectContent>
@@ -245,6 +280,8 @@ export function CampaignCostEntries({ campaignId }: { campaignId: string }) {
           </CardContent>
         </Card>
       )}
+
+      {canWrite && <CostCsvImport campaignId={campaignId} />}
 
       {entriesQuery.isPending ? (
         <LoadingState label={t("list.loading")} />
@@ -283,5 +320,88 @@ export function CampaignCostEntries({ campaignId }: { campaignId: string }) {
         </DialogContent>
       </Dialog>
     </div>
+  );
+}
+
+const CSV_TEMPLATE = "date,country,amount,currency,traffic_source_id\n2026-01-31,DE,120.50,USD,\n2026-01-31,FR,80,EUR,\n";
+
+/** Sorts "file" first, then "line N" by N. */
+function sortImportErrors(fields: Record<string, string>): [string, string][] {
+  const lineNo = (k: string) => (k === "file" ? -1 : Number(k.replace(/^line /, "")) || 0);
+  return Object.entries(fields).sort(([a], [b]) => lineNo(a) - lineNo(b));
+}
+
+/** CSV import card. The backend parses and validates (csvimport.go); this
+ * only reads the file and shows the per-line errors of a refused file. */
+function CostCsvImport({ campaignId }: { campaignId: string }) {
+  const { t } = useTranslation("cost");
+  const importMutation = useImportCostEntries(campaignId);
+  const inputRef = React.useRef<HTMLInputElement>(null);
+  const [rowErrors, setRowErrors] = React.useState<[string, string][]>([]);
+
+  async function onFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = ""; // the same file can be picked again after a fix
+    if (!file) return;
+    setRowErrors([]);
+    let text: string;
+    try {
+      text = await file.text();
+    } catch {
+      toast.error(t("import.readError"));
+      return;
+    }
+    importMutation.mutate(text, {
+      onSuccess: (res) => toast(t("import.success"), { description: t("import.successDescription", { count: res.written }) }),
+      onError: (err) => {
+        if (err instanceof ApiError && err.fields && Object.keys(err.fields).length > 0) {
+          setRowErrors(sortImportErrors(err.fields));
+        }
+        toast.error(t("import.error"), { description: err.message });
+      },
+    });
+  }
+
+  function downloadTemplate() {
+    const url = URL.createObjectURL(new Blob([CSV_TEMPLATE], { type: "text/csv" }));
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "cost-template.csv";
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>{t("import.title")}</CardTitle>
+        <CardDescription>{t("import.description")}</CardDescription>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-3">
+        <div className="flex flex-wrap gap-2">
+          <input ref={inputRef} type="file" accept=".csv,text/csv" className="sr-only" tabIndex={-1} onChange={onFile} aria-hidden />
+          <Button type="button" onClick={() => inputRef.current?.click()} disabled={importMutation.isPending}>
+            <UploadIcon className="size-4" />
+            {importMutation.isPending ? t("import.importing") : t("import.chooseFile")}
+          </Button>
+          <Button type="button" variant="outline" onClick={downloadTemplate}>
+            <DownloadIcon className="size-4" />
+            {t("import.template")}
+          </Button>
+        </div>
+        {rowErrors.length > 0 && (
+          <div role="alert" className="flex flex-col gap-1 rounded-md border border-danger/40 bg-danger/5 p-2.5 text-xs">
+            <span className="font-medium text-danger">{t("import.errorsTitle")}</span>
+            <ul className="flex max-h-48 flex-col gap-0.5 overflow-y-auto">
+              {rowErrors.map(([where, msg]) => (
+                <li key={where}>
+                  <span className="font-mono tabular-nums">{where}</span>: {msg}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+      </CardContent>
+    </Card>
   );
 }

@@ -2,6 +2,7 @@ package costsync
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 	// accountTimezone validates zone names: the zone database must ship
@@ -121,6 +122,10 @@ func (s *Service) Sync(ctx context.Context, orgID, trafficSourceID string, from,
 				Amount:          rec.Amount,
 				Currency:        rec.Currency,
 			}, source); err != nil {
+				if errors.Is(err, cost.ErrSplitConflict) {
+					result.EntriesSkippedSplit++
+					continue
+				}
 				return result, fmt.Errorf("writing cost entry for campaign %s: %w", c.ID, err)
 			}
 			result.EntriesWritten++

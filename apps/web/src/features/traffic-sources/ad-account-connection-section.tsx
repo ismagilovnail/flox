@@ -169,6 +169,11 @@ export function AdAccountConnectionSection({
                 <span>
                   {t("connection.syncResult.entriesWritten", { ns: "trafficSources" })}: {sync.data.entriesWritten}
                 </span>
+                {sync.data.entriesSkippedSplit > 0 && (
+                  <span>
+                    {t("connection.syncResult.entriesSkippedSplit", { ns: "trafficSources" })}: {sync.data.entriesSkippedSplit}
+                  </span>
+                )}
               </div>
               {sync.data.unmatchedExternalCampaignIds && sync.data.unmatchedExternalCampaignIds.length > 0 && (
                 <div className="flex flex-col gap-1">
