@@ -10,6 +10,7 @@ import { useTrafficSources } from "@/hooks/use-traffic-sources";
 import { useOffers } from "@/hooks/use-offers";
 import { usePwas } from "@/hooks/use-pwas";
 import { usePostlandings } from "@/hooks/use-postlandings";
+import { useNetworks } from "@/hooks/use-networks";
 import type { DimensionKey } from "@/features/analytics/registry";
 
 /**
@@ -18,7 +19,7 @@ import type { DimensionKey } from "@/features/analytics/registry";
  * entities can share one. This maps ids to current names for display
  * only; filters, exports of the raw query and the URL keep the id.
  *
- * Resolved: `campaign`, `source`, `flow`, `stream_set`, `landing`, `offer`, `pwa` and `postlanding` — all group by ULIDs that read as noise
+ * Resolved: `campaign`, `source`, `flow`, `stream_set`, `landing`, `offer`, `network`, `pwa` and `postlanding` — all group by ULIDs that read as noise
  * on their own, and both have an empty value that is a real bucket worth
  * naming ("no landing shown", "not routed to an offer"). Every other
  * dimension returns its value unchanged — the same rendering as before
@@ -34,6 +35,7 @@ export function useDimensionValueLabel(): (dimension: DimensionKey, value: strin
   const offers = useOffers().data?.offers;
   const pwas = usePwas().data?.pwas;
   const postlandings = usePostlandings().data?.postlandings;
+  const networks = useNetworks().data?.networks;
 
   const campaignNames = React.useMemo(() => new Map((campaigns ?? []).map((c) => [c.id, c.name])), [campaigns]);
   const sourceNames = React.useMemo(() => new Map((sources ?? []).map((s) => [s.id, s.name])), [sources]);
@@ -56,6 +58,7 @@ export function useDimensionValueLabel(): (dimension: DimensionKey, value: strin
   const landingNames = React.useMemo(() => new Map((landings ?? []).map((l) => [l.id, l.name])), [landings]);
   const offerNames = React.useMemo(() => new Map((offers ?? []).map((o) => [o.id, o.name])), [offers]);
   const pwaNames = React.useMemo(() => new Map((pwas ?? []).map((p) => [p.id, p.name])), [pwas]);
+  const networkNames = React.useMemo(() => new Map((networks ?? []).map((n) => [n.id, n.name])), [networks]);
   const postlandingNames = React.useMemo(
     () => new Map((postlandings ?? []).map((p) => [p.id, p.name])),
     [postlandings],
@@ -78,6 +81,8 @@ export function useDimensionValueLabel(): (dimension: DimensionKey, value: strin
           return value === "" ? t("values.noOffer") : (offerNames.get(value) ?? value);
         case "pwa":
           return value === "" ? t("values.noPwa") : (pwaNames.get(value) ?? value);
+        case "network":
+          return value === "" ? t("values.noNetwork") : (networkNames.get(value) ?? value);
         case "postlanding":
           return value === "" ? t("values.noPostlanding") : (postlandingNames.get(value) ?? value);
         case "country":
@@ -88,6 +93,6 @@ export function useDimensionValueLabel(): (dimension: DimensionKey, value: strin
           return value === "" ? "—" : value;
       }
     },
-    [t, campaignNames, sourceNames, flowNames, streamSetNames, landingNames, offerNames, pwaNames, postlandingNames],
+    [t, campaignNames, sourceNames, flowNames, streamSetNames, landingNames, offerNames, networkNames, pwaNames, postlandingNames],
   );
 }

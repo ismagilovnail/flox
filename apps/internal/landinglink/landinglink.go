@@ -48,6 +48,9 @@ type Claims struct {
 	LandingID      string `json:"l"`
 	Destination    string `json:"d"`
 	OfferID        string `json:"of,omitempty"`
+	// NetworkID is the network of OfferID at click time, carried so onward
+	// events stay on the same `network` bucket.
+	NetworkID string `json:"nw,omitempty"`
 	// TrafficSourceID is the click's campaign's traffic source, carried so
 	// onward events (LAND_CLICK, PWA_*) stay on the same `source` bucket.
 	TrafficSourceID string `json:"ts,omitempty"`

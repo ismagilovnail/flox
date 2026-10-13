@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/ClickHouse/clickhouse-go/v2"
 	"github.com/ClickHouse/clickhouse-go/v2/lib/driver"
 )
 
@@ -68,4 +69,51 @@ func backfillDone(ctx context.Context, conn driver.Conn, name string) (bool, err
 		return false, fmt.Errorf("chstore: checking backfill %s: %w", name, err)
 	}
 	return n > 0, nil
+}
+
+const networkBackfill = "network_id_v1"
+
+// BackfillNetworks gives clicks and tracking events from before
+// schema/017 their network, from their offer_id and the offer's network
+// now (offers, keyed by offer id, from Postgres — load is only called when
+// the backfill has not run yet). An offer moved to another network since
+// puts its old clicks on the new one; clicks without an offer stay empty.
+// Rows that already have a network are left alone. One map for every
+// organization: offer ids are globally unique, and a click only ever
+// carries an offer of its own organization. Runs once, from
+// apps/worker; it waits for the mutations to finish before recording
+// itself, so an interrupted run is redone on the next start.
+func BackfillNetworks(ctx context.Context, conn driver.Conn, load func(context.Context) (map[string]string, error)) error {
+	return backfillNetworks(ctx, conn, networkBackfill, load)
+}
+
+func backfillNetworks(ctx context.Context, conn driver.Conn, name string, load func(context.Context) (map[string]string, error)) error {
+	done, err := backfillDone(ctx, conn, name)
+	if err != nil || done {
+		return err
+	}
+	offers, err := load(ctx)
+	if err != nil {
+		return fmt.Errorf("chstore: backfill %s: loading offers: %w", name, err)
+	}
+	if len(offers) > 0 {
+		ids := make([]string, 0, len(offers))
+		nets := make([]string, 0, len(offers))
+		for id, net := range offers {
+			ids = append(ids, id)
+			nets = append(nets, net)
+		}
+		wait := clickhouse.Context(ctx, clickhouse.WithSettings(clickhouse.Settings{"mutations_sync": 2}))
+		for _, table := range []string{"click_events", "tracking_events"} {
+			if err := conn.Exec(wait, `ALTER TABLE `+table+`
+				UPDATE network_id = transform(offer_id, ?, ?, '')
+				WHERE network_id = '' AND offer_id IN ?`, ids, nets, ids); err != nil {
+				return fmt.Errorf("chstore: backfill %s on %s: %w", name, table, err)
+			}
+		}
+	}
+	if err := conn.Exec(ctx, `INSERT INTO chstore_backfills (name) VALUES (?)`, name); err != nil {
+		return fmt.Errorf("chstore: recording backfill %s: %w", name, err)
+	}
+	return nil
 }

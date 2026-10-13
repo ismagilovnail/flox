@@ -518,11 +518,9 @@ type dimensionValuesRequest struct {
 
 // dimensionValues answers POST /analytics/dimension-values — the report
 // builder's filter-value dropdown's own endpoint (docs/analytics-report-
-// api.md). A dimension outside chstore.ValidDimension's 15 (the 2 still-
-// unbacked ones) surfaces as the same apierror.Validation every other
-// endpoint here already gives for an unsupported dimension; the frontend
-// falls back to its own mock pool for those rather than treating this
-// as a hard failure.
+// api.md). A dimension outside chstore.ValidDimension surfaces as the
+// same apierror.Validation every other endpoint here gives for an
+// unsupported dimension.
 func (h *Handler) dimensionValues(w http.ResponseWriter, r *http.Request) {
 	orgID, _ := tenant.OrgID(r.Context())
 	var req dimensionValuesRequest

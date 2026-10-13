@@ -323,15 +323,15 @@ func TestLoadLandingPageIsOrgScoped(t *testing.T) {
 }
 
 // TestOfferIDOnEveryLandingEvent: a flow routing to a real offer through
-// an internal landing stamps that offer's id on SOURCE_CLICK, LAND_VIEW
-// and LAND_CLICK (the `offer` report dimension), and the click-through
-// lands on the offer's link. An inactive offer falls back — and is then
-// NOT attributed.
+// an internal landing stamps that offer's id and its network on
+// SOURCE_CLICK, LAND_VIEW and LAND_CLICK (the `offer` and `network` report
+// dimensions), and the click-through lands on the offer's link. An
+// inactive offer falls back — and neither is then attributed.
 func TestOfferIDOnEveryLandingEvent(t *testing.T) {
 	pool := testPool(t)
 	ctx := context.Background()
 	const offerLink = "https://offer.example/real?aff=1"
-	var offerID string
+	var offerID, networkID string
 	lnd := internalLanding(landing.StatusActive)
 	fx := seedFlowFixture(t, pool, &lnd, func(orgID string, f *streamset.FlowInput) {
 		net, err := network.NewService(network.NewRepository(pool)).Create(ctx, orgID, network.CreateInput{Name: "Offer Net", PostbackURL: "https://net.example/pb"})
@@ -345,7 +345,7 @@ func TestOfferIDOnEveryLandingEvent(t *testing.T) {
 		if err != nil {
 			t.Fatalf("seeding offer: %v", err)
 		}
-		offerID = off.ID
+		offerID, networkID = off.ID, net.Network.ID
 		f.Destination = streamset.Destination{Kind: routing.DestinationOffer, NetworkID: net.Network.ID, OfferID: off.ID}
 	})
 
@@ -364,8 +364,8 @@ func TestOfferIDOnEveryLandingEvent(t *testing.T) {
 		t.Fatalf("want SOURCE_CLICK, LAND_VIEW, LAND_CLICK, got %+v", sink.events)
 	}
 	for _, e := range sink.events {
-		if e.OfferID != offerID {
-			t.Fatalf("%s OfferID = %q, want %q", e.Type, e.OfferID, offerID)
+		if e.OfferID != offerID || e.NetworkID != networkID {
+			t.Fatalf("%s offer %q network %q, want %q / %q", e.Type, e.OfferID, e.NetworkID, offerID, networkID)
 		}
 	}
 
@@ -377,8 +377,8 @@ func TestOfferIDOnEveryLandingEvent(t *testing.T) {
 	get(h2, fx.host, "/t/go")
 	closeEvents2()
 	for _, e := range sink2.events {
-		if e.OfferID != "" {
-			t.Fatalf("%s attributed to paused offer %q", e.Type, e.OfferID)
+		if e.OfferID != "" || e.NetworkID != "" {
+			t.Fatalf("%s attributed to paused offer %q / network %q", e.Type, e.OfferID, e.NetworkID)
 		}
 	}
 }

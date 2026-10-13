@@ -19,18 +19,18 @@ referenced below as §N).
 ## CURRENT STATE — UPDATE THIS EVERY PHASE
 
 ```
-CURRENT PHASE : PHASE 12b — POSTLANDING SERVING (closed)
+CURRENT PHASE : PHASE 11b — NETWORK REPORT DIMENSION (closed)
 STATUS        : Spec conformance gaps (docs/spec-conformance-2026-10-11.md):
-                1 pixels, 2 campaign list metrics, 3 postlanding serving +
-                `postlanding` dimension closed. Gap 3: tracker redirects to
-                the postlanding (POSTLANDING_VIEW at redirect), {next_url} →
-                signed /pc/ (POSTLANDING_CLICK), CH schema 016. Checked in
-                the browser with live dev traffic.
-                Left: gaps 4–15, prod restore drill after deployment.
-LAST COMMIT   : feat(tracker): postlanding stage serving.
-UNCOMMITTED   : none expected. Dev DB at migration 00069, CH schema 016.
-NEXT          : wait for the user — next gap is 4 (`network` dimension +
-                "View statistics" for networks). CI (DO1) is
+                1 pixels, 2 campaign list metrics, 3 postlanding serving,
+                4 `network` dimension closed. Gap 4: tracker stamps the routed
+                offer's network (CH schema 017), history backfilled once from
+                offer_id (marker network_id_v1); every report dimension is
+                backed. Checked in the browser.
+                Left: gaps 5–15, prod restore drill after deployment.
+LAST COMMIT   : feat(analytics): network report dimension.
+UNCOMMITTED   : none expected. Dev DB at migration 00069, CH schema 017.
+NEXT          : wait for the user — next gap is 5 (Push section:
+                sidebar, NOTIFICATION_* events). CI (DO1) is
                 the user's own decision — do not set it up. Run go test with
                 the full env line AND check e2e did not skip (memory:
                 flox-full-test-env); chconn's TestLimitsStopAHeavyQuery

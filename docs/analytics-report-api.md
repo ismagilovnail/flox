@@ -53,9 +53,8 @@ an operator who wants it can still type `""` into the existing free-text
 value field.
 
 Gated by the same `chstore.ValidDimension` whitelist every other
-endpoint here already uses — a request for the still-unbacked
-dimension (`network`) 400s, same
-as `/analytics/report` already does for one. The frontend's
+endpoint here already uses — a request for a dimension outside it 400s,
+same as `/analytics/report` does. The frontend's
 `useDimensionValues` hook (`retry: false` — a 400 here is deterministic,
 not transient) treats that rejection as expected, not an error to
 surface: `AddFilterPopover` (`report-controls.tsx`) then offers no value
@@ -66,11 +65,25 @@ data" bar applies here the same way it does to cost: a genuine "nothing
 yet" must render as nothing, never as a plausible-looking placeholder
 value that isn't real.
 
-## Dimension whitelist: 16 backed (15 of the original 16, plus stream_set)
+## Dimension whitelist: 17 backed (the original 16, plus stream_set)
 
-`chstore.ReportDimension` (16): campaign, source (the traffic source of the click's
+`chstore.ReportDimension` (17): campaign, source (the traffic source of the click's
 campaign, `traffic_source_id`, schema/011), country, region, city, device, platform, os,
-browser, language, flow, stream_set, landing, offer, pwa, postlanding.
+browser, language, flow, stream_set, landing, offer, pwa, postlanding, network.
+
+`network` (`DimNetwork`, `network_id`) answers from two sides:
+clicks and tracking events by the network of the offer the click was
+routed to (`chstore/schema/017_network_id.sql`, stamped by `apps/tracker`
+from `offers.network_id` at click time and carried on the signed link to
+LAND_*/PWA_*/POSTLANDING_*); conversions by the network that sent the
+postback (`conversion_events.network_id`, schema/003). The two agree
+whenever a network posts back for its own offers. Empty = redirect flows,
+fallbacks, blocked clicks. Clicks from before 2026-10-13 got their network
+once from `offer_id` and the offer's network at the time
+(`chstore.BackfillNetworks`, apps/worker, marker `network_id_v1`) — an offer
+moved between networks before then has its old clicks on the new one.
+Names in the UI, "No network" for empty, "View statistics" in the networks
+list.
 
 `postlanding` (`DimPostlanding`, `postlanding_id`,
 `chstore/schema/016_postlanding_id.sql`, after `event_id`; also on
@@ -137,21 +150,17 @@ carries `stream_set_id = ""`, as does a conversion that never resolved to
 a click — grouping by `stream_set` returns that as its own `""` row, not
 missing data. The stream sets list's "View statistics" action
 (`features/stream-sets/stream-set-row.tsx`) deep-links into this
-dimension with the set's real id, not its display name — unlike the
-pre-existing network/source "View statistics" links (below), this
-one filters on the same value the column actually stores, so it works.
+dimension with the set's real id, not its display name — it filters on
+the same value the column stores.
 The filter chip it produces shows that raw id, since `FilterCondition`
 (`features/analytics/aggregate.ts`) has no separate display-label field;
 adding one is out of scope for a query-layer/UI change.
 
-`features/analytics/registry.ts`'s `DimensionKey` still lists one more from
-the original 16 — network — with no backing column anywhere in the event
-pipeline. Nothing blocks it (an offer's network is known at routing time);
-it is gap 4 of `docs/spec-conformance-2026-10-11.md`. The report builder
-does not offer it (`UNBACKED_DIMENSIONS`); requesting it 400s with
-`apierror.Validation`.
+Every `DimensionKey` in `features/analytics/registry.ts` is backed since
+2026-10-13 (gap 4 of `docs/spec-conformance-2026-10-11.md`); a dimension
+outside the whitelist 400s with `apierror.Validation`.
 
-Of the 11 backed dimensions, only 8 have a column on `conversion_events`
+Of the 17 backed dimensions, 14 have a column on `conversion_events`
 (`chstore.reportConversionColumns`) — it carries no `os`/`browser`/
 `language`. Grouping or filtering by those three is answered by joining
 `click_events` onto each conversion via `click_id`
@@ -184,8 +193,8 @@ under these dimensions and filters, not `null`.
   SOURCE_CLICK matches every filter (`click_id IN (SELECT ... click_events
   ...)`), so every stage is answerable with every dimension, including os/
   browser/language on the conversion steps. The click may predate the window.
-- The report builder no longer offers `network` (unbacked, it 400s; `postlanding`
-  was backed on 2026-10-13) and its filter-value picker no longer falls back to a mock pool.
+- The report builder offers every dimension (`postlanding` and `network` were
+  backed on 2026-10-13) and its filter-value picker no longer falls back to a mock pool.
 
 ## `source` is the traffic source, not a campaign proxy
 

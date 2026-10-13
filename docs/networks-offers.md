@@ -125,6 +125,16 @@ Before this the tracker redirected with a literal `{click_id}`: a network
 never received the id it has to echo back in its postback. `apps/e2e` now
 takes the click id from the redirect itself, not from ClickHouse.
 
+## Reports by network (2026-10-13)
+
+A click routed to an offer carries that offer's network (`network_id`,
+stamped by `apps/tracker` at click time; ClickHouse `schema/017`), and a
+conversion carries the network that sent its postback. Together they back
+the `network` report dimension and the networks list's "View statistics"
+(`docs/analytics-report-api.md`). Moving an offer to another network
+changes only clicks from then on; clicks from before the column existed
+were filled once from their offer.
+
 ## Frontend: a third mock/store pair left untouched
 
 Same situation `lib/mock/campaigns.ts`/`stores/campaigns.ts` was in after

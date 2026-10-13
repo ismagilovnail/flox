@@ -24,8 +24,7 @@ const (
 // verbatim; every method in this file rejects anything not in
 // reportClickColumns/reportConversionColumns below before it gets near SQL.
 //
-// The 16 here match apps/web's registry.ts DIMENSIONS. Network has no
-// column: no event carries a network.
+// The 17 here match apps/web's registry.ts DIMENSIONS.
 type ReportDimension string
 
 const (
@@ -70,6 +69,11 @@ const (
 	// flows without one, skipped stages (paused, behind an external
 	// landing), and rows from before postlandings were served.
 	DimPostlanding ReportDimension = "postlanding"
+	// DimNetwork groups clicks by the network of the offer they were
+	// routed to (schema/017) and conversions by the network that sent the
+	// postback (schema/003). Empty is a real bucket: redirect flows,
+	// fallbacks, blocked clicks.
+	DimNetwork ReportDimension = "network"
 )
 
 // reportClickColumns is the whitelist for click_events and tracking_events,
@@ -93,6 +97,7 @@ var reportClickColumns = map[ReportDimension]string{
 	DimOffer:       "offer_id",
 	DimPwa:         "pwa_id",
 	DimPostlanding: "postlanding_id",
+	DimNetwork:     "network_id",
 }
 
 // reportConversionColumns is the narrower whitelist for conversion_events
@@ -115,6 +120,7 @@ var reportConversionColumns = map[ReportDimension]string{
 	DimOffer:       "offer_id",
 	DimPwa:         "pwa_id",
 	DimPostlanding: "postlanding_id",
+	DimNetwork:     "network_id",
 }
 
 // reportConversionViaClickColumns are the dimensions conversion_events has
@@ -127,7 +133,7 @@ var reportConversionViaClickColumns = map[ReportDimension]string{
 	DimLanguage: "language",
 }
 
-// ValidDimension reports whether d is one of the 16 supported report
+// ValidDimension reports whether d is one of the 17 supported report
 // dimensions — the same check both click- and conversion-side queries can
 // always answer, since reportClickColumns is the wider of the two whitelists.
 func ValidDimension(d ReportDimension) bool {

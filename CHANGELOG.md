@@ -5,6 +5,32 @@ per-phase, matching `CLAUDE.md`'s phase protocol. The one exception is
 [Between phases], below: spec amendments and the code changes that follow from
 them land between phases and would otherwise be invisible here.
 
+## [Phase 11b] — Network report dimension
+
+Closes gap 4 of `docs/spec-conformance-2026-10-11.md`. `docs/analytics-report-api.md`.
+
+- **Tracker:** a click routed to an offer carries that offer's network (`event.Event.NetworkID`,
+  from `offers.network_id` loaded with the routing config — `CampaignRouting.OfferNetworks`).
+  It rides the signed link (`landinglink.Claims.NetworkID`) onto LAND_*, PWA_* and POSTLANDING_*.
+  Redirect flows, fallbacks and blocked clicks have none. Stamped at click time, so an offer
+  moved to another network later keeps its old clicks where they were.
+- **ClickHouse** `schema/017_network_id.sql`: `network_id` on `click_events` and
+  `tracking_events`. Conversions already had it (the network that sent the postback).
+- **History** (owner's decision): clicks and tracking events from before get their network once
+  from `offer_id` and the offer's current network — `chstore.BackfillNetworks`, run by
+  apps/worker after the existing backfills, waiting for the mutations, marker `network_id_v1`.
+  Rows that already have a network are untouched.
+- **Reports:** `network` dimension (`chstore.DimNetwork`) — every dimension the report builder
+  lists is now backed, so `UNBACKED_DIMENSIONS` is gone. Names in the UI, "No network" for
+  empty; "View statistics" in the networks list.
+- The flows query's offer join is now also scoped by organization.
+- Tests: tracker offer/network stamping (and none after a fallback), chstore report by network
+  and the backfill (once, keeps existing values, skips clicks without an offer). The tests that
+  used `network` as an unbacked example now use an unknown dimension.
+- Browser pass: networks list → "View statistics" opens the report filtered to Demo Network
+  (3 clicks filled by the backfill, plus their conversions); grouping by network shows "No
+  network" and "Demo Network". A new live click got its network from the tracker.
+
 ## [Phase 12b] — Postlanding serving
 
 Closes gap 3 of `docs/spec-conformance-2026-10-11.md`. `docs/postlanding.md` "Serving visitors".

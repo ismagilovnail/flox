@@ -22,3 +22,8 @@ func RunBackfill(ctx context.Context, conn driver.Conn, name, sql string) error 
 func SyncMutations(ctx context.Context) context.Context {
 	return clickhouse.Context(ctx, clickhouse.WithSettings(clickhouse.Settings{"mutations_sync": 2}))
 }
+
+// RunNetworkBackfill runs BackfillNetworks under its own name.
+func RunNetworkBackfill(ctx context.Context, conn driver.Conn, name string, offers map[string]string) error {
+	return backfillNetworks(ctx, conn, name, func(context.Context) (map[string]string, error) { return offers, nil })
+}

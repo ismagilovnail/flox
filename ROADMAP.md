@@ -144,7 +144,6 @@ scoped phase; none blocks anything that ships today.
 | Content Gallery has no system content/templates; flows list has no tags; flow nodes show no analytics summary; no "empty subs %" diagnostic | see the conformance doc |
 | No API-key rotation; `audit_logs` covers team and settings only; no tracker test for an inactive campaign | §54, §58 |
 | PWA types `external`/`ios_app`, landing `asPwa`, push from installed PWAs | no target-URL fields exist for the two types; `docs/pwa-serving.md` "Not done" |
-| `network` report dimension | unblocked (an offer's network is known at routing time) — gap 4 of the conformance doc; same pattern as `offer` |
 | Google Play URL parsing for the PWA listing preview | would need a scraper behind `apps/internal/urlsafety` |
 | `TRUSTED_PROXIES` still on its default (no real reverse proxy/LB/CDN deployed yet) | set it once real infrastructure exists in front of `apps/api`/`apps/tracker` |
 | `golang.org/x/crypto/openpgp` (`GO-2026-5932`) has no upstream fix | permanent, accepted, unreachable — this codebase only imports `bcrypt`; see `docs/security.md` Known limitations |

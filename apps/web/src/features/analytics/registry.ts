@@ -46,14 +46,10 @@ export const DIMENSIONS: { key: DimensionKey; label: string }[] = [
   { key: "day", label: "Day" },
 ];
 
-/** Dimensions /analytics/report can't answer yet (no event column — see
- * chstore.ReportDimension): picking one 400s the whole report, so the report
- * builder never offers them. `registry.ts` keeps the full list for Custom Metrics. */
-const UNBACKED_DIMENSIONS: DimensionKey[] = ["network"];
-
-/** What the report builder's dimension picker offers: every backed dimension,
- * plus "day" (per-day rows, bucketed in the report's timezone). */
-export const REPORT_DIMENSIONS = DIMENSIONS.filter((d) => !UNBACKED_DIMENSIONS.includes(d.key));
+/** What the report builder's dimension picker offers: every dimension
+ * chstore.ReportDimension answers, plus "day" (per-day rows, bucketed in the
+ * report's timezone). */
+export const REPORT_DIMENSIONS = DIMENSIONS;
 
 /** What the filter picker offers: like REPORT_DIMENSIONS without "day" — a day
  * is a bucket of event time, not a value an event carries. */

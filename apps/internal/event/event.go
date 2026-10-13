@@ -203,8 +203,13 @@ type Event struct {
 	// blocked, so a buyer can tell bot-filtering from geo-filtering.
 	FilterReason string `json:"filterReason,omitempty"`
 
-	// CPA conversion fields (§45), set on CPA_* events only.
+	// NetworkID is, on a CPA_* event, the network that sent the postback;
+	// on a click and the events after it, the network of the offer the
+	// click was routed to (apps/tracker; empty for redirects and
+	// fallbacks). Backs the `network` report dimension.
 	NetworkID string `json:"networkId,omitempty"`
+
+	// CPA conversion fields (§45), set on CPA_* events only.
 
 	// Revenue/Currency are exactly as the network reported them; USDValue
 	// is normalized using the FX rate on EventAt's date, never the current

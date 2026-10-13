@@ -497,12 +497,12 @@ func TestReportRejectsTooManyDimensions(t *testing.T) {
 func TestReportRejectsUnknownDimension(t *testing.T) {
 	svc := analytics.NewService(&reportFakeRepo{}, nil)
 	_, err := svc.Report(context.Background(), "org-1", analytics.ReportInput{
-		Dims: []chstore.ReportDimension{"network"}, // the deferred dimension
+		Dims: []chstore.ReportDimension{"no_such_dimension"},
 		From: time.Now().AddDate(0, 0, -7),
 		To:   time.Now(),
 	})
 	if err == nil {
-		t.Fatal("Report with dimension \"network\" succeeded, want a validation error (deferred, no backing column)")
+		t.Fatal("Report with an unknown dimension succeeded, want a validation error")
 	}
 }
 
@@ -671,19 +671,18 @@ func TestDimensionValuesPassesThroughAndCaps(t *testing.T) {
 	}
 }
 
-// TestDimensionValuesRejectsUnbackedDimension mirrors
-// TestReportRejectsUnknownDimension — the frontend's own fallback to its
-// mock pool for the 2 still-unbacked dimensions depends on this coming
-// back as a real validation error, not a silent empty list or a panic.
-func TestDimensionValuesRejectsUnbackedDimension(t *testing.T) {
+// TestDimensionValuesRejectsUnknownDimension mirrors
+// TestReportRejectsUnknownDimension — a dimension outside the whitelist is
+// a validation error, not a silent empty list or a panic.
+func TestDimensionValuesRejectsUnknownDimension(t *testing.T) {
 	svc := analytics.NewService(&reportFakeRepo{}, nil)
 	_, err := svc.DimensionValues(context.Background(), "org-1", analytics.DimensionValuesInput{
-		Dim:  "network", // the deferred dimension
+		Dim:  "no_such_dimension",
 		From: time.Now().AddDate(0, 0, -7),
 		To:   time.Now(),
 	})
 	if err == nil {
-		t.Fatal("DimensionValues with dimension \"network\" succeeded, want a validation error (deferred, no backing column)")
+		t.Fatal("DimensionValues with an unknown dimension succeeded, want a validation error")
 	}
 }
 

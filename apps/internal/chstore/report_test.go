@@ -621,9 +621,9 @@ func TestDistinctValuesLimitsResults(t *testing.T) {
 func TestDistinctValuesRejectsUnsupportedDimension(t *testing.T) {
 	conn := mustConn(t)
 	store := chstore.NewEventStore(conn)
-	_, err := store.DistinctValues(context.Background(), idgen.New(), chstore.ReportDimension("network"), time.Now().Add(-24*time.Hour), time.Now(), 10)
+	_, err := store.DistinctValues(context.Background(), idgen.New(), chstore.ReportDimension("no_such_dimension"), time.Now().Add(-24*time.Hour), time.Now(), 10)
 	if err == nil {
-		t.Fatal(`DistinctValues with dimension "network" succeeded, want an error — network has no backing column`)
+		t.Fatal(`DistinctValues with an unknown dimension succeeded, want an error`)
 	}
 }
 
@@ -1031,5 +1031,42 @@ func TestReportClicksCountsBlockedAndBotsWithoutTouchingClicks(t *testing.T) {
 	// A country with only blocked traffic still appears, with 0 clicks.
 	if de.Clicks != 0 || de.Blocked != 1 || de.Bots != 0 {
 		t.Fatalf("DE = clicks %d blocked %d bots %d, want 0/1/0", de.Clicks, de.Blocked, de.Bots)
+	}
+}
+
+// TestReportByNetwork: clicks group by the network of the offer they were
+// routed to (schema/017), conversions by the network that sent the
+// postback (schema/003) — one `network` dimension across both.
+func TestReportByNetwork(t *testing.T) {
+	conn := mustConn(t)
+	store := chstore.NewEventStore(conn)
+	ctx := context.Background()
+	orgID, campaignID := idgen.New(), idgen.New()
+	day := time.Date(2026, 10, 4, 0, 0, 0, 0, time.UTC)
+	click := idgen.New()
+
+	if err := store.InsertBatch(ctx, []event.Event{
+		{Type: event.SourceClick, EventAt: day.Add(time.Hour), OrganizationID: orgID, CampaignID: campaignID, ClickID: click, OfferID: "offer-a", NetworkID: "net-a"},
+		{Type: event.SourceClick, EventAt: day.Add(2 * time.Hour), OrganizationID: orgID, CampaignID: campaignID, ClickID: idgen.New()},
+		{Type: event.LandView, EventAt: day.Add(time.Hour), OrganizationID: orgID, CampaignID: campaignID, ClickID: click, NetworkID: "net-a"},
+		{Type: event.CpaAccept, EventAt: day.Add(3 * time.Hour), OrganizationID: orgID, CampaignID: campaignID, ClickID: click, NetworkID: "net-a", USDValue: 9, HasUSDValue: true},
+	}); err != nil {
+		t.Fatalf("InsertBatch with network ids: %v", err)
+	}
+	q := chstore.ReportQuery{OrganizationID: orgID, Dims: []chstore.ReportDimension{chstore.DimNetwork}, From: day, To: day.Add(24 * time.Hour)}
+	clicks, err := store.ReportClicks(ctx, q)
+	if err != nil {
+		t.Fatalf("ReportClicks by network: %v", err)
+	}
+	got := map[string]uint64{}
+	for _, a := range clicks {
+		got[a.Key.DimValues[chstore.DimNetwork]] = a.Clicks
+	}
+	if len(got) != 2 || got["net-a"] != 1 || got[""] != 1 {
+		t.Fatalf("clicks by network = %v", got)
+	}
+	convs, err := store.ReportConversions(ctx, q)
+	if err != nil || len(convs) != 1 || convs[0].Key.DimValues[chstore.DimNetwork] != "net-a" || convs[0].RevenueUSD != 9 {
+		t.Fatalf("conversions by network = %+v, %v", convs, err)
 	}
 }

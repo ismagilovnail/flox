@@ -3,7 +3,7 @@
 import * as React from "react";
 import Link from "next/link";
 import { toast } from "sonner";
-import { CopyIcon, KeyRoundIcon, PauseIcon, PencilIcon, PlayIcon, Trash2Icon } from "lucide-react";
+import { BarChart3Icon, CopyIcon, KeyRoundIcon, PauseIcon, PencilIcon, PlayIcon, Trash2Icon } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 import { IconButton } from "@/components/ui/icon-button";
@@ -25,6 +25,7 @@ import {
   useRegeneratePostbackSecret,
 } from "@/hooks/use-networks";
 import { usePermission } from "@/hooks/use-auth";
+import { viewStatisticsHref } from "@/features/analytics/view-statistics-link";
 import { PostbackSecretDialog } from "@/features/networks/network-list";
 import type { Network } from "@/lib/api/networks";
 
@@ -86,6 +87,18 @@ export function NetworkRowActions({ network }: { network: Network }) {
             </IconButton>
           </TooltipTrigger>
           <TooltipContent>{t("rowActions.edit")}</TooltipContent>
+        </Tooltip>
+
+        {/* network.id: the `network` report dimension groups by network_id. */}
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <IconButton aria-label={t("rowActions.viewStatistics")} size="icon-sm" asChild>
+              <Link href={viewStatisticsHref("network", network.id)}>
+                <BarChart3Icon className="size-3.5" />
+              </Link>
+            </IconButton>
+          </TooltipTrigger>
+          <TooltipContent>{t("rowActions.viewStatistics")}</TooltipContent>
         </Tooltip>
 
         {canWrite && network.status !== "archived" && (

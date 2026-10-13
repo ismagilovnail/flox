@@ -3,6 +3,7 @@ package chstore_test
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -70,5 +71,51 @@ func TestBackfillRunsOnce(t *testing.T) {
 	}
 	if rows != 1 {
 		t.Fatalf("backfill rows = %d after 3 runs, want 1 (it must run once)", rows)
+	}
+}
+
+// TestBackfillNetworks: clicks and tracking events from before schema/017
+// get their offer's network; rows that have one, or have no offer, are
+// left alone; a second run does nothing.
+func TestBackfillNetworks(t *testing.T) {
+	conn := mustConn(t)
+	store := chstore.NewEventStore(conn)
+	ctx := context.Background()
+	orgID := idgen.New()
+	name := "networks_" + idgen.New()
+	t.Cleanup(func() {
+		_ = conn.Exec(chstore.SyncMutations(context.Background()), `ALTER TABLE chstore_backfills DELETE WHERE name = ?`, name)
+	})
+	offer := "offer-" + idgen.New()
+	at := time.Date(2026, 9, 1, 10, 0, 0, 0, time.UTC)
+	old, kept, none := idgen.New(), idgen.New(), idgen.New()
+	if err := store.InsertBatch(ctx, []event.Event{
+		{Type: event.SourceClick, EventAt: at, OrganizationID: orgID, ClickID: old, OfferID: offer},
+		{Type: event.LandView, EventAt: at, OrganizationID: orgID, ClickID: old, OfferID: offer},
+		{Type: event.SourceClick, EventAt: at, OrganizationID: orgID, ClickID: kept, OfferID: offer, NetworkID: "net-then"},
+		{Type: event.SourceClick, EventAt: at, OrganizationID: orgID, ClickID: none},
+	}); err != nil {
+		t.Fatalf("InsertBatch: %v", err)
+	}
+
+	offers := map[string]string{offer: "net-now"}
+	if err := chstore.RunNetworkBackfill(ctx, conn, name, offers); err != nil {
+		t.Fatalf("backfill: %v", err)
+	}
+	// Recorded: a second run with another mapping changes nothing.
+	if err := chstore.RunNetworkBackfill(ctx, conn, name, map[string]string{offer: "net-other"}); err != nil {
+		t.Fatalf("second backfill: %v", err)
+	}
+
+	want := map[string]string{"click_events/" + old: "net-now", "tracking_events/" + old: "net-now", "click_events/" + kept: "net-then", "click_events/" + none: ""}
+	for key, net := range want {
+		table, click, _ := strings.Cut(key, "/")
+		var got string
+		if err := conn.QueryRow(ctx, `SELECT network_id FROM `+table+` WHERE organization_id = ? AND click_id = ?`, orgID, click).Scan(&got); err != nil {
+			t.Fatalf("%s: %v", key, err)
+		}
+		if got != net {
+			t.Fatalf("%s network_id = %q, want %q", key, got, net)
+		}
 	}
 }

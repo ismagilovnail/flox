@@ -74,10 +74,10 @@ export function useDashboardReport(from: Date, to: Date, timezone?: string, date
 }
 
 /**
- * `retry: false` — a rejection here is a deterministic 400 for an
- * unbacked dimension (chstore.ValidDimension), not a transient failure
- * retrying would ever fix; the report builder doesn't offer those, so in
- * practice it never fires. `enabled` lets the caller skip firing this
+ * `retry: false` — a rejection here is a deterministic 400 for a
+ * dimension outside chstore.ValidDimension, not a transient failure
+ * retrying would ever fix; the report builder offers only valid ones, so
+ * in practice it never fires. `enabled` lets the caller skip firing this
  * until its popover is actually open.
  */
 export function useDimensionValues(dim: DimensionKey, from: Date, to: Date, options?: { enabled?: boolean }) {

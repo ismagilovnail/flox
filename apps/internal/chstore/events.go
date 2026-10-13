@@ -74,6 +74,7 @@ func (s *EventStore) insertClickEvents(ctx context.Context, events []event.Event
 			e.LandingID, e.OfferID, e.PwaID, e.TrafficSourceID, // schema/008-011: appended last, keep this order
 			e.ID,            // schema/014: event_id, after them
 			e.PostlandingID, // schema/016, after event_id
+			e.NetworkID,     // schema/017, after postlanding_id (click/tracking only; conversions have it from 003)
 		); err != nil {
 			return fmt.Errorf("chstore: appending to click_events batch: %w", err)
 		}
@@ -104,6 +105,7 @@ func (s *EventStore) insertTrackingEvents(ctx context.Context, events []event.Ev
 			e.LandingID, e.OfferID, e.PwaID, e.TrafficSourceID, // schema/008-011: appended last, keep this order
 			e.ID,            // schema/014: event_id, after them
 			e.PostlandingID, // schema/016, after event_id
+			e.NetworkID,     // schema/017, after postlanding_id (click/tracking only; conversions have it from 003)
 		); err != nil {
 			return fmt.Errorf("chstore: appending to tracking_events batch: %w", err)
 		}

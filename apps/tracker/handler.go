@@ -158,6 +158,11 @@ func (h *Handler) track(w http.ResponseWriter, r *http.Request) {
 	clickID := clickIDFor(sticky, result, loaded.StickyFlowKeepClickID)
 
 	ev := buildEvent(link, result, attrs, params, clickID, ip, r)
+	// The network of the offer the click was routed to, as it is now — an
+	// offer moved to another network later keeps this click on this one.
+	if result.OfferID != "" {
+		ev.NetworkID = loaded.OfferNetworks[result.OfferID]
+	}
 	// The destination's macros ({click_id}, {sub1}…) are resolved once, here:
 	// the recorded event, and the signed landing/PWA links that carry
 	// ev.Destination onward, all hold the URL the visitor actually reaches —

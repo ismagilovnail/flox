@@ -32,6 +32,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgxpool"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 
 	"github.com/ismagilovnail/flox/apps/internal/adaccount"
@@ -222,6 +223,15 @@ func run() error {
 		if err := chstore.Backfill(ctx, ch); err != nil {
 			if ctx.Err() == nil {
 				logger.Error("clickhouse backfill failed, will retry on next start", "error", err)
+			}
+			return
+		}
+		// Networks for clicks from before schema/017, from their offer.
+		if err := chstore.BackfillNetworks(ctx, ch, func(ctx context.Context) (map[string]string, error) {
+			return offerNetworks(ctx, db)
+		}); err != nil {
+			if ctx.Err() == nil {
+				logger.Error("clickhouse network backfill failed, will retry on next start", "error", err)
 			}
 			return
 		}
@@ -516,4 +526,23 @@ func (p slackPoster) PostSlack(ctx context.Context, orgID, text string) error {
 		return alert.ErrSlackNotConnected
 	}
 	return err
+}
+
+// offerNetworks maps every offer id to its network, across organizations
+// — for chstore.BackfillNetworks.
+func offerNetworks(ctx context.Context, db *pgxpool.Pool) (map[string]string, error) {
+	rows, err := db.Query(ctx, `SELECT id, network_id FROM offers`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := map[string]string{}
+	for rows.Next() {
+		var id, network string
+		if err := rows.Scan(&id, &network); err != nil {
+			return nil, err
+		}
+		out[id] = network
+	}
+	return out, rows.Err()
 }
