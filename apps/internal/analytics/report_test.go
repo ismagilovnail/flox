@@ -497,12 +497,12 @@ func TestReportRejectsTooManyDimensions(t *testing.T) {
 func TestReportRejectsUnknownDimension(t *testing.T) {
 	svc := analytics.NewService(&reportFakeRepo{}, nil)
 	_, err := svc.Report(context.Background(), "org-1", analytics.ReportInput{
-		Dims: []chstore.ReportDimension{"postlanding"}, // one of the 2 deferred dimensions
+		Dims: []chstore.ReportDimension{"network"}, // the deferred dimension
 		From: time.Now().AddDate(0, 0, -7),
 		To:   time.Now(),
 	})
 	if err == nil {
-		t.Fatal("Report with dimension \"postlanding\" succeeded, want a validation error (deferred, no backing column)")
+		t.Fatal("Report with dimension \"network\" succeeded, want a validation error (deferred, no backing column)")
 	}
 }
 
@@ -678,12 +678,12 @@ func TestDimensionValuesPassesThroughAndCaps(t *testing.T) {
 func TestDimensionValuesRejectsUnbackedDimension(t *testing.T) {
 	svc := analytics.NewService(&reportFakeRepo{}, nil)
 	_, err := svc.DimensionValues(context.Background(), "org-1", analytics.DimensionValuesInput{
-		Dim:  "postlanding", // one of the 2 deferred dimensions
+		Dim:  "network", // the deferred dimension
 		From: time.Now().AddDate(0, 0, -7),
 		To:   time.Now(),
 	})
 	if err == nil {
-		t.Fatal("DimensionValues with dimension \"postlanding\" succeeded, want a validation error (deferred, no backing column)")
+		t.Fatal("DimensionValues with dimension \"network\" succeeded, want a validation error (deferred, no backing column)")
 	}
 }
 

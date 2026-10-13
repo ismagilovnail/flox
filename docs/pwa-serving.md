@@ -143,7 +143,6 @@ secure context, so install works in dev without TLS.
 
 ## Not done
 
-- Postlanding stage serving (and its report dimension) — next.
 - The landing's `asPwa` flag; PWA types `external`/`ios_app` (no URL
   fields exist for them).
 - Push notifications (`NOTIFICATION_*`) from the installed app.

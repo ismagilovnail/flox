@@ -62,6 +62,9 @@ func (s *fakeStore) LoadLandingPage(context.Context, string, string) (routingsto
 func (s *fakeStore) LoadPwaPage(context.Context, string, string) (routingstore.PwaPage, error) {
 	return routingstore.PwaPage{}, errors.New("unused")
 }
+func (s *fakeStore) LoadPostlanding(context.Context, string, string) (routingstore.FlowPostlanding, error) {
+	return routingstore.FlowPostlanding{}, errors.New("unused")
+}
 func (s *fakeStore) LoadPwaComments(context.Context, string, string) ([]routingstore.PwaComment, error) {
 	return nil, errors.New("unused")
 }

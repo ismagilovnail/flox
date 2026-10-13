@@ -19,18 +19,18 @@ referenced below as §N).
 ## CURRENT STATE — UPDATE THIS EVERY PHASE
 
 ```
-CURRENT PHASE : PHASE 6b — CAMPAIGN LIST METRICS (closed)
+CURRENT PHASE : PHASE 12b — POSTLANDING SERVING (closed)
 STATUS        : Spec conformance gaps (docs/spec-conformance-2026-10-11.md):
-                1 pixels (server-side sending, internal/pixelsend) and 2
-                campaign list metrics (period report by campaign + custom
-                metrics "Campaigns Table") closed and checked in the browser
-                (2026-10-13); the pass found and fixed a stream-set save bug
-                (missing valueTo/value from the API failed the form schema).
-                Left: gaps 3–15, prod restore drill after deployment.
-LAST COMMIT   : fix(stream-sets): saved stream sets can be saved again.
-UNCOMMITTED   : none expected. Dev DB at migration 00069, CH schema 015.
-NEXT          : wait for the user — next gap is 3 (postlanding serving +
-                postlanding/network dimensions). CI (DO1) is
+                1 pixels, 2 campaign list metrics, 3 postlanding serving +
+                `postlanding` dimension closed. Gap 3: tracker redirects to
+                the postlanding (POSTLANDING_VIEW at redirect), {next_url} →
+                signed /pc/ (POSTLANDING_CLICK), CH schema 016. Checked in
+                the browser with live dev traffic.
+                Left: gaps 4–15, prod restore drill after deployment.
+LAST COMMIT   : feat(tracker): postlanding stage serving.
+UNCOMMITTED   : none expected. Dev DB at migration 00069, CH schema 016.
+NEXT          : wait for the user — next gap is 4 (`network` dimension +
+                "View statistics" for networks). CI (DO1) is
                 the user's own decision — do not set it up. Run go test with
                 the full env line AND check e2e did not skip (memory:
                 flox-full-test-env); chconn's TestLimitsStopAHeavyQuery

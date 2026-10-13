@@ -621,9 +621,9 @@ func TestDistinctValuesLimitsResults(t *testing.T) {
 func TestDistinctValuesRejectsUnsupportedDimension(t *testing.T) {
 	conn := mustConn(t)
 	store := chstore.NewEventStore(conn)
-	_, err := store.DistinctValues(context.Background(), idgen.New(), chstore.ReportDimension("postlanding"), time.Now().Add(-24*time.Hour), time.Now(), 10)
+	_, err := store.DistinctValues(context.Background(), idgen.New(), chstore.ReportDimension("network"), time.Now().Add(-24*time.Hour), time.Now(), 10)
 	if err == nil {
-		t.Fatal(`DistinctValues with dimension "offer" succeeded, want an error — offer has no backing column`)
+		t.Fatal(`DistinctValues with dimension "network" succeeded, want an error — network has no backing column`)
 	}
 }
 
@@ -778,6 +778,43 @@ func TestReportByPwa(t *testing.T) {
 	convs, err := store.ReportConversions(ctx, q)
 	if err != nil || len(convs) != 1 || convs[0].RevenueUSD != 12 {
 		t.Fatalf("conversions by pwa = %+v, %v", convs, err)
+	}
+}
+
+// TestReportByPostlanding: postlanding_id (schema/016) groups clicks, the
+// stage's own events and conversions.
+func TestReportByPostlanding(t *testing.T) {
+	conn := mustConn(t)
+	store := chstore.NewEventStore(conn)
+	ctx := context.Background()
+	orgID, campaignID := idgen.New(), idgen.New()
+	day := time.Date(2026, 10, 3, 0, 0, 0, 0, time.UTC)
+	click := idgen.New()
+
+	if err := store.InsertBatch(ctx, []event.Event{
+		{Type: event.SourceClick, EventAt: day.Add(time.Hour), OrganizationID: orgID, CampaignID: campaignID, ClickID: click, PostlandingID: "post-a"},
+		{Type: event.SourceClick, EventAt: day.Add(2 * time.Hour), OrganizationID: orgID, CampaignID: campaignID, ClickID: idgen.New()},
+		{Type: event.PostlandingView, EventAt: day.Add(time.Hour), OrganizationID: orgID, CampaignID: campaignID, ClickID: click, PostlandingID: "post-a"},
+		{Type: event.PostlandingClick, EventAt: day.Add(time.Hour), OrganizationID: orgID, CampaignID: campaignID, ClickID: click, PostlandingID: "post-a"},
+		{Type: event.CpaAccept, EventAt: day.Add(3 * time.Hour), OrganizationID: orgID, CampaignID: campaignID, ClickID: click, PostlandingID: "post-a", USDValue: 7, HasUSDValue: true},
+	}); err != nil {
+		t.Fatalf("InsertBatch with postlanding ids: %v", err)
+	}
+	q := chstore.ReportQuery{OrganizationID: orgID, Dims: []chstore.ReportDimension{chstore.DimPostlanding}, From: day, To: day.Add(24 * time.Hour)}
+	clicks, err := store.ReportClicks(ctx, q)
+	if err != nil {
+		t.Fatalf("ReportClicks by postlanding: %v", err)
+	}
+	got := map[string]uint64{}
+	for _, a := range clicks {
+		got[a.Key.DimValues[chstore.DimPostlanding]] = a.Clicks
+	}
+	if len(got) != 2 || got["post-a"] != 1 || got[""] != 1 {
+		t.Fatalf("clicks by postlanding = %v", got)
+	}
+	convs, err := store.ReportConversions(ctx, q)
+	if err != nil || len(convs) != 1 || convs[0].Key.DimValues[chstore.DimPostlanding] != "post-a" || convs[0].RevenueUSD != 7 {
+		t.Fatalf("conversions by postlanding = %+v, %v", convs, err)
 	}
 }
 

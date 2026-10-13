@@ -48,6 +48,7 @@ type Store interface {
 	LoadLandingPage(ctx context.Context, orgID, landingID string) (routingstore.LandingPage, error)
 	LoadPwaPage(ctx context.Context, orgID, pwaID string) (routingstore.PwaPage, error)
 	LoadPwaComments(ctx context.Context, orgID, pwaID string) ([]routingstore.PwaComment, error)
+	LoadPostlanding(ctx context.Context, orgID, postlandingID string) (routingstore.FlowPostlanding, error)
 }
 
 var _ Store = (*routingstore.Store)(nil)
@@ -94,6 +95,7 @@ type Cache struct {
 	routing  *table[string, routingstore.CampaignRouting]
 	landings *table[string, routingstore.LandingPage]
 	pwas     *table[string, routingstore.PwaPage]
+	posts    *table[string, routingstore.FlowPostlanding]
 
 	invalidations atomic.Uint64
 }
@@ -109,6 +111,7 @@ func New(store Store, cfg Config, logger *slog.Logger) *Cache {
 		routing:  newTable[string, routingstore.CampaignRouting]("routing_config", cfg, logger),
 		landings: newTable[string, routingstore.LandingPage]("landing_page", cfg, logger),
 		pwas:     newTable[string, routingstore.PwaPage]("pwa_page", cfg, logger),
+		posts:    newTable[string, routingstore.FlowPostlanding]("postlanding", cfg, logger),
 	}
 }
 
@@ -137,6 +140,12 @@ func (c *Cache) LoadPwaPage(ctx context.Context, orgID, pwaID string) (routingst
 	})
 }
 
+func (c *Cache) LoadPostlanding(ctx context.Context, orgID, postlandingID string) (routingstore.FlowPostlanding, error) {
+	return c.posts.get(ctx, orgID+"/"+postlandingID, func(ctx context.Context) (routingstore.FlowPostlanding, error) {
+		return c.store.LoadPostlanding(ctx, orgID, postlandingID)
+	})
+}
+
 // LoadPwaComments is not cached: only the PWA constructor's test view reads
 // them, and an operator previewing an edit must see it.
 func (c *Cache) LoadPwaComments(ctx context.Context, orgID, pwaID string) ([]routingstore.PwaComment, error) {
@@ -150,6 +159,7 @@ func (c *Cache) Invalidate() {
 	c.routing.invalidate()
 	c.landings.invalidate()
 	c.pwas.invalidate()
+	c.posts.invalidate()
 	c.invalidations.Add(1)
 	metrics.RoutingCacheInvalidationsTotal.Inc()
 }

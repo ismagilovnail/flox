@@ -65,3 +65,18 @@ func TestResolveURLEscapesValues(t *testing.T) {
 		t.Fatalf("Resolve = %q, want the raw value", got)
 	}
 }
+
+// A postlanding's onward link is a whole URL dropped into a query
+// parameter: it must arrive as one escaped value, and nowhere else
+// set it resolves to nothing.
+func TestResolveURLNextURL(t *testing.T) {
+	next := "https://t.example/pc/abc.def?x=1&y=2"
+	got := macro.ResolveURL("https://post.example/?go={next_url}&cid={click_id}", macro.Values{ClickID: "c1", NextURL: next})
+	want := "https://post.example/?go=https%3A%2F%2Ft.example%2Fpc%2Fabc.def%3Fx%3D1%26y%3D2&cid=c1"
+	if got != want {
+		t.Fatalf("ResolveURL =\n  %s\nwant\n  %s", got, want)
+	}
+	if got := macro.ResolveURL("https://offer.example/?n={next_url}", macro.Values{}); got != "https://offer.example/?n=" {
+		t.Fatalf("unset next_url = %s, want it blank", got)
+	}
+}

@@ -24,10 +24,8 @@ const (
 // verbatim; every method in this file rejects anything not in
 // reportClickColumns/reportConversionColumns below before it gets near SQL.
 //
-// The 15 here match apps/web's registry.ts DIMENSIONS. Postlanding and
-// network have no column: the tracker does not serve a postlanding stage
-// (recording one that was never shown would be fabricated attribution),
-// and no event carries a network.
+// The 16 here match apps/web's registry.ts DIMENSIONS. Network has no
+// column: no event carries a network.
 type ReportDimension string
 
 const (
@@ -67,6 +65,11 @@ const (
 	// stage, skipped stages (paused PWA, non-internal type, behind an
 	// external landing), and rows from before PWAs were served.
 	DimPwa ReportDimension = "pwa"
+	// DimPostlanding groups by the postlanding stage a click's routed path
+	// went through (apps/tracker/postlanding.go). Empty is a real bucket:
+	// flows without one, skipped stages (paused, behind an external
+	// landing), and rows from before postlandings were served.
+	DimPostlanding ReportDimension = "postlanding"
 )
 
 // reportClickColumns is the whitelist for click_events and tracking_events,
@@ -74,21 +77,22 @@ const (
 // on the same underlying event.Event struct — see schema/002's own
 // comment on why they're still two tables).
 var reportClickColumns = map[ReportDimension]string{
-	DimCampaign:  "campaign_id",
-	DimSource:    "traffic_source_id",
-	DimCountry:   "country",
-	DimRegion:    "region",
-	DimCity:      "city",
-	DimDevice:    "device",
-	DimPlatform:  "platform",
-	DimOS:        "os",
-	DimBrowser:   "browser",
-	DimLanguage:  "language",
-	DimFlow:      "flow_id",
-	DimStreamSet: "stream_set_id",
-	DimLanding:   "landing_id",
-	DimOffer:     "offer_id",
-	DimPwa:       "pwa_id",
+	DimCampaign:    "campaign_id",
+	DimSource:      "traffic_source_id",
+	DimCountry:     "country",
+	DimRegion:      "region",
+	DimCity:        "city",
+	DimDevice:      "device",
+	DimPlatform:    "platform",
+	DimOS:          "os",
+	DimBrowser:     "browser",
+	DimLanguage:    "language",
+	DimFlow:        "flow_id",
+	DimStreamSet:   "stream_set_id",
+	DimLanding:     "landing_id",
+	DimOffer:       "offer_id",
+	DimPwa:         "pwa_id",
+	DimPostlanding: "postlanding_id",
 }
 
 // reportConversionColumns is the narrower whitelist for conversion_events
@@ -98,18 +102,19 @@ var reportClickColumns = map[ReportDimension]string{
 // reportConversionsJoined; every other dimension reads straight off
 // conversion_events with no join.
 var reportConversionColumns = map[ReportDimension]string{
-	DimCampaign:  "campaign_id",
-	DimSource:    "traffic_source_id",
-	DimCountry:   "country",
-	DimRegion:    "region",
-	DimCity:      "city",
-	DimDevice:    "device",
-	DimPlatform:  "platform",
-	DimFlow:      "flow_id",
-	DimStreamSet: "stream_set_id",
-	DimLanding:   "landing_id",
-	DimOffer:     "offer_id",
-	DimPwa:       "pwa_id",
+	DimCampaign:    "campaign_id",
+	DimSource:      "traffic_source_id",
+	DimCountry:     "country",
+	DimRegion:      "region",
+	DimCity:        "city",
+	DimDevice:      "device",
+	DimPlatform:    "platform",
+	DimFlow:        "flow_id",
+	DimStreamSet:   "stream_set_id",
+	DimLanding:     "landing_id",
+	DimOffer:       "offer_id",
+	DimPwa:         "pwa_id",
+	DimPostlanding: "postlanding_id",
 }
 
 // reportConversionViaClickColumns are the dimensions conversion_events has
@@ -122,7 +127,7 @@ var reportConversionViaClickColumns = map[ReportDimension]string{
 	DimLanguage: "language",
 }
 
-// ValidDimension reports whether d is one of the 15 supported report
+// ValidDimension reports whether d is one of the 16 supported report
 // dimensions — the same check both click- and conversion-side queries can
 // always answer, since reportClickColumns is the wider of the two whitelists.
 func ValidDimension(d ReportDimension) bool {

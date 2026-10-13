@@ -128,7 +128,7 @@ func (h *Handler) pwaPage(w http.ResponseWriter, r *http.Request) {
 		// PWA gone or paused since the link was issued: don't strand the
 		// visitor, send them on.
 		outcome = outcomeRedirected
-		http.Redirect(w, r, c.Destination, http.StatusFound)
+		h.continueOnward(w, r, c, func() event.Event { return h.claimsEvent(r, c) })
 		return
 	}
 
@@ -161,7 +161,7 @@ func (h *Handler) pwaPage(w http.ResponseWriter, r *http.Request) {
 		// A broken template must not strand the visitor on half a page.
 		h.logger.Error("rendering pwa page", "error", err, "pwa_id", c.PwaID)
 		outcome = outcomeRedirected
-		http.Redirect(w, r, c.Destination, http.StatusFound)
+		h.continueOnward(w, r, c, func() event.Event { return h.claimsEvent(r, c) })
 		return
 	}
 	writeHTML(w, body)
@@ -233,8 +233,12 @@ func (h *Handler) pwaOpen(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-	h.recordClaimsEvent(r, event.PwaOpen, c)
-	http.Redirect(w, r, c.Destination, http.StatusFound)
+	open := h.claimsEvent(r, c)
+	if !c.Test {
+		open.Type = event.PwaOpen
+		h.events.Enqueue(open)
+	}
+	h.continueOnward(w, r, c, func() event.Event { return open })
 }
 
 // pwaContinue is the page's "continue without installing" — a browser
@@ -246,7 +250,7 @@ func (h *Handler) pwaContinue(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-	http.Redirect(w, r, c.Destination, http.StatusFound)
+	h.continueOnward(w, r, c, func() event.Event { return h.claimsEvent(r, c) })
 }
 
 // recordClaimsEvent records t on the token's click_id with this request's
@@ -255,6 +259,15 @@ func (h *Handler) recordClaimsEvent(r *http.Request, t event.Type, c landinglink
 	if c.Test {
 		return
 	}
+	ev := h.claimsEvent(r, c)
+	ev.Type = t
+	h.events.Enqueue(ev)
+}
+
+// claimsEvent is the event of this request on the token's journey: the
+// token's routing/attribution context, this request's geo/device. Its Type
+// is the caller's to set.
+func (h *Handler) claimsEvent(r *http.Request, c landinglink.Claims) event.Event {
 	ip := h.clientIP.NetIP(r)
 	attrs, err := h.classifier.Classify(r.Context(), classifier.Input{
 		IP:             ip,
@@ -265,9 +278,7 @@ func (h *Handler) recordClaimsEvent(r *http.Request, t event.Type, c landinglink
 		h.logger.Error("classifying request", "error", err)
 		attrs = routing.Attributes{}
 	}
-	ev := landClickEvent(c, attrs, ip, r)
-	ev.Type = t
-	h.events.Enqueue(ev)
+	return landClickEvent(c, attrs, ip, r)
 }
 
 // inAppWebviewMarkers identify in-app browsers by their own self-

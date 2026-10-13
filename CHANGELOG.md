@@ -5,6 +5,44 @@ per-phase, matching `CLAUDE.md`'s phase protocol. The one exception is
 [Between phases], below: spec amendments and the code changes that follow from
 them land between phases and would otherwise be invisible here.
 
+## [Phase 12b] — Postlanding serving
+
+Closes gap 3 of `docs/spec-conformance-2026-10-11.md`. `docs/postlanding.md` "Serving visitors".
+
+- **Tracker** (`apps/tracker/postlanding.go`): a flow's postlanding stage now reaches visitors.
+  The tracker redirects to the postlanding where it used to redirect to the destination —
+  straight from the click, after an internal landing's click-through, after the PWA's launch or
+  "continue without installing" — and records **POSTLANDING_VIEW** at that redirect (owner's
+  decision: a view of someone else's page is counted when the visitor is sent there).
+- **`{next_url}`** in the postlanding URL resolves to a signed `/pc/{token}` link (same
+  `landinglink` token as `/lc/`, host-bound, 30 days, re-issued at each redirect). `/pc/`
+  records **POSTLANDING_CLICK** on the original click_id and 302s to the destination. Without the
+  macro the postlanding ends the funnel; nothing is appended to the operator's URL (owner's
+  decision).
+- Skipped like other stages: paused postlanding, behind an external landing, no
+  `LANDING_LINK_KEY`; a postlanding paused after the link was issued is read as it is now
+  (`routingstore.LoadPostlanding`, cached and tenant-scoped).
+- **Data:** `event.Event.PostlandingID`; ClickHouse `schema/016_postlanding_id.sql` adds
+  `postlanding_id` to click/tracking/conversion events and `click_lookup` (new view
+  `click_lookup_mv_v3`), so conversions inherit it through attribution.
+- **Reports:** `postlanding` dimension (`chstore.DimPostlanding`), offered by the report builder
+  with names and "No postlanding"; "View statistics" in the postlanding list. `network` is the one
+  dimension left unbacked (gap 4).
+- **Form:** the URL field has a "Macros" button limited to what a postlanding URL is resolved
+  with (`POSTLANDING_MACROS`: `{next_url}` and the click's values) and a hint on `{next_url}`; the
+  description no longer says postlandings come after the offer.
+- `flox_tracking_requests_total` gains outcomes `postlanding` and `post_click`.
+- Tests: `tracker/postlanding_test.go` (direct funnel, Landing → PWA → Postlanding order,
+  skipped stages, rejected `/pc/` tokens, tenant scope), chstore report and attribution,
+  `macro` `{next_url}` escaping, `lib/macros.test.ts`. Tests that used `postlanding` as the
+  example of an unbacked dimension now use `network`.
+- Browser pass: postlanding created in the form, attached to the demo flow; live traffic through
+  the dev tracker → postlanding with a signed `{next_url}` → `/pc/` → offer, and a conversion,
+  all carrying `postlanding_id` in ClickHouse; the report grouped and filtered by postlanding
+  with its name. Test postlanding archived afterwards.
+- Not done: the postlanding's `events` field is still only a label (push/Telegram have no
+  phase).
+
 ## [Between phases] — Saved stream sets can be saved again; browser pass of 13b and 6b
 
 - **Fix:** a stream set loaded from the API could not be saved from the campaign page — the

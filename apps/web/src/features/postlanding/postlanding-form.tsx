@@ -13,6 +13,8 @@ import { Label } from "@/components/ui/label";
 import { MultiSelect } from "@/components/ui/multi-select";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { MacroPicker } from "@/components/shared/macro-picker";
+import { POSTLANDING_MACROS } from "@/lib/macros";
 import { POSTLANDING_EVENT_TYPES, type PostlandingEventType, type PostlandingStatus } from "@/lib/api/postlanding";
 
 /** Factory, not a module-level const — see source-form.tsx's
@@ -63,6 +65,8 @@ export function PostlandingForm({
     register,
     handleSubmit,
     control,
+    setValue,
+    getValues,
     formState: { errors, isSubmitting },
   } = form;
 
@@ -87,7 +91,13 @@ export function PostlandingForm({
           </div>
 
           <div className="grid gap-1.5">
-            <Label htmlFor="psl-url">{t("form.urlLabel", { ns: "postlanding" })}</Label>
+            <div className="flex items-center justify-between gap-2">
+              <Label htmlFor="psl-url">{t("form.urlLabel", { ns: "postlanding" })}</Label>
+              <MacroPicker
+                macros={POSTLANDING_MACROS}
+                onInsert={(token) => setValue("url", `${getValues("url")}${token}`, { shouldValidate: true })}
+              />
+            </div>
             <Input
               id="psl-url"
               placeholder={t("form.urlPlaceholder", { ns: "postlanding" })}
@@ -95,7 +105,11 @@ export function PostlandingForm({
               {...register("url")}
               aria-invalid={!!errors.url}
             />
-            {errors.url && <p className="text-xs text-danger">{errors.url.message}</p>}
+            {errors.url ? (
+              <p className="text-xs text-danger">{errors.url.message}</p>
+            ) : (
+              <p className="text-xs text-muted-foreground">{t("form.urlHint", { ns: "postlanding" })}</p>
+            )}
           </div>
 
           <div className="grid gap-1.5">

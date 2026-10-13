@@ -49,7 +49,7 @@ is what tells them apart on a dashboard).
 
 | §53 name | Metric(s) | Recorded in |
 |---|---|---|
-| `tracking_requests` | `flox_tracking_requests_total{outcome}` | `apps/tracker/handler.go`'s `track()` — outcome is `redirected`/`blocked`/`not_found`/`error` |
+| `tracking_requests` | `flox_tracking_requests_total{outcome}` | every tracker route (`/t/`, `/lc/`, `/pwa/`, `/pc/`) — outcome is `redirected`/`landing`/`land_click`/`pwa`/`postlanding`/`post_click`/`blocked`/`not_found`/`error` (`apps/tracker/handler.go`) |
 | `tracking_latency` | `flox_tracking_latency_seconds` | same, whole-handler wall time |
 | `routing_latency` | `flox_routing_latency_seconds` | `internal/routing.Engine.Resolve` — recorded wherever it's called (the hot path, and `apps/api`'s `/routing/simulate`, each in their own process) |
 | `event_processing_latency` | `flox_event_processing_latency_seconds` | `eventqueue.Flusher.RunOnce` — the ClickHouse `InsertBatch` call only |

@@ -54,6 +54,10 @@ type Claims struct {
 	// PwaID is the flow's PWA stage (internal type) — set when the visitor
 	// is to be shown that PWA's install page after this step.
 	PwaID string `json:"p,omitempty"`
+	// PostlandingID is the flow's postlanding stage — set when the visitor
+	// is to be sent through that postlanding before the destination
+	// (apps/tracker/postlanding.go).
+	PostlandingID string `json:"pl,omitempty"`
 	// Test marks a link minted by the PWA constructor's "open test page"
 	// (apps/api), not by a real click: the tracker serves it normally but
 	// records no events, so testing never pollutes analytics.

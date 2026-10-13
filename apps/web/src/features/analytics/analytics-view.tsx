@@ -25,7 +25,7 @@ import { useApiErrorMessage } from "@/hooks/use-api-error-message";
 
 /** Dimensions "View statistics" (§27.5) is allowed to deep-link a filter for —
  * an allowlist so an arbitrary/malformed URL query can't inject a bogus filter. */
-const VIEW_STATS_DIMENSIONS: DimensionKey[] = ["campaign", "offer", "source", "stream_set", "flow", "landing", "pwa"];
+const VIEW_STATS_DIMENSIONS: DimensionKey[] = ["campaign", "offer", "source", "stream_set", "flow", "landing", "pwa", "postlanding"];
 
 function previousRange(range: ReportControlsState["dateRange"]) {
   if (!range?.from) return undefined;

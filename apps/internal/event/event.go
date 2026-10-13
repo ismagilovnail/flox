@@ -154,6 +154,10 @@ type Event struct {
 	// it (apps/tracker/pwa.go) — on SOURCE_CLICK, LAND_*, PWA_* and, via
 	// attribution, conversions.
 	PwaID string `json:"pwaId,omitempty"`
+	// PostlandingID is the flow's postlanding stage when the click's routed
+	// path includes it (apps/tracker/postlanding.go) — on SOURCE_CLICK,
+	// LAND_*, PWA_*, POSTLANDING_* and, via attribution, conversions.
+	PostlandingID string `json:"postlandingId,omitempty"`
 	// TrafficSourceID is the traffic source of the click's campaign
 	// (apps/tracker, from the campaign row at click time) — on every
 	// click-derived event and, via attribution, conversions. Backs the

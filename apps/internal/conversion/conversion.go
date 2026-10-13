@@ -797,6 +797,7 @@ func newEvent(in eventInput, attr attribution.Attribution) event.Event {
 		ev.LandingID = click.LandingID
 		ev.OfferID = click.OfferID
 		ev.PwaID = click.PwaID
+		ev.PostlandingID = click.PostlandingID
 		ev.TrafficSourceID = click.TrafficSourceID
 		ev.Country = click.Country
 		ev.Region = click.Region

@@ -37,6 +37,14 @@
   измерению `campaign`; кастомные метрики с целью «Campaigns Table»
   выводятся колонками. Без расхода — «—». Copy tracking URL в строке
   остаётся в ROADMAP.
+- **2026-10-13 — постлендинги (расхождение 3).** Трекер ведёт посетителя
+  на постлендинг вместо оффера (сразу после клика, после внутреннего
+  лендинга, после запуска PWA или «продолжить без установки») и пишет
+  POSTLANDING_VIEW; макрос `{next_url}` в URL постлендинга — подписанная
+  ссылка `/pc/`, она пишет POSTLANDING_CLICK и уводит на оффер.
+  `postlanding_id` на всех событиях пути и конверсиях (ClickHouse
+  `schema/016`), измерение `postlanding` в отчётах, «Посмотреть статистику»
+  в списке постлендингов. `docs/postlanding.md` «Serving visitors».
 
 ## По фазам
 
@@ -47,7 +55,7 @@
 | 2 Design system | ◐ | Компоненты §16 в `components/ui` (Combobox = `searchable-select`, Drawer = `sheet`, CommandMenu = `command`) | Нет отдельного **DataGrid** (только DataTable) — мелочь |
 | 3 Application shell | ◐ | Сайдбар, ⌘K, workspace selector, уведомления, user menu, mobile nav | В сайдбаре нет **Reports** (роль играет Analytics) и **Push** — раздела push-уведомлений нет вовсе |
 | 4 Dashboard | ✔ | KPI, 4 графика, 4 «Top»-таблицы, «—» без расхода | — |
-| 5 Analytics | ◐ | Таблица/линия/столбцы/воронка из 8 шагов §43, 14 из 16 измерений §19 (плюс `stream_set`), все метрики | Измерения **postlanding** и **network** не поддержаны (в UI есть, бэкенд отклоняет) |
+| 5 Analytics | ◐ | Таблица/линия/столбцы/воронка из 8 шагов §43, 15 из 16 измерений §19 (плюс `stream_set`; `postlanding` с 2026-10-13), все метрики | Измерение **network** не поддержано (в UI есть, бэкенд отклоняет) |
 | 6 Campaigns | ◐ | Список с метриками за период (с 2026-10-11), создание, детальная, настройки; Open/Pause/Duplicate/Archive | Copy tracking URL — только на странице кампании, не в строке |
 | 7 Stream sets | ✔ | Приоритет, drag-reorder, дублирование, вкл/выкл, пиксели, fallback | — |
 | 8 Filter builder | ✔ | Все 31 поле и 16 операторов §22, AND/OR, вложенность, ISO-коды, bot/proxy как флаги | — |
@@ -55,12 +63,12 @@
 | 10 Routing simulator | ✔ | Тонкий UI над `/routing/simulate`, все поля фильтра на входе, sticky-пояснение | — |
 | 11 Sources/Networks/Offers | ✔ | Все поля §27, один резолвер макросов (`internal/macro` + `lib/macros.ts`), дневной лимит оффера | — |
 | 27-COST | ◐ | Ручной ввод, синк FB/TikTok/Google по расписанию, USD по курсу даты, «—» без расхода | Нет **импорта CSV** и **разреза расхода по стране** |
-| 12 Landing/PWA/Postlanding | ✔ | Внутренние (ZIP) и внешние лендинги, PWA, постлендинги, обход in-app WebView | (показ постлендингов — см. §43 ниже) |
+| 12 Landing/PWA/Postlanding | ✔ | Внутренние (ZIP) и внешние лендинги, PWA, постлендинги (показываются трекером с 2026-10-13), обход in-app WebView | — |
 | 13 Conversions/Postbacks/Pixels | ✔ | Конверсии с таймлайном, входящие/исходящие постбэки, логи, маппинг событий, пиксели с server-side отправкой и журналом (с 2026-10-11) | ~~Пиксели не отправляют события~~ — закрыто |
 | 14 Domains/Team/Settings | ✔ | Домены с TXT-верификацией, SSL, Namecheap/Cloudflare; команда, роли, права, активность; организация, API-ключи, интеграции, безопасность | — |
 | 14.5 Tags | ◐ | Общий компонент, массовое редактирование, OR-фильтр в 6 разделах | **Нет тегов в списке потоков** `/flows` (бэкенд `flow` поддерживает) |
 | 14.6 Custom metrics | ✔ | Формулы, безопасное деление, черновик/публикация, права, цели Report Builder и Campaigns Table (с 2026-10-11) | Offers/Sources честно отключены |
-| 14.7 Presets + View statistics | ◐ | Пресеты (включая часовой пояс и режим дат), «View statistics» у офферов, потоков, источников, кампаний, лендингов, PWA | **Нет «View statistics» у CPA-сетей** (упирается в неподдержанное измерение `network`) |
+| 14.7 Presets + View statistics | ◐ | Пресеты (включая часовой пояс и режим дат), «View statistics» у офферов, потоков, источников, кампаний, лендингов, PWA, постлендингов | **Нет «View statistics» у CPA-сетей** (упирается в неподдержанное измерение `network`) |
 | 14.8 Referral | ✔ | Код, атрибуция регистраций, журнал начислений, выплаты pending→approved→paid | — |
 | 14.9 Content gallery | ◐ | Библиотека файлов команды, папки, поиск, превью, выбор файла в формах лендинга и PWA | Нет **системного контента и шаблонов** (лендинг/PWA-шаблоны, креативы) — сделана только библиотека загрузок команды |
 | 15 Frontend architecture | ✔ | `features/`, `hooks/`, `lib/api` (без разбросанных `fetch`), `stores/` | Отдельных `types/` и `schemas/` нет — схемы лежат в фичах; мелочь |
@@ -72,7 +80,7 @@
 | 20 Classifier | ✔ | Все поля, Geo/ASN/Bot за интерфейсами | — |
 | 21 Tracking engine | ✔ | Отдельный бинарник, асинхронная запись, p50/p95 в бюджете | — |
 | 42 Tracking link | ◐ | click_id (ULID), utm, sub1–10, fbclid/ttclid/external_click_id | Нет диагностики **«% трафика с пустыми sub»** — `Subs.SubCount` есть, но в отчёты не выведен |
-| 43 Event model | ◐ | Все ~20 типов в enum и схеме ClickHouse | Генерируются только 7 (SOURCE_CLICK/FILTER, LAND_VIEW/CLICK, PWA_VIEW/OPEN/INSTALL); **POSTLANDING_*, IOS_INSTALL, NOTIFICATION_*, TG_*** не создаёт никто |
+| 43 Event model | ◐ | Все ~20 типов в enum и схеме ClickHouse | Генерируются 9 (SOURCE_CLICK/FILTER, LAND_VIEW/CLICK, POSTLANDING_VIEW/CLICK, PWA_VIEW/OPEN/INSTALL); **IOS_INSTALL, NOTIFICATION_*, TG_*** не создаёт никто |
 | 22 Attribution | ✔ | click_id / external_click_id, без выдумывания, повторная атрибуция | — |
 | 23 Conversion engine | ✔ | Ключ (click_id, status, event_ref), progression, acceptDuplicates, FX на дату события, outbox | Быстрый путь Redis хранит последний статус, дедуп — уникальный индекс PG (корректно; Redis-ключа дедупа как такового нет) |
 | 24 Postback engine | ✔ | Очередь, ретраи, dead-letter, все 6 статусов, справедливая выдача | — |
@@ -98,8 +106,8 @@
 1. ~~Пиксели не срабатывают (фаза 13, §29).~~ Закрыто 2026-10-11.
 2. ~~В списке кампаний нет метрик (§20), и цель «Campaigns Table» кастомных
    метрик ведёт в пустоту (§30.5).~~ Закрыто 2026-10-11.
-3. Постлендинги не показываются трекером; измерение `postlanding` (§43, фаза 5)
-   — уже в ROADMAP.
+3. ~~Постлендинги не показываются трекером; измерение `postlanding` (§43,
+   фаза 5).~~ Закрыто 2026-10-13.
 4. Измерение `network` и «View statistics» у сетей (фаза 5, §27.5).
 5. Нет раздела Push (сайдбар §17, события NOTIFICATION_*, «Push» в категориях
    кастомных метрик).

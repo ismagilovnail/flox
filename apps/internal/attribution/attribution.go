@@ -74,6 +74,7 @@ type Click struct {
 	LandingID       string
 	OfferID         string
 	PwaID           string
+	PostlandingID   string
 	TrafficSourceID string
 	ExternalClickID string
 	OccurredAt      time.Time

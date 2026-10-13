@@ -53,8 +53,8 @@ an operator who wants it can still type `""` into the existing free-text
 value field.
 
 Gated by the same `chstore.ValidDimension` whitelist every other
-endpoint here already uses — a request for one of the 2 still-unbacked
-dimensions (`postlanding`/`network`) 400s, same
+endpoint here already uses — a request for the still-unbacked
+dimension (`network`) 400s, same
 as `/analytics/report` already does for one. The frontend's
 `useDimensionValues` hook (`retry: false` — a 400 here is deterministic,
 not transient) treats that rejection as expected, not an error to
@@ -66,11 +66,21 @@ data" bar applies here the same way it does to cost: a genuine "nothing
 yet" must render as nothing, never as a plausible-looking placeholder
 value that isn't real.
 
-## Dimension whitelist: 15 backed (14 of the original 16, plus stream_set)
+## Dimension whitelist: 16 backed (15 of the original 16, plus stream_set)
 
-`chstore.ReportDimension` (15): campaign, source (the traffic source of the click's
+`chstore.ReportDimension` (16): campaign, source (the traffic source of the click's
 campaign, `traffic_source_id`, schema/011), country, region, city, device, platform, os,
-browser, language, flow, stream_set, landing, offer, pwa.
+browser, language, flow, stream_set, landing, offer, pwa, postlanding.
+
+`postlanding` (`DimPostlanding`, `postlanding_id`,
+`chstore/schema/016_postlanding_id.sql`, after `event_id`; also on
+`click_lookup`, so conversions inherit it) followed once `apps/tracker`
+served the postlanding stage (`docs/postlanding.md`, "Serving visitors"):
+set on every event of a journey whose routed path goes through the flow's
+postlanding — SOURCE_CLICK, LAND_*, PWA_*, POSTLANDING_VIEW/CLICK — and on
+its conversions. Empty = no postlanding reached (none configured, paused,
+behind an external landing, or before 2026-10-13). Names in the UI, "No
+postlanding" for empty, "View statistics" from the postlanding list.
 
 `pwa` (`DimPwa`, `pwa_id`, `chstore/schema/010_pwa_id.sql`, after
 `offer_id`) became possible once `apps/tracker` started serving the PWA
@@ -134,16 +144,11 @@ The filter chip it produces shows that raw id, since `FilterCondition`
 (`features/analytics/aggregate.ts`) has no separate display-label field;
 adding one is out of scope for a query-layer/UI change.
 
-`features/analytics/registry.ts`'s `DimensionKey` still lists 2 more from
-the original 16 — postlanding, network — with no backing column anywhere
-in the event pipeline. postlanding is blocked on more than a column:
-`apps/tracker` doesn't serve the postlanding stage yet (no
-POSTLANDING_VIEW is ever emitted), so there is nothing honest to
-attribute; it follows once that stage is served, like pwa did. network has no such blocker (an offer's network is
-known at routing time), it just hasn't been asked for. The report builder's dimension
-picker offers all 17 named keys now (unchanged in kind — `registry.ts` is
-shared with the still-mocked Custom Metrics feature, which needs the full
-list); requesting one of the 2 unbacked ones 400s with
+`features/analytics/registry.ts`'s `DimensionKey` still lists one more from
+the original 16 — network — with no backing column anywhere in the event
+pipeline. Nothing blocks it (an offer's network is known at routing time);
+it is gap 4 of `docs/spec-conformance-2026-10-11.md`. The report builder
+does not offer it (`UNBACKED_DIMENSIONS`); requesting it 400s with
 `apierror.Validation`.
 
 Of the 11 backed dimensions, only 8 have a column on `conversion_events`
@@ -179,8 +184,8 @@ under these dimensions and filters, not `null`.
   SOURCE_CLICK matches every filter (`click_id IN (SELECT ... click_events
   ...)`), so every stage is answerable with every dimension, including os/
   browser/language on the conversion steps. The click may predate the window.
-- The report builder no longer offers `postlanding`/`network` (unbacked,
-  they 400) and its filter-value picker no longer falls back to a mock pool.
+- The report builder no longer offers `network` (unbacked, it 400s; `postlanding`
+  was backed on 2026-10-13) and its filter-value picker no longer falls back to a mock pool.
 
 ## `source` is the traffic source, not a campaign proxy
 

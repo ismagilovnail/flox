@@ -36,6 +36,10 @@ type Values struct {
 	Country    string
 	Device     string
 	Subs       [10]string
+	// NextURL is the signed link a postlanding page sends the visitor on
+	// with (apps/tracker/postlanding.go). Only a postlanding URL is resolved
+	// with it set; anywhere else {next_url} is known-but-empty.
+	NextURL string
 }
 
 var token = regexp.MustCompile(`\{[a-z0-9_]+\}`)
@@ -70,6 +74,7 @@ func resolve(template string, v Values, escape func(string) string) string {
 		"{offer_id}":    v.OfferID,
 		"{country}":     v.Country,
 		"{device}":      v.Device,
+		"{next_url}":    v.NextURL,
 	}
 	for i, s := range v.Subs {
 		fields["{sub"+strconv.Itoa(i+1)+"}"] = s

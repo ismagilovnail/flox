@@ -169,7 +169,8 @@ internal landing stages (straight to destination, as before). The tracker
 also reads `S3_ENDPOINT`/`S3_PUBLIC_ENDPOINT`/`S3_BUCKET` to build asset
 URLs — no storage credentials, it never touches objects.
 
-Still not done: the landing's `asPwa` flag, the PWA/postlanding stages,
+Still not done: the landing's `asPwa` flag (the PWA and postlanding stages
+are served since — `docs/pwa-serving.md`, `docs/postlanding.md`),
 and the push/PWA variants of `engine_onClickButton`. (The `landing`
 report dimension followed in its own change — every event the tracker
 emits for a shown landing carries `landing_id`; see

@@ -77,7 +77,8 @@
     "source": "Traffic source",
     "country": "Geo (ISO country code)",
     "device": "Device type",
-    "sub": "Sub parameter {{n}}"
+    "sub": "Sub parameter {{n}}",
+    "next_url": "Next step link (postlanding)"
   },
   "a11y": {
     "userMenu": "User menu",

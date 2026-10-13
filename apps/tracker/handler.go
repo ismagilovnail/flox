@@ -56,6 +56,7 @@ type Handler struct {
 func (h *Handler) Register(r chi.Router) {
 	r.Get("/t/{trackingID}", h.track)
 	r.Get(landClickPath+"{token}", h.landClick)
+	r.Get(postClickPath+"{token}", h.postClick)
 	h.registerPwa(r)
 }
 
@@ -66,13 +67,15 @@ func (h *Handler) Register(r chi.Router) {
 type trackOutcome string
 
 const (
-	outcomeRedirected trackOutcome = "redirected"
-	outcomeLanding    trackOutcome = "landing"    // an internal landing was served
-	outcomeLandClick  trackOutcome = "land_click" // a visitor clicked through a served landing
-	outcomePwa        trackOutcome = "pwa"        // a PWA install page was served
-	outcomeBlocked    trackOutcome = "blocked"
-	outcomeNotFound   trackOutcome = "not_found"
-	outcomeError      trackOutcome = "error"
+	outcomeRedirected  trackOutcome = "redirected"
+	outcomeLanding     trackOutcome = "landing"     // an internal landing was served
+	outcomeLandClick   trackOutcome = "land_click"  // a visitor clicked through a served landing
+	outcomePwa         trackOutcome = "pwa"         // a PWA install page was served
+	outcomePostlanding trackOutcome = "postlanding" // redirected to a postlanding
+	outcomePostClick   trackOutcome = "post_click"  // a visitor left a postlanding through its {next_url}
+	outcomeBlocked     trackOutcome = "blocked"
+	outcomeNotFound    trackOutcome = "not_found"
+	outcomeError       trackOutcome = "error"
 )
 
 func (h *Handler) track(w http.ResponseWriter, r *http.Request) {
@@ -185,12 +188,17 @@ func (h *Handler) track(w http.ResponseWriter, r *http.Request) {
 	// Only a landing actually shown is attributed (the `landing` report
 	// dimension): a skipped stage — paused, unsignable — leaves it empty.
 	ev.LandingID = lnd.landingID
-	// The PWA stage is reachable straight from the click, or after an
-	// internal landing (its click link leads there). An external landing
-	// is a page we can't link onward from, so the PWA behind it is never
-	// reached — and never attributed.
+	// The PWA and postlanding stages are reachable straight from the
+	// click, or after an internal landing (its click link leads there). An
+	// external landing is a page we can't link onward from, so the stages
+	// behind it are never reached — and never attributed.
+	var post routingstore.FlowPostlanding
 	if lnd.externalURL == "" {
 		ev.PwaID = h.decidePwa(loaded, result.FlowID)
+		var ok bool
+		if post, ok = h.decidePostlanding(loaded, result.FlowID); ok {
+			ev.PostlandingID = post.PostlandingID
+		}
 	}
 
 	h.events.Enqueue(ev)
@@ -204,6 +212,12 @@ func (h *Handler) track(w http.ResponseWriter, r *http.Request) {
 		outcome = outcomeRedirected
 		token := h.links.Sign(clickClaims(ev, params, "", r.Host))
 		http.Redirect(w, r, pwaURL(requestOrigin(r), token), http.StatusFound)
+		return
+	}
+
+	if ev.PostlandingID != "" {
+		outcome = outcomePostlanding
+		h.sendToPostlanding(w, r, clickClaims(ev, params, "", r.Host), post.URL, ev)
 		return
 	}
 

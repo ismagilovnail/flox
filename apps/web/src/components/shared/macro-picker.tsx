@@ -6,13 +6,20 @@ import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Caption, Mono } from "@/components/ui/typography";
-import { MACROS } from "@/lib/macros";
+import { MACROS, type MacroDef } from "@/lib/macros";
 
 /** Popover reference for the shared macro/placeholder system (§27). Drop next
  * to any URL/template input (offer link, network postback, source tracking
  * template, and later postback/pixel templates) — clicking a token appends it
- * to the field's current value via `onInsert`. */
-export function MacroPicker({ onInsert }: { onInsert: (token: string) => void }) {
+ * to the field's current value via `onInsert`. `macros` narrows the list to
+ * what the field is actually resolved with. */
+export function MacroPicker({
+  onInsert,
+  macros = MACROS,
+}: {
+  onInsert: (token: string) => void;
+  macros?: MacroDef[];
+}) {
   const { t } = useTranslation("common");
   return (
     <Popover>
@@ -24,7 +31,7 @@ export function MacroPicker({ onInsert }: { onInsert: (token: string) => void })
       <PopoverContent align="end" className="max-h-72 overflow-y-auto">
         <Caption className="px-1">{t("macros.hint")}</Caption>
         <div className="flex flex-col">
-          {MACROS.map((macro) => (
+          {macros.map((macro) => (
             <button
               key={macro.token}
               type="button"

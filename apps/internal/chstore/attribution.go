@@ -55,7 +55,8 @@ const clickColumns = `
 	utm_source, utm_medium, utm_campaign, utm_content, utm_term,
 	sub1, sub2, sub3, sub4, sub5, sub6, sub7, sub8, sub9, sub10,
 	landing_id, offer_id, pwa_id, traffic_source_id,
-	ip, user_agent, fb_click_id, tt_click_id`
+	ip, user_agent, fb_click_id, tt_click_id,
+	postlanding_id`
 
 // Both queries below filter to type = SOURCE_CLICK, excluding
 // SOURCE_FILTER rows: a filtered click never reached a destination, so a
@@ -78,6 +79,7 @@ func scanClick(r driver.Rows, organizationID string) (attribution.Click, error) 
 		&c.Subs[5], &c.Subs[6], &c.Subs[7], &c.Subs[8], &c.Subs[9],
 		&c.LandingID, &c.OfferID, &c.PwaID, &c.TrafficSourceID,
 		&c.IP, &c.UserAgent, &c.FBClickID, &c.TTClickID,
+		&c.PostlandingID,
 	); err != nil {
 		return attribution.Click{}, err
 	}

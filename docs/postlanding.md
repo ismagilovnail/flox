@@ -69,6 +69,71 @@ Same reasoning as Landings/PWA: Postlanding was still mocked when the
 Frontend i18n phase ran. Added a `postlanding` namespace (`en`+`ru`, both
 complete — key-set parity checked directly).
 
+## Serving visitors (`apps/tracker`, 2026-10-13)
+
+Gap 3 of `docs/spec-conformance-2026-10-11.md`. A flow's postlanding
+stage (`flows.postlanding_enabled` + `postlanding_id`, loaded by
+`routingstore` with the flows) reaches real visitors. Code:
+`apps/tracker/postlanding.go`; tests: `apps/tracker/postlanding_test.go`.
+
+A postlanding is always someone else's page — FLOX holds only its URL —
+so the tracker redirects to it rather than serving it.
+
+### Funnel (§25: Landing → PWA → Postlanding → Offer)
+
+```
+/t/{slug} ─► [internal landing ─► /lc/] ─► [PWA open / continue] ─► postlanding ─► /pc/{token} ─► destination
+SOURCE_CLICK  LAND_VIEW   LAND_CLICK        PWA_OPEN               POSTLANDING_VIEW  POSTLANDING_CLICK
+```
+
+The postlanding comes where the destination used to: straight from the
+click, after an internal landing's click-through, after the PWA's launch
+(`/pwa/{t}/open` — every launch) or its "continue without installing", and
+when a PWA was paused or broke after its link was issued.
+
+- **POSTLANDING_VIEW** is recorded when the tracker redirects there (the
+  owner's decision 2026-10-13). Whether the page finished loading is not
+  known; this is how "views" of external pages are counted elsewhere too.
+- **{next_url}** in the postlanding's URL is replaced by a signed link on
+  the tracker, `{origin}/pc/{token}` — query-escaped, so `?go={next_url}`
+  carries it as one value. The page's button leads there. `GET /pc/{token}`
+  records **POSTLANDING_CLICK** (every click, as on a landing) and 302s to
+  the destination the click was routed to. No database read; same signed
+  token as `/lc/` (`landinglink.Claims.PostlandingID`), honoured only on
+  the host it was issued for, 30-day max age. The token is re-issued at
+  each redirect to the postlanding, so an installed PWA's launch months
+  later still gets a working link.
+- Without `{next_url}` the postlanding is the end of the funnel, as an
+  external landing is: nothing is appended to the operator's URL. The form
+  says so under the URL field and its "Macros" button offers only what the
+  URL is resolved with — `{next_url}` and the click's `{click_id}`,
+  `{campaign_id}`, `{offer_id}`, `{country}`, `{device}`, `{sub1}`…`{sub10}`
+  (`POSTLANDING_MACROS`, `lib/macros.ts`).
+
+### Skipped (straight to the destination, nothing attributed)
+
+- The postlanding is paused, or has no URL. Archived ones are still
+  served, as landings are.
+- It sits behind an external landing: we cannot link onward from an
+  advertiser's page, so the stages after it are never reached.
+- No `LANDING_LINK_KEY`: `{next_url}` cannot be signed.
+- Paused after the visitor's link was issued: the routes that continue a
+  journey from a token (`/lc/`, PWA routes) read the postlanding as it is
+  now (`routingstore.LoadPostlanding`, cached like PWA pages).
+
+### Attribution and reports
+
+`postlanding_id` is on every event of a journey that goes through the
+stage — SOURCE_CLICK, LAND_*, PWA_*, POSTLANDING_* — and on its conversions
+through `click_lookup` (ClickHouse `schema/016_postlanding_id.sql`). It
+backs the `postlanding` report dimension (`docs/analytics-report-api.md`),
+names in the UI, "No postlanding" for empty, and "View statistics" in the
+postlanding list.
+
+Not done: the postlanding's `events` (PWA_INSTALL, NOTIFICATION_*, TG_*)
+are still only a label — nothing on a postlanding page reports them; push
+and Telegram have no phase yet.
+
 ## Known issue (resolved in a later phase): i18n hydration race was mitigated, not eliminated
 
 **Update:** closed deterministically in a later phase via server-side

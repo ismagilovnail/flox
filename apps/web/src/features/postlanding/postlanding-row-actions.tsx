@@ -3,7 +3,7 @@
 import * as React from "react";
 import Link from "next/link";
 import { toast } from "sonner";
-import { CopyIcon, PauseIcon, PencilIcon, PlayIcon, Trash2Icon } from "lucide-react";
+import { BarChart3Icon, CopyIcon, PauseIcon, PencilIcon, PlayIcon, Trash2Icon } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 import { IconButton } from "@/components/ui/icon-button";
@@ -17,6 +17,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { viewStatisticsHref } from "@/features/analytics/view-statistics-link";
 import { useActivatePostlanding, useArchivePostlanding, useDuplicatePostlanding, usePausePostlanding } from "@/hooks/use-postlandings";
 import { usePermission } from "@/hooks/use-auth";
 import type { Postlanding } from "@/lib/api/postlanding";
@@ -71,6 +72,18 @@ export function PostlandingRowActions({ postlanding }: { postlanding: Postlandin
             </IconButton>
           </TooltipTrigger>
           <TooltipContent>{t("rowActions.edit")}</TooltipContent>
+        </Tooltip>
+
+        {/* postlanding.id: the `postlanding` report dimension groups by postlanding_id. */}
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <IconButton aria-label={t("rowActions.viewStatistics")} size="icon-sm" asChild>
+              <Link href={viewStatisticsHref("postlanding", postlanding.id)}>
+                <BarChart3Icon className="size-3.5" />
+              </Link>
+            </IconButton>
+          </TooltipTrigger>
+          <TooltipContent>{t("rowActions.viewStatistics")}</TooltipContent>
         </Tooltip>
 
         {canWrite && postlanding.status !== "archived" && (

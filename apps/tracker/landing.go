@@ -113,6 +113,7 @@ func clickClaims(ev event.Event, params params, landingID, host string) landingl
 		FlowID:          ev.FlowID,
 		LandingID:       landingID,
 		PwaID:           ev.PwaID,
+		PostlandingID:   ev.PostlandingID,
 		Destination:     ev.Destination,
 		OfferID:         ev.OfferID,
 		TrafficSourceID: ev.TrafficSourceID,
@@ -169,14 +170,15 @@ func (h *Handler) landClick(w http.ResponseWriter, r *http.Request) {
 		attrs = routing.Attributes{}
 	}
 
-	h.events.Enqueue(landClickEvent(claims, attrs, ip, r))
+	click := landClickEvent(claims, attrs, ip, r)
+	h.events.Enqueue(click)
 	outcome = outcomeLandClick
 	if claims.PwaID != "" {
 		// Next funnel stage: the PWA install page, on the same token.
 		http.Redirect(w, r, pwaURL(requestOrigin(r), chi.URLParam(r, "token")), http.StatusFound)
 		return
 	}
-	http.Redirect(w, r, claims.Destination, http.StatusFound)
+	h.continueOnward(w, r, claims, func() event.Event { return click })
 }
 
 func landClickEvent(c landinglink.Claims, attrs routing.Attributes, ip net.IP, r *http.Request) event.Event {
@@ -194,6 +196,7 @@ func landClickEvent(c landinglink.Claims, attrs routing.Attributes, ip net.IP, r
 		LandingID:       c.LandingID,
 		OfferID:         c.OfferID,
 		PwaID:           c.PwaID,
+		PostlandingID:   c.PostlandingID,
 		TrafficSourceID: c.TrafficSourceID,
 
 		Country:        attrs[routing.FieldCountry],

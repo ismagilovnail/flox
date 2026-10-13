@@ -32,6 +32,19 @@ export const MACROS: MacroDef[] = [
   })),
 ];
 
+/** A postlanding's onward link: a signed tracker URL that records
+ * POSTLANDING_CLICK and continues to the offer (apps/tracker/postlanding.go).
+ * Resolved only in a postlanding URL. */
+export const NEXT_URL_MACRO: MacroDef = { token: "{next_url}", label: "Next step link", example: "https://track.example/pc/…" };
+
+/** What a postlanding URL is resolved with: the click's own values (no
+ * conversion yet, so no status/revenue/currency) and {next_url}. */
+const CLICK_TIME_TOKENS = new Set(["{click_id}", "{campaign_id}", "{offer_id}", "{country}", "{device}"]);
+export const POSTLANDING_MACROS: MacroDef[] = [
+  NEXT_URL_MACRO,
+  ...MACROS.filter((m) => CLICK_TIME_TOKENS.has(m.token) || m.sub !== undefined),
+];
+
 /** Replaces every recognized `{token}` in `template` with `values[token]`.
  * Unrecognized or unset tokens are left as-is — never throws on a partial
  * value set (e.g. previewing an offer link before a click has occurred). */
