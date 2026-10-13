@@ -5,6 +5,26 @@ per-phase, matching `CLAUDE.md`'s phase protocol. The one exception is
 [Between phases], below: spec amendments and the code changes that follow from
 them land between phases and would otherwise be invisible here.
 
+## [Between phases] — Saved stream sets can be saved again; browser pass of 13b and 6b
+
+- **Fix:** a stream set loaded from the API could not be saved from the campaign page — the
+  editor said "fix the highlighted filter conditions" with nothing highlighted. The Go filter
+  node sends `value`/`valueTo` with `omitempty` (valueTo is absent outside BETWEEN, value for
+  EXISTS), `hydrateFilterNode` passed `undefined` into the form, and the form schema requires
+  strings. Every stream set with a filter was affected, the demo one included, since
+  2026-08-21. The wire type now marks both optional and hydration turns a missing one into "".
+  `src/lib/api/stream-sets.test.ts` covers the round trip and the schema.
+- **Browser pass, campaign list (6b):** metrics for the period, "—" for Spend/Profit/ROI without
+  cost, Campaigns Table custom metrics as columns (a ratio over zero conversions shows "—").
+- **Browser pass, pixels (13b):** a Generic pixel created in the UI (Twitter/X not offered),
+  attached to the demo stream set; a click plus `reg`/`ftd` postbacks queued CPA_HOLD and
+  CPA_ACCEPT in the conversion transaction, the worker sent them through the SSRF-guarded
+  client, and the pixel's delivery log showed both with the attempt count and the error. Test
+  pixel and metrics removed afterwards; the demo network's postback secret was regenerated for
+  the test (the fixtures' printed one no longer works).
+- UX note, not changed: the campaign header's "Save changes" saves only the campaign; unsaved
+  edits in an open stream set are dropped without a warning when leaving the page.
+
 ## [Phase 6b] — Campaign list metrics
 
 Closes gap 2 of `docs/spec-conformance-2026-10-11.md`.

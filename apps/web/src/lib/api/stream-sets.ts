@@ -16,13 +16,15 @@ export type StreamSetStatus = "active" | "paused";
  * tree-editing concern). hydrateFilterNode/dehydrateFilterNode below
  * convert to and from lib/filters.ts's own FilterNode (which does carry
  * an id, since filter-group-builder.tsx's tree-mutation helpers address
- * nodes by it). */
+ * nodes by it). `value`/`valueTo` are optional on the way in: `omitempty`
+ * drops them when empty (valueTo outside BETWEEN, value for EXISTS), and
+ * hydrateFilterNode turns that back into "" for the form's schema. */
 export type ApiFilterCondition = {
   type: "condition";
   field: string;
   operator: string;
-  value: string;
-  valueTo: string;
+  value?: string;
+  valueTo?: string;
 };
 export type ApiFilterGroup = {
   type: "group";
@@ -110,8 +112,8 @@ export function hydrateFilterNode(node: ApiFilterNode): FilterNode {
       type: "condition",
       field: node.field as FilterField,
       operator: node.operator as FilterOperator,
-      value: node.value,
-      valueTo: node.valueTo,
+      value: node.value ?? "",
+      valueTo: node.valueTo ?? "",
     };
   }
   return {

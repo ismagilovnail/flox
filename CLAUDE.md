@@ -23,14 +23,14 @@ CURRENT PHASE : PHASE 6b — CAMPAIGN LIST METRICS (closed)
 STATUS        : Spec conformance gaps (docs/spec-conformance-2026-10-11.md):
                 1 pixels (server-side sending, internal/pixelsend) and 2
                 campaign list metrics (period report by campaign + custom
-                metrics "Campaigns Table") closed. Browser pass of both not
-                done (Chrome extension disconnected) — API checked with curl.
+                metrics "Campaigns Table") closed and checked in the browser
+                (2026-10-13); the pass found and fixed a stream-set save bug
+                (missing valueTo/value from the API failed the form schema).
                 Left: gaps 3–15, prod restore drill after deployment.
-LAST COMMIT   : feat(campaigns): metrics in the campaign list.
+LAST COMMIT   : fix(stream-sets): saved stream sets can be saved again.
 UNCOMMITTED   : none expected. Dev DB at migration 00069, CH schema 015.
 NEXT          : wait for the user — next gap is 3 (postlanding serving +
-                postlanding/network dimensions). Browser-check pixels and the
-                campaign list once the extension is connected. CI (DO1) is
+                postlanding/network dimensions). CI (DO1) is
                 the user's own decision — do not set it up. Run go test with
                 the full env line AND check e2e did not skip (memory:
                 flox-full-test-env); chconn's TestLimitsStopAHeavyQuery
