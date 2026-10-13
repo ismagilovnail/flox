@@ -62,6 +62,10 @@ func subscriberKeys(t *testing.T) (p256dh, auth string) {
 	return base64.RawURLEncoding.EncodeToString(k.PublicKey().Bytes()), base64.RawURLEncoding.EncodeToString(a)
 }
 
+// plainMarker is long enough that the ~4 KB of padded ciphertext never holds
+// it by chance (a 2-byte "Hi" did, in about 5% of runs).
+const plainMarker = "flox-plaintext-marker-7f3a"
+
 // TestWebPushSends: the request a push service gets is encrypted
 // (aes128gcm) and carries the VAPID authorization and the TTL.
 func TestWebPushSends(t *testing.T) {
@@ -80,7 +84,7 @@ func TestWebPushSends(t *testing.T) {
 
 	p256, auth := subscriberKeys(t)
 	sender := &pushsend.WebPush{Client: srv.Client(), PublicKey: pub, PrivateKey: priv, Subject: "mailto:ops@flox.example", TTL: 3600}
-	code, err := sender.Send(context.Background(), pushsend.Subscriber{Endpoint: srv.URL + "/push/abc", P256dh: p256, Auth: auth}, []byte(`{"title":"Hi"}`))
+	code, err := sender.Send(context.Background(), pushsend.Subscriber{Endpoint: srv.URL + "/push/abc", P256dh: p256, Auth: auth}, []byte(`{"title":"`+plainMarker+`"}`))
 	if err != nil || code != http.StatusCreated {
 		t.Fatalf("Send = %d, %v", code, err)
 	}
@@ -88,7 +92,7 @@ func TestWebPushSends(t *testing.T) {
 		!strings.HasPrefix(got.Header.Get("Authorization"), "vapid t=") || !strings.Contains(got.Header.Get("Authorization"), "k="+pub) {
 		t.Fatalf("headers = %v", got.Header)
 	}
-	if strings.Contains(string(body), "Hi") {
+	if strings.Contains(string(body), plainMarker) {
 		t.Fatal("payload sent in the clear")
 	}
 }
