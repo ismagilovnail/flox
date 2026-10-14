@@ -11,6 +11,7 @@ import (
 	"io"
 	"io/fs"
 	"log/slog"
+	mrand "math/rand/v2"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -68,6 +69,7 @@ var segmentKinds = map[string]string{
 	"cost-entries":    "costEntry",
 	"stream-sets":     "streamSet",
 	"tracking-links":  "trackingLink",
+	"telegram-bots":   "telegramBot",
 	"folders":         "folder",
 	"custom-metrics":  "customMetric",
 	"domains":         "domain",
@@ -651,6 +653,12 @@ func seedEveryKind(t *testing.T, ctx context.Context, pool *pgxpool.Pool, orgID,
 	payout, err := refSvc.RequestPayout(ctx, orgID, userID, 50)
 	must("payout", err)
 	ids["payout"] = payout.ID
+
+	// A Telegram bot, written directly: connecting one calls Telegram.
+	ids["telegramBot"] = idgen.New()
+	_, err = pool.Exec(ctx, `INSERT INTO telegram_bots (id, organization_id, tg_bot_id, username, token_encrypted, webhook_secret_hash)
+		VALUES ($1, $2, $3, 'seed_bot', 'x', 'x')`, ids["telegramBot"], orgID, mrand.Int64N(1<<40))
+	must("telegram bot", err)
 
 	// A push subscriber and a broadcast, written directly: a broadcast
 	// sent through the service would queue deliveries the dev worker sends.

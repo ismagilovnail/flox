@@ -45,6 +45,7 @@ import (
 	"github.com/ismagilovnail/flox/apps/internal/routingcache"
 	"github.com/ismagilovnail/flox/apps/internal/routingstore"
 	"github.com/ismagilovnail/flox/apps/internal/storage"
+	"github.com/ismagilovnail/flox/apps/internal/telegram"
 	"github.com/ismagilovnail/flox/apps/internal/telemetry"
 	"github.com/ismagilovnail/flox/apps/internal/tlsask"
 )
@@ -306,6 +307,8 @@ func run() error {
 	r.Get(tlsask.Path, tlsask.Handler(db, logger))
 	handler.Register(r)
 	postbackHandler.Register(r)
+	// Telegram bots' webhook (docs/telegram.md): TG_START, TG_JOIN.
+	telegram.NewWebhook(telegram.NewRepository(db), clickResolver, events, logger).Register(r)
 
 	// Whole-request bounds (tech audit RL5). Requests here are a redirect,
 	// a landing or PWA page, or a postback — small, so short: a slow client

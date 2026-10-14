@@ -148,5 +148,40 @@
     "integrations": "Интеграции",
     "security": "Безопасность",
     "customMetrics": "Свои метрики"
+  },
+  "telegram": {
+    "title": "Telegram-боты",
+    "description": "Ваши собственные боты: запуск бота из рекламы записывает TG_START на визит, вступление в его канал — TG_JOIN.",
+    "connect": "Подключить бота",
+    "notConfigured": "Недоступно на этой установке: не задан TELEGRAM_WEBHOOK_BASE_URL.",
+    "loading": "Загружаем ботов…",
+    "loadError": "Не удалось загрузить Telegram-ботов",
+    "empty": "Ботов пока нет.",
+    "channel": "Канал: {{title}}",
+    "noChannel": "Без канала: записывается только TG_START",
+    "copyDeepLink": "Скопировать ссылку на бота",
+    "copied": "Ссылка скопирована",
+    "deepLinkHint": "Используйте ссылку на бота как URL оффера или назначения: {click_id} открывает бота с кликом этого визита.",
+    "connectTitle": "Подключить Telegram-бота",
+    "connectDescription": "FLOX забирает webhook бота: используйте бота, который больше ничего не делает.",
+    "token": "Токен бота",
+    "tokenHint": "Из @BotFather. Хранится зашифрованным и не покидает сервер.",
+    "channelLabel": "Канал (необязательно)",
+    "channelHint": "@channelname или id канала. Сначала сделайте бота админом с правом приглашать пользователей.",
+    "welcome": "Приветствие",
+    "welcomeHint": "Отправляется, когда бота запускают, с кнопкой на канал.",
+    "connected": "Бот подключён",
+    "connectError": "Не удалось подключить бота",
+    "removeAria": "Удалить @{{name}}",
+    "removeTitle": "Удалить @{{name}}?",
+    "removeDescription": "Webhook бота будет снят: бот перестанет отвечать, новые TG_START / TG_JOIN не запишутся. Уже записанные события останутся.",
+    "remove": "Удалить",
+    "removed": "Бот удалён",
+    "removeError": "Не удалось удалить бота",
+    "errors": {
+      "token": "Токен бота из @BotFather (123456:ABC…)",
+      "channel": "@channelname или id канала (-100…)",
+      "welcomeText": "Не больше 2000 символов"
+    }
   }
 }

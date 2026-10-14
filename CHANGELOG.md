@@ -5,6 +5,32 @@ per-phase, matching `CLAUDE.md`'s phase protocol. The one exception is
 [Between phases], below: spec amendments and the code changes that follow from
 them land between phases and would otherwise be invisible here.
 
+## [Phase 30.25] — Telegram bots: TG_START, TG_JOIN
+
+The last §43 events nothing produced (`docs/spec-conformance-2026-10-11.md`). Scope (owner, 2026-10-14): the
+organization's own bot via webhook; TG_JOIN attributed through the user's `/start`; pixels later.
+
+- **Connect** (`/telegram-bots`, `settings.write`): token checked with `getMe`, optional channel checked
+  (bot is an admin that can invite; invite link public or created once), webhook set to the tracker with a
+  random secret (SHA-256 stored) and `chat_member` explicitly allowed; token encrypted with the integration
+  key. Already connected → 409 and the new webhook removed; delete removes the webhook. Migration `00076`
+  (`telegram_bots`, `telegram_users`). New env `TELEGRAM_WEBHOOK_BASE_URL`, `TELEGRAM_API_URL`.
+- **Webhook** (tracker `POST /tg/{botId}`, secret header, constant-time): `/start <click_id>` → TG_START on
+  that click in the bot's organization (once per click) with the click's context, answered with the welcome
+  and a channel button; joining the channel → TG_JOIN on the user's /start click (once per click); join
+  requests approved. Answers ride in the HTTP response — the tracker never calls Telegram. ClickHouse down →
+  503 so Telegram retries.
+- `attribution.Click.CopyTo` now builds the click context of both conversions and Telegram events (one
+  list). `integrations.Encrypt/Decrypt` exported for the bot tokens.
+- **UI:** Settings → Integrations → Telegram bots: connect dialog (token, channel, welcome, inline errors from
+  Telegram's reasons), list with channel and copyable deep link, remove with confirm, not-configured notice.
+  Activity labels. en/ru.
+- Tests against a fake Bot API (connect, refusals, token never leaked, isolation, webhook cases incl.
+  retries); mutation-checked; RBAC/isolation guards updated (the webhook is deliberately open). Verified live
+  by posting Telegram-shaped updates to the dev tracker (events in ClickHouse with the click's campaign) and
+  in Chrome (panel, remove). The connect dialog was not exercised in the browser (no public webhook URL in
+  dev).
+
 ## [Phase 30.24] — IOS_INSTALL
 
 From the "мелочи" list of `docs/spec-conformance-2026-10-11.md` (§43). Scope (owner, 2026-10-14): detect on

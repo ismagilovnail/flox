@@ -192,6 +192,8 @@ needs no configuration at all.
 | `RETENTION_FAILED_POSTBACKS_DAYS` (worker) | `90` | Days a postback that was not recorded (duplicate/error/ignored) is kept in Postgres; `0` keeps them. Successes are never deleted. `docs/retention.md` |
 | `RETENTION_PIXEL_DELIVERIES_DAYS` (worker) | `30` | Days a sent or dead-lettered pixel delivery (it holds the visitor's IP and user agent) is kept in Postgres; `0` keeps them. Rows still to send are never deleted. `docs/pixels.md` |
 | `RETENTION_PUSH_DELIVERIES_DAYS` (worker) | `30` | Days a finished push delivery is kept; its broadcast keeps the counts. `0` keeps them. `docs/push.md` |
+| `TELEGRAM_WEBHOOK_BASE_URL` (api) | empty | The tracker's public **https** origin Telegram calls (`…/tg/{botId}`). Unset: Settings → Integrations shows Telegram bots as unavailable and connecting one is refused (503). `docs/telegram.md` |
+| `TELEGRAM_API_URL` (api) | `https://api.telegram.org` | The Bot API the api calls when a bot is connected or removed; tests point it at a fake. |
 | `RETENTION_POSTBACK_LOG_MONTHS` (worker) | `13` | TTL of ClickHouse's postback attempt log, applied by the worker at start; `0` removes it. Lowering it deletes older log rows at the next merges. |
 
 ### FX rates

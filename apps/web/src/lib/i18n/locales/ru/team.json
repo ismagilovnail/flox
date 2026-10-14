@@ -122,7 +122,9 @@
       "ad_account_connected": "Рекламный кабинет подключён",
       "ad_account_disconnected": "Рекламный кабинет отключён",
       "network_postback_secret_regenerated": "Секрет постбэков сети перевыпущен",
-      "settings_updated": "Изменены настройки организации"
+      "settings_updated": "Изменены настройки организации",
+      "telegram_bot_connected": "Telegram-бот подключён",
+      "telegram_bot_removed": "Telegram-бот удалён"
     },
     "methods": {
       "POST": "Изменение",

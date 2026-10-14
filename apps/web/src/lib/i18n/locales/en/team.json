@@ -122,7 +122,9 @@
       "ad_account_connected": "Ad account connected",
       "ad_account_disconnected": "Ad account disconnected",
       "network_postback_secret_regenerated": "Network postback secret regenerated",
-      "settings_updated": "Organization settings changed"
+      "settings_updated": "Organization settings changed",
+      "telegram_bot_connected": "Telegram bot connected",
+      "telegram_bot_removed": "Telegram bot removed"
     },
     "methods": {
       "POST": "Change",

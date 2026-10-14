@@ -107,6 +107,35 @@ type Click struct {
 	TTClickID string
 }
 
+// CopyTo puts the click's context on an event recorded later on the same
+// visit — a conversion, a Telegram start or join: its campaign, routing
+// and stage ids, classified dimensions and pass-through parameters, so the
+// event slices by the same facets as the click.
+func (c Click) CopyTo(ev *event.Event) {
+	ev.CampaignID = c.CampaignID
+	ev.StreamSetID = c.StreamSetID
+	ev.FlowID = c.FlowID
+	ev.LandingID = c.LandingID
+	ev.OfferID = c.OfferID
+	ev.PwaID = c.PwaID
+	ev.PostlandingID = c.PostlandingID
+	ev.TrafficSourceID = c.TrafficSourceID
+	ev.Country = c.Country
+	ev.Region = c.Region
+	ev.City = c.City
+	ev.Device = c.Device
+	ev.Platform = c.Platform
+	ev.OS = c.OS
+	ev.Browser = c.Browser
+	ev.UTMSource = c.UTMSource
+	ev.UTMMedium = c.UTMMedium
+	ev.UTMCampaign = c.UTMCampaign
+	ev.UTMContent = c.UTMContent
+	ev.UTMTerm = c.UTMTerm
+	ev.Subs = c.Subs
+	ev.ExternalClickID = c.ExternalClickID
+}
+
 // Method names the evidence a conversion was attributed on. Stored with the
 // conversion so a disputed payout can be re-argued from the record.
 type Method string

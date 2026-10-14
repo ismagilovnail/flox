@@ -75,3 +75,9 @@ func decrypt(key []byte, encoded string) (string, error) {
 	}
 	return string(plaintext), nil
 }
+
+// Encrypt and Decrypt are encrypt/decrypt for other packages keeping a
+// credential under the same key (internal/telegram's bot tokens).
+func Encrypt(key []byte, plaintext string) (string, error) { return encrypt(key, plaintext) }
+
+func Decrypt(key []byte, encoded string) (string, error) { return decrypt(key, encoded) }

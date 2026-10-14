@@ -790,29 +790,7 @@ func newEvent(in eventInput, attr attribution.Attribution) event.Event {
 		}
 	}
 	if attr.Outcome.Attributed() {
-		click := attr.Click
-		ev.CampaignID = click.CampaignID
-		ev.StreamSetID = click.StreamSetID
-		ev.FlowID = click.FlowID
-		ev.LandingID = click.LandingID
-		ev.OfferID = click.OfferID
-		ev.PwaID = click.PwaID
-		ev.PostlandingID = click.PostlandingID
-		ev.TrafficSourceID = click.TrafficSourceID
-		ev.Country = click.Country
-		ev.Region = click.Region
-		ev.City = click.City
-		ev.Device = click.Device
-		ev.Platform = click.Platform
-		ev.OS = click.OS
-		ev.Browser = click.Browser
-		ev.UTMSource = click.UTMSource
-		ev.UTMMedium = click.UTMMedium
-		ev.UTMCampaign = click.UTMCampaign
-		ev.UTMContent = click.UTMContent
-		ev.UTMTerm = click.UTMTerm
-		ev.Subs = click.Subs
-		ev.ExternalClickID = click.ExternalClickID
+		attr.Click.CopyTo(&ev)
 	}
 	return ev
 }

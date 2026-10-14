@@ -77,6 +77,7 @@ import (
 	"github.com/ismagilovnail/flox/apps/internal/storage"
 	"github.com/ismagilovnail/flox/apps/internal/streamset"
 	"github.com/ismagilovnail/flox/apps/internal/tags"
+	"github.com/ismagilovnail/flox/apps/internal/telegram"
 	"github.com/ismagilovnail/flox/apps/internal/telemetry"
 	"github.com/ismagilovnail/flox/apps/internal/tenant"
 	totpengine "github.com/ismagilovnail/flox/apps/internal/totp"
@@ -464,6 +465,19 @@ func buildServer(ctx context.Context, cfg config.Config, logger *slog.Logger, re
 		r.Use(tenantMiddleware)
 		r.Use(readGate("settings.write"))
 		integrationsHandler.Register(r)
+	})
+
+	// Telegram bots (docs/telegram.md): connected here, their webhook
+	// served by apps/tracker.
+	if cfg.TelegramWebhookBaseURL == "" {
+		logger.Warn("telegram not configured (TELEGRAM_WEBHOOK_BASE_URL): bots cannot be connected")
+	}
+	telegramHandler := telegram.NewHandler(telegram.NewService(telegram.NewRepository(db),
+		telegram.NewHTTPBotAPI(cfg.TelegramAPIURL), integrationKey, cfg.TelegramWebhookBaseURL, logger), requireSettingsWrite, logger)
+	srv.Mux().Route("/telegram-bots", func(r chi.Router) {
+		r.Use(tenantMiddleware)
+		r.Use(readGate("settings.write"))
+		telegramHandler.Register(r)
 	})
 
 	// Registrar/DNS automation (§30): domain.Service reads Namecheap and

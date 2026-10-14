@@ -81,6 +81,12 @@ type Config struct {
 	// deployment — changing it ends every existing subscription.
 	PushVAPIDPublicKey, PushVAPIDPrivateKey, PushVAPIDSubject string
 
+	// Telegram bots (internal/telegram, docs/telegram.md), api only.
+	// TelegramWebhookBaseURL is the tracker's public https origin Telegram
+	// calls (…/tg/{botId}); unset, bots cannot be connected.
+	// TelegramAPIURL is the Bot API (default https://api.telegram.org).
+	TelegramWebhookBaseURL, TelegramAPIURL string
+
 	// SentryDSN enables error tracking (internal/errtrack) — any tracker
 	// that speaks the Sentry protocol. Empty: off. SentryEnvironment labels
 	// events; it defaults to Env.
@@ -297,6 +303,8 @@ func load(portVar, portDefault, defaultServiceName string, ch chLimits) (Config,
 		PushVAPIDPublicKey:       getEnv("PUSH_VAPID_PUBLIC_KEY", ""),
 		PushVAPIDPrivateKey:      getEnv("PUSH_VAPID_PRIVATE_KEY", ""),
 		PushVAPIDSubject:         getEnv("PUSH_VAPID_SUBJECT", ""),
+		TelegramWebhookBaseURL:   getEnv("TELEGRAM_WEBHOOK_BASE_URL", ""),
+		TelegramAPIURL:           getEnv("TELEGRAM_API_URL", ""),
 		LandingLinkKey:           getEnv("LANDING_LINK_KEY", ""),
 		StickyCookieKey:          getEnv("STICKY_COOKIE_KEY", ""),
 		FXProvider:               getEnv("FX_PROVIDER", "ecb"),

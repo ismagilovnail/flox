@@ -148,5 +148,40 @@
     "integrations": "Integrations",
     "security": "Security",
     "customMetrics": "Custom metrics"
+  },
+  "telegram": {
+    "title": "Telegram bots",
+    "description": "Your own bots: opening one from an ad records TG_START on the visit, joining its channel records TG_JOIN.",
+    "connect": "Connect bot",
+    "notConfigured": "Not available on this deployment: TELEGRAM_WEBHOOK_BASE_URL is not set.",
+    "loading": "Loading bots…",
+    "loadError": "Couldn't load Telegram bots",
+    "empty": "No bots connected yet.",
+    "channel": "Channel: {{title}}",
+    "noChannel": "No channel: only TG_START is recorded",
+    "copyDeepLink": "Copy the bot link",
+    "copied": "Link copied",
+    "deepLinkHint": "Use the bot link as an offer or destination URL: {click_id} opens the bot with the visit’s own click.",
+    "connectTitle": "Connect a Telegram bot",
+    "connectDescription": "FLOX takes over the bot’s webhook: use a bot that does nothing else.",
+    "token": "Bot token",
+    "tokenHint": "From @BotFather. Stored encrypted; it never leaves the server.",
+    "channelLabel": "Channel (optional)",
+    "channelHint": "@channelname or the channel id. Make the bot an admin with the right to invite users first.",
+    "welcome": "Welcome message",
+    "welcomeHint": "Sent when someone starts the bot, with a button to the channel.",
+    "connected": "Bot connected",
+    "connectError": "Couldn't connect the bot",
+    "removeAria": "Remove @{{name}}",
+    "removeTitle": "Remove @{{name}}?",
+    "removeDescription": "Its webhook is removed: the bot stops answering and no more TG_START / TG_JOIN are recorded. Events already recorded stay.",
+    "remove": "Remove",
+    "removed": "Bot removed",
+    "removeError": "Couldn't remove the bot",
+    "errors": {
+      "token": "A bot token from @BotFather (123456:ABC…)",
+      "channel": "@channelname or the channel id (-100…)",
+      "welcomeText": "At most 2000 characters"
+    }
   }
 }

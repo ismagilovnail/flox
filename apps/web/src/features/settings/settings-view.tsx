@@ -8,6 +8,7 @@ import { usePermission } from "@/hooks/use-auth";
 import { OrganizationPanel } from "@/features/settings/organization-panel";
 import { ApiKeysPanel } from "@/features/settings/api-keys-panel";
 import { IntegrationsPanel } from "@/features/settings/integrations-panel";
+import { TelegramBotsPanel } from "@/features/settings/telegram-bots-panel";
 import { SecurityPanel } from "@/features/settings/security-panel";
 import { CustomMetricsList } from "@/features/custom-metrics/custom-metrics-list";
 import { AlertsPanel } from "@/features/alerts/alerts-panel";
@@ -55,8 +56,9 @@ export function SettingsView() {
             <TabsContent value="api-keys">
               <ApiKeysPanel />
             </TabsContent>
-            <TabsContent value="integrations">
+            <TabsContent value="integrations" className="flex flex-col gap-4">
               <IntegrationsPanel />
+              <TelegramBotsPanel />
             </TabsContent>
             <TabsContent value="alerts">
               <AlertsPanel />

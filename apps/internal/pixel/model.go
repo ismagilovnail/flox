@@ -61,8 +61,9 @@ func (p Provider) UsesToken() bool {
 
 // ValidEventTypes is the part of the §43 event model a pixel can report:
 // the events FLOX actually produces that an ad platform optimizes for.
-// TG_JOIN and NOTIFICATION_SUBSCRIBE used to be offered too, but nothing
-// produces them yet, so a pixel set to them would never send.
+// TG_JOIN and NOTIFICATION_SUBSCRIBE used to be offered too; both are
+// produced now (internal/telegram, internal/push) but not offered yet —
+// each needs its per-platform event mapping (a later phase).
 var ValidEventTypes = []string{
 	"PWA_INSTALL",
 	"CPA_HOLD",
