@@ -14,8 +14,9 @@ const (
 	TriggeredSendBatch = 1000
 )
 
-// RunScheduler sends due scheduled broadcasts (Repository.SendDue) and
-// active triggers' due subscribers (Repository.SendTriggered) every
+// RunScheduler sends due scheduled broadcasts (Repository.SendDue),
+// recurring templates' due slots (Repository.SendRecurring) and active
+// triggers' due subscribers (Repository.SendTriggered) every
 // interval until ctx ends — apps/worker runs it. Its deliveries then go out
 // through the usual queue (internal/pushsend).
 func RunScheduler(ctx context.Context, repo *Repository, interval time.Duration, logger *slog.Logger) {
@@ -28,6 +29,13 @@ func RunScheduler(ctx context.Context, repo *Repository, interval time.Duration,
 		}
 		if n > 0 {
 			logger.Info("push: scheduled broadcasts sent", "count", n)
+		}
+		n, err = repo.SendRecurring(ctx, time.Now(), ScheduledSendBatch)
+		if err != nil && ctx.Err() == nil {
+			logger.Error("push: sending recurring broadcasts", "error", err)
+		}
+		if n > 0 {
+			logger.Info("push: recurring broadcasts sent", "count", n)
 		}
 		n, err = repo.SendTriggered(ctx, time.Now(), TriggeredSendBatch)
 		if err != nil && ctx.Err() == nil {

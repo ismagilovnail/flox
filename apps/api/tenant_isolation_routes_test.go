@@ -819,6 +819,7 @@ var notReferences = map[string]string{
 	"relatedPayoutId":              "response only",
 	"replacedById":                 "response only: the server sets it when rotating a key (TestRotateRefusesRevokedAndOtherOrganizationsKeys)",
 	"deliveryId":                   "response only",
+	"parentId":                     "response only: the worker sets it on a recurring broadcast's sends (TestRecurringBroadcast)",
 	"ruleId":                       "response only",
 	"tagId":                        "response only; assignments take tagIds, covered",
 	"userId":                       "response only (team members, auth/me)",

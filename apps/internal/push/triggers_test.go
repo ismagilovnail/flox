@@ -101,14 +101,14 @@ func TestTriggeredBroadcast(t *testing.T) {
 
 	// Paused sends nothing; resumed, the subscribers due meanwhile go out.
 	var apiErr *apierror.Error
-	if _, err := svc.SetTriggerActive(ctx, f.org, b.ID, true); !errors.As(err, &apiErr) || apiErr.Status != 409 {
+	if _, err := svc.SetActive(ctx, f.org, b.ID, true); !errors.As(err, &apiErr) || apiErr.Status != 409 {
 		t.Fatalf("resume an active trigger: %v, want 409", err)
 	}
 	otherOrg, _, _ := f.seedOrg(t)
-	if _, err := svc.SetTriggerActive(ctx, otherOrg, b.ID, false); !errors.As(err, &apiErr) || apiErr.Status != 404 {
+	if _, err := svc.SetActive(ctx, otherOrg, b.ID, false); !errors.As(err, &apiErr) || apiErr.Status != 404 {
 		t.Fatalf("other organization pauses: %v, want 404", err)
 	}
-	if p, err := svc.SetTriggerActive(ctx, f.org, b.ID, false); err != nil || p.Status != push.BroadcastPaused {
+	if p, err := svc.SetActive(ctx, f.org, b.ID, false); err != nil || p.Status != push.BroadcastPaused {
 		t.Fatalf("pause = %+v, %v", p, err)
 	}
 	// Push metrics count a trigger's deliveries on the day they went out:
@@ -120,7 +120,7 @@ func TestTriggeredBroadcast(t *testing.T) {
 	if n := f.sendTriggered(t, repo, now.Add(62*time.Minute)); n != 0 {
 		t.Fatalf("paused trigger sent %d", n)
 	}
-	if _, err := svc.SetTriggerActive(ctx, f.org, b.ID, true); err != nil {
+	if _, err := svc.SetActive(ctx, f.org, b.ID, true); err != nil {
 		t.Fatal(err)
 	}
 	// late (due at now+60m, skipped at now+26h) is within its window now.
@@ -145,7 +145,7 @@ func TestTriggeredBroadcast(t *testing.T) {
 	if once.Kind != push.KindOnce || once.Trigger != nil {
 		t.Fatalf("one-off = %+v", once)
 	}
-	if _, err := svc.SetTriggerActive(ctx, f.org, once.ID, false); !errors.As(err, &apiErr) || apiErr.Status != 409 {
+	if _, err := svc.SetActive(ctx, f.org, once.ID, false); !errors.As(err, &apiErr) || apiErr.Status != 409 {
 		t.Fatalf("pause a one-off: %v, want 409", err)
 	}
 }

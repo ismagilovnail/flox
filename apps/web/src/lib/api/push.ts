@@ -25,13 +25,21 @@ export type PushBroadcast = {
   failed: number;
   unsubscribed: number;
   opened: number;
-  kind: "once" | "triggered";
+  kind: "once" | "triggered" | "recurring";
   /** scheduled: waits for sendAt, no deliveries yet (the audience is fixed
    * when it goes out); sent: queued at sentAt; canceled: called off.
    * A triggered one is active (sends as subscribers become due) or
-   * paused; its total grows as it sends. */
-  status: "scheduled" | "sent" | "canceled" | "active" | "paused";
+   * paused; its total grows as it sends. A recurring template is active,
+   * paused or finished (past its end date). */
+  status: "scheduled" | "sent" | "canceled" | "active" | "paused" | "finished";
   trigger: PushTrigger | null;
+  /** A recurring template: nextSendAt is its next slot (null once
+   * finished), occurrences how many sends it made; its counters are
+   * theirs summed. Each send is a once broadcast with parentId set. */
+  recurrence: PushRecurrence | null;
+  nextSendAt: string | null;
+  occurrences: number;
+  parentId: string | null;
   sendAt: string | null;
   sentAt: string | null;
   createdAt: string;
@@ -49,6 +57,15 @@ export type PushTrigger = {
   delayMinutes: number;
   condition: "none" | "with" | "without";
   statuses: PushTriggerStatus[];
+};
+
+/** Weekdays ISO 1 (Monday)–7, time "HH:MM" in timezone (the
+ * organization's, set by the server), until "YYYY-MM-DD" inclusive or "". */
+export type PushRecurrence = {
+  weekdays: number[];
+  time: string;
+  timezone: string;
+  until: string;
 };
 
 export type PushGroupCount = { key: string; count: number };
@@ -88,6 +105,9 @@ export type CreateBroadcastInput = {
   sendAt?: string;
   /** Makes it a triggered broadcast; not with sendAt. Delay 5 min–30 days. */
   trigger?: PushTrigger;
+  /** Makes it a recurring template; not with sendAt or trigger. The
+   * server sets timezone to the organization's. */
+  recurrence?: Omit<PushRecurrence, "timezone">;
 };
 
 /** Push metrics keyed as the custom-metric catalog names them (§30.5,

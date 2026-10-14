@@ -85,13 +85,33 @@ const (
 	BroadcastCanceled  = "canceled"
 	BroadcastActive    = "active"
 	BroadcastPaused    = "paused"
+	// BroadcastFinished: a recurring template past its end date.
+	BroadcastFinished = "finished"
 )
 
-// Broadcast kinds: once (now or scheduled) or triggered.
+// Broadcast kinds: once (now or scheduled), triggered, or recurring — a
+// template whose every send is a once broadcast with ParentID set to it.
 const (
 	KindOnce      = "once"
 	KindTriggered = "triggered"
+	KindRecurring = "recurring"
 )
+
+// Recurrence makes a broadcast go out on Weekdays (ISO: 1 = Monday … 7) at
+// Time ("HH:MM") in Timezone — the organization's when it was created —
+// until Until (a "YYYY-MM-DD" date in that zone, inclusive), or for good
+// when Until is empty. Each send fixes its own audience then.
+type Recurrence struct {
+	Weekdays []int  `json:"weekdays"`
+	Time     string `json:"time"`
+	Timezone string `json:"timezone"`
+	Until    string `json:"until"`
+}
+
+// RecurringLateness: a slot the worker reaches later than this (it was
+// down) is skipped, not sent late — a "19:00" push at 3 a.m. is worse
+// than none.
+const RecurringLateness = time.Hour
 
 // Trigger condition on the subscriber's click at send time.
 const (
@@ -146,10 +166,17 @@ type Broadcast struct {
 	Status       string  `json:"status"`
 	// Trigger is set for a triggered broadcast, whose Total grows as it
 	// sends.
-	Trigger   *Trigger   `json:"trigger"`
-	SendAt    *time.Time `json:"sendAt"`
-	SentAt    *time.Time `json:"sentAt"`
-	CreatedAt time.Time  `json:"createdAt"`
+	Trigger *Trigger `json:"trigger"`
+	// Recurrence is set for a recurring template; NextSendAt is its next
+	// slot (null once finished), Occurrences how many sends it made — its
+	// counters are theirs summed. ParentID is set on each of those sends.
+	Recurrence  *Recurrence `json:"recurrence"`
+	NextSendAt  *time.Time  `json:"nextSendAt"`
+	Occurrences int         `json:"occurrences"`
+	ParentID    *string     `json:"parentId"`
+	SendAt      *time.Time  `json:"sendAt"`
+	SentAt      *time.Time  `json:"sentAt"`
+	CreatedAt   time.Time   `json:"createdAt"`
 }
 
 type CreateBroadcastInput struct {
@@ -165,6 +192,9 @@ type CreateBroadcastInput struct {
 	SendAt *time.Time
 	// Trigger makes it a triggered broadcast (not with SendAt).
 	Trigger *Trigger
+	// Recurrence makes it a recurring template (not with SendAt or
+	// Trigger); its Timezone is set by the service from the organization.
+	Recurrence *Recurrence
 }
 
 // Scheduling bounds: a time in the past or a few seconds ahead is "now";

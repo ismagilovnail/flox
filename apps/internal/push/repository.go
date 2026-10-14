@@ -95,6 +95,18 @@ func nonNil(s []string) []string {
 	return s
 }
 
+// OrganizationTimezone is the organization's IANA zone (UTC when unset).
+func (r *Repository) OrganizationTimezone(ctx context.Context, orgID string) (string, error) {
+	var tz string
+	if err := r.db.QueryRow(ctx, `SELECT coalesce(timezone, '') FROM organizations WHERE id = $1`, orgID).Scan(&tz); err != nil {
+		return "", fmt.Errorf("push: reading organization timezone: %w", err)
+	}
+	if tz == "" {
+		tz = "UTC"
+	}
+	return tz, nil
+}
+
 // CountAudience is how many subscribers a broadcast with these filters
 // would go to now.
 func (r *Repository) CountAudience(ctx context.Context, orgID string, f Filters) (int, error) {
@@ -126,17 +138,37 @@ func (r *Repository) CreateBroadcast(ctx context.Context, orgID, userID string, 
 	case in.SendAt != nil:
 		status = BroadcastScheduled
 	}
+	// A recurring template: its first slot from now (the service checked
+	// there is one).
+	var recTime, recUntil *string
+	var recWeekdays []int
+	recTimezone := ""
+	var nextSendAt *time.Time
+	if rec := in.Recurrence; rec != nil {
+		kind, status = KindRecurring, BroadcastActive
+		next, ok, err := NextOccurrence(*rec, time.Now())
+		if err != nil || !ok {
+			return Broadcast{}, apierror.Validation("invalid recurrence", map[string]string{"recurrence.until": "ends before its first send"})
+		}
+		recTime, recWeekdays, recTimezone, nextSendAt = &rec.Time, rec.Weekdays, rec.Timezone, &next
+		if rec.Until != "" {
+			recUntil = &rec.Until
+		}
+	}
 	var id string
 	if err := tx.QueryRow(ctx, `
 		INSERT INTO push_broadcasts (id, organization_id, name, title, body, icon_url, image_url, target, url,
 		                             pwa_ids, campaign_ids, countries, created_by_user_id, status, send_at, sent_at,
-		                             kind, trigger_delay_minutes, trigger_condition, trigger_statuses)
+		                             kind, trigger_delay_minutes, trigger_condition, trigger_statuses,
+		                             recur_weekdays, recur_time, recur_timezone, recur_until, next_send_at)
 		VALUES (flox_new_ulid(), $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14,
-		        CASE WHEN $13 = 'sent' THEN now() END, $15, $16, $17, $18)
+		        CASE WHEN $13 = 'sent' THEN now() END, $15, $16, $17, $18,
+		        $19, $20::time, $21, $22::date, $23)
 		RETURNING id`,
 		orgID, in.Name, in.Title, in.Body, in.IconURL, in.ImageURL, string(in.Target), in.URL,
 		nonNil(in.Filters.PwaIDs), nonNil(in.Filters.CampaignIDs), nonNil(in.Filters.Countries), userID,
 		status, in.SendAt, kind, delay, condition, statuses,
+		weekdays16(recWeekdays), recTime, recTimezone, recUntil, nextSendAt,
 	).Scan(&id); err != nil {
 		return Broadcast{}, fmt.Errorf("push: storing broadcast: %w", err)
 	}
@@ -338,28 +370,183 @@ func (r *Repository) sendTrigger(ctx context.Context, id string, now time.Time, 
 	return n, nil
 }
 
-// SetTriggerActive pauses or resumes a triggered broadcast. Resumed, it
-// sends to the subscribers who became due while it was paused only if that
-// was within TriggerWindow. Not a trigger, or already so, is a conflict.
-func (r *Repository) SetTriggerActive(ctx context.Context, orgID, id string, active bool) (Broadcast, error) {
-	from, to := BroadcastActive, BroadcastPaused
-	if active {
-		from, to = to, from
-	}
-	tag, err := r.db.Exec(ctx, `
-		UPDATE push_broadcasts SET status = $3
-		WHERE id = $1 AND organization_id = $2 AND status = $4`, id, orgID, to, from)
-	if err != nil {
-		return Broadcast{}, fmt.Errorf("push: setting trigger %s: %w", to, err)
-	}
+// SetActive pauses or resumes a triggered or recurring broadcast. A
+// resumed trigger sends to the subscribers who became due while it was
+// paused only if that was within TriggerWindow; a resumed recurring one
+// goes on from its next slot after now (finished if there is none). Any
+// other broadcast, or one already so, is a conflict.
+func (r *Repository) SetActive(ctx context.Context, orgID, id string, active bool) (Broadcast, error) {
 	b, err := r.GetBroadcast(ctx, orgID, id)
 	if err != nil {
 		return Broadcast{}, err
 	}
-	if tag.RowsAffected() == 0 {
-		return Broadcast{}, apierror.Conflict("only an " + from + " trigger can be set " + to + "; this one is " + b.Status)
+	from, to := BroadcastActive, BroadcastPaused
+	if active {
+		from, to = to, from
 	}
-	return b, nil
+	if b.Kind == KindOnce || b.Status != from {
+		return Broadcast{}, apierror.Conflict("only an " + from + " trigger or recurring broadcast can be set " + to + "; this one is " + b.Kind + ", " + b.Status)
+	}
+	var next *time.Time
+	if active && b.Recurrence != nil {
+		n, ok, err := NextOccurrence(*b.Recurrence, time.Now())
+		if err != nil {
+			return Broadcast{}, err
+		}
+		if ok {
+			next = &n
+		} else {
+			to = BroadcastFinished
+		}
+	}
+	tag, err := r.db.Exec(ctx, `
+		UPDATE push_broadcasts SET status = $3,
+		       next_send_at = CASE WHEN kind = 'recurring' AND $3 <> 'paused' THEN $5 ELSE next_send_at END
+		WHERE id = $1 AND organization_id = $2 AND status = $4`, id, orgID, to, from, next)
+	if err != nil {
+		return Broadcast{}, fmt.Errorf("push: setting broadcast %s: %w", to, err)
+	}
+	if tag.RowsAffected() == 0 { // changed meanwhile
+		return Broadcast{}, apierror.Conflict("the broadcast changed meanwhile; reload it")
+	}
+	return r.GetBroadcast(ctx, orgID, id)
+}
+
+// SendRecurring makes each active recurring template whose slot is due by
+// now into a sent broadcast — at most limit per call — and reports how
+// many it sent. Each template is handled in its own transaction holding
+// its row, which also moves it to its next slot, so a slot goes out once
+// however many workers run. A slot reached more than RecurringLateness
+// late is skipped; one whose filters match no one creates nothing.
+func (r *Repository) SendRecurring(ctx context.Context, now time.Time, limit int) (int, error) {
+	sent := 0
+	for range limit {
+		ok, did, err := r.sendOneRecurring(ctx, now)
+		if err != nil {
+			return sent, err
+		}
+		if !ok {
+			break
+		}
+		if did {
+			sent++
+		}
+	}
+	return sent, nil
+}
+
+// sendOneRecurring handles one due template: ok false when none is due;
+// sent whether it made a broadcast.
+func (r *Repository) sendOneRecurring(ctx context.Context, now time.Time) (ok, sent bool, err error) {
+	tx, err := r.db.Begin(ctx)
+	if err != nil {
+		return false, false, fmt.Errorf("push: beginning recurring send: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	var orgID string
+	b, err := scanBroadcast(tx.QueryRow(ctx, `
+		SELECT `+broadcastColumns+`, organization_id FROM push_broadcasts
+		WHERE kind = 'recurring' AND status = 'active' AND next_send_at <= $1
+		  AND (cardinality($2::text[]) = 0 OR organization_id = ANY($2::text[]))
+		ORDER BY next_send_at, id LIMIT 1 FOR UPDATE SKIP LOCKED`, now, nonNil(r.scope)), &orgID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return false, false, nil
+	}
+	if err != nil {
+		return false, false, fmt.Errorf("push: claiming recurring broadcast: %w", err)
+	}
+	slot := *b.NextSendAt
+	if now.Sub(slot) <= RecurringLateness {
+		n, err := r.countAudienceTx(ctx, tx, orgID, b.Filters)
+		if err != nil {
+			return false, false, err
+		}
+		if n > 0 {
+			loc, _ := time.LoadLocation(b.Recurrence.Timezone)
+			var childID string
+			if err := tx.QueryRow(ctx, `
+				INSERT INTO push_broadcasts (id, organization_id, name, title, body, icon_url, image_url, target, url,
+				                             pwa_ids, campaign_ids, countries, created_by_user_id, status, sent_at, kind, parent_id)
+				SELECT flox_new_ulid(), organization_id, name || ' · ' || $2, title, body, icon_url, image_url, target, url,
+				       pwa_ids, campaign_ids, countries, created_by_user_id, 'sent', now(), 'once', id
+				FROM push_broadcasts WHERE id = $1
+				RETURNING id`, b.ID, slot.In(loc).Format(time.DateOnly)).Scan(&childID); err != nil {
+				return false, false, fmt.Errorf("push: storing recurring send: %w", err)
+			}
+			if err := r.queue(ctx, tx, orgID, childID, b.Filters); err != nil {
+				return false, false, err
+			}
+			sent = true
+		}
+	}
+	next, more, err := NextOccurrence(*b.Recurrence, now)
+	if err != nil {
+		return false, false, err
+	}
+	if more {
+		_, err = tx.Exec(ctx, `UPDATE push_broadcasts SET next_send_at = $2 WHERE id = $1`, b.ID, next)
+	} else {
+		_, err = tx.Exec(ctx, `UPDATE push_broadcasts SET status = 'finished', next_send_at = NULL WHERE id = $1`, b.ID)
+	}
+	if err != nil {
+		return false, false, fmt.Errorf("push: moving recurring broadcast on: %w", err)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return false, false, fmt.Errorf("push: committing recurring send: %w", err)
+	}
+	return true, sent, nil
+}
+
+func (r *Repository) countAudienceTx(ctx context.Context, tx pgx.Tx, orgID string, f Filters) (int, error) {
+	var n int
+	if err := tx.QueryRow(ctx, `SELECT count(*) FROM push_subscriptions s WHERE `+audienceWhere,
+		audienceArgs(orgID, f)...).Scan(&n); err != nil {
+		return 0, fmt.Errorf("push: counting audience: %w", err)
+	}
+	return n, nil
+}
+
+// weekdays16 is ISO weekdays as recur_weekdays' smallint[].
+func weekdays16(days []int) []int16 {
+	out := make([]int16, len(days))
+	for i, d := range days {
+		out[i] = int16(d)
+	}
+	return out
+}
+
+// withRecurringTotals sets each recurring template's Occurrences and
+// counters from its sends (they hold the deliveries).
+func (r *Repository) withRecurringTotals(ctx context.Context, orgID string, bs []Broadcast) error {
+	idx := map[string]int{}
+	var ids []string
+	for i, b := range bs {
+		if b.Kind == KindRecurring {
+			idx[b.ID] = i
+			ids = append(ids, b.ID)
+		}
+	}
+	if len(ids) == 0 {
+		return nil
+	}
+	rows, err := r.db.Query(ctx, `
+		SELECT parent_id, count(*), sum(total), sum(delivered), sum(failed), sum(unsubscribed), sum(opened)
+		FROM push_broadcasts WHERE organization_id = $1 AND parent_id = ANY($2::text[])
+		GROUP BY parent_id`, orgID, ids)
+	if err != nil {
+		return fmt.Errorf("push: summing recurring sends: %w", err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var id string
+		var n, total, delivered, failed, unsub, opened int
+		if err := rows.Scan(&id, &n, &total, &delivered, &failed, &unsub, &opened); err != nil {
+			return fmt.Errorf("push: scanning recurring sums: %w", err)
+		}
+		b := &bs[idx[id]]
+		b.Occurrences, b.Total, b.Delivered, b.Failed, b.Unsubscribed, b.Opened = n, total, delivered, failed, unsub, opened
+	}
+	return rows.Err()
 }
 
 var statsKeys = map[StatsGroup]string{
@@ -415,20 +602,33 @@ func (r *Repository) Stats(ctx context.Context, orgID string, from, to time.Time
 
 const broadcastColumns = `id, name, title, body, icon_url, image_url, target, url, pwa_ids, campaign_ids, countries,
 	total, delivered, failed, unsubscribed, opened, kind, status, trigger_delay_minutes, trigger_condition,
-	trigger_statuses, send_at, sent_at, created_at`
+	trigger_statuses, recur_weekdays, to_char(recur_time, 'HH24:MI'), recur_timezone,
+	coalesce(to_char(recur_until, 'YYYY-MM-DD'), ''), next_send_at, parent_id, send_at, sent_at, created_at`
 
-func scanBroadcast(row pgx.Row) (Broadcast, error) {
+// scanBroadcast reads broadcastColumns, then any extra columns the query
+// selected after them into extra.
+func scanBroadcast(row pgx.Row, extra ...any) (Broadcast, error) {
 	var b Broadcast
-	var target, condition string
+	var target, condition, recTimezone, recUntil string
 	var delay *int
 	var statuses []string
-	err := row.Scan(&b.ID, &b.Name, &b.Title, &b.Body, &b.IconURL, &b.ImageURL, &target, &b.URL,
+	var weekdays []int16
+	var recTime *string
+	dest := []any{&b.ID, &b.Name, &b.Title, &b.Body, &b.IconURL, &b.ImageURL, &target, &b.URL,
 		&b.Filters.PwaIDs, &b.Filters.CampaignIDs, &b.Filters.Countries,
 		&b.Total, &b.Delivered, &b.Failed, &b.Unsubscribed, &b.Opened, &b.Kind, &b.Status, &delay, &condition,
-		&statuses, &b.SendAt, &b.SentAt, &b.CreatedAt)
+		&statuses, &weekdays, &recTime, &recTimezone, &recUntil, &b.NextSendAt, &b.ParentID, &b.SendAt, &b.SentAt, &b.CreatedAt}
+	err := row.Scan(append(dest, extra...)...)
 	b.Target = Target(target)
 	if delay != nil {
 		b.Trigger = &Trigger{DelayMinutes: *delay, Condition: condition, Statuses: statuses}
+	}
+	if recTime != nil {
+		days := make([]int, len(weekdays))
+		for i, d := range weekdays {
+			days[i] = int(d)
+		}
+		b.Recurrence = &Recurrence{Weekdays: days, Time: *recTime, Timezone: recTimezone, Until: recUntil}
 	}
 	return b, err
 }
@@ -441,7 +641,11 @@ func (r *Repository) GetBroadcast(ctx context.Context, orgID, id string) (Broadc
 	if err != nil {
 		return Broadcast{}, fmt.Errorf("push: reading broadcast: %w", err)
 	}
-	return b, nil
+	one := []Broadcast{b}
+	if err := r.withRecurringTotals(ctx, orgID, one); err != nil {
+		return Broadcast{}, err
+	}
+	return one[0], nil
 }
 
 // ListBroadcasts is the organization's broadcasts, newest first.
@@ -464,7 +668,14 @@ func (r *Repository) ListBroadcasts(ctx context.Context, orgID string, page pagi
 		}
 		out = append(out, b)
 	}
-	return out, total, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, 0, err
+	}
+	rows.Close()
+	if err := r.withRecurringTotals(ctx, orgID, out); err != nil {
+		return nil, 0, err
+	}
+	return out, total, nil
 }
 
 // SubscriptionFilter narrows the subscriber list; empty fields do not.

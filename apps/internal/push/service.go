@@ -75,6 +75,20 @@ func (s *Service) CreateBroadcast(ctx context.Context, orgID, userID string, in 
 			fields[k] = v
 		}
 	}
+	if in.Recurrence != nil {
+		if in.SendAt != nil || in.Trigger != nil {
+			fields["recurrence"] = "not with sendAt or a trigger"
+		}
+		// The organization's zone; a recurring broadcast keeps it.
+		tz, err := s.repo.OrganizationTimezone(ctx, orgID)
+		if err != nil {
+			return Broadcast{}, err
+		}
+		in.Recurrence.Timezone = tz
+		for k, v := range validateRecurrence(*in.Recurrence, s.now()) {
+			fields[k] = v
+		}
+	}
 	if in.SendAt != nil {
 		now := s.now()
 		switch {
@@ -87,7 +101,7 @@ func (s *Service) CreateBroadcast(ctx context.Context, orgID, userID string, in 
 	if len(fields) > 0 {
 		return Broadcast{}, apierror.Validation("invalid broadcast", fields)
 	}
-	if in.SendAt != nil || in.Trigger != nil {
+	if in.SendAt != nil || in.Trigger != nil || in.Recurrence != nil {
 		return s.repo.CreateBroadcast(ctx, orgID, userID, in)
 	}
 	n, err := s.repo.CountAudience(ctx, orgID, in.Filters)
@@ -105,9 +119,10 @@ func (s *Service) CancelBroadcast(ctx context.Context, orgID, id string) (Broadc
 	return s.repo.CancelBroadcast(ctx, orgID, id)
 }
 
-// SetTriggerActive pauses (active false) or resumes a triggered broadcast.
-func (s *Service) SetTriggerActive(ctx context.Context, orgID, id string, active bool) (Broadcast, error) {
-	return s.repo.SetTriggerActive(ctx, orgID, id, active)
+// SetActive pauses (active false) or resumes a triggered or recurring
+// broadcast.
+func (s *Service) SetActive(ctx context.Context, orgID, id string, active bool) (Broadcast, error) {
+	return s.repo.SetActive(ctx, orgID, id, active)
 }
 
 // Stats is push metrics for broadcasts sent between from and to (days,
@@ -161,6 +176,39 @@ func validateBroadcast(in CreateBroadcastInput) map[string]string {
 		}
 	default:
 		fields["target"] = "destination or url"
+	}
+	return fields
+}
+
+// validateRecurrence checks rec (its Timezone set) as of now: weekdays
+// 1–7 without repeats, an HH:MM time, an until date with a send on or
+// before it.
+func validateRecurrence(rec Recurrence, now time.Time) map[string]string {
+	fields := map[string]string{}
+	seen := map[int]bool{}
+	for _, d := range rec.Weekdays {
+		if d < 1 || d > 7 || seen[d] {
+			fields["recurrence.weekdays"] = "ISO weekdays 1–7, each once"
+		}
+		seen[d] = true
+	}
+	if len(rec.Weekdays) == 0 {
+		fields["recurrence.weekdays"] = "at least one weekday"
+	}
+	if _, _, err := parseClock(rec.Time); err != nil {
+		fields["recurrence.time"] = "HH:MM"
+	}
+	if rec.Until != "" {
+		if _, err := time.Parse(time.DateOnly, rec.Until); err != nil {
+			fields["recurrence.until"] = "YYYY-MM-DD"
+		}
+	}
+	if len(fields) == 0 {
+		if _, ok, err := NextOccurrence(rec, now); err != nil {
+			fields["recurrence"] = err.Error()
+		} else if !ok {
+			fields["recurrence.until"] = "ends before its first send"
+		}
 	}
 	return fields
 }

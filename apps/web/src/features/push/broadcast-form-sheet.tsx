@@ -33,8 +33,9 @@ import { usePwas } from "@/hooks/use-pwas";
 import { ApiError } from "@/lib/api/client";
 import { PUSH_TRIGGER_STATUSES, type PushFilters, type PushTrigger, type PushTriggerStatus } from "@/lib/api/push";
 import { countryOptions } from "@/lib/countries";
-import { formatInZone, utcOffsetLabel, utcToZonedLocal, zonedLocalToUtc } from "@/lib/timezones";
+import { formatInZone, todayInZone, utcOffsetLabel, utcToZonedLocal, zonedLocalToUtc } from "@/lib/timezones";
 import { DELAY_UNIT_MINUTES, describeTrigger, type DelayUnit } from "@/features/push/trigger-format";
+import { ISO_WEEKDAYS, describeRecurrence, weekdayName } from "@/features/push/recurrence-format";
 
 // Mirrors push.MinScheduleAhead / MaxScheduleAhead (internal/push/model.go).
 const MIN_AHEAD_MS = 60_000;
@@ -60,12 +61,15 @@ function buildSchema(t: TFunction, timeZone: string) {
       pwaIds: z.array(z.string()),
       campaignIds: z.array(z.string()),
       countries: z.array(z.string()),
-      when: z.enum(["now", "later", "trigger"]),
+      when: z.enum(["now", "later", "trigger", "recurring"]),
       sendAtLocal: z.string(),
       delayAmount: z.string(),
       delayUnit: z.enum(["minutes", "hours", "days"]),
       condition: z.enum(["none", "with", "without"]),
       statuses: z.array(z.enum(PUSH_TRIGGER_STATUSES)),
+      weekdays: z.array(z.number()),
+      recurTime: z.string(),
+      recurUntil: z.string(),
     })
     .superRefine((v, ctx) => {
       if (v.target === "url" && !/^https?:\/\/[^\s/]+/i.test(v.url)) {
@@ -87,6 +91,15 @@ function buildSchema(t: TFunction, timeZone: string) {
           ctx.addIssue({ code: "custom", message: t("form.validation.statuses"), path: ["statuses"] });
         }
       }
+      if (v.when === "recurring") {
+        if (v.weekdays.length === 0) ctx.addIssue({ code: "custom", message: t("form.validation.weekdays"), path: ["weekdays"] });
+        if (!/^\d{2}:\d{2}$/.test(v.recurTime)) ctx.addIssue({ code: "custom", message: t("form.validation.recurTime"), path: ["recurTime"] });
+        // An end date in the past: the server says so precisely (it knows
+        // whether today's slot is still ahead); this catches the obvious.
+        if (v.recurUntil && v.recurUntil < todayInZone(timeZone).toISOString().slice(0, 10)) {
+          ctx.addIssue({ code: "custom", message: t("form.validation.recurUntil"), path: ["recurUntil"] });
+        }
+      }
     });
 }
 
@@ -105,17 +118,28 @@ function triggerOf(v: FormValues): PushTrigger {
   };
 }
 
-// Server field names (push.validateTrigger) → form fields.
-const TRIGGER_FIELDS: Record<string, keyof FormValues> = {
+// Server field names (push.validateTrigger, validateRecurrence) → form fields.
+const SERVER_FIELDS: Record<string, keyof FormValues> = {
   "trigger.delayMinutes": "delayAmount",
   "trigger.condition": "condition",
   "trigger.statuses": "statuses",
+  "recurrence.weekdays": "weekdays",
+  "recurrence.time": "recurTime",
+  "recurrence.until": "recurUntil",
 };
+
+const SUBMIT_LABEL = { now: "form.submit", later: "form.submitSchedule", trigger: "form.submitTrigger", recurring: "form.submitRecurring" } as const;
+const CONFIRM_LABEL = { now: "form.confirm", later: "form.confirmSchedule", trigger: "form.confirmTrigger", recurring: "form.confirmRecurring" } as const;
+
+function recurrenceOf(v: FormValues) {
+  return { weekdays: [...v.weekdays].sort((a, b) => a - b), time: v.recurTime, until: v.recurUntil };
+}
 
 const EMPTY: FormValues = {
   name: "", title: "", body: "", iconUrl: "", imageUrl: "",
   target: "destination", url: "", pwaIds: [], campaignIds: [], countries: [],
   when: "now", sendAtLocal: "", delayAmount: "1", delayUnit: "hours", condition: "none", statuses: [],
+  weekdays: [...ISO_WEEKDAYS], recurTime: "19:00", recurUntil: "",
 };
 
 export function BroadcastFormSheet({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
@@ -150,12 +174,14 @@ export function BroadcastFormSheet({ open, onOpenChange }: { open: boolean; onOp
         filters: { pwaIds: v.pwaIds, campaignIds: v.campaignIds, countries: v.countries },
         sendAt: v.when === "later" ? zonedLocalToUtc(v.sendAtLocal, timeZone).toISOString() : undefined,
         trigger: v.when === "trigger" ? triggerOf(v) : undefined,
+        recurrence: v.when === "recurring" ? recurrenceOf(v) : undefined,
       },
       {
         onSuccess: (b) => {
           setConfirming(null);
           onOpenChange(false);
-          const done = b.kind === "triggered" ? "form.triggerStarted" : b.status === "scheduled" ? "form.scheduled" : "form.sent";
+          const done =
+            b.kind === "triggered" ? "form.triggerStarted" : b.kind === "recurring" ? "form.recurringStarted" : b.status === "scheduled" ? "form.scheduled" : "form.sent";
           toast(t(done), { description: b.name });
         },
         onError: (err) => {
@@ -164,7 +190,7 @@ export function BroadcastFormSheet({ open, onOpenChange }: { open: boolean; onOp
             for (const [field, message] of Object.entries(err.fields)) {
               if (field in EMPTY) setError(field as keyof FormValues, { message });
               if (field === "sendAt") setError("sendAtLocal", { message });
-              if (TRIGGER_FIELDS[field]) setError(TRIGGER_FIELDS[field], { message });
+              if (SERVER_FIELDS[field]) setError(SERVER_FIELDS[field], { message });
             }
             if (err.fields.filters) toast.error(t("form.validation.noAudience"));
             return;
@@ -294,6 +320,10 @@ export function BroadcastFormSheet({ open, onOpenChange }: { open: boolean; onOp
                       <RadioGroupItem value="trigger" />
                       {t("form.whenTrigger")}
                     </label>
+                    <label className="flex items-center gap-2 text-sm">
+                      <RadioGroupItem value="recurring" />
+                      {t("form.whenRecurring")}
+                    </label>
                   </RadioGroup>
                 )}
               />
@@ -306,6 +336,51 @@ export function BroadcastFormSheet({ open, onOpenChange }: { open: boolean; onOp
                 >
                   <Input id="pb-send-at" type="datetime-local" className="w-56 font-mono text-xs" {...register("sendAtLocal")} aria-invalid={!!formState.errors.sendAtLocal} />
                 </Field>
+              )}
+              {values.when === "recurring" && (
+                <div className="grid gap-3">
+                  <div className="grid gap-1.5">
+                    <Label>{t("form.weekdays")}</Label>
+                    <Controller
+                      control={control}
+                      name="weekdays"
+                      render={({ field }) => (
+                        <div className="flex flex-wrap gap-1" role="group" aria-label={t("form.weekdays")}>
+                          {ISO_WEEKDAYS.map((d) => {
+                            const on = field.value.includes(d);
+                            return (
+                              <Button
+                                key={d}
+                                type="button"
+                                size="sm"
+                                variant={on ? "default" : "outline"}
+                                aria-pressed={on}
+                                className="w-11"
+                                onClick={() => field.onChange(on ? field.value.filter((x) => x !== d) : [...field.value, d])}
+                              >
+                                {weekdayName(d, i18n.language)}
+                              </Button>
+                            );
+                          })}
+                        </div>
+                      )}
+                    />
+                    {formState.errors.weekdays?.message && <p className="text-xs text-danger">{formState.errors.weekdays.message}</p>}
+                  </div>
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <Field
+                      id="pb-recur-time"
+                      label={t("form.recurTime", { zone: [timeZone, utcOffsetLabel(timeZone)].filter(Boolean).join(" ") })}
+                      error={formState.errors.recurTime?.message}
+                    >
+                      <Input id="pb-recur-time" type="time" className="w-32 font-mono text-xs" {...register("recurTime")} aria-invalid={!!formState.errors.recurTime} />
+                    </Field>
+                    <Field id="pb-recur-until" label={t("form.recurUntil")} hint={t("form.recurUntilHint")} error={formState.errors.recurUntil?.message}>
+                      <Input id="pb-recur-until" type="date" className="w-44 font-mono text-xs" {...register("recurUntil")} aria-invalid={!!formState.errors.recurUntil} />
+                    </Field>
+                  </div>
+                  <p className="text-xs text-muted-foreground">{t("form.recurringHint")}</p>
+                </div>
               )}
               {values.when === "trigger" && (
                 <div className="grid gap-3">
@@ -410,7 +485,7 @@ export function BroadcastFormSheet({ open, onOpenChange }: { open: boolean; onOp
               {t("form.cancel")}
             </Button>
             <Button type="submit" form="push-broadcast" disabled={(values.when === "now" && count === 0) || formState.isSubmitting}>
-              {values.when === "later" ? t("form.submitSchedule") : values.when === "trigger" ? t("form.submitTrigger") : t("form.submit")}
+              {t(SUBMIT_LABEL[values.when ?? "now"])}
             </Button>
           </SheetFooter>
         </SheetContent>
@@ -419,7 +494,14 @@ export function BroadcastFormSheet({ open, onOpenChange }: { open: boolean; onOp
       <Dialog open={confirming !== null} onOpenChange={(o) => !o && !create.isPending && setConfirming(null)}>
         <DialogContent>
           <DialogHeader>
-            {confirming?.when === "trigger" ? (
+            {confirming?.when === "recurring" ? (
+              <>
+                <DialogTitle>{t("form.confirmRecurringTitle", { name: confirming.name })}</DialogTitle>
+                <DialogDescription>
+                  {t("form.confirmRecurringDescription", { schedule: describeRecurrence(recurrenceOf(confirming), t, i18n.language), zone: timeZone })}
+                </DialogDescription>
+              </>
+            ) : confirming?.when === "trigger" ? (
               <>
                 <DialogTitle>{t("form.confirmTriggerTitle", { name: confirming.name })}</DialogTitle>
                 <DialogDescription>{t("form.confirmTriggerDescription", { trigger: describeTrigger(triggerOf(confirming), t) })}</DialogDescription>
@@ -446,7 +528,7 @@ export function BroadcastFormSheet({ open, onOpenChange }: { open: boolean; onOp
               {t("form.cancel")}
             </Button>
             <Button onClick={() => confirming && send(confirming)} disabled={create.isPending}>
-              {confirming?.when === "later" ? t("form.confirmSchedule") : confirming?.when === "trigger" ? t("form.confirmTrigger") : t("form.confirm")}
+              {t(CONFIRM_LABEL[confirming?.when ?? "now"])}
             </Button>
           </DialogFooter>
         </DialogContent>

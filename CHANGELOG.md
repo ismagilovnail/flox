@@ -5,6 +5,28 @@ per-phase, matching `CLAUDE.md`'s phase protocol. The one exception is
 [Between phases], below: spec amendments and the code changes that follow from
 them land between phases and would otherwise be invisible here.
 
+## [Phase 30.23] — Recurring push broadcasts
+
+Push leftover (`docs/push.md`). Scope (owner, 2026-10-14): weekdays + time in the organization's zone,
+optional end date, the template plus each send shown.
+
+- **Templates:** `POST /push/broadcasts` takes `recurrence: {weekdays (ISO 1–7), time "HH:MM", until}`;
+  the zone is the organization's at creation. Migration `00075`: `kind 'recurring'`, `recur_*`,
+  `next_send_at`, `parent_id`, status `finished`; the 00074 kind/status check is replaced by one covering
+  every kind.
+- **Sending:** the push scheduler's `SendRecurring` turns each due slot, under the template's row lock,
+  into an ordinary sent broadcast "Name · date" (`parent_id` set, audience fixed then) and moves to the next
+  slot. More than an hour late → skipped; nobody matching → nothing created; past `until` → finished.
+  `push.NextOccurrence` handles weekdays, the end date and DST.
+- **Pause/resume** now covers triggers and recurring templates (`SetActive`); resume continues from the next
+  slot after now. Templates report their sends' summed counters and `occurrences`.
+- **UI:** When: Repeat (weekday toggles, time, end date, inline errors, confirm text); list shows status,
+  schedule, next send, number of sends and pause/resume; sends carry a repeat icon. Pause/resume toasts are
+  no longer trigger-specific. en/ru.
+- Tests: next-slot table incl. DST, recurring sends (held row skipped, two workers, lateness, empty
+  audience, pause/resume, end date, org zone, cross-tenant), validation; mutation-checked. Verified live
+  (worker sent the slot on time) and in Chrome.
+
 ## [Phase 30.22] — Copy tracking URL in the campaigns row
 
 From the "мелочи" list of `docs/spec-conformance-2026-10-11.md` (§20).

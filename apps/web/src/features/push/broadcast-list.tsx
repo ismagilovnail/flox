@@ -3,7 +3,7 @@
 import * as React from "react";
 import type { ColumnDef } from "@tanstack/react-table";
 import type { TFunction } from "i18next";
-import { CalendarXIcon, PauseIcon, PlayIcon } from "lucide-react";
+import { CalendarXIcon, PauseIcon, PlayIcon, RepeatIcon } from "lucide-react";
 import { toast } from "sonner";
 import { useTranslation } from "react-i18next";
 
@@ -20,6 +20,7 @@ import { usePermission } from "@/hooks/use-auth";
 import { useOrganization } from "@/hooks/use-organization";
 import { useCancelPushBroadcast, usePushBroadcasts, useSetPushTriggerActive } from "@/hooks/use-push";
 import { describeTrigger } from "@/features/push/trigger-format";
+import { describeRecurrence } from "@/features/push/recurrence-format";
 import { formatInt, formatPercent } from "@/lib/format";
 import { formatInZone } from "@/lib/timezones";
 import type { PushBroadcast } from "@/lib/api/push";
@@ -44,7 +45,10 @@ function broadcastColumns(
       header: t("broadcasts.columns.name"),
       cell: ({ row }) => (
         <div className="flex min-w-48 flex-col">
-          <span className="font-medium">{row.original.name}</span>
+          <span className="flex items-center gap-1 font-medium">
+            {row.original.parentId && <RepeatIcon className="size-3 shrink-0 text-muted-foreground" aria-label={t("broadcasts.recurringSend")} />}
+            {row.original.name}
+          </span>
           <span className="truncate text-xs text-muted-foreground">{row.original.title}</span>
         </div>
       ),
@@ -55,6 +59,23 @@ function broadcastColumns(
       header: t("broadcasts.columns.sent"),
       cell: ({ row }) => {
         const b = row.original;
+        if (b.kind === "recurring" && b.recurrence) {
+          return (
+            <div className="flex flex-col items-start gap-0.5">
+              <Badge variant={b.status === "active" ? "success" : "secondary"}>{t(`broadcasts.status.${b.status}`)}</Badge>
+              <span className="text-xs text-muted-foreground">
+                {describeRecurrence(b.recurrence, t as TFunction<"push">, opts.locale)} ({b.recurrence.timezone})
+              </span>
+              <span className="text-xs text-muted-foreground">
+                {b.status === "active" && b.nextSendAt
+                  ? t("broadcasts.nextSend", { when: formatInZone(new Date(b.nextSendAt), b.recurrence.timezone, opts.locale) })
+                  : null}
+                {b.status === "active" && b.nextSendAt && " · "}
+                {t("broadcasts.occurrences", { count: b.occurrences })}
+              </span>
+            </div>
+          );
+        }
         if (b.kind === "triggered" && b.trigger) {
           return (
             <div className="flex flex-col items-start gap-0.5">
@@ -121,7 +142,7 @@ function broadcastColumns(
                   </IconButton>
                 );
               }
-              if (b.kind === "triggered") {
+              if ((b.kind === "triggered" || b.kind === "recurring") && b.status !== "finished") {
                 const active = b.status === "active";
                 return (
                   <IconButton

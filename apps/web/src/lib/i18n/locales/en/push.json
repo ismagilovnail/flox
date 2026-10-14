@@ -28,7 +28,8 @@
       "scheduled": "Scheduled",
       "canceled": "Canceled",
       "active": "Active",
-      "paused": "Paused"
+      "paused": "Paused",
+      "finished": "Finished"
     },
     "cancelAria": "Cancel {{name}}",
     "cancelTitle": "Cancel “{{name}}”?",
@@ -39,9 +40,13 @@
     "cancelError": "Couldn't cancel the broadcast",
     "pauseAria": "Pause {{name}}",
     "resumeAria": "Resume {{name}}",
-    "paused": "Trigger paused",
-    "resumed": "Trigger resumed",
-    "toggleError": "Couldn't change the trigger"
+    "paused": "Broadcast paused",
+    "resumed": "Broadcast resumed",
+    "toggleError": "Couldn't change the broadcast",
+    "recurringSend": "Sent by a recurring broadcast",
+    "nextSend": "Next: {{when}}",
+    "occurrences_one": "{{count}} send",
+    "occurrences_other": "{{count}} sends"
   },
   "form": {
     "title": "New broadcast",
@@ -90,7 +95,10 @@
       "noAudience": "No subscribers match these filters",
       "sendAt": "Pick a time from a minute to 30 days ahead",
       "delay": "5 minutes to 30 days, a whole number",
-      "statuses": "Pick at least one status"
+      "statuses": "Pick at least one status",
+      "weekdays": "Pick at least one day",
+      "recurTime": "A time, HH:MM",
+      "recurUntil": "The end date has passed"
     },
     "confirmDescription_few": "It goes to {{count}} subscribers right away and cannot be recalled.",
     "confirmDescription_many": "It goes to {{count}} subscribers right away and cannot be recalled.",
@@ -126,7 +134,18 @@
       "none": "Always",
       "without": "Only if the click has none of",
       "with": "Only if the click has one of"
-    }
+    },
+    "whenRecurring": "Repeat",
+    "weekdays": "Days",
+    "recurTime": "At ({{zone}})",
+    "recurUntil": "Until (optional)",
+    "recurUntilHint": "Inclusive. Empty: until you pause it.",
+    "recurringHint": "Each send goes to the subscribers matching at that moment. A send the worker reaches more than an hour late (it was down) is skipped; a send with no one to reach creates nothing.",
+    "submitRecurring": "Start repeating…",
+    "confirmRecurringTitle": "Start “{{name}}”?",
+    "confirmRecurringDescription": "Goes out {{schedule}} ({{zone}}) to the subscribers matching at each send. You can pause it any time.",
+    "confirmRecurring": "Start",
+    "recurringStarted": "Recurring broadcast started"
   },
   "subscribers": {
     "active": "Active subscribers",
@@ -196,5 +215,9 @@
       "with": "if {{statuses}}",
       "without": "if no {{statuses}}"
     }
+  },
+  "recurrence": {
+    "everyDay": "Every day",
+    "until": "until {{date}}"
   }
 }

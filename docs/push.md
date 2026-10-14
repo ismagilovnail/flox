@@ -5,9 +5,10 @@ sidebar (§17) and the NOTIFICATION_* events (§43). Scope chosen by the
 owner on 2026-10-13: subscriptions and broadcasts sent now. Added
 2026-10-14: scheduled broadcasts and push metrics (Push → Statistics,
 custom metrics on the `push_stats` surface), then triggered broadcasts
-("N hours after subscribing, if no deposit"). Not done: recurring
-broadcasts, multi-step sequences in one trigger, push metrics in the
-report builder (one formula = one data source, §30.5: push metrics are not
+("N hours after subscribing, if no deposit") and recurring broadcasts
+("Mon/Wed/Fri at 19:00"). Not done: multi-step sequences in one trigger,
+an interval mode ("every N hours"), push metrics in the report
+builder (one formula = one data source, §30.5: push metrics are not
 on the regular rows).
 
 ## Subscribing (apps/tracker)
@@ -62,7 +63,7 @@ Admin, Manager — migration 00070):
 | `GET /push/broadcasts`, `/push/broadcasts/{id}` | broadcasts with their counters |
 | `POST /push/broadcasts` | send now, or schedule with `sendAt` (`push.write`) |
 | `POST /push/broadcasts/{id}/cancel` | call off a scheduled broadcast (`push.write`); sent or canceled → 409 |
-| `POST /push/broadcasts/{id}/pause`, `/resume` | stop / restart a trigger (`push.write`); not a trigger, or already so → 409 |
+| `POST /push/broadcasts/{id}/pause`, `/resume` | stop / restart a trigger or recurring broadcast (`push.write`); anything else, finished, or already so → 409 |
 | `GET /push/stats?from=&to=&timezone=&groupBy=` | push metrics, see below |
 
 A broadcast: name, title (≤ 80), text (≤ 240), optional https icon (empty:
@@ -131,6 +132,39 @@ Deploy note: 00074 changes `push_broadcast_stats`' key. Code from before
 it cannot record finished deliveries or opens against it, so roll the
 worker, api and tracker together with the migration.
 
+### Recurring broadcasts (migration 00075)
+
+`recurrence: {weekdays, time, until}` (not with `sendAt` or a trigger)
+makes a **template**, `kind = 'recurring'`. Owner's scope (2026-10-14):
+weekdays + a time of day, an optional end date, the template plus each
+send shown.
+
+- **Schedule:** ISO weekdays (1 = Monday … 7, all seven = every day) at
+  `HH:MM` in the organization's timezone **as it was when the template was
+  made** (`recur_timezone`; the request's own value is ignored), until
+  `until` (a date in that zone, inclusive) or for good.
+  `push.NextOccurrence` computes slots: a time in the spring DST gap moves
+  forward, one in the autumn overlap is its first occurrence.
+- **Sending:** `RunScheduler` calls `SendRecurring` each tick: one due
+  template at a time, in a transaction holding its row
+  (`FOR UPDATE SKIP LOCKED`) that creates the send — an ordinary sent
+  broadcast `"<name> · YYYY-MM-DD"` with `parent_id` = the template, its
+  audience fixed then exactly like a send-now — and moves `next_send_at` to
+  the next slot after now. A slot goes out once however many workers run.
+- **Skipped, not late:** a slot reached more than an hour late
+  (`push.RecurringLateness`, a worker outage) is skipped. A slot whose
+  filters match no one creates nothing.
+- **End:** past `until` the template is `finished` (`next_send_at` null)
+  and cannot be resumed. Pause stops it; resume continues from the next
+  slot after now (finished if there is none).
+- **Counters:** a template's own are 0; the API returns its sends' sums
+  and `occurrences`. Each send is an ordinary row (repeat icon in the list)
+  with its own numbers, so Statistics by broadcast compares the days.
+- **UI:** New broadcast → When: Repeat (weekday toggles, time in the
+  organization's zone, optional end date; confirm "goes out Mon, Wed, Fri ·
+  19:00 (UTC)…"). The list shows Active/Paused/Finished, the schedule, the
+  next send and the number of sends, with pause/resume.
+
 ## Push metrics (Push → Statistics)
 
 `push_broadcast_stats` holds each broadcast's counters per 15-minute
@@ -184,6 +218,26 @@ installed long ago): records **NOTIFICATION_CLICK** on every click, counts
 the broadcast's open once per delivery — only for a delivery sent to this
 click's subscription in this organization — and redirects to the target.
 A delivery that is not this click's, or no longer kept, still leads on.
+
+## Verified (2026-10-14, recurring)
+
+- Tests: `TestNextOccurrence` (later today, at the slot, weekday sets,
+  Sunday = 7, until inclusive / past, autumn DST in Berlin, the spring
+  gap); `recurring_test.go` — not before the slot; a template held by
+  another worker is skipped at once; two workers send a slot once; the
+  send's name, audience and parent; template sums and next slot; a slot two
+  hours late skipped; empty audience creates nothing; pause / resume (next
+  slot from now), cross-tenant 404, a send cannot be paused; until →
+  finished, not resumable; the organization's zone wins over the request's;
+  validation. Mutation-checked: dropping the lateness check, the end-date
+  finish or `SKIP LOCKED` each fails a test (the held-row case was added
+  because the two-goroutine race alone did not catch the missing lock).
+  The isolation guard required `parentId` to be declared response-only.
+- Live: a template due two minutes ahead, filtered to one test
+  subscription → the running worker sent it at 11:50:14, the template moved
+  to the next day and showed 1 send. In Chrome: the list (template row,
+  send with the repeat icon, pause → "На паузе"), the form (weekday
+  toggles, "pick a day" error, confirm text). Test rows removed.
 
 ## Verified (2026-10-14, triggers)
 
