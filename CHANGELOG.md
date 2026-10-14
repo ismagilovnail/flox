@@ -5,6 +5,19 @@ per-phase, matching `CLAUDE.md`'s phase protocol. The one exception is
 [Between phases], below: spec amendments and the code changes that follow from
 them land between phases and would otherwise be invisible here.
 
+## [Phase 30.22] — Copy tracking URL in the campaigns row
+
+From the "мелочи" list of `docs/spec-conformance-2026-10-11.md` (§20).
+
+- **Campaigns list:** a "Copy tracking URL" button in each row (not archived campaigns). One active link: one
+  click copies it, the tooltip shows the URL; several: a menu of their full URLs; none: disabled with a hint
+  to create one on the campaign page. http links (no certificate yet) are marked. en/ru.
+- **API:** `GET /tracking-links?status=` (`campaign.read`) — the organization's tracking links across
+  campaigns in one request; all rows share one query. Tracking-link mutations now invalidate it too.
+- Tests: `TestListByOrg` (tenant scope, status filter, order, validation; mutation-checked), the route walk
+  covers the new GET. Verified in Chrome in all three states (menu, single, none); the menu was too narrow
+  to tell the URLs apart and its tooltip cramped — both fixed during the check.
+
 ## [Phase 30.21] — Triggered push broadcasts
 
 Push leftover: triggered broadcasts (`docs/push.md`). Scope (owner, 2026-10-14): a delay after

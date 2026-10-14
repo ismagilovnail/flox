@@ -19,14 +19,13 @@ referenced below as §N).
 ## CURRENT STATE — UPDATE THIS EVERY PHASE
 
 ```
-CURRENT PHASE : PHASE 30.21 — TRIGGERED PUSH BROADCASTS (closed)
+CURRENT PHASE : PHASE 30.22 — COPY TRACKING URL IN THE CAMPAIGNS ROW (closed)
 STATUS        : Spec conformance gaps (docs/spec-conformance-2026-10-11.md):
-                all 15 closed. Left from that doc: the "мелочи" list
-                (DataGrid, types/ schemas/ dirs, Copy tracking URL in the
-                campaigns row, IOS_INSTALL/TG_* events). Push leftovers:
-                recurring broadcasts, push metrics in the report builder.
-                Prod restore drill after deployment.
-LAST COMMIT   : feat(push): triggered broadcasts.
+                all 15 closed. Left from that doc's "мелочи": DataGrid,
+                types/ schemas/ dirs, IOS_INSTALL/TG_* events. Push
+                leftovers: recurring broadcasts, push metrics in the report
+                builder. Prod restore drill after deployment.
+LAST COMMIT   : feat(campaigns): copy tracking URL in the row.
 UNCOMMITTED   : none expected. Dev DB at migration 00074, CH schema 018.
 NEXT          : wait for the user — pick from the leftovers above with the
                 user. CI (DO1) is

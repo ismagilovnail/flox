@@ -126,7 +126,15 @@
     "duplicate": "Duplicate",
     "archive": "Archive",
     "archiveConfirmTitle": "Archive \"{{name}}\"?",
-    "archiveConfirmDescription": "Archived campaigns stop routing traffic, are hidden from the active list, and can no longer be edited. Duplicate the campaign to keep working with these settings."
+    "archiveConfirmDescription": "Archived campaigns stop routing traffic, are hidden from the active list, and can no longer be edited. Duplicate the campaign to keep working with these settings.",
+    "copyTrackingUrl": "Copy tracking URL",
+    "copyTrackingUrlAria": "Copy tracking URL of {{name}}",
+    "copyTrackingUrlNone": "No active tracking link — open the campaign to create one.",
+    "copyTrackingUrlLoadError": "Couldn't load tracking links",
+    "copyTrackingUrlError": "Couldn't copy the link",
+    "copyTrackingUrlInsecure": "http: the domain has no valid SSL certificate yet",
+    "copyTrackingUrlMany_one": "{{count}} active tracking link",
+    "copyTrackingUrlMany_other": "{{count}} active tracking links"
   },
   "toast": {
     "updated": "Campaign updated",

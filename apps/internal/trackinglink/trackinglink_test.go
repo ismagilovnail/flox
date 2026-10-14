@@ -2,6 +2,7 @@ package trackinglink_test
 
 import (
 	"context"
+	"errors"
 	"os"
 	"testing"
 
@@ -147,6 +148,72 @@ func TestCreateRejectsInvalidSlug(t *testing.T) {
 			t.Fatalf("slug %q: expected a validation error", slug)
 		}
 	}
+}
+
+// ListByOrg is every campaign's links of this organization only, filtered
+// by status — the campaigns list's "Copy tracking URL".
+func TestListByOrg(t *testing.T) {
+	pool := mustPool(t)
+	ctx := context.Background()
+	orgA := seedOrg(t, ctx, pool)
+	orgB := seedOrg(t, ctx, pool)
+	campaign1, campaign2 := seedCampaign(t, ctx, pool, orgA), seedCampaign(t, ctx, pool, orgA)
+	domainA := seedDomain(t, ctx, pool, orgA, "tl-org.example.com")
+	svc := trackinglink.NewService(trackinglink.NewRepository(pool))
+
+	one, err := svc.Create(ctx, orgA, campaign1, trackinglink.CreateInput{DomainID: domainA, Slug: "one"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	two, err := svc.Create(ctx, orgA, campaign2, trackinglink.CreateInput{DomainID: domainA, Slug: "two"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	paused, err := svc.Create(ctx, orgA, campaign2, trackinglink.CreateInput{DomainID: domainA, Slug: "paused"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.UpdateStatus(ctx, orgA, paused.ID, trackinglink.StatusPaused); err != nil {
+		t.Fatal(err)
+	}
+	campaignB := seedCampaign(t, ctx, pool, orgB)
+	domainB := seedDomain(t, ctx, pool, orgB, "tl-org-b.example.com")
+	if _, err := svc.Create(ctx, orgB, campaignB, trackinglink.CreateInput{DomainID: domainB, Slug: "theirs"}); err != nil {
+		t.Fatal(err)
+	}
+
+	ids := func(links []trackinglink.TrackingLink) map[string]string {
+		out := map[string]string{}
+		for _, l := range links {
+			out[l.ID] = l.CampaignID
+		}
+		return out
+	}
+	all, err := svc.ListByOrg(ctx, orgA, "")
+	if err != nil {
+		t.Fatalf("ListByOrg: %v", err)
+	}
+	if got := ids(all); len(got) != 3 || got[one.ID] != campaign1 || got[two.ID] != campaign2 || got[paused.ID] != campaign2 {
+		t.Fatalf("all = %v, want this organization's three links with their campaigns", got)
+	}
+	active, err := svc.ListByOrg(ctx, orgA, trackinglink.StatusActive)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := ids(active); len(got) != 2 || got[paused.ID] != "" {
+		t.Fatalf("active = %v, want the two active ones", got)
+	}
+	if active[0].URL != "http://tl-org.example.com/t/two" {
+		t.Fatalf("first = %q, want the newest with its URL", active[0].URL)
+	}
+	if _, err := svc.ListByOrg(ctx, orgA, "deleted"); !isValidation(err) {
+		t.Fatalf("unknown status: %v, want a validation error", err)
+	}
+}
+
+func isValidation(err error) bool {
+	var apiErr *apierror.Error
+	return errors.As(err, &apiErr) && apiErr.Status == 422
 }
 
 func isNotFound(err error) bool {

@@ -35,6 +35,23 @@ func (h *Handler) Register(r chi.Router) {
 	r.With(h.requireWrite).Delete("/{id}", h.delete)
 }
 
+// RegisterOrgWide mounts GET /tracking-links?status= — the organization's
+// links across campaigns. The caller applies tenant.Middleware and the
+// campaign.read gate first.
+func (h *Handler) RegisterOrgWide(r chi.Router) {
+	r.Get("/", h.listByOrg)
+}
+
+func (h *Handler) listByOrg(w http.ResponseWriter, r *http.Request) {
+	orgID, _ := tenant.OrgID(r.Context())
+	links, err := h.svc.ListByOrg(r.Context(), orgID, Status(r.URL.Query().Get("status")))
+	if err != nil {
+		apierror.Write(w, h.logger, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"trackingLinks": links})
+}
+
 func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
 	orgID, _ := tenant.OrgID(r.Context())
 	campaignID := chi.URLParam(r, "campaignId")

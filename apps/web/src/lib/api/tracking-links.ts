@@ -27,6 +27,12 @@ export function listTrackingLinks(campaignId: string): Promise<{ trackingLinks: 
   return apiFetch(`/campaigns/${campaignId}/tracking-links`);
 }
 
+/** The organization's tracking links across campaigns, optionally of one
+ * status — the campaigns list's "Copy tracking URL" (one request). */
+export function listOrgTrackingLinks(status?: TrackingLinkStatus): Promise<{ trackingLinks: TrackingLink[] }> {
+  return apiFetch("/tracking-links", { searchParams: status ? { status } : undefined });
+}
+
 export function createTrackingLink(campaignId: string, input: CreateTrackingLinkInput): Promise<TrackingLink> {
   return apiFetch(`/campaigns/${campaignId}/tracking-links`, { method: "POST", body: input });
 }

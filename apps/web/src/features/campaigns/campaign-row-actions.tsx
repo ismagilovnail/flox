@@ -20,6 +20,7 @@ import {
 } from "@/components/ui/dialog";
 import { useActivateCampaign, useArchiveCampaign, useDuplicateCampaign, usePauseCampaign } from "@/hooks/use-campaigns";
 import { usePermission } from "@/hooks/use-auth";
+import { CopyTrackingUrlButton } from "@/features/campaigns/copy-tracking-url-button";
 import { viewStatisticsHref } from "@/features/analytics/view-statistics-link";
 import type { Campaign } from "@/lib/api/campaigns";
 
@@ -122,6 +123,8 @@ export function CampaignRowActions({
             </TooltipTrigger>
             <TooltipContent>{t("rowActions.open")}</TooltipContent>
           </Tooltip>
+
+          {campaign.status !== "archived" && <CopyTrackingUrlButton campaignId={campaign.id} campaignName={campaign.name} />}
 
           {/* campaign.id: the `campaign` report dimension groups by campaign_id. */}
           <Tooltip>

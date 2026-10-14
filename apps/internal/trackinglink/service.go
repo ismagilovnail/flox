@@ -33,6 +33,15 @@ func (s *Service) List(ctx context.Context, orgID, campaignID string) ([]Trackin
 	return s.repo.List(ctx, orgID, campaignID)
 }
 
+// ListByOrg is every campaign's tracking links, optionally of one status
+// (empty: all).
+func (s *Service) ListByOrg(ctx context.Context, orgID string, status Status) ([]TrackingLink, error) {
+	if status != "" && !status.Valid() {
+		return nil, apierror.Validation("invalid status", map[string]string{"status": "active, paused or archived"})
+	}
+	return s.repo.ListByOrg(ctx, orgID, status)
+}
+
 func (s *Service) Get(ctx context.Context, orgID, id string) (TrackingLink, error) {
 	return s.repo.GetByID(ctx, orgID, id)
 }

@@ -190,6 +190,25 @@ console errors, opened both the Renew and Sync DNS confirm dialogs and
 confirmed their real warning copy, and confirmed Sync DNS's real
 network call. Test domain and org_integrations row deleted afterward.
 
+## Copy tracking URL in the campaigns list (§20, 2026-10-14)
+
+Each campaign row (not archived) has a link button next to "Open":
+one active tracking link is copied in one click (the tooltip shows the
+URL); several open a menu of their URLs; none leaves the button disabled
+with "open the campaign to create one". An http link (no valid certificate
+yet) is marked as on the campaign page. The URL is copied as is; the
+parameter presets ("Copy with parameters") stay on the campaign page.
+
+Data: `GET /tracking-links?status=active` (`campaign.read`) — the
+organization's links across campaigns in one request
+(`trackinglink.Repository.ListByOrg`), which every row reads from one
+shared query (`useActiveTrackingLinksByCampaign`). Creating, pausing or
+deleting a link invalidates it with the campaign's own list. Tests:
+`TestListByOrg` (this organization's links only, status filter, newest
+first; mutation-checked against a dropped organization filter); the api
+route walk calls the new GET as another organization. Checked in Chrome:
+menu with two links, one-click copy with one, disabled hint with none.
+
 ## HTTPS for tracking domains (marketer audit 2026-10-06, #4)
 
 Before this, `ssl` was set only by a Cloudflare check, so every other domain

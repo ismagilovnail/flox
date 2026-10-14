@@ -71,6 +71,37 @@ func (r *Repository) List(ctx context.Context, orgID, campaignID string) ([]Trac
 	return out, nil
 }
 
+// ListByOrg returns the organization's tracking links across campaigns,
+// newest first, optionally only those of one status — the campaigns list's
+// "Copy tracking URL" (one request for the whole table).
+func (r *Repository) ListByOrg(ctx context.Context, orgID string, status Status) ([]TrackingLink, error) {
+	rows, err := r.db.Query(ctx, `
+		SELECT `+selectColumns+`
+		FROM tracking_links tl
+		JOIN domains d ON d.id = tl.domain_id
+		WHERE tl.organization_id = $1 AND ($2 = '' OR tl.status = $2)
+		ORDER BY tl.created_at DESC, tl.id DESC`,
+		orgID, string(status),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("trackinglink: listing organization's links: %w", err)
+	}
+	defer rows.Close()
+
+	out := []TrackingLink{}
+	for rows.Next() {
+		l, err := scanLink(rows)
+		if err != nil {
+			return nil, fmt.Errorf("trackinglink: scanning: %w", err)
+		}
+		out = append(out, l)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("trackinglink: reading: %w", err)
+	}
+	return out, nil
+}
+
 func (r *Repository) GetByID(ctx context.Context, orgID, id string) (TrackingLink, error) {
 	row := r.db.QueryRow(ctx, `
 		SELECT `+selectColumns+`

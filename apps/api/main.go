@@ -445,6 +445,11 @@ func buildServer(ctx context.Context, cfg config.Config, logger *slog.Logger, re
 		r.Use(readGate("campaign.read"))
 		trackingLinkHandler.Register(r)
 	})
+	srv.Mux().Route("/tracking-links", func(r chi.Router) {
+		r.Use(tenantMiddleware)
+		r.Use(readGate("campaign.read"))
+		trackingLinkHandler.RegisterOrgWide(r)
+	})
 
 	adAccountRepo := adaccount.NewRepository(db, adAccountKey)
 	adAccountHandler := adaccount.NewHandler(adaccount.NewService(adAccountRepo), requireSourceWrite, logger)
