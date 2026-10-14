@@ -19,16 +19,16 @@ referenced below as §N).
 ## CURRENT STATE — UPDATE THIS EVERY PHASE
 
 ```
-CURRENT PHASE : PHASE 30.16 — ANALYTICS SUMMARY ON FLOW NODES (closed)
+CURRENT PHASE : PHASE 30.17 — EMPTY SUBS DIAGNOSTIC (closed)
 STATUS        : Spec conformance gaps (docs/spec-conformance-2026-10-11.md):
-                1–12 closed (… tags in /flows, flow node stats).
+                1–13 closed (… flow node stats, empty subs %).
                 Push leftovers: scheduled/triggered broadcasts, push
-                metrics. Left: gaps 13–15, prod restore drill after
+                metrics. Left: gaps 14–15, prod restore drill after
                 deployment.
-LAST COMMIT   : feat(flows): analytics summary on flow nodes.
+LAST COMMIT   : feat(analytics): empty subs diagnostic.
 UNCOMMITTED   : none expected. Dev DB at migration 00071, CH schema 018.
-NEXT          : wait for the user — next gap is 13 (empty-sub % diagnostic,
-                §42). CI (DO1) is
+NEXT          : wait for the user — next gap is 14 (API key rotation;
+                audit_logs beyond command/settings, §54). CI (DO1) is
                 the user's own decision — do not set it up. Run go test with
                 the full env line AND check e2e did not skip (memory:
                 flox-full-test-env); chconn's TestLimitsStopAHeavyQuery

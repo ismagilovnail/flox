@@ -25,9 +25,9 @@ describe("withCampaignMetrics", () => {
   it("joins report rows by campaign id", () => {
     const [a] = withCampaignMetrics(
       [campaign("a")],
-      [row("a", { clicks: 120, conversions: 4, revenue: 200, cost: 50, profit: 150, roi: 300, ctr: 1 })],
+      [row("a", { clicks: 120, conversions: 4, revenue: 200, cost: 50, profit: 150, roi: 300, emptySubsRate: 12.5, ctr: 1 })],
     );
-    expect(a.metrics).toEqual({ clicks: 120, conversions: 4, revenue: 200, cost: 50, profit: 150, roi: 300 });
+    expect(a.metrics).toEqual({ clicks: 120, conversions: 4, revenue: 200, cost: 50, profit: 150, roi: 300, emptySubsRate: 12.5 });
   });
 
   it("keeps a missing cost as null, never zero", () => {
@@ -38,7 +38,7 @@ describe("withCampaignMetrics", () => {
 
   it("gives a campaign with no row zero traffic and no cost", () => {
     const [b] = withCampaignMetrics([campaign("b")], [row("a", { clicks: 1 })]);
-    expect(b.metrics).toEqual({ clicks: 0, conversions: 0, revenue: 0, cost: null, profit: null, roi: null });
+    expect(b.metrics).toEqual({ clicks: 0, conversions: 0, revenue: 0, cost: null, profit: null, roi: null, emptySubsRate: null });
   });
 });
 

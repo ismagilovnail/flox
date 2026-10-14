@@ -91,7 +91,9 @@ export type MetricKey =
   | "blocked"
   | "bots"
   | "blockedRate"
-  | "botRate";
+  | "botRate"
+  | "emptySubs"
+  | "emptySubsRate";
 
 export type MetricFormat = "int" | "currency" | "percent" | "ratio";
 
@@ -126,6 +128,8 @@ export const METRICS: { key: MetricKey; label: string; format: MetricFormat }[] 
   { key: "bots", label: "Bots", format: "int" },
   { key: "blockedRate", label: "Blocked rate", format: "percent" },
   { key: "botRate", label: "Bot rate", format: "percent" },
+  { key: "emptySubs", label: "Empty subs", format: "int" },
+  { key: "emptySubsRate", label: "Empty subs %", format: "percent" },
 ];
 
 export function metricLabel(t: TFunction, key: MetricKey): string {

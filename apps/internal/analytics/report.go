@@ -124,6 +124,12 @@ type MetricValues struct {
 	Bots        uint64
 	BlockedRate *float64
 	BotRate     *float64
+
+	// EmptySubs is the clicks whose sub1..sub10 all arrived empty (§42
+	// "unfilled FB subs" diagnostic); EmptySubsRate is their share of
+	// Clicks in percent, nil when there were no clicks.
+	EmptySubs     uint64
+	EmptySubsRate *float64
 }
 
 // ReportRow is one output row of Report/Timeseries/Breakdown/Dashboard —
@@ -444,6 +450,7 @@ func (s *Service) groupedReport(ctx context.Context, organizationID string, dims
 		acc := get(a.Key)
 		acc.clicks = a.Clicks
 		acc.blocked, acc.bots = a.Blocked, a.Bots
+		acc.emptySubs = a.EmptySubs
 		acc.uniqueClicks = a.UniqueClicks
 	}
 	for _, a := range landAggs {
@@ -785,7 +792,7 @@ type rowAccumulator struct {
 	dimValues map[chstore.ReportDimension]string
 
 	clicks, uniqueClicks, landViews uint64
-	blocked, bots                   uint64
+	blocked, bots, emptySubs        uint64
 	conversions                     *uint64
 	revenueUSD                      *float64
 	pwaInstalls                     uint64
@@ -824,10 +831,12 @@ func deriveMetrics(acc *rowAccumulator) MetricValues {
 		Trash:         acc.trash,
 		Blocked:       acc.blocked,
 		Bots:          acc.bots,
+		EmptySubs:     acc.emptySubs,
 	}
 
 	m.BlockedRate = percentOf(acc.blocked, acc.clicks+acc.blocked)
 	m.BotRate = percentOf(acc.bots, acc.clicks+acc.blocked)
+	m.EmptySubsRate = percentOf(acc.emptySubs, acc.clicks)
 
 	m.ClickToInstall = percentOf(acc.pwaInstalls, acc.clicks)
 	if acc.registrations != nil {
@@ -1054,6 +1063,10 @@ func metricFloat(m MetricValues, key string) (float64, bool) {
 		return ptrOrNegInf(m.BlockedRate), true
 	case "botrate":
 		return ptrOrNegInf(m.BotRate), true
+	case "emptysubs":
+		return float64(m.EmptySubs), true
+	case "emptysubsrate":
+		return ptrOrNegInf(m.EmptySubsRate), true
 	default:
 		return 0, false
 	}

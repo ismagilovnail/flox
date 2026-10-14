@@ -443,3 +443,20 @@ now appears as a row with `clicks: 0`. These metrics follow the click dimensions
 `landing` bucket is where blocked clicks land, since they never reached one. The
 Overview shows four tiles: Blocked, Blocked share, Bots, Bot share.
 
+
+## Empty subs (§42)
+
+Every metrics object carries `emptySubs` (count) and `emptySubsRate` (percent,
+`null` when there were no clicks): the §42 "unfilled FB subs" diagnostic.
+
+- `emptySubs` = `SOURCE_CLICK` rows whose `sub1`…`sub10` are **all** empty: the
+  sub set never arrived (in-app WebView, prefetch, a redirect chain). A click with
+  any one sub filled is not counted, so a campaign that uses only `sub1`–`sub3`
+  is not flagged for the other seven. Blocked clicks (`SOURCE_FILTER`) are left
+  out, as they are of `clicks`.
+- `emptySubsRate = emptySubs / clicks`.
+
+Empty subs are stored as empty strings — never an "unknown campaign" — and these
+two numbers make that share visible. They follow the click dimensions like
+`blocked`/`bots`, are in the report builder's metric picker, custom metrics and
+presets, and `emptySubsRate` is a column of the campaigns list ("Empty subs %").

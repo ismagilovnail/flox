@@ -6,7 +6,7 @@ import type { CustomMetric } from "@/lib/custom-metrics";
 /** The registry metrics the campaigns table shows — the same set custom
  * metrics targeting it may use (§30.5), so a formula never asks for a
  * number the table does not have. */
-export const CAMPAIGN_TABLE_METRICS = ["clicks", "conversions", "revenue", "cost", "profit", "roi"] as const satisfies readonly MetricKey[];
+export const CAMPAIGN_TABLE_METRICS = ["clicks", "conversions", "revenue", "cost", "profit", "roi", "emptySubsRate"] as const satisfies readonly MetricKey[];
 
 export type CampaignTableMetric = (typeof CAMPAIGN_TABLE_METRICS)[number];
 export type CampaignMetrics = Record<CampaignTableMetric, number | null>;
@@ -17,8 +17,9 @@ export type CampaignRow = Campaign & { metrics?: CampaignMetrics };
 
 /** A campaign with no report row had no events and no spend in the
  * period: zero traffic, and no cost — so profit and ROI are "—", never a
- * number computed against a made-up zero spend (CLAUDE.md #6). */
-const NO_ACTIVITY: CampaignMetrics = { clicks: 0, conversions: 0, revenue: 0, cost: null, profit: null, roi: null };
+ * number computed against a made-up zero spend (CLAUDE.md #6). The empty
+ * subs share of no clicks is "—" too. */
+const NO_ACTIVITY: CampaignMetrics = { clicks: 0, conversions: 0, revenue: 0, cost: null, profit: null, roi: null, emptySubsRate: null };
 
 /** Joins the report grouped by campaign (`/analytics/report`, dims
  * [campaign], unfiltered — so campaigns with spend but no clicks have a row)

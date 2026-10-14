@@ -1181,3 +1181,33 @@ func TestFlowStageCountsPerFlowAndTenant(t *testing.T) {
 		t.Errorf("other org sees %v, want only its own click and view", other[flowA])
 	}
 }
+
+// TestReportClicksCountsEmptySubs: §42's "empty subs" diagnostic counts a
+// redirected click only when every sub1..sub10 is empty — one sub set is
+// enough, whichever slot it is in — and never a blocked click.
+func TestReportClicksCountsEmptySubs(t *testing.T) {
+	conn := mustConn(t)
+	store := chstore.NewEventStore(conn)
+	ctx := context.Background()
+	orgID, campaignID := idgen.New(), idgen.New()
+	day := time.Date(2026, 8, 23, 0, 0, 0, 0, time.UTC)
+	click := func(typ event.Type, subs event.Subs) event.Event {
+		return event.Event{Type: typ, EventAt: day.Add(time.Hour), OrganizationID: orgID, CampaignID: campaignID, ClickID: idgen.New(), Subs: subs}
+	}
+	if err := store.InsertBatch(ctx, []event.Event{
+		click(event.SourceClick, event.Subs{}),
+		click(event.SourceClick, event.Subs{}),
+		click(event.SourceClick, event.Subs{0: "ad-1", 1: "set-1"}),
+		click(event.SourceClick, event.Subs{9: "x"}),
+		click(event.SourceFilter, event.Subs{}),
+	}); err != nil {
+		t.Fatalf("seeding: %v", err)
+	}
+	aggs, err := store.ReportClicks(ctx, chstore.ReportQuery{OrganizationID: orgID, From: day, To: day.Add(24 * time.Hour)})
+	if err != nil || len(aggs) != 1 {
+		t.Fatalf("ReportClicks = %+v, %v", aggs, err)
+	}
+	if aggs[0].Clicks != 4 || aggs[0].EmptySubs != 2 {
+		t.Fatalf("clicks/empty subs = %d/%d, want 4/2", aggs[0].Clicks, aggs[0].EmptySubs)
+	}
+}

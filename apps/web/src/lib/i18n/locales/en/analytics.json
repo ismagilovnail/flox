@@ -113,7 +113,9 @@
     "blocked": "Blocked",
     "bots": "Bots",
     "blockedRate": "Blocked rate",
-    "botRate": "Bot rate"
+    "botRate": "Bot rate",
+    "emptySubs": "Empty subs",
+    "emptySubsRate": "Empty subs %"
   },
   "metricHints": {
     "clicks": "All clicks on the campaign, including repeat clicks from the same visitor.",
@@ -144,7 +146,9 @@
     "blocked": "Clicks that matched no destination (no flow and no fallback) and were not redirected — SOURCE_FILTER events. They are not counted in Clicks.",
     "bots": "Clicks flagged as bots by the classifier, including bots that were still sent to a fallback.",
     "blockedRate": "Blocked ÷ (clicks + blocked) × 100%. \"—\" when there was no traffic.",
-    "botRate": "Bots ÷ (clicks + blocked) × 100%. \"—\" when there was no traffic."
+    "botRate": "Bots ÷ (clicks + blocked) × 100%. \"—\" when there was no traffic.",
+    "emptySubs": "Clicks that arrived with every sub1–sub10 empty — often Facebook/Instagram traffic opened in the in-app browser, a prefetch or a redirect chain. Recorded as empty, never as an unknown campaign.",
+    "emptySubsRate": "Empty subs ÷ clicks × 100%. The share of clicks whose subs did not arrive, so attribution by sub can't see them. \"—\" when there are no clicks."
   },
   "funnelSteps": {
     "SOURCE_CLICK": "Source Click",

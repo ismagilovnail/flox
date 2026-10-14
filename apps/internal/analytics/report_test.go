@@ -743,7 +743,7 @@ func TestReportBlockedAndBotMetrics(t *testing.T) {
 	k := dimKey(chstore.DimCampaign, "camp-a")
 	// 90 redirected clicks, 10 blocked: 100 reached the tracker. 5 of them
 	// bots (some redirected to a fallback, some blocked).
-	repo := &reportFakeRepo{clicks: []chstore.ClickAgg{{Key: k, Clicks: 90, UniqueClicks: 80, Blocked: 10, Bots: 5}}}
+	repo := &reportFakeRepo{clicks: []chstore.ClickAgg{{Key: k, Clicks: 90, UniqueClicks: 80, Blocked: 10, Bots: 5, EmptySubs: 18}}}
 	rows, err := analytics.NewService(repo, nil).Report(context.Background(), "org-1", analytics.ReportInput{
 		Dims: []chstore.ReportDimension{chstore.DimCampaign},
 		From: time.Date(2026, 8, 1, 0, 0, 0, 0, time.UTC), To: time.Date(2026, 8, 7, 0, 0, 0, 0, time.UTC),
@@ -758,6 +758,11 @@ func TestReportBlockedAndBotMetrics(t *testing.T) {
 	if m.BlockedRate == nil || *m.BlockedRate != 10 || m.BotRate == nil || *m.BotRate != 5 {
 		t.Fatalf("rates = %v / %v, want 10 / 5 (share of the 100 that reached the tracker)", m.BlockedRate, m.BotRate)
 	}
+	// Empty subs is a share of the redirected clicks only: a blocked click
+	// is not in Clicks, and its subs are not part of any attribution.
+	if m.EmptySubs != 18 || m.EmptySubsRate == nil || *m.EmptySubsRate != 20 {
+		t.Fatalf("empty subs = %d / %v, want 18 / 20%% of 90 clicks", m.EmptySubs, m.EmptySubsRate)
+	}
 }
 
 func TestReportBlockedRatesAreNullWithoutTraffic(t *testing.T) {
@@ -770,8 +775,8 @@ func TestReportBlockedRatesAreNullWithoutTraffic(t *testing.T) {
 	if err != nil || len(rows) != 1 {
 		t.Fatalf("Report: %v rows=%d", err, len(rows))
 	}
-	if m := rows[0].Metrics; m.BlockedRate != nil || m.BotRate != nil || m.Blocked != 0 {
-		t.Fatalf("no traffic: rates must be nil, never 0 / NaN; got %v %v", m.BlockedRate, m.BotRate)
+	if m := rows[0].Metrics; m.BlockedRate != nil || m.BotRate != nil || m.EmptySubsRate != nil || m.Blocked != 0 {
+		t.Fatalf("no traffic: rates must be nil, never 0 / NaN; got %v %v %v", m.BlockedRate, m.BotRate, m.EmptySubsRate)
 	}
 }
 

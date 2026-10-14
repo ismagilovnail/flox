@@ -123,7 +123,7 @@ export const SHOW_IN_TARGETS: { id: ShowInTarget; label: string }[] = [
  * always disabled rather than faked. */
 export const SURFACE_AVAILABLE_METRIC_IDS: Record<ShowInTarget, Set<MetricKey | string>> = {
   report_builder: new Set(METRICS.map((m) => m.key)),
-  campaigns_table: new Set(["clicks", "conversions", "revenue", "cost", "profit", "roi"]),
+  campaigns_table: new Set(["clicks", "conversions", "revenue", "cost", "profit", "roi", "emptySubsRate"]),
   offers_table: new Set(),
   sources_table: new Set(),
 };

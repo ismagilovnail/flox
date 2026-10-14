@@ -5,6 +5,20 @@ per-phase, matching `CLAUDE.md`'s phase protocol. The one exception is
 [Between phases], below: spec amendments and the code changes that follow from
 them land between phases and would otherwise be invisible here.
 
+## [Phase 30.17] — Empty subs diagnostic
+
+Closes gap 13 of `docs/spec-conformance-2026-10-11.md` (§42: show the share of subs-less traffic).
+
+- **Metrics:** every report row carries `emptySubs` — redirected clicks (SOURCE_CLICK) with all of
+  sub1–sub10 empty, counted in ClickHouse — and `emptySubsRate` = emptySubs ÷ clicks, `null` without
+  clicks. "All empty", not "any empty": a campaign that uses only sub1–3 is not flagged. Blocked clicks
+  are left out, as they are of clicks. Both follow the click dimensions.
+- **Surfaces:** report builder metric picker and hints, custom metrics, report presets, and an
+  "Empty subs %" column in the campaigns list (also available to campaigns-table custom metrics). en/ru.
+- Tests: `chstore.TestReportClicksCountsEmptySubs` (live ClickHouse: all-empty vs one sub in any slot,
+  blocked excluded), service rate and null-without-clicks, campaign table metrics. `docs/analytics-report-api.md`.
+- Verified live on the dev API (demo campaign: 8 clicks, 4 without subs → 50%). Not checked in the browser.
+
 ## [Phase 30.16] — Analytics summary on flow nodes
 
 Closes gap 12 of `docs/spec-conformance-2026-10-11.md` (§25: flow builder nodes show an analytics summary).

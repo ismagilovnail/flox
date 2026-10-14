@@ -45,6 +45,7 @@ var validMetrics = map[string]bool{
 	"clickToInstall": true, "installToReg": true, "regToPurchase": true,
 	"costPerInstall": true, "costPerReg": true, "costPerPurchase": true,
 	"blocked": true, "bots": true, "blockedRate": true, "botRate": true,
+	"emptySubs": true, "emptySubsRate": true,
 }
 
 // maxDimensions matches maxReportDims in apps/internal/analytics/report.go

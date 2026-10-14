@@ -35,7 +35,7 @@ var reportMetricIDs = []string{
 	"pwaInstalls", "registrations", "purchases", "repurchases", "declines", "trash",
 	"clickToInstall", "installToReg", "regToPurchase",
 	"costPerInstall", "costPerReg", "costPerPurchase",
-	"blocked", "bots", "blockedRate", "botRate",
+	"blocked", "bots", "blockedRate", "botRate", "emptySubs", "emptySubsRate",
 }
 
 var metricCatalog = buildCatalog()

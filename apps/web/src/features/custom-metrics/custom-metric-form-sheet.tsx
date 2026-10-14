@@ -65,6 +65,8 @@ const SAMPLE_VALUES: Record<string, number | null> = {
   total_deposits: 590,
   total_deposit_revenue: 6120.75,
   bots: 340,
+  emptySubs: 2100,
+  emptySubsRate: 11.4,
   click_all: 18840,
   push_sent: 12000,
   push_delivered: 11400,

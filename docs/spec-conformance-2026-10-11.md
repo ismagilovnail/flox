@@ -99,7 +99,7 @@
 | 39-STICKY | ✔ | Подписанная cookie — источник правды, Redis только кэш, keepClickId, skipInactive | — |
 | 20 Classifier | ✔ | Все поля, Geo/ASN/Bot за интерфейсами | — |
 | 21 Tracking engine | ✔ | Отдельный бинарник, асинхронная запись, p50/p95 в бюджете | — |
-| 42 Tracking link | ◐ | click_id (ULID), utm, sub1–10, fbclid/ttclid/external_click_id | Нет диагностики **«% трафика с пустыми sub»** — `Subs.SubCount` есть, но в отчёты не выведен |
+| 42 Tracking link | ✔ | click_id (ULID), utm, sub1–10, fbclid/ttclid/external_click_id; метрики «Пустые sub» и «Пустые sub, %» в отчётах и списке кампаний (с 2026-10-14) | ~~Нет диагностики «% пустых sub»~~ — закрыто |
 | 43 Event model | ◐ | Все ~20 типов в enum и схеме ClickHouse | Генерируются 14 (SOURCE_CLICK/FILTER, LAND_VIEW/CLICK, POSTLANDING_VIEW/CLICK, PWA_VIEW/OPEN/INSTALL, NOTIFICATION_REQUEST/SUBSCRIBE/DECLINE/UNSUBSCRIBE/CLICK); **IOS_INSTALL, TG_*** не создаёт никто |
 | 22 Attribution | ✔ | click_id / external_click_id, без выдумывания, повторная атрибуция | — |
 | 23 Conversion engine | ✔ | Ключ (click_id, status, event_ref), progression, acceptDuplicates, FX на дату события, outbox | Быстрый путь Redis хранит последний статус, дедуп — уникальный индекс PG (корректно; Redis-ключа дедупа как такового нет) |
@@ -148,7 +148,7 @@
    2026-10-14 (`docs/content-gallery.md`).
 11. ~~Нет тегов в списке потоков (§30.6).~~ Закрыто 2026-10-14.
 12. ~~Нет сводки аналитики на узлах потока (§25).~~ Закрыто 2026-10-14.
-13. Нет диагностики «% пустых sub» (§42).
+13. ~~Нет диагностики «% пустых sub» (§42).~~ Закрыто 2026-10-14.
 
 **Безопасность и тесты:**
 

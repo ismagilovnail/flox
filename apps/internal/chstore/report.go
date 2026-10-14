@@ -320,6 +320,10 @@ type ClickAgg struct {
 	// and SOURCE_FILTER — a bot that fell through to a fallback URL is a bot
 	// even though it still counts as a click.
 	Bots uint64
+	// EmptySubs counts SOURCE_CLICK rows whose sub1..sub10 all arrived
+	// empty (§42 "unfilled FB subs"): the whole set lost on the way, not a
+	// campaign that only uses sub1-3.
+	EmptySubs uint64
 }
 
 type LandAgg struct {
@@ -402,6 +406,11 @@ func scanKey(dims []ReportDimension, values []string, day *time.Time) ReportKey 
 	return key
 }
 
+// emptySubsCondition is true for a click_events row with none of
+// sub1..sub10 set.
+const emptySubsCondition = "sub1 = '' AND sub2 = '' AND sub3 = '' AND sub4 = '' AND sub5 = '' AND " +
+	"sub6 = '' AND sub7 = '' AND sub8 = '' AND sub9 = '' AND sub10 = ''"
+
 // ReportClicks answers "how many SOURCE_CLICK rows, and how many distinct
 // visitors among them" for q's date range/dims/filters, plus how many
 // SOURCE_FILTER rows (Blocked) and is_bot rows (Bots) fall in the same slice. A visitor is the
@@ -432,7 +441,8 @@ func (s *EventStore) ReportClicks(ctx context.Context, q ReportQuery) ([]ClickAg
 		SELECT %scountIf(type = 'SOURCE_CLICK') AS clicks,
 		       uniqExactIf(if(ip = '' AND user_agent = '', click_id, concat(campaign_id, '|', ip, '|', user_agent)), type = 'SOURCE_CLICK') AS unique_clicks,
 		       countIf(type = 'SOURCE_FILTER') AS blocked,
-		       countIf(is_bot = 1) AS bots
+		       countIf(is_bot = 1) AS bots,
+		       countIf(type = 'SOURCE_CLICK' AND `+emptySubsCondition+`) AS empty_subs
 		FROM click_events
 		WHERE organization_id = ? AND event_at >= ? AND event_at < ? AND type IN ('SOURCE_CLICK', 'SOURCE_FILTER')%s
 		%s`,
@@ -448,12 +458,12 @@ func (s *EventStore) ReportClicks(ctx context.Context, q ReportQuery) ([]ClickAg
 	var out []ClickAgg
 	for rows.Next() {
 		dimVals, day, dest := scanDest(q.Dims, q.ByDay)
-		var clicks, unique, blocked, bots uint64
-		dest = append(dest, &clicks, &unique, &blocked, &bots)
+		var clicks, unique, blocked, bots, emptySubs uint64
+		dest = append(dest, &clicks, &unique, &blocked, &bots, &emptySubs)
 		if err := rows.Scan(dest...); err != nil {
 			return nil, fmt.Errorf("chstore: scanning click report row: %w", err)
 		}
-		out = append(out, ClickAgg{Key: scanKey(q.Dims, deref(dimVals), day), Clicks: clicks, UniqueClicks: unique, Blocked: blocked, Bots: bots})
+		out = append(out, ClickAgg{Key: scanKey(q.Dims, deref(dimVals), day), Clicks: clicks, UniqueClicks: unique, Blocked: blocked, Bots: bots, EmptySubs: emptySubs})
 	}
 	return out, rows.Err()
 }
