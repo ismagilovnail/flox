@@ -7,6 +7,7 @@ import {
   countPushAudience,
   createPushBroadcast,
   getPushStats,
+  setPushTriggerActive,
   getPushSummary,
   listPushBroadcasts,
   listPushSubscriptions,
@@ -51,6 +52,14 @@ export function useCancelPushBroadcast() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (id: string) => cancelPushBroadcast(id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: pushKey }),
+  });
+}
+
+export function useSetPushTriggerActive() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, active }: { id: string; active: boolean }) => setPushTriggerActive(id, active),
     onSuccess: () => qc.invalidateQueries({ queryKey: pushKey }),
   });
 }

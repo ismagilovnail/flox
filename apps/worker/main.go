@@ -97,8 +97,8 @@ const (
 const (
 	pushPollBatchSize = 100
 	pushPollIdle      = 2 * time.Second
-	// pushScheduleInterval: how often due scheduled broadcasts are looked
-	// for — a broadcast goes out at most this late.
+	// pushScheduleInterval: how often due scheduled broadcasts and triggers'
+	// due subscribers are looked for — they go out at most this late.
 	pushScheduleInterval = 15 * time.Second
 )
 
@@ -398,7 +398,7 @@ func run() error {
 		start(func() { pushDeliverer.PollLoop(ctx, pushPollBatchSize, pushPollIdle) })
 	}
 
-	// Scheduled push broadcasts go out when due (docs/push.md), configured
+	// Scheduled push broadcasts and triggers go out when due (docs/push.md), configured
 	// or not: their deliveries then wait in the queue like any other.
 	logger.Info("push scheduler starting", "interval", pushScheduleInterval)
 	start(func() { push.RunScheduler(ctx, push.NewRepository(db), pushScheduleInterval, logger) })

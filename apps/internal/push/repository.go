@@ -20,6 +20,17 @@ type Repository struct {
 	// deliveries is push_deliveries; tests use a private copy so the
 	// dev-stack worker cannot send their rows.
 	deliveries string
+	// scope limits the worker's sends (SendDue, SendTriggered) to these
+	// organizations; empty is all. Only tests set it (export_test.go):
+	// the dev database is shared, and a test's "later now" would otherwise
+	// send other organizations' broadcasts into its private table.
+	scope []string
+}
+
+// bucketOf is the 15-minute stats bucket (push_broadcast_stats.bucket,
+// migration 00074) of a time expression.
+func bucketOf(ts string) string {
+	return `date_bin('15 minutes', ` + ts + `, timestamptz '2000-01-01 00:00:00+00')`
 }
 
 func NewRepository(db *pgxpool.Pool) *Repository {
@@ -105,20 +116,27 @@ func (r *Repository) CreateBroadcast(ctx context.Context, orgID, userID string, 
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 
-	status := BroadcastSent
-	if in.SendAt != nil {
+	kind, status := KindOnce, BroadcastSent
+	var delay *int
+	condition, statuses := ConditionNone, []string{}
+	switch {
+	case in.Trigger != nil:
+		kind, status = KindTriggered, BroadcastActive
+		delay, condition, statuses = &in.Trigger.DelayMinutes, in.Trigger.Condition, nonNil(in.Trigger.Statuses)
+	case in.SendAt != nil:
 		status = BroadcastScheduled
 	}
 	var id string
 	if err := tx.QueryRow(ctx, `
 		INSERT INTO push_broadcasts (id, organization_id, name, title, body, icon_url, image_url, target, url,
-		                             pwa_ids, campaign_ids, countries, created_by_user_id, status, send_at, sent_at)
+		                             pwa_ids, campaign_ids, countries, created_by_user_id, status, send_at, sent_at,
+		                             kind, trigger_delay_minutes, trigger_condition, trigger_statuses)
 		VALUES (flox_new_ulid(), $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14,
-		        CASE WHEN $13 = 'sent' THEN now() END)
+		        CASE WHEN $13 = 'sent' THEN now() END, $15, $16, $17, $18)
 		RETURNING id`,
 		orgID, in.Name, in.Title, in.Body, in.IconURL, in.ImageURL, string(in.Target), in.URL,
 		nonNil(in.Filters.PwaIDs), nonNil(in.Filters.CampaignIDs), nonNil(in.Filters.Countries), userID,
-		status, in.SendAt,
+		status, in.SendAt, kind, delay, condition, statuses,
 	).Scan(&id); err != nil {
 		return Broadcast{}, fmt.Errorf("push: storing broadcast: %w", err)
 	}
@@ -146,8 +164,8 @@ func (r *Repository) queue(ctx context.Context, tx pgx.Tx, orgID, id string, f F
 		return fmt.Errorf("push: queueing deliveries: %w", err)
 	}
 	if _, err := tx.Exec(ctx, `
-		INSERT INTO push_broadcast_stats (organization_id, broadcast_id, pwa_id, campaign_id, country, sent)
-		SELECT s.organization_id, $5, s.pwa_id, s.campaign_id, s.country, count(*)
+		INSERT INTO push_broadcast_stats (organization_id, broadcast_id, bucket, pwa_id, campaign_id, country, sent)
+		SELECT s.organization_id, $5, `+bucketOf("now()")+`, s.pwa_id, s.campaign_id, s.country, count(*)
 		FROM push_subscriptions s WHERE `+audienceWhere+`
 		GROUP BY s.organization_id, s.pwa_id, s.campaign_id, s.country`, args...); err != nil {
 		return fmt.Errorf("push: counting broadcast groups: %w", err)
@@ -188,7 +206,8 @@ func (r *Repository) sendOneDue(ctx context.Context, now time.Time) (bool, error
 	err = tx.QueryRow(ctx, `
 		SELECT id, organization_id, pwa_ids, campaign_ids, countries FROM push_broadcasts
 		WHERE status = 'scheduled' AND send_at <= $1
-		ORDER BY send_at, id LIMIT 1 FOR UPDATE SKIP LOCKED`, now,
+		  AND (cardinality($2::text[]) = 0 OR organization_id = ANY($2::text[]))
+		ORDER BY send_at, id LIMIT 1 FOR UPDATE SKIP LOCKED`, now, nonNil(r.scope),
 	).Scan(&id, &orgID, &f.PwaIDs, &f.CampaignIDs, &f.Countries)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return false, nil
@@ -227,26 +246,142 @@ func (r *Repository) CancelBroadcast(ctx context.Context, orgID, id string) (Bro
 	return b, nil
 }
 
+// SendTriggered sends every active triggered broadcast to the subscribers
+// due by now (see Trigger), at most limit per broadcast per call — the next
+// call continues. Each broadcast is sent in its own transaction holding its
+// row, so two workers never send the same one at once; the deliveries'
+// unique (broadcast, subscription) makes it once per subscriber regardless.
+// It reports how many deliveries it queued.
+func (r *Repository) SendTriggered(ctx context.Context, now time.Time, limit int) (int, error) {
+	rows, err := r.db.Query(ctx, `SELECT id FROM push_broadcasts WHERE status = 'active'
+		AND (cardinality($1::text[]) = 0 OR organization_id = ANY($1::text[])) ORDER BY id`, nonNil(r.scope))
+	if err != nil {
+		return 0, fmt.Errorf("push: listing triggers: %w", err)
+	}
+	ids, err := pgx.CollectRows(rows, pgx.RowTo[string])
+	if err != nil {
+		return 0, fmt.Errorf("push: listing triggers: %w", err)
+	}
+	queued := 0
+	for _, id := range ids {
+		n, err := r.sendTrigger(ctx, id, now, limit)
+		queued += n
+		if err != nil {
+			return queued, err
+		}
+	}
+	return queued, nil
+}
+
+func (r *Repository) sendTrigger(ctx context.Context, id string, now time.Time, limit int) (int, error) {
+	tx, err := r.db.Begin(ctx)
+	if err != nil {
+		return 0, fmt.Errorf("push: beginning trigger send: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	var orgID, condition string
+	var f Filters
+	var delay int
+	var statuses []string
+	var created time.Time
+	err = tx.QueryRow(ctx, `
+		SELECT organization_id, pwa_ids, campaign_ids, countries, trigger_delay_minutes, trigger_condition,
+		       trigger_statuses, created_at
+		FROM push_broadcasts WHERE id = $1 AND status = 'active' FOR UPDATE SKIP LOCKED`, id,
+	).Scan(&orgID, &f.PwaIDs, &f.CampaignIDs, &f.Countries, &delay, &condition, &statuses, &created)
+	if errors.Is(err, pgx.ErrNoRows) { // paused meanwhile, or another worker has it
+		return 0, nil
+	}
+	if err != nil {
+		return 0, fmt.Errorf("push: claiming trigger: %w", err)
+	}
+	// Due: subscribed after the trigger was created, delay ago, within the
+	// window; not sent this broadcast yet; the condition on the click's
+	// recorded conversions ($10 'with' / 'without') holds now.
+	args := append(audienceArgs(orgID, f), id, created, delay, now, TriggerWindow.Seconds(), condition, nonNil(statuses), limit)
+	var n int
+	if err := tx.QueryRow(ctx, `
+		WITH due AS (
+			SELECT s.id, s.organization_id, s.pwa_id, s.campaign_id, s.country
+			FROM push_subscriptions s
+			WHERE `+audienceWhere+`
+			  AND s.created_at >= $6
+			  AND s.created_at + make_interval(mins => $7) <= $8
+			  AND s.created_at + make_interval(mins => $7) > $8 - make_interval(secs => $9)
+			  AND NOT EXISTS (SELECT 1 FROM `+r.deliveries+` d WHERE d.broadcast_id = $5 AND d.subscription_id = s.id)
+			  AND ($10 = 'none' OR ($10 = 'with') = (s.click_id <> '' AND (
+			        EXISTS (SELECT 1 FROM postbacks p WHERE p.organization_id = s.organization_id AND p.result = 'success'
+			                AND p.click_id = s.click_id AND p.status = ANY($11::text[]))
+			     OR EXISTS (SELECT 1 FROM postbacks p WHERE p.organization_id = s.organization_id AND p.result = 'success'
+			                AND p.attributed_click_id = s.click_id AND p.status = ANY($11::text[])))))
+			ORDER BY s.created_at, s.id LIMIT $12
+		), ins AS (
+			INSERT INTO `+r.deliveries+` (id, organization_id, broadcast_id, subscription_id, pwa_id, campaign_id, country)
+			SELECT flox_new_ulid(), organization_id, $5, id, pwa_id, campaign_id, country FROM due
+			ON CONFLICT (broadcast_id, subscription_id) DO NOTHING
+			RETURNING organization_id, pwa_id, campaign_id, country
+		), grouped AS (
+			INSERT INTO push_broadcast_stats (organization_id, broadcast_id, bucket, pwa_id, campaign_id, country, sent)
+			SELECT organization_id, $5, `+bucketOf("now()")+`, pwa_id, campaign_id, country, count(*)
+			FROM ins GROUP BY organization_id, pwa_id, campaign_id, country
+			ON CONFLICT (broadcast_id, bucket, pwa_id, campaign_id, country) DO UPDATE
+			SET sent = push_broadcast_stats.sent + EXCLUDED.sent
+		), counted AS (
+			UPDATE push_broadcasts SET total = total + (SELECT count(*) FROM ins) WHERE id = $5
+		)
+		SELECT count(*) FROM ins`, args...).Scan(&n); err != nil {
+		return 0, fmt.Errorf("push: sending trigger: %w", err)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return 0, fmt.Errorf("push: committing trigger send: %w", err)
+	}
+	return n, nil
+}
+
+// SetTriggerActive pauses or resumes a triggered broadcast. Resumed, it
+// sends to the subscribers who became due while it was paused only if that
+// was within TriggerWindow. Not a trigger, or already so, is a conflict.
+func (r *Repository) SetTriggerActive(ctx context.Context, orgID, id string, active bool) (Broadcast, error) {
+	from, to := BroadcastActive, BroadcastPaused
+	if active {
+		from, to = to, from
+	}
+	tag, err := r.db.Exec(ctx, `
+		UPDATE push_broadcasts SET status = $3
+		WHERE id = $1 AND organization_id = $2 AND status = $4`, id, orgID, to, from)
+	if err != nil {
+		return Broadcast{}, fmt.Errorf("push: setting trigger %s: %w", to, err)
+	}
+	b, err := r.GetBroadcast(ctx, orgID, id)
+	if err != nil {
+		return Broadcast{}, err
+	}
+	if tag.RowsAffected() == 0 {
+		return Broadcast{}, apierror.Conflict("only an " + from + " trigger can be set " + to + "; this one is " + b.Status)
+	}
+	return b, nil
+}
+
 var statsKeys = map[StatsGroup]string{
-	StatsByDay:       `to_char((b.sent_at AT TIME ZONE $4)::date, 'YYYY-MM-DD')`,
+	StatsByDay:       `to_char((st.bucket AT TIME ZONE $4)::date, 'YYYY-MM-DD')`,
 	StatsByBroadcast: `b.id`,
 	StatsByPwa:       `st.pwa_id`,
 	StatsByCampaign:  `st.campaign_id`,
 	StatsByCountry:   `st.country`,
 }
 
-// Stats is push metrics over the organization's broadcasts sent from day
-// from to day to (inclusive) in timezone, grouped by group, plus the
-// totals. A broadcast counts on its send day: its opens stay with it
-// whenever they come.
+// Stats is push metrics over what the organization's broadcasts sent from
+// day from to day to (inclusive) in timezone, grouped by group, plus the
+// totals. Deliveries count on the day they were queued (a trigger's spread
+// over the days it sent): their opens stay with them whenever they come.
 func (r *Repository) Stats(ctx context.Context, orgID string, from, to time.Time, timezone string, group StatsGroup) ([]StatsRow, StatsCounts, error) {
 	key, ok := statsKeys[group]
 	if !ok {
 		return nil, StatsCounts{}, apierror.Validation("unknown groupBy", map[string]string{"groupBy": "unknown"})
 	}
-	const where = `st.organization_id = $1 AND b.status = 'sent'
-		AND b.sent_at >= ($2::date::timestamp AT TIME ZONE $4)
-		AND b.sent_at < (($3::date + 1)::timestamp AT TIME ZONE $4)`
+	const where = `st.organization_id = $1
+		AND st.bucket >= ($2::date::timestamp AT TIME ZONE $4)
+		AND st.bucket < (($3::date + 1)::timestamp AT TIME ZONE $4)`
 	label := `''`
 	if group == StatsByBroadcast {
 		label = `max(b.name)`
@@ -279,15 +414,22 @@ func (r *Repository) Stats(ctx context.Context, orgID string, from, to time.Time
 }
 
 const broadcastColumns = `id, name, title, body, icon_url, image_url, target, url, pwa_ids, campaign_ids, countries,
-	total, delivered, failed, unsubscribed, opened, status, send_at, sent_at, created_at`
+	total, delivered, failed, unsubscribed, opened, kind, status, trigger_delay_minutes, trigger_condition,
+	trigger_statuses, send_at, sent_at, created_at`
 
 func scanBroadcast(row pgx.Row) (Broadcast, error) {
 	var b Broadcast
-	var target string
+	var target, condition string
+	var delay *int
+	var statuses []string
 	err := row.Scan(&b.ID, &b.Name, &b.Title, &b.Body, &b.IconURL, &b.ImageURL, &target, &b.URL,
 		&b.Filters.PwaIDs, &b.Filters.CampaignIDs, &b.Filters.Countries,
-		&b.Total, &b.Delivered, &b.Failed, &b.Unsubscribed, &b.Opened, &b.Status, &b.SendAt, &b.SentAt, &b.CreatedAt)
+		&b.Total, &b.Delivered, &b.Failed, &b.Unsubscribed, &b.Opened, &b.Kind, &b.Status, &delay, &condition,
+		&statuses, &b.SendAt, &b.SentAt, &b.CreatedAt)
 	b.Target = Target(target)
+	if delay != nil {
+		b.Trigger = &Trigger{DelayMinutes: *delay, Condition: condition, Statuses: statuses}
+	}
 	return b, err
 }
 
@@ -435,10 +577,10 @@ func (r *Repository) RecordOpen(ctx context.Context, orgID, clickID, deliveryID 
 			UPDATE push_broadcasts SET opened = opened + 1
 			FROM d WHERE push_broadcasts.id = d.broadcast_id AND d.first
 		), grouped AS (
-			INSERT INTO push_broadcast_stats (organization_id, broadcast_id, pwa_id, campaign_id, country, opened)
-			SELECT pd.organization_id, pd.broadcast_id, pd.pwa_id, pd.campaign_id, pd.country, 1
+			INSERT INTO push_broadcast_stats (organization_id, broadcast_id, bucket, pwa_id, campaign_id, country, opened)
+			SELECT pd.organization_id, pd.broadcast_id, `+bucketOf("pd.created_at")+`, pd.pwa_id, pd.campaign_id, pd.country, 1
 			FROM `+r.deliveries+` pd JOIN d ON d.id = pd.id WHERE d.first
-			ON CONFLICT (broadcast_id, pwa_id, campaign_id, country) DO UPDATE
+			ON CONFLICT (broadcast_id, bucket, pwa_id, campaign_id, country) DO UPDATE
 			SET opened = push_broadcast_stats.opened + 1
 		)
 		SELECT b.target, b.url, d.first FROM d JOIN push_broadcasts b ON b.id = d.broadcast_id`,

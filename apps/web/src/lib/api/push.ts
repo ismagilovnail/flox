@@ -25,12 +25,30 @@ export type PushBroadcast = {
   failed: number;
   unsubscribed: number;
   opened: number;
+  kind: "once" | "triggered";
   /** scheduled: waits for sendAt, no deliveries yet (the audience is fixed
-   * when it goes out); sent: queued at sentAt; canceled: called off. */
-  status: "scheduled" | "sent" | "canceled";
+   * when it goes out); sent: queued at sentAt; canceled: called off.
+   * A triggered one is active (sends as subscribers become due) or
+   * paused; its total grows as it sends. */
+  status: "scheduled" | "sent" | "canceled" | "active" | "paused";
+  trigger: PushTrigger | null;
   sendAt: string | null;
   sentAt: string | null;
   createdAt: string;
+};
+
+/** Conversion statuses a trigger condition can name (push.ConversionStatuses). */
+export const PUSH_TRIGGER_STATUSES = ["CPA_HOLD", "CPA_ACCEPT", "CPA_REDEP", "CPA_DECLINE", "CPA_TRASH"] as const;
+export type PushTriggerStatus = (typeof PUSH_TRIGGER_STATUSES)[number];
+
+/** Sent to each subscriber delayMinutes after they subscribed (only those
+ * who subscribe after the trigger is created, within 24 h of that moment),
+ * if the condition on their click's recorded conversions holds then:
+ * "with" one of statuses, "without" any of them, or "none". */
+export type PushTrigger = {
+  delayMinutes: number;
+  condition: "none" | "with" | "without";
+  statuses: PushTriggerStatus[];
 };
 
 export type PushGroupCount = { key: string; count: number };
@@ -68,6 +86,8 @@ export type CreateBroadcastInput = {
   filters: PushFilters;
   /** RFC 3339; absent sends now. A minute to 30 days ahead. */
   sendAt?: string;
+  /** Makes it a triggered broadcast; not with sendAt. Delay 5 min–30 days. */
+  trigger?: PushTrigger;
 };
 
 /** Push metrics keyed as the custom-metric catalog names them (§30.5,
@@ -116,6 +136,10 @@ export function createPushBroadcast(input: CreateBroadcastInput): Promise<PushBr
 
 export function cancelPushBroadcast(id: string): Promise<PushBroadcast> {
   return apiFetch(`/push/broadcasts/${id}/cancel`, { method: "POST" });
+}
+
+export function setPushTriggerActive(id: string, active: boolean): Promise<PushBroadcast> {
+  return apiFetch(`/push/broadcasts/${id}/${active ? "resume" : "pause"}`, { method: "POST" });
 }
 
 export function getPushStats(input: { from: string; to: string; timezone: string; groupBy: PushStatsGroup }): Promise<PushStats> {

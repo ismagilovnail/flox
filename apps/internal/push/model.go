@@ -76,11 +76,50 @@ type Filters struct {
 }
 
 // Broadcast statuses. A scheduled broadcast has no deliveries until the
-// worker sends it at SendAt (SendDue); the audience is fixed then.
+// worker sends it at SendAt (SendDue); the audience is fixed then. A
+// triggered one is active (the worker sends it to each subscriber as they
+// become due, SendTriggered) or paused.
 const (
 	BroadcastScheduled = "scheduled"
 	BroadcastSent      = "sent"
 	BroadcastCanceled  = "canceled"
+	BroadcastActive    = "active"
+	BroadcastPaused    = "paused"
+)
+
+// Broadcast kinds: once (now or scheduled) or triggered.
+const (
+	KindOnce      = "once"
+	KindTriggered = "triggered"
+)
+
+// Trigger condition on the subscriber's click at send time.
+const (
+	ConditionNone    = "none"
+	ConditionWith    = "with"    // has a conversion of one of Statuses
+	ConditionWithout = "without" // has none of Statuses
+)
+
+// ConversionStatuses are the statuses a trigger condition can name (§43).
+var ConversionStatuses = []string{"CPA_HOLD", "CPA_ACCEPT", "CPA_REDEP", "CPA_DECLINE", "CPA_TRASH"}
+
+// Trigger makes a broadcast go to each subscriber DelayMinutes after they
+// subscribed — only subscriptions made after the trigger was created, only
+// within TriggerWindow of that moment — if Condition holds then.
+type Trigger struct {
+	DelayMinutes int      `json:"delayMinutes"`
+	Condition    string   `json:"condition"`
+	Statuses     []string `json:"statuses"`
+}
+
+// Trigger bounds. TriggerWindow: a subscriber is sent to only within this
+// long of their due time, so resuming a paused trigger (or a worker
+// outage) does not send day-old "1 hour after" messages; it also keeps the
+// once-per-subscriber check within the delivery rows' retention.
+const (
+	MinTriggerDelay = 5
+	MaxTriggerDelay = 30 * 24 * 60
+	TriggerWindow   = 24 * time.Hour
 )
 
 // Broadcast is a message sent to the subscribers its filters match, now or
@@ -89,24 +128,28 @@ const (
 // service said the subscription is gone — counted in Failed too), Opened
 // (clicked).
 type Broadcast struct {
-	ID           string     `json:"id"`
-	Name         string     `json:"name"`
-	Title        string     `json:"title"`
-	Body         string     `json:"body"`
-	IconURL      string     `json:"iconUrl"`
-	ImageURL     string     `json:"imageUrl"`
-	Target       Target     `json:"target"`
-	URL          string     `json:"url"`
-	Filters      Filters    `json:"filters"`
-	Total        int        `json:"total"`
-	Delivered    int        `json:"delivered"`
-	Failed       int        `json:"failed"`
-	Unsubscribed int        `json:"unsubscribed"`
-	Opened       int        `json:"opened"`
-	Status       string     `json:"status"`
-	SendAt       *time.Time `json:"sendAt"`
-	SentAt       *time.Time `json:"sentAt"`
-	CreatedAt    time.Time  `json:"createdAt"`
+	ID           string  `json:"id"`
+	Name         string  `json:"name"`
+	Title        string  `json:"title"`
+	Body         string  `json:"body"`
+	IconURL      string  `json:"iconUrl"`
+	ImageURL     string  `json:"imageUrl"`
+	Target       Target  `json:"target"`
+	URL          string  `json:"url"`
+	Filters      Filters `json:"filters"`
+	Total        int     `json:"total"`
+	Delivered    int     `json:"delivered"`
+	Failed       int     `json:"failed"`
+	Unsubscribed int     `json:"unsubscribed"`
+	Opened       int     `json:"opened"`
+	Kind         string  `json:"kind"`
+	Status       string  `json:"status"`
+	// Trigger is set for a triggered broadcast, whose Total grows as it
+	// sends.
+	Trigger   *Trigger   `json:"trigger"`
+	SendAt    *time.Time `json:"sendAt"`
+	SentAt    *time.Time `json:"sentAt"`
+	CreatedAt time.Time  `json:"createdAt"`
 }
 
 type CreateBroadcastInput struct {
@@ -120,6 +163,8 @@ type CreateBroadcastInput struct {
 	Filters  Filters
 	// SendAt schedules the broadcast; nil sends it now.
 	SendAt *time.Time
+	// Trigger makes it a triggered broadcast (not with SendAt).
+	Trigger *Trigger
 }
 
 // Scheduling bounds: a time in the past or a few seconds ahead is "now";

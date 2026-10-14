@@ -212,13 +212,14 @@ func (s *PostgresStore) finish(ctx context.Context, d Delivery, res Result, code
 			WHERE id = $1 AND organization_id = $2`, d.BroadcastID, d.OrganizationID, delivered, failed, gone); err != nil {
 			return false, fmt.Errorf("pushsend: counting delivery: %w", err)
 		}
-		// The same counts per PWA × campaign × country, for the push
-		// metrics. An upsert: a delivery queued before its broadcast had
+		// The same counts per PWA × campaign × country and the 15-minute
+		// bucket it was queued in (push.bucketOf), for the push metrics. An upsert: a delivery queued before its broadcast had
 		// group rows still counts.
 		if _, err := tx.Exec(ctx, `
-			INSERT INTO push_broadcast_stats (organization_id, broadcast_id, pwa_id, campaign_id, country, delivered, failed, unsubscribed)
-			SELECT organization_id, broadcast_id, pwa_id, campaign_id, country, $2, $3, $4 FROM `+s.table+` WHERE id = $1
-			ON CONFLICT (broadcast_id, pwa_id, campaign_id, country) DO UPDATE
+			INSERT INTO push_broadcast_stats (organization_id, broadcast_id, bucket, pwa_id, campaign_id, country, delivered, failed, unsubscribed)
+			SELECT organization_id, broadcast_id, date_bin('15 minutes', created_at, timestamptz '2000-01-01 00:00:00+00'),
+			       pwa_id, campaign_id, country, $2, $3, $4 FROM `+s.table+` WHERE id = $1
+			ON CONFLICT (broadcast_id, bucket, pwa_id, campaign_id, country) DO UPDATE
 			SET delivered = push_broadcast_stats.delivered + EXCLUDED.delivered,
 			    failed = push_broadcast_stats.failed + EXCLUDED.failed,
 			    unsubscribed = push_broadcast_stats.unsubscribed + EXCLUDED.unsubscribed`,

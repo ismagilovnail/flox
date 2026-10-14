@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/url"
 	"regexp"
+	"slices"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -53,10 +54,10 @@ func (s *Service) CountAudience(ctx context.Context, orgID string, f Filters) (i
 	return s.repo.CountAudience(ctx, orgID, f)
 }
 
-// CreateBroadcast validates and sends a broadcast now, or schedules it. An
-// audience of no one is refused for a send now rather than stored as an
-// empty send; a scheduled broadcast's audience is counted when it goes out,
-// so it may be empty today.
+// CreateBroadcast validates and sends a broadcast now, schedules it, or
+// starts a trigger. An audience of no one is refused for a send now rather
+// than stored as an empty send; a scheduled or triggered broadcast's
+// audience is counted when it goes out, so it may be empty today.
 func (s *Service) CreateBroadcast(ctx context.Context, orgID, userID string, in CreateBroadcastInput) (Broadcast, error) {
 	if !s.configured {
 		return Broadcast{}, apierror.Unavailable("push is not configured on this deployment (PUSH_VAPID_* keys)")
@@ -66,6 +67,14 @@ func (s *Service) CreateBroadcast(ctx context.Context, orgID, userID string, in 
 	in.Body = strings.TrimSpace(in.Body)
 	in.URL = strings.TrimSpace(in.URL)
 	fields := validateBroadcast(in)
+	if in.Trigger != nil {
+		if in.SendAt != nil {
+			fields["sendAt"] = "not with a trigger"
+		}
+		for k, v := range validateTrigger(in.Trigger) {
+			fields[k] = v
+		}
+	}
 	if in.SendAt != nil {
 		now := s.now()
 		switch {
@@ -78,7 +87,7 @@ func (s *Service) CreateBroadcast(ctx context.Context, orgID, userID string, in 
 	if len(fields) > 0 {
 		return Broadcast{}, apierror.Validation("invalid broadcast", fields)
 	}
-	if in.SendAt != nil {
+	if in.SendAt != nil || in.Trigger != nil {
 		return s.repo.CreateBroadcast(ctx, orgID, userID, in)
 	}
 	n, err := s.repo.CountAudience(ctx, orgID, in.Filters)
@@ -94,6 +103,11 @@ func (s *Service) CreateBroadcast(ctx context.Context, orgID, userID string, in 
 // CancelBroadcast calls off a scheduled broadcast before it is sent.
 func (s *Service) CancelBroadcast(ctx context.Context, orgID, id string) (Broadcast, error) {
 	return s.repo.CancelBroadcast(ctx, orgID, id)
+}
+
+// SetTriggerActive pauses (active false) or resumes a triggered broadcast.
+func (s *Service) SetTriggerActive(ctx context.Context, orgID, id string, active bool) (Broadcast, error) {
+	return s.repo.SetTriggerActive(ctx, orgID, id, active)
 }
 
 // Stats is push metrics for broadcasts sent between from and to (days,
@@ -147,6 +161,32 @@ func validateBroadcast(in CreateBroadcastInput) map[string]string {
 		}
 	default:
 		fields["target"] = "destination or url"
+	}
+	return fields
+}
+
+func validateTrigger(t *Trigger) map[string]string {
+	fields := map[string]string{}
+	if t.DelayMinutes < MinTriggerDelay || t.DelayMinutes > MaxTriggerDelay {
+		fields["trigger.delayMinutes"] = fmt.Sprintf("%d minutes to 30 days", MinTriggerDelay)
+	}
+	switch t.Condition {
+	case "", ConditionNone:
+		t.Condition = ConditionNone
+		if len(t.Statuses) > 0 {
+			fields["trigger.statuses"] = "only with a condition"
+		}
+	case ConditionWith, ConditionWithout:
+		if len(t.Statuses) == 0 {
+			fields["trigger.statuses"] = "at least one status"
+		}
+		for _, st := range t.Statuses {
+			if !slices.Contains(ConversionStatuses, st) {
+				fields["trigger.statuses"] = strings.Join(ConversionStatuses, ", ")
+			}
+		}
+	default:
+		fields["trigger.condition"] = "none, with or without"
 	}
 	return fields
 }

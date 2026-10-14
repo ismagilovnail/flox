@@ -5,6 +5,29 @@ per-phase, matching `CLAUDE.md`'s phase protocol. The one exception is
 [Between phases], below: spec amendments and the code changes that follow from
 them land between phases and would otherwise be invisible here.
 
+## [Phase 30.21] — Triggered push broadcasts
+
+Push leftover: triggered broadcasts (`docs/push.md`). Scope (owner, 2026-10-14): a delay after
+subscription plus an optional conversion condition; new subscribers only; one message per trigger.
+
+- **Triggers:** `POST /push/broadcasts` takes `trigger: {delayMinutes (5 min–30 d), condition
+  none|with|without, statuses (CPA_*)}`; `POST /push/broadcasts/{id}/pause|resume`. The worker's push
+  scheduler (15 s) runs `SendTriggered`: per active trigger, under its row lock, one statement queues the
+  subscribers who subscribed after the trigger was created and are due within the last 24 h, checks the
+  condition against `postbacks` (success, by click or attributed click) at send time, and updates the
+  total and stats. Once per subscriber (the deliveries' unique key).
+- **Stats by when it went out:** migration `00074` adds a 15-minute `bucket` to `push_broadcast_stats`'
+  key (earlier rows take their send time), so by-day statistics spread a trigger over the days it sent;
+  also `push_broadcasts.kind/trigger_*`, statuses `active`/`paused`, and indexes for due subscriptions and
+  attributed-click lookups. Deploy the worker/api/tracker together with it.
+- **UI:** New broadcast → When: Trigger (delay + unit, condition, statuses, inline errors, confirm text
+  describing the trigger); list badge Active/Paused with the description and a pause/resume button. en/ru.
+- **Fix in test isolation:** `SendDue`/`SendTriggered` can be scoped to organizations (tests only); the
+  30.20 scheduling tests could otherwise send due broadcasts of the shared dev database.
+- Tests: trigger timing, old subscribers, window, pause/resume, condition (click, attributed click,
+  success only, cross-tenant), stats by day, validation; mutation-checked. Verified live (worker sent to
+  the right subscriber only) and in Chrome, which also closes the 30.20 browser pass.
+
 ## [Phase 30.20] — Scheduled push broadcasts and push metrics
 
 Push leftovers from Phase 30.5 (`docs/push.md`): scheduled broadcasts and push metrics. Recurring/triggered

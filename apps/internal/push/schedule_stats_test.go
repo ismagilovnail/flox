@@ -37,7 +37,7 @@ func TestScheduledBroadcastGoesOutWhenDue(t *testing.T) {
 		t.Fatalf("%d deliveries queued before the send time", n)
 	}
 
-	if _, err := f.repo.SendDue(ctx, time.Now(), 50); err != nil {
+	if _, err := f.repo.ScopedTo(f.org).SendDue(ctx, time.Now(), 50); err != nil {
 		t.Fatalf("SendDue (not yet due): %v", err)
 	}
 	if got, _ := svc.GetBroadcast(ctx, f.org, b.ID); got.Status != push.BroadcastScheduled {
@@ -46,7 +46,7 @@ func TestScheduledBroadcastGoesOutWhenDue(t *testing.T) {
 
 	// A subscriber who joins before the send time gets it too.
 	f.subscribe(t, f.org, f.pwa, f.camp, "DE")
-	if _, err := f.repo.SendDue(ctx, sendAt.Add(time.Minute), 50); err != nil {
+	if _, err := f.repo.ScopedTo(f.org).SendDue(ctx, sendAt.Add(time.Minute), 50); err != nil {
 		t.Fatalf("SendDue: %v", err)
 	}
 	got, _ := svc.GetBroadcast(ctx, f.org, b.ID)
@@ -61,7 +61,7 @@ func TestScheduledBroadcastGoesOutWhenDue(t *testing.T) {
 	}
 
 	// Sent once: due again later, nothing more is queued.
-	if _, err := f.repo.SendDue(ctx, sendAt.Add(time.Hour), 50); err != nil {
+	if _, err := f.repo.ScopedTo(f.org).SendDue(ctx, sendAt.Add(time.Hour), 50); err != nil {
 		t.Fatalf("SendDue again: %v", err)
 	}
 	if n := f.count(t, `SELECT count(*) FROM `+f.deliveries+` WHERE broadcast_id = $1`, b.ID); n != 3 {
@@ -92,7 +92,7 @@ func TestCancelScheduledBroadcast(t *testing.T) {
 	if _, err := svc.CancelBroadcast(ctx, f.org, b.ID); !errors.As(err, &apiErr) || apiErr.Status != 409 {
 		t.Fatalf("cancel twice: %v, want 409", err)
 	}
-	if _, err := f.repo.SendDue(ctx, sendAt.Add(time.Minute), 50); err != nil {
+	if _, err := f.repo.ScopedTo(f.org).SendDue(ctx, sendAt.Add(time.Minute), 50); err != nil {
 		t.Fatal(err)
 	}
 	if got, _ := svc.GetBroadcast(ctx, f.org, b.ID); got.Status != push.BroadcastCanceled || got.Total != 0 {

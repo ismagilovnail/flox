@@ -4,8 +4,9 @@ Gap 5 of `docs/spec-conformance-2026-10-11.md`: the "Push" section of the
 sidebar (§17) and the NOTIFICATION_* events (§43). Scope chosen by the
 owner on 2026-10-13: subscriptions and broadcasts sent now. Added
 2026-10-14: scheduled broadcasts and push metrics (Push → Statistics,
-custom metrics on the `push_stats` surface). Not done: recurring or
-triggered broadcasts ("N hours after install"), push metrics in the
+custom metrics on the `push_stats` surface), then triggered broadcasts
+("N hours after subscribing, if no deposit"). Not done: recurring
+broadcasts, multi-step sequences in one trigger, push metrics in the
 report builder (one formula = one data source, §30.5: push metrics are not
 on the regular rows).
 
@@ -61,6 +62,7 @@ Admin, Manager — migration 00070):
 | `GET /push/broadcasts`, `/push/broadcasts/{id}` | broadcasts with their counters |
 | `POST /push/broadcasts` | send now, or schedule with `sendAt` (`push.write`) |
 | `POST /push/broadcasts/{id}/cancel` | call off a scheduled broadcast (`push.write`); sent or canceled → 409 |
+| `POST /push/broadcasts/{id}/pause`, `/resume` | stop / restart a trigger (`push.write`); not a trigger, or already so → 409 |
 | `GET /push/stats?from=&to=&timezone=&groupBy=` | push metrics, see below |
 
 A broadcast: name, title (≤ 80), text (≤ 240), optional https icon (empty:
@@ -91,9 +93,48 @@ transaction — sent once, however many workers or ticks see it. It runs
 without VAPID keys too; the deliveries then wait in the queue. A scheduled
 broadcast can be canceled until then (`canceled`, never sent).
 
+### Triggered broadcasts (migration 00074)
+
+`trigger: {delayMinutes, condition, statuses}` (not with `sendAt`) makes a
+broadcast `kind = 'triggered'`, `status = 'active'`. Owner's scope
+(2026-10-14): a delay after subscription plus an optional condition; new
+subscribers only; one message per trigger — a sequence is several triggers
+with different delays.
+
+- **Who:** active subscriptions matching the filters, created **after** the
+  trigger was (current subscribers are never included — no surprise wave
+  on start), once `created_at + delay` has passed.
+- **Delay:** 5 minutes to 30 days. Measured from the subscription's first
+  `created_at`; a re-subscribe does not restart it.
+- **Condition:** `none`, or `with` / `without` one of the chosen CPA
+  statuses, looked up at send time in `postbacks` (`result = 'success'`,
+  by `click_id` **or** `attributed_click_id` = the subscription's click,
+  same organization). "Without CPA_ACCEPT, CPA_REDEP" reaches who has not
+  deposited yet.
+- **Window:** a subscriber is sent to only within 24 h
+  (`push.TriggerWindow`) of their due time. Resuming a trigger paused for
+  a week, or a worker outage, does not send week-old "1 hour after"
+  messages; due within the last 24 h still go. The window also keeps the
+  once-per-subscriber check (the deliveries' unique (broadcast,
+  subscription)) within the delivery rows' retention.
+- **Sending:** the same `RunScheduler` tick (15 s) calls `SendTriggered`:
+  per active trigger, one transaction holds the trigger row
+  (`FOR UPDATE SKIP LOCKED`) and one statement picks the due subscribers
+  (≤ 1000 per tick), queues their deliveries, adds to the trigger's
+  `total` and the stats. Deliveries then go out like any other.
+- **UI:** New broadcast → When: Trigger (delay + unit, condition,
+  statuses; confirm "each new subscriber gets it 1 h after subscribing ·
+  if no CPA_ACCEPT"). The list shows Active/Paused with that description
+  and a pause/resume button; Audience is what it has sent so far.
+
+Deploy note: 00074 changes `push_broadcast_stats`' key. Code from before
+it cannot record finished deliveries or opens against it, so roll the
+worker, api and tracker together with the migration.
+
 ## Push metrics (Push → Statistics)
 
-`push_broadcast_stats` holds each broadcast's counters per PWA × campaign ×
+`push_broadcast_stats` holds each broadcast's counters per 15-minute
+bucket (when the deliveries were queued, migration 00074) × PWA × campaign ×
 country: `sent` at queue time, `delivered`/`failed`/`unsubscribed` with each
 finished delivery (`pushsend`), `opened` with the first open of a delivery.
 Each delivery row carries its subscriber's PWA, campaign and country as they
@@ -101,10 +142,11 @@ were when sent. The table outlives the delivery rows (retention) and always
 adds up to the broadcast's own counters. Broadcasts sent before migration
 00073 have one row of their totals with empty dimensions ("Not split").
 
-`GET /push/stats` groups by `day` (send day in `timezone`), `broadcast`,
-`pwa`, `campaign` or `country`, over broadcasts **sent** in the range (a
-broadcast counts on its send day, its later opens stay with it; ≤ 366
-days). Each row's metrics are keyed as the custom-metric catalog names them
+`GET /push/stats` groups by `day` (in `timezone`), `broadcast`, `pwa`,
+`campaign` or `country`, over deliveries **queued** in the range: a
+one-off on its send day, a trigger spread over the days it sent; later
+opens stay with their delivery; ≤ 366 days. 15-minute buckets cut days
+right in every real UTC offset (+05:45 included). Each row's metrics are keyed as the custom-metric catalog names them
 — `push_sent`, `push_delivered`, `push_opened`, `push_ctr` (opened ÷
 delivered × 100, null with nothing delivered) — plus `push_failed`,
 `push_unsubscribed`. So the registry's Push category is live: a custom
@@ -142,6 +184,27 @@ installed long ago): records **NOTIFICATION_CLICK** on every click, counts
 the broadcast's open once per delivery — only for a delivery sent to this
 click's subscription in this organization — and redirects to the target.
 A delivery that is not this click's, or no longer kept, still leads on.
+
+## Verified (2026-10-14, triggers)
+
+- Tests: `internal/push` `triggers_test.go` — not before due; old
+  subscribers never; once per subscriber; the 24 h window; pause (nothing
+  sent) / resume (due meanwhile sent), 409s, cross-tenant 404; stats by
+  day split by when deliveries went out; the condition by click and by
+  attributed click, success only, other organization's conversion
+  ignored; validation. Mutation-checked: dropping the window, the
+  "created after the trigger" rule or the attributed-click lookup each
+  fails a test. `trigger-format.test.ts`. The worker sends
+  (`SendDue`, `SendTriggered`) are scoped to the test's organization
+  (`export_test.go`) — before, a `SendDue` test with a "later now" could
+  have sent the shared dev database's due broadcasts into its private
+  table.
+- Live: a trigger "5 min, without CPA_ACCEPT" through the API, two
+  backdated test subscriptions (one on a click with a CPA_ACCEPT) → the
+  running worker queued only the other one on its next tick; pause, pause
+  again (409), resume; stats in Asia/Kathmandu. In Chrome: the form (inline
+  "pick a status" error, confirm text), the list (Active → Paused), and
+  Push → Statistics (the 30.20 browser pass). Test rows removed.
 
 ## Verified (2026-10-14, scheduling and metrics)
 

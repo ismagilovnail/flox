@@ -33,6 +33,8 @@ func (h *Handler) Register(r chi.Router) {
 	r.Get("/broadcasts/{id}", h.broadcast)
 	r.With(h.requireWrite).Post("/broadcasts", h.createBroadcast)
 	r.With(h.requireWrite).Post("/broadcasts/{id}/cancel", h.cancelBroadcast)
+	r.With(h.requireWrite).Post("/broadcasts/{id}/pause", h.setTriggerActive(false))
+	r.With(h.requireWrite).Post("/broadcasts/{id}/resume", h.setTriggerActive(true))
 	r.Get("/stats", h.stats)
 }
 
@@ -118,6 +120,8 @@ type createBroadcastRequest struct {
 	Filters  Filters `json:"filters"`
 	// SendAt (RFC 3339) schedules the broadcast; absent or null sends now.
 	SendAt *time.Time `json:"sendAt"`
+	// Trigger makes it a triggered broadcast; not with sendAt.
+	Trigger *Trigger `json:"trigger"`
 }
 
 func (h *Handler) createBroadcast(w http.ResponseWriter, r *http.Request) {
@@ -130,7 +134,7 @@ func (h *Handler) createBroadcast(w http.ResponseWriter, r *http.Request) {
 	}
 	b, err := h.svc.CreateBroadcast(r.Context(), orgID, userID, CreateBroadcastInput{
 		Name: req.Name, Title: req.Title, Body: req.Body, IconURL: req.IconURL, ImageURL: req.ImageURL,
-		Target: req.Target, URL: req.URL, Filters: req.Filters, SendAt: req.SendAt,
+		Target: req.Target, URL: req.URL, Filters: req.Filters, SendAt: req.SendAt, Trigger: req.Trigger,
 	})
 	if err != nil {
 		apierror.Write(w, h.logger, err)
@@ -147,6 +151,19 @@ func (h *Handler) cancelBroadcast(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, b)
+}
+
+// setTriggerActive pauses or resumes a triggered broadcast.
+func (h *Handler) setTriggerActive(active bool) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		orgID, _ := tenant.OrgID(r.Context())
+		b, err := h.svc.SetTriggerActive(r.Context(), orgID, chi.URLParam(r, "id"), active)
+		if err != nil {
+			apierror.Write(w, h.logger, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, b)
+	}
 }
 
 // stats answers GET /push/stats?from=&to=&timezone=&groupBy= with rows of

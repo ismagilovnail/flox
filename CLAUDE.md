@@ -19,16 +19,15 @@ referenced below as §N).
 ## CURRENT STATE — UPDATE THIS EVERY PHASE
 
 ```
-CURRENT PHASE : PHASE 30.20 — SCHEDULED PUSH BROADCASTS + PUSH METRICS (closed)
+CURRENT PHASE : PHASE 30.21 — TRIGGERED PUSH BROADCASTS (closed)
 STATUS        : Spec conformance gaps (docs/spec-conformance-2026-10-11.md):
                 all 15 closed. Left from that doc: the "мелочи" list
                 (DataGrid, types/ schemas/ dirs, Copy tracking URL in the
                 campaigns row, IOS_INSTALL/TG_* events). Push leftovers:
-                recurring/triggered broadcasts. 30.20 had no browser pass
-                (Chrome extension not connected) — do one next session.
+                recurring broadcasts, push metrics in the report builder.
                 Prod restore drill after deployment.
-LAST COMMIT   : feat(push): scheduled broadcasts and push metrics.
-UNCOMMITTED   : none expected. Dev DB at migration 00073, CH schema 018.
+LAST COMMIT   : feat(push): triggered broadcasts.
+UNCOMMITTED   : none expected. Dev DB at migration 00074, CH schema 018.
 NEXT          : wait for the user — pick from the leftovers above with the
                 user. CI (DO1) is
                 the user's own decision — do not set it up. Run go test with

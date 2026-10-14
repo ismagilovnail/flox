@@ -26,7 +26,9 @@
     "failedHint": "{{count}} unsubscribed",
     "status": {
       "scheduled": "Scheduled",
-      "canceled": "Canceled"
+      "canceled": "Canceled",
+      "active": "Active",
+      "paused": "Paused"
     },
     "cancelAria": "Cancel {{name}}",
     "cancelTitle": "Cancel “{{name}}”?",
@@ -34,11 +36,16 @@
     "keep": "Keep",
     "cancelConfirm": "Cancel broadcast",
     "canceled": "Broadcast canceled",
-    "cancelError": "Couldn't cancel the broadcast"
+    "cancelError": "Couldn't cancel the broadcast",
+    "pauseAria": "Pause {{name}}",
+    "resumeAria": "Resume {{name}}",
+    "paused": "Trigger paused",
+    "resumed": "Trigger resumed",
+    "toggleError": "Couldn't change the trigger"
   },
   "form": {
     "title": "New broadcast",
-    "description": "Goes to every active subscriber the filters match — now, or at the time you schedule.",
+    "description": "Goes to every active subscriber the filters match — now, at the time you schedule, or to each new subscriber some time after they subscribe.",
     "name": "Name",
     "namePlaceholder": "Weekend promo",
     "notificationTitle": "Title",
@@ -81,7 +88,9 @@
       "https": "An https URL",
       "url": "An http(s) URL",
       "noAudience": "No subscribers match these filters",
-      "sendAt": "Pick a time from a minute to 30 days ahead"
+      "sendAt": "Pick a time from a minute to 30 days ahead",
+      "delay": "5 minutes to 30 days, a whole number",
+      "statuses": "Pick at least one status"
     },
     "confirmDescription_few": "It goes to {{count}} subscribers right away and cannot be recalled.",
     "confirmDescription_many": "It goes to {{count}} subscribers right away and cannot be recalled.",
@@ -95,7 +104,29 @@
     "confirmSchedule": "Schedule",
     "confirmScheduleDescription_one": "It goes out {{when}} to the subscribers matching then — {{count}} today. You can cancel it until then.",
     "confirmScheduleDescription_other": "It goes out {{when}} to the subscribers matching then — {{count}} today. You can cancel it until then.",
-    "scheduled": "Broadcast scheduled"
+    "scheduled": "Broadcast scheduled",
+    "whenTrigger": "Trigger",
+    "delay": "Send after subscribing",
+    "delayHint": "From 5 minutes to 30 days.",
+    "delayUnit": "Unit",
+    "condition": "Condition",
+    "statuses": "Conversion statuses",
+    "triggerHint": "Only people who subscribe from now on get it — current subscribers are not included. The condition is checked when it is sent; a subscriber not reached within 24 hours of their time (the trigger was paused) is skipped.",
+    "submitTrigger": "Start trigger…",
+    "confirmTriggerTitle": "Start “{{name}}”?",
+    "confirmTriggerDescription": "Each new subscriber matching the filters gets it {{trigger}}. You can pause it any time.",
+    "confirmTrigger": "Start trigger",
+    "triggerStarted": "Trigger started",
+    "delayUnits": {
+      "minutes": "minutes",
+      "hours": "hours",
+      "days": "days"
+    },
+    "conditions": {
+      "none": "Always",
+      "without": "Only if the click has none of",
+      "with": "Only if the click has one of"
+    }
   },
   "subscribers": {
     "active": "Active subscribers",
@@ -137,7 +168,7 @@
       "campaign": "Campaign",
       "country": "Country"
     },
-    "bySendDay": "Broadcasts count on the day they were sent; their later opens stay with them.",
+    "bySendDay": "Each delivery counts on the day it went out (a trigger spreads over the days it sends); its later opens stay with it.",
     "columns": {
       "sent": "Sent",
       "delivered": "Delivered",
@@ -150,5 +181,20 @@
     "searchPlaceholder": "Search…",
     "emptyTitle": "No broadcasts sent in this range",
     "emptyDescription": "Pick another range, or send a broadcast."
+  },
+  "trigger": {
+    "after": "{{delay}} after subscribing",
+    "units": {
+      "minutes_one": "{{count}} min",
+      "minutes_other": "{{count}} min",
+      "hours_one": "{{count}} h",
+      "hours_other": "{{count}} h",
+      "days_one": "{{count}} d",
+      "days_other": "{{count}} d"
+    },
+    "conditionShort": {
+      "with": "if {{statuses}}",
+      "without": "if no {{statuses}}"
+    }
   }
 }

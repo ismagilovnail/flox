@@ -3,7 +3,7 @@
 import * as React from "react";
 import type { ColumnDef } from "@tanstack/react-table";
 import type { TFunction } from "i18next";
-import { CalendarXIcon } from "lucide-react";
+import { CalendarXIcon, PauseIcon, PlayIcon } from "lucide-react";
 import { toast } from "sonner";
 import { useTranslation } from "react-i18next";
 
@@ -18,7 +18,8 @@ import { RelativeTime } from "@/components/ui/relative-time";
 import { Mono } from "@/components/ui/typography";
 import { usePermission } from "@/hooks/use-auth";
 import { useOrganization } from "@/hooks/use-organization";
-import { useCancelPushBroadcast, usePushBroadcasts } from "@/hooks/use-push";
+import { useCancelPushBroadcast, usePushBroadcasts, useSetPushTriggerActive } from "@/hooks/use-push";
+import { describeTrigger } from "@/features/push/trigger-format";
 import { formatInt, formatPercent } from "@/lib/format";
 import { formatInZone } from "@/lib/timezones";
 import type { PushBroadcast } from "@/lib/api/push";
@@ -29,7 +30,13 @@ function num(n: number) {
 
 function broadcastColumns(
   t: TFunction,
-  opts: { timeZone: string; locale: string; onCancel?: (b: PushBroadcast) => void },
+  opts: {
+    timeZone: string;
+    locale: string;
+    onCancel?: (b: PushBroadcast) => void;
+    onSetActive?: (b: PushBroadcast, active: boolean) => void;
+    pendingId?: string;
+  },
 ): ColumnDef<typeof dataTableFeatures, PushBroadcast>[] {
   return [
     {
@@ -48,6 +55,14 @@ function broadcastColumns(
       header: t("broadcasts.columns.sent"),
       cell: ({ row }) => {
         const b = row.original;
+        if (b.kind === "triggered" && b.trigger) {
+          return (
+            <div className="flex flex-col items-start gap-0.5">
+              <Badge variant={b.status === "active" ? "success" : "secondary"}>{t(`broadcasts.status.${b.status}`)}</Badge>
+              <span className="text-xs text-muted-foreground">{describeTrigger(b.trigger, t as TFunction<"push">)}</span>
+            </div>
+          );
+        }
         if (b.status === "scheduled" && b.sendAt) {
           return (
             <div className="flex flex-col items-start gap-0.5">
@@ -91,18 +106,36 @@ function broadcastColumns(
         return <Mono className="tabular-nums">{v === null ? "—" : formatPercent(v)}</Mono>;
       },
     },
-    ...(opts.onCancel
+    ...(opts.onCancel && opts.onSetActive
       ? [
           {
             id: "actions",
             header: "",
             enableSorting: false,
-            cell: ({ row }) =>
-              row.original.status === "scheduled" ? (
-                <IconButton aria-label={t("broadcasts.cancelAria", { name: row.original.name })} size="icon-sm" onClick={() => opts.onCancel?.(row.original)}>
-                  <CalendarXIcon className="size-3.5" />
-                </IconButton>
-              ) : null,
+            cell: ({ row }) => {
+              const b = row.original;
+              if (b.status === "scheduled") {
+                return (
+                  <IconButton aria-label={t("broadcasts.cancelAria", { name: b.name })} size="icon-sm" onClick={() => opts.onCancel?.(b)}>
+                    <CalendarXIcon className="size-3.5" />
+                  </IconButton>
+                );
+              }
+              if (b.kind === "triggered") {
+                const active = b.status === "active";
+                return (
+                  <IconButton
+                    aria-label={t(active ? "broadcasts.pauseAria" : "broadcasts.resumeAria", { name: b.name })}
+                    size="icon-sm"
+                    disabled={opts.pendingId === b.id}
+                    onClick={() => opts.onSetActive?.(b, !active)}
+                  >
+                    {active ? <PauseIcon className="size-3.5" /> : <PlayIcon className="size-3.5" />}
+                  </IconButton>
+                );
+              }
+              return null;
+            },
           } satisfies ColumnDef<typeof dataTableFeatures, PushBroadcast>,
         ]
       : []),
@@ -116,6 +149,17 @@ export function BroadcastList() {
   const timeZone = useOrganization().data?.timezone || "UTC";
   const cancel = useCancelPushBroadcast();
   const [canceling, setCanceling] = React.useState<PushBroadcast | null>(null);
+  const setActive = useSetPushTriggerActive();
+
+  function toggle(b: PushBroadcast, active: boolean) {
+    setActive.mutate(
+      { id: b.id, active },
+      {
+        onSuccess: (r) => toast(t(active ? "broadcasts.resumed" : "broadcasts.paused"), { description: r.name }),
+        onError: (err) => toast.error(t("broadcasts.toggleError"), { description: err.message }),
+      },
+    );
+  }
 
   function confirmCancel() {
     if (!canceling) return;
@@ -133,7 +177,10 @@ export function BroadcastList() {
   return (
     <>
       <DataTable
-        columns={broadcastColumns(t, { timeZone, locale: i18n.language, onCancel: canWrite ? setCanceling : undefined })}
+        columns={broadcastColumns(t, { timeZone, locale: i18n.language, onCancel: canWrite ? setCanceling : undefined,
+          onSetActive: canWrite ? toggle : undefined,
+          pendingId: setActive.isPending ? setActive.variables?.id : undefined,
+        })}
         data={query.data.broadcasts}
         searchPlaceholder={t("broadcasts.searchPlaceholder")}
         exportFilename="push-broadcasts"

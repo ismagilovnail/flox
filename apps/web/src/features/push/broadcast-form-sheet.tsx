@@ -22,6 +22,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { MultiSelect } from "@/components/ui/multi-select";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Textarea } from "@/components/ui/textarea";
@@ -30,13 +31,17 @@ import { useCreatePushBroadcast, usePushAudience } from "@/hooks/use-push";
 import { useOrganization } from "@/hooks/use-organization";
 import { usePwas } from "@/hooks/use-pwas";
 import { ApiError } from "@/lib/api/client";
-import type { PushFilters } from "@/lib/api/push";
+import { PUSH_TRIGGER_STATUSES, type PushFilters, type PushTrigger, type PushTriggerStatus } from "@/lib/api/push";
 import { countryOptions } from "@/lib/countries";
 import { formatInZone, utcOffsetLabel, utcToZonedLocal, zonedLocalToUtc } from "@/lib/timezones";
+import { DELAY_UNIT_MINUTES, describeTrigger, type DelayUnit } from "@/features/push/trigger-format";
 
 // Mirrors push.MinScheduleAhead / MaxScheduleAhead (internal/push/model.go).
 const MIN_AHEAD_MS = 60_000;
 const MAX_AHEAD_MS = 30 * 24 * 60 * 60_000;
+// Mirrors push.MinTriggerDelay / MaxTriggerDelay (minutes).
+const MIN_TRIGGER_DELAY = 5;
+const MAX_TRIGGER_DELAY = 30 * 24 * 60;
 
 const httpsURL = (msg: string) => z.union([z.literal(""), z.url({ protocol: /^https$/, error: msg })]);
 
@@ -55,8 +60,12 @@ function buildSchema(t: TFunction, timeZone: string) {
       pwaIds: z.array(z.string()),
       campaignIds: z.array(z.string()),
       countries: z.array(z.string()),
-      when: z.enum(["now", "later"]),
+      when: z.enum(["now", "later", "trigger"]),
       sendAtLocal: z.string(),
+      delayAmount: z.string(),
+      delayUnit: z.enum(["minutes", "hours", "days"]),
+      condition: z.enum(["none", "with", "without"]),
+      statuses: z.array(z.enum(PUSH_TRIGGER_STATUSES)),
     })
     .superRefine((v, ctx) => {
       if (v.target === "url" && !/^https?:\/\/[^\s/]+/i.test(v.url)) {
@@ -69,15 +78,44 @@ function buildSchema(t: TFunction, timeZone: string) {
           ctx.addIssue({ code: "custom", message: t("form.validation.sendAt"), path: ["sendAtLocal"] });
         }
       }
+      if (v.when === "trigger") {
+        const minutes = delayMinutes(v.delayAmount, v.delayUnit);
+        if (!(minutes >= MIN_TRIGGER_DELAY && minutes <= MAX_TRIGGER_DELAY)) {
+          ctx.addIssue({ code: "custom", message: t("form.validation.delay"), path: ["delayAmount"] });
+        }
+        if (v.condition !== "none" && v.statuses.length === 0) {
+          ctx.addIssue({ code: "custom", message: t("form.validation.statuses"), path: ["statuses"] });
+        }
+      }
     });
 }
 
 type FormValues = z.infer<ReturnType<typeof buildSchema>>;
 
+/** Whole minutes, NaN for anything but a positive whole number. */
+function delayMinutes(amount: string, unit: DelayUnit): number {
+  return /^\d+$/.test(amount.trim()) ? Number(amount) * DELAY_UNIT_MINUTES[unit] : NaN;
+}
+
+function triggerOf(v: FormValues): PushTrigger {
+  return {
+    delayMinutes: delayMinutes(v.delayAmount, v.delayUnit),
+    condition: v.condition,
+    statuses: v.condition === "none" ? [] : v.statuses,
+  };
+}
+
+// Server field names (push.validateTrigger) → form fields.
+const TRIGGER_FIELDS: Record<string, keyof FormValues> = {
+  "trigger.delayMinutes": "delayAmount",
+  "trigger.condition": "condition",
+  "trigger.statuses": "statuses",
+};
+
 const EMPTY: FormValues = {
   name: "", title: "", body: "", iconUrl: "", imageUrl: "",
   target: "destination", url: "", pwaIds: [], campaignIds: [], countries: [],
-  when: "now", sendAtLocal: "",
+  when: "now", sendAtLocal: "", delayAmount: "1", delayUnit: "hours", condition: "none", statuses: [],
 };
 
 export function BroadcastFormSheet({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
@@ -111,12 +149,14 @@ export function BroadcastFormSheet({ open, onOpenChange }: { open: boolean; onOp
         target: v.target, url: v.target === "url" ? v.url : "",
         filters: { pwaIds: v.pwaIds, campaignIds: v.campaignIds, countries: v.countries },
         sendAt: v.when === "later" ? zonedLocalToUtc(v.sendAtLocal, timeZone).toISOString() : undefined,
+        trigger: v.when === "trigger" ? triggerOf(v) : undefined,
       },
       {
         onSuccess: (b) => {
           setConfirming(null);
           onOpenChange(false);
-          toast(b.status === "scheduled" ? t("form.scheduled") : t("form.sent"), { description: b.name });
+          const done = b.kind === "triggered" ? "form.triggerStarted" : b.status === "scheduled" ? "form.scheduled" : "form.sent";
+          toast(t(done), { description: b.name });
         },
         onError: (err) => {
           setConfirming(null);
@@ -124,6 +164,7 @@ export function BroadcastFormSheet({ open, onOpenChange }: { open: boolean; onOp
             for (const [field, message] of Object.entries(err.fields)) {
               if (field in EMPTY) setError(field as keyof FormValues, { message });
               if (field === "sendAt") setError("sendAtLocal", { message });
+              if (TRIGGER_FIELDS[field]) setError(TRIGGER_FIELDS[field], { message });
             }
             if (err.fields.filters) toast.error(t("form.validation.noAudience"));
             return;
@@ -249,6 +290,10 @@ export function BroadcastFormSheet({ open, onOpenChange }: { open: boolean; onOp
                       <RadioGroupItem value="later" />
                       {t("form.whenLater")}
                     </label>
+                    <label className="flex items-center gap-2 text-sm">
+                      <RadioGroupItem value="trigger" />
+                      {t("form.whenTrigger")}
+                    </label>
                   </RadioGroup>
                 )}
               />
@@ -261,6 +306,81 @@ export function BroadcastFormSheet({ open, onOpenChange }: { open: boolean; onOp
                 >
                   <Input id="pb-send-at" type="datetime-local" className="w-56 font-mono text-xs" {...register("sendAtLocal")} aria-invalid={!!formState.errors.sendAtLocal} />
                 </Field>
+              )}
+              {values.when === "trigger" && (
+                <div className="grid gap-3">
+                  <Field id="pb-delay" label={t("form.delay")} hint={t("form.delayHint")} error={formState.errors.delayAmount?.message}>
+                    <div className="flex gap-2">
+                      <Input
+                        id="pb-delay"
+                        inputMode="numeric"
+                        className="w-24 font-mono text-xs tabular-nums"
+                        {...register("delayAmount")}
+                        aria-invalid={!!formState.errors.delayAmount}
+                      />
+                      <Controller
+                        control={control}
+                        name="delayUnit"
+                        render={({ field }) => (
+                          <Select value={field.value} onValueChange={field.onChange}>
+                            <SelectTrigger size="sm" className="w-32" aria-label={t("form.delayUnit")}>
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {(["minutes", "hours", "days"] as const).map((u) => (
+                                <SelectItem key={u} value={u}>
+                                  {t(`form.delayUnits.${u}`)}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        )}
+                      />
+                    </div>
+                  </Field>
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <div className="grid gap-1.5">
+                      <Label htmlFor="pb-condition">{t("form.condition")}</Label>
+                      <Controller
+                        control={control}
+                        name="condition"
+                        render={({ field }) => (
+                          <Select value={field.value} onValueChange={field.onChange}>
+                            <SelectTrigger id="pb-condition" size="sm">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {(["none", "without", "with"] as const).map((c) => (
+                                <SelectItem key={c} value={c}>
+                                  {t(`form.conditions.${c}`)}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        )}
+                      />
+                    </div>
+                    {values.condition !== "none" && (
+                      <div className="grid gap-1.5">
+                        <Label>{t("form.statuses")}</Label>
+                        <Controller
+                          control={control}
+                          name="statuses"
+                          render={({ field }) => (
+                            <MultiSelect
+                              label={t("form.statuses")}
+                              options={PUSH_TRIGGER_STATUSES.map((s) => ({ value: s, label: s }))}
+                              selected={field.value}
+                              onChange={(v) => field.onChange(v as PushTriggerStatus[])}
+                            />
+                          )}
+                        />
+                        {formState.errors.statuses?.message && <p className="text-xs text-danger">{formState.errors.statuses.message}</p>}
+                      </div>
+                    )}
+                  </div>
+                  <p className="text-xs text-muted-foreground">{t("form.triggerHint")}</p>
+                </div>
               )}
             </div>
 
@@ -289,8 +409,8 @@ export function BroadcastFormSheet({ open, onOpenChange }: { open: boolean; onOp
             <Button variant="outline" onClick={() => onOpenChange(false)}>
               {t("form.cancel")}
             </Button>
-            <Button type="submit" form="push-broadcast" disabled={(values.when !== "later" && count === 0) || formState.isSubmitting}>
-              {values.when === "later" ? t("form.submitSchedule") : t("form.submit")}
+            <Button type="submit" form="push-broadcast" disabled={(values.when === "now" && count === 0) || formState.isSubmitting}>
+              {values.when === "later" ? t("form.submitSchedule") : values.when === "trigger" ? t("form.submitTrigger") : t("form.submit")}
             </Button>
           </SheetFooter>
         </SheetContent>
@@ -299,7 +419,12 @@ export function BroadcastFormSheet({ open, onOpenChange }: { open: boolean; onOp
       <Dialog open={confirming !== null} onOpenChange={(o) => !o && !create.isPending && setConfirming(null)}>
         <DialogContent>
           <DialogHeader>
-            {confirming?.when === "later" ? (
+            {confirming?.when === "trigger" ? (
+              <>
+                <DialogTitle>{t("form.confirmTriggerTitle", { name: confirming.name })}</DialogTitle>
+                <DialogDescription>{t("form.confirmTriggerDescription", { trigger: describeTrigger(triggerOf(confirming), t) })}</DialogDescription>
+              </>
+            ) : confirming?.when === "later" ? (
               <>
                 <DialogTitle>{t("form.confirmScheduleTitle", { name: confirming.name })}</DialogTitle>
                 <DialogDescription>
@@ -321,7 +446,7 @@ export function BroadcastFormSheet({ open, onOpenChange }: { open: boolean; onOp
               {t("form.cancel")}
             </Button>
             <Button onClick={() => confirming && send(confirming)} disabled={create.isPending}>
-              {confirming?.when === "later" ? t("form.confirmSchedule") : t("form.confirm")}
+              {confirming?.when === "later" ? t("form.confirmSchedule") : confirming?.when === "trigger" ? t("form.confirmTrigger") : t("form.confirm")}
             </Button>
           </DialogFooter>
         </DialogContent>
