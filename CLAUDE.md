@@ -19,16 +19,16 @@ referenced below as §N).
 ## CURRENT STATE — UPDATE THIS EVERY PHASE
 
 ```
-CURRENT PHASE : PHASE 30.11 — REPORTING CURRENCY (closed)
+CURRENT PHASE : PHASE 30.12 — LTV FILTERS + BREAKDOWNS (closed)
 STATUS        : Spec conformance gaps (docs/spec-conformance-2026-10-11.md):
-                1–7 closed (… cost by country + CSV, reports/LTV in the
-                org's reporting currency). Push leftovers: scheduled/
-                triggered broadcasts, push metrics. Left: gaps 8–15, prod
-                restore drill after deployment.
-LAST COMMIT   : feat(fx): reports in the organization's reporting currency.
-UNCOMMITTED   : none expected. Dev DB at migration 00071, CH schema 017.
-NEXT          : wait for the user — next gap is 8 (LTV filters by
-                source/offer, §26.5). CI (DO1) is
+                1–8 closed (… reporting currency, LTV source/offer filters
+                and breakdowns). Push leftovers: scheduled/triggered
+                broadcasts, push metrics. Left: gaps 9–15, prod restore
+                drill after deployment.
+LAST COMMIT   : feat(ltv): source and offer filters, breakdowns.
+UNCOMMITTED   : none expected. Dev DB at migration 00071, CH schema 018.
+NEXT          : wait for the user — next gap is 9 (cpa_decline /
+                cpa_trash report metrics, §50). CI (DO1) is
                 the user's own decision — do not set it up. Run go test with
                 the full env line AND check e2e did not skip (memory:
                 flox-full-test-env); chconn's TestLimitsStopAHeavyQuery

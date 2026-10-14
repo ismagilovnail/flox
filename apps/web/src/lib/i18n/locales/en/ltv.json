@@ -1,16 +1,22 @@
 {
   "title": "LTV / Cohorts",
-  "description": "Revenue of each cohort of first deposits (FTD) or registrations over its first 90 days, split by campaign, network and country. Cohort days are UTC.",
+  "description": "Revenue of each cohort of first deposits (FTD) or registrations over its first 90 days, optionally broken down by campaign, source, offer, network or country. Cohort days are UTC.",
   "types": { "ftd": "FTD cohorts", "reg": "Registration cohorts" },
   "periods": { "day": "By day", "week": "By week", "month": "By month" },
   "filters": {
     "period": "Cohort period",
     "campaign": "Campaign",
     "network": "Network",
+    "source": "Traffic source",
+    "offer": "Offer",
+    "breakdown": "Breakdown",
     "allCampaigns": "All campaigns",
+    "allSources": "All sources",
+    "allOffers": "All offers",
     "allNetworks": "All networks",
     "allCountries": "All countries"
   },
+  "dimensions": { "campaign": "Campaign", "source": "Source", "offer": "Offer", "network": "Network", "country": "Country" },
   "windows": { "d0": "Day 0", "d1_7": "Days 1–7", "d8_30": "Days 8–30", "d31_90": "Days 31–90" },
   "windowHints": {
     "d0": "Revenue on the day of the first deposit/registration",
@@ -21,6 +27,8 @@
   "columns": {
     "cohort": "Cohort",
     "campaign": "Campaign",
+    "source": "Source",
+    "offer": "Offer",
     "network": "Network",
     "country": "Country",
     "ftds": "FTDs",

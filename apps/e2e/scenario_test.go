@@ -979,7 +979,7 @@ func (s *scenario) analyticsAndLTV() {
 			AnchorCount int    `json:"anchorCount"`
 		} `json:"cohorts"`
 	}
-	s.get(fmt.Sprintf("/analytics/ltv/ftd-cohorts?from=%s&to=%s&campaignId=%s", today, today, s.campaignID), &ftd, http.StatusOK)
+	s.get(fmt.Sprintf("/analytics/ltv/ftd-cohorts?from=%s&to=%s&campaignId=%s&groupBy=campaign", today, today, s.campaignID), &ftd, http.StatusOK)
 	if !hasAnchor(ftd.Cohorts, s.campaignID) {
 		s.t.Fatalf("ltv: no FTD cohort (anchored on CPA_ACCEPT) found for campaign %s: %+v", s.campaignID, ftd.Cohorts)
 	}
@@ -991,7 +991,7 @@ func (s *scenario) analyticsAndLTV() {
 			AnchorCount int    `json:"anchorCount"`
 		} `json:"cohorts"`
 	}
-	s.get(fmt.Sprintf("/analytics/ltv/reg-cohorts?from=%s&to=%s&campaignId=%s", today, today, s.campaignID), &reg, http.StatusOK)
+	s.get(fmt.Sprintf("/analytics/ltv/reg-cohorts?from=%s&to=%s&campaignId=%s&groupBy=campaign", today, today, s.campaignID), &reg, http.StatusOK)
 	if !hasAnchor(reg.Cohorts, s.campaignID) {
 		s.t.Fatalf("ltv: no registration cohort (anchored on CPA_HOLD) found for campaign %s: %+v", s.campaignID, reg.Cohorts)
 	}

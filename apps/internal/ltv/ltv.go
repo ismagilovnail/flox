@@ -125,17 +125,63 @@ type WindowResult struct {
 	Complete   bool
 }
 
-// CohortKey identifies one row of a cohort table: a period bucket plus
-// §26.5's filterable dimensions actually available in the event pipeline
-// today (campaign, network — the "cpa/network" filter — and country).
-// "source" and "offer" are named by §26.5 too, but ltv_events carries
-// neither, and they are not approximated here.
+// Dimension is one of §26.5's breakdowns ("any of the above + cohort
+// period"): a cohort table is grouped by its period bucket plus the
+// dimensions asked for, in any combination.
+type Dimension string
+
+const (
+	DimCampaign Dimension = "campaign"
+	DimSource   Dimension = "source"
+	DimOffer    Dimension = "offer"
+	DimNetwork  Dimension = "network"
+	DimCountry  Dimension = "country"
+)
+
+// Dimensions is every breakdown, in the order a cohort table shows them.
+var Dimensions = []Dimension{DimCampaign, DimSource, DimOffer, DimNetwork, DimCountry}
+
+// ValidDimension reports whether d is a breakdown this package groups by.
+func ValidDimension(d Dimension) bool {
+	for _, v := range Dimensions {
+		if v == d {
+			return true
+		}
+	}
+	return false
+}
+
+// CohortKey identifies one row of a cohort table: a period bucket plus the
+// value of each requested breakdown. A dimension not grouped by stays ""
+// — the row spans all its values.
 type CohortKey struct {
-	Period     CohortPeriod
-	Bucket     string
-	CampaignID string
-	NetworkID  string
-	Country    string
+	Period          CohortPeriod
+	Bucket          string
+	CampaignID      string
+	TrafficSourceID string
+	OfferID         string
+	NetworkID       string
+	Country         string
+}
+
+// cohortKey is h's row in a table grouped by groupBy.
+func cohortKey(period CohortPeriod, anchorDate time.Time, h chstore.ClickHistory, groupBy []Dimension) CohortKey {
+	k := CohortKey{Period: period, Bucket: bucket(period, anchorDate)}
+	for _, d := range groupBy {
+		switch d {
+		case DimCampaign:
+			k.CampaignID = h.CampaignID
+		case DimSource:
+			k.TrafficSourceID = h.TrafficSourceID
+		case DimOffer:
+			k.OfferID = h.OfferID
+		case DimNetwork:
+			k.NetworkID = h.NetworkID
+		case DimCountry:
+			k.Country = h.Country
+		}
+	}
+	return k
 }
 
 // base holds every field FTD and Reg cohorts compute identically — the
@@ -290,12 +336,12 @@ func daysBetween(a, b time.Time) int {
 }
 
 // ComputeFTDCohorts groups histories (each already guaranteed to have a
-// CPA_ACCEPT — chstore.ClicksByFTDAnchor's contract) by (period bucket of
-// its CPA_ACCEPT date, campaign, network, country) and computes every
-// §26.5 metric for each group. asOf is the reference "now" for window
+// CPA_ACCEPT — chstore.ClicksByFTDAnchor's contract) by the period bucket
+// of its CPA_ACCEPT date plus the groupBy dimensions (none = one row per
+// bucket) and computes every §26.5 metric for each group. asOf is the reference "now" for window
 // completeness — pass time.Now().UTC() in production, a fixed instant in
 // tests.
-func ComputeFTDCohorts(histories []chstore.ClickHistory, period CohortPeriod, asOf time.Time) []FTDCohort {
+func ComputeFTDCohorts(histories []chstore.ClickHistory, period CohortPeriod, groupBy []Dimension, asOf time.Time) []FTDCohort {
 	accs := map[CohortKey]*accumulator{}
 	var order []CohortKey
 
@@ -304,7 +350,7 @@ func ComputeFTDCohorts(histories []chstore.ClickHistory, period CohortPeriod, as
 		if !ok {
 			continue // defensive: ClicksByFTDAnchor's contract guarantees this shouldn't happen
 		}
-		key := CohortKey{Period: period, Bucket: bucket(period, anchorDate), CampaignID: h.CampaignID, NetworkID: h.NetworkID, Country: h.Country}
+		key := cohortKey(period, anchorDate, h, groupBy)
 		acc, exists := accs[key]
 		if !exists {
 			acc = newAccumulator(key)
@@ -331,7 +377,7 @@ func ComputeFTDCohorts(histories []chstore.ClickHistory, period CohortPeriod, as
 // ComputeRegCohorts is ComputeFTDCohorts' Reg-cohort counterpart, anchored
 // on each history's CPA_HOLD instead (chstore.ClicksByRegAnchor's
 // contract).
-func ComputeRegCohorts(histories []chstore.ClickHistory, period CohortPeriod, asOf time.Time) []RegCohort {
+func ComputeRegCohorts(histories []chstore.ClickHistory, period CohortPeriod, groupBy []Dimension, asOf time.Time) []RegCohort {
 	accs := map[CohortKey]*accumulator{}
 	var order []CohortKey
 
@@ -340,7 +386,7 @@ func ComputeRegCohorts(histories []chstore.ClickHistory, period CohortPeriod, as
 		if !ok {
 			continue
 		}
-		key := CohortKey{Period: period, Bucket: bucket(period, anchorDate), CampaignID: h.CampaignID, NetworkID: h.NetworkID, Country: h.Country}
+		key := cohortKey(period, anchorDate, h, groupBy)
 		acc, exists := accs[key]
 		if !exists {
 			acc = newAccumulator(key)

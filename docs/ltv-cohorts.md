@@ -88,27 +88,38 @@ no click in the cohort redeposited at all; when some did and some didn't,
 the average is over only the clicks that did — averaging in zeros for the
 rest would understate the metric it's supposed to measure.
 
-## Deliberately deferred: `source`/`offer` filters, and the frontend
+## Filters and breakdowns (§26.5)
 
-§26.5 names `campaign, source, offer, cpa/network, country` as filter/
-breakdown dimensions. `CampaignID`/`NetworkID`/`Country` are implemented;
-`source` (traffic source) and `offer` are not — `event.Event` carries
-neither `traffic_source_id` nor `offer_id` yet, the same pre-existing gap
-`internal/macro`'s `{source}` token (Phase 24) and `click_events`' sort key
-(Phase 26) already documented. Adding that propagation is its own piece of
-work, not silently approximated here.
+§26.5: "filters: campaign, source, offer, cpa/network, country; breakdowns:
+any of the above + cohort period". All five are implemented (gap 8 of
+`docs/spec-conformance-2026-10-11.md`, 2026-10-14).
 
-**Update (marketer audit #5, 2026-10-08):** the screen exists now —
-`/ltv-cohorts` (`features/ltv/ltv-view.tsx`): FTD / registration tabs, period
-(day/week/month), UTC date range, campaign/network/country filters, the
-engine's rows as they come (cohort × campaign × network × country) with
-incomplete windows marked `*`. It only displays the API's numbers; nothing is
-re-aggregated in the browser.
+- **Filters** narrow which clicks' anchor counts: `campaignId`, `sourceId`
+  (traffic source), `offerId`, `networkId`, `country` query parameters →
+  `chstore.LTVFilter`. Each one only ever matches the caller's own
+  organization's rows (`organization_id` leads every query; covered by
+  `TestEveryReferenceRefusesAnotherOrganizationsIDs`).
+- **Breakdowns**: `groupBy=campaign,source,offer,network,country` (any
+  subset, each once; `ltv.Dimension`). A row is one cohort period bucket ×
+  the values of the requested dimensions; a dimension not grouped by is
+  summed over and left out of the response. **No `groupBy` = one row per
+  cohort period** — until 2026-10-14 every row was always split by
+  campaign × network × country.
+- **Where offer/source come from:** `ltv_events.offer_id` /
+  `traffic_source_id` (schema/018), copied from `conversion_events`, which
+  takes them from the attributed click. The view was changed in place
+  (`ALTER TABLE ltv_events_mv_v3 MODIFY QUERY`), so no conversion missed its
+  row during the upgrade. Rows from before 018 got them from their click
+  (`chstore.BackfillLTVAttribution`, once, from apps/worker: a scratch
+  `Join` table over `click_lookup` read by `joinGet` in one mutation; a
+  failed mutation is killed so ClickHouse does not retry it forever). A
+  click with no offer (redirect flow, fallback) shows "—".
 
-Originally, no frontend work in this phase either — consistent with every Go-backend
-phase since 23 (conversion engine, postback engine, analytics pipeline,
-ClickHouse), and there is no existing LTV/Cohorts UI mock to integrate with
-in the first place (ROADMAP.md has no such phase before 27).
+The screen, `/ltv-cohorts` (`features/ltv/ltv-view.tsx`): FTD / registration
+tabs, period (day/week/month), UTC date range, the five filters, a
+"Breakdown" multi-select (columns appear only for the chosen dimensions, in
+a fixed order), incomplete windows marked `*`. It only displays the API's
+numbers; nothing is re-aggregated in the browser.
 
 ## Verified end-to-end
 

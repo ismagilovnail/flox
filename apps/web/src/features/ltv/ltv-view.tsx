@@ -10,6 +10,7 @@ import { DataTable, dataTableFeatures } from "@/components/ui/data-table";
 import { DateRangePicker } from "@/components/ui/date-range-picker";
 import { ErrorState } from "@/components/ui/error-state";
 import { LoadingState } from "@/components/ui/loading-state";
+import { MultiSelect } from "@/components/ui/multi-select";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -18,8 +19,18 @@ import { useCampaigns } from "@/hooks/use-campaigns";
 import { useLocale } from "@/hooks/use-locale";
 import { useCohorts } from "@/hooks/use-ltv";
 import { useNetworks } from "@/hooks/use-networks";
+import { useOffers } from "@/hooks/use-offers";
+import { useTrafficSources } from "@/hooks/use-traffic-sources";
 import { useApiErrorMessage } from "@/hooks/use-api-error-message";
-import { LTV_WINDOWS, type Cohort, type CohortPeriod, type CohortType, type LtvWindow } from "@/lib/api/ltv";
+import {
+  LTV_DIMENSIONS,
+  LTV_WINDOWS,
+  type Cohort,
+  type CohortPeriod,
+  type CohortType,
+  type LtvDimension,
+  type LtvWindow,
+} from "@/lib/api/ltv";
 import { countryOptions } from "@/lib/countries";
 import { formatInt, formatMoney, formatPercent } from "@/lib/format";
 import { useReportingCurrency } from "@/hooks/use-organization";
@@ -46,8 +57,8 @@ function cohortColumns(
   t: TFunction<"ltv">,
   locale: Locale,
   type: CohortType,
-  campaignName: (id?: string) => string,
-  networkName: (id?: string) => string,
+  groupBy: LtvDimension[],
+  valueName: (dim: LtvDimension, c: Cohort) => string,
   currency: string,
 ): ColumnDef<typeof dataTableFeatures, Cohort>[] {
   const money = (n: number) => formatMoney(n, currency, 2, locale);
@@ -73,9 +84,11 @@ function cohortColumns(
 
   const columns: ColumnDef<typeof dataTableFeatures, Cohort>[] = [
     { accessorKey: "bucket", header: t("columns.cohort"), cell: ({ getValue }) => <span className="tabular-nums">{getValue() as string}</span> },
-    { id: "campaign", header: t("columns.campaign"), accessorFn: (c) => campaignName(c.campaignId) },
-    { id: "network", header: t("columns.network"), accessorFn: (c) => networkName(c.networkId) },
-    { id: "country", header: t("columns.country"), accessorFn: (c) => c.country || "—" },
+    // Only the breakdowns asked for: a dimension not grouped by spans all
+    // its values, so a column for it would only ever say "—".
+    ...groupBy.map(
+      (d): ColumnDef<typeof dataTableFeatures, Cohort> => ({ id: d, header: t(`columns.${d}`), accessorFn: (c) => valueName(d, c) }),
+    ),
     {
       accessorKey: "anchorCount",
       header: type === "ftd" ? t("columns.ftds") : t("columns.regs"),
@@ -122,12 +135,22 @@ export function LtvView() {
   const [period, setPeriod] = React.useState<CohortPeriod>("week");
   const [range, setRange] = React.useState<DateRange | undefined>(defaultRange);
   const [campaignId, setCampaignId] = React.useState(ALL);
+  const [sourceId, setSourceId] = React.useState(ALL);
+  const [offerId, setOfferId] = React.useState(ALL);
   const [networkId, setNetworkId] = React.useState(ALL);
   const [country, setCountry] = React.useState("");
+  const [breakdown, setBreakdown] = React.useState<LtvDimension[]>([]);
+  // Canonical order, so the columns and the query key do not depend on
+  // the order the boxes were ticked in.
+  const groupBy = React.useMemo(() => LTV_DIMENSIONS.filter((d) => breakdown.includes(d)), [breakdown]);
 
   const campaignsData = useCampaigns().data;
+  const sourcesData = useTrafficSources().data;
+  const offersData = useOffers().data;
   const networksData = useNetworks().data;
   const campaigns = React.useMemo(() => campaignsData?.campaigns ?? [], [campaignsData]);
+  const sources = React.useMemo(() => sourcesData?.trafficSources ?? [], [sourcesData]);
+  const offers = React.useMemo(() => offersData?.offers ?? [], [offersData]);
   const networks = React.useMemo(() => networksData?.networks ?? [], [networksData]);
   const fallback = defaultRange();
   const from = range?.from ?? fallback.from!;
@@ -139,21 +162,36 @@ export function LtvView() {
     from: ymd(from),
     to: ymd(to),
     campaignId: campaignId === ALL ? undefined : campaignId,
+    sourceId: sourceId === ALL ? undefined : sourceId,
+    offerId: offerId === ALL ? undefined : offerId,
     networkId: networkId === ALL ? undefined : networkId,
     country: country || undefined,
+    groupBy,
   });
 
-  const campaignName = React.useCallback(
-    (id?: string) => (id ? (campaigns.find((c) => c.id === id)?.name ?? id) : "—"),
-    [campaigns],
-  );
-  const networkName = React.useCallback(
-    (id?: string) => (id ? (networks.find((n) => n.id === id)?.name ?? id) : "—"),
-    [networks],
+  // A row's breakdown value by name; "—" for clicks without one (e.g. a
+  // redirect flow has no offer).
+  const valueName = React.useCallback(
+    (dim: LtvDimension, c: Cohort) => {
+      const named = (list: { id: string; name: string }[], id?: string) => (id ? (list.find((x) => x.id === id)?.name ?? id) : "—");
+      switch (dim) {
+        case "campaign":
+          return named(campaigns, c.campaignId);
+        case "source":
+          return named(sources, c.sourceId);
+        case "offer":
+          return named(offers, c.offerId);
+        case "network":
+          return named(networks, c.networkId);
+        case "country":
+          return c.country || "—";
+      }
+    },
+    [campaigns, sources, offers, networks],
   );
   const columns = React.useMemo(
-    () => cohortColumns(t, locale, type, campaignName, networkName, currency),
-    [t, locale, type, campaignName, networkName, currency],
+    () => cohortColumns(t, locale, type, groupBy, valueName, currency),
+    [t, locale, type, groupBy, valueName, currency],
   );
   const countries = React.useMemo(
     () => [{ value: "", label: t("filters.allCountries") }, ...countryOptions(i18n.language)],
@@ -200,6 +238,32 @@ export function LtvView() {
             ))}
           </SelectContent>
         </Select>
+        <Select value={sourceId} onValueChange={setSourceId}>
+          <SelectTrigger size="sm" className="w-44" aria-label={t("filters.source")}>
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value={ALL}>{t("filters.allSources")}</SelectItem>
+            {sources.map((s) => (
+              <SelectItem key={s.id} value={s.id}>
+                {s.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Select value={offerId} onValueChange={setOfferId}>
+          <SelectTrigger size="sm" className="w-44" aria-label={t("filters.offer")}>
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value={ALL}>{t("filters.allOffers")}</SelectItem>
+            {offers.map((o) => (
+              <SelectItem key={o.id} value={o.id}>
+                {o.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
         <Select value={networkId} onValueChange={setNetworkId}>
           <SelectTrigger size="sm" className="w-44" aria-label={t("filters.network")}>
             <SelectValue />
@@ -219,6 +283,13 @@ export function LtvView() {
           onChange={setCountry}
           placeholder={t("filters.allCountries")}
           className="w-48"
+        />
+        <MultiSelect
+          label={t("filters.breakdown")}
+          options={LTV_DIMENSIONS.map((d) => ({ value: d, label: t(`dimensions.${d}`) }))}
+          selected={breakdown}
+          onChange={(v) => setBreakdown(v as LtvDimension[])}
+          className="w-56"
         />
       </div>
 

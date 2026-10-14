@@ -91,7 +91,7 @@ func (s *Service) convert(ctx context.Context, organizationID string, from time.
 	return nil
 }
 
-func validateQuery(organizationID string, period CohortPeriod, filter chstore.LTVFilter) error {
+func validateQuery(organizationID string, period CohortPeriod, filter chstore.LTVFilter, groupBy []Dimension) error {
 	if organizationID == "" {
 		return apierror.Validation("missing organization", nil)
 	}
@@ -106,12 +106,19 @@ func validateQuery(organizationID string, period CohortPeriod, filter chstore.LT
 	if filter.To.Sub(filter.From) > maxAnchorRangeDays*24*time.Hour {
 		return apierror.Validation("date range too wide", map[string]string{"to": "more than 366 days after from"})
 	}
+	seen := map[Dimension]bool{}
+	for _, d := range groupBy {
+		if !ValidDimension(d) || seen[d] {
+			return apierror.Validation("invalid groupBy, want campaign|source|offer|network|country, each once", map[string]string{"groupBy": string(d)})
+		}
+		seen[d] = true
+	}
 	return nil
 }
 
 // FTDCohorts computes §26.5's FTD cohort table for organizationID.
-func (s *Service) FTDCohorts(ctx context.Context, organizationID string, filter chstore.LTVFilter, period CohortPeriod, asOf time.Time) ([]FTDCohort, error) {
-	if err := validateQuery(organizationID, period, filter); err != nil {
+func (s *Service) FTDCohorts(ctx context.Context, organizationID string, filter chstore.LTVFilter, period CohortPeriod, groupBy []Dimension, asOf time.Time) ([]FTDCohort, error) {
+	if err := validateQuery(organizationID, period, filter, groupBy); err != nil {
 		return nil, err
 	}
 	histories, err := s.repo.ClicksByFTDAnchor(ctx, organizationID, filter)
@@ -121,12 +128,12 @@ func (s *Service) FTDCohorts(ctx context.Context, organizationID string, filter 
 	if err := s.convert(ctx, organizationID, filter.From, histories); err != nil {
 		return nil, err
 	}
-	return ComputeFTDCohorts(histories, period, asOf), nil
+	return ComputeFTDCohorts(histories, period, groupBy, asOf), nil
 }
 
 // RegCohorts computes §26.5's Reg cohort table for organizationID.
-func (s *Service) RegCohorts(ctx context.Context, organizationID string, filter chstore.LTVFilter, period CohortPeriod, asOf time.Time) ([]RegCohort, error) {
-	if err := validateQuery(organizationID, period, filter); err != nil {
+func (s *Service) RegCohorts(ctx context.Context, organizationID string, filter chstore.LTVFilter, period CohortPeriod, groupBy []Dimension, asOf time.Time) ([]RegCohort, error) {
+	if err := validateQuery(organizationID, period, filter, groupBy); err != nil {
 		return nil, err
 	}
 	histories, err := s.repo.ClicksByRegAnchor(ctx, organizationID, filter)
@@ -136,5 +143,5 @@ func (s *Service) RegCohorts(ctx context.Context, organizationID string, filter 
 	if err := s.convert(ctx, organizationID, filter.From, histories); err != nil {
 		return nil, err
 	}
-	return ComputeRegCohorts(histories, period, asOf), nil
+	return ComputeRegCohorts(histories, period, groupBy, asOf), nil
 }

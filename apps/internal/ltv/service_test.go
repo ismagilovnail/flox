@@ -35,7 +35,7 @@ func TestServiceFTDCohortsPassesThroughToComputation(t *testing.T) {
 	svc := ltv.NewService(repo)
 
 	cohorts, err := svc.FTDCohorts(context.Background(), "org-1",
-		chstore.LTVFilter{From: at(-1), To: at(1)}, ltv.PeriodDay, at(200))
+		chstore.LTVFilter{From: at(-1), To: at(1)}, ltv.PeriodDay, nil, at(200))
 	if err != nil {
 		t.Fatalf("FTDCohorts: %v", err)
 	}
@@ -46,7 +46,7 @@ func TestServiceFTDCohortsPassesThroughToComputation(t *testing.T) {
 
 func TestServiceRejectsMissingOrg(t *testing.T) {
 	svc := ltv.NewService(&fakeRepo{})
-	_, err := svc.FTDCohorts(context.Background(), "", chstore.LTVFilter{From: at(0), To: at(1)}, ltv.PeriodDay, at(200))
+	_, err := svc.FTDCohorts(context.Background(), "", chstore.LTVFilter{From: at(0), To: at(1)}, ltv.PeriodDay, nil, at(200))
 	if err == nil {
 		t.Fatal("expected an error for a missing organization id")
 	}
@@ -54,15 +54,24 @@ func TestServiceRejectsMissingOrg(t *testing.T) {
 
 func TestServiceRejectsInvalidPeriod(t *testing.T) {
 	svc := ltv.NewService(&fakeRepo{})
-	_, err := svc.FTDCohorts(context.Background(), "org-1", chstore.LTVFilter{From: at(0), To: at(1)}, ltv.CohortPeriod("year"), at(200))
+	_, err := svc.FTDCohorts(context.Background(), "org-1", chstore.LTVFilter{From: at(0), To: at(1)}, ltv.CohortPeriod("year"), nil, at(200))
 	if err == nil {
 		t.Fatal("expected an error for an invalid period")
 	}
 }
 
+func TestServiceRejectsInvalidGroupBy(t *testing.T) {
+	svc := ltv.NewService(&fakeRepo{})
+	for _, groupBy := range [][]ltv.Dimension{{"flow"}, {ltv.DimOffer, ltv.DimOffer}} {
+		if _, err := svc.FTDCohorts(context.Background(), "org-1", chstore.LTVFilter{From: at(0), To: at(1)}, ltv.PeriodDay, groupBy, at(200)); err == nil {
+			t.Fatalf("groupBy %v: expected an error", groupBy)
+		}
+	}
+}
+
 func TestServiceRejectsInvertedRange(t *testing.T) {
 	svc := ltv.NewService(&fakeRepo{})
-	_, err := svc.RegCohorts(context.Background(), "org-1", chstore.LTVFilter{From: at(5), To: at(0)}, ltv.PeriodDay, at(200))
+	_, err := svc.RegCohorts(context.Background(), "org-1", chstore.LTVFilter{From: at(5), To: at(0)}, ltv.PeriodDay, nil, at(200))
 	if err == nil {
 		t.Fatal("expected an error when To is before From")
 	}
@@ -72,7 +81,7 @@ func TestServiceRejectsRangeTooWide(t *testing.T) {
 	repo := &fakeRepo{}
 	svc := ltv.NewService(repo)
 	from := time.Date(2020, 1, 1, 0, 0, 0, 0, time.UTC)
-	_, err := svc.FTDCohorts(context.Background(), "org-1", chstore.LTVFilter{From: from, To: from.AddDate(2, 0, 0)}, ltv.PeriodDay, at(200))
+	_, err := svc.FTDCohorts(context.Background(), "org-1", chstore.LTVFilter{From: from, To: from.AddDate(2, 0, 0)}, ltv.PeriodDay, nil, at(200))
 	if err == nil {
 		t.Fatal("expected an error for a multi-year anchor range")
 	}
@@ -94,7 +103,7 @@ func TestServiceConvertsEachDepositAtItsDaysRate(t *testing.T) {
 	conv := fx.NewConversion("EUR", []fx.Rate{{Date: day0, RateToUSD: 2}, {Date: day0.AddDate(0, 0, 1), RateToUSD: 4}}, day0, day0.AddDate(0, 0, 3))
 	svc := ltv.NewService(repo).WithMoney(fakeMoney{conv})
 
-	cohorts, err := svc.FTDCohorts(context.Background(), "org-1", chstore.LTVFilter{From: at(-1), To: at(1)}, ltv.PeriodDay, at(200))
+	cohorts, err := svc.FTDCohorts(context.Background(), "org-1", chstore.LTVFilter{From: at(-1), To: at(1)}, ltv.PeriodDay, nil, at(200))
 	if err != nil {
 		t.Fatalf("FTDCohorts: %v", err)
 	}

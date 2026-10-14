@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"log/slog"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -48,6 +49,8 @@ func windowsResponse(windows map[WindowKey]WindowResult) map[string]windowRespon
 type baseResponse struct {
 	Bucket                 string                    `json:"bucket"`
 	CampaignID             string                    `json:"campaignId,omitempty"`
+	SourceID               string                    `json:"sourceId,omitempty"`
+	OfferID                string                    `json:"offerId,omitempty"`
 	NetworkID              string                    `json:"networkId,omitempty"`
 	Country                string                    `json:"country,omitempty"`
 	AnchorCount            int                       `json:"anchorCount"`
@@ -63,7 +66,7 @@ type baseResponse struct {
 
 func toBaseResponse(k CohortKey, b base) baseResponse {
 	return baseResponse{
-		Bucket: k.Bucket, CampaignID: k.CampaignID, NetworkID: k.NetworkID, Country: k.Country,
+		Bucket: k.Bucket, CampaignID: k.CampaignID, SourceID: k.TrafficSourceID, OfferID: k.OfferID, NetworkID: k.NetworkID, Country: k.Country,
 		AnchorCount: b.AnchorCount, Windows: windowsResponse(b.Windows),
 		LTVTotalUSD: b.LTVTotalUSD, LTVPerAnchorUSD: b.LTVPerAnchorUSD,
 		LifetimeDaysAvg: b.LifetimeDaysAvg, HasLifetimeData: b.HasLifetimeData,
@@ -83,11 +86,11 @@ type regCohortResponse struct {
 }
 
 func (h *Handler) ftdCohorts(w http.ResponseWriter, r *http.Request) {
-	orgID, period, filter, ok := h.parseParams(w, r)
+	orgID, period, filter, groupBy, ok := h.parseParams(w, r)
 	if !ok {
 		return
 	}
-	cohorts, err := h.svc.FTDCohorts(r.Context(), orgID, filter, period, time.Now().UTC())
+	cohorts, err := h.svc.FTDCohorts(r.Context(), orgID, filter, period, groupBy, time.Now().UTC())
 	if err != nil {
 		apierror.Write(w, h.logger, err)
 		return
@@ -100,11 +103,11 @@ func (h *Handler) ftdCohorts(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) regCohorts(w http.ResponseWriter, r *http.Request) {
-	orgID, period, filter, ok := h.parseParams(w, r)
+	orgID, period, filter, groupBy, ok := h.parseParams(w, r)
 	if !ok {
 		return
 	}
-	cohorts, err := h.svc.RegCohorts(r.Context(), orgID, filter, period, time.Now().UTC())
+	cohorts, err := h.svc.RegCohorts(r.Context(), orgID, filter, period, groupBy, time.Now().UTC())
 	if err != nil {
 		apierror.Write(w, h.logger, err)
 		return
@@ -116,12 +119,15 @@ func (h *Handler) regCohorts(w http.ResponseWriter, r *http.Request) {
 	h.writeCohorts(w, r, orgID, resp)
 }
 
-// parseParams reads ?period=&from=&to=&campaignId=&networkId=&country=.
+// parseParams reads ?period=&from=&to=&campaignId=&sourceId=&offerId=
+// &networkId=&country=&groupBy=. groupBy is a comma-separated list of
+// ltv.Dimension values (validated by the service); empty = one row per
+// cohort period.
 // from/to default to the last 90 days when omitted — §26.5 itself says a
 // report needs "≥ 90-day range for full windows," so that's the useful
 // default view, not just an arbitrary one. On a parse error it writes the
 // response itself and returns ok=false.
-func (h *Handler) parseParams(w http.ResponseWriter, r *http.Request) (orgID string, period CohortPeriod, filter chstore.LTVFilter, ok bool) {
+func (h *Handler) parseParams(w http.ResponseWriter, r *http.Request) (orgID string, period CohortPeriod, filter chstore.LTVFilter, groupBy []Dimension, ok bool) {
 	orgID, _ = tenant.OrgID(r.Context())
 	q := r.URL.Query()
 
@@ -136,7 +142,7 @@ func (h *Handler) parseParams(w http.ResponseWriter, r *http.Request) (orgID str
 		parsed, err := time.Parse(dateLayout, v)
 		if err != nil {
 			apierror.Write(w, h.logger, apierror.Validation("invalid from date, want YYYY-MM-DD", nil))
-			return "", "", chstore.LTVFilter{}, false
+			return "", "", chstore.LTVFilter{}, nil, false
 		}
 		from = parsed
 	}
@@ -144,7 +150,7 @@ func (h *Handler) parseParams(w http.ResponseWriter, r *http.Request) (orgID str
 		parsed, err := time.Parse(dateLayout, v)
 		if err != nil {
 			apierror.Write(w, h.logger, apierror.Validation("invalid to date, want YYYY-MM-DD", nil))
-			return "", "", chstore.LTVFilter{}, false
+			return "", "", chstore.LTVFilter{}, nil, false
 		}
 		// chstore.LTVFilter's anchor query is a half-open `event_at >= from
 		// AND event_at < to` range (internal/chstore/ltv.go) — a bare
@@ -158,11 +164,18 @@ func (h *Handler) parseParams(w http.ResponseWriter, r *http.Request) (orgID str
 
 	filter = chstore.LTVFilter{
 		From: from, To: to,
-		CampaignID: q.Get("campaignId"),
-		NetworkID:  q.Get("networkId"),
-		Country:    q.Get("country"),
+		CampaignID:      q.Get("campaignId"),
+		TrafficSourceID: q.Get("sourceId"),
+		OfferID:         q.Get("offerId"),
+		NetworkID:       q.Get("networkId"),
+		Country:         q.Get("country"),
 	}
-	return orgID, period, filter, true
+	for _, d := range strings.Split(q.Get("groupBy"), ",") {
+		if d = strings.TrimSpace(d); d != "" {
+			groupBy = append(groupBy, Dimension(d))
+		}
+	}
+	return orgID, period, filter, groupBy, true
 }
 
 func writeJSON(w http.ResponseWriter, status int, body any) {

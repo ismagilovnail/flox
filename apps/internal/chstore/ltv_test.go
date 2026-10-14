@@ -140,3 +140,85 @@ func TestClicksByFTDAnchorNoMatches(t *testing.T) {
 		t.Fatalf("histories = %d, want 0", len(histories))
 	}
 }
+
+func TestLTVFilterBySourceAndOffer(t *testing.T) {
+	conn := mustConn(t)
+	store := chstore.NewEventStore(conn)
+	ctx := context.Background()
+	orgID := idgen.New()
+	srcA, srcB, offA, offB := idgen.New(), idgen.New(), idgen.New(), idgen.New()
+	c1, c2, c3 := idgen.New(), idgen.New(), idgen.New()
+	day := time.Date(2026, 3, 10, 12, 0, 0, 0, time.UTC)
+	accept := func(click, src, off string) event.Event {
+		return event.Event{Type: event.CpaAccept, EventAt: day, OrganizationID: orgID, ClickID: click, TrafficSourceID: src, OfferID: off, USDValue: 1, HasUSDValue: true}
+	}
+	if err := store.InsertBatch(ctx, []event.Event{accept(c1, srcA, offA), accept(c2, srcA, offB), accept(c3, srcB, offA)}); err != nil {
+		t.Fatalf("InsertBatch: %v", err)
+	}
+	month := chstore.LTVFilter{From: day.AddDate(0, 0, -9), To: day.AddDate(0, 0, 20)}
+	for name, tc := range map[string]struct {
+		filter func(*chstore.LTVFilter)
+		want   int
+	}{
+		"none":          {func(*chstore.LTVFilter) {}, 3},
+		"source":        {func(f *chstore.LTVFilter) { f.TrafficSourceID = srcA }, 2},
+		"offer":         {func(f *chstore.LTVFilter) { f.OfferID = offA }, 2},
+		"source+offer":  {func(f *chstore.LTVFilter) { f.TrafficSourceID, f.OfferID = srcB, offA }, 1},
+		"no such offer": {func(f *chstore.LTVFilter) { f.OfferID = "nope" }, 0},
+	} {
+		f := month
+		tc.filter(&f)
+		histories, err := store.ClicksByFTDAnchor(ctx, orgID, f)
+		if err != nil || len(histories) != tc.want {
+			t.Fatalf("%s: %d histories, %v; want %d", name, len(histories), err, tc.want)
+		}
+		for _, h := range histories {
+			if (f.TrafficSourceID != "" && h.TrafficSourceID != f.TrafficSourceID) || (f.OfferID != "" && h.OfferID != f.OfferID) {
+				t.Fatalf("%s: history %+v does not match the filter", name, h)
+			}
+		}
+	}
+}
+
+func TestBackfillLTVAttribution(t *testing.T) {
+	conn := mustConn(t)
+	store := chstore.NewEventStore(conn)
+	ctx := context.Background()
+	orgID := idgen.New()
+	name := "ltv_attrs_" + idgen.New()
+	t.Cleanup(func() {
+		_ = conn.Exec(chstore.SyncMutations(context.Background()), `ALTER TABLE chstore_backfills DELETE WHERE name = ?`, name)
+	})
+	at := time.Date(2026, 4, 2, 10, 0, 0, 0, time.UTC)
+	old, kept, noOffer := idgen.New(), idgen.New(), idgen.New()
+	if err := store.InsertBatch(ctx, []event.Event{
+		// The click knows its offer and source; the conversion row, as
+		// from before schema/018, does not.
+		{Type: event.SourceClick, EventAt: at, OrganizationID: orgID, ClickID: old, OfferID: "off-click", TrafficSourceID: "src-click"},
+		{Type: event.CpaAccept, EventAt: at.Add(time.Hour), OrganizationID: orgID, ClickID: old},
+		// Already set: left alone.
+		{Type: event.SourceClick, EventAt: at, OrganizationID: orgID, ClickID: kept, OfferID: "off-click", TrafficSourceID: "src-click"},
+		{Type: event.CpaAccept, EventAt: at.Add(time.Hour), OrganizationID: orgID, ClickID: kept, OfferID: "off-then", TrafficSourceID: "src-then"},
+		// A click without an offer stays empty.
+		{Type: event.SourceClick, EventAt: at, OrganizationID: orgID, ClickID: noOffer},
+		{Type: event.CpaAccept, EventAt: at.Add(time.Hour), OrganizationID: orgID, ClickID: noOffer},
+	}); err != nil {
+		t.Fatalf("InsertBatch: %v", err)
+	}
+	if err := chstore.RunLTVAttributionBackfill(ctx, conn, name); err != nil {
+		t.Fatalf("backfill: %v", err)
+	}
+	for click, want := range map[string][2]string{old: {"off-click", "src-click"}, kept: {"off-then", "src-then"}, noOffer: {"", ""}} {
+		var offer, source string
+		if err := conn.QueryRow(ctx, `SELECT offer_id, traffic_source_id FROM ltv_events WHERE organization_id = ? AND click_id = ?`, orgID, click).Scan(&offer, &source); err != nil {
+			t.Fatalf("%s: %v", click, err)
+		}
+		if offer != want[0] || source != want[1] {
+			t.Fatalf("click %s = %q/%q, want %q/%q", click, offer, source, want[0], want[1])
+		}
+	}
+	var leftover uint64
+	if err := conn.QueryRow(ctx, `SELECT count() FROM system.tables WHERE database = currentDatabase() AND name = ?`, "backfill_attrs_"+name).Scan(&leftover); err != nil || leftover != 0 {
+		t.Fatalf("scratch join table left behind: %d, %v", leftover, err)
+	}
+}

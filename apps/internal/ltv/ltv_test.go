@@ -37,7 +37,7 @@ func TestFTDWindowBucketing(t *testing.T) {
 		deposit(91, event.CpaRedep, 999), // day 91: beyond every window, excluded
 	)
 
-	cohorts := ltv.ComputeFTDCohorts([]chstore.ClickHistory{h}, ltv.PeriodDay, at(200))
+	cohorts := ltv.ComputeFTDCohorts([]chstore.ClickHistory{h}, ltv.PeriodDay, nil, at(200))
 	if len(cohorts) != 1 {
 		t.Fatalf("cohorts = %d, want 1", len(cohorts))
 	}
@@ -94,7 +94,7 @@ func TestWindowIncompleteness(t *testing.T) {
 	// shows up in the still-incomplete d1_7 window, which is exactly
 	// §26.5's acceptance criterion: incomplete windows show their partial
 	// total, not a zero.
-	cohorts := ltv.ComputeFTDCohorts([]chstore.ClickHistory{h}, ltv.PeriodDay, at(4))
+	cohorts := ltv.ComputeFTDCohorts([]chstore.ClickHistory{h}, ltv.PeriodDay, nil, at(4))
 	c := cohorts[0]
 
 	if !c.Windows[ltv.WindowD0].Complete {
@@ -112,7 +112,7 @@ func TestWindowIncompleteness(t *testing.T) {
 
 	// Now evaluate as of day 10: d1_7 has fully elapsed and its revenue
 	// shows, but d8_30/d31_90 still haven't.
-	cohorts = ltv.ComputeFTDCohorts([]chstore.ClickHistory{h}, ltv.PeriodDay, at(10))
+	cohorts = ltv.ComputeFTDCohorts([]chstore.ClickHistory{h}, ltv.PeriodDay, nil, at(10))
 	c = cohorts[0]
 	if !c.Windows[ltv.WindowD1_7].Complete {
 		t.Error("d1_7 should be complete by day 10")
@@ -137,7 +137,7 @@ func TestConservativeCompletenessAcrossCohortMembers(t *testing.T) {
 	// asOf = day 2: d0 (span 1 day) is complete for "early" (anchor day 0,
 	// 2 days elapsed) but NOT for "late" (anchor day 3, still in the future
 	// relative to asOf).
-	cohorts := ltv.ComputeFTDCohorts([]chstore.ClickHistory{early, late}, ltv.PeriodWeek, at(2))
+	cohorts := ltv.ComputeFTDCohorts([]chstore.ClickHistory{early, late}, ltv.PeriodWeek, nil, at(2))
 	if len(cohorts) != 1 {
 		t.Fatalf("cohorts = %d, want 1 (both clicks in the same ISO week)", len(cohorts))
 	}
@@ -160,7 +160,7 @@ func TestFTDToRedepAndDepToRedepRates(t *testing.T) {
 	h3 := history("c3", deposit(0, event.CpaAccept, 1), deposit(1, event.CpaRedep, 1))
 	h4 := history("c4", deposit(0, event.CpaAccept, 1)) // no redep
 
-	cohorts := ltv.ComputeFTDCohorts([]chstore.ClickHistory{h1, h2, h3, h4}, ltv.PeriodDay, at(200))
+	cohorts := ltv.ComputeFTDCohorts([]chstore.ClickHistory{h1, h2, h3, h4}, ltv.PeriodDay, nil, at(200))
 	c := cohorts[0]
 
 	if c.AnchorCount != 4 {
@@ -187,7 +187,7 @@ func TestLifetimeDaysAvgOnlyCountsClicksWithRedep(t *testing.T) {
 	withRedep := history("c1", deposit(0, event.CpaAccept, 1), deposit(10, event.CpaRedep, 1))
 	noRedep := history("c2", deposit(0, event.CpaAccept, 1))
 
-	cohorts := ltv.ComputeFTDCohorts([]chstore.ClickHistory{withRedep, noRedep}, ltv.PeriodDay, at(200))
+	cohorts := ltv.ComputeFTDCohorts([]chstore.ClickHistory{withRedep, noRedep}, ltv.PeriodDay, nil, at(200))
 	c := cohorts[0]
 	if !c.HasLifetimeData {
 		t.Fatal("HasLifetimeData = false, want true (one click has a redep)")
@@ -197,7 +197,7 @@ func TestLifetimeDaysAvgOnlyCountsClicksWithRedep(t *testing.T) {
 	}
 
 	// All clicks with no redep at all: no lifetime data, not zero.
-	cohorts = ltv.ComputeFTDCohorts([]chstore.ClickHistory{noRedep}, ltv.PeriodDay, at(200))
+	cohorts = ltv.ComputeFTDCohorts([]chstore.ClickHistory{noRedep}, ltv.PeriodDay, nil, at(200))
 	c = cohorts[0]
 	if c.HasLifetimeData {
 		t.Fatal("HasLifetimeData = true, want false when no click in the cohort has any redep")
@@ -217,7 +217,7 @@ func TestRegCohortAnchorsOnHoldNotAccept(t *testing.T) {
 		},
 	}
 
-	regCohorts := ltv.ComputeRegCohorts([]chstore.ClickHistory{h}, ltv.PeriodDay, at(200))
+	regCohorts := ltv.ComputeRegCohorts([]chstore.ClickHistory{h}, ltv.PeriodDay, nil, at(200))
 	rc := regCohorts[0]
 	if rc.Windows[ltv.WindowD0].RevenueUSD != 0 {
 		t.Fatalf("reg-anchored d0 revenue = %v, want 0 (both deposits land after day 0 relative to registration)", rc.Windows[ltv.WindowD0].RevenueUSD)
@@ -226,7 +226,7 @@ func TestRegCohortAnchorsOnHoldNotAccept(t *testing.T) {
 		t.Fatalf("reg-anchored d1_7 revenue = %v, want 15 (10 + 5, both fall in days 1-7 from registration)", rc.Windows[ltv.WindowD1_7].RevenueUSD)
 	}
 
-	ftdCohorts := ltv.ComputeFTDCohorts([]chstore.ClickHistory{h}, ltv.PeriodDay, at(200))
+	ftdCohorts := ltv.ComputeFTDCohorts([]chstore.ClickHistory{h}, ltv.PeriodDay, nil, at(200))
 	fc := ftdCohorts[0]
 	if fc.Windows[ltv.WindowD0].RevenueUSD != 10 {
 		t.Fatalf("ftd-anchored d0 revenue = %v, want 10 (the FTD deposit itself is always day 0 relative to itself)", fc.Windows[ltv.WindowD0].RevenueUSD)
@@ -246,7 +246,7 @@ func TestRegToFTDRate(t *testing.T) {
 		{EventAt: at(0), Type: event.CpaHold},
 	}}
 
-	cohorts := ltv.ComputeRegCohorts([]chstore.ClickHistory{converted, notConverted}, ltv.PeriodDay, at(200))
+	cohorts := ltv.ComputeRegCohorts([]chstore.ClickHistory{converted, notConverted}, ltv.PeriodDay, nil, at(200))
 	c := cohorts[0]
 	if c.AnchorCount != 2 {
 		t.Fatalf("AnchorCount = %d, want 2", c.AnchorCount)
@@ -263,7 +263,7 @@ func TestMissingFXRateContributesZeroNotError(t *testing.T) {
 	h := chstore.ClickHistory{ClickID: "c1", CampaignID: "camp-1", NetworkID: "net-1", Country: "US", Deposits: []chstore.Deposit{
 		{EventAt: at(0), Type: event.CpaAccept, USDValue: 0, HasUSDValue: false},
 	}}
-	cohorts := ltv.ComputeFTDCohorts([]chstore.ClickHistory{h}, ltv.PeriodDay, at(200))
+	cohorts := ltv.ComputeFTDCohorts([]chstore.ClickHistory{h}, ltv.PeriodDay, nil, at(200))
 	c := cohorts[0]
 	if c.LTVTotalUSD != 0 {
 		t.Fatalf("LTVTotalUSD = %v, want 0", c.LTVTotalUSD)
@@ -273,16 +273,42 @@ func TestMissingFXRateContributesZeroNotError(t *testing.T) {
 	}
 }
 
-// TestGroupingByDimensions: cohorts with different campaign/network/country
-// must never merge into one row.
+// TestGroupingByDimensions: clicks differing in a grouped dimension never
+// merge; a dimension not grouped by is summed over (§26.5 "breakdowns: any
+// of the above + cohort period").
 func TestGroupingByDimensions(t *testing.T) {
-	a := chstore.ClickHistory{ClickID: "c1", CampaignID: "camp-A", NetworkID: "net-1", Country: "US", Deposits: []chstore.Deposit{deposit(0, event.CpaAccept, 1)}}
-	b := chstore.ClickHistory{ClickID: "c2", CampaignID: "camp-B", NetworkID: "net-1", Country: "US", Deposits: []chstore.Deposit{deposit(0, event.CpaAccept, 1)}}
-	c := chstore.ClickHistory{ClickID: "c3", CampaignID: "camp-A", NetworkID: "net-1", Country: "DE", Deposits: []chstore.Deposit{deposit(0, event.CpaAccept, 1)}}
+	click := func(id, campaign, source, offer, country string) chstore.ClickHistory {
+		return chstore.ClickHistory{ClickID: id, CampaignID: campaign, TrafficSourceID: source, OfferID: offer, NetworkID: "net-1", Country: country,
+			Deposits: []chstore.Deposit{deposit(0, event.CpaAccept, 1)}}
+	}
+	clicks := []chstore.ClickHistory{
+		click("c1", "camp-A", "src-1", "off-1", "US"),
+		click("c2", "camp-B", "src-1", "off-2", "US"),
+		click("c3", "camp-A", "src-2", "off-1", "DE"),
+	}
+	for _, tc := range []struct {
+		groupBy []ltv.Dimension
+		want    int
+	}{
+		{nil, 1},
+		{[]ltv.Dimension{ltv.DimNetwork}, 1},
+		{[]ltv.Dimension{ltv.DimCampaign, ltv.DimCountry}, 3},
+		{[]ltv.Dimension{ltv.DimSource}, 2},
+		{[]ltv.Dimension{ltv.DimOffer}, 2},
+		{[]ltv.Dimension{ltv.DimOffer, ltv.DimSource}, 3},
+	} {
+		cohorts := ltv.ComputeFTDCohorts(clicks, ltv.PeriodDay, tc.groupBy, at(200))
+		if len(cohorts) != tc.want {
+			t.Fatalf("groupBy %v: %d cohorts, want %d", tc.groupBy, len(cohorts), tc.want)
+		}
+	}
 
-	cohorts := ltv.ComputeFTDCohorts([]chstore.ClickHistory{a, b, c}, ltv.PeriodDay, at(200))
-	if len(cohorts) != 3 {
-		t.Fatalf("cohorts = %d, want 3 (different campaign or country must not merge)", len(cohorts))
+	bySource := ltv.ComputeFTDCohorts(clicks, ltv.PeriodDay, []ltv.Dimension{ltv.DimSource}, at(200))
+	if k := bySource[0].Key; k.TrafficSourceID != "src-1" || k.CampaignID != "" || k.OfferID != "" || bySource[0].AnchorCount != 2 {
+		t.Fatalf("first source row = %+v (anchors %d), want src-1 with 2 anchors and other dims empty", k, bySource[0].AnchorCount)
+	}
+	if total := ltv.ComputeFTDCohorts(clicks, ltv.PeriodDay, nil, at(200)); total[0].AnchorCount != 3 {
+		t.Fatalf("period-only row anchors = %d, want 3", total[0].AnchorCount)
 	}
 }
 
@@ -291,17 +317,17 @@ func TestGroupingByDimensions(t *testing.T) {
 func TestPeriodGrouping(t *testing.T) {
 	h := history("c1", deposit(0, event.CpaAccept, 1))
 
-	dayCohorts := ltv.ComputeFTDCohorts([]chstore.ClickHistory{h}, ltv.PeriodDay, at(200))
+	dayCohorts := ltv.ComputeFTDCohorts([]chstore.ClickHistory{h}, ltv.PeriodDay, nil, at(200))
 	if dayCohorts[0].Key.Bucket != "2026-01-01" {
 		t.Fatalf("day bucket = %q, want 2026-01-01", dayCohorts[0].Key.Bucket)
 	}
 
-	monthCohorts := ltv.ComputeFTDCohorts([]chstore.ClickHistory{h}, ltv.PeriodMonth, at(200))
+	monthCohorts := ltv.ComputeFTDCohorts([]chstore.ClickHistory{h}, ltv.PeriodMonth, nil, at(200))
 	if monthCohorts[0].Key.Bucket != "2026-01" {
 		t.Fatalf("month bucket = %q, want 2026-01", monthCohorts[0].Key.Bucket)
 	}
 
-	weekCohorts := ltv.ComputeFTDCohorts([]chstore.ClickHistory{h}, ltv.PeriodWeek, at(200))
+	weekCohorts := ltv.ComputeFTDCohorts([]chstore.ClickHistory{h}, ltv.PeriodWeek, nil, at(200))
 	if weekCohorts[0].Key.Bucket != "2026-W01" {
 		t.Fatalf("week bucket = %q, want 2026-W01", weekCohorts[0].Key.Bucket)
 	}
@@ -310,10 +336,10 @@ func TestPeriodGrouping(t *testing.T) {
 // TestEmptyInputProducesNoCohorts: no histories, no rows — not a panic,
 // not a zero-valued cohort.
 func TestEmptyInputProducesNoCohorts(t *testing.T) {
-	if got := ltv.ComputeFTDCohorts(nil, ltv.PeriodDay, at(0)); len(got) != 0 {
+	if got := ltv.ComputeFTDCohorts(nil, ltv.PeriodDay, nil, at(0)); len(got) != 0 {
 		t.Fatalf("cohorts = %d, want 0", len(got))
 	}
-	if got := ltv.ComputeRegCohorts(nil, ltv.PeriodDay, at(0)); len(got) != 0 {
+	if got := ltv.ComputeRegCohorts(nil, ltv.PeriodDay, nil, at(0)); len(got) != 0 {
 		t.Fatalf("cohorts = %d, want 0", len(got))
 	}
 }
@@ -327,7 +353,7 @@ func TestChargebackNetsOutOfLTV(t *testing.T) {
 		deposit(2, event.CpaRedep, 10),
 		deposit(3, event.CpaDecline, -25),
 	)
-	c := ltv.ComputeFTDCohorts([]chstore.ClickHistory{h}, ltv.PeriodDay, at(200))[0]
+	c := ltv.ComputeFTDCohorts([]chstore.ClickHistory{h}, ltv.PeriodDay, nil, at(200))[0]
 	if got := c.Windows[ltv.WindowD0].RevenueUSD; got != 25 {
 		t.Errorf("d0 revenue = %v, want 25 (the FTD's day keeps it)", got)
 	}

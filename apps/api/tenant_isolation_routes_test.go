@@ -766,8 +766,8 @@ func referenceCases(env *isolationEnv) []refCase {
 		{http.MethodPost, "/content-gallery/files/restore", map[string]string{"ids": "file"}, false,
 			func(ref func(string) string) any { return map[string]any{"ids": []string{ref("ids")}} }},
 		{http.MethodGet, "/content-gallery/files", map[string]string{"folderId": "folder", "uploadedBy": "user"}, true, nil},
-		{http.MethodGet, "/analytics/ltv/ftd-cohorts", map[string]string{"campaignId": "campaign", "networkId": "network"}, true, nil},
-		{http.MethodGet, "/analytics/ltv/reg-cohorts", map[string]string{"campaignId": "campaign", "networkId": "network"}, true, nil},
+		{http.MethodGet, "/analytics/ltv/ftd-cohorts", map[string]string{"campaignId": "campaign", "sourceId": "trafficSource", "offerId": "offer", "networkId": "network"}, true, nil},
+		{http.MethodGet, "/analytics/ltv/reg-cohorts", map[string]string{"campaignId": "campaign", "sourceId": "trafficSource", "offerId": "offer", "networkId": "network"}, true, nil},
 		{http.MethodPost, "/postback-logs/replay-incoming", map[string]string{"networkId": "network"}, false,
 			func(ref func(string) string) any {
 				return map[string]any{"networkId": ref("networkId"), "clickId": idgen.New(), "rawStatus": "ftd"}

@@ -117,3 +117,58 @@ func backfillNetworks(ctx context.Context, conn driver.Conn, name string, load f
 	}
 	return nil
 }
+
+const ltvAttributionBackfill = "ltv_offer_source_v1"
+
+// BackfillLTVAttribution gives ltv_events rows from before schema/018
+// their click's offer and traffic source, from click_lookup. Rows that
+// already have either are left alone; a click without an offer (redirect
+// flow, fallback) stays empty. Runs once, from apps/worker; it waits for
+// the mutation before recording itself, so an interrupted run is redone
+// on the next start.
+func BackfillLTVAttribution(ctx context.Context, conn driver.Conn) error {
+	return backfillLTVAttribution(ctx, conn, ltvAttributionBackfill)
+}
+
+func backfillLTVAttribution(ctx context.Context, conn driver.Conn, name string) error {
+	done, err := backfillDone(ctx, conn, name)
+	if err != nil || done {
+		return err
+	}
+	// A scratch Join table read through joinGet, only while this runs. The
+	// mutation runs outside this session, so joinGet needs the database.
+	var db string
+	if err := conn.QueryRow(ctx, `SELECT currentDatabase()`).Scan(&db); err != nil {
+		return fmt.Errorf("chstore: backfill %s: %w", name, err)
+	}
+	join := "backfill_attrs_" + name
+	if err := conn.Exec(ctx, `DROP TABLE IF EXISTS `+join); err != nil {
+		return fmt.Errorf("chstore: backfill %s: %w", name, err)
+	}
+	defer func() { _ = conn.Exec(context.WithoutCancel(ctx), `DROP TABLE IF EXISTS `+join) }()
+	if err := conn.Exec(ctx, `
+		CREATE TABLE `+join+` ENGINE = Join(ANY, LEFT, organization_id, click_id) AS
+		SELECT organization_id, click_id, argMax(offer_id, event_at) AS offer_id, argMax(traffic_source_id, event_at) AS traffic_source_id
+		FROM click_lookup
+		WHERE (organization_id, click_id) IN (
+			SELECT organization_id, click_id FROM ltv_events WHERE offer_id = '' AND traffic_source_id = '')
+		GROUP BY organization_id, click_id`); err != nil {
+		return fmt.Errorf("chstore: backfill %s: loading clicks: %w", name, err)
+	}
+	wait := clickhouse.Context(ctx, clickhouse.WithSettings(clickhouse.Settings{"mutations_sync": 2}))
+	qualified := db + "." + join
+	if err := conn.Exec(wait, `ALTER TABLE ltv_events UPDATE
+		offer_id = joinGet('`+qualified+`', 'offer_id', organization_id, click_id),
+		traffic_source_id = joinGet('`+qualified+`', 'traffic_source_id', organization_id, click_id)
+		WHERE offer_id = '' AND traffic_source_id = ''`); err != nil {
+		// A failed mutation is retried by ClickHouse forever; stop it, the
+		// next start runs the backfill again.
+		_ = conn.Exec(context.WithoutCancel(ctx), `KILL MUTATION WHERE database = ? AND table = 'ltv_events' AND NOT is_done AND command LIKE ?`,
+			db, "%"+join+"%")
+		return fmt.Errorf("chstore: backfill %s: %w", name, err)
+	}
+	if err := conn.Exec(ctx, `INSERT INTO chstore_backfills (name) VALUES (?)`, name); err != nil {
+		return fmt.Errorf("chstore: recording backfill %s: %w", name, err)
+	}
+	return nil
+}

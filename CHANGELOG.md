@@ -5,6 +5,32 @@ per-phase, matching `CLAUDE.md`'s phase protocol. The one exception is
 [Between phases], below: spec amendments and the code changes that follow from
 them land between phases and would otherwise be invisible here.
 
+## [Phase 30.12] — LTV: source and offer filters, breakdowns
+
+Closes gap 8 of `docs/spec-conformance-2026-10-11.md` (§26.5 "filters: campaign, source, offer,
+cpa/network, country; breakdowns: any of the above + cohort period"). Scope (owner, 2026-10-14):
+filters and breakdowns. `docs/ltv-cohorts.md` "Filters and breakdowns".
+
+- **ClickHouse schema 018:** `ltv_events.offer_id` and `traffic_source_id`; the view is changed in place
+  (`MODIFY QUERY`), so no conversion misses its LTV row during the upgrade.
+- **Backfill** (`chstore.BackfillLTVAttribution`, once, from apps/worker): older rows get offer and
+  source from their click (`click_lookup`, via a scratch Join table and one `joinGet` mutation). A failed
+  mutation is killed instead of being retried by ClickHouse forever.
+- **API:** `sourceId` and `offerId` filters; `groupBy` takes any of campaign, source, offer, network,
+  country (validated, 400 otherwise). Rows carry `sourceId` / `offerId`. **Behaviour change:** with no
+  `groupBy`, rows are one per cohort period; they used to always be split by campaign × network × country.
+- **Web:** source and offer filters and a "Breakdown" multi-select on `/ltv-cohorts`. Columns appear only
+  for the dimensions you pick, in a fixed order, with names resolved.
+- Found while building it: the first backfill's `joinGet` named the Join table without its database. The
+  mutation runs outside the session, so it failed and ClickHouse kept retrying it. The dev worker
+  (hot-reloaded by air) had already started such runs; they were killed and nothing was recorded as done.
+- Verified on the dev stack: schema 018 applied, the backfill filled every row whose click has an offer,
+  and the demo org's cohorts by source/offer/campaign are correct in the API and in the browser.
+- Tests: `internal/ltv` (grouping by every dimension, period-only totals, invalid `groupBy`),
+  `internal/chstore` (filters by source/offer, the backfill incl. rows left alone and the scratch table
+  dropped), tenant isolation (`sourceId`/`offerId` of another org on both LTV routes), e2e asks for
+  `groupBy=campaign`.
+
 ## [Phase 30.11] — Reports in the organization's reporting currency
 
 Closes gap 7 of `docs/spec-conformance-2026-10-11.md` (§50-FX "Base reporting currency configurable per

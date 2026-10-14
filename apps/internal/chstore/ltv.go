@@ -22,24 +22,27 @@ type Deposit struct {
 // everything internal/ltv needs to derive that click's Reg/FTD anchor
 // dates and every deposit to bucket into LTV windows.
 type ClickHistory struct {
-	ClickID    string
-	CampaignID string
-	NetworkID  string
-	Country    string
-	Deposits   []Deposit
+	ClickID         string
+	CampaignID      string
+	NetworkID       string
+	Country         string
+	OfferID         string
+	TrafficSourceID string
+	Deposits        []Deposit
 }
 
 // LTVFilter narrows which clicks' cohort anchor must fall in [From, To) —
 // see ClicksByFTDAnchor/ClicksByRegAnchor for exactly what "anchor" means
-// for each. Empty CampaignID/NetworkID/Country match any value — §26.5's
-// named filter dimensions minus "source"/"offer", which ltv_events does
-// not carry.
+// for each. Empty fields match any value — §26.5's filters: campaign,
+// source, offer, cpa/network, country.
 type LTVFilter struct {
-	From       time.Time
-	To         time.Time
-	CampaignID string
-	NetworkID  string
-	Country    string
+	From            time.Time
+	To              time.Time
+	CampaignID      string
+	NetworkID       string
+	Country         string
+	OfferID         string
+	TrafficSourceID string
 }
 
 func (f LTVFilter) whereAndArgs(anchorType event.Type) (string, []any) {
@@ -56,6 +59,14 @@ func (f LTVFilter) whereAndArgs(anchorType event.Type) (string, []any) {
 	if f.Country != "" {
 		where += ` AND country = ?`
 		args = append(args, f.Country)
+	}
+	if f.OfferID != "" {
+		where += ` AND offer_id = ?`
+		args = append(args, f.OfferID)
+	}
+	if f.TrafficSourceID != "" {
+		where += ` AND traffic_source_id = ?`
+		args = append(args, f.TrafficSourceID)
 	}
 	return where, args
 }
@@ -113,7 +124,7 @@ func (s *EventStore) clicksByAnchor(ctx context.Context, organizationID string, 
 	}
 
 	historyRows, err := s.conn.Query(ctx, `
-		SELECT click_id, campaign_id, network_id, country, event_at, type, usd_value, has_usd_value
+		SELECT click_id, campaign_id, network_id, country, offer_id, traffic_source_id, event_at, type, usd_value, has_usd_value
 		FROM ltv_events
 		WHERE organization_id = ? AND click_id IN (?)
 		ORDER BY click_id, event_at`,
@@ -129,11 +140,12 @@ func (s *EventStore) clicksByAnchor(ctx context.Context, organizationID string, 
 	for historyRows.Next() {
 		var (
 			clickID, campaignID, networkID, country, typ string
+			offerID, sourceID                            string
 			eventAt                                      time.Time
 			usdValue                                     float64
 			hasUSDValue                                  uint8
 		)
-		if err := historyRows.Scan(&clickID, &campaignID, &networkID, &country, &eventAt, &typ, &usdValue, &hasUSDValue); err != nil {
+		if err := historyRows.Scan(&clickID, &campaignID, &networkID, &country, &offerID, &sourceID, &eventAt, &typ, &usdValue, &hasUSDValue); err != nil {
 			return nil, fmt.Errorf("chstore: scanning ltv click history row: %w", err)
 		}
 		h, ok := byClick[clickID]
@@ -141,6 +153,14 @@ func (s *EventStore) clicksByAnchor(ctx context.Context, organizationID string, 
 			h = &ClickHistory{ClickID: clickID, CampaignID: campaignID, NetworkID: networkID, Country: country}
 			byClick[clickID] = h
 			order = append(order, clickID)
+		}
+		// Every row of a click carries the same offer and source, but a
+		// row from before schema/018 the backfill could not fill is empty.
+		if h.OfferID == "" {
+			h.OfferID = offerID
+		}
+		if h.TrafficSourceID == "" {
+			h.TrafficSourceID = sourceID
 		}
 		h.Deposits = append(h.Deposits, Deposit{EventAt: eventAt, Type: event.Type(typ), USDValue: usdValue, HasUSDValue: hasUSDValue != 0})
 	}

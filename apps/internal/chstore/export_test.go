@@ -27,3 +27,8 @@ func SyncMutations(ctx context.Context) context.Context {
 func RunNetworkBackfill(ctx context.Context, conn driver.Conn, name string, offers map[string]string) error {
 	return backfillNetworks(ctx, conn, name, func(context.Context) (map[string]string, error) { return offers, nil })
 }
+
+// RunLTVAttributionBackfill runs BackfillLTVAttribution under its own name.
+func RunLTVAttributionBackfill(ctx context.Context, conn driver.Conn, name string) error {
+	return backfillLTVAttribution(ctx, conn, name)
+}

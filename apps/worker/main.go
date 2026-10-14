@@ -245,6 +245,13 @@ func run() error {
 			}
 			return
 		}
+		// Offer and source on LTV rows from before schema/018.
+		if err := chstore.BackfillLTVAttribution(ctx, ch); err != nil {
+			if ctx.Err() == nil {
+				logger.Error("clickhouse ltv attribution backfill failed, will retry on next start", "error", err)
+			}
+			return
+		}
 		logger.Info("clickhouse backfills done", "took", time.Since(start))
 	}()
 
