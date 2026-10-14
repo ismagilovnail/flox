@@ -12,9 +12,11 @@ import { usePushSummary } from "@/hooks/use-push";
 import { BroadcastList } from "@/features/push/broadcast-list";
 import { BroadcastFormSheet } from "@/features/push/broadcast-form-sheet";
 import { SubscriberPanel } from "@/features/push/subscriber-panel";
+import { PushStatsPanel } from "@/features/push/push-stats-panel";
 
 /** The Push section (§17, docs/push.md): broadcasts sent to installed PWAs'
- * subscribers, and who those subscribers are. */
+ * subscribers (now or scheduled), what they did (Statistics), and who
+ * those subscribers are. */
 export function PushView() {
   const { t } = useTranslation("push");
   const canWrite = usePermission("push.write");
@@ -44,10 +46,14 @@ export function PushView() {
       <Tabs defaultValue="broadcasts">
         <TabsList>
           <TabsTrigger value="broadcasts">{t("tabs.broadcasts")}</TabsTrigger>
+          <TabsTrigger value="stats">{t("tabs.stats")}</TabsTrigger>
           <TabsTrigger value="subscribers">{t("tabs.subscribers")}</TabsTrigger>
         </TabsList>
         <TabsContent value="broadcasts" className="mt-4">
           <BroadcastList />
+        </TabsContent>
+        <TabsContent value="stats" className="mt-4">
+          <PushStatsPanel />
         </TabsContent>
         <TabsContent value="subscribers" className="mt-4">
           <SubscriberPanel summary={summary} />

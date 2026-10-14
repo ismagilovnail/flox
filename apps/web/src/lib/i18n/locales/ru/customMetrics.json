@@ -30,7 +30,8 @@
     "report_builder": "Конструктор отчётов",
     "campaigns_table": "Таблица кампаний",
     "offers_table": "Таблица офферов",
-    "sources_table": "Таблица источников"
+    "sources_table": "Таблица источников",
+    "push_stats": "Статистика push"
   },
   "formats": {
     "int": "Число",

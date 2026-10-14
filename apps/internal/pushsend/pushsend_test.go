@@ -192,6 +192,16 @@ func TestDeliverer(t *testing.T) {
 	if got.Delivered != 1 || got.Failed != 2 || got.Unsubscribed != 1 {
 		t.Fatalf("counters = delivered %d failed %d unsubscribed %d", got.Delivered, got.Failed, got.Unsubscribed)
 	}
+	// The push metrics' per-group counts add up to the broadcast's own.
+	var sent, delivered, failed, unsubscribed int
+	if err := pool.QueryRow(ctx, `SELECT sum(sent), sum(delivered), sum(failed), sum(unsubscribed) FROM push_broadcast_stats
+		WHERE broadcast_id = $1 AND pwa_id = $2 AND campaign_id = 'camp-1' AND country = 'US'`, b.ID, pwa).
+		Scan(&sent, &delivered, &failed, &unsubscribed); err != nil {
+		t.Fatal(err)
+	}
+	if sent != got.Total || delivered != got.Delivered || failed != got.Failed || unsubscribed != got.Unsubscribed {
+		t.Fatalf("group counts = sent %d delivered %d failed %d unsubscribed %d, want the broadcast's %+v", sent, delivered, failed, unsubscribed, got)
+	}
 	for _, p := range sender.sent {
 		if p.Title != "Hi" || p.Body != "There" || p.Icon != "https://cdn.example/app.png" ||
 			!strings.HasPrefix(p.URL, "https://t.example/pwa/tok-") || !strings.Contains(p.URL, "/push/click/") {

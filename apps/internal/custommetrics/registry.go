@@ -65,8 +65,9 @@ func buildCatalog() map[string]registryMetric {
 	// bots" is not, so it stays catalog-only.
 	add(sourceRegular, true, "click_all")
 
-	// Push — no Push module exists yet.
-	add(sourcePush, true, "push_sent", "push_delivered", "push_opened", "push_ctr")
+	// Push — computed by internal/push's stats (GET /push/stats, keyed by
+	// these ids) and shown on Push > Statistics.
+	add(sourcePush, true, pushMetricIDs...)
 
 	// LTV — insertable:false is deliberate, not a placeholder: §30.5
 	// explicitly forbids LTV/Cohort metrics inside custom formulas.
@@ -88,10 +89,22 @@ var surfaceAvailableMetricIDs = map[ShowInTarget]map[string]bool{
 	TargetReportBuilder: allRegularMetricIDs(),
 	TargetCampaignsTable: {
 		"clicks": true, "conversions": true, "revenue": true,
-		"cost": true, "profit": true, "roi": true,
+		"cost": true, "profit": true, "roi": true, "emptySubsRate": true,
 	},
 	TargetOffersTable:  {},
 	TargetSourcesTable: {},
+	TargetPushStats:    setOf(pushMetricIDs),
+}
+
+// pushMetricIDs are the push metrics GET /push/stats returns per row.
+var pushMetricIDs = []string{"push_sent", "push_delivered", "push_opened", "push_ctr"}
+
+func setOf(ids []string) map[string]bool {
+	out := map[string]bool{}
+	for _, id := range ids {
+		out[id] = true
+	}
+	return out
 }
 
 func allRegularMetricIDs() map[string]bool {

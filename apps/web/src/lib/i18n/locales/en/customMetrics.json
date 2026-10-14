@@ -30,7 +30,8 @@
     "report_builder": "Report builder",
     "campaigns_table": "Campaigns table",
     "offers_table": "Offers table",
-    "sources_table": "Traffic sources table"
+    "sources_table": "Traffic sources table",
+    "push_stats": "Push statistics"
   },
   "formats": {
     "int": "Number",

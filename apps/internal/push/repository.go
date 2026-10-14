@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -94,9 +95,9 @@ func (r *Repository) CountAudience(ctx context.Context, orgID string, f Filters)
 	return n, nil
 }
 
-// CreateBroadcast stores the broadcast and queues one delivery per
-// subscriber it matches, in one transaction: the audience is fixed when it
-// is sent.
+// CreateBroadcast stores the broadcast. Sent now (in.SendAt nil), it
+// queues one delivery per subscriber it matches in the same transaction:
+// the audience is fixed when it is sent. Scheduled, it waits for SendDue.
 func (r *Repository) CreateBroadcast(ctx context.Context, orgID, userID string, in CreateBroadcastInput) (Broadcast, error) {
 	tx, err := r.db.Begin(ctx)
 	if err != nil {
@@ -104,27 +105,27 @@ func (r *Repository) CreateBroadcast(ctx context.Context, orgID, userID string, 
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 
+	status := BroadcastSent
+	if in.SendAt != nil {
+		status = BroadcastScheduled
+	}
 	var id string
 	if err := tx.QueryRow(ctx, `
 		INSERT INTO push_broadcasts (id, organization_id, name, title, body, icon_url, image_url, target, url,
-		                             pwa_ids, campaign_ids, countries, created_by_user_id)
-		VALUES (flox_new_ulid(), $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+		                             pwa_ids, campaign_ids, countries, created_by_user_id, status, send_at, sent_at)
+		VALUES (flox_new_ulid(), $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14,
+		        CASE WHEN $13 = 'sent' THEN now() END)
 		RETURNING id`,
 		orgID, in.Name, in.Title, in.Body, in.IconURL, in.ImageURL, string(in.Target), in.URL,
 		nonNil(in.Filters.PwaIDs), nonNil(in.Filters.CampaignIDs), nonNil(in.Filters.Countries), userID,
+		status, in.SendAt,
 	).Scan(&id); err != nil {
 		return Broadcast{}, fmt.Errorf("push: storing broadcast: %w", err)
 	}
-	args := append(audienceArgs(orgID, in.Filters), id)
-	tag, err := tx.Exec(ctx, `
-		INSERT INTO `+r.deliveries+` (id, organization_id, broadcast_id, subscription_id)
-		SELECT flox_new_ulid(), s.organization_id, $5, s.id
-		FROM push_subscriptions s WHERE `+audienceWhere, args...)
-	if err != nil {
-		return Broadcast{}, fmt.Errorf("push: queueing deliveries: %w", err)
-	}
-	if _, err := tx.Exec(ctx, `UPDATE push_broadcasts SET total = $2 WHERE id = $1`, id, tag.RowsAffected()); err != nil {
-		return Broadcast{}, fmt.Errorf("push: counting broadcast: %w", err)
+	if status == BroadcastSent {
+		if err := r.queue(ctx, tx, orgID, id, in.Filters); err != nil {
+			return Broadcast{}, err
+		}
 	}
 	if err := tx.Commit(ctx); err != nil {
 		return Broadcast{}, fmt.Errorf("push: committing broadcast: %w", err)
@@ -132,15 +133,160 @@ func (r *Repository) CreateBroadcast(ctx context.Context, orgID, userID string, 
 	return r.GetBroadcast(ctx, orgID, id)
 }
 
+// queue fixes broadcast id's audience: one delivery per matching active
+// subscriber, carrying the subscriber's PWA, campaign and country as they
+// are now; the per-group sent counts (push_broadcast_stats); the total.
+func (r *Repository) queue(ctx context.Context, tx pgx.Tx, orgID, id string, f Filters) error {
+	args := append(audienceArgs(orgID, f), id)
+	tag, err := tx.Exec(ctx, `
+		INSERT INTO `+r.deliveries+` (id, organization_id, broadcast_id, subscription_id, pwa_id, campaign_id, country)
+		SELECT flox_new_ulid(), s.organization_id, $5, s.id, s.pwa_id, s.campaign_id, s.country
+		FROM push_subscriptions s WHERE `+audienceWhere, args...)
+	if err != nil {
+		return fmt.Errorf("push: queueing deliveries: %w", err)
+	}
+	if _, err := tx.Exec(ctx, `
+		INSERT INTO push_broadcast_stats (organization_id, broadcast_id, pwa_id, campaign_id, country, sent)
+		SELECT s.organization_id, $5, s.pwa_id, s.campaign_id, s.country, count(*)
+		FROM push_subscriptions s WHERE `+audienceWhere+`
+		GROUP BY s.organization_id, s.pwa_id, s.campaign_id, s.country`, args...); err != nil {
+		return fmt.Errorf("push: counting broadcast groups: %w", err)
+	}
+	if _, err := tx.Exec(ctx, `UPDATE push_broadcasts SET total = $2 WHERE id = $1`, id, tag.RowsAffected()); err != nil {
+		return fmt.Errorf("push: counting broadcast: %w", err)
+	}
+	return nil
+}
+
+// SendDue sends up to limit scheduled broadcasts whose send time is at or
+// before now, each in its own transaction, and reports how many it sent.
+// Broadcasts another worker holds are skipped. A broadcast whose filters
+// match no one by then is sent with total 0.
+func (r *Repository) SendDue(ctx context.Context, now time.Time, limit int) (int, error) {
+	sent := 0
+	for sent < limit {
+		ok, err := r.sendOneDue(ctx, now)
+		if err != nil {
+			return sent, err
+		}
+		if !ok {
+			break
+		}
+		sent++
+	}
+	return sent, nil
+}
+
+func (r *Repository) sendOneDue(ctx context.Context, now time.Time) (bool, error) {
+	tx, err := r.db.Begin(ctx)
+	if err != nil {
+		return false, fmt.Errorf("push: beginning scheduled send: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	var id, orgID string
+	var f Filters
+	err = tx.QueryRow(ctx, `
+		SELECT id, organization_id, pwa_ids, campaign_ids, countries FROM push_broadcasts
+		WHERE status = 'scheduled' AND send_at <= $1
+		ORDER BY send_at, id LIMIT 1 FOR UPDATE SKIP LOCKED`, now,
+	).Scan(&id, &orgID, &f.PwaIDs, &f.CampaignIDs, &f.Countries)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return false, nil
+	}
+	if err != nil {
+		return false, fmt.Errorf("push: claiming scheduled broadcast: %w", err)
+	}
+	if err := r.queue(ctx, tx, orgID, id, f); err != nil {
+		return false, err
+	}
+	if _, err := tx.Exec(ctx, `UPDATE push_broadcasts SET status = 'sent', sent_at = now() WHERE id = $1`, id); err != nil {
+		return false, fmt.Errorf("push: marking scheduled broadcast sent: %w", err)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return false, fmt.Errorf("push: committing scheduled send: %w", err)
+	}
+	return true, nil
+}
+
+// CancelBroadcast calls off a scheduled broadcast. One already sent, or
+// canceled, is a conflict.
+func (r *Repository) CancelBroadcast(ctx context.Context, orgID, id string) (Broadcast, error) {
+	tag, err := r.db.Exec(ctx, `
+		UPDATE push_broadcasts SET status = 'canceled'
+		WHERE id = $1 AND organization_id = $2 AND status = 'scheduled'`, id, orgID)
+	if err != nil {
+		return Broadcast{}, fmt.Errorf("push: canceling broadcast: %w", err)
+	}
+	b, err := r.GetBroadcast(ctx, orgID, id)
+	if err != nil {
+		return Broadcast{}, err
+	}
+	if tag.RowsAffected() == 0 {
+		return Broadcast{}, apierror.Conflict("only a scheduled broadcast can be canceled; this one is " + b.Status)
+	}
+	return b, nil
+}
+
+var statsKeys = map[StatsGroup]string{
+	StatsByDay:       `to_char((b.sent_at AT TIME ZONE $4)::date, 'YYYY-MM-DD')`,
+	StatsByBroadcast: `b.id`,
+	StatsByPwa:       `st.pwa_id`,
+	StatsByCampaign:  `st.campaign_id`,
+	StatsByCountry:   `st.country`,
+}
+
+// Stats is push metrics over the organization's broadcasts sent from day
+// from to day to (inclusive) in timezone, grouped by group, plus the
+// totals. A broadcast counts on its send day: its opens stay with it
+// whenever they come.
+func (r *Repository) Stats(ctx context.Context, orgID string, from, to time.Time, timezone string, group StatsGroup) ([]StatsRow, StatsCounts, error) {
+	key, ok := statsKeys[group]
+	if !ok {
+		return nil, StatsCounts{}, apierror.Validation("unknown groupBy", map[string]string{"groupBy": "unknown"})
+	}
+	const where = `st.organization_id = $1 AND b.status = 'sent'
+		AND b.sent_at >= ($2::date::timestamp AT TIME ZONE $4)
+		AND b.sent_at < (($3::date + 1)::timestamp AT TIME ZONE $4)`
+	label := `''`
+	if group == StatsByBroadcast {
+		label = `max(b.name)`
+	}
+	rows, err := r.db.Query(ctx, `
+		SELECT `+key+` AS k, `+label+`, sum(st.sent), sum(st.delivered), sum(st.failed), sum(st.unsubscribed), sum(st.opened)
+		FROM push_broadcast_stats st
+		JOIN push_broadcasts b ON b.id = st.broadcast_id AND b.organization_id = st.organization_id
+		WHERE `+where+`
+		GROUP BY k ORDER BY k`, orgID, from.Format(time.DateOnly), to.Format(time.DateOnly), timezone)
+	if err != nil {
+		return nil, StatsCounts{}, fmt.Errorf("push: querying stats: %w", err)
+	}
+	defer rows.Close()
+	out := []StatsRow{}
+	var total StatsCounts
+	for rows.Next() {
+		var row StatsRow
+		if err := rows.Scan(&row.Key, &row.Label, &row.Sent, &row.Delivered, &row.Failed, &row.Unsubscribed, &row.Opened); err != nil {
+			return nil, StatsCounts{}, fmt.Errorf("push: scanning stats: %w", err)
+		}
+		total.Sent += row.Sent
+		total.Delivered += row.Delivered
+		total.Failed += row.Failed
+		total.Unsubscribed += row.Unsubscribed
+		total.Opened += row.Opened
+		out = append(out, row)
+	}
+	return out, total, rows.Err()
+}
+
 const broadcastColumns = `id, name, title, body, icon_url, image_url, target, url, pwa_ids, campaign_ids, countries,
-	total, delivered, failed, unsubscribed, opened, created_at`
+	total, delivered, failed, unsubscribed, opened, status, send_at, sent_at, created_at`
 
 func scanBroadcast(row pgx.Row) (Broadcast, error) {
 	var b Broadcast
 	var target string
 	err := row.Scan(&b.ID, &b.Name, &b.Title, &b.Body, &b.IconURL, &b.ImageURL, &target, &b.URL,
 		&b.Filters.PwaIDs, &b.Filters.CampaignIDs, &b.Filters.Countries,
-		&b.Total, &b.Delivered, &b.Failed, &b.Unsubscribed, &b.Opened, &b.CreatedAt)
+		&b.Total, &b.Delivered, &b.Failed, &b.Unsubscribed, &b.Opened, &b.Status, &b.SendAt, &b.SentAt, &b.CreatedAt)
 	b.Target = Target(target)
 	return b, err
 }
@@ -288,6 +434,12 @@ func (r *Repository) RecordOpen(ctx context.Context, orgID, clickID, deliveryID 
 		), counted AS (
 			UPDATE push_broadcasts SET opened = opened + 1
 			FROM d WHERE push_broadcasts.id = d.broadcast_id AND d.first
+		), grouped AS (
+			INSERT INTO push_broadcast_stats (organization_id, broadcast_id, pwa_id, campaign_id, country, opened)
+			SELECT pd.organization_id, pd.broadcast_id, pd.pwa_id, pd.campaign_id, pd.country, 1
+			FROM `+r.deliveries+` pd JOIN d ON d.id = pd.id WHERE d.first
+			ON CONFLICT (broadcast_id, pwa_id, campaign_id, country) DO UPDATE
+			SET opened = push_broadcast_stats.opened + 1
 		)
 		SELECT b.target, b.url, d.first FROM d JOIN push_broadcasts b ON b.id = d.broadcast_id`,
 		deliveryID, orgID, clickID,

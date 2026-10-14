@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"log/slog"
 	"net/http"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 
@@ -31,6 +32,8 @@ func (h *Handler) Register(r chi.Router) {
 	r.Get("/broadcasts", h.broadcasts)
 	r.Get("/broadcasts/{id}", h.broadcast)
 	r.With(h.requireWrite).Post("/broadcasts", h.createBroadcast)
+	r.With(h.requireWrite).Post("/broadcasts/{id}/cancel", h.cancelBroadcast)
+	r.Get("/stats", h.stats)
 }
 
 func (h *Handler) summary(w http.ResponseWriter, r *http.Request) {
@@ -113,6 +116,8 @@ type createBroadcastRequest struct {
 	Target   Target  `json:"target"`
 	URL      string  `json:"url"`
 	Filters  Filters `json:"filters"`
+	// SendAt (RFC 3339) schedules the broadcast; absent or null sends now.
+	SendAt *time.Time `json:"sendAt"`
 }
 
 func (h *Handler) createBroadcast(w http.ResponseWriter, r *http.Request) {
@@ -125,13 +130,72 @@ func (h *Handler) createBroadcast(w http.ResponseWriter, r *http.Request) {
 	}
 	b, err := h.svc.CreateBroadcast(r.Context(), orgID, userID, CreateBroadcastInput{
 		Name: req.Name, Title: req.Title, Body: req.Body, IconURL: req.IconURL, ImageURL: req.ImageURL,
-		Target: req.Target, URL: req.URL, Filters: req.Filters,
+		Target: req.Target, URL: req.URL, Filters: req.Filters, SendAt: req.SendAt,
 	})
 	if err != nil {
 		apierror.Write(w, h.logger, err)
 		return
 	}
 	writeJSON(w, http.StatusCreated, b)
+}
+
+func (h *Handler) cancelBroadcast(w http.ResponseWriter, r *http.Request) {
+	orgID, _ := tenant.OrgID(r.Context())
+	b, err := h.svc.CancelBroadcast(r.Context(), orgID, chi.URLParam(r, "id"))
+	if err != nil {
+		apierror.Write(w, h.logger, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, b)
+}
+
+// stats answers GET /push/stats?from=&to=&timezone=&groupBy= with rows of
+// push metrics keyed as the custom-metric catalog names them (push_sent,
+// push_delivered, push_opened, push_ctr) plus failed/unsubscribed, and the
+// totals.
+func (h *Handler) stats(w http.ResponseWriter, r *http.Request) {
+	orgID, _ := tenant.OrgID(r.Context())
+	q := r.URL.Query()
+	from, errFrom := time.Parse(time.DateOnly, q.Get("from"))
+	to, errTo := time.Parse(time.DateOnly, q.Get("to"))
+	if errFrom != nil || errTo != nil {
+		apierror.Write(w, h.logger, apierror.Validation("from and to are YYYY-MM-DD dates", map[string]string{"from": "YYYY-MM-DD", "to": "YYYY-MM-DD"}))
+		return
+	}
+	group := StatsGroup(q.Get("groupBy"))
+	if group == "" {
+		group = StatsByDay
+	}
+	rows, total, err := h.svc.Stats(r.Context(), orgID, from, to, q.Get("timezone"), group)
+	if err != nil {
+		apierror.Write(w, h.logger, err)
+		return
+	}
+	out := make([]statsRowResponse, len(rows))
+	for i, row := range rows {
+		out[i] = statsRowResponse{Key: row.Key, Label: row.Label, Metrics: metricsOf(row.StatsCounts)}
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"rows": out, "totals": metricsOf(total)})
+}
+
+type statsRowResponse struct {
+	Key     string         `json:"key"`
+	Label   string         `json:"label,omitempty"`
+	Metrics map[string]any `json:"metrics"`
+}
+
+// metricsOf names the counts as the custom-metric catalog does, so a push
+// formula evaluates on a row as it is. push_ctr is opened ÷ delivered in
+// percent, null when nothing was delivered.
+func metricsOf(c StatsCounts) map[string]any {
+	var ctr any
+	if c.Delivered > 0 {
+		ctr = float64(c.Opened) / float64(c.Delivered) * 100
+	}
+	return map[string]any{
+		"push_sent": c.Sent, "push_delivered": c.Delivered, "push_opened": c.Opened, "push_ctr": ctr,
+		"push_failed": c.Failed, "push_unsubscribed": c.Unsubscribed,
+	}
 }
 
 func writeJSON(w http.ResponseWriter, status int, body any) {

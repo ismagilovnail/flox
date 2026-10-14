@@ -4,9 +4,10 @@
  * reused here verbatim, not duplicated) with the categories §50 documents
  * that Phase 5 didn't need: CPA Funnel, Push, and LTV.
  *
- * CPA Funnel and Push are catalog-only for now (`live: false`) — there's no
- * tracker or Push module yet to compute them, so no surface can expose a
- * formula built from them until those phases land. LTV is catalog-only AND
+ * CPA Funnel is catalog-only for now (`live: false`): no surface exposes a
+ * formula built from those ids. Push is live: GET /push/stats returns
+ * these ids per row, and Push > Statistics (target push_stats) evaluates
+ * push formulas there. LTV is catalog-only AND
  * `insertable: false` — §30.5 explicitly forbids LTV in custom formulas, not
  * just "not implemented yet".
  *
@@ -79,7 +80,7 @@ const PUSH: RegistryMetric[] = PUSH_BASE.map((m) => ({
   category: "Push" as const,
   dataSource: "push" as const,
   insertable: true,
-  live: false,
+  live: true,
 }));
 
 const LTV: RegistryMetric[] = [
@@ -108,13 +109,14 @@ export function catalogMetric(id: string): RegistryMetric | undefined {
   return METRIC_CATALOG.find((m) => m.id === id);
 }
 
-export type ShowInTarget = "report_builder" | "campaigns_table" | "offers_table" | "sources_table";
+export type ShowInTarget = "report_builder" | "campaigns_table" | "offers_table" | "sources_table" | "push_stats";
 
 export const SHOW_IN_TARGETS: { id: ShowInTarget; label: string }[] = [
   { id: "report_builder", label: "Report Builder" },
   { id: "campaigns_table", label: "Campaigns Table" },
   { id: "offers_table", label: "Offers Table" },
   { id: "sources_table", label: "Traffic Sources Table" },
+  { id: "push_stats", label: "Push Statistics" },
 ];
 
 /** Which registry metric ids each surface can actually supply as inputs — drives
@@ -126,6 +128,7 @@ export const SURFACE_AVAILABLE_METRIC_IDS: Record<ShowInTarget, Set<MetricKey | 
   campaigns_table: new Set(["clicks", "conversions", "revenue", "cost", "profit", "roi", "emptySubsRate"]),
   offers_table: new Set(),
   sources_table: new Set(),
+  push_stats: new Set(["push_sent", "push_delivered", "push_opened", "push_ctr"]),
 };
 
 export function surfaceCanCompute(target: ShowInTarget, usedMetricIds: string[]): boolean {

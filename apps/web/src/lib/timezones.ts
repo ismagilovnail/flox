@@ -67,3 +67,42 @@ export function todayInZone(timeZone: string, at: Date = new Date()): Date {
     return new Date(`${at.toISOString().slice(0, 10)}T00:00:00Z`);
   }
 }
+
+/** How far `timeZone` is ahead of UTC at instant `at`, in minutes. */
+function offsetMinutes(timeZone: string, at: Date): number {
+  const parts = Object.fromEntries(
+    new Intl.DateTimeFormat("en-US", {
+      timeZone, hourCycle: "h23", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit",
+    })
+      .formatToParts(at)
+      .map((p) => [p.type, p.value]),
+  );
+  const asUtc = Date.UTC(+parts.year, +parts.month - 1, +parts.day, +parts.hour, +parts.minute, +parts.second);
+  return Math.round((asUtc - Math.floor(at.getTime() / 1000) * 1000) / 60000);
+}
+
+/** The instant a wall-clock time ("YYYY-MM-DDTHH:mm", a datetime-local
+ * input's value) names in `timeZone`. Across a DST change the offset is
+ * taken at the result, so a time in the autumn overlap resolves to its
+ * first occurrence and one in the spring gap moves forward. */
+export function zonedLocalToUtc(local: string, timeZone: string): Date {
+  const naive = new Date(`${local}:00Z`);
+  const first = new Date(naive.getTime() - offsetMinutes(timeZone, naive) * 60000);
+  return new Date(naive.getTime() - offsetMinutes(timeZone, first) * 60000);
+}
+
+/** `at` as a wall-clock time in `timeZone`, "YYYY-MM-DDTHH:mm" — the value
+ * a datetime-local input takes. */
+export function utcToZonedLocal(at: Date, timeZone: string): string {
+  const shifted = new Date(at.getTime() + offsetMinutes(timeZone, at) * 60000);
+  return shifted.toISOString().slice(0, 16);
+}
+
+/** A date and time as the organization reads it, with its zone. */
+export function formatInZone(at: Date, timeZone: string, locale: string): string {
+  // dateStyle/timeStyle cannot be combined with timeZoneName — the fields
+  // are spelled out instead.
+  return new Intl.DateTimeFormat(locale, {
+    timeZone, year: "numeric", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit", timeZoneName: "short",
+  }).format(at);
+}

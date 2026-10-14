@@ -67,6 +67,7 @@ import (
 	"github.com/ismagilovnail/flox/apps/internal/postback"
 	"github.com/ismagilovnail/flox/apps/internal/postbacklog"
 	"github.com/ismagilovnail/flox/apps/internal/postgres"
+	"github.com/ismagilovnail/flox/apps/internal/push"
 	"github.com/ismagilovnail/flox/apps/internal/pushsend"
 	"github.com/ismagilovnail/flox/apps/internal/queuereaper"
 	"github.com/ismagilovnail/flox/apps/internal/queuestats"
@@ -96,6 +97,9 @@ const (
 const (
 	pushPollBatchSize = 100
 	pushPollIdle      = 2 * time.Second
+	// pushScheduleInterval: how often due scheduled broadcasts are looked
+	// for — a broadcast goes out at most this late.
+	pushScheduleInterval = 15 * time.Second
 )
 
 // eventPollBatchSize/eventPollIdle: same shape, sized for click/tracking
@@ -393,6 +397,11 @@ func run() error {
 		logger.Info("push delivery poll loop starting", "batch_size", pushPollBatchSize, "idle", pushPollIdle)
 		start(func() { pushDeliverer.PollLoop(ctx, pushPollBatchSize, pushPollIdle) })
 	}
+
+	// Scheduled push broadcasts go out when due (docs/push.md), configured
+	// or not: their deliveries then wait in the queue like any other.
+	logger.Info("push scheduler starting", "interval", pushScheduleInterval)
+	start(func() { push.RunScheduler(ctx, push.NewRepository(db), pushScheduleInterval, logger) })
 
 	logger.Info("event flush poll loop starting", "batch_size", eventPollBatchSize, "idle", eventPollIdle)
 	start(func() { flusher.PollLoop(ctx, eventPollBatchSize, eventPollIdle) })

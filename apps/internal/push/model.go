@@ -75,26 +75,38 @@ type Filters struct {
 	Countries   []string `json:"countries"`
 }
 
-// Broadcast is a message sent now to the subscribers its filters match.
-// The counters follow the deliveries: Delivered (the push service accepted
-// it), Failed (could not be sent), Unsubscribed (the push service said the
-// subscription is gone — counted in Failed too), Opened (clicked).
+// Broadcast statuses. A scheduled broadcast has no deliveries until the
+// worker sends it at SendAt (SendDue); the audience is fixed then.
+const (
+	BroadcastScheduled = "scheduled"
+	BroadcastSent      = "sent"
+	BroadcastCanceled  = "canceled"
+)
+
+// Broadcast is a message sent to the subscribers its filters match, now or
+// at SendAt. The counters follow the deliveries: Delivered (the push
+// service accepted it), Failed (could not be sent), Unsubscribed (the push
+// service said the subscription is gone — counted in Failed too), Opened
+// (clicked).
 type Broadcast struct {
-	ID           string    `json:"id"`
-	Name         string    `json:"name"`
-	Title        string    `json:"title"`
-	Body         string    `json:"body"`
-	IconURL      string    `json:"iconUrl"`
-	ImageURL     string    `json:"imageUrl"`
-	Target       Target    `json:"target"`
-	URL          string    `json:"url"`
-	Filters      Filters   `json:"filters"`
-	Total        int       `json:"total"`
-	Delivered    int       `json:"delivered"`
-	Failed       int       `json:"failed"`
-	Unsubscribed int       `json:"unsubscribed"`
-	Opened       int       `json:"opened"`
-	CreatedAt    time.Time `json:"createdAt"`
+	ID           string     `json:"id"`
+	Name         string     `json:"name"`
+	Title        string     `json:"title"`
+	Body         string     `json:"body"`
+	IconURL      string     `json:"iconUrl"`
+	ImageURL     string     `json:"imageUrl"`
+	Target       Target     `json:"target"`
+	URL          string     `json:"url"`
+	Filters      Filters    `json:"filters"`
+	Total        int        `json:"total"`
+	Delivered    int        `json:"delivered"`
+	Failed       int        `json:"failed"`
+	Unsubscribed int        `json:"unsubscribed"`
+	Opened       int        `json:"opened"`
+	Status       string     `json:"status"`
+	SendAt       *time.Time `json:"sendAt"`
+	SentAt       *time.Time `json:"sentAt"`
+	CreatedAt    time.Time  `json:"createdAt"`
 }
 
 type CreateBroadcastInput struct {
@@ -106,6 +118,53 @@ type CreateBroadcastInput struct {
 	Target   Target
 	URL      string
 	Filters  Filters
+	// SendAt schedules the broadcast; nil sends it now.
+	SendAt *time.Time
+}
+
+// Scheduling bounds: a time in the past or a few seconds ahead is "now";
+// further than MaxScheduleAhead is refused.
+const (
+	MinScheduleAhead = time.Minute
+	MaxScheduleAhead = 30 * 24 * time.Hour
+)
+
+// StatsGroup is what push metrics are broken down by.
+type StatsGroup string
+
+const (
+	StatsByDay       StatsGroup = "day"
+	StatsByBroadcast StatsGroup = "broadcast"
+	StatsByPwa       StatsGroup = "pwa"
+	StatsByCampaign  StatsGroup = "campaign"
+	StatsByCountry   StatsGroup = "country"
+)
+
+func (g StatsGroup) valid() bool {
+	switch g {
+	case StatsByDay, StatsByBroadcast, StatsByPwa, StatsByCampaign, StatsByCountry:
+		return true
+	}
+	return false
+}
+
+// StatsCounts are push metrics over a set of sent broadcasts. Sent is the
+// deliveries queued; Delivered/Failed/Unsubscribed/Opened as on Broadcast.
+type StatsCounts struct {
+	Sent         int `json:"sent"`
+	Delivered    int `json:"delivered"`
+	Failed       int `json:"failed"`
+	Unsubscribed int `json:"unsubscribed"`
+	Opened       int `json:"opened"`
+}
+
+// StatsRow is one group of push metrics: Key is the day (YYYY-MM-DD in the
+// report's timezone), broadcast, PWA or campaign id, or country; Label the
+// broadcast's name for StatsByBroadcast.
+type StatsRow struct {
+	Key   string `json:"key"`
+	Label string `json:"label,omitempty"`
+	StatsCounts
 }
 
 // Summary is the subscriber overview: totals and the active subscribers

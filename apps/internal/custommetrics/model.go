@@ -51,11 +51,14 @@ const (
 	TargetCampaignsTable ShowInTarget = "campaigns_table"
 	TargetOffersTable    ShowInTarget = "offers_table"
 	TargetSourcesTable   ShowInTarget = "sources_table"
+	// TargetPushStats is Push > Statistics (docs/push.md): push formulas
+	// only, one data source per formula.
+	TargetPushStats ShowInTarget = "push_stats"
 )
 
 func (t ShowInTarget) valid() bool {
 	switch t {
-	case TargetReportBuilder, TargetCampaignsTable, TargetOffersTable, TargetSourcesTable:
+	case TargetReportBuilder, TargetCampaignsTable, TargetOffersTable, TargetSourcesTable, TargetPushStats:
 		return true
 	}
 	return false

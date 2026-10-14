@@ -81,7 +81,7 @@ function customMetricFormSchema(t: TFunction<"customMetrics">) {
     format: z.enum(FORMATS as [MetricFormat, ...MetricFormat[]]),
     formula: z.string().min(1, t("form.errors.formula")),
     targets: z.array(
-      z.enum(["report_builder", "campaigns_table", "offers_table", "sources_table"] as [ShowInTarget, ...ShowInTarget[]]),
+      z.enum(["report_builder", "campaigns_table", "offers_table", "sources_table", "push_stats"] as [ShowInTarget, ...ShowInTarget[]]),
     ),
     status: z.enum(["draft", "published"] as [CustomMetricStatus, ...CustomMetricStatus[]]),
   });

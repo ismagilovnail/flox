@@ -19,17 +19,18 @@ referenced below as §N).
 ## CURRENT STATE — UPDATE THIS EVERY PHASE
 
 ```
-CURRENT PHASE : PHASE 30.19 — INACTIVE CAMPAIGN TRACKER TEST (closed)
+CURRENT PHASE : PHASE 30.20 — SCHEDULED PUSH BROADCASTS + PUSH METRICS (closed)
 STATUS        : Spec conformance gaps (docs/spec-conformance-2026-10-11.md):
                 all 15 closed. Left from that doc: the "мелочи" list
                 (DataGrid, types/ schemas/ dirs, Copy tracking URL in the
                 campaigns row, IOS_INSTALL/TG_* events). Push leftovers:
-                scheduled/triggered broadcasts, push metrics. Prod restore
-                drill after deployment.
-LAST COMMIT   : test(tracker): inactive campaign is not tracked.
-UNCOMMITTED   : none expected. Dev DB at migration 00072, CH schema 018.
-NEXT          : wait for the user — the numbered gaps are done; pick from
-                the leftovers above with the user. CI (DO1) is
+                recurring/triggered broadcasts. 30.20 had no browser pass
+                (Chrome extension not connected) — do one next session.
+                Prod restore drill after deployment.
+LAST COMMIT   : feat(push): scheduled broadcasts and push metrics.
+UNCOMMITTED   : none expected. Dev DB at migration 00073, CH schema 018.
+NEXT          : wait for the user — pick from the leftovers above with the
+                user. CI (DO1) is
                 the user's own decision — do not set it up. Run go test with
                 the full env line AND check e2e did not skip (memory:
                 flox-full-test-env); chconn's TestLimitsStopAHeavyQuery

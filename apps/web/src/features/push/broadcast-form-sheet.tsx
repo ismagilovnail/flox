@@ -27,15 +27,22 @@ import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetT
 import { Textarea } from "@/components/ui/textarea";
 import { useCampaigns } from "@/hooks/use-campaigns";
 import { useCreatePushBroadcast, usePushAudience } from "@/hooks/use-push";
+import { useOrganization } from "@/hooks/use-organization";
 import { usePwas } from "@/hooks/use-pwas";
 import { ApiError } from "@/lib/api/client";
 import type { PushFilters } from "@/lib/api/push";
 import { countryOptions } from "@/lib/countries";
+import { formatInZone, utcOffsetLabel, utcToZonedLocal, zonedLocalToUtc } from "@/lib/timezones";
+
+// Mirrors push.MinScheduleAhead / MaxScheduleAhead (internal/push/model.go).
+const MIN_AHEAD_MS = 60_000;
+const MAX_AHEAD_MS = 30 * 24 * 60 * 60_000;
 
 const httpsURL = (msg: string) => z.union([z.literal(""), z.url({ protocol: /^https$/, error: msg })]);
 
-/** Mirrors push.Service's validation (internal/push/service.go). */
-function buildSchema(t: TFunction) {
+/** Mirrors push.Service's validation (internal/push/service.go). A
+ * scheduled time is a wall-clock time in the organization's timezone. */
+function buildSchema(t: TFunction, timeZone: string) {
   return z
     .object({
       name: z.string().trim().min(2, t("form.validation.name")).max(100, t("form.validation.name")),
@@ -48,10 +55,19 @@ function buildSchema(t: TFunction) {
       pwaIds: z.array(z.string()),
       campaignIds: z.array(z.string()),
       countries: z.array(z.string()),
+      when: z.enum(["now", "later"]),
+      sendAtLocal: z.string(),
     })
     .superRefine((v, ctx) => {
       if (v.target === "url" && !/^https?:\/\/[^\s/]+/i.test(v.url)) {
         ctx.addIssue({ code: "custom", message: t("form.validation.url"), path: ["url"] });
+      }
+      if (v.when === "later") {
+        const at = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(v.sendAtLocal) ? zonedLocalToUtc(v.sendAtLocal, timeZone).getTime() : NaN;
+        const ahead = at - Date.now();
+        if (!(ahead >= MIN_AHEAD_MS && ahead <= MAX_AHEAD_MS)) {
+          ctx.addIssue({ code: "custom", message: t("form.validation.sendAt"), path: ["sendAtLocal"] });
+        }
       }
     });
 }
@@ -61,11 +77,13 @@ type FormValues = z.infer<ReturnType<typeof buildSchema>>;
 const EMPTY: FormValues = {
   name: "", title: "", body: "", iconUrl: "", imageUrl: "",
   target: "destination", url: "", pwaIds: [], campaignIds: [], countries: [],
+  when: "now", sendAtLocal: "",
 };
 
 export function BroadcastFormSheet({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
   const { t, i18n } = useTranslation("push");
-  const form = useForm<FormValues>({ resolver: zodResolver(buildSchema(t)), defaultValues: EMPTY });
+  const timeZone = useOrganization().data?.timezone || "UTC";
+  const form = useForm<FormValues>({ resolver: zodResolver(buildSchema(t, timeZone)), defaultValues: EMPTY });
   const { register, handleSubmit, control, formState, reset, setError } = form;
   const values = useWatch({ control });
   const create = useCreatePushBroadcast();
@@ -92,18 +110,20 @@ export function BroadcastFormSheet({ open, onOpenChange }: { open: boolean; onOp
         name: v.name, title: v.title, body: v.body, iconUrl: v.iconUrl, imageUrl: v.imageUrl,
         target: v.target, url: v.target === "url" ? v.url : "",
         filters: { pwaIds: v.pwaIds, campaignIds: v.campaignIds, countries: v.countries },
+        sendAt: v.when === "later" ? zonedLocalToUtc(v.sendAtLocal, timeZone).toISOString() : undefined,
       },
       {
         onSuccess: (b) => {
           setConfirming(null);
           onOpenChange(false);
-          toast(t("form.sent"), { description: b.name });
+          toast(b.status === "scheduled" ? t("form.scheduled") : t("form.sent"), { description: b.name });
         },
         onError: (err) => {
           setConfirming(null);
           if (err instanceof ApiError && err.fields) {
             for (const [field, message] of Object.entries(err.fields)) {
               if (field in EMPTY) setError(field as keyof FormValues, { message });
+              if (field === "sendAt") setError("sendAtLocal", { message });
             }
             if (err.fields.filters) toast.error(t("form.validation.noAudience"));
             return;
@@ -206,6 +226,47 @@ export function BroadcastFormSheet({ open, onOpenChange }: { open: boolean; onOp
             <Separator />
 
             <div className="grid gap-2">
+              <Label>{t("form.when")}</Label>
+              <Controller
+                control={control}
+                name="when"
+                render={({ field }) => (
+                  <RadioGroup
+                    value={field.value}
+                    onValueChange={(v) => {
+                      field.onChange(v);
+                      if (v === "later" && !form.getValues("sendAtLocal")) {
+                        form.setValue("sendAtLocal", utcToZonedLocal(new Date(Date.now() + 60 * 60_000), timeZone));
+                      }
+                    }}
+                    className="flex flex-wrap gap-4"
+                  >
+                    <label className="flex items-center gap-2 text-sm">
+                      <RadioGroupItem value="now" />
+                      {t("form.whenNow")}
+                    </label>
+                    <label className="flex items-center gap-2 text-sm">
+                      <RadioGroupItem value="later" />
+                      {t("form.whenLater")}
+                    </label>
+                  </RadioGroup>
+                )}
+              />
+              {values.when === "later" && (
+                <Field
+                  id="pb-send-at"
+                  label={t("form.sendAt", { zone: [timeZone, utcOffsetLabel(timeZone)].filter(Boolean).join(" ") })}
+                  hint={t("form.sendAtHint")}
+                  error={formState.errors.sendAtLocal?.message}
+                >
+                  <Input id="pb-send-at" type="datetime-local" className="w-56 font-mono text-xs" {...register("sendAtLocal")} aria-invalid={!!formState.errors.sendAtLocal} />
+                </Field>
+              )}
+            </div>
+
+            <Separator />
+
+            <div className="grid gap-2">
               <Label>{t("form.preview")}</Label>
               <div className="flex max-w-sm items-start gap-3 rounded-lg border bg-card p-3 shadow-sm">
                 {previewIcon ? (
@@ -228,8 +289,8 @@ export function BroadcastFormSheet({ open, onOpenChange }: { open: boolean; onOp
             <Button variant="outline" onClick={() => onOpenChange(false)}>
               {t("form.cancel")}
             </Button>
-            <Button type="submit" form="push-broadcast" disabled={count === 0 || formState.isSubmitting}>
-              {t("form.submit")}
+            <Button type="submit" form="push-broadcast" disabled={(values.when !== "later" && count === 0) || formState.isSubmitting}>
+              {values.when === "later" ? t("form.submitSchedule") : t("form.submit")}
             </Button>
           </SheetFooter>
         </SheetContent>
@@ -238,15 +299,29 @@ export function BroadcastFormSheet({ open, onOpenChange }: { open: boolean; onOp
       <Dialog open={confirming !== null} onOpenChange={(o) => !o && !create.isPending && setConfirming(null)}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>{t("form.confirmTitle", { name: confirming?.name ?? "" })}</DialogTitle>
-            <DialogDescription>{t("form.confirmDescription", { count: count ?? 0 })}</DialogDescription>
+            {confirming?.when === "later" ? (
+              <>
+                <DialogTitle>{t("form.confirmScheduleTitle", { name: confirming.name })}</DialogTitle>
+                <DialogDescription>
+                  {t("form.confirmScheduleDescription", {
+                    when: formatInZone(zonedLocalToUtc(confirming.sendAtLocal, timeZone), timeZone, i18n.language),
+                    count: count ?? 0,
+                  })}
+                </DialogDescription>
+              </>
+            ) : (
+              <>
+                <DialogTitle>{t("form.confirmTitle", { name: confirming?.name ?? "" })}</DialogTitle>
+                <DialogDescription>{t("form.confirmDescription", { count: count ?? 0 })}</DialogDescription>
+              </>
+            )}
           </DialogHeader>
           <DialogFooter>
             <Button variant="outline" onClick={() => setConfirming(null)} disabled={create.isPending}>
               {t("form.cancel")}
             </Button>
             <Button onClick={() => confirming && send(confirming)} disabled={create.isPending}>
-              {t("form.confirm")}
+              {confirming?.when === "later" ? t("form.confirmSchedule") : t("form.confirm")}
             </Button>
           </DialogFooter>
         </DialogContent>

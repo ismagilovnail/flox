@@ -2,9 +2,11 @@ package push
 
 import (
 	"context"
+	"fmt"
 	"net/url"
 	"regexp"
 	"strings"
+	"time"
 	"unicode/utf8"
 
 	"github.com/ismagilovnail/flox/apps/internal/apierror"
@@ -16,11 +18,15 @@ type Service struct {
 	// configured: the deployment has a VAPID key pair — without one
 	// nothing can be sent, so no broadcast is created.
 	configured bool
+	now        func() time.Time
 }
 
 func NewService(repo *Repository, configured bool) *Service {
-	return &Service{repo: repo, configured: configured}
+	return &Service{repo: repo, configured: configured, now: time.Now}
 }
+
+// maxStatsDays bounds a push metrics range, like the analytics reports.
+const maxStatsDays = 366
 
 func (s *Service) Configured() bool { return s.configured }
 
@@ -47,8 +53,10 @@ func (s *Service) CountAudience(ctx context.Context, orgID string, f Filters) (i
 	return s.repo.CountAudience(ctx, orgID, f)
 }
 
-// CreateBroadcast validates and sends a broadcast now. An audience of no
-// one is refused rather than stored as an empty send.
+// CreateBroadcast validates and sends a broadcast now, or schedules it. An
+// audience of no one is refused for a send now rather than stored as an
+// empty send; a scheduled broadcast's audience is counted when it goes out,
+// so it may be empty today.
 func (s *Service) CreateBroadcast(ctx context.Context, orgID, userID string, in CreateBroadcastInput) (Broadcast, error) {
 	if !s.configured {
 		return Broadcast{}, apierror.Unavailable("push is not configured on this deployment (PUSH_VAPID_* keys)")
@@ -57,8 +65,21 @@ func (s *Service) CreateBroadcast(ctx context.Context, orgID, userID string, in 
 	in.Title = strings.TrimSpace(in.Title)
 	in.Body = strings.TrimSpace(in.Body)
 	in.URL = strings.TrimSpace(in.URL)
-	if fields := validateBroadcast(in); len(fields) > 0 {
+	fields := validateBroadcast(in)
+	if in.SendAt != nil {
+		now := s.now()
+		switch {
+		case in.SendAt.Before(now.Add(MinScheduleAhead)):
+			fields["sendAt"] = "at least a minute ahead; send now instead"
+		case in.SendAt.After(now.Add(MaxScheduleAhead)):
+			fields["sendAt"] = "at most 30 days ahead"
+		}
+	}
+	if len(fields) > 0 {
 		return Broadcast{}, apierror.Validation("invalid broadcast", fields)
+	}
+	if in.SendAt != nil {
+		return s.repo.CreateBroadcast(ctx, orgID, userID, in)
 	}
 	n, err := s.repo.CountAudience(ctx, orgID, in.Filters)
 	if err != nil {
@@ -68,6 +89,35 @@ func (s *Service) CreateBroadcast(ctx context.Context, orgID, userID string, in 
 		return Broadcast{}, apierror.Validation("no subscribers match these filters", map[string]string{"filters": "no subscribers match"})
 	}
 	return s.repo.CreateBroadcast(ctx, orgID, userID, in)
+}
+
+// CancelBroadcast calls off a scheduled broadcast before it is sent.
+func (s *Service) CancelBroadcast(ctx context.Context, orgID, id string) (Broadcast, error) {
+	return s.repo.CancelBroadcast(ctx, orgID, id)
+}
+
+// Stats is push metrics for broadcasts sent between from and to (days,
+// inclusive) in timezone (empty: UTC), grouped by group.
+func (s *Service) Stats(ctx context.Context, orgID string, from, to time.Time, timezone string, group StatsGroup) ([]StatsRow, StatsCounts, error) {
+	if timezone == "" {
+		timezone = "UTC"
+	}
+	fields := map[string]string{}
+	if !group.valid() {
+		fields["groupBy"] = "day, broadcast, pwa, campaign or country"
+	}
+	if _, err := time.LoadLocation(timezone); err != nil {
+		fields["timezone"] = "an IANA time zone"
+	}
+	if to.Before(from) {
+		fields["to"] = "on or after from"
+	} else if to.Sub(from) > (maxStatsDays-1)*24*time.Hour {
+		fields["to"] = fmt.Sprintf("at most %d days after from", maxStatsDays)
+	}
+	if len(fields) > 0 {
+		return nil, StatsCounts{}, apierror.Validation("invalid stats query", fields)
+	}
+	return s.repo.Stats(ctx, orgID, from, to, timezone, group)
 }
 
 func validateBroadcast(in CreateBroadcastInput) map[string]string {

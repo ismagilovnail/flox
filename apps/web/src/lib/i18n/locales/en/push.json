@@ -3,7 +3,8 @@
   "notConfigured": "Push is not configured on this deployment (PUSH_VAPID_* keys): PWAs do not ask for notifications and broadcasts cannot be sent.",
   "tabs": {
     "broadcasts": "Broadcasts",
-    "subscribers": "Subscribers"
+    "subscribers": "Subscribers",
+    "stats": "Statistics"
   },
   "broadcasts": {
     "newButton": "New broadcast",
@@ -22,11 +23,22 @@
       "ctr": "CTR",
       "pending": "In queue"
     },
-    "failedHint": "{{count}} unsubscribed"
+    "failedHint": "{{count}} unsubscribed",
+    "status": {
+      "scheduled": "Scheduled",
+      "canceled": "Canceled"
+    },
+    "cancelAria": "Cancel {{name}}",
+    "cancelTitle": "Cancel “{{name}}”?",
+    "cancelDescription": "It will not be sent. Nothing has gone out yet.",
+    "keep": "Keep",
+    "cancelConfirm": "Cancel broadcast",
+    "canceled": "Broadcast canceled",
+    "cancelError": "Couldn't cancel the broadcast"
   },
   "form": {
     "title": "New broadcast",
-    "description": "Sent now to every active subscriber the filters match.",
+    "description": "Goes to every active subscriber the filters match — now, or at the time you schedule.",
     "name": "Name",
     "namePlaceholder": "Weekend promo",
     "notificationTitle": "Title",
@@ -68,10 +80,22 @@
       "body": "At most 240 characters",
       "https": "An https URL",
       "url": "An http(s) URL",
-      "noAudience": "No subscribers match these filters"
+      "noAudience": "No subscribers match these filters",
+      "sendAt": "Pick a time from a minute to 30 days ahead"
     },
     "confirmDescription_few": "It goes to {{count}} subscribers right away and cannot be recalled.",
-    "confirmDescription_many": "It goes to {{count}} subscribers right away and cannot be recalled."
+    "confirmDescription_many": "It goes to {{count}} subscribers right away and cannot be recalled.",
+    "when": "When",
+    "whenNow": "Send now",
+    "whenLater": "Schedule",
+    "sendAt": "Send at ({{zone}})",
+    "sendAtHint": "The audience is counted when it goes out: subscribers who join before then get it too.",
+    "submitSchedule": "Schedule…",
+    "confirmScheduleTitle": "Schedule “{{name}}”?",
+    "confirmSchedule": "Schedule",
+    "confirmScheduleDescription_one": "It goes out {{when}} to the subscribers matching then — {{count}} today. You can cancel it until then.",
+    "confirmScheduleDescription_other": "It goes out {{when}} to the subscribers matching then — {{count}} today. You can cancel it until then.",
+    "scheduled": "Broadcast scheduled"
   },
   "subscribers": {
     "active": "Active subscribers",
@@ -101,5 +125,30 @@
     "none": "—",
     "group": "Group",
     "count": "Subscribers"
+  },
+  "stats": {
+    "loading": "Loading push statistics…",
+    "loadError": "Couldn't load push statistics",
+    "groupBy": "Group by",
+    "groups": {
+      "day": "Day",
+      "broadcast": "Broadcast",
+      "pwa": "PWA",
+      "campaign": "Campaign",
+      "country": "Country"
+    },
+    "bySendDay": "Broadcasts count on the day they were sent; their later opens stay with them.",
+    "columns": {
+      "sent": "Sent",
+      "delivered": "Delivered",
+      "failed": "Failed",
+      "unsubscribed": "Unsubscribed",
+      "opened": "Opened",
+      "ctr": "CTR"
+    },
+    "notSplit": "Not split (sent before the breakdown)",
+    "searchPlaceholder": "Search…",
+    "emptyTitle": "No broadcasts sent in this range",
+    "emptyDescription": "Pick another range, or send a broadcast."
   }
 }

@@ -5,6 +5,32 @@ per-phase, matching `CLAUDE.md`'s phase protocol. The one exception is
 [Between phases], below: spec amendments and the code changes that follow from
 them land between phases and would otherwise be invisible here.
 
+## [Phase 30.20] — Scheduled push broadcasts and push metrics
+
+Push leftovers from Phase 30.5 (`docs/push.md`): scheduled broadcasts and push metrics. Recurring/triggered
+broadcasts and push metrics in the report builder stay out.
+
+- **Scheduled broadcasts:** `POST /push/broadcasts` takes `sendAt` (a minute to 30 days ahead) and stores
+  the broadcast as `scheduled` with no deliveries; the audience is counted when it goes out.
+  `apps/worker` runs `push.RunScheduler` (15 s): `SendDue` claims due ones `FOR UPDATE SKIP LOCKED`, queues
+  deliveries and marks them `sent` in one transaction. `POST /push/broadcasts/{id}/cancel` (409 once sent or
+  canceled). UI: "Send now / Schedule" with a wall-clock time in the organization's timezone
+  (`zonedLocalToUtc`/`utcToZonedLocal`, DST-aware), scheduled/canceled badges and a cancel confirm in the
+  list.
+- **Push metrics:** migration `00073` — `push_broadcasts.status/send_at/sent_at`, the subscriber's
+  PWA/campaign/country on each delivery, and `push_broadcast_stats` (counters per PWA × campaign × country,
+  kept in step by queueing, `pushsend` and opens; outlives delivery retention; earlier broadcasts get one
+  unsplit row). `GET /push/stats` by day/broadcast/PWA/campaign/country, metrics keyed as the custom-metric
+  catalog (`push_sent`, `push_delivered`, `push_opened`, `push_ctr`). New **Push → Statistics** tab (range,
+  group by, totals, table with export).
+- **Custom metrics:** the registry's Push category is live; new target `push_stats` (push formulas only)
+  evaluated per row on Push → Statistics. `TestSurfacesMatchTheFrontend` keeps the Go and TS surface lists
+  equal (it also caught `emptySubsRate` missing on the Go side for the campaigns table — fixed).
+- Tests: scheduling (not before due, sent once, audience at send time, cancel incl. cross-tenant, bounds),
+  stats (grouping, tenant isolation, opens once, validation), group counts = broadcast counters, timezone
+  helpers. Verified live on the dev stack through the API (schedule, cancel, worker send on the next tick,
+  stats); no browser pass — the Chrome extension was not connected.
+
 ## [Phase 30.19] — Inactive campaign tracker test
 
 Closes gap 15 of `docs/spec-conformance-2026-10-11.md` (§58 "inactive campaigns"), the last open gap.

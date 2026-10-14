@@ -2,10 +2,12 @@
 
 Gap 5 of `docs/spec-conformance-2026-10-11.md`: the "Push" section of the
 sidebar (§17) and the NOTIFICATION_* events (§43). Scope chosen by the
-owner on 2026-10-13: subscriptions and broadcasts sent now. Not done:
-scheduled, recurring or triggered broadcasts ("N hours after install"),
-push metrics in the report builder and in custom metrics (the registry's
-"Push" category stays catalog-only).
+owner on 2026-10-13: subscriptions and broadcasts sent now. Added
+2026-10-14: scheduled broadcasts and push metrics (Push → Statistics,
+custom metrics on the `push_stats` surface). Not done: recurring or
+triggered broadcasts ("N hours after install"), push metrics in the
+report builder (one formula = one data source, §30.5: push metrics are not
+on the regular rows).
 
 ## Subscribing (apps/tracker)
 
@@ -57,7 +59,9 @@ Admin, Manager — migration 00070):
 | `GET /push/subscriptions` | the subscriber list (filters `status`, `pwaId`, `campaignId`, `country`); the endpoint itself is never returned, only its host |
 | `POST /push/audience` | how many active subscribers filters match now |
 | `GET /push/broadcasts`, `/push/broadcasts/{id}` | broadcasts with their counters |
-| `POST /push/broadcasts` | send now (`push.write`) |
+| `POST /push/broadcasts` | send now, or schedule with `sendAt` (`push.write`) |
+| `POST /push/broadcasts/{id}/cancel` | call off a scheduled broadcast (`push.write`); sent or canceled → 409 |
+| `GET /push/stats?from=&to=&timezone=&groupBy=` | push metrics, see below |
 
 A broadcast: name, title (≤ 80), text (≤ 240), optional https icon (empty:
 the PWA's) and image, a click target, and filters (PWAs, campaigns,
@@ -72,6 +76,41 @@ matching is a validation error; without VAPID keys, 503.
 The UI (Push → Broadcasts → New broadcast) counts the audience live, shows
 a notification preview and asks to confirm "send to N subscribers"; the
 list refreshes every 15 s.
+
+### Scheduled broadcasts (migration 00073)
+
+`sendAt` (RFC 3339) a minute to 30 days ahead stores the broadcast as
+`status = 'scheduled'` with no deliveries. The UI takes a wall-clock time
+in the organization's timezone (`zonedLocalToUtc`, DST-aware). The audience
+is **not** fixed at scheduling: it may be empty today, and subscribers who
+join before the send time get it too. `apps/worker` runs
+`push.RunScheduler` every 15 s: `SendDue` claims each due broadcast with
+`FOR UPDATE SKIP LOCKED` (safe with several workers), queues its deliveries
+exactly as a send-now does and marks it `sent` with `sent_at`, in one
+transaction — sent once, however many workers or ticks see it. It runs
+without VAPID keys too; the deliveries then wait in the queue. A scheduled
+broadcast can be canceled until then (`canceled`, never sent).
+
+## Push metrics (Push → Statistics)
+
+`push_broadcast_stats` holds each broadcast's counters per PWA × campaign ×
+country: `sent` at queue time, `delivered`/`failed`/`unsubscribed` with each
+finished delivery (`pushsend`), `opened` with the first open of a delivery.
+Each delivery row carries its subscriber's PWA, campaign and country as they
+were when sent. The table outlives the delivery rows (retention) and always
+adds up to the broadcast's own counters. Broadcasts sent before migration
+00073 have one row of their totals with empty dimensions ("Not split").
+
+`GET /push/stats` groups by `day` (send day in `timezone`), `broadcast`,
+`pwa`, `campaign` or `country`, over broadcasts **sent** in the range (a
+broadcast counts on its send day, its later opens stay with it; ≤ 366
+days). Each row's metrics are keyed as the custom-metric catalog names them
+— `push_sent`, `push_delivered`, `push_opened`, `push_ctr` (opened ÷
+delivered × 100, null with nothing delivered) — plus `push_failed`,
+`push_unsubscribed`. So the registry's Push category is live: a custom
+metric built from push ids can target **Push statistics** (`push_stats`)
+and is evaluated per row on that tab; the two registries' surface lists
+are kept equal by `TestSurfacesMatchTheFrontend`.
 
 ## Sending (apps/worker, internal/pushsend)
 
@@ -103,6 +142,21 @@ installed long ago): records **NOTIFICATION_CLICK** on every click, counts
 the broadcast's open once per delivery — only for a delivery sent to this
 click's subscription in this organization — and redirects to the target.
 A delivery that is not this click's, or no longer kept, still leads on.
+
+## Verified (2026-10-14, scheduling and metrics)
+
+- Tests: `internal/push` `schedule_stats_test.go` (nothing queued before
+  the send time; sent at the due time to the audience then, with
+  dimensions and group counts; sent once; cancel incl. cross-tenant 404 and
+  409 twice / after send; sendAt bounds; stats by country/broadcast/day,
+  other organization and scheduled ones left out, opens counted once,
+  validation), `pushsend` (group counts add up to the broadcast's),
+  `custommetrics` (surface lists equal on both sides), `timezones.test.ts`.
+- Live on the dev stack (API, no browser — the Chrome extension was not
+  connected): schedule → cancel → 409; a broadcast due in 70 s sent by the
+  running worker on its next tick to 1 subscriber; `/push/stats` by country
+  over the pre-migration broadcast ("Not split" row, CTR 75%); bad
+  `groupBy`/range → 422.
 
 ## Verified (2026-10-13)
 
