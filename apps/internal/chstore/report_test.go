@@ -284,9 +284,16 @@ func TestReportConversionsCountsRedepsSeparately(t *testing.T) {
 	store := chstore.NewEventStore(conn)
 	ctx := context.Background()
 	orgID, campaignID, click := idgen.New(), idgen.New(), idgen.New()
+	declined, trashed := idgen.New(), idgen.New()
 	day := time.Date(2026, 8, 21, 0, 0, 0, 0, time.UTC)
 	if err := store.InsertBatch(ctx, []event.Event{
 		{Type: event.SourceClick, EventAt: day, OrganizationID: orgID, CampaignID: campaignID, ClickID: click, OS: "linux"},
+		// A registration the network then rejected, and a junk lead.
+		{Type: event.SourceClick, EventAt: day, OrganizationID: orgID, CampaignID: campaignID, ClickID: declined, OS: "linux"},
+		{Type: event.CpaHold, EventAt: day.Add(time.Hour), OrganizationID: orgID, CampaignID: campaignID, ClickID: declined},
+		{Type: event.CpaDecline, EventAt: day.Add(2 * time.Hour), OrganizationID: orgID, CampaignID: campaignID, ClickID: declined},
+		{Type: event.SourceClick, EventAt: day, OrganizationID: orgID, CampaignID: campaignID, ClickID: trashed, OS: "linux"},
+		{Type: event.CpaTrash, EventAt: day.Add(time.Hour), OrganizationID: orgID, CampaignID: campaignID, ClickID: trashed},
 		{Type: event.CpaHold, EventAt: day.Add(time.Hour), OrganizationID: orgID, CampaignID: campaignID, ClickID: click},
 		{Type: event.CpaAccept, EventAt: day.Add(2 * time.Hour), OrganizationID: orgID, CampaignID: campaignID, ClickID: click, USDValue: 10, HasUSDValue: true},
 		{Type: event.CpaRedep, EventAt: day.Add(3 * time.Hour), OrganizationID: orgID, CampaignID: campaignID, ClickID: click, USDValue: 5, HasUSDValue: true, EventRef: "t1"},
@@ -301,8 +308,8 @@ func TestReportConversionsCountsRedepsSeparately(t *testing.T) {
 			t.Fatalf("%s: ReportConversions = %+v, %v", name, aggs, err)
 		}
 		a := aggs[0]
-		if a.Registrations != 1 || a.Purchases != 1 || a.Repurchases != 2 || a.Conversions != 3 || a.RevenueUSD != 20 {
-			t.Fatalf("%s: got %+v, want reg=1 purchases=1 redeps=2 conversions=3 revenue=20", name, a)
+		if a.Registrations != 2 || a.Purchases != 1 || a.Repurchases != 2 || a.Declines != 1 || a.Trash != 1 || a.Conversions != 3 || a.RevenueUSD != 20 {
+			t.Fatalf("%s: got %+v, want reg=2 purchases=1 redeps=2 declines=1 trash=1 conversions=3 revenue=20", name, a)
 		}
 	}
 }

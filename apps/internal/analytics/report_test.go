@@ -175,7 +175,7 @@ func TestReportPwaAndCpaFunnelMetrics(t *testing.T) {
 	repo := &reportFakeRepo{
 		clicks:   []chstore.ClickAgg{{Key: k, Clicks: 100, UniqueClicks: 100}},
 		installs: []chstore.InstallAgg{{Key: k, PwaInstalls: 40}},
-		conv:     []chstore.ConversionAgg{{Key: k, Conversions: 8, RevenueUSD: 400, Registrations: 20, Purchases: 6, Repurchases: 2}},
+		conv:     []chstore.ConversionAgg{{Key: k, Conversions: 8, RevenueUSD: 400, Registrations: 20, Purchases: 6, Repurchases: 2, Declines: 3, Trash: 1}},
 	}
 	svc := analytics.NewService(repo, &fakeCost{byCampaign: []cost.CampaignSpend{{CampaignID: "camp-a", AmountUSD: 200, AllConverted: true}}})
 	rows, err := svc.Report(context.Background(), "org-1", analytics.ReportInput{
@@ -194,6 +194,9 @@ func TestReportPwaAndCpaFunnelMetrics(t *testing.T) {
 	}
 	if m.PwaInstalls != 40 || *m.Registrations != 20 || *m.Purchases != 6 || *m.Repurchases != 2 {
 		t.Fatalf("counts = %d/%v/%v/%v, want 40/20/6/2", m.PwaInstalls, m.Registrations, m.Purchases, m.Repurchases)
+	}
+	if m.Declines == nil || *m.Declines != 3 || m.Trash == nil || *m.Trash != 1 {
+		t.Fatalf("declines/trash = %v/%v, want 3/1", m.Declines, m.Trash)
 	}
 	eq("ClickToInstall", m.ClickToInstall, 40)
 	eq("InstallToReg", m.InstallToReg, 50)
@@ -217,6 +220,9 @@ func TestReportFunnelMetricsAreNullNotZeroWhenUndefined(t *testing.T) {
 	m := rows[0].Metrics
 	if m.PwaInstalls != 0 || m.Registrations == nil || *m.Registrations != 0 {
 		t.Fatalf("zero counts must be real zeros, got installs=%d regs=%v", m.PwaInstalls, m.Registrations)
+	}
+	if m.Declines == nil || *m.Declines != 0 || m.Trash == nil || *m.Trash != 0 {
+		t.Fatalf("declines/trash = %v/%v, want real zeros", m.Declines, m.Trash)
 	}
 	if m.ClickToInstall == nil || *m.ClickToInstall != 0 {
 		t.Fatalf("ClickToInstall = %v, want a real 0 (10 clicks, 0 installs)", m.ClickToInstall)

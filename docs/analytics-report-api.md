@@ -391,6 +391,7 @@ instead of throwing or showing a fabricated number. `tsc --noEmit`/
 
 Every metrics object also carries: `pwaInstalls` (PWA_INSTALL count),
 `registrations` (CPA_HOLD), `purchases` (CPA_ACCEPT), `repurchases` (CPA_REDEP),
+`declines` (CPA_DECLINE, §50 cpa_decline), `trash` (CPA_TRASH, §50 cpa_trash),
 `clickToInstall`, `installToReg`, `regToPurchase` (percent) and
 `costPerInstall`, `costPerReg`, `costPerPurchase` (USD). The CPA counts are
 `null` when the requested dimensions can't be answered from conversion_events;
@@ -400,6 +401,12 @@ CPA_REDEP **net of chargebacks**: a CPA_DECLINE/CPA_TRASH that reversed an
 accepted FTD carries that payout negated and is summed in, on the decline's
 own date (so a past day keeps the revenue it showed; the decline's day can
 be negative). See `docs/conversion.md`, "Chargebacks".
+
+`declines` and `trash` count status events, like the other CPA counts: a
+chargeback is a decline too, and a decline later reversed (CPA_ACCEPT after
+CPA_DECLINE) still counts, just as a hold later accepted still counts as a
+registration. Both are sortable and usable in custom metrics; they are not
+in the default preset.
 
 ## Blocked traffic and bots
 

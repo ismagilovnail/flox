@@ -5,6 +5,25 @@ per-phase, matching `CLAUDE.md`'s phase protocol. The one exception is
 [Between phases], below: spec amendments and the code changes that follow from
 them land between phases and would otherwise be invisible here.
 
+## [Phase 30.13] — Report metrics: declines and trash
+
+Closes gap 9 of `docs/spec-conformance-2026-10-11.md` (§50 CPA FUNNEL `cpa_decline`, `cpa_trash`).
+`docs/analytics-report-api.md` "PWA / CPA funnel metrics".
+
+- `declines` (CPA_DECLINE events, chargebacks included) and `trash` (CPA_TRASH) on every report,
+  timeseries, breakdown and dashboard row, counted in ClickHouse on both the plain and the click-joined
+  path. Like the other CPA counts: `null` when the dimensions can't be answered from conversions, a real
+  0 otherwise. A reversed decline still counts.
+- Sortable; in the report builder's metric picker (en/ru labels and hints); allowed in custom metrics and
+  report presets. Not added to the default preset.
+- `analytics`: the three copies of "zero every conversion counter" are now one helper
+  (`rowAccumulator.zeroConversions`).
+- Tests: `internal/chstore` (declined and junk leads, plain and joined), `internal/analytics` (counts
+  pass through; real zeros), the Go↔TS metric-list sync test.
+- Known: the custom-metric catalog still lists the older catalog-only ids `cpa_hold` … `cpa_trash`
+  (marked not live) next to the live `registrations` … `trash`. This was already true for
+  hold/accept/redep and is left as is.
+
 ## [Phase 30.12] — LTV: source and offer filters, breakdowns
 
 Closes gap 8 of `docs/spec-conformance-2026-10-11.md` (§26.5 "filters: campaign, source, offer,

@@ -338,6 +338,12 @@ type ConversionAgg struct {
 	Registrations uint64
 	Purchases     uint64
 	Repurchases   uint64
+	// Declines / Trash count CPA_DECLINE / CPA_TRASH events (§50
+	// cpa_decline, cpa_trash) — a chargeback is a decline too, and a
+	// decline later reversed still counts, as a hold later accepted still
+	// counts as a registration.
+	Declines uint64
+	Trash    uint64
 	// DatedByConversion counts, by click, the group's conversions with no
 	// attributed click, reported on their own date instead.
 	DatedByConversion uint64
@@ -572,6 +578,8 @@ func (s *EventStore) ReportConversions(ctx context.Context, q ReportQuery) ([]Co
 			countIf(type = 'CPA_HOLD') AS registrations,
 			countIf(type = 'CPA_ACCEPT') AS purchases,
 			countIf(type = 'CPA_REDEP') AS repurchases,
+			countIf(type = 'CPA_DECLINE') AS declines,
+			countIf(type = 'CPA_TRASH') AS trash,
 			%s AS dated_by_conversion
 		FROM conversion_events
 		WHERE organization_id = ? AND %s AND type IN `+reportCPATypes+`%s
@@ -588,15 +596,16 @@ func (s *EventStore) ReportConversions(ctx context.Context, q ReportQuery) ([]Co
 	var out []ConversionAgg
 	for rows.Next() {
 		dimVals, day, dest := scanDest(q.Dims, q.ByDay)
-		var conversions, registrations, purchases, repurchases, datedByConversion uint64
+		var conversions, registrations, purchases, repurchases, declines, trash, datedByConversion uint64
 		var revenueUSD float64
-		dest = append(dest, &conversions, &revenueUSD, &registrations, &purchases, &repurchases, &datedByConversion)
+		dest = append(dest, &conversions, &revenueUSD, &registrations, &purchases, &repurchases, &declines, &trash, &datedByConversion)
 		if err := rows.Scan(dest...); err != nil {
 			return nil, fmt.Errorf("chstore: scanning conversion report row: %w", err)
 		}
 		out = append(out, ConversionAgg{
 			Key: scanKey(q.Dims, deref(dimVals), day), Conversions: conversions, RevenueUSD: revenueUSD,
 			Registrations: registrations, Purchases: purchases, Repurchases: repurchases,
+			Declines: declines, Trash: trash,
 			DatedByConversion: datedByConversion,
 		})
 	}
@@ -666,6 +675,8 @@ func (s *EventStore) reportConversionsJoined(ctx context.Context, q ReportQuery)
 			countIf(c.type = 'CPA_HOLD') AS registrations,
 			countIf(c.type = 'CPA_ACCEPT') AS purchases,
 			countIf(c.type = 'CPA_REDEP') AS repurchases,
+			countIf(c.type = 'CPA_DECLINE') AS declines,
+			countIf(c.type = 'CPA_TRASH') AS trash,
 			%s AS dated_by_conversion
 		FROM conversion_events AS c
 		LEFT JOIN (
@@ -691,15 +702,16 @@ func (s *EventStore) reportConversionsJoined(ctx context.Context, q ReportQuery)
 	var out []ConversionAgg
 	for rows.Next() {
 		dimVals, day, dest := scanDest(q.Dims, q.ByDay)
-		var conversions, registrations, purchases, repurchases, datedByConversion uint64
+		var conversions, registrations, purchases, repurchases, declines, trash, datedByConversion uint64
 		var revenueUSD float64
-		dest = append(dest, &conversions, &revenueUSD, &registrations, &purchases, &repurchases, &datedByConversion)
+		dest = append(dest, &conversions, &revenueUSD, &registrations, &purchases, &repurchases, &declines, &trash, &datedByConversion)
 		if err := rows.Scan(dest...); err != nil {
 			return nil, fmt.Errorf("chstore: scanning joined conversion report row: %w", err)
 		}
 		out = append(out, ConversionAgg{
 			Key: scanKey(q.Dims, deref(dimVals), day), Conversions: conversions, RevenueUSD: revenueUSD,
 			Registrations: registrations, Purchases: purchases, Repurchases: repurchases,
+			Declines: declines, Trash: trash,
 			DatedByConversion: datedByConversion,
 		})
 	}

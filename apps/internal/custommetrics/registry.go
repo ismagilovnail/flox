@@ -32,7 +32,7 @@ type registryMetric struct {
 var reportMetricIDs = []string{
 	"clicks", "uniqueClicks", "conversions", "revenue", "cost", "profit",
 	"roi", "roas", "ctr", "cvr", "cpc", "cpa", "epc",
-	"pwaInstalls", "registrations", "purchases", "repurchases",
+	"pwaInstalls", "registrations", "purchases", "repurchases", "declines", "trash",
 	"clickToInstall", "installToReg", "regToPurchase",
 	"costPerInstall", "costPerReg", "costPerPurchase",
 	"blocked", "bots", "blockedRate", "botRate",

@@ -93,14 +93,17 @@ type MetricValues struct {
 	EPC          *float64
 
 	// PWA / CPA funnel counters (§50 CPA FUNNEL). PwaInstalls comes from
-	// tracking_events and is always answerable; the three CPA counts are nil
+	// tracking_events and is always answerable; the CPA counts are nil
 	// exactly when Conversions is (conversion_events can't answer the
 	// requested dimensions). Purchases = CPA_ACCEPT (the first purchase,
-	// FTD), Repurchases = CPA_REDEP, Registrations = CPA_HOLD.
+	// FTD), Repurchases = CPA_REDEP, Registrations = CPA_HOLD, Declines =
+	// CPA_DECLINE (chargebacks included), Trash = CPA_TRASH.
 	PwaInstalls   uint64
 	Registrations *uint64
 	Purchases     *uint64
 	Repurchases   *uint64
+	Declines      *uint64
+	Trash         *uint64
 
 	// Step rates in percent and cost per step. Nil when the denominator is
 	// zero (or, for costs, when there is no cost on file) — never a
@@ -459,10 +462,7 @@ func (s *Service) groupedReport(ctx context.Context, organizationID string, dims
 		// not of any one group; see conversionColumns' own doc). Only
 		// !convSupported groups stay nil, for every row, below.
 		for _, acc := range merged {
-			zero, zeroF := uint64(0), 0.0
-			acc.conversions, acc.revenueUSD = &zero, &zeroF
-			z1, z2, z3 := uint64(0), uint64(0), uint64(0)
-			acc.registrations, acc.purchases, acc.repurchases = &z1, &z2, &z3
+			acc.zeroConversions()
 		}
 		for _, a := range convAggs {
 			// get() here can legitimately create a new row: a click and
@@ -476,6 +476,8 @@ func (s *Service) groupedReport(ctx context.Context, organizationID string, dims
 			acc.revenueUSD = &revenue
 			registrations, purchases, repurchases := a.Registrations, a.Purchases, a.Repurchases
 			acc.registrations, acc.purchases, acc.repurchases = &registrations, &purchases, &repurchases
+			declines, trash := a.Declines, a.Trash
+			acc.declines, acc.trash = &declines, &trash
 			acc.datedByConversion = a.DatedByConversion
 		}
 	}
@@ -490,10 +492,7 @@ func (s *Service) groupedReport(ctx context.Context, organizationID string, dims
 			addRow = func(dimValues map[chstore.ReportDimension]string) *rowAccumulator {
 				acc := get(chstore.ReportKey{DimValues: dimValues})
 				if convSupported && acc.conversions == nil {
-					zero, zeroF := uint64(0), 0.0
-					acc.conversions, acc.revenueUSD = &zero, &zeroF
-					z1, z2, z3 := uint64(0), uint64(0), uint64(0)
-					acc.registrations, acc.purchases, acc.repurchases = &z1, &z2, &z3
+					acc.zeroConversions()
 				}
 				return acc
 			}
@@ -791,12 +790,22 @@ type rowAccumulator struct {
 	revenueUSD                      *float64
 	pwaInstalls                     uint64
 	registrations, purchases        *uint64
-	repurchases                     *uint64
+	repurchases, declines, trash    *uint64
 	costUSD                         *float64
 	datedByConversion               uint64
 	// revenueUnknown: revenue met a day with no reporting-currency rate
 	// (sanitizeMoney); EPC is then unknown too.
 	revenueUnknown bool
+}
+
+// zeroConversions makes every conversion_events-backed field a real 0: the
+// row's dimensions are answerable there, it just had no conversions.
+func (acc *rowAccumulator) zeroConversions() {
+	var conversions, registrations, purchases, repurchases, declines, trash uint64
+	var revenue float64
+	acc.conversions, acc.revenueUSD = &conversions, &revenue
+	acc.registrations, acc.purchases, acc.repurchases = &registrations, &purchases, &repurchases
+	acc.declines, acc.trash = &declines, &trash
 }
 
 // deriveMetrics ports apps/web/src/features/analytics/aggregate.ts's
@@ -811,6 +820,8 @@ func deriveMetrics(acc *rowAccumulator) MetricValues {
 		Registrations: acc.registrations,
 		Purchases:     acc.purchases,
 		Repurchases:   acc.repurchases,
+		Declines:      acc.declines,
+		Trash:         acc.trash,
 		Blocked:       acc.blocked,
 		Bots:          acc.bots,
 	}
@@ -1019,6 +1030,10 @@ func metricFloat(m MetricValues, key string) (float64, bool) {
 		return u64OrNegInf(m.Purchases), true
 	case "repurchases":
 		return u64OrNegInf(m.Repurchases), true
+	case "declines":
+		return u64OrNegInf(m.Declines), true
+	case "trash":
+		return u64OrNegInf(m.Trash), true
 	case "clicktoinstall":
 		return ptrOrNegInf(m.ClickToInstall), true
 	case "installtoreg":

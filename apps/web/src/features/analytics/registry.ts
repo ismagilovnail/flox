@@ -80,6 +80,8 @@ export type MetricKey =
   | "registrations"
   | "purchases"
   | "repurchases"
+  | "declines"
+  | "trash"
   | "clickToInstall"
   | "installToReg"
   | "regToPurchase"
@@ -112,6 +114,8 @@ export const METRICS: { key: MetricKey; label: string; format: MetricFormat }[] 
   { key: "registrations", label: "Registrations", format: "int" },
   { key: "purchases", label: "Purchases", format: "int" },
   { key: "repurchases", label: "Repurchases", format: "int" },
+  { key: "declines", label: "Declines", format: "int" },
+  { key: "trash", label: "Trash", format: "int" },
   { key: "clickToInstall", label: "Click → install", format: "percent" },
   { key: "installToReg", label: "Install → reg.", format: "percent" },
   { key: "regToPurchase", label: "Reg. → purchase", format: "percent" },
