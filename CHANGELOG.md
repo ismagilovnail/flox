@@ -5,6 +5,17 @@ per-phase, matching `CLAUDE.md`'s phase protocol. The one exception is
 [Between phases], below: spec amendments and the code changes that follow from
 them land between phases and would otherwise be invisible here.
 
+## [Phase 30.19] — Inactive campaign tracker test
+
+Closes gap 15 of `docs/spec-conformance-2026-10-11.md` (§58 "inactive campaigns"), the last open gap.
+
+- `apps/tracker` `TestInactiveCampaignIsNotTracked`: through the real handler, a paused, draft or archived
+  campaign's tracking link answers 404, does not redirect (not even to the fallback) and records no event;
+  the active campaign of the same fixture redirects and records its click. Checked that it fails when the
+  tracker's status check is removed.
+- No behavior change. The routing fixture's skip message wrongly said an inactive campaign "routes to a
+  safe destination"; it now says what the tracker does and points to the test. `docs/routing.md` updated.
+
 ## [Phase 30.18] — API key rotation and audit trail
 
 Closes gap 14 of `docs/spec-conformance-2026-10-11.md` (§54: API key rotation; audit logging beyond team

@@ -581,7 +581,7 @@ func TestInvalidTrackingLinks_CallerLevelConcern(t *testing.T) {
 }
 
 func TestInactiveCampaigns_CallerLevelConcern(t *testing.T) {
-	t.Skip("RoutingConfig deliberately carries no campaign-level status field. The caller only loads/passes RoutingConfig for campaigns it has already confirmed are active; a paused/draft/archived campaign routes to a safe destination without invoking this engine at all.")
+	t.Skip("RoutingConfig deliberately carries no campaign-level status field. The caller only loads/passes RoutingConfig for campaigns it has already confirmed are active; apps/tracker answers a paused/draft/archived campaign's link with 404 and records nothing, without invoking this engine (tracker TestInactiveCampaignIsNotTracked).")
 }
 
 func TestInAppWebViewBounce_CallerLevelConcern(t *testing.T) {

@@ -19,16 +19,17 @@ referenced below as §N).
 ## CURRENT STATE — UPDATE THIS EVERY PHASE
 
 ```
-CURRENT PHASE : PHASE 30.18 — API KEY ROTATION + AUDIT TRAIL (closed)
+CURRENT PHASE : PHASE 30.19 — INACTIVE CAMPAIGN TRACKER TEST (closed)
 STATUS        : Spec conformance gaps (docs/spec-conformance-2026-10-11.md):
-                1–14 closed (… empty subs %, key rotation + audit).
-                Push leftovers: scheduled/triggered broadcasts, push
-                metrics. Left: gap 15, prod restore drill after
-                deployment.
-LAST COMMIT   : feat(security): api key rotation and audit trail.
+                all 15 closed. Left from that doc: the "мелочи" list
+                (DataGrid, types/ schemas/ dirs, Copy tracking URL in the
+                campaigns row, IOS_INSTALL/TG_* events). Push leftovers:
+                scheduled/triggered broadcasts, push metrics. Prod restore
+                drill after deployment.
+LAST COMMIT   : test(tracker): inactive campaign is not tracked.
 UNCOMMITTED   : none expected. Dev DB at migration 00072, CH schema 018.
-NEXT          : wait for the user — next gap is 15 (tracker test for an
-                inactive campaign, §58). CI (DO1) is
+NEXT          : wait for the user — the numbered gaps are done; pick from
+                the leftovers above with the user. CI (DO1) is
                 the user's own decision — do not set it up. Run go test with
                 the full env line AND check e2e did not skip (memory:
                 flox-full-test-env); chconn's TestLimitsStopAHeavyQuery

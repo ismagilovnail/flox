@@ -230,7 +230,7 @@ implementation to keep in sync.
 | sticky skipInactive true/false | `TestSticky_SkipInactive` | both branches |
 | inactive flows | `TestInactiveFlow_ExcludedFromSelection` | |
 | inactive offers | `TestInactiveOffer_TreatedAsMissingDestination` | the frontend mock doesn't check this; the Go engine is deliberately stricter here — see `Destination.OfferActive` |
-| inactive campaigns | `TestInactiveCampaigns_CallerLevelConcern` (skipped, documented) | `RoutingConfig` carries no campaign-level status; the caller only loads config for campaigns it already confirmed are active |
+| inactive campaigns | `TestInactiveCampaigns_CallerLevelConcern` (skipped here) + `apps/tracker` `TestInactiveCampaignIsNotTracked` | `RoutingConfig` carries no campaign-level status; the tracker checks it first: a paused, draft or archived campaign's link answers 404 and records no event (no redirect to the fallback, no click in reports) |
 | missing destinations | `TestMissingDestination_CascadesThroughFallbacks` | cascades redirect/offer → stream-set fallback → campaign fallback → empty (never an error) |
 | invalid tracking links | `TestInvalidTrackingLinks_CallerLevelConcern` (skipped, documented) | never reaches this package — the caller doesn't invoke `Resolve` if the tracking link doesn't resolve |
 | ISO code mismatch (UK vs GB) | `TestISOCodeMismatch_NoFuzzyCoercion` | proves no semantic country-code aliasing — a `UK` value must not match a `GB` filter; this engine surfaces a classifier bug rather than papering over it |
