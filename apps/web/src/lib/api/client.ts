@@ -33,6 +33,12 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080";
  */
 export const API_VERSION_PREFIX = "/v1";
 
+/** An absolute URL for a path the API returned relative to its own origin
+ * (e.g. a system gallery image, "/v1/gallery-system/assets/…"). */
+export function apiUrl(path: string): string {
+  return new URL(path, API_URL).toString();
+}
+
 /** API error codes whose message the app shows in the user's language
  * (common:apiErrors.*) instead of the server's English text — wherever the
  * error ends up (toasts, error states, forms). */

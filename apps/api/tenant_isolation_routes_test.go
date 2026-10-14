@@ -92,6 +92,7 @@ var notTenantResources = map[string]string{
 	"token":    "an invite token: public by design, it is the credential",
 	"provider": "an integration provider name (facebook, namecheap…); the row is always the caller's own",
 	"clickId":  "a click id is not a Postgres row; ClickHouse reads filter on the session's org (chstore TestCrossTenantIsolation)",
+	"itemId":   "a system gallery item: shipped with FLOX, the same for every organization; use copies it into the caller's own (contentgallery TestUseSystemItems)",
 }
 
 // missingIDs holds, for every kind, an id no row has.

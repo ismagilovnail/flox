@@ -3,12 +3,15 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import {
+  applySystemItem,
   archiveFiles,
   createFolder,
   deleteFiles,
   deleteFolder,
   listFiles,
   listFolders,
+  listSystemItems,
+  previewSystemLanding,
   moveFiles,
   renameFolder,
   restoreFiles,
@@ -95,5 +98,32 @@ export function useDeleteGalleryFiles() {
   return useMutation({
     mutationFn: (ids: string[]) => deleteFiles(ids),
     onSuccess: () => invalidateFiles(qc),
+  });
+}
+
+/** The system catalog is the same for everyone and ships with the API —
+ * it changes only on deploy. */
+export function useSystemGalleryItems() {
+  return useQuery({ queryKey: ["content-gallery", "system"], queryFn: listSystemItems, staleTime: Infinity });
+}
+
+export function useSystemLandingPreview(id: string | undefined, assetBase: string | undefined) {
+  return useQuery({
+    queryKey: ["content-gallery", "system", id, "preview"],
+    queryFn: () => previewSystemLanding(id!, assetBase!),
+    enabled: !!id && !!assetBase,
+    staleTime: Infinity,
+  });
+}
+
+/** Hands a system item to the team; every kind may add files to the library. */
+export function useApplySystemItem() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, name }: { id: string; name?: string }) => applySystemItem(id, name ? { name } : {}),
+    onSuccess: (res) => {
+      if (res.kind === "landing") qc.invalidateQueries({ queryKey: ["landings"] });
+      return invalidateFiles(qc);
+    },
   });
 }

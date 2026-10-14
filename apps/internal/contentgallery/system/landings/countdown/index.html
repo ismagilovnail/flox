@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Today only</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <main class="page">
+    <header class="brand"><img src="logo.png" alt="" width="40" height="40"><span>Your brand</span></header>
+    <img class="hero" src="hero.png" alt="" width="960" height="540">
+    <p class="tag">Limited time</p>
+    <h1>The offer ends at midnight</h1>
+    <div class="timer" aria-live="polite">
+      <div><span id="h">00</span><small>hours</small></div>
+      <div><span id="m">00</span><small>minutes</small></div>
+      <div><span id="s">00</span><small>seconds</small></div>
+    </div>
+    <a class="cta" href="{{ trackUrl }}">Claim the offer</a>
+    <p class="fine">The timer counts down to the visitor's local midnight.</p>
+  </main>
+  <script>
+    (function () {
+      function pad(n) { return (n < 10 ? "0" : "") + n; }
+      function tick() {
+        var now = new Date();
+        var end = new Date(now); end.setHours(24, 0, 0, 0);
+        var left = Math.max(0, Math.floor((end - now) / 1000));
+        document.getElementById("h").textContent = pad(Math.floor(left / 3600));
+        document.getElementById("m").textContent = pad(Math.floor(left % 3600 / 60));
+        document.getElementById("s").textContent = pad(left % 60);
+      }
+      tick(); setInterval(tick, 1000);
+    })();
+  </script>
+</body>
+</html>

@@ -1,0 +1,135 @@
+{
+  "items": [
+    {
+      "id": "creative-install-banner",
+      "kind": "creative",
+      "name": { "en": "App install banner", "ru": "Баннер установки приложения" },
+      "description": { "en": "1200×628 feed banner with an install call to action.", "ru": "Баннер 1200×628 для ленты с призывом установить приложение." },
+      "tags": ["1200×628", "banner"],
+      "file": "creatives/install-banner.png"
+    },
+    {
+      "id": "creative-welcome-square",
+      "kind": "creative",
+      "name": { "en": "Welcome bonus square", "ru": "Квадрат «приветственный бонус»" },
+      "description": { "en": "1080×1080 square for feeds and carousels.", "ru": "Квадрат 1080×1080 для ленты и каруселей." },
+      "tags": ["1080×1080", "square"],
+      "file": "creatives/welcome-square.png"
+    },
+    {
+      "id": "creative-story-vertical",
+      "kind": "creative",
+      "name": { "en": "Vertical story", "ru": "Вертикальная сторис" },
+      "description": { "en": "720×1280 vertical for stories and reels.", "ru": "Вертикаль 720×1280 для сторис и рилс." },
+      "tags": ["720×1280", "story"],
+      "file": "creatives/story-vertical.png"
+    },
+    {
+      "id": "creative-countdown-banner",
+      "kind": "creative",
+      "name": { "en": "Limited-time banner", "ru": "Баннер ограниченного предложения" },
+      "description": { "en": "1200×628 banner for a today-only offer.", "ru": "Баннер 1200×628 для предложения «только сегодня»." },
+      "tags": ["1200×628", "banner"],
+      "file": "creatives/countdown-banner.png"
+    },
+    {
+      "id": "landing-cta",
+      "kind": "landing",
+      "name": { "en": "One-screen call to action", "ru": "Одноэкранный призыв к действию" },
+      "description": { "en": "Hero image, three benefits and one button to the offer.", "ru": "Картинка, три преимущества и одна кнопка на оффер." },
+      "tags": ["prelander", "mobile"],
+      "preview": "landings/cta/hero.png",
+      "dir": "landings/cta",
+      "logo": "landings/cta/logo.png",
+      "title": "Get started"
+    },
+    {
+      "id": "landing-quiz",
+      "kind": "landing",
+      "name": { "en": "Three-question quiz", "ru": "Квиз из трёх вопросов" },
+      "description": { "en": "A short quiz that warms the visitor up, then one link to the offer.", "ru": "Короткий квиз, который разогревает посетителя, затем одна ссылка на оффер." },
+      "tags": ["prelander", "quiz"],
+      "preview": "landings/quiz/logo.png",
+      "dir": "landings/quiz",
+      "logo": "landings/quiz/logo.png",
+      "title": "Quick quiz"
+    },
+    {
+      "id": "landing-countdown",
+      "kind": "landing",
+      "name": { "en": "Countdown offer", "ru": "Оффер с обратным отсчётом" },
+      "description": { "en": "A today-only offer with a timer to the visitor's midnight.", "ru": "Предложение «только сегодня» с таймером до полуночи посетителя." },
+      "tags": ["prelander", "urgency"],
+      "preview": "landings/countdown/hero.png",
+      "dir": "landings/countdown",
+      "logo": "landings/countdown/logo.png",
+      "title": "Today only"
+    },
+    {
+      "id": "pwa-nova",
+      "kind": "pwa",
+      "name": { "en": "Rewards app, light", "ru": "Приложение наград, светлое" },
+      "description": { "en": "Light store page: icon, three screenshots, description and ratings.", "ru": "Светлая страница стора: иконка, три скриншота, описание и оценки." },
+      "tags": ["light", "store page"],
+      "preview": "pwa/nova/screen-1.png",
+      "icon": "pwa/nova/icon.png",
+      "screenshots": ["pwa/nova/screen-1.png", "pwa/nova/screen-2.png", "pwa/nova/screen-3.png"],
+      "pwa": {
+        "name": "Nova Rewards",
+        "shortName": "Nova",
+        "themeColor": "#2563eb",
+        "backgroundColor": "#ffffff",
+        "developer": "Nova Studio",
+        "description": "Check in every day, collect points and unlock new levels. Invite friends and climb the leaderboard together.",
+        "rating": 4.7,
+        "ratingCount": 12840,
+        "downloadsLabel": "100K+",
+        "sizeMb": 4.2,
+        "whatsNew": "Faster start-up and a new weekly challenge.",
+        "ratingStars5": 78,
+        "ratingStars4": 14,
+        "ratingStars3": 4,
+        "ratingStars2": 2,
+        "ratingStars1": 2,
+        "version": "2.3.1",
+        "ageRating": "12+",
+        "category": "Entertainment",
+        "containsAds": false,
+        "inAppPurchases": false
+      }
+    },
+    {
+      "id": "pwa-pulse",
+      "kind": "pwa",
+      "name": { "en": "Game app, dark", "ru": "Игровое приложение, тёмное" },
+      "description": { "en": "Dark store page for a casual game: icon, three screenshots, description and ratings.", "ru": "Тёмная страница стора для казуальной игры: иконка, три скриншота, описание и оценки." },
+      "tags": ["dark", "store page"],
+      "preview": "pwa/pulse/screen-1.png",
+      "icon": "pwa/pulse/icon.png",
+      "screenshots": ["pwa/pulse/screen-1.png", "pwa/pulse/screen-2.png", "pwa/pulse/screen-3.png"],
+      "pwa": {
+        "name": "Pulse Arcade",
+        "shortName": "Pulse",
+        "themeColor": "#7c3aed",
+        "backgroundColor": "#111827",
+        "developer": "Pulse Games",
+        "description": "Play instantly with no download wait. New challenges every week, seasonal themes and special prizes.",
+        "rating": 4.6,
+        "ratingCount": 8312,
+        "downloadsLabel": "50K+",
+        "sizeMb": 6.8,
+        "whatsNew": "New seasonal event and bug fixes.",
+        "ratingStars5": 72,
+        "ratingStars4": 17,
+        "ratingStars3": 6,
+        "ratingStars2": 2,
+        "ratingStars1": 3,
+        "version": "1.8.0",
+        "ageRating": "12+",
+        "category": "Games",
+        "containsAds": true,
+        "inAppPurchases": true
+      }
+    }
+  ]
+}

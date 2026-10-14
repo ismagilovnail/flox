@@ -24,6 +24,7 @@
   },
   "form": {
     "titleNew": "New PWA",
+    "fromTemplate": "Filled in from the gallery template “{{name}}”. Its icon and screenshots are in your content gallery now. Check the start URL and the texts, then create the PWA.",
     "titleEdit": "Edit {{name}}",
     "description": "These fields are the app's real Web App Manifest — the preview below is what installs on the device.",
     "nameLabel": "Name",

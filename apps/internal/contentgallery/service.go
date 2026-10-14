@@ -42,8 +42,9 @@ var allowedImageExt = map[string]string{
 var videoExt = map[string]bool{".mp4": true, ".mov": true, ".webm": true}
 
 type Service struct {
-	repo    *Repository
-	storage *storage.Client
+	repo     *Repository
+	storage  *storage.Client
+	landings LandingCreator // nil until WithLandings: landing templates unavailable
 }
 
 // storageClient may be nil (object storage failed to initialize at

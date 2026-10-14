@@ -5,6 +5,34 @@ per-phase, matching `CLAUDE.md`'s phase protocol. The one exception is
 [Between phases], below: spec amendments and the code changes that follow from
 them land between phases and would otherwise be invisible here.
 
+## [Phase 30.14] — Content Gallery: system catalog
+
+Closes gap 10 of `docs/spec-conformance-2026-10-11.md` (§30.8: browsable system content with preview and
+"use this" into the right builder, kept apart from team uploads). Scope (owner, 2026-10-14): creatives,
+landing templates and PWA templates. `docs/content-gallery.md`.
+
+- **Catalog** shipped in the API binary (`contentgallery/system/`): 4 creatives, 3 landing templates
+  (call to action, three-question quiz, countdown), 2 PWA store pages. All generic samples with invented
+  names; the images come from `contentgallery/gen/make_assets.py`. `catalog.json` is checked at start-up
+  (unknown fields or kinds, missing files or translations stop the API).
+- **Use** (`POST /content-gallery/system/{itemId}/use`, `content.write`): a creative is copied into the team
+  library. A landing template becomes an internal landing (bundle zipped server-side, same checks as an
+  upload, logo copied into the library), then its page opens. A PWA template copies icon and screenshots
+  into the library and opens `/pwa/new` filled in; nothing is saved until the form is submitted. Copies go
+  through `UploadFile` and are the team's own from then on.
+- **Preview:** images, and landing templates rendered live (`landing.Render`, links disabled) in a sandboxed
+  iframe like the template editor. Public asset route `/v1/gallery-system/assets/*` serves only PNG and CSS,
+  with `nosniff`; HTML is never served from the API's origin.
+- **Web:** "Team library" / "System" sections on `/content-gallery`: type filter, search, cards, preview
+  dialog, name dialog for landings, en/ru. New-PWA form shows which template it was filled from.
+- Tenant isolation: the route walker lists `{itemId}` as not a tenant resource (system items are global;
+  use writes only into the caller's org, covered by `TestUseSystemItems`).
+- Verified in the browser on the dev stack: catalog, landing preview, landing created and opened (a
+  "Одноэкранный призыв к действию" landing now exists in the demo org), PWA form prefilled (not submitted).
+- Tests: catalog checks incl. broken catalogs, asset route (no HTML, no catalog, no traversal), landing
+  preview, every hand-off end to end with Postgres and MinIO (the PWA template passes the PWA service's own
+  validation), cross-org visibility of the copies.
+
 ## [Phase 30.13] — Report metrics: declines and trash
 
 Closes gap 9 of `docs/spec-conformance-2026-10-11.md` (§50 CPA FUNNEL `cpa_decline`, `cpa_trash`).

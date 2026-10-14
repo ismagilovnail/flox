@@ -99,5 +99,56 @@
   "pagination_one": "Page {{page}} of {{pages}} · {{count}} file",
   "pagination_few": "Page {{page}} of {{pages}} · {{count}} files",
   "pagination_many": "Page {{page}} of {{pages}} · {{count}} files",
-  "pagination_other": "Page {{page}} of {{pages}} · {{count}} files"
+  "pagination_other": "Page {{page}} of {{pages}} · {{count}} files",
+  "sections": {
+    "library": "Team library",
+    "system": "System"
+  },
+  "system": {
+    "loading": "Loading the catalog…",
+    "loadError": "Couldn't load the catalog",
+    "search": "Search templates and creatives",
+    "emptyTitle": "Nothing matches",
+    "emptyDescription": "Try another type or search.",
+    "kinds": {
+      "all": "All",
+      "creative": "Creatives",
+      "landing": "Landing templates",
+      "pwa": "PWA templates"
+    },
+    "kindLabels": {
+      "creative": "Creative",
+      "landing": "Landing template",
+      "pwa": "PWA template"
+    },
+    "use": {
+      "creative": "Add to library",
+      "landing": "Create landing",
+      "pwa": "Create PWA"
+    },
+    "preview": "Preview {{name}}",
+    "previewAction": "Preview",
+    "previewHint": {
+      "creative": "Adding it copies the image into your team library.",
+      "landing": "Links are disabled here. Creating a landing copies the template into your landings, where you can edit it.",
+      "pwa": "Creating a PWA copies the icon and screenshots into your team library and opens the PWA form filled in."
+    },
+    "previewLoading": "Rendering the preview…",
+    "previewError": "Couldn't render the preview",
+    "close": "Close",
+    "landingDialog": {
+      "title": "Create a landing from this template",
+      "description": "The landing is created right away and opens in the editor. Its logo is added to your team library.",
+      "name": "Landing name",
+      "cancel": "Cancel",
+      "create": "Create landing",
+      "creating": "Creating…"
+    },
+    "toast": {
+      "creative": "Added to your team library",
+      "openLibrary": "Open library",
+      "landing": "Landing created from the template",
+      "error": "Couldn't use this item"
+    }
+  }
 }

@@ -42,6 +42,70 @@ func (h *Handler) Register(r chi.Router) {
 	r.With(h.requireWrite).Post("/files/archive", h.archiveFiles)
 	r.With(h.requireWrite).Post("/files/restore", h.restoreFiles)
 	r.With(h.requireWrite).Post("/files/delete", h.deleteFiles)
+
+	// System content (system.go): read like the library, used like an upload.
+	r.Get("/system", h.listSystem)
+	r.Get("/system/{itemId}/preview", h.previewSystem)
+	r.With(h.requireWrite).Post("/system/{itemId}/use", h.useSystem)
+}
+
+type systemItemResponse struct {
+	ID          string            `json:"id"`
+	Kind        SystemKind        `json:"kind"`
+	Name        map[string]string `json:"name"`
+	Description map[string]string `json:"description"`
+	Tags        []string          `json:"tags"`
+	// PreviewPath is the card image, relative to the API's origin.
+	PreviewPath string `json:"previewPath"`
+	// AssetBasePath, for a landing template, is where its CSS and images
+	// are served — what the preview needs as its assetBase.
+	AssetBasePath string `json:"assetBasePath,omitempty"`
+}
+
+func (h *Handler) listSystem(w http.ResponseWriter, _ *http.Request) {
+	items := h.svc.SystemItems()
+	out := make([]systemItemResponse, len(items))
+	for i, it := range items {
+		out[i] = systemItemResponse{
+			ID: it.ID, Kind: it.Kind, Name: it.Name, Description: it.Description, Tags: it.Tags,
+			PreviewPath: SystemAssetBasePath + it.Preview,
+		}
+		if it.Kind == SystemLanding {
+			out[i].AssetBasePath = SystemAssetBasePath + it.Dir + "/"
+		}
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"items": out})
+}
+
+// previewSystem answers {"html": …} for a landing template; JSON, never
+// text/html — the page must not run on the API's origin.
+func (h *Handler) previewSystem(w http.ResponseWriter, r *http.Request) {
+	html, err := h.svc.SystemLandingPreview(chi.URLParam(r, "itemId"), r.URL.Query().Get("assetBase"))
+	if err != nil {
+		apierror.Write(w, h.logger, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"html": html})
+}
+
+func (h *Handler) useSystem(w http.ResponseWriter, r *http.Request) {
+	orgID, _ := tenant.OrgID(r.Context())
+	userID, _ := tenant.UserID(r.Context())
+	var req struct {
+		Name string `json:"name"`
+	}
+	if r.ContentLength != 0 {
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			apierror.Write(w, h.logger, apierror.Validation("invalid JSON body", nil))
+			return
+		}
+	}
+	res, err := h.svc.UseSystemItem(r.Context(), orgID, userID, chi.URLParam(r, "itemId"), SystemUseInput{Name: req.Name})
+	if err != nil {
+		apierror.Write(w, h.logger, err)
+		return
+	}
+	writeJSON(w, http.StatusCreated, res)
 }
 
 func (h *Handler) listFolders(w http.ResponseWriter, r *http.Request) {

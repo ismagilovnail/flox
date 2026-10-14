@@ -105,3 +105,42 @@ export function restoreFiles(ids: string[]): Promise<{ restored: number }> {
 export function deleteFiles(ids: string[]): Promise<{ deleted: number }> {
   return apiFetch("/content-gallery/files/delete", { method: "POST", body: { ids } });
 }
+
+// --- System content (§30.8; Go contentgallery/system.go) ---
+
+export type SystemItemKind = "creative" | "landing" | "pwa";
+
+export type SystemGalleryItem = {
+  id: string;
+  kind: SystemItemKind;
+  /** Localized: { en, ru }. */
+  name: Record<string, string>;
+  description: Record<string, string>;
+  tags: string[];
+  /** Relative to the API origin — pass through apiUrl(). */
+  previewPath: string;
+  /** Landing templates: where the template's CSS and images are served. */
+  assetBasePath?: string;
+};
+
+/** The hand-off: `file` for a creative (copied into the library), `landing`
+ * for a landing template (created), `pwa` for a PWA template (the PWA form's
+ * fields, images already copied into the library). */
+export type SystemUseResult = {
+  kind: SystemItemKind;
+  file?: GalleryFile;
+  landing?: { id: string; name: string };
+  pwa?: Record<string, unknown>;
+};
+
+export function listSystemItems(): Promise<{ items: SystemGalleryItem[] }> {
+  return apiFetch("/content-gallery/system");
+}
+
+export function previewSystemLanding(id: string, assetBase: string): Promise<{ html: string }> {
+  return apiFetch(`/content-gallery/system/${id}/preview`, { searchParams: { assetBase } });
+}
+
+export function applySystemItem(id: string, input: { name?: string } = {}): Promise<SystemUseResult> {
+  return apiFetch(`/content-gallery/system/${id}/use`, { method: "POST", body: input });
+}

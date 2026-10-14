@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Quick quiz</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <main class="page">
+    <header class="brand"><img src="logo.png" alt="" width="40" height="40"><span>Your brand</span></header>
+    <div class="progress"><div class="bar" id="bar"></div></div>
+
+    <!-- Answers are buttons, not links: every <a> on a landing leads to the offer. -->
+    <section class="step active">
+      <h1>What are you looking for?</h1>
+      <button type="button" class="answer">Something to pass the time</button>
+      <button type="button" class="answer">A way to earn rewards</button>
+      <button type="button" class="answer">Just curious</button>
+    </section>
+    <section class="step">
+      <h1>How often would you use it?</h1>
+      <button type="button" class="answer">Every day</button>
+      <button type="button" class="answer">A few times a week</button>
+      <button type="button" class="answer">Now and then</button>
+    </section>
+    <section class="step">
+      <h1>Which device do you use most?</h1>
+      <button type="button" class="answer">Android phone</button>
+      <button type="button" class="answer">iPhone</button>
+      <button type="button" class="answer">Computer</button>
+    </section>
+    <section class="step">
+      <h1>Great — we found a match for you</h1>
+      <p class="lead">Your personal pick is ready.</p>
+      <a class="cta" href="{{ trackUrl }}">See my match</a>
+    </section>
+  </main>
+  <script>
+    (function () {
+      var steps = document.querySelectorAll(".step");
+      var bar = document.getElementById("bar");
+      var current = 0;
+      function show(i) {
+        steps[current].classList.remove("active");
+        current = i;
+        steps[current].classList.add("active");
+        bar.style.width = Math.round((current / (steps.length - 1)) * 100) + "%";
+      }
+      document.querySelectorAll(".answer").forEach(function (b) {
+        b.addEventListener("click", function () { if (current < steps.length - 1) show(current + 1); });
+      });
+    })();
+  </script>
+</body>
+</html>

@@ -460,7 +460,8 @@ func buildServer(ctx context.Context, cfg config.Config, logger *slog.Logger, re
 		networkHandler.Register(r)
 	})
 
-	landingHandler := landing.NewHandler(landing.NewService(landing.NewRepository(db), storageClient, logger), requireContentWrite, logger)
+	landingSvc := landing.NewService(landing.NewRepository(db), storageClient, logger)
+	landingHandler := landing.NewHandler(landingSvc, requireContentWrite, logger)
 	srv.Mux().Route("/landings", func(r chi.Router) {
 		r.Use(tenantMiddleware)
 		r.Use(readGate("content.read"))
@@ -484,11 +485,17 @@ func buildServer(ctx context.Context, cfg config.Config, logger *slog.Logger, re
 		pwaHandler.Register(r)
 	})
 
-	contentGalleryHandler := contentgallery.NewHandler(contentgallery.NewService(contentgallery.NewRepository(db), storageClient), requireContentWrite, logger)
+	contentGallerySvc := contentgallery.NewService(contentgallery.NewRepository(db), storageClient).WithLandings(landingSvc)
+	contentGalleryHandler := contentgallery.NewHandler(contentGallerySvc, requireContentWrite, logger)
 	srv.Mux().Route("/content-gallery", func(r chi.Router) {
 		r.Use(tenantMiddleware)
 		r.Use(readGate("content.read"))
 		contentGalleryHandler.Register(r)
+	})
+	// System gallery images and stylesheets: public, the same for every
+	// organization (contentgallery.ServeSystemAsset).
+	srv.Mux().Get("/gallery-system/assets/*", func(w http.ResponseWriter, r *http.Request) {
+		contentgallery.ServeSystemAsset(w, r, chi.URLParam(r, "*"))
 	})
 
 	// Alerts (marketer audit #10): rules under Settings, the bell's feed.
