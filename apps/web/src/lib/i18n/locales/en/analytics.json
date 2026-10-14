@@ -131,7 +131,7 @@
     "cpc": "CPC = cost ÷ clicks. Average price of one click.",
     "cpa": "CPA = cost ÷ conversions. Average price of one conversion.",
     "epc": "EPC = revenue ÷ clicks. Average revenue per click.",
-    "pwaInstalls": "Number of PWA installs (PWA_INSTALL events).",
+    "pwaInstalls": "Number of PWA installs: the install beacon (PWA_INSTALL) plus iOS installs counted at the first Home Screen launch (IOS_INSTALL).",
     "registrations": "Registrations at the network — CPA_HOLD events.",
     "purchases": "First purchases (FTD) — CPA_ACCEPT events.",
     "repurchases": "Repeat purchases — CPA_REDEP events.",

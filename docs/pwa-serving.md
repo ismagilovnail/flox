@@ -11,6 +11,7 @@ installed app is launched. Code: `apps/tracker/pwa.go`; tests:
 ```
 click /t/{slug} ──► [internal landing] ──► /pwa/{token}/ ──► install ──► app launch ──► destination
    SOURCE_CLICK      LAND_VIEW/LAND_CLICK    PWA_VIEW        PWA_INSTALL   PWA_OPEN
+                                                             (iOS: IOS_INSTALL on the first launch)
 ```
 
 - No landing: `/t/` 302s straight to `/pwa/{token}/`.
@@ -140,6 +141,33 @@ open lead back to the editor. Works even for a paused PWA. Needs
 `LANDING_LINK_KEY` and `TRACKER_PUBLIC_URL` on apps/api (dev: compose and
 `.env.example`); otherwise the button answers 503. `localhost` counts as a
 secure context, so install works in dev without TLS.
+
+## iOS installs (IOS_INSTALL, 2026-10-14)
+
+Safari on iOS/iPadOS never fires `appinstalled`, so the install page's
+beacon (PWA_INSTALL) cannot see an iOS install. Its first sign is the
+first launch from the Home Screen, which requests `start_url`
+(`/pwa/{token}/open`). A Home Screen app has its own cookie store, which
+starts empty, so `/open` from an iOS device (classifier `os = ios`,
+iPhone or iPad) **without** the `sf_pwa_inst` cookie records
+**IOS_INSTALL** — before that launch's PWA_OPEN, same click — and sets the
+cookie (HttpOnly, 400 days, `Path=/pwa/{token}/` so Safari's own visits to
+the install page never carry it, `Secure` on https). Later launches find
+it and record only PWA_OPEN. One event per installation: a second device
+or a reinstall is another install. Test links record nothing.
+
+Owner's choice: an iOS install counts as an install everywhere — the
+`pwaInstalls` metric (`PWA_INSTALL` + `IOS_INSTALL` rows), the funnel's and
+the flow summary's PWA_INSTALL stage (distinct visits, folded in
+ClickHouse), and pixels: an IOS_INSTALL reaches the pixels set for
+PWA_INSTALL, sent as PWA_INSTALL (CompleteRegistration / SIGN_UP, `{status}`
+= PWA_INSTALL). The event itself stays IOS_INSTALL (§43) in the click log
+and timeline.
+
+Limits: an iPad set to request desktop sites sends a Mac user agent and is
+not recognized; opening `/open` directly in Safari (not from the Home
+Screen) on an iPhone would count once, since the server cannot tell the two
+apart — `start_url` is not a link anyone is shown.
 
 ## Not done
 

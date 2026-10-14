@@ -14,8 +14,19 @@ import (
 // trackerTriggered is the tracker-produced events a pixel can report
 // (pixel.ValidEventTypes); CPA statuses are queued by the conversion's own
 // transaction instead.
+// IOS_INSTALL is an install too (docs/pwa-serving.md): it reaches the
+// pixels set for PWA_INSTALL, as PWA_INSTALL (pixelType).
 var trackerTriggered = map[event.Type]bool{
 	event.PwaInstall: true,
+	event.IosInstall: true,
+}
+
+// pixelType is the event type a pixel is configured and mapped by.
+func pixelType(t event.Type) event.Type {
+	if t == event.IosInstall {
+		return event.PwaInstall
+	}
+	return t
 }
 
 // Inserter is the ClickHouse event writer the worker's event pipelines
@@ -51,7 +62,8 @@ func (t *TriggerSink) InsertBatch(ctx context.Context, events []event.Event) err
 }
 
 func (t *TriggerSink) queue(ctx context.Context, ev event.Event) error {
-	wanted, err := t.Queue.Wanted(ctx, ev.OrganizationID, ev.StreamSetID, ev.Type)
+	typ := pixelType(ev.Type)
+	wanted, err := t.Queue.Wanted(ctx, ev.OrganizationID, ev.StreamSetID, typ)
 	if err != nil {
 		return err
 	}
@@ -62,7 +74,7 @@ func (t *TriggerSink) queue(ctx context.Context, ev event.Event) error {
 		OrganizationID: ev.OrganizationID,
 		StreamSetID:    ev.StreamSetID,
 		SourceEventID:  ev.ID,
-		Type:           ev.Type,
+		Type:           typ,
 		EventAt:        ev.EventAt,
 		ClickID:        ev.ClickID,
 		IP:             ev.IP,
@@ -71,7 +83,7 @@ func (t *TriggerSink) queue(ctx context.Context, ev event.Event) error {
 		TTClickID:      ev.TTClickID,
 		Macros: macro.Values{
 			ClickID:    ev.ClickID,
-			Status:     string(ev.Type),
+			Status:     string(typ),
 			CampaignID: ev.CampaignID,
 			OfferID:    ev.OfferID,
 			Country:    ev.Country,

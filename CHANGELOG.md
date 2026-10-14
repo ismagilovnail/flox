@@ -5,6 +5,23 @@ per-phase, matching `CLAUDE.md`'s phase protocol. The one exception is
 [Between phases], below: spec amendments and the code changes that follow from
 them land between phases and would otherwise be invisible here.
 
+## [Phase 30.24] — IOS_INSTALL
+
+From the "мелочи" list of `docs/spec-conformance-2026-10-11.md` (§43). Scope (owner, 2026-10-14): detect on
+the first Home Screen launch; count as an install everywhere.
+
+- **Tracker:** iOS never fires `appinstalled`, so `/pwa/{token}/open` (the app's start_url) from an iOS
+  device without the `sf_pwa_inst` cookie records IOS_INSTALL before that launch's PWA_OPEN and sets the
+  cookie (HttpOnly, 400 days, token path; a Home Screen app's cookie store starts empty — one event per
+  installation). Later launches, other platforms and test links record none.
+- **Counted as an install:** `pwaInstalls` sums PWA_INSTALL + IOS_INSTALL; the funnel and the flow summary
+  fold IOS_INSTALL into the PWA_INSTALL stage (distinct visits); pixels set for PWA_INSTALL fire on it, sent
+  as PWA_INSTALL. The metric's description says so (en/ru).
+- Tests: tracker (first launch only, cookie shape, Android, second device, test link), ClickHouse (metric,
+  funnel, flow summary), pixel trigger; mutation-checked. Verified live: an iPhone click and two launches →
+  one IOS_INSTALL and two PWA_OPEN in ClickHouse (the demo campaign was activated for the check and paused
+  again; that click stays in the dev data).
+
 ## [Phase 30.23] — Recurring push broadcasts
 
 Push leftover (`docs/push.md`). Scope (owner, 2026-10-14): weekdays + time in the organization's zone,

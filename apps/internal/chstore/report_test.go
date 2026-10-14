@@ -1211,3 +1211,58 @@ func TestReportClicksCountsEmptySubs(t *testing.T) {
 		t.Fatalf("clicks/empty subs = %d/%d, want 4/2", aggs[0].Clicks, aggs[0].EmptySubs)
 	}
 }
+
+// An iOS install (IOS_INSTALL, its first launch — iOS has no install
+// beacon) is an install: in the pwaInstalls metric, in the funnel's and
+// the flow summary's PWA_INSTALL stage (distinct visits), never as a
+// stage of its own.
+func TestInstallsIncludeIosInstalls(t *testing.T) {
+	conn := mustConn(t)
+	store := chstore.NewEventStore(conn)
+	ctx := context.Background()
+	orgID, campaignID, flowID := idgen.New(), idgen.New(), idgen.New()
+	android, iphone, both := idgen.New(), idgen.New(), idgen.New()
+	day := time.Date(2026, 8, 22, 0, 0, 0, 0, time.UTC)
+	ev := func(typ event.Type, click string, h int) event.Event {
+		return event.Event{Type: typ, EventAt: day.Add(time.Duration(h) * time.Hour), OrganizationID: orgID, CampaignID: campaignID, FlowID: flowID, ClickID: click, Country: "US"}
+	}
+	if err := store.InsertBatch(ctx, []event.Event{
+		ev(event.PwaInstall, android, 1),
+		ev(event.IosInstall, iphone, 2),
+		// Installed twice on one visit (two devices): two installs, one visit.
+		ev(event.IosInstall, both, 3), ev(event.IosInstall, both, 4),
+		ev(event.PwaView, idgen.New(), 1),
+	}); err != nil {
+		t.Fatalf("seeding: %v", err)
+	}
+	window := func() (time.Time, time.Time) { return day, day.Add(24 * time.Hour) }
+
+	from, to := window()
+	aggs, err := store.ReportPwaInstalls(ctx, chstore.ReportQuery{OrganizationID: orgID, From: from, To: to})
+	if err != nil {
+		t.Fatalf("ReportPwaInstalls: %v", err)
+	}
+	var installs uint64
+	for _, a := range aggs {
+		installs += a.PwaInstalls
+	}
+	if installs != 4 {
+		t.Fatalf("pwaInstalls = %d, want 4 (one PWA_INSTALL + three IOS_INSTALL)", installs)
+	}
+
+	funnel, err := store.FunnelCounts(ctx, orgID, from, to, nil)
+	if err != nil {
+		t.Fatalf("FunnelCounts: %v", err)
+	}
+	if funnel["PWA_INSTALL"] != 3 || funnel["IOS_INSTALL"] != 0 {
+		t.Fatalf("funnel = %v, want PWA_INSTALL = 3 visits and no IOS_INSTALL stage", funnel)
+	}
+
+	stages, err := store.FlowStageCounts(ctx, orgID, from, to, []string{flowID})
+	if err != nil {
+		t.Fatalf("FlowStageCounts: %v", err)
+	}
+	if got := stages[flowID]; got["PWA_INSTALL"] != 3 || got["IOS_INSTALL"] != 0 {
+		t.Fatalf("flow stages = %v, want PWA_INSTALL = 3 visits", got)
+	}
+}

@@ -19,14 +19,13 @@ referenced below as §N).
 ## CURRENT STATE — UPDATE THIS EVERY PHASE
 
 ```
-CURRENT PHASE : PHASE 30.23 — RECURRING PUSH BROADCASTS (closed)
+CURRENT PHASE : PHASE 30.24 — IOS_INSTALL (closed)
 STATUS        : Spec conformance gaps (docs/spec-conformance-2026-10-11.md):
                 all 15 closed. Left from that doc's "мелочи": DataGrid,
-                types/ schemas/ dirs, IOS_INSTALL/TG_* events. Push
-                leftovers: push metrics in the report builder (interval
-                mode and multi-step triggers were scoped out).
+                types/ schemas/ dirs, TG_* events. Push leftover: push
+                metrics in the report builder.
                 Prod restore drill after deployment.
-LAST COMMIT   : feat(push): recurring broadcasts.
+LAST COMMIT   : feat(tracker): ios install on first home screen launch.
 UNCOMMITTED   : none expected. Dev DB at migration 00075, CH schema 018.
 NEXT          : wait for the user — pick from the leftovers above with the
                 user. CI (DO1) is

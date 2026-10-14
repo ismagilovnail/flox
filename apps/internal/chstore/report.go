@@ -511,8 +511,17 @@ func (s *EventStore) ReportLandViews(ctx context.Context, q ReportQuery) ([]Land
 	return out, rows.Err()
 }
 
-// ReportPwaInstalls answers "how many PWA_INSTALL rows" for q — the
-// pwaInstalls metric. Same table and dimensions as ReportLandViews.
+// installTypes is what counts as a PWA install: the install page's beacon
+// (PWA_INSTALL) and an iOS app's first launch (IOS_INSTALL — iOS has no
+// beacon; docs/pwa-serving.md). installAs folds them into PWA_INSTALL for
+// the funnel and the flow summary, which count distinct visits per stage.
+const (
+	installTypes = `('PWA_INSTALL', 'IOS_INSTALL')`
+	installAs    = `if(type = 'IOS_INSTALL', 'PWA_INSTALL', type)`
+)
+
+// ReportPwaInstalls answers "how many PWA_INSTALL + IOS_INSTALL rows" for
+// q — the pwaInstalls metric. Same table and dimensions as ReportLandViews.
 func (s *EventStore) ReportPwaInstalls(ctx context.Context, q ReportQuery) ([]InstallAgg, error) {
 	selectCols, ok := buildGroupBy(reportClickColumns, q.Dims)
 	if !ok {
@@ -529,7 +538,7 @@ func (s *EventStore) ReportPwaInstalls(ctx context.Context, q ReportQuery) ([]In
 	query := fmt.Sprintf(`
 		SELECT %scount() AS pwa_installs
 		FROM tracking_events
-		WHERE organization_id = ? AND event_at >= ? AND event_at < ? AND type = 'PWA_INSTALL'%s
+		WHERE organization_id = ? AND event_at >= ? AND event_at < ? AND type IN `+installTypes+`%s
 		%s`,
 		selectExpr, filterClause, groupByExpr,
 	)
@@ -768,11 +777,11 @@ func (s *EventStore) FunnelCounts(ctx context.Context, organizationID string, fr
 	}
 
 	trackingRows, err := s.conn.Query(ctx, `
-		SELECT type, count(DISTINCT click_id)
+		SELECT `+installAs+` AS stage, count(DISTINCT click_id)
 		FROM tracking_events
 		WHERE organization_id = ? AND event_at >= ? AND event_at < ?
-			AND type IN ('LAND_VIEW', 'LAND_CLICK', 'PWA_VIEW', 'PWA_INSTALL')`+visitFilter+`
-		GROUP BY type`, append([]any{organizationID, from, to}, visitArgs...)...)
+			AND type IN ('LAND_VIEW', 'LAND_CLICK', 'PWA_VIEW', 'PWA_INSTALL', 'IOS_INSTALL')`+visitFilter+`
+		GROUP BY stage`, append([]any{organizationID, from, to}, visitArgs...)...)
 	if err != nil {
 		return nil, fmt.Errorf("chstore: querying funnel tracking counts: %w", err)
 	}
@@ -942,7 +951,7 @@ func deref(ptrs []*string) []string {
 // carries them (§25 "analytics summary" on a flow's nodes).
 var flowStageTypes = map[string][]string{
 	"click_events":      {"SOURCE_CLICK"},
-	"tracking_events":   {"LAND_VIEW", "LAND_CLICK", "PWA_VIEW", "PWA_INSTALL", "POSTLANDING_VIEW", "POSTLANDING_CLICK"},
+	"tracking_events":   {"LAND_VIEW", "LAND_CLICK", "PWA_VIEW", "PWA_INSTALL", "IOS_INSTALL", "POSTLANDING_VIEW", "POSTLANDING_CLICK"},
 	"conversion_events": {"CPA_ACCEPT", "CPA_REDEP"},
 }
 
@@ -963,10 +972,10 @@ func (s *EventStore) FlowStageCounts(ctx context.Context, organizationID string,
 			count = "count()"
 		}
 		rows, err := s.conn.Query(ctx, `
-			SELECT flow_id, type, `+count+`
+			SELECT flow_id, `+installAs+` AS stage, `+count+`
 			FROM `+table+`
 			WHERE organization_id = ? AND event_at >= ? AND event_at < ? AND flow_id IN ? AND type IN ?
-			GROUP BY flow_id, type`,
+			GROUP BY flow_id, stage`,
 			organizationID, from, to, flowIDs, flowStageTypes[table])
 		if err != nil {
 			return nil, fmt.Errorf("chstore: querying flow stage counts from %s: %w", table, err)

@@ -32,7 +32,7 @@ import (
 //	GET  /pwa/{token}/manifest.webmanifest web app manifest
 //	GET  /pwa/{token}/sw.js                service worker (scope = /pwa/{token}/)
 //	POST /pwa/{token}/installed            page beacon on appinstalled → PWA_INSTALL
-//	GET  /pwa/{token}/open                 installed app's start_url → PWA_OPEN → destination
+//	GET  /pwa/{token}/open                 installed app's start_url → [IOS_INSTALL] PWA_OPEN → destination
 //	GET  /pwa/{token}/continue             "continue without installing" → destination
 //
 // The install page is the operator's own app presented as itself — name,
@@ -241,7 +241,8 @@ func (h *Handler) pwaInstalled(w http.ResponseWriter, r *http.Request) {
 }
 
 // pwaOpen is the installed app's start_url: every launch records PWA_OPEN
-// on the original click_id and continues to the destination.
+// on the original click_id and continues to the destination. On iOS the
+// first launch also records IOS_INSTALL (iosFirstLaunch).
 func (h *Handler) pwaOpen(w http.ResponseWriter, r *http.Request) {
 	c, ok := h.pwaClaims(r, true)
 	if !ok {
@@ -250,6 +251,11 @@ func (h *Handler) pwaOpen(w http.ResponseWriter, r *http.Request) {
 	}
 	open := h.claimsEvent(r, c)
 	if !c.Test {
+		if h.iosFirstLaunch(w, r, open.OS) {
+			install := open
+			install.Type = event.IosInstall
+			h.events.Enqueue(install)
+		}
 		open.Type = event.PwaOpen
 		h.events.Enqueue(open)
 	}
@@ -264,6 +270,40 @@ func (h *Handler) pwaOpen(w http.ResponseWriter, r *http.Request) {
 		h.logger.Error("rendering launch page", "error", err, "pwa_id", c.PwaID)
 	}
 	h.continueOnward(w, r, c, func() event.Event { return open })
+}
+
+// iosInstalledCookie marks an installed iOS app that has launched. Safari
+// on iOS never fires appinstalled, so the install page's beacon
+// (PWA_INSTALL) cannot see an iOS install; its first launch from the Home
+// Screen is the first sign of it. A Home Screen app has its own cookie
+// store, which starts without this cookie: no cookie on start_url means
+// this installation's first launch (docs/pwa-serving.md). Scoped to the
+// token's path, so Safari's own visits to the install page never set it.
+const iosInstalledCookie = "sf_pwa_inst"
+
+// iosInstalledMaxAge is the longest browsers keep a cookie (400 days).
+const iosInstalledMaxAge = 400 * 24 * 60 * 60
+
+// iosFirstLaunch reports whether this start_url request is an iOS app's
+// first launch, marking it launched. Not iOS (os from the classifier,
+// iPhone and iPad), or already marked: false.
+func (h *Handler) iosFirstLaunch(w http.ResponseWriter, r *http.Request, os string) bool {
+	if os != "ios" {
+		return false
+	}
+	if _, err := r.Cookie(iosInstalledCookie); err == nil {
+		return false
+	}
+	http.SetCookie(w, &http.Cookie{
+		Name:     iosInstalledCookie,
+		Value:    "1",
+		Path:     pwaPathPrefix + chi.URLParam(r, "token") + "/",
+		MaxAge:   iosInstalledMaxAge,
+		HttpOnly: true,
+		Secure:   strings.HasPrefix(requestOrigin(r), "https:"),
+		SameSite: http.SameSiteLaxMode,
+	})
+	return true
 }
 
 // pwaContinue is the page's "continue without installing" — a browser

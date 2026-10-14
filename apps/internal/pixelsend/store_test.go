@@ -270,3 +270,28 @@ func TestTriggerSinkQueuesPwaInstall(t *testing.T) {
 		t.Fatalf("queued event = %+v, want the install with its click's fbclid and time", ev)
 	}
 }
+
+// An iOS install (IOS_INSTALL) reaches the pixels set for PWA_INSTALL, as
+// PWA_INSTALL — the platform's mapped event (CompleteRegistration) and the
+// {status} macro are the configured event's.
+func TestTriggerSinkQueuesIosInstallAsPwaInstall(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	store := pixelsend.NewPostgresStoreOnTable(f.pool, testpg.PrivateTable(t, f.pool, "pixel_deliveries"))
+	px := f.pixel(t, pixel.CreateInput{Name: "FB", Provider: pixel.ProviderFacebook, PixelID: "1", Events: []string{"PWA_INSTALL"}}, true)
+	sink := &pixelsend.TriggerSink{Next: &fakeInserter{}, Queue: store}
+
+	install := event.Event{ID: idgen.New(), Type: event.IosInstall, OrganizationID: f.org, StreamSetID: f.streamSet,
+		ClickID: "click-ios", EventAt: time.Now(), IP: "198.51.100.5", UserAgent: "iPhone"}
+	if err := sink.InsertBatch(ctx, []event.Event{install}); err != nil {
+		t.Fatal(err)
+	}
+	claimed, err := store.ClaimDue(ctx, 10)
+	if err != nil || len(claimed) != 1 {
+		t.Fatalf("claimed = %v, %v; want one delivery for the iOS install", claimed, err)
+	}
+	ev := claimed[0].Event
+	if claimed[0].PixelID != px.ID || ev.SourceEventID != install.ID || ev.Type != event.PwaInstall || ev.Macros.Status != "PWA_INSTALL" {
+		t.Fatalf("queued event = %+v, want the iOS install as PWA_INSTALL", ev)
+	}
+}
