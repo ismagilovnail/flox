@@ -195,16 +195,20 @@ type LoginOutcome struct {
 	RequiresTOTPEnrollment bool
 }
 
-// ActivityEntry is one audit_logs row (migration 00010) — populated by
-// this package's own membership actions only (invited/role changed/
-// removed/suspended/reactivated), not a cross-domain audit trail. Sweeping
-// audit-log writes into every other domain's write path is out of scope
-// here for the same reason the RBAC sweep is (see package doc comment).
+// ActivityEntry is one audit_logs row (migration 00010): the
+// organization's audit trail (§54). internal/audit writes a row for every
+// successful write on a tenant route — Action is a named action
+// ("team.invited", "api_key.rotated") or, unnamed, "METHOD /route" — and
+// this package's team actions go through it too. Route is the route
+// pattern the action came through ("" for a row written outside a
+// request); APIKeyName is set when it came through an API key.
 type ActivityEntry struct {
 	ID         string
 	Action     string
 	EntityType string
 	EntityID   string
 	ActorName  *string
+	Route      string
+	APIKeyName *string
 	CreatedAt  time.Time
 }

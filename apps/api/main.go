@@ -26,6 +26,7 @@ import (
 	"github.com/ismagilovnail/flox/apps/internal/analytics"
 	"github.com/ismagilovnail/flox/apps/internal/apikey"
 	"github.com/ismagilovnail/flox/apps/internal/attribution"
+	"github.com/ismagilovnail/flox/apps/internal/audit"
 	"github.com/ismagilovnail/flox/apps/internal/auth"
 	"github.com/ismagilovnail/flox/apps/internal/campaign"
 	"github.com/ismagilovnail/flox/apps/internal/chconn"
@@ -175,6 +176,24 @@ func run() error {
 // returned close releases the connections; it is also called when
 // buildServer fails part way. Split from run so a test can walk the real
 // router (tenant_isolation_routes_test.go).
+// auditSkip are the tenant routes that take POST but change nothing — a
+// JSON query body, a simulation, the caller's own read marks — so they stay
+// out of the audit trail. TestAuditSkipRoutesExist keeps each entry a real
+// route; rbac_coverage_test.go's deliberatelyOpen lists the same reads.
+var auditSkip = map[string]bool{
+	"POST /analytics/report":                        true,
+	"POST /analytics/timeseries":                    true,
+	"POST /analytics/breakdown":                     true,
+	"POST /analytics/funnel":                        true,
+	"POST /analytics/flow-summary":                  true,
+	"POST /analytics/dashboard":                     true,
+	"POST /analytics/cost-timezones":                true,
+	"POST /analytics/dimension-values":              true,
+	"POST /campaigns/{campaignId}/routing/simulate": true,
+	"POST /push/audience":                           true,
+	"POST /notifications/read":                      true,
+}
+
 func buildServer(ctx context.Context, cfg config.Config, logger *slog.Logger, reporter errtrack.Reporter, clientIP *clientip.Resolver) (srv *httpserver.Server, closeAll func(), err error) {
 	var closers []func()
 	closeAll = func() {
@@ -327,7 +346,11 @@ func buildServer(ctx context.Context, cfg config.Config, logger *slog.Logger, re
 	// tenantMiddleware is the two composed.
 	csrfCheck := tenant.RequireSameOrigin(cfg.AppURL, logger)
 	sessionCheck := tenant.NewMiddleware(authSvc, apiKeySvc, logger, cfg.Env != "development")
-	tenantMiddleware := func(next http.Handler) http.Handler { return csrfCheck(sessionCheck(next)) }
+	// auditTrail (§54) records every successful write on a tenant route
+	// — inside sessionCheck, which puts the organization and actor into
+	// the context — except the POST-shaped reads in auditSkip.
+	auditTrail := audit.Middleware(db, auditSkip, httpserver.APIPrefix, logger)
+	tenantMiddleware := func(next http.Handler) http.Handler { return csrfCheck(sessionCheck(auditTrail(next))) }
 
 	// identify puts the org/API-key identity into context, best-effort,
 	// before the general limiter (§54, tenant.PeekIdentity). The limiter

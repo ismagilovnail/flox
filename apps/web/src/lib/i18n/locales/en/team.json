@@ -113,7 +113,23 @@
       "team_role_changed": "Member's role changed",
       "team_suspended": "Member suspended",
       "team_reactivated": "Member reactivated",
-      "team_removed": "Member removed"
-    }
+      "team_removed": "Member removed",
+      "api_key_created": "API key created",
+      "api_key_rotated": "API key rotated",
+      "api_key_revoked": "API key revoked",
+      "integration_connected": "Integration connected",
+      "integration_disconnected": "Integration disconnected",
+      "ad_account_connected": "Ad account connected",
+      "ad_account_disconnected": "Ad account disconnected",
+      "network_postback_secret_regenerated": "Network postback secret regenerated",
+      "settings_updated": "Organization settings changed"
+    },
+    "methods": {
+      "POST": "Change",
+      "PUT": "Change",
+      "PATCH": "Edit",
+      "DELETE": "Deletion"
+    },
+    "viaApiKey": "via API key “{{name}}”"
   }
 }

@@ -804,8 +804,8 @@ func (f fixedResolver) ResolveSession(ctx context.Context, token string) (string
 // tenant.NewMiddleware's signature.
 type nilAPIKeyAuthenticator struct{}
 
-func (nilAPIKeyAuthenticator) Authenticate(ctx context.Context, rawKey string) (string, string, string, error) {
-	return "", "", "", apierror.Unauthorized("invalid api key")
+func (nilAPIKeyAuthenticator) Authenticate(ctx context.Context, rawKey string) (tenant.APIKeyIdentity, error) {
+	return tenant.APIKeyIdentity{}, apierror.Unauthorized("invalid api key")
 }
 
 // fixedAPIKeyAuthenticator implements tenant.APIKeyAuthenticator by
@@ -813,8 +813,8 @@ func (nilAPIKeyAuthenticator) Authenticate(ctx context.Context, rawKey string) (
 // same rationale as fixedResolver above, for TestRequirePermissionAPIKeyScope.
 type fixedAPIKeyAuthenticator struct{ orgID, userID, scope string }
 
-func (f fixedAPIKeyAuthenticator) Authenticate(ctx context.Context, rawKey string) (string, string, string, error) {
-	return f.orgID, f.userID, f.scope, nil
+func (f fixedAPIKeyAuthenticator) Authenticate(ctx context.Context, rawKey string) (tenant.APIKeyIdentity, error) {
+	return tenant.APIKeyIdentity{KeyID: "key-1", OrganizationID: f.orgID, UserID: f.userID, Scope: f.scope}, nil
 }
 
 func TestRequirePermissionMiddleware(t *testing.T) {

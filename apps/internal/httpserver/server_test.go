@@ -47,8 +47,8 @@ func mustRedis(t *testing.T) *redis.Client {
 
 type fixedAPIKeyAuthenticator struct{ orgID, userID, scope string }
 
-func (f fixedAPIKeyAuthenticator) Authenticate(ctx context.Context, rawKey string) (string, string, string, error) {
-	return f.orgID, f.userID, f.scope, nil
+func (f fixedAPIKeyAuthenticator) Authenticate(ctx context.Context, rawKey string) (tenant.APIKeyIdentity, error) {
+	return tenant.APIKeyIdentity{KeyID: "key-1", OrganizationID: f.orgID, UserID: f.userID, Scope: f.scope}, nil
 }
 
 type noSessionResolver struct{}

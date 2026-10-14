@@ -13,4 +13,9 @@ export type ApiKey = {
   scope: ApiKeyScope;
   createdAt: string;
   lastUsedAt: string | null;
+  /** Set on a rotated key: it keeps working until then (24 hours after the
+   * rotation), then stops and leaves the list. */
+  expiresAt: string | null;
+  /** The key that replaced this one in a rotation. */
+  replacedById: string | null;
 };

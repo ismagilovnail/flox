@@ -5,6 +5,7 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
@@ -155,9 +156,13 @@ func TestAuthenticateValidKey(t *testing.T) {
 		t.Fatalf("Create: %v", err)
 	}
 
-	gotOrg, gotUser, gotScope, err := svc.Authenticate(ctx, created.FullKey)
+	id, err := svc.Authenticate(ctx, created.FullKey)
 	if err != nil {
 		t.Fatalf("Authenticate: %v", err)
+	}
+	gotOrg, gotUser, gotScope := id.OrganizationID, id.UserID, id.Scope
+	if id.KeyID != created.ApiKey.ID {
+		t.Errorf("KeyID = %q, want %q", id.KeyID, created.ApiKey.ID)
 	}
 	if gotOrg != orgID {
 		t.Errorf("organizationID = %q, want %q", gotOrg, orgID)
@@ -194,7 +199,7 @@ func TestAuthenticateRejectsRevokedKey(t *testing.T) {
 		t.Fatalf("Revoke: %v", err)
 	}
 
-	if _, _, _, err := svc.Authenticate(ctx, created.FullKey); err == nil {
+	if _, err := svc.Authenticate(ctx, created.FullKey); err == nil {
 		t.Fatal("Authenticate accepted a revoked key")
 	}
 }
@@ -210,8 +215,105 @@ func TestAuthenticateRejectsUnknownOrGarbageKey(t *testing.T) {
 		"",
 	}
 	for _, raw := range cases {
-		if _, _, _, err := svc.Authenticate(ctx, raw); err == nil {
+		if _, err := svc.Authenticate(ctx, raw); err == nil {
 			t.Errorf("Authenticate(%q) accepted, want rejected", raw)
 		}
+	}
+}
+
+// TestRotateKeepsOldKeyForTheGracePeriod: rotation mints a new secret with
+// the same name and scope; the old secret keeps working until its
+// expires_at and then stops, and leaves the list (§54 "API key rotation").
+func TestRotateKeepsOldKeyForTheGracePeriod(t *testing.T) {
+	pool := mustPool(t)
+	ctx := context.Background()
+	orgID, userID := seedOrgAndUser(t, ctx, pool)
+	svc := newService(pool)
+
+	old, err := svc.Create(ctx, orgID, userID, apikey.CreateInput{Name: "Partner sync", Scope: apikey.ScopeWrite})
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	before := time.Now()
+	rotated, err := svc.Rotate(ctx, orgID, old.ApiKey.ID, userID)
+	if err != nil {
+		t.Fatalf("Rotate: %v", err)
+	}
+	if rotated.FullKey == old.FullKey || rotated.ApiKey.ID == old.ApiKey.ID {
+		t.Fatal("rotation must mint a new secret and a new key")
+	}
+	if rotated.ApiKey.Name != "Partner sync" || rotated.ApiKey.Scope != apikey.ScopeWrite {
+		t.Fatalf("rotated key = %+v, want the same name and scope", rotated.ApiKey)
+	}
+
+	// Both secrets authenticate during the grace period.
+	for name, raw := range map[string]string{"old": old.FullKey, "new": rotated.FullKey} {
+		if _, err := svc.Authenticate(ctx, raw); err != nil {
+			t.Fatalf("%s key during the grace period: %v", name, err)
+		}
+	}
+	list, err := svc.List(ctx, orgID)
+	if err != nil || len(list) != 2 {
+		t.Fatalf("List = %+v, %v; want both keys", list, err)
+	}
+	for _, k := range list {
+		if k.ID != old.ApiKey.ID {
+			continue
+		}
+		if k.ExpiresAt == nil || k.ExpiresAt.Before(before.Add(apikey.RotationGrace-time.Minute)) || k.ExpiresAt.After(time.Now().Add(apikey.RotationGrace+time.Minute)) {
+			t.Fatalf("old key expiresAt = %v, want about now + %v", k.ExpiresAt, apikey.RotationGrace)
+		}
+		if k.ReplacedByID == nil || *k.ReplacedByID != rotated.ApiKey.ID {
+			t.Fatalf("old key replacedById = %v, want %s", k.ReplacedByID, rotated.ApiKey.ID)
+		}
+	}
+
+	// A key that already has a successor cannot be rotated again.
+	if _, err := svc.Rotate(ctx, orgID, old.ApiKey.ID, userID); err == nil {
+		t.Fatal("rotating an already-rotated key succeeded")
+	}
+
+	// The grace period ends: the old secret stops, the new one works.
+	if _, err := pool.Exec(ctx, `UPDATE api_keys SET expires_at = now() - interval '1 second' WHERE id = $1`, old.ApiKey.ID); err != nil {
+		t.Fatalf("ending the grace period: %v", err)
+	}
+	if _, err := svc.Authenticate(ctx, old.FullKey); err == nil {
+		t.Fatal("old key still authenticates after its grace period")
+	}
+	if _, err := svc.Authenticate(ctx, rotated.FullKey); err != nil {
+		t.Fatalf("new key after the grace period: %v", err)
+	}
+	list, err = svc.List(ctx, orgID)
+	if err != nil || len(list) != 1 || list[0].ID != rotated.ApiKey.ID {
+		t.Fatalf("List after the grace period = %+v, %v; want only the new key", list, err)
+	}
+	if _, err := svc.Rotate(ctx, orgID, old.ApiKey.ID, userID); err == nil {
+		t.Fatal("rotating an expired key succeeded")
+	}
+}
+
+func TestRotateRefusesRevokedAndOtherOrganizationsKeys(t *testing.T) {
+	pool := mustPool(t)
+	ctx := context.Background()
+	orgA, userA := seedOrgAndUser(t, ctx, pool)
+	orgB, userB := seedOrgAndUser(t, ctx, pool)
+	svc := newService(pool)
+
+	keyA, err := svc.Create(ctx, orgA, userA, apikey.CreateInput{Name: "Org A key", Scope: apikey.ScopeRead})
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	if _, err := svc.Rotate(ctx, orgB, keyA.ApiKey.ID, userB); err == nil {
+		t.Fatal("org B rotated org A's key")
+	}
+	if list, _ := svc.List(ctx, orgA); len(list) != 1 || list[0].ExpiresAt != nil {
+		t.Fatalf("org A's key changed after org B's attempt: %+v", list)
+	}
+
+	if err := svc.Revoke(ctx, orgA, keyA.ApiKey.ID); err != nil {
+		t.Fatalf("Revoke: %v", err)
+	}
+	if _, err := svc.Rotate(ctx, orgA, keyA.ApiKey.ID, userA); err == nil {
+		t.Fatal("rotating a revoked key succeeded")
 	}
 }

@@ -137,6 +137,6 @@ func (s sessionOf) ResolveSession(context.Context, string) (string, string, erro
 
 type noAPIKeys struct{}
 
-func (noAPIKeys) Authenticate(context.Context, string) (string, string, string, error) {
-	return "", "", "", errors.New("no api keys here")
+func (noAPIKeys) Authenticate(context.Context, string) (tenant.APIKeyIdentity, error) {
+	return tenant.APIKeyIdentity{}, errors.New("no api keys here")
 }

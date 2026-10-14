@@ -8,6 +8,7 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"github.com/ismagilovnail/flox/apps/internal/apierror"
+	"github.com/ismagilovnail/flox/apps/internal/audit"
 	"github.com/ismagilovnail/flox/apps/internal/tenant"
 )
 
@@ -29,6 +30,7 @@ func (h *Handler) Register(r chi.Router) {
 	r.Get("/", h.list)
 	r.With(h.requireWrite).Post("/", h.create)
 	r.With(h.requireWrite).Delete("/{id}", h.revoke)
+	r.With(h.requireWrite).Post("/{id}/rotate", h.rotate)
 }
 
 func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
@@ -59,6 +61,25 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 		apierror.Write(w, h.logger, err)
 		return
 	}
+	audit.Annotate(r.Context(), audit.Entry{Action: "api_key.created", EntityType: "api_key", EntityID: result.ApiKey.ID})
+	writeJSON(w, http.StatusCreated, map[string]any{
+		"apiKey":  result.ApiKey,
+		"fullKey": result.FullKey,
+	})
+}
+
+// rotate answers POST /api-keys/{id}/rotate with the replacement key and
+// its full secret (shown once); the old key works for RotationGrace more.
+func (h *Handler) rotate(w http.ResponseWriter, r *http.Request) {
+	orgID, _ := tenant.OrgID(r.Context())
+	userID, _ := tenant.UserID(r.Context())
+	id := chi.URLParam(r, "id")
+	result, err := h.svc.Rotate(r.Context(), orgID, id, userID)
+	if err != nil {
+		apierror.Write(w, h.logger, err)
+		return
+	}
+	audit.Annotate(r.Context(), audit.Entry{Action: "api_key.rotated", EntityType: "api_key", EntityID: id})
 	writeJSON(w, http.StatusCreated, map[string]any{
 		"apiKey":  result.ApiKey,
 		"fullKey": result.FullKey,
@@ -67,10 +88,12 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) revoke(w http.ResponseWriter, r *http.Request) {
 	orgID, _ := tenant.OrgID(r.Context())
-	if err := h.svc.Revoke(r.Context(), orgID, chi.URLParam(r, "id")); err != nil {
+	id := chi.URLParam(r, "id")
+	if err := h.svc.Revoke(r.Context(), orgID, id); err != nil {
 		apierror.Write(w, h.logger, err)
 		return
 	}
+	audit.Annotate(r.Context(), audit.Entry{Action: "api_key.revoked", EntityType: "api_key", EntityID: id})
 	w.WriteHeader(http.StatusNoContent)
 }
 

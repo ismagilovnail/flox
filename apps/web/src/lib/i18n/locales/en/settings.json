@@ -91,7 +91,14 @@
     "revoke": "Revoke",
     "errors": {
       "name": "Name must be at least 2 characters"
-    }
+    },
+    "rotate": "Rotate",
+    "rotateAria": "Rotate {{name}}",
+    "rotateTitle": "Rotate \"{{name}}\"?",
+    "rotateDescription": "A new key with the same name and scope is created and shown once. The current key keeps working for 24 hours, then stops — switch your integrations to the new key before then.",
+    "rotated": "API key rotated",
+    "rotateError": "Couldn't rotate API key",
+    "replacedStops": "Replaced · stops working"
   },
   "integrations": {
     "loading": "Loading integrations…",

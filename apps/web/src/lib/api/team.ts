@@ -29,16 +29,20 @@ export type UpdateMemberInput = {
   status?: MemberStatus;
 };
 
-/** apps/internal/auth's audit_logs-backed activity feed — populated only
- * by this package's own membership actions (see docs/auth.md), not a
- * cross-domain audit trail. `action` is a raw key like "team.invited";
- * activity-panel.tsx maps it to a human sentence. */
+/** The organization's audit trail (audit_logs, §54): every successful
+ * change on a tenant route (apps/internal/audit). `action` is a named key
+ * like "team.invited" or "api_key.rotated", or, for an unnamed change,
+ * "METHOD /route" ("PATCH /campaigns/{campaign}"); activity-panel.tsx
+ * renders both. `route` is "" for a row written outside a request;
+ * `apiKeyName` is set when the change came through an API key. */
 export type ActivityEntry = {
   id: string;
   action: string;
   entityType: string;
   entityId: string;
   actorName: string | null;
+  route: string;
+  apiKeyName: string | null;
   createdAt: string;
 };
 

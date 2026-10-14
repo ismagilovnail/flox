@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next";
 
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Card, CardContent } from "@/components/ui/card";
+import { Mono } from "@/components/ui/typography";
 import { RelativeTime } from "@/components/ui/relative-time";
 import { LoadingState } from "@/components/ui/loading-state";
 import { ErrorState } from "@/components/ui/error-state";
@@ -19,13 +20,16 @@ function initials(name: string) {
     .toUpperCase();
 }
 
-/** apps/internal/auth writes a fixed, small set of action keys (see
- * docs/auth.md); each is a translation under team:activity.actions, with
- * "." replaced by "_". Phrased without the actor ("Member invited"), who
- * is shown under it, so the sentence needs no grammatical gender. */
+/** A named action ("team.invited", "api_key.rotated") is a translation
+ * under team:activity.actions, with "." replaced by "_". Phrased without
+ * the actor ("Member invited"), who is shown under it, so the sentence
+ * needs no grammatical gender. */
 function actionKey(action: string) {
   return `activity.actions.${action.replace(".", "_")}`;
 }
+
+/** An unnamed change is recorded as "METHOD /route" (apps/internal/audit). */
+const ROUTE_ACTION = /^(POST|PUT|PATCH|DELETE) (\/\S*)$/;
 
 export function ActivityPanel() {
   const { t } = useTranslation("team");
@@ -61,14 +65,31 @@ export function ActivityPanel() {
               <AvatarFallback>{entry.actorName ? initials(entry.actorName) : "?"}</AvatarFallback>
             </Avatar>
             <div className="flex min-w-0 flex-1 flex-col">
-              <p className="text-sm text-foreground">{t(actionKey(entry.action), { defaultValue: entry.action })}</p>
+              <ActionLabel action={entry.action} entityId={entry.entityId} />
               <span className="text-xs text-muted-foreground">
-                {entry.actorName ?? t("activity.someone")} · <RelativeTime date={entry.createdAt} />
+                {entry.actorName ?? t("activity.someone")}
+                {entry.apiKeyName && <> · {t("activity.viaApiKey", { name: entry.apiKeyName })}</>} ·{" "}
+                <RelativeTime date={entry.createdAt} />
               </span>
             </div>
           </div>
         ))}
       </CardContent>
     </Card>
+  );
+}
+
+function ActionLabel({ action, entityId }: { action: string; entityId: string }) {
+  const { t } = useTranslation("team");
+  const route = ROUTE_ACTION.exec(action);
+  if (!route) {
+    return <p className="text-sm text-foreground">{t(actionKey(action), { defaultValue: action })}</p>;
+  }
+  return (
+    <p className="flex min-w-0 flex-wrap items-baseline gap-x-1.5 text-sm text-foreground">
+      <span>{t(`activity.methods.${route[1]}`)}</span>
+      <Mono className="truncate text-xs text-muted-foreground">{route[2]}</Mono>
+      {entityId && <Mono className="truncate text-xs text-muted-foreground">{entityId}</Mono>}
+    </p>
   );
 }

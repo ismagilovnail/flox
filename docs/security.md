@@ -198,6 +198,18 @@ key's scope as a coarse tier — `read`/`write`(minus `team.write` and
 Full detail, including the live end-to-end verification against a real
 running API, is in `docs/auth.md`'s "API key authentication" section.
 
+## 6a. API key rotation (§54, Phase 30.18)
+
+`POST /api-keys/{id}/rotate` (`settings.write`) mints the key's successor —
+same name and scope, a new secret shown once — and gives the old key
+`expires_at = now() + 24h` and `replaced_by_id` (migration `00072`). Both
+secrets authenticate during those 24 hours, so an integration switches
+without downtime; afterwards the old one is refused ("api key expired") and
+leaves the list. A key that already has a successor cannot be rotated again
+(409): rotate the replacement. Revoking still stops a key at once, also
+during its grace period. Settings > API keys has a Rotate button; a replaced
+key shows when it stops working.
+
 ## 7. Security headers (tech audit S2)
 
 | | `apps/web` (`next.config.ts`) | `apps/api` (`httpserver.securityHeaders`) |
@@ -261,3 +273,33 @@ where a campaign needs it.
   Fixing this needs auth resolution to happen before the general
   limiter runs, which is a bigger restructuring than §6's phase scoped;
   noted for whoever picks up API traffic at real volume.
+
+## 8. Audit trail (§54, Phase 30.18)
+
+`internal/audit.Middleware` runs inside the tenant middleware
+(`apps/api/main.go`'s `tenantMiddleware`), so every tenant route is covered,
+including routes added later. It writes one `audit_logs` row per successful
+(2xx) POST/PUT/PATCH/DELETE:
+
+- **who:** `actor_user_id` is the signed-in user, or for an API key its
+  creator, with `metadata.apiKeyId` naming the key;
+- **what:** a named action when the handler or service gave one through
+  `audit.Annotate` (`api_key.created/rotated/revoked`,
+  `integration.connected/disconnected`, `ad_account.connected/disconnected`,
+  `network.postback_secret_regenerated`, the `team.*` and
+  `settings.updated` actions); otherwise `"METHOD /route"`, the route
+  pattern without `/v1`;
+- **which:** the entity of the last URL parameter, or the id of a resource
+  a 201 response created;
+- `metadata` = method, route, status (and `apiKeyId`).
+
+Request and response bodies are never stored: they carry the secrets §54
+forbids logging (API keys, postback secrets, ad-platform tokens). Failed
+requests and reads are not recorded; neither are the POST-shaped reads in
+`auditSkip` (analytics queries, routing simulate, push audience, marking
+notifications read). `TestAuditTrail` (apps/api) checks that every
+`auditSkip` entry is a real route, and runs a session write and an API-key
+write end to end. The insert is best-effort and runs after the response
+has been written: a failed write is logged, never turned into an error.
+One gap remains: a change whose request then fails, such as a service error
+after the commit, leaves no row.

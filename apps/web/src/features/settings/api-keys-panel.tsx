@@ -4,7 +4,7 @@ import * as React from "react";
 import { Controller, useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { toast } from "sonner";
-import { CopyIcon, PlusIcon, Trash2Icon } from "lucide-react";
+import { CopyIcon, PlusIcon, RotateCwIcon, Trash2Icon } from "lucide-react";
 import { z } from "zod";
 import { useTranslation } from "react-i18next";
 import type { TFunction } from "i18next";
@@ -28,7 +28,7 @@ import { Caption, Mono } from "@/components/ui/typography";
 import { RelativeTime } from "@/components/ui/relative-time";
 import { LoadingState } from "@/components/ui/loading-state";
 import { ErrorState } from "@/components/ui/error-state";
-import { useApiKeys, useCreateApiKey, useRevokeApiKey } from "@/hooks/use-api-keys";
+import { useApiKeys, useCreateApiKey, useRevokeApiKey, useRotateApiKey } from "@/hooks/use-api-keys";
 import { API_KEY_SCOPES, type ApiKeyScope } from "@/lib/api-keys";
 
 function createKeySchema(t: TFunction<"settings">) {
@@ -51,11 +51,13 @@ export function ApiKeysPanel() {
   const apiKeysQuery = useApiKeys();
   const createApiKeyMutation = useCreateApiKey();
   const revokeApiKeyMutation = useRevokeApiKey();
+  const rotateApiKeyMutation = useRotateApiKey();
   const apiKeys = apiKeysQuery.data?.apiKeys ?? [];
 
   const [creating, setCreating] = React.useState(false);
   const [revealedKey, setRevealedKey] = React.useState<string | null>(null);
   const [revokeTarget, setRevokeTarget] = React.useState<{ id: string; name: string } | null>(null);
+  const [rotateTarget, setRotateTarget] = React.useState<{ id: string; name: string } | null>(null);
 
   const form = useForm<CreateKeyValues>({
     resolver: zodResolver(createKeySchema(t)),
@@ -77,6 +79,18 @@ export function ApiKeysPanel() {
     if (!revealedKey) return;
     navigator.clipboard.writeText(revealedKey);
     toast(t("apiKeys.copied"));
+  }
+
+  function handleRotate() {
+    if (!rotateTarget) return;
+    rotateApiKeyMutation.mutate(rotateTarget.id, {
+      onSuccess: ({ fullKey }) => {
+        setRotateTarget(null);
+        toast(t("apiKeys.rotated"), { description: rotateTarget.name });
+        setRevealedKey(fullKey);
+      },
+      onError: (err) => toast.error(t("apiKeys.rotateError"), { description: err.message }),
+    });
   }
 
   function handleRevoke() {
@@ -122,12 +136,26 @@ export function ApiKeysPanel() {
             <div className="flex min-w-0 flex-1 flex-col gap-0.5">
               <span className="text-sm font-medium">{key.name}</span>
               <Mono className="text-xs text-muted-foreground">{key.prefix}</Mono>
+              {key.expiresAt && (
+                <span className="flex flex-wrap items-baseline gap-1 text-xs text-warning">
+                  {t("apiKeys.replacedStops")} <RelativeTime date={key.expiresAt} className="text-warning" />
+                </span>
+              )}
             </div>
             <Badge variant={SCOPE_VARIANT[key.scope]}>{t(`apiKeys.scopes.${key.scope}`)}</Badge>
             {key.lastUsedAt ? (
               <RelativeTime date={key.lastUsedAt} className="hidden w-32 sm:block" />
             ) : (
               <Caption className="hidden w-32 sm:block">{t("apiKeys.neverUsed")}</Caption>
+            )}
+            {!key.replacedById && (
+              <IconButton
+                aria-label={t("apiKeys.rotateAria", { name: key.name })}
+                size="icon-sm"
+                onClick={() => setRotateTarget({ id: key.id, name: key.name })}
+              >
+                <RotateCwIcon className="size-3.5" />
+              </IconButton>
             )}
             <IconButton
               aria-label={t("apiKeys.revokeAria", { name: key.name })}
@@ -203,6 +231,23 @@ export function ApiKeysPanel() {
           </p>
           <DialogFooter>
             <Button onClick={() => setRevealedKey(null)}>{t("apiKeys.done")}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!rotateTarget} onOpenChange={(open) => !open && setRotateTarget(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{t("apiKeys.rotateTitle", { name: rotateTarget?.name })}</DialogTitle>
+            <DialogDescription>{t("apiKeys.rotateDescription")}</DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setRotateTarget(null)}>
+              {t("common:actions.cancel")}
+            </Button>
+            <Button onClick={handleRotate} disabled={rotateApiKeyMutation.isPending}>
+              {t("apiKeys.rotate")}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

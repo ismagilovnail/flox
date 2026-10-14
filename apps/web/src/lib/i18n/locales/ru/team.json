@@ -113,7 +113,23 @@
       "team_role_changed": "Изменена роль участника",
       "team_suspended": "Участник приостановлен",
       "team_reactivated": "Доступ участника восстановлен",
-      "team_removed": "Участник удалён"
-    }
+      "team_removed": "Участник удалён",
+      "api_key_created": "Создан API-ключ",
+      "api_key_rotated": "API-ключ перевыпущен",
+      "api_key_revoked": "API-ключ отозван",
+      "integration_connected": "Интеграция подключена",
+      "integration_disconnected": "Интеграция отключена",
+      "ad_account_connected": "Рекламный кабинет подключён",
+      "ad_account_disconnected": "Рекламный кабинет отключён",
+      "network_postback_secret_regenerated": "Секрет постбэков сети перевыпущен",
+      "settings_updated": "Изменены настройки организации"
+    },
+    "methods": {
+      "POST": "Изменение",
+      "PUT": "Изменение",
+      "PATCH": "Правка",
+      "DELETE": "Удаление"
+    },
+    "viaApiKey": "через API-ключ «{{name}}»"
   }
 }

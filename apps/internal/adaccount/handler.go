@@ -8,6 +8,7 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"github.com/ismagilovnail/flox/apps/internal/apierror"
+	"github.com/ismagilovnail/flox/apps/internal/audit"
 	"github.com/ismagilovnail/flox/apps/internal/tenant"
 )
 
@@ -80,6 +81,7 @@ func (h *Handler) connect(w http.ResponseWriter, r *http.Request) {
 		apierror.Write(w, h.logger, err)
 		return
 	}
+	audit.Annotate(r.Context(), audit.Entry{Action: "ad_account.connected", EntityType: "traffic_source", EntityID: trafficSourceID(r)})
 	writeJSON(w, http.StatusOK, c)
 }
 
@@ -89,6 +91,7 @@ func (h *Handler) disconnect(w http.ResponseWriter, r *http.Request) {
 		apierror.Write(w, h.logger, err)
 		return
 	}
+	audit.Annotate(r.Context(), audit.Entry{Action: "ad_account.disconnected", EntityType: "traffic_source", EntityID: trafficSourceID(r)})
 	w.WriteHeader(http.StatusNoContent)
 }
 

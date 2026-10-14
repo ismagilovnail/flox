@@ -4,13 +4,19 @@ import (
 	"context"
 	"log/slog"
 	"strings"
+	"time"
 
 	"github.com/ismagilovnail/flox/apps/internal/apierror"
+	"github.com/ismagilovnail/flox/apps/internal/tenant"
 )
 
 const (
 	nameMinLen = 2
 	nameMaxLen = 60
+
+	// RotationGrace is how long a rotated key keeps working, so an
+	// integration can switch to the new secret without downtime (§54).
+	RotationGrace = 24 * time.Hour
 )
 
 type Service struct {
@@ -53,6 +59,21 @@ func (s *Service) Revoke(ctx context.Context, orgID, id string) error {
 	return s.repo.Revoke(ctx, orgID, id)
 }
 
+// Rotate issues a new secret for key id: a new key with the same name and
+// scope, its full secret returned once, as on create. The old key keeps
+// authenticating for RotationGrace, then stops (see Repository.Rotate).
+func (s *Service) Rotate(ctx context.Context, orgID, id, userID string) (CreateResult, error) {
+	fullKey, prefix, hash, err := newKey()
+	if err != nil {
+		return CreateResult{}, err
+	}
+	created, err := s.repo.Rotate(ctx, orgID, id, userID, prefix, hash, RotationGrace)
+	if err != nil {
+		return CreateResult{}, err
+	}
+	return CreateResult{ApiKey: created, FullKey: fullKey}, nil
+}
+
 // Authenticate validates a raw API key (an Authorization: Bearer token)
 // and returns the organization it belongs to, its creator, and its scope
 // — implements tenant.APIKeyAuthenticator, called from tenant.NewMiddleware
@@ -69,16 +90,19 @@ func (s *Service) Revoke(ctx context.Context, orgID, id string) error {
 // package's own Revoke) is the intended control, not membership churn.
 // Authorization itself is entirely a function of the key's scope — see
 // apps/internal/auth.Service.RequirePermission's scope-tier check.
-func (s *Service) Authenticate(ctx context.Context, rawKey string) (organizationID, userID, scope string, err error) {
+func (s *Service) Authenticate(ctx context.Context, rawKey string) (tenant.APIKeyIdentity, error) {
 	if !strings.HasPrefix(rawKey, keyPrefix) {
-		return "", "", "", apierror.Unauthorized("invalid api key")
+		return tenant.APIKeyIdentity{}, apierror.Unauthorized("invalid api key")
 	}
 	key, err := s.repo.FindByHash(ctx, hashKey(rawKey))
 	if err != nil {
-		return "", "", "", err
+		return tenant.APIKeyIdentity{}, err
 	}
 	if key.RevokedAt != nil {
-		return "", "", "", apierror.Unauthorized("api key revoked")
+		return tenant.APIKeyIdentity{}, apierror.Unauthorized("api key revoked")
+	}
+	if !key.usable(time.Now()) {
+		return tenant.APIKeyIdentity{}, apierror.Unauthorized("api key expired: it was rotated, use its replacement")
 	}
 	// Best-effort: a failed bookkeeping write must never turn into a
 	// rejected request over an otherwise-valid key, matching this
@@ -87,5 +111,5 @@ func (s *Service) Authenticate(ctx context.Context, rawKey string) (organization
 	if err := s.repo.UpdateLastUsed(ctx, key.ID); err != nil {
 		s.logger.Warn("api key authenticated but last_used_at update failed", "error", err, "key_id", key.ID)
 	}
-	return key.OrganizationID, key.CreatedByUserID, string(key.Scope), nil
+	return tenant.APIKeyIdentity{KeyID: key.ID, OrganizationID: key.OrganizationID, UserID: key.CreatedByUserID, Scope: string(key.Scope)}, nil
 }

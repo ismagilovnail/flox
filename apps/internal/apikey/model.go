@@ -34,6 +34,15 @@ type ApiKey struct {
 	CreatedAt       time.Time  `json:"createdAt"`
 	LastUsedAt      *time.Time `json:"lastUsedAt"`
 	RevokedAt       *time.Time `json:"-"`
+	// ExpiresAt is set on a rotated key: it keeps authenticating until
+	// then (the grace period), then stops. ReplacedByID is its successor.
+	ExpiresAt    *time.Time `json:"expiresAt"`
+	ReplacedByID *string    `json:"replacedById"`
+}
+
+// usable reports whether the key authenticates at now.
+func (k ApiKey) usable(now time.Time) bool {
+	return k.RevokedAt == nil && (k.ExpiresAt == nil || now.Before(*k.ExpiresAt))
 }
 
 type CreateInput struct {

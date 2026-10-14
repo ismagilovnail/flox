@@ -11,6 +11,12 @@ export function createApiKey(input: { name: string; scope: ApiKeyScope }): Promi
   return apiFetch("/api-keys", { method: "POST", body: input });
 }
 
+/** A new key with the same name and scope, its full secret shown once; the
+ * rotated key keeps working for 24 hours (apps/internal/apikey.RotationGrace). */
+export function rotateApiKey(id: string): Promise<{ apiKey: ApiKey; fullKey: string }> {
+  return apiFetch(`/api-keys/${id}/rotate`, { method: "POST" });
+}
+
 export function revokeApiKey(id: string): Promise<void> {
   return apiFetch(`/api-keys/${id}`, { method: "DELETE" });
 }

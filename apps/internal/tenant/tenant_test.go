@@ -47,12 +47,12 @@ type countingAPIKeyAuthenticator struct {
 	calls                int
 }
 
-func (c *countingAPIKeyAuthenticator) Authenticate(ctx context.Context, rawKey string) (string, string, string, error) {
+func (c *countingAPIKeyAuthenticator) Authenticate(ctx context.Context, rawKey string) (tenant.APIKeyIdentity, error) {
 	c.calls++
 	if c.err != nil {
-		return "", "", "", c.err
+		return tenant.APIKeyIdentity{}, c.err
 	}
-	return c.orgID, c.userID, c.scope, nil
+	return tenant.APIKeyIdentity{KeyID: "key-1", OrganizationID: c.orgID, UserID: c.userID, Scope: c.scope}, nil
 }
 
 func TestPeekIdentityResolvesAPIKey(t *testing.T) {

@@ -5,6 +5,35 @@ per-phase, matching `CLAUDE.md`'s phase protocol. The one exception is
 [Between phases], below: spec amendments and the code changes that follow from
 them land between phases and would otherwise be invisible here.
 
+## [Phase 30.18] — API key rotation and audit trail
+
+Closes gap 14 of `docs/spec-conformance-2026-10-11.md` (§54: API key rotation; audit logging beyond team
+and settings). Scope (owner, 2026-10-14): audit middleware plus named key events; rotation with a 24-hour
+grace period.
+
+- **Rotation:** `POST /api-keys/{id}/rotate` (`settings.write`) creates the successor (same name and scope,
+  secret shown once); the old key works 24 more hours, then is refused and leaves the list. Migration
+  `00072`: `api_keys.expires_at`, `replaced_by_id`. Rotating a replaced, expired, revoked or another
+  organization's key is refused. Settings > API keys: Rotate button and confirm dialog; a replaced key shows
+  when it stops working.
+- **Audit trail:** new `internal/audit` middleware inside `tenantMiddleware` writes one `audit_logs` row
+  per successful write on any tenant route: actor (user, or API key + creator), action, entity, route,
+  status. Bodies are never stored. Named actions via `audit.Annotate` for API keys, integrations, ad
+  accounts, network postback secret; team/settings actions moved onto the same path (one row per action,
+  no duplicates). POST-shaped reads (analytics, simulate, push audience, notification reads) are skipped.
+- `tenant.APIKeyAuthenticator.Authenticate` now returns `tenant.APIKeyIdentity` (incl. the key id);
+  `tenant.APIKeyID(ctx)`.
+- **Team > Activity** shows every change: named actions translated, others as action + route + entity,
+  plus "via API key «name»". en/ru.
+- Tests: audit middleware (rows, entity from URL or 201 body, API key metadata, reads/failures/skips not
+  recorded, annotations, bodies never stored, write failure keeps the response), rotation (grace period,
+  expiry, second rotation, revoked, cross-org), `TestAuditTrail` end to end on the real router (skip list
+  routes exist; that test caught the `/v1` prefix in runtime patterns). Isolation guard lists
+  `replacedById` as response-only. `docs/security.md` §6a and §8, `docs/auth.md`.
+- Verified live: rotate → both secrets work, second rotation 409, activity rows; checked in the browser
+  (API keys list, rotate dialog, activity feed), smoke keys revoked afterwards.
+- Known gap: a change whose request then fails (e.g. an error after the commit) is not recorded.
+
 ## [Phase 30.17] — Empty subs diagnostic
 
 Closes gap 13 of `docs/spec-conformance-2026-10-11.md` (§42: show the share of subs-less traffic).

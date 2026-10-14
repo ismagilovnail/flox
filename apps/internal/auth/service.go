@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/ismagilovnail/flox/apps/internal/apierror"
+	"github.com/ismagilovnail/flox/apps/internal/audit"
 	"github.com/ismagilovnail/flox/apps/internal/idgen"
 	"github.com/ismagilovnail/flox/apps/internal/tenant"
 	totpengine "github.com/ismagilovnail/flox/apps/internal/totp"
@@ -562,7 +563,7 @@ func (s *Service) Invite(ctx context.Context, orgID, actorUserID string, in Invi
 	}
 
 	actor := actorUserID
-	_ = s.repo.RecordActivity(ctx, idgen.New(), orgID, &actor, "team.invited", "membership", membershipID)
+	s.recordActivity(ctx, orgID, actor, "team.invited", "membership", membershipID)
 	return s.inviteURL(token), nil
 }
 
@@ -577,7 +578,7 @@ func (s *Service) ResendInvite(ctx context.Context, orgID, actorUserID, membersh
 	}
 
 	actor := actorUserID
-	_ = s.repo.RecordActivity(ctx, idgen.New(), orgID, &actor, "team.invite_resent", "membership", membershipID)
+	s.recordActivity(ctx, orgID, actor, "team.invite_resent", "membership", membershipID)
 	return s.inviteURL(token), nil
 }
 
@@ -621,7 +622,7 @@ func (s *Service) AcceptInvite(ctx context.Context, in AcceptInviteInput) (Login
 	}
 
 	actor := inv.UserID
-	_ = s.repo.RecordActivity(ctx, idgen.New(), inv.OrganizationID, &actor, "team.invite_accepted", "membership", inv.MembershipID)
+	s.recordActivity(ctx, inv.OrganizationID, actor, "team.invite_accepted", "membership", inv.MembershipID)
 	return s.completeLogin(ctx, inv.UserID, inv.OrganizationID, in.Name, inv.Email, inv.RoleKey, inv.OrganizationName, in.ClientIP)
 }
 
@@ -644,14 +645,14 @@ func (s *Service) UpdateMembership(ctx context.Context, orgID, actorUserID, memb
 
 	actor := actorUserID
 	if in.RoleKey != nil {
-		_ = s.repo.RecordActivity(ctx, idgen.New(), orgID, &actor, "team.role_changed", "membership", membershipID)
+		s.recordActivity(ctx, orgID, actor, "team.role_changed", "membership", membershipID)
 	}
 	if in.Status != nil {
 		action := "team.suspended"
 		if *in.Status == "active" {
 			action = "team.reactivated"
 		}
-		_ = s.repo.RecordActivity(ctx, idgen.New(), orgID, &actor, action, "membership", membershipID)
+		s.recordActivity(ctx, orgID, actor, action, "membership", membershipID)
 	}
 	return s.repo.GetMembership(ctx, orgID, membershipID)
 }
@@ -664,7 +665,7 @@ func (s *Service) RemoveMember(ctx context.Context, orgID, actorUserID, membersh
 		return err
 	}
 	actor := actorUserID
-	_ = s.repo.RecordActivity(ctx, idgen.New(), orgID, &actor, "team.removed", "membership", membershipID)
+	s.recordActivity(ctx, orgID, actor, "team.removed", "membership", membershipID)
 	return nil
 }
 
@@ -737,7 +738,7 @@ func (s *Service) UpdateOrganizationSettings(ctx context.Context, orgID, actorUs
 		return OrganizationSettings{}, err
 	}
 	actor := actorUserID
-	_ = s.repo.RecordActivity(ctx, idgen.New(), orgID, &actor, "settings.updated", "organization", orgID)
+	s.recordActivity(ctx, orgID, actor, "settings.updated", "organization", orgID)
 	return updated, nil
 }
 
@@ -792,7 +793,7 @@ func (s *Service) UpdateSecuritySettings(ctx context.Context, orgID, actorUserID
 		return SecuritySettings{}, err
 	}
 	actor := actorUserID
-	_ = s.repo.RecordActivity(ctx, idgen.New(), orgID, &actor, "settings.updated", "organization", orgID)
+	s.recordActivity(ctx, orgID, actor, "settings.updated", "organization", orgID)
 	return updated, nil
 }
 
@@ -1011,4 +1012,15 @@ func (s *Service) CompleteEnrollmentLogin(ctx context.Context, pendingToken, cod
 	}
 	_ = s.repo.DeletePendingTOTPLogin(ctx, pending.ID)
 	return s.createSession(ctx, who.UserID, pending.OrganizationID, who.UserName, who.UserEmail, who.RoleKey, who.OrganizationName, sec.SessionTimeoutMinutes)
+}
+
+// recordActivity names a team/settings action in the audit trail. Inside a
+// tenant route the audit middleware writes it (one row per request, with
+// the route and API key — internal/audit); outside one, accepting an
+// invite before any session exists, it is written here.
+func (s *Service) recordActivity(ctx context.Context, orgID, actor, action, entityType, entityID string) {
+	if audit.Annotate(ctx, audit.Entry{Action: action, EntityType: entityType, EntityID: entityID}) {
+		return
+	}
+	_ = s.repo.RecordActivity(ctx, idgen.New(), orgID, &actor, action, entityType, entityID)
 }

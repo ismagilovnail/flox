@@ -32,6 +32,7 @@ const CookieName = "flox_session"
 type contextKey struct{}
 type userContextKey struct{}
 type apiKeyScopeContextKey struct{}
+type apiKeyIDContextKey struct{}
 
 // SessionResolver validates a raw session token (the cookie's value) and
 // returns the organization/user it belongs to. Implemented by
@@ -43,15 +44,31 @@ type SessionResolver interface {
 	ResolveSession(ctx context.Context, token string) (organizationID, userID string, err error)
 }
 
+// APIKeyIdentity is what a valid API key resolves to: the key itself
+// (KeyID, for the audit trail), the organization it belongs to, the user
+// who created it (for audit attribution only — see NewMiddleware's own
+// comment), and its scope ("read"/"write"/"admin", checked by
+// apps/internal/auth.Service.RequirePermission).
+type APIKeyIdentity struct {
+	KeyID          string
+	OrganizationID string
+	UserID         string
+	Scope          string
+}
+
 // APIKeyAuthenticator validates a raw API key (an Authorization: Bearer
-// token) and returns the organization it belongs to, the user who created
-// it (for audit attribution only — see NewMiddleware's own comment), and
-// its scope ("read"/"write"/"admin", checked by
-// apps/internal/auth.Service.RequirePermission). Implemented by
-// apps/internal/apikey.Service — declared here, at the point of use, for
-// the same import-cycle reason as SessionResolver.
+// token). Implemented by apps/internal/apikey.Service — declared here, at
+// the point of use, for the same import-cycle reason as SessionResolver.
 type APIKeyAuthenticator interface {
-	Authenticate(ctx context.Context, rawKey string) (organizationID, userID, scope string, err error)
+	Authenticate(ctx context.Context, rawKey string) (APIKeyIdentity, error)
+}
+
+// withAPIKey puts an API key's identity into ctx.
+func withAPIKey(ctx context.Context, id APIKeyIdentity) context.Context {
+	ctx = context.WithValue(ctx, contextKey{}, id.OrganizationID)
+	ctx = context.WithValue(ctx, userContextKey{}, id.UserID)
+	ctx = context.WithValue(ctx, apiKeyScopeContextKey{}, id.Scope)
+	return context.WithValue(ctx, apiKeyIDContextKey{}, id.KeyID)
 }
 
 // NewMiddleware builds the chi-compatible middleware every tenant-scoped
@@ -83,15 +100,12 @@ func NewMiddleware(resolver SessionResolver, apiKeys APIKeyAuthenticator, logger
 			// browser's session cookie too, but if both somehow are, the
 			// explicit credential the caller chose to send wins.
 			if rawKey, ok := bearerToken(r); ok {
-				orgID, userID, scope, err := apiKeys.Authenticate(r.Context(), rawKey)
+				id, err := apiKeys.Authenticate(r.Context(), rawKey)
 				if err != nil {
 					apierror.Write(w, logger, err)
 					return
 				}
-				ctx := context.WithValue(r.Context(), contextKey{}, orgID)
-				ctx = context.WithValue(ctx, userContextKey{}, userID)
-				ctx = context.WithValue(ctx, apiKeyScopeContextKey{}, scope)
-				next.ServeHTTP(w, r.WithContext(ctx))
+				next.ServeHTTP(w, r.WithContext(withAPIKey(r.Context(), id)))
 				return
 			}
 
@@ -153,11 +167,8 @@ func PeekIdentity(resolver SessionResolver, apiKeys APIKeyAuthenticator, logger 
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			if rawKey, ok := bearerToken(r); ok {
-				if orgID, userID, scope, err := apiKeys.Authenticate(r.Context(), rawKey); err == nil {
-					ctx := context.WithValue(r.Context(), contextKey{}, orgID)
-					ctx = context.WithValue(ctx, userContextKey{}, userID)
-					ctx = context.WithValue(ctx, apiKeyScopeContextKey{}, scope)
-					next.ServeHTTP(w, r.WithContext(ctx))
+				if id, err := apiKeys.Authenticate(r.Context(), rawKey); err == nil {
+					next.ServeHTTP(w, r.WithContext(withAPIKey(r.Context(), id)))
 					return
 				}
 				next.ServeHTTP(w, r)
@@ -269,4 +280,11 @@ func UserID(ctx context.Context) (string, bool) {
 func APIKeyScope(ctx context.Context) (string, bool) {
 	v, ok := ctx.Value(apiKeyScopeContextKey{}).(string)
 	return v, ok
+}
+
+// APIKeyID is the id of the API key the request authenticated with; ok is
+// false for a session (cookie) request.
+func APIKeyID(ctx context.Context) (string, bool) {
+	v, ok := ctx.Value(apiKeyIDContextKey{}).(string)
+	return v, ok && v != ""
 }

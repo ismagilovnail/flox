@@ -250,13 +250,15 @@ enforced server-side too, since frontend permissions are only UX) and
 
 ### Activity log
 
-`GET /team/activity` (`team.read`) reads `audit_logs` (migration `00010`,
-existed but was completely unused until this phase). Populated only by
-this package's own membership actions (`team.invited`,
-`team.invite_accepted`, `team.role_changed`, `team.suspended`,
-`team.reactivated`, `team.removed`) — sweeping audit-log writes into every
-other domain's write path is out of scope here for the same reason the
-RBAC sweep is (see Scope decisions above).
+`GET /team/activity` (`team.read`) reads `audit_logs` (migration `00010`):
+the organization's audit trail, the latest 50 rows. Since Phase 30.18 it
+covers every domain, not only membership — see `docs/security.md` §8.
+This package's own actions (`team.invited`, `team.invite_accepted`,
+`team.role_changed`, `team.suspended`, `team.reactivated`, `team.removed`,
+`settings.updated`) name themselves through `audit.Annotate`; only
+accepting an invite, which runs before any session exists, still writes
+its row directly. Each entry carries the route it came through and, for a
+change made with an API key, that key's name.
 
 ## Cookie details
 

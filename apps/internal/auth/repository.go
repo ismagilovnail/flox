@@ -587,9 +587,11 @@ func (r *Repository) RecordActivity(ctx context.Context, id, orgID string, actor
 
 func (r *Repository) ListActivity(ctx context.Context, orgID string, limit int) ([]ActivityEntry, error) {
 	rows, err := r.db.Query(ctx, `
-		SELECT a.id, a.action, a.entity_type, a.entity_id, u.name, a.created_at
+		SELECT a.id, a.action, a.entity_type, a.entity_id, u.name,
+		       coalesce(a.metadata->>'route', ''), k.name, a.created_at
 		FROM audit_logs a
 		LEFT JOIN users u ON u.id = a.actor_user_id
+		LEFT JOIN api_keys k ON k.id = a.metadata->>'apiKeyId' AND k.organization_id = a.organization_id
 		WHERE a.organization_id = $1
 		ORDER BY a.created_at DESC
 		LIMIT $2`, orgID, limit)
@@ -601,7 +603,7 @@ func (r *Repository) ListActivity(ctx context.Context, orgID string, limit int) 
 	var out []ActivityEntry
 	for rows.Next() {
 		var e ActivityEntry
-		if err := rows.Scan(&e.ID, &e.Action, &e.EntityType, &e.EntityID, &e.ActorName, &e.CreatedAt); err != nil {
+		if err := rows.Scan(&e.ID, &e.Action, &e.EntityType, &e.EntityID, &e.ActorName, &e.Route, &e.APIKeyName, &e.CreatedAt); err != nil {
 			return nil, err
 		}
 		out = append(out, e)

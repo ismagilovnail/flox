@@ -8,6 +8,7 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"github.com/ismagilovnail/flox/apps/internal/apierror"
+	"github.com/ismagilovnail/flox/apps/internal/audit"
 	"github.com/ismagilovnail/flox/apps/internal/pagination"
 	"github.com/ismagilovnail/flox/apps/internal/tenant"
 )
@@ -166,6 +167,7 @@ func (h *Handler) regeneratePostbackSecret(w http.ResponseWriter, r *http.Reques
 		apierror.Write(w, h.logger, err)
 		return
 	}
+	audit.Annotate(r.Context(), audit.Entry{Action: "network.postback_secret_regenerated", EntityType: "network", EntityID: chi.URLParam(r, "id")})
 	writeJSON(w, http.StatusOK, struct {
 		PostbackSecret string `json:"postbackSecret"`
 	}{secret})

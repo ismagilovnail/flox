@@ -155,6 +155,8 @@ type activityResponse struct {
 	EntityType string    `json:"entityType"`
 	EntityID   string    `json:"entityId"`
 	ActorName  *string   `json:"actorName"`
+	Route      string    `json:"route"`
+	APIKeyName *string   `json:"apiKeyName"`
 	CreatedAt  time.Time `json:"createdAt"`
 }
 
@@ -167,7 +169,7 @@ func (h *TeamHandler) activity(w http.ResponseWriter, r *http.Request) {
 	}
 	out := make([]activityResponse, len(entries))
 	for i, e := range entries {
-		out[i] = activityResponse{ID: e.ID, Action: e.Action, EntityType: e.EntityType, EntityID: e.EntityID, ActorName: e.ActorName, CreatedAt: e.CreatedAt}
+		out[i] = activityResponse{ID: e.ID, Action: e.Action, EntityType: e.EntityType, EntityID: e.EntityID, ActorName: e.ActorName, Route: e.Route, APIKeyName: e.APIKeyName, CreatedAt: e.CreatedAt}
 	}
 	writeJSON(w, http.StatusOK, out)
 }
