@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -218,6 +219,38 @@ type ReportQuery struct {
 	// DateByConversion) or by their click's (DateByClick). Clicks, landing
 	// views and installs are dated by when they happened either way.
 	DateBasis DateBasis
+	// Money converts revenue into the reporting currency per conversion
+	// (§50-FX): nil keeps USD as stored.
+	Money *MoneyFactors
+}
+
+// MoneyFactors is a USD → reporting-currency multiplier per UTC day
+// (fx.Conversion.Days). A conversion on a day not listed has no rate, and
+// makes its group's revenue NaN — unknown, never 0; the caller turns NaN
+// into a null.
+type MoneyFactors struct {
+	Days    []time.Time
+	Factors []float64
+}
+
+// revenueValueExpr is one conversion row's revenue, converted when m is set.
+// The lists are inlined from time.Time / float64 values, never user text.
+func revenueValueExpr(prefix string, m *MoneyFactors) string {
+	usd := prefix + "usd_value * " + prefix + "has_usd_value"
+	if m == nil {
+		return usd
+	}
+	if len(m.Days) == 0 {
+		return usd + " * nan"
+	}
+	days := make([]string, len(m.Days))
+	factors := make([]string, len(m.Factors))
+	for i, d := range m.Days {
+		days[i] = "toDate('" + d.UTC().Format("2006-01-02") + "')"
+		factors[i] = strconv.FormatFloat(m.Factors[i], 'g', -1, 64)
+	}
+	return fmt.Sprintf("%s * transform(toDate(%sevent_at, 'UTC'), [%s], [toFloat64(%s)], nan)",
+		usd, prefix, strings.Join(days, ", "), strings.Join(factors, "), toFloat64("))
 }
 
 // DateBasis is which moment a conversion is reported on (tech audit AN5).
@@ -535,7 +568,7 @@ func (s *EventStore) ReportConversions(ctx context.Context, q ReportQuery) ([]Co
 
 	query := fmt.Sprintf(`
 		SELECT %scountIf(type IN ('CPA_ACCEPT', 'CPA_REDEP')) AS conversions,
-			sumIf(usd_value * has_usd_value, type IN `+revenueTypes+`) AS revenue_usd,
+			sumIf(`+revenueValueExpr("", q.Money)+`, type IN `+revenueTypes+`) AS revenue_usd,
 			countIf(type = 'CPA_HOLD') AS registrations,
 			countIf(type = 'CPA_ACCEPT') AS purchases,
 			countIf(type = 'CPA_REDEP') AS repurchases,
@@ -629,7 +662,7 @@ func (s *EventStore) reportConversionsJoined(ctx context.Context, q ReportQuery)
 
 	query := fmt.Sprintf(`
 		SELECT %scountIf(c.type IN ('CPA_ACCEPT', 'CPA_REDEP')) AS conversions,
-			sumIf(c.usd_value * c.has_usd_value, c.type IN `+revenueTypes+`) AS revenue_usd,
+			sumIf(`+revenueValueExpr("c.", q.Money)+`, c.type IN `+revenueTypes+`) AS revenue_usd,
 			countIf(c.type = 'CPA_HOLD') AS registrations,
 			countIf(c.type = 'CPA_ACCEPT') AS purchases,
 			countIf(c.type = 'CPA_REDEP') AS repurchases,

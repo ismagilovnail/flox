@@ -2,12 +2,14 @@ package analytics_test
 
 import (
 	"context"
+	"math"
 	"testing"
 	"time"
 
 	"github.com/ismagilovnail/flox/apps/internal/analytics"
 	"github.com/ismagilovnail/flox/apps/internal/chstore"
 	"github.com/ismagilovnail/flox/apps/internal/cost"
+	"github.com/ismagilovnail/flox/apps/internal/fx"
 )
 
 // reportFakeRepo is a fully scripted analytics.Repository for report.go's
@@ -163,7 +165,7 @@ func TestReportComputesEveryMetricWhenCostIsAvailable(t *testing.T) {
 	if m.CPA == nil || *m.CPA != 20 {
 		t.Fatalf("CPA = %v, want 20 (200/10)", m.CPA)
 	}
-	if m.EPC != 5 {
+	if m.EPC == nil || *m.EPC != 5 {
 		t.Fatalf("EPC = %v, want 5 (500/100)", m.EPC)
 	}
 }
@@ -480,8 +482,8 @@ func TestReportNoDataAtAllStillReturnsOneZeroRow(t *testing.T) {
 		t.Fatalf("rows = %d, want exactly 1 all-zero row", len(rows))
 	}
 	m := rows[0].Metrics
-	if m.Clicks != 0 || m.UniqueClicks != 0 || m.CTR != 0 || m.CVR != 0 || m.EPC != 0 {
-		t.Fatalf("Metrics = %+v, want every field zero", m)
+	if m.Clicks != 0 || m.UniqueClicks != 0 || m.CTR != 0 || m.CVR != 0 || m.EPC != nil {
+		t.Fatalf("Metrics = %+v, want every field zero and EPC null (no clicks)", m)
 	}
 	if m.Conversions == nil || *m.Conversions != 0 {
 		t.Fatalf("Conversions = %v, want a real 0", m.Conversions)
@@ -914,4 +916,89 @@ func TestReportCostByCountryAndDay(t *testing.T) {
 	if c := rows[1].Metrics.Cost; c != nil {
 		t.Fatalf("day 2 DE cost = %v, want nil (day 2 has unsplit spend)", *c)
 	}
+}
+
+type fakeMoney struct{ conv *fx.Conversion }
+
+func (m fakeMoney) ReportingConversion(context.Context, string, time.Time, time.Time) (*fx.Conversion, error) {
+	return m.conv, nil
+}
+
+func TestReportInReportingCurrency(t *testing.T) {
+	d1 := time.Date(2026, 8, 3, 0, 0, 0, 0, time.UTC) // Monday
+	d2 := d1.AddDate(0, 0, 1)
+	// 1 EUR = 1.25 USD on d1, = 2 USD from d2: factors 0.8 and 0.5.
+	eur := fx.NewConversion("EUR", []fx.Rate{{Date: d1, RateToUSD: 1.25}, {Date: d2, RateToUSD: 2}}, d1.AddDate(0, 0, -1), d2.AddDate(0, 0, 30))
+	costs := func() *fakeCost {
+		return &fakeCost{campaignDay: []cost.CampaignDaySpend{
+			{CampaignID: "camp-a", Day: d1, AmountUSD: 100},
+			{CampaignID: "camp-a", Day: d2, AmountUSD: 100},
+		}}
+	}
+	input := analytics.ReportInput{Dims: []chstore.ReportDimension{chstore.DimCampaign}, From: d1, To: d2}
+
+	t.Run("spend converts per day, revenue factors go to ClickHouse", func(t *testing.T) {
+		repo := &reportFakeRepo{
+			clicks: []chstore.ClickAgg{{Key: dimKey(chstore.DimCampaign, "camp-a"), Clicks: 10}},
+			conv:   []chstore.ConversionAgg{{Key: dimKey(chstore.DimCampaign, "camp-a"), Conversions: 1, RevenueUSD: 260}},
+		}
+		svc := analytics.NewService(repo, costs()).WithMoney(fakeMoney{eur})
+		rows, err := svc.Report(context.Background(), "org-1", input)
+		if err != nil {
+			t.Fatalf("Report: %v", err)
+		}
+		m := rows[0].Metrics
+		if m.Cost == nil || *m.Cost != 130 { // 100*0.8 + 100*0.5
+			t.Fatalf("Cost = %v, want 130 (each day at its own rate)", m.Cost)
+		}
+		if m.Profit == nil || *m.Profit != 130 {
+			t.Fatalf("Profit = %v, want 130", m.Profit)
+		}
+		mq := repo.lastConvQuery.Money
+		if mq == nil || len(mq.Days) == 0 || mq.Factors[0] != 0.8 {
+			t.Fatalf("conversion query money = %+v, want EUR factors from d1", mq)
+		}
+	})
+
+	t.Run("revenue on a day with no rate is unknown, not 0", func(t *testing.T) {
+		repo := &reportFakeRepo{
+			clicks: []chstore.ClickAgg{{Key: dimKey(chstore.DimCampaign, "camp-a"), Clicks: 10}},
+			conv:   []chstore.ConversionAgg{{Key: dimKey(chstore.DimCampaign, "camp-a"), Conversions: 1, RevenueUSD: math.NaN()}},
+		}
+		rows, err := analytics.NewService(repo, costs()).WithMoney(fakeMoney{eur}).Report(context.Background(), "org-1", input)
+		if err != nil {
+			t.Fatalf("Report: %v", err)
+		}
+		m := rows[0].Metrics
+		if m.Revenue != nil || m.EPC != nil || m.Profit != nil || m.ROI != nil {
+			t.Fatalf("Revenue/EPC/Profit/ROI = %v/%v/%v/%v, want all null", m.Revenue, m.EPC, m.Profit, m.ROI)
+		}
+		if m.Cost == nil || m.Conversions == nil || *m.Conversions != 1 {
+			t.Fatalf("Cost/Conversions = %v/%v, want them kept", m.Cost, m.Conversions)
+		}
+	})
+
+	t.Run("spend on a day with no rate is unknown", func(t *testing.T) {
+		late := &fakeCost{campaignDay: []cost.CampaignDaySpend{{CampaignID: "camp-a", Day: d1.AddDate(0, 0, -10), AmountUSD: 5}}}
+		repo := &reportFakeRepo{clicks: []chstore.ClickAgg{{Key: dimKey(chstore.DimCampaign, "camp-a"), Clicks: 10}}}
+		rows, err := analytics.NewService(repo, late).WithMoney(fakeMoney{eur}).Report(context.Background(), "org-1", input)
+		if err != nil || rows[0].Metrics.Cost != nil {
+			t.Fatalf("Cost = %v, %v, want null", rows[0].Metrics.Cost, err)
+		}
+	})
+
+	t.Run("KeepUSD leaves money as stored", func(t *testing.T) {
+		repo := &reportFakeRepo{clicks: []chstore.ClickAgg{{Key: dimKey(chstore.DimCampaign, "camp-a"), Clicks: 10}}}
+		in := input
+		in.KeepUSD = true
+		usdCost := costs()
+		usdCost.byCampaign = []cost.CampaignSpend{{CampaignID: "camp-a", AmountUSD: 200}}
+		rows, err := analytics.NewService(repo, usdCost).WithMoney(fakeMoney{eur}).Report(context.Background(), "org-1", in)
+		if err != nil || rows[0].Metrics.Cost == nil || *rows[0].Metrics.Cost != 200 {
+			t.Fatalf("Cost = %v, %v, want 200 USD", rows[0].Metrics.Cost, err)
+		}
+		if repo.lastConvQuery.Money != nil {
+			t.Fatal("KeepUSD still sent money factors")
+		}
+	})
 }

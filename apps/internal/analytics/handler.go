@@ -153,7 +153,7 @@ type metricValuesResponse struct {
 	CVR          float64  `json:"cvr"`
 	CPC          *float64 `json:"cpc"`
 	CPA          *float64 `json:"cpa"`
-	EPC          float64  `json:"epc"`
+	EPC          *float64 `json:"epc"`
 
 	PwaInstalls     uint64   `json:"pwaInstalls"`
 	Registrations   *uint64  `json:"registrations"`
@@ -297,7 +297,19 @@ func (h *Handler) report(w http.ResponseWriter, r *http.Request) {
 		apierror.Write(w, h.logger, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, rowsResponse(rows))
+	h.writeRows(w, r, orgID, rows)
+}
+
+// writeRows answers with rows and the currency their money is in.
+func (h *Handler) writeRows(w http.ResponseWriter, r *http.Request, orgID string, rows []ReportRow) {
+	cur, err := h.svc.Currency(r.Context(), orgID)
+	if err != nil {
+		apierror.Write(w, h.logger, err)
+		return
+	}
+	resp := rowsResponse(rows)
+	resp["currency"] = cur
+	writeJSON(w, http.StatusOK, resp)
 }
 
 // rowsResponse is the {"rows": …} answer of the report, timeseries and
@@ -350,7 +362,7 @@ func (h *Handler) timeseries(w http.ResponseWriter, r *http.Request) {
 		apierror.Write(w, h.logger, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, rowsResponse(rows))
+	h.writeRows(w, r, orgID, rows)
 }
 
 type breakdownRequest struct {
@@ -394,7 +406,7 @@ func (h *Handler) breakdown(w http.ResponseWriter, r *http.Request) {
 		apierror.Write(w, h.logger, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, rowsResponse(rows))
+	h.writeRows(w, r, orgID, rows)
 }
 
 type rangeRequest struct {
@@ -454,6 +466,8 @@ type dashboardResponse struct {
 	TopCountries      []reportRowResponse `json:"topCountries"`
 	TopFlows          []reportRowResponse `json:"topFlows"`
 	TopOffers         []reportRowResponse `json:"topOffers"`
+	// Currency is the reporting currency every amount above is in.
+	Currency string `json:"currency"`
 }
 
 // dashboard answers POST /analytics/dashboard — /overview's own endpoint
@@ -476,6 +490,11 @@ func (h *Handler) dashboard(w http.ResponseWriter, r *http.Request) {
 		apierror.Write(w, h.logger, err)
 		return
 	}
+	cur, err := h.svc.Currency(r.Context(), orgID)
+	if err != nil {
+		apierror.Write(w, h.logger, err)
+		return
+	}
 	writeJSON(w, http.StatusOK, dashboardResponse{
 		Totals:            metricValuesToResponse(result.Totals),
 		DatedByConversion: result.DatedByConversion,
@@ -484,6 +503,7 @@ func (h *Handler) dashboard(w http.ResponseWriter, r *http.Request) {
 		TopCountries:      reportRowsToResponse(result.TopCountries),
 		TopFlows:          reportRowsToResponse(result.TopFlows),
 		TopOffers:         reportRowsToResponse(result.TopOffers),
+		Currency:          cur,
 	})
 }
 

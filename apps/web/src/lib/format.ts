@@ -11,9 +11,15 @@ import type { Locale } from "@/lib/i18n/config";
 const INTL_LOCALE: Record<Locale, string> = { en: "en-US", ru: "ru-RU" };
 
 export function formatUsd(n: number, maximumFractionDigits = 0, locale: Locale = "en") {
+  return formatMoney(n, "USD", maximumFractionDigits, locale);
+}
+
+/** An amount in `currency` (ISO 4217) — report money comes out in the
+ * organization's reporting currency (§50-FX, useReportingCurrency). */
+export function formatMoney(n: number, currency: string, maximumFractionDigits = 0, locale: Locale = "en") {
   return n.toLocaleString(INTL_LOCALE[locale], {
     style: "currency",
-    currency: "USD",
+    currency,
     maximumFractionDigits,
   });
 }

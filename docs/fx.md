@@ -65,6 +65,34 @@ Two gaps, both caught by `make reconcile FROM=… TO=…`:
 - a bucket with more than `reconcile.MaxRepairsPerRun` (1000) conversions
   to rewrite is skipped and logged at error level.
 
+## Reporting currency
+
+§50-FX: "Base reporting currency configurable per organization" —
+`organizations.currency` (Settings → Organization). Storage does not
+change: everything stays in USD at the event's own rate. Reports convert
+on the way out (`fx.Store.ReportingConversion` → `fx.Conversion`):
+
+- each **day's** USD is multiplied by that day's USD → base factor
+  (`1 / rate_to_usd`, same "latest on or before, at most 7 days old" rule
+  as above), so a past day reads the same however wide the report is;
+- revenue is converted per conversion row inside ClickHouse
+  (`chstore.ReportQuery.Money`, a `transform()` over the inlined day →
+  factor lists, by the conversion's UTC day); spend per cost-entry day in
+  `analytics.convertedCost` (period sums are rebuilt from the per-day
+  rows); LTV per deposit in `ltv.Service`;
+- a day with **no rate** makes the amount unknown — Revenue/Cost (and
+  Profit, ROI, ROAS, EPC, CPA…) come out `null` ("—"), never a partial sum
+  and never 0 (CLAUDE.md #6/#7). EPC is therefore nullable on the wire now;
+- every report, timeseries, breakdown, dashboard and LTV response carries
+  `currency`; the web app formats money with `useReportingCurrency()` (the
+  same organization setting) and refetches everything when it changes;
+- **alert rules stay in USD** (`ReportInput.KeepUSD`): thresholds are
+  typed in USD. Custom metrics compute over the converted values, so a
+  money formula comes out in the reporting currency.
+
+The field names (`revenueUsd`, `ltvTotalUsd`, …) are kept for compatibility
+— read them as "in `currency`".
+
 ## Monitoring
 
 - `flox_fx_sync_total{outcome}` — sync runs.

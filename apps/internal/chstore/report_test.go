@@ -2,6 +2,7 @@ package chstore_test
 
 import (
 	"context"
+	"math"
 	"testing"
 	"time"
 
@@ -1068,5 +1069,38 @@ func TestReportByNetwork(t *testing.T) {
 	convs, err := store.ReportConversions(ctx, q)
 	if err != nil || len(convs) != 1 || convs[0].Key.DimValues[chstore.DimNetwork] != "net-a" || convs[0].RevenueUSD != 9 {
 		t.Fatalf("conversions by network = %+v, %v", convs, err)
+	}
+}
+
+func TestReportConversionsInReportingCurrency(t *testing.T) {
+	conn := mustConn(t)
+	store := chstore.NewEventStore(conn)
+	ctx := context.Background()
+	orgID, campaignID, click := idgen.New(), idgen.New(), idgen.New()
+	d1 := time.Date(2026, 8, 24, 0, 0, 0, 0, time.UTC)
+	d2 := d1.AddDate(0, 0, 1)
+	if err := store.InsertBatch(ctx, []event.Event{
+		{Type: event.SourceClick, EventAt: d1, OrganizationID: orgID, CampaignID: campaignID, ClickID: click, OS: "linux"},
+		// 23:30 UTC is still d1 for the rate, whatever zone the report is in.
+		{Type: event.CpaAccept, EventAt: d1.Add(23*time.Hour + 30*time.Minute), OrganizationID: orgID, CampaignID: campaignID, ClickID: click, USDValue: 10, HasUSDValue: true},
+		{Type: event.CpaRedep, EventAt: d2.Add(time.Hour), OrganizationID: orgID, CampaignID: campaignID, ClickID: click, USDValue: 4, HasUSDValue: true, EventRef: "r1"},
+	}); err != nil {
+		t.Fatalf("seeding: %v", err)
+	}
+	q := chstore.ReportQuery{OrganizationID: orgID, From: d1, To: d2.Add(24 * time.Hour),
+		Money: &chstore.MoneyFactors{Days: []time.Time{d1, d2}, Factors: []float64{0.5, 0.25}}}
+	for name, dims := range map[string][]chstore.ReportDimension{"plain": nil, "joined": {chstore.DimOS}} {
+		q.Dims = dims
+		aggs, err := store.ReportConversions(ctx, q)
+		if err != nil || len(aggs) != 1 || aggs[0].RevenueUSD != 6 { // 10*0.5 + 4*0.25
+			t.Fatalf("%s: ReportConversions = %+v, %v, want revenue 6", name, aggs, err)
+		}
+	}
+	// d2 without a rate: the total is unknown (NaN), never a partial sum.
+	q.Dims = nil
+	q.Money = &chstore.MoneyFactors{Days: []time.Time{d1}, Factors: []float64{0.5}}
+	aggs, err := store.ReportConversions(ctx, q)
+	if err != nil || len(aggs) != 1 || !math.IsNaN(aggs[0].RevenueUSD) {
+		t.Fatalf("ReportConversions = %+v, %v, want NaN revenue", aggs, err)
 	}
 }

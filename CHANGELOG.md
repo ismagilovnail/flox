@@ -5,6 +5,30 @@ per-phase, matching `CLAUDE.md`'s phase protocol. The one exception is
 [Between phases], below: spec amendments and the code changes that follow from
 them land between phases and would otherwise be invisible here.
 
+## [Phase 30.11] — Reports in the organization's reporting currency
+
+Closes gap 7 of `docs/spec-conformance-2026-10-11.md` (§50-FX "Base reporting currency configurable per
+organization"). `docs/fx.md` "Reporting currency", `docs/analytics-report-api.md`.
+
+- **Conversion per day:** storage stays USD at the event's rate; reports convert each day's USD at that
+  day's USD → base rate (`fx.Store.ReportingConversion`, same 7-day staleness rule as the USD side), so
+  a past day never changes with the report's width.
+- **Revenue** is converted per conversion row in ClickHouse (`chstore.ReportQuery.Money`, by the
+  conversion's UTC day, plain and joined queries); **spend** per cost-entry day (`analytics.convertedCost`,
+  all cost shapes incl. by country); **LTV** per deposit (`ltv.Service`).
+- **No rate = unknown:** a day without a rate makes revenue/spend `null` — Profit, ROI, ROAS, EPC, CPA
+  follow — never a partial sum or 0. `epc` is nullable on the wire.
+- **API:** report/timeseries/breakdown/dashboard/LTV responses carry `currency`.
+- **Alerts stay USD** (`ReportInput.KeepUSD`) — thresholds are typed in USD.
+- **Web:** `formatMoney` + `useReportingCurrency()`; analytics (table, charts, compare cards), overview
+  KPIs and top tables, campaign list metrics, LTV and the custom-metric preview show the org currency.
+  Changing the currency refetches every query. Overview revenue is now "—" when unknown instead of 0.
+- Verified on the dev stack: Demo org switched to EUR showed €75.08 spend for $84 (ECB ~1.119), in the
+  API and in the browser (overview, campaigns); switched back to USD.
+- Tests: `internal/fx` (day filling, staleness, store), `internal/chstore` (per-day revenue factors, NaN
+  on a missing day, joined path), `internal/analytics` (per-day spend, unknown revenue/spend, KeepUSD),
+  `internal/ltv` (per-deposit conversion), web `formatMoney`.
+
 ## [Phase 30.10] — Cost: per-country spend and CSV import
 
 Closes gap 6 of `docs/spec-conformance-2026-10-11.md` (§27-COST "manual cost entry / CSV import per

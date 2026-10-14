@@ -96,7 +96,7 @@ func (h *Handler) ftdCohorts(w http.ResponseWriter, r *http.Request) {
 	for i, c := range cohorts {
 		resp[i] = ftdCohortResponse{baseResponse: toBaseResponse(c.Key, c.base), FTDToRedepRate: c.FTDToRedepRate, DepToRedepRate: c.DepToRedepRate}
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"cohorts": resp})
+	h.writeCohorts(w, r, orgID, resp)
 }
 
 func (h *Handler) regCohorts(w http.ResponseWriter, r *http.Request) {
@@ -113,7 +113,7 @@ func (h *Handler) regCohorts(w http.ResponseWriter, r *http.Request) {
 	for i, c := range cohorts {
 		resp[i] = regCohortResponse{baseResponse: toBaseResponse(c.Key, c.base), RegToFTDRate: c.RegToFTDRate}
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"cohorts": resp})
+	h.writeCohorts(w, r, orgID, resp)
 }
 
 // parseParams reads ?period=&from=&to=&campaignId=&networkId=&country=.
@@ -169,4 +169,14 @@ func writeJSON(w http.ResponseWriter, status int, body any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(body)
+}
+
+// writeCohorts answers with the cohorts and the currency their revenue is in.
+func (h *Handler) writeCohorts(w http.ResponseWriter, r *http.Request, orgID string, cohorts any) {
+	cur, err := h.svc.Currency(r.Context(), orgID)
+	if err != nil {
+		apierror.Write(w, h.logger, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"cohorts": cohorts, "currency": cur})
 }

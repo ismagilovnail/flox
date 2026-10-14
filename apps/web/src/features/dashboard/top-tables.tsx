@@ -4,7 +4,8 @@ import { useTranslation } from "react-i18next";
 
 import { DataTable, dataTableFeatures } from "@/components/ui/data-table";
 import { Mono } from "@/components/ui/typography";
-import { formatUsd, formatInt } from "@/lib/format";
+import { useReportingCurrency } from "@/hooks/use-organization";
+import { formatMoney, formatInt } from "@/lib/format";
 import type { PerformanceRow } from "@/features/dashboard/metrics";
 
 type Entity = "campaigns" | "countries" | "flows" | "offers";
@@ -16,7 +17,7 @@ const NAME_HEADER_KEY: Record<Entity, string> = {
   offers: "offerHeader",
 };
 
-function columns(t: TFunction, nameHeader: string, nameHint: string): ColumnDef<typeof dataTableFeatures, PerformanceRow>[] {
+function columns(t: TFunction, nameHeader: string, nameHint: string, currency: string): ColumnDef<typeof dataTableFeatures, PerformanceRow>[] {
   return [
     { accessorKey: "name", header: nameHeader, meta: { hint: nameHint } },
     {
@@ -35,7 +36,10 @@ function columns(t: TFunction, nameHeader: string, nameHint: string): ColumnDef<
       accessorKey: "revenue",
       header: t("topTables.revenueHeader", { ns: "dashboard" }),
       meta: { hint: t("topTables.revenueHint", { ns: "dashboard" }) },
-      cell: ({ getValue }) => <Mono>{formatUsd(getValue() as number)}</Mono>,
+      cell: ({ getValue }) => {
+        const v = getValue() as number | null;
+        return <Mono className={v === null ? "text-muted-foreground" : undefined}>{v === null ? "—" : formatMoney(v, currency)}</Mono>;
+      },
     },
     {
       id: "roi",
@@ -56,13 +60,14 @@ function columns(t: TFunction, nameHeader: string, nameHint: string): ColumnDef<
 
 export function TopTable({ entity, rows }: { entity: Entity; rows: PerformanceRow[] }) {
   const { t } = useTranslation("dashboard");
+  const currency = useReportingCurrency();
   const nameHeader = t(`topTables.${NAME_HEADER_KEY[entity]}`);
 
   return (
     <div className="flex flex-col gap-2">
       <h3 className="text-sm font-semibold text-foreground">{t(`topTables.${entity}Title`)}</h3>
       <DataTable
-        columns={columns(t, nameHeader, t(`topTables.${entity}Hint`))}
+        columns={columns(t, nameHeader, t(`topTables.${entity}Hint`), currency)}
         data={rows}
         searchPlaceholder={t(`topTables.${entity}SearchPlaceholder`)}
         emptyTitle={t(`topTables.${entity}EmptyTitle`)}

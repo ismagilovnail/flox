@@ -2,10 +2,12 @@ package ltv
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/ismagilovnail/flox/apps/internal/apierror"
 	"github.com/ismagilovnail/flox/apps/internal/chstore"
+	"github.com/ismagilovnail/flox/apps/internal/fx"
 )
 
 // Repository is the narrow slice of chstore.EventStore this package needs
@@ -26,10 +28,68 @@ type Repository interface {
 const maxAnchorRangeDays = 366
 
 type Service struct {
-	repo Repository
+	repo  Repository
+	money MoneySource
 }
 
 func NewService(repo Repository) *Service { return &Service{repo: repo} }
+
+// MoneySource is the organization's reporting currency (§50-FX) —
+// *fx.Store in production; same as analytics.MoneySource.
+type MoneySource interface {
+	ReportingConversion(ctx context.Context, organizationID string, from, to time.Time) (*fx.Conversion, error)
+}
+
+// WithMoney makes cohort revenue come out in the organization's reporting
+// currency, each deposit at its own day's rate.
+func (s *Service) WithMoney(m MoneySource) *Service {
+	s.money = m
+	return s
+}
+
+// Currency is the currency cohort revenue comes out in.
+func (s *Service) Currency(ctx context.Context, organizationID string) (string, error) {
+	if s.money == nil {
+		return "USD", nil
+	}
+	now := time.Now()
+	c, err := s.money.ReportingConversion(ctx, organizationID, now, now)
+	if err != nil {
+		return "", err
+	}
+	return c.Code(), nil
+}
+
+// convert rewrites each deposit's USD value into the reporting currency. A
+// deposit is never earlier than its anchor, so [filter.From, now] covers
+// them all. A deposit on a day with no rate counts as having no value —
+// how a deposit with no USD value is already treated.
+func (s *Service) convert(ctx context.Context, organizationID string, from time.Time, histories []chstore.ClickHistory) error {
+	if s.money == nil {
+		return nil
+	}
+	conv, err := s.money.ReportingConversion(ctx, organizationID, from.AddDate(0, 0, -1), time.Now().AddDate(0, 0, 1))
+	if err != nil {
+		return fmt.Errorf("ltv: loading the reporting currency: %w", err)
+	}
+	if conv.Identity() {
+		return nil
+	}
+	for i := range histories {
+		for j := range histories[i].Deposits {
+			d := &histories[i].Deposits[j]
+			if !d.HasUSDValue {
+				continue
+			}
+			if f, ok := conv.Factor(d.EventAt); ok {
+				d.USDValue *= f
+			} else {
+				d.USDValue, d.HasUSDValue = 0, false
+			}
+		}
+	}
+	return nil
+}
 
 func validateQuery(organizationID string, period CohortPeriod, filter chstore.LTVFilter) error {
 	if organizationID == "" {
@@ -58,6 +118,9 @@ func (s *Service) FTDCohorts(ctx context.Context, organizationID string, filter 
 	if err != nil {
 		return nil, err
 	}
+	if err := s.convert(ctx, organizationID, filter.From, histories); err != nil {
+		return nil, err
+	}
 	return ComputeFTDCohorts(histories, period, asOf), nil
 }
 
@@ -68,6 +131,9 @@ func (s *Service) RegCohorts(ctx context.Context, organizationID string, filter 
 	}
 	histories, err := s.repo.ClicksByRegAnchor(ctx, organizationID, filter)
 	if err != nil {
+		return nil, err
+	}
+	if err := s.convert(ctx, organizationID, filter.From, histories); err != nil {
 		return nil, err
 	}
 	return ComputeRegCohorts(histories, period, asOf), nil

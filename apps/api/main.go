@@ -45,6 +45,7 @@ import (
 	"github.com/ismagilovnail/flox/apps/internal/domain/tlsprobe"
 	"github.com/ismagilovnail/flox/apps/internal/errtrack"
 	"github.com/ismagilovnail/flox/apps/internal/eventmapping"
+	"github.com/ismagilovnail/flox/apps/internal/fx"
 	"github.com/ismagilovnail/flox/apps/internal/httpserver"
 	integrationsengine "github.com/ismagilovnail/flox/apps/internal/integrations"
 	"github.com/ismagilovnail/flox/apps/internal/landing"
@@ -650,7 +651,9 @@ func buildServer(ctx context.Context, cfg config.Config, logger *slog.Logger, re
 	if ch != nil {
 		events := chstore.NewEventStore(ch)
 
-		analyticsSvc := analytics.NewService(events, costSvc)
+		// Reports in the organization's reporting currency (§50-FX).
+		fxStore := fx.NewStore(db)
+		analyticsSvc := analytics.NewService(events, costSvc).WithMoney(fxStore)
 		analyticsHandler := analytics.NewHandler(analyticsSvc, logger)
 		srv.Mux().Route("/analytics", func(r chi.Router) {
 			r.Use(tenantMiddleware)
@@ -658,7 +661,7 @@ func buildServer(ctx context.Context, cfg config.Config, logger *slog.Logger, re
 			analyticsHandler.Register(r)
 		})
 
-		ltvSvc := ltv.NewService(events)
+		ltvSvc := ltv.NewService(events).WithMoney(fxStore)
 		ltvHandler := ltv.NewHandler(ltvSvc, logger)
 		srv.Mux().Route("/analytics/ltv", func(r chi.Router) {
 			r.Use(tenantMiddleware)

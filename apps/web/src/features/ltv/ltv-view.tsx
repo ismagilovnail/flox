@@ -21,7 +21,8 @@ import { useNetworks } from "@/hooks/use-networks";
 import { useApiErrorMessage } from "@/hooks/use-api-error-message";
 import { LTV_WINDOWS, type Cohort, type CohortPeriod, type CohortType, type LtvWindow } from "@/lib/api/ltv";
 import { countryOptions } from "@/lib/countries";
-import { formatInt, formatPercent, formatUsd } from "@/lib/format";
+import { formatInt, formatMoney, formatPercent } from "@/lib/format";
+import { useReportingCurrency } from "@/hooks/use-organization";
 import type { Locale } from "@/lib/i18n/config";
 import { cn } from "@/lib/utils";
 
@@ -47,8 +48,9 @@ function cohortColumns(
   type: CohortType,
   campaignName: (id?: string) => string,
   networkName: (id?: string) => string,
+  currency: string,
 ): ColumnDef<typeof dataTableFeatures, Cohort>[] {
-  const usd = (n: number) => formatUsd(n, 2, locale);
+  const money = (n: number) => formatMoney(n, currency, 2, locale);
   const rate = (n?: number) => (n === undefined ? "—" : formatPercent(n * 100, locale));
 
   const windowColumn = (w: LtvWindow): ColumnDef<typeof dataTableFeatures, Cohort> => ({
@@ -60,10 +62,10 @@ function cohortColumns(
       const value = row.original.windows[w];
       if (!value) return "—";
       return value.complete ? (
-        usd(value.revenueUsd)
+        money(value.revenueUsd)
       ) : (
         <span className="text-muted-foreground italic" title={t("incomplete")}>
-          {usd(value.revenueUsd)}*
+          {money(value.revenueUsd)}*
         </span>
       );
     },
@@ -80,11 +82,11 @@ function cohortColumns(
       cell: ({ getValue }) => formatInt(getValue() as number, locale),
     },
     ...LTV_WINDOWS.map(windowColumn),
-    { accessorKey: "ltvTotalUsd", header: t("columns.ltvTotal"), cell: ({ getValue }) => usd(getValue() as number) },
+    { accessorKey: "ltvTotalUsd", header: t("columns.ltvTotal"), cell: ({ getValue }) => money(getValue() as number) },
     {
       accessorKey: "ltvPerAnchorUsd",
       header: type === "ftd" ? t("columns.ltvPerFtd") : t("columns.ltvPerReg"),
-      cell: ({ getValue }) => usd(getValue() as number),
+      cell: ({ getValue }) => money(getValue() as number),
     },
   ];
 
@@ -106,7 +108,7 @@ function cohortColumns(
         row.original.hasLifetimeData ? (row.original.lifetimeDaysAvg ?? 0).toLocaleString(locale, { maximumFractionDigits: 1 }) : "—",
     },
     { accessorKey: "totalDeposits", header: t("columns.totalDeposits"), cell: ({ getValue }) => formatInt(getValue() as number, locale) },
-    { accessorKey: "totalDepositRevenueUsd", header: t("columns.totalDepositRevenue"), cell: ({ getValue }) => usd(getValue() as number) },
+    { accessorKey: "totalDepositRevenueUsd", header: t("columns.totalDepositRevenue"), cell: ({ getValue }) => money(getValue() as number) },
   );
   return columns;
 }
@@ -115,6 +117,7 @@ export function LtvView() {
   const { t, i18n } = useTranslation("ltv");
   const errorMessage = useApiErrorMessage();
   const locale = useLocale();
+  const currency = useReportingCurrency();
   const [type, setType] = React.useState<CohortType>("ftd");
   const [period, setPeriod] = React.useState<CohortPeriod>("week");
   const [range, setRange] = React.useState<DateRange | undefined>(defaultRange);
@@ -149,8 +152,8 @@ export function LtvView() {
     [networks],
   );
   const columns = React.useMemo(
-    () => cohortColumns(t, locale, type, campaignName, networkName),
-    [t, locale, type, campaignName, networkName],
+    () => cohortColumns(t, locale, type, campaignName, networkName, currency),
+    [t, locale, type, campaignName, networkName, currency],
   );
   const countries = React.useMemo(
     () => [{ value: "", label: t("filters.allCountries") }, ...countryOptions(i18n.language)],

@@ -14,7 +14,7 @@ import { LoadingState } from "@/components/ui/loading-state";
 import { ErrorState } from "@/components/ui/error-state";
 import { usePermission } from "@/hooks/use-auth";
 import { useCampaigns } from "@/hooks/use-campaigns";
-import { useOrganization } from "@/hooks/use-organization";
+import { useOrganization, useReportingCurrency } from "@/hooks/use-organization";
 import { useReport } from "@/hooks/use-analytics-report";
 import { useCustomMetrics } from "@/hooks/use-custom-metrics";
 import { useApiErrorMessage } from "@/hooks/use-api-error-message";
@@ -37,6 +37,7 @@ const NO_FILTERS: never[] = [];
 
 export function CampaignList() {
   const { t } = useTranslation(["campaigns", "common"]);
+  const currency = useReportingCurrency();
   const errorMessage = useApiErrorMessage();
   const canWrite = usePermission("campaign.write");
   const campaignsQuery = useCampaigns();
@@ -81,8 +82,8 @@ export function CampaignList() {
   const filtered = React.useMemo(() => filterByTags("campaign", rows, tagFilter, assignments), [rows, tagFilter, assignments]);
 
   const columns = React.useMemo(
-    () => campaignColumns(t, sourceNameById, customMetrics, reportQuery.isPending),
-    [t, sourceNameById, customMetrics, reportQuery.isPending],
+    () => campaignColumns(t, sourceNameById, customMetrics, reportQuery.isPending, currency),
+    [t, sourceNameById, customMetrics, reportQuery.isPending, currency],
   );
 
   const header = (

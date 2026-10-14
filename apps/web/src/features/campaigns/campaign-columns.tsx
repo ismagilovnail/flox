@@ -40,6 +40,7 @@ export function campaignColumns(
   sourceNameById: Record<string, string>,
   customMetrics: CustomMetric[] = [],
   metricsLoading = false,
+  currency = "USD",
 ): ColumnDef<typeof dataTableFeatures, CampaignRow>[] {
   const metricColumns: ColumnDef<typeof dataTableFeatures, CampaignRow>[] = [
     ...CAMPAIGN_TABLE_METRICS.map((key): ColumnDef<typeof dataTableFeatures, CampaignRow> => {
@@ -49,7 +50,7 @@ export function campaignColumns(
         header: key === "cost" ? t("columns.spend", { ns: "campaigns" }) : metricLabel(t, key),
         accessorFn: (row) => row.metrics?.[key] ?? null,
         sortUndefined: "last",
-        cell: ({ row }) => metricCell(row.original, metricsLoading, (r) => r.metrics?.[key] ?? null, (v) => formatMetric(v, format)),
+        cell: ({ row }) => metricCell(row.original, metricsLoading, (r) => r.metrics?.[key] ?? null, (v) => formatMetric(v, format, currency)),
       };
     }),
     ...customMetrics.map((cm): ColumnDef<typeof dataTableFeatures, CampaignRow> => ({
@@ -61,7 +62,7 @@ export function campaignColumns(
           row.original,
           metricsLoading,
           (r) => (r.metrics ? evaluateFormula(cm.formula, r.metrics) : null),
-          (v) => formatMetric(v, cm.format),
+          (v) => formatMetric(v, cm.format, currency),
         ),
     })),
   ];

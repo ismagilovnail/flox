@@ -23,6 +23,7 @@ import {
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Mono } from "@/components/ui/typography";
 import { formatMetric, type MetricFormat } from "@/features/analytics/registry";
+import { useReportingCurrency } from "@/hooks/use-organization";
 import {
   METRIC_CATALOG,
   SHOW_IN_TARGETS,
@@ -104,6 +105,7 @@ export function CustomMetricFormSheet({
   onSubmit: (values: CustomMetricFormValues) => void;
 }) {
   const { t } = useTranslation(["customMetrics", "common"]);
+  const currency = useReportingCurrency();
   const form = useForm<CustomMetricFormValues>({
     resolver: zodResolver(customMetricFormSchema(t)),
     defaultValues: {
@@ -202,7 +204,7 @@ export function CustomMetricFormSheet({
               />
               <div className="rounded-md border border-border bg-muted/40 px-3 py-2 text-sm">
                 <span className="text-xs text-muted-foreground">{t("form.preview")} </span>
-                <Mono>{validation.valid ? formatMetric(preview, format) : "—"}</Mono>
+                <Mono>{validation.valid ? formatMetric(preview, format, currency) : "—"}</Mono>
               </div>
             </div>
           </div>

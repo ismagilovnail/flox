@@ -1,7 +1,8 @@
 import { useTranslation } from "react-i18next";
 
 import { StatCard } from "@/components/ui/stat-card";
-import { formatUsd, formatInt } from "@/lib/format";
+import { useReportingCurrency } from "@/hooks/use-organization";
+import { formatMoney, formatInt } from "@/lib/format";
 import { pctDelta, type PeriodMetrics } from "@/features/dashboard/metrics";
 
 const pct = (n: number) => `${(n * 100).toFixed(2)}%`;
@@ -23,18 +24,24 @@ export function KpiGrid({
   previous: PeriodMetrics;
 }) {
   const { t } = useTranslation("dashboard");
+  const currency = useReportingCurrency();
+  const money = (n: number) => formatMoney(n, currency);
   return (
     <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-      <StatCard label={t("kpi.revenue")} value={formatUsd(current.revenue)} {...trendProps(current.revenue, previous.revenue)} />
+      <StatCard
+        label={t("kpi.revenue")}
+        value={current.revenue === null ? "—" : money(current.revenue)}
+        {...(current.revenue !== null && previous.revenue !== null ? trendProps(current.revenue, previous.revenue) : {})}
+      />
       <StatCard
         label={t("kpi.spend")}
-        value={current.spend === null ? "—" : formatUsd(current.spend)}
+        value={current.spend === null ? "—" : money(current.spend)}
         direction="up-is-bad"
         {...(current.spend !== null && previous.spend !== null ? trendProps(current.spend, previous.spend) : {})}
       />
       <StatCard
         label={t("kpi.profit")}
-        value={current.profit === null ? "—" : formatUsd(current.profit)}
+        value={current.profit === null ? "—" : money(current.profit)}
         {...(current.profit !== null && previous.profit !== null ? trendProps(current.profit, previous.profit) : {})}
       />
       <StatCard
@@ -53,7 +60,7 @@ export function KpiGrid({
       <StatCard label={t("kpi.cvr")} value={pct(current.cvr)} {...trendProps(current.cvr, previous.cvr)} />
       <StatCard
         label={t("kpi.cpa")}
-        value={current.cpa === null ? "—" : formatUsd(current.cpa)}
+        value={current.cpa === null ? "—" : money(current.cpa)}
         direction="up-is-bad"
         {...(current.cpa !== null && previous.cpa !== null
           ? trendProps(current.cpa, previous.cpa)

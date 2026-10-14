@@ -129,6 +129,7 @@ func (e *Evaluator) evaluateOrg(ctx context.Context, now time.Time, orgID string
 			if !rowsLoaded {
 				rows, err = e.Reports.Report(ctx, orgID, analytics.ReportInput{
 					Dims: []chstore.ReportDimension{chstore.DimCampaign}, From: local, To: local, Timezone: loc.String(),
+					KeepUSD: true, // thresholds are USD
 				})
 				if err != nil {
 					return fired, fmt.Errorf("campaign report: %w", err)

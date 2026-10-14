@@ -7,6 +7,7 @@ import (
 
 	"github.com/ismagilovnail/flox/apps/internal/chstore"
 	"github.com/ismagilovnail/flox/apps/internal/event"
+	"github.com/ismagilovnail/flox/apps/internal/fx"
 	"github.com/ismagilovnail/flox/apps/internal/ltv"
 )
 
@@ -74,5 +75,33 @@ func TestServiceRejectsRangeTooWide(t *testing.T) {
 	_, err := svc.FTDCohorts(context.Background(), "org-1", chstore.LTVFilter{From: from, To: from.AddDate(2, 0, 0)}, ltv.PeriodDay, at(200))
 	if err == nil {
 		t.Fatal("expected an error for a multi-year anchor range")
+	}
+}
+
+type fakeMoney struct{ conv *fx.Conversion }
+
+func (m fakeMoney) ReportingConversion(context.Context, string, time.Time, time.Time) (*fx.Conversion, error) {
+	return m.conv, nil
+}
+
+func TestServiceConvertsEachDepositAtItsDaysRate(t *testing.T) {
+	day0 := at(0).Truncate(24 * time.Hour)
+	repo := &fakeRepo{ftdHistories: []chstore.ClickHistory{{ClickID: "c1", Deposits: []chstore.Deposit{
+		{EventAt: at(0), Type: event.CpaAccept, USDValue: 10, HasUSDValue: true},
+		{EventAt: at(0).AddDate(0, 0, 1), Type: event.CpaRedep, USDValue: 10, HasUSDValue: true},
+	}}}}
+	// 1 unit = 2 USD on day 0, = 4 USD from day 1: factors 0.5 and 0.25.
+	conv := fx.NewConversion("EUR", []fx.Rate{{Date: day0, RateToUSD: 2}, {Date: day0.AddDate(0, 0, 1), RateToUSD: 4}}, day0, day0.AddDate(0, 0, 3))
+	svc := ltv.NewService(repo).WithMoney(fakeMoney{conv})
+
+	cohorts, err := svc.FTDCohorts(context.Background(), "org-1", chstore.LTVFilter{From: at(-1), To: at(1)}, ltv.PeriodDay, at(200))
+	if err != nil {
+		t.Fatalf("FTDCohorts: %v", err)
+	}
+	if len(cohorts) != 1 || cohorts[0].TotalDepositRevenueUSD != 7.5 { // 10*0.5 + 10*0.25
+		t.Fatalf("cohorts = %+v, want deposit revenue 7.5", cohorts)
+	}
+	if cur, err := svc.Currency(context.Background(), "org-1"); err != nil || cur != "EUR" {
+		t.Fatalf("Currency = %q, %v", cur, err)
 	}
 }

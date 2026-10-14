@@ -8,7 +8,7 @@ import i18n, {
   isSupportedLocale,
   resolveLocale,
 } from "@/lib/i18n/config";
-import { formatInt, formatPercent, formatUsd } from "@/lib/format";
+import { formatInt, formatMoney, formatPercent, formatUsd } from "@/lib/format";
 import enCommonBundle from "@/lib/i18n/locales/en/common.json";
 
 describe("i18n config", () => {
@@ -151,6 +151,12 @@ describe("locale-aware formatting (lib/format.ts)", () => {
     // decimal, symbol after the value — \s in regex matches U+00A0 too.
     expect(ru).toMatch(/14\s655,87/);
     expect(ru).toContain("$");
+  });
+
+  it("formats the reporting currency it is given, not USD", () => {
+    expect(formatMoney(1234.5, "EUR", 2, "en")).toBe("€1,234.50");
+    expect(formatMoney(10, "RUB", 0, "ru")).toMatch(/10\s₽/);
+    expect(formatMoney(100, "USD")).toBe(formatUsd(100));
   });
 
   it("formats integers with locale-appropriate grouping", () => {

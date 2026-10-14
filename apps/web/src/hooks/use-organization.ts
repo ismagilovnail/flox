@@ -11,10 +11,17 @@ export function useOrganization() {
   return useQuery({ queryKey: organizationKey, queryFn: getOrganization });
 }
 
+/** The currency report money comes out in (§50-FX) — the API converts by
+ * this same organization setting. USD until the organization loads. */
+export function useReportingCurrency(): string {
+  return useOrganization().data?.currency || "USD";
+}
+
 export function useUpdateOrganization() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (input: Partial<Pick<OrganizationSettings, "name" | "timezone" | "currency">>) => updateOrganization(input),
-    onSuccess: () => qc.invalidateQueries({ queryKey: organizationKey }),
+    // A new currency changes every report's money: refetch them all.
+    onSuccess: (_data, input) => qc.invalidateQueries(input.currency ? undefined : { queryKey: organizationKey }),
   });
 }

@@ -10,6 +10,7 @@ import (
 	"github.com/ismagilovnail/flox/apps/internal/apierror"
 	"github.com/ismagilovnail/flox/apps/internal/chstore"
 	"github.com/ismagilovnail/flox/apps/internal/cost"
+	"github.com/ismagilovnail/flox/apps/internal/fx"
 )
 
 // maxReportDims bounds how many dimensions one report can group by at
@@ -89,7 +90,7 @@ type MetricValues struct {
 	CVR          float64
 	CPC          *float64
 	CPA          *float64
-	EPC          float64
+	EPC          *float64
 
 	// PWA / CPA funnel counters (§50 CPA FUNNEL). PwaInstalls comes from
 	// tracking_events and is always answerable; the three CPA counts are nil
@@ -152,6 +153,9 @@ type ReportInput struct {
 	// DateBasis dates conversions by their own time or their click's
 	// ("" = by conversion; tech audit AN5).
 	DateBasis chstore.DateBasis
+	// KeepUSD reports money in USD whatever the organization's reporting
+	// currency — for alert rules, whose thresholds are USD.
+	KeepUSD bool
 }
 
 // SortSpec sorts the final, fully-derived rows — after merging and
@@ -220,7 +224,7 @@ func (s *Service) Report(ctx context.Context, organizationID string, in ReportIn
 	}
 	dims, byDay := splitDay(in.Dims)
 
-	rows, err := s.groupedReport(ctx, organizationID, dims, byDay, in.Filters, in.From, in.To, sc, in.DateBasis)
+	rows, err := s.groupedReport(ctx, organizationID, dims, byDay, in.Filters, in.From, in.To, sc, in.DateBasis, in.KeepUSD)
 	if err != nil {
 		return nil, err
 	}
@@ -257,7 +261,7 @@ func (s *Service) Timeseries(ctx context.Context, organizationID string, in Time
 	if err != nil {
 		return nil, err
 	}
-	rows, err := s.groupedReport(ctx, organizationID, nil, true, in.Filters, in.From, in.To, sc, in.DateBasis)
+	rows, err := s.groupedReport(ctx, organizationID, nil, true, in.Filters, in.From, in.To, sc, in.DateBasis, false)
 	if err != nil {
 		return nil, err
 	}
@@ -295,7 +299,7 @@ func (s *Service) Breakdown(ctx context.Context, organizationID string, in Break
 	if err != nil {
 		return nil, err
 	}
-	rows, err := s.groupedReport(ctx, organizationID, dims, false, in.Filters, in.From, in.To, sc, in.DateBasis)
+	rows, err := s.groupedReport(ctx, organizationID, dims, false, in.Filters, in.From, in.To, sc, in.DateBasis, false)
 	if err != nil {
 		return nil, err
 	}
@@ -361,7 +365,7 @@ func (s *Service) DimensionValues(ctx context.Context, organizationID string, in
 // Nothing here sorts or limits; that's each public method's own job,
 // since only they know what "sorted by" and "top-N" mean for their
 // specific request.
-func (s *Service) groupedReport(ctx context.Context, organizationID string, dims []chstore.ReportDimension, byDay bool, filters []chstore.ReportFilter, from, to time.Time, sc scope, basis chstore.DateBasis) ([]ReportRow, error) {
+func (s *Service) groupedReport(ctx context.Context, organizationID string, dims []chstore.ReportDimension, byDay bool, filters []chstore.ReportFilter, from, to time.Time, sc scope, basis chstore.DateBasis, keepUSD bool) ([]ReportRow, error) {
 	qFrom, qTo := sc.bounds(from, to)
 	q := chstore.ReportQuery{
 		OrganizationID: organizationID,
@@ -376,6 +380,25 @@ func (s *Service) groupedReport(ctx context.Context, organizationID string, dims
 		From:      qFrom,
 		To:        qTo,
 		DateBasis: basis,
+	}
+
+	// Revenue is converted per conversion day: dated by click, a
+	// conversion can land any day up to now, and a zone can move the first
+	// day back across UTC midnight — hence the wider range.
+	conv := fx.USD
+	if !keepUSD {
+		last := to.AddDate(0, 0, 1)
+		if now := time.Now().AddDate(0, 0, 1); now.After(last) {
+			last = now
+		}
+		var err error
+		if conv, err = s.conversion(ctx, organizationID, from.AddDate(0, 0, -1), last); err != nil {
+			return nil, fmt.Errorf("analytics: loading the reporting currency: %w", err)
+		}
+	}
+	if !conv.Identity() {
+		days, factors := conv.Days()
+		q.Money = &chstore.MoneyFactors{Days: days, Factors: factors}
 	}
 
 	clickAggs, err := s.repo.ReportClicks(ctx, q)
@@ -475,9 +498,16 @@ func (s *Service) groupedReport(ctx context.Context, organizationID string, dims
 				return acc
 			}
 		}
-		if err := s.attachCost(ctx, organizationID, dims, byDay, filters, from, to, merged, addRow); err != nil {
+		src := s.cost
+		if !conv.Identity() {
+			src = convertedCost{inner: s.cost, conv: conv}
+		}
+		if err := attachCost(ctx, src, organizationID, dims, byDay, filters, from, to, merged, addRow); err != nil {
 			return nil, err
 		}
+	}
+	for _, acc := range merged {
+		sanitizeMoney(acc)
 	}
 
 	rows := make([]ReportRow, 0, len(order))
@@ -509,23 +539,23 @@ func costEligible(dims []chstore.ReportDimension) bool {
 // requires) for every row groupedReport has already built. addRow, when
 // not nil, creates the row for a campaign or source that has spend but no
 // row yet (per-period reports only).
-func (s *Service) attachCost(ctx context.Context, organizationID string, dims []chstore.ReportDimension, byDay bool, filters []chstore.ReportFilter, from, to time.Time, merged map[string]*rowAccumulator, addRow func(map[chstore.ReportDimension]string) *rowAccumulator) error {
+func attachCost(ctx context.Context, src CostSource, organizationID string, dims []chstore.ReportDimension, byDay bool, filters []chstore.ReportFilter, from, to time.Time, merged map[string]*rowAccumulator, addRow func(map[chstore.ReportDimension]string) *rowAccumulator) error {
 	if !costEligible(dims) {
 		return nil // every acc.costUSD stays nil — no dimension breakdown cost_entries can answer
 	}
 	if len(dims) == 1 && dims[0] == chstore.DimCountry {
-		return s.attachCountryCost(ctx, organizationID, byDay, filters, from, to, merged, addRow)
+		return attachCountryCost(ctx, src, organizationID, byDay, filters, from, to, merged, addRow)
 	}
 
 	if byDay {
-		return s.attachDailyCost(ctx, organizationID, dims, from, to, merged)
+		return attachDailyCost(ctx, src, organizationID, dims, from, to, merged)
 	}
 
 	if len(dims) == 0 {
 		// One grand total across every campaign — sum SpendByCampaign's
 		// own per-campaign rows rather than adding a third cost query
 		// shape for "just the org total."
-		spend, err := s.cost.SpendByCampaign(ctx, organizationID, from, to)
+		spend, err := src.SpendByCampaign(ctx, organizationID, from, to)
 		if err != nil {
 			return fmt.Errorf("analytics: querying spend by campaign: %w", err)
 		}
@@ -544,7 +574,7 @@ func (s *Service) attachCost(ctx context.Context, organizationID string, dims []
 	}
 
 	if dims[0] == chstore.DimSource {
-		bySource, err := s.cost.SpendBySource(ctx, organizationID, from, to)
+		bySource, err := src.SpendBySource(ctx, organizationID, from, to)
 		if err != nil {
 			return fmt.Errorf("analytics: querying spend by source: %w", err)
 		}
@@ -573,7 +603,7 @@ func (s *Service) attachCost(ctx context.Context, organizationID string, dims []
 	}
 
 	// dims == [campaign] — per-campaign cost.
-	spend, err := s.cost.SpendByCampaign(ctx, organizationID, from, to)
+	spend, err := src.SpendByCampaign(ctx, organizationID, from, to)
 	if err != nil {
 		return fmt.Errorf("analytics: querying spend by campaign: %w", err)
 	}
@@ -609,7 +639,7 @@ func (s *Service) attachCost(ctx context.Context, organizationID string, dims []
 // narrow the spend only by campaign and traffic source; a report filtered
 // by anything else, or by two values of one, gets no cost — which spend
 // matches it is unknown.
-func (s *Service) attachCountryCost(ctx context.Context, organizationID string, byDay bool, filters []chstore.ReportFilter, from, to time.Time, merged map[string]*rowAccumulator, addRow func(map[chstore.ReportDimension]string) *rowAccumulator) error {
+func attachCountryCost(ctx context.Context, src CostSource, organizationID string, byDay bool, filters []chstore.ReportFilter, from, to time.Time, merged map[string]*rowAccumulator, addRow func(map[chstore.ReportDimension]string) *rowAccumulator) error {
 	var scope cost.CountryScope
 	for _, f := range filters {
 		var field *string
@@ -626,7 +656,7 @@ func (s *Service) attachCountryCost(ctx context.Context, organizationID string, 
 		}
 		*field = f.Value
 	}
-	spend, err := s.cost.SpendByCountry(ctx, organizationID, from, to, scope)
+	spend, err := src.SpendByCountry(ctx, organizationID, from, to, scope)
 	if err != nil {
 		return fmt.Errorf("analytics: querying spend by country: %w", err)
 	}
@@ -686,7 +716,7 @@ func (s *Service) attachCountryCost(ctx context.Context, organizationID string, 
 
 // attachDailyCost fills per-day cost: the org's daily total when there is no
 // other dimension, or per (campaign|source, day) when grouped by one of them.
-func (s *Service) attachDailyCost(ctx context.Context, organizationID string, dims []chstore.ReportDimension, from, to time.Time, merged map[string]*rowAccumulator) error {
+func attachDailyCost(ctx context.Context, src CostSource, organizationID string, dims []chstore.ReportDimension, from, to time.Time, merged map[string]*rowAccumulator) error {
 	set := func(acc *rowAccumulator, usd float64) {
 		v := usd
 		acc.costUSD = &v
@@ -695,7 +725,7 @@ func (s *Service) attachDailyCost(ctx context.Context, organizationID string, di
 
 	switch {
 	case len(dims) == 0:
-		spend, err := s.cost.DailySpendForOrg(ctx, organizationID, from, to)
+		spend, err := src.DailySpendForOrg(ctx, organizationID, from, to)
 		if err != nil {
 			return fmt.Errorf("analytics: querying daily org spend: %w", err)
 		}
@@ -712,7 +742,7 @@ func (s *Service) attachDailyCost(ctx context.Context, organizationID string, di
 			}
 		}
 	case dims[0] == chstore.DimSource:
-		spend, err := s.cost.SourceSpendByDay(ctx, organizationID, from, to)
+		spend, err := src.SourceSpendByDay(ctx, organizationID, from, to)
 		if err != nil {
 			return fmt.Errorf("analytics: querying daily spend by source: %w", err)
 		}
@@ -729,7 +759,7 @@ func (s *Service) attachDailyCost(ctx context.Context, organizationID string, di
 			}
 		}
 	default: // [campaign]
-		spend, err := s.cost.CampaignSpendByDay(ctx, organizationID, from, to)
+		spend, err := src.CampaignSpendByDay(ctx, organizationID, from, to)
 		if err != nil {
 			return fmt.Errorf("analytics: querying daily spend by campaign: %w", err)
 		}
@@ -764,6 +794,9 @@ type rowAccumulator struct {
 	repurchases                     *uint64
 	costUSD                         *float64
 	datedByConversion               uint64
+	// revenueUnknown: revenue met a day with no reporting-currency rate
+	// (sanitizeMoney); EPC is then unknown too.
+	revenueUnknown bool
 }
 
 // deriveMetrics ports apps/web/src/features/analytics/aggregate.ts's
@@ -799,12 +832,13 @@ func deriveMetrics(acc *rowAccumulator) MetricValues {
 	if acc.conversions != nil && acc.clicks > 0 {
 		m.CVR = float64(*acc.conversions) / float64(acc.clicks) * 100
 	}
-	if acc.conversions != nil && acc.clicks > 0 {
+	if acc.conversions != nil && acc.clicks > 0 && !acc.revenueUnknown {
 		rev := 0.0
 		if acc.revenueUSD != nil {
 			rev = *acc.revenueUSD
 		}
-		m.EPC = rev / float64(acc.clicks)
+		epc := rev / float64(acc.clicks)
+		m.EPC = &epc
 	}
 
 	if acc.revenueUSD != nil {
@@ -976,7 +1010,7 @@ func metricFloat(m MetricValues, key string) (float64, bool) {
 	case "cpa":
 		return ptrOrNegInf(m.CPA), true
 	case "epc":
-		return m.EPC, true
+		return ptrOrNegInf(m.EPC), true
 	case "pwainstalls":
 		return float64(m.PwaInstalls), true
 	case "registrations":
@@ -1104,7 +1138,7 @@ func (s *Service) Dashboard(ctx context.Context, organizationID string, from, to
 	if err != nil {
 		return DashboardResult{}, err
 	}
-	totalsRows, err := s.groupedReport(ctx, organizationID, nil, false, nil, from, to, sc, basis)
+	totalsRows, err := s.groupedReport(ctx, organizationID, nil, false, nil, from, to, sc, basis, false)
 	if err != nil {
 		return DashboardResult{}, err
 	}
@@ -1117,7 +1151,7 @@ func (s *Service) Dashboard(ctx context.Context, organizationID string, from, to
 		totals, datedByConversion = totalsRows[0].Metrics, totalsRows[0].DatedByConversion
 	}
 
-	daily, err := s.groupedReport(ctx, organizationID, nil, true, nil, from, to, sc, basis)
+	daily, err := s.groupedReport(ctx, organizationID, nil, true, nil, from, to, sc, basis, false)
 	if err != nil {
 		return DashboardResult{}, err
 	}

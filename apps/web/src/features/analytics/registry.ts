@@ -1,6 +1,6 @@
 import type { TFunction } from "i18next";
 
-import { formatUsd, formatInt } from "@/lib/format";
+import { formatMoney, formatInt } from "@/lib/format";
 
 export type DimensionKey =
   | "campaign"
@@ -129,13 +129,14 @@ export function metricLabel(t: TFunction, key: MetricKey): string {
 }
 
 
-export function formatMetric(value: number | null, format: MetricFormat): string {
+/** `currency` is the reporting currency the value is in (useReportingCurrency). */
+export function formatMetric(value: number | null, format: MetricFormat, currency = "USD"): string {
   if (value === null) return "—";
   switch (format) {
     case "int":
       return formatInt(value);
     case "currency":
-      return formatUsd(value, 2);
+      return formatMoney(value, currency, 2);
     case "percent":
       return `${value.toFixed(2)}%`;
     case "ratio":

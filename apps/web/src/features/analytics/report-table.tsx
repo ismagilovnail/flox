@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 
 import { DataTable, dataTableFeatures } from "@/components/ui/data-table";
 import { Mono } from "@/components/ui/typography";
+import { useReportingCurrency } from "@/hooks/use-organization";
 import { METRICS, dimensionLabel, metricLabel, formatMetric, type DimensionKey, type MetricKey } from "@/features/analytics/registry";
 import type { ReportRow } from "@/features/analytics/aggregate";
 import { evaluateFormula } from "@/lib/formula-engine";
@@ -37,6 +38,7 @@ export function ReportTable({
   onHiddenColumnsChange?: (hidden: string[]) => void;
 }) {
   const { t } = useTranslation("analytics");
+  const currency = useReportingCurrency();
   const valueLabel = useDimensionValueLabel();
 
   const columns: ColumnDef<typeof dataTableFeatures, ReportRow>[] = [
@@ -64,14 +66,14 @@ export function ReportTable({
         header: metricLabel(t, m),
         meta: { hint: t(`metricHints.${m}`, { defaultValue: "" }) || undefined },
         accessorFn: (row) => row.metrics[m],
-        cell: ({ getValue }) => <Mono>{formatMetric(getValue() as number | null, meta.format)}</Mono>,
+        cell: ({ getValue }) => <Mono>{formatMetric(getValue() as number | null, meta.format, currency)}</Mono>,
       };
     }),
     ...customMetrics.map((cm): ColumnDef<typeof dataTableFeatures, ReportRow> => ({
       id: `cm_${cm.id}`,
       header: cm.name,
       accessorFn: (row) => evaluateFormula(cm.formula, row.metrics),
-      cell: ({ getValue }) => <Mono>{formatMetric(getValue() as number | null, cm.format)}</Mono>,
+      cell: ({ getValue }) => <Mono>{formatMetric(getValue() as number | null, cm.format, currency)}</Mono>,
     })),
   ];
 

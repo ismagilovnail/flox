@@ -16,6 +16,7 @@ import {
 import { chartBaseOption, chartBarOption, CHART_RGB, rgba, type ChartMode } from "@/lib/chart-theme";
 import type { ReportRow } from "@/features/analytics/aggregate";
 import type { TimeseriesPoint } from "@/lib/api/analytics";
+import { useReportingCurrency } from "@/hooks/use-organization";
 import { METRICS, metricLabel, formatMetric, type DimensionKey, type MetricKey } from "@/features/analytics/registry";
 import { useDimensionValueLabel } from "@/features/analytics/use-dimension-value-label";
 
@@ -55,6 +56,7 @@ export function ReportLineChart({
   metrics: MetricKey[];
 }) {
   const { t } = useTranslation("analytics");
+  const currency = useReportingCurrency();
   const { resolvedTheme } = useTheme();
   const mode: ChartMode = resolvedTheme === "light" ? "light" : "dark";
   const [metric, setMetric] = React.useState<MetricKey>(metrics[0] ?? "clicks");
@@ -76,7 +78,7 @@ export function ReportLineChart({
       // in components/charts/line-metric-chart.tsx and the full
       // explanation in lib/chart-theme.ts.
       ...base,
-      tooltip: { ...base.tooltip, valueFormatter: (v: number) => formatMetric(v, meta.format) },
+      tooltip: { ...base.tooltip, valueFormatter: (v: number) => formatMetric(v, meta.format, currency) },
       // Days are categories, not a continuous time axis: with one day of data
       // a time axis falls back to hourly ticks and says nothing useful.
       xAxis: { ...base.xAxis, type: "category" as const, data: points.map((p) => p.date), boundaryGap: points.length <= 1 },
@@ -99,7 +101,7 @@ export function ReportLineChart({
         },
       ],
     };
-  }, [mode, points, meta]);
+  }, [mode, points, meta, currency]);
 
   return (
     <ChartCard
@@ -127,6 +129,7 @@ export function ReportBarChart({
   metrics: MetricKey[];
 }) {
   const { t } = useTranslation("analytics");
+  const currency = useReportingCurrency();
   const { resolvedTheme } = useTheme();
   const mode: ChartMode = resolvedTheme === "light" ? "light" : "dark";
   const [metric, setMetric] = React.useState<MetricKey>(metrics[0] ?? "clicks");
@@ -148,7 +151,7 @@ export function ReportBarChart({
     const base = chartBarOption(mode, categories);
     return {
       ...base,
-      tooltip: { ...base.tooltip, trigger: "item" as const, valueFormatter: (v: number) => formatMetric(v, meta.format) },
+      tooltip: { ...base.tooltip, trigger: "item" as const, valueFormatter: (v: number) => formatMetric(v, meta.format, currency) },
       series: [
         {
           type: "bar",

@@ -12,6 +12,7 @@ import (
 	"github.com/ismagilovnail/flox/apps/internal/apierror"
 	"github.com/ismagilovnail/flox/apps/internal/chstore"
 	"github.com/ismagilovnail/flox/apps/internal/cost"
+	"github.com/ismagilovnail/flox/apps/internal/fx"
 	"github.com/ismagilovnail/flox/apps/internal/metrics"
 )
 
@@ -61,14 +62,46 @@ type CostSource interface {
 const maxRangeDays = 366
 
 type Service struct {
-	repo Repository
-	cost CostSource
+	repo  Repository
+	cost  CostSource
+	money MoneySource
 }
 
 // costSource may be nil — see CostSource's own doc comment on what that
 // means for report output.
 func NewService(repo Repository, costSource CostSource) *Service {
 	return &Service{repo: repo, cost: costSource}
+}
+
+// MoneySource is the organization's reporting currency and its rates
+// (§50-FX) — *fx.Store in production.
+type MoneySource interface {
+	ReportingConversion(ctx context.Context, organizationID string, from, to time.Time) (*fx.Conversion, error)
+}
+
+// WithMoney makes reports come out in the organization's reporting
+// currency. Without it (and for a USD organization) money stays in USD.
+func (s *Service) WithMoney(m MoneySource) *Service {
+	s.money = m
+	return s
+}
+
+// conversion loads the reporting conversion for days [from, to].
+func (s *Service) conversion(ctx context.Context, organizationID string, from, to time.Time) (*fx.Conversion, error) {
+	if s.money == nil {
+		return fx.USD, nil
+	}
+	return s.money.ReportingConversion(ctx, organizationID, from, to)
+}
+
+// Currency is the currency the organization's reports come out in.
+func (s *Service) Currency(ctx context.Context, organizationID string) (string, error) {
+	now := time.Now()
+	c, err := s.conversion(ctx, organizationID, now, now)
+	if err != nil {
+		return "", err
+	}
+	return c.Code(), nil
 }
 
 func (s *Service) validateRange(organizationID, campaignID string, from, to time.Time) error {

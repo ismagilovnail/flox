@@ -8,13 +8,15 @@ export type PerformanceRow = {
   clicks: number;
   conversions: number;
   cvr: number;
-  revenue: number;
+  /** null = revenue on a day with no reporting-currency rate (§50-FX) — "—". */
+  revenue: number | null;
   spend: number | null;
   roi: number | null;
 };
 
 export type PeriodMetrics = {
-  revenue: number;
+  /** null = revenue on a day with no reporting-currency rate (§50-FX) — "—". */
+  revenue: number | null;
   /** null = no cost_entries at all for this range (CLAUDE.md #6) — "—", never a fabricated $0. */
   spend: number | null;
   profit: number | null;
@@ -39,7 +41,7 @@ export type PeriodMetrics = {
  * a fabricated 0 — none of the four mean anything without a real cost row. */
 export function metricsFromApi(m: Record<MetricKey, number | null>): PeriodMetrics {
   return {
-    revenue: m.revenue ?? 0,
+    revenue: m.revenue,
     spend: m.cost,
     profit: m.profit,
     roi: m.roi,
@@ -73,7 +75,7 @@ export function performanceRowFromApi(
     clicks: row.metrics.clicks ?? 0,
     conversions: row.metrics.conversions ?? 0,
     cvr: (row.metrics.cvr ?? 0) / 100,
-    revenue: row.metrics.revenue ?? 0,
+    revenue: row.metrics.revenue,
     spend: row.metrics.cost,
     roi: row.metrics.roi,
   };

@@ -19,17 +19,16 @@ referenced below as §N).
 ## CURRENT STATE — UPDATE THIS EVERY PHASE
 
 ```
-CURRENT PHASE : PHASE 30.10 — COST: COUNTRY + CSV (closed)
+CURRENT PHASE : PHASE 30.11 — REPORTING CURRENCY (closed)
 STATUS        : Spec conformance gaps (docs/spec-conformance-2026-10-11.md):
-                1–6 closed (pixels, campaign list metrics, postlanding
-                serving, `network` dimension, Push, cost by country + CSV
-                import). Push leftovers: scheduled/triggered broadcasts,
-                push metrics. Left: gaps 7–15, prod restore drill after
-                deployment.
-LAST COMMIT   : feat(cost): spend by country and CSV import.
+                1–7 closed (… cost by country + CSV, reports/LTV in the
+                org's reporting currency). Push leftovers: scheduled/
+                triggered broadcasts, push metrics. Left: gaps 8–15, prod
+                restore drill after deployment.
+LAST COMMIT   : feat(fx): reports in the organization's reporting currency.
 UNCOMMITTED   : none expected. Dev DB at migration 00071, CH schema 017.
-NEXT          : wait for the user — next gap is 7 (org base currency in
-                reports, §50-FX). CI (DO1) is
+NEXT          : wait for the user — next gap is 8 (LTV filters by
+                source/offer, §26.5). CI (DO1) is
                 the user's own decision — do not set it up. Run go test with
                 the full env line AND check e2e did not skip (memory:
                 flox-full-test-env); chconn's TestLimitsStopAHeavyQuery

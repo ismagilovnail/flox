@@ -319,6 +319,14 @@ non-UTC zone, the os join path, campaign daily revenue, equal totals),
 `analytics/date_basis_test.go` (basis reaches the query, 422 on an unknown
 one), `reportpresets` (round trip).
 
+## Money is in the organization's reporting currency (§50-FX)
+
+`report`, `timeseries`, `breakdown` and `dashboard` answer with
+`"currency": "<ISO 4217>"` next to the rows; every money metric (revenue,
+cost, profit, cpc, cpa, epc, cost-per-*) is in it, each day converted at
+that day's rate. A day with no rate makes the amount `null`, so `epc` is
+nullable now too. Details: `docs/fx.md` "Reporting currency".
+
 ## Frontend integration
 
 - `features/analytics/analytics-view.tsx`: `useReport`/`useTimeseries`/

@@ -14,6 +14,7 @@ import { ReportTable } from "@/features/analytics/report-table";
 import { ReportLineChart, ReportBarChart } from "@/features/analytics/report-chart";
 import { FunnelChart } from "@/features/analytics/funnel-chart";
 import type { FilterCondition } from "@/features/analytics/aggregate";
+import { useReportingCurrency } from "@/hooks/use-organization";
 import { METRICS, metricLabel, formatMetric, type DimensionKey } from "@/features/analytics/registry";
 import { useReport, useTimeseries, useFunnelReport } from "@/hooks/use-analytics-report";
 import { CostTimezoneNotice } from "@/features/analytics/cost-timezone-notice";
@@ -48,6 +49,7 @@ export function AnalyticsView() {
 
 function AnalyticsContent({ orgTimezone }: { orgTimezone: string }) {
   const { t } = useTranslation("analytics");
+  const currency = useReportingCurrency();
   const errorMessage = useApiErrorMessage();
   const searchParams = useSearchParams();
   const allCustomMetrics = useCustomMetrics().data?.metrics ?? EMPTY_CUSTOM_METRICS;
@@ -175,7 +177,7 @@ function AnalyticsContent({ orgTimezone }: { orgTimezone: string }) {
               <StatCard
                 key={m}
                 label={metricLabel(t, m)}
-                value={formatMetric(curr, meta.format)}
+                value={formatMetric(curr, meta.format, currency)}
                 {...(delta !== null
                   ? {
                       trend: (Math.abs(delta) < 0.5 ? "flat" : delta > 0 ? "up" : "down") as
