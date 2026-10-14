@@ -130,3 +130,7 @@ func TestCampaignDailyRejectsRangeTooWide(t *testing.T) {
 		t.Fatal("repository must not be queried when validation already failed")
 	}
 }
+
+func (r *fakeRepo) FlowStageCounts(context.Context, string, time.Time, time.Time, []string) (map[string]map[string]uint64, error) {
+	return nil, nil
+}

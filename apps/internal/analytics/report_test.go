@@ -2,6 +2,7 @@ package analytics_test
 
 import (
 	"context"
+	"fmt"
 	"math"
 	"testing"
 	"time"
@@ -25,6 +26,10 @@ type reportFakeRepo struct {
 	installs []chstore.InstallAgg
 	funnel   map[string]uint64
 	values   []string
+
+	flowStages  map[string]map[string]uint64
+	lastFlowOrg string
+	lastFlowIDs []string
 
 	lastConvQuery  *chstore.ReportQuery // nil unless ReportConversions was actually called
 	lastClickQuery *chstore.ReportQuery
@@ -1007,4 +1012,64 @@ func TestReportInReportingCurrency(t *testing.T) {
 			t.Fatal("KeepUSD still sent money factors")
 		}
 	})
+}
+
+func (r *reportFakeRepo) FlowStageCounts(_ context.Context, orgID string, _, _ time.Time, flowIDs []string) (map[string]map[string]uint64, error) {
+	r.lastFlowOrg, r.lastFlowIDs = orgID, flowIDs
+	return r.flowStages, nil
+}
+
+func TestFlowSummaryZeroFillsEveryStageInRequestOrder(t *testing.T) {
+	repo := &reportFakeRepo{flowStages: map[string]map[string]uint64{
+		"flow-b": {"SOURCE_CLICK": 40, "LAND_VIEW": 30, "CPA_REDEP": 2},
+	}}
+	svc := analytics.NewService(repo, nil)
+
+	flows, err := svc.FlowSummary(context.Background(), "org-1", []string{"flow-a", "flow-b"}, time.Now().AddDate(0, 0, -6), time.Now(), "Europe/Berlin")
+	if err != nil {
+		t.Fatalf("FlowSummary: %v", err)
+	}
+	if repo.lastFlowOrg != "org-1" {
+		t.Fatalf("repository queried for org %q, want org-1", repo.lastFlowOrg)
+	}
+	if len(flows) != 2 || flows[0].FlowID != "flow-a" || flows[1].FlowID != "flow-b" {
+		t.Fatalf("flows = %+v, want flow-a then flow-b", flows)
+	}
+	// A flow with no traffic still gets every stage, at zero.
+	if len(flows[0].Counts) != 9 || flows[0].Counts["LAND_VIEW"] != 0 {
+		t.Fatalf("flow-a counts = %v, want 9 zero-filled stages", flows[0].Counts)
+	}
+	if flows[1].Counts["SOURCE_CLICK"] != 40 || flows[1].Counts["CPA_REDEP"] != 2 || flows[1].Counts["PWA_INSTALL"] != 0 {
+		t.Fatalf("flow-b counts = %v", flows[1].Counts)
+	}
+}
+
+func TestFlowSummaryRejectsBadInput(t *testing.T) {
+	tooMany := make([]string, 101)
+	for i := range tooMany {
+		tooMany[i] = fmt.Sprintf("flow-%d", i)
+	}
+	now := time.Now()
+	cases := map[string]struct {
+		flowIDs  []string
+		from, to time.Time
+		tz       string
+	}{
+		"no flows":       {nil, now.AddDate(0, 0, -6), now, ""},
+		"too many flows": {tooMany, now.AddDate(0, 0, -6), now, ""},
+		"to before from": {[]string{"f"}, now, now.AddDate(0, 0, -6), ""},
+		"bad timezone":   {[]string{"f"}, now.AddDate(0, 0, -6), now, "Mars/Olympus"},
+	}
+	for name, c := range cases {
+		t.Run(name, func(t *testing.T) {
+			repo := &reportFakeRepo{}
+			_, err := analytics.NewService(repo, nil).FlowSummary(context.Background(), "org-1", c.flowIDs, c.from, c.to, c.tz)
+			if err == nil {
+				t.Fatal("FlowSummary accepted bad input")
+			}
+			if repo.lastFlowIDs != nil {
+				t.Fatal("repository must not be queried when validation failed")
+			}
+		})
+	}
 }

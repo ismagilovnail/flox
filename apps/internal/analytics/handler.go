@@ -43,6 +43,7 @@ func (h *Handler) Register(r chi.Router) {
 	r.Post("/timeseries", h.timeseries)
 	r.Post("/breakdown", h.breakdown)
 	r.Post("/funnel", h.funnel)
+	r.Post("/flow-summary", h.flowSummary)
 	r.Post("/dashboard", h.dashboard)
 	r.Post("/cost-timezones", h.costTimezones)
 	r.Post("/dimension-values", h.dimensionValues)
@@ -573,4 +574,42 @@ func writeJSON(w http.ResponseWriter, status int, body any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(body)
+}
+
+type flowSummaryRequest struct {
+	FlowIDs  []string `json:"flowIds"`
+	From     string   `json:"from"`
+	To       string   `json:"to"`
+	Timezone string   `json:"timezone"`
+}
+
+type flowSummaryResponse struct {
+	FlowID string            `json:"flowId"`
+	Counts map[string]uint64 `json:"counts"`
+}
+
+// flowSummary answers POST /analytics/flow-summary — each flow's per-stage
+// counts for the flow builder's nodes (§25).
+func (h *Handler) flowSummary(w http.ResponseWriter, r *http.Request) {
+	orgID, _ := tenant.OrgID(r.Context())
+	var req flowSummaryRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		apierror.Write(w, h.logger, apierror.Validation("invalid JSON body", nil))
+		return
+	}
+	from, to, err := parseDateRangeBody(req.From, req.To)
+	if err != nil {
+		apierror.Write(w, h.logger, err)
+		return
+	}
+	flows, err := h.svc.FlowSummary(r.Context(), orgID, req.FlowIDs, from, to, req.Timezone)
+	if err != nil {
+		apierror.Write(w, h.logger, err)
+		return
+	}
+	resp := make([]flowSummaryResponse, len(flows))
+	for i, f := range flows {
+		resp[i] = flowSummaryResponse{FlowID: f.FlowID, Counts: f.Counts}
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"flows": resp})
 }

@@ -5,6 +5,23 @@ per-phase, matching `CLAUDE.md`'s phase protocol. The one exception is
 [Between phases], below: spec amendments and the code changes that follow from
 them land between phases and would otherwise be invisible here.
 
+## [Phase 30.16] — Analytics summary on flow nodes
+
+Closes gap 12 of `docs/spec-conformance-2026-10-11.md` (§25: flow builder nodes show an analytics summary).
+
+- **API:** `POST /analytics/flow-summary` — `{flowIds (1–100), from, to, timezone}` → per flow, every stage
+  zero-filled. Distinct visits for SOURCE_CLICK and the landing/PWA/postlanding stages (a reload is not a
+  second view), events for CPA_ACCEPT/CPA_REDEP (a redeposit counts again, as in the report). Read-only,
+  tenant-scoped like the other analytics routes; another org's flow id is zeros, like a made-up one.
+- **Web:** an expanded stream set fetches its saved flows' last 7 days (organization timezone) in one request.
+  Landing and Postlanding show views · clicks · CTR, PWA views · installs · CR, Offer/Redirect clicks ·
+  conversions · redeposits; a rate over zero views is "—". Loading / unavailable line above the flows.
+  A flow added in the form has no summary until saved. en/ru.
+- Tests: `chstore.TestFlowStageCountsPerFlowAndTenant` (live ClickHouse: reload, redeposits, range, flow not
+  asked for, other org), service zero-fill and validation, `flowNodeSummaries` formatting. RBAC and
+  isolation route guards list the new route/field with reasons. `docs/analytics-report-api.md`.
+- Not checked in the browser this phase; endpoint verified live on the dev API as analyst@flox.local.
+
 ## [Phase 30.15] — Tags in the flows list
 
 Closes gap 11 of `docs/spec-conformance-2026-10-11.md` (§30.6: tags in all seven sections). The backend

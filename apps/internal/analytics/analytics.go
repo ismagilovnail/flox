@@ -28,6 +28,7 @@ type Repository interface {
 	ReportConversions(ctx context.Context, q chstore.ReportQuery) ([]chstore.ConversionAgg, error)
 	FunnelCounts(ctx context.Context, organizationID string, from, to time.Time, filters []chstore.ReportFilter) (map[string]uint64, error)
 	DistinctValues(ctx context.Context, organizationID string, dim chstore.ReportDimension, from, to time.Time, limit int) ([]string, error)
+	FlowStageCounts(ctx context.Context, organizationID string, from, to time.Time, flowIDs []string) (map[string]map[string]uint64, error)
 }
 
 // CostSource is the narrow slice of *cost.Service this package needs — same

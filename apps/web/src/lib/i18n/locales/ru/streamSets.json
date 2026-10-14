@@ -236,5 +236,13 @@
     "deleteConfirmAction": "Удалить",
     "noFilters": "Нет фильтров — соответствует всему трафику",
     "noOffer": "Нет оффера"
+  },
+  "flowSummary": {
+    "period": "Статистика узлов: последние {{days}} дн.",
+    "loading": "Загружаем статистику узлов…",
+    "error": "Статистика узлов сейчас недоступна",
+    "viewsClicks": "{{views}} просмотров · {{clicks}} кликов · CTR {{rate}}",
+    "viewsInstalls": "{{views}} просмотров · {{installs}} установок · CR {{rate}}",
+    "clicksConversions": "{{clicks}} кликов · {{conversions}} конверсий · {{redeps}} редепозитов"
   }
 }

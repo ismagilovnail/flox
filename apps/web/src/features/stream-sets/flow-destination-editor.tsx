@@ -36,12 +36,14 @@ export function FlowDestinationEditor({
   fallbackUrl,
   networks,
   offers,
+  analytics,
   onChange,
 }: {
   flow: FlowFormValue;
   fallbackUrl: string;
   networks: Network[];
   offers: Offer[];
+  analytics?: string;
   onChange: (patch: Partial<FlowFormValue>) => void;
 }) {
   const { t } = useTranslation("streamSets");
@@ -60,6 +62,7 @@ export function FlowDestinationEditor({
         toggleable={false}
         enabled
         configured={destination.kind === "offer" ? !!destination.offerId : !!destination.url}
+        analytics={analytics}
       >
         <div className="flex w-full flex-wrap items-center gap-2">
           <div className="flex overflow-hidden rounded-md border border-input">

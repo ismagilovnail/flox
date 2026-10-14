@@ -13,6 +13,7 @@ import { PWA_TYPES } from "@/lib/api/stream-sets";
 import type { StreamSetFormValues } from "@/features/stream-sets/stream-set-schema";
 import { FlowDestinationEditor } from "@/features/stream-sets/flow-destination-editor";
 import { FlowNode } from "@/features/stream-sets/flow-node";
+import type { FlowNodeSummaries } from "@/features/stream-sets/flow-summary";
 
 type FlowFormValue = StreamSetFormValues["flows"][number];
 
@@ -40,6 +41,7 @@ export function FlowFunnel({
   landings,
   pwas,
   postlandings,
+  summaries,
   onChange,
 }: {
   flow: FlowFormValue;
@@ -49,6 +51,8 @@ export function FlowFunnel({
   landings: Landing[];
   pwas: Pwa[];
   postlandings: Postlanding[];
+  /** §25 per-node analytics — absent for a flow not saved yet. */
+  summaries?: FlowNodeSummaries;
   onChange: (patch: Partial<FlowFormValue>) => void;
 }) {
   const { t } = useTranslation("streamSets");
@@ -67,6 +71,7 @@ export function FlowFunnel({
         // Only an external landing's URL is a page; an internal one's is
         // its bundle's asset base, which isn't openable on its own.
         previewUrl={landingOption?.type === "external" ? landingOption.url : undefined}
+        analytics={summaries?.landing}
       >
         <Select
           value={flow.landing.landingId || NONE}
@@ -103,6 +108,7 @@ export function FlowFunnel({
         onToggleEnabled={(enabled) => onChange({ pwa: { ...flow.pwa, enabled, pwaType: flow.pwa.pwaType || PWA_TYPES[0] } })}
         configured={!!flow.pwa.pwaId}
         previewUrl={pwaOption ? pwaOption.startUrl : undefined}
+        analytics={summaries?.pwa}
       >
         <Select
           value={flow.pwa.pwaId || NONE}
@@ -145,6 +151,7 @@ export function FlowFunnel({
         onToggleEnabled={(enabled) => onChange({ postlanding: { ...flow.postlanding, enabled } })}
         configured={!!flow.postlanding.postlandingId}
         previewUrl={postlandingOption?.url}
+        analytics={summaries?.postlanding}
       >
         <Select
           value={flow.postlanding.postlandingId || NONE}
@@ -167,7 +174,7 @@ export function FlowFunnel({
 
       <Connector />
 
-      <FlowDestinationEditor flow={flow} fallbackUrl={fallbackUrl} networks={networks} offers={offers} onChange={onChange} />
+      <FlowDestinationEditor flow={flow} fallbackUrl={fallbackUrl} networks={networks} offers={offers} analytics={summaries?.destination} onChange={onChange} />
     </div>
   );
 }

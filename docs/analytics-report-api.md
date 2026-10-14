@@ -23,6 +23,7 @@ querystring).
 | `POST /analytics/timeseries` | Report builder line chart — one row per day, every metric included so the client can switch which one it plots without a second request. |
 | `POST /analytics/breakdown` | One dimension, sorted by one metric descending, top-N. Used internally by `/analytics/dashboard`'s Top-N cards; the frontend's own bar chart tab instead calls `/analytics/report` with a single dim and does its own client-side top-8 sort, so switching the bar chart's metric picker re-sorts instantly without a refetch (see `report-chart.tsx`'s `ReportBarChart`). |
 | `POST /analytics/funnel` | The §43 8-stage funnel's per-stage totals for a range. |
+| `POST /analytics/flow-summary` | `{flowIds, from, to, timezone}` → `{"flows": [{flowId, counts}]}`: the flow builder's per-node summary (§25, below). |
 | `POST /analytics/dashboard` | `/overview`'s endpoint — KPI totals, a daily series, and three Top-N breakdowns (campaigns/countries/flows). |
 | `POST /analytics/dimension-values` | The report builder's filter-value dropdown — real distinct values seen for one dimension, most-common first (below). |
 | `POST /analytics/cost-timezones` | `{from, to, timezone}` → `{"mismatched": [...]}`: the ad-account zones whose daily spend in the range is cut in other days than the report (below). |
@@ -196,6 +197,22 @@ under these dimensions and filters, not `null`.
   browser/language on the conversion steps. The click may predate the window.
 - The report builder offers every dimension (`postlanding` and `network` were
   backed on 2026-10-13) and its filter-value picker no longer falls back to a mock pool.
+
+## `flow-summary`: per-node counts in the flow builder (§25)
+
+One request per expanded stream set, 1–100 flow ids, the last 7 days of
+the organization's calendar. `counts` has every stage, zero-filled:
+SOURCE_CLICK, LAND_VIEW, LAND_CLICK, PWA_VIEW, PWA_INSTALL,
+POSTLANDING_VIEW, POSTLANDING_CLICK (distinct `click_id` per flow — a
+reload is not a second view) and CPA_ACCEPT, CPA_REDEP (events, like the
+report's `conversions`: a redeposit counts again). Read by `flow_id` from
+`click_events`, `tracking_events` and `conversion_events`, filtered on the
+session's organization: another organization's flow id comes back as
+zeros, the same as an id that exists nowhere
+(`chstore.TestFlowStageCountsPerFlowAndTenant`). The nodes show views ·
+clicks · CTR (Landing, Postlanding), views · installs · CR (PWA) and
+clicks · conversions · redeposits (Offer/Redirect); a rate over zero
+views is "—". A flow added in the form but not yet saved has no summary.
 
 ## `source` is the traffic source, not a campaign proxy
 

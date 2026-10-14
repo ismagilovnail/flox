@@ -1111,3 +1111,73 @@ func TestReportConversionsInReportingCurrency(t *testing.T) {
 		t.Fatalf("ReportConversions = %+v, %v, want NaN revenue", aggs, err)
 	}
 }
+
+// TestFlowStageCountsPerFlowAndTenant is the live-ClickHouse check behind
+// the flow builder's node summaries (§25): per flow, distinct visits for
+// the page stages (a reload is not a second view), every CPA_REDEP as its
+// own conversion, and nothing from a flow not asked for, outside the
+// range, or from another organization.
+func TestFlowStageCountsPerFlowAndTenant(t *testing.T) {
+	conn := mustConn(t)
+	store := chstore.NewEventStore(conn)
+	ctx := context.Background()
+	orgID, otherOrg, campaignID := idgen.New(), idgen.New(), idgen.New()
+	flowA, flowB, flowC := idgen.New(), idgen.New(), idgen.New()
+	day := time.Date(2026, 8, 22, 0, 0, 0, 0, time.UTC)
+	click1, click2, click3 := idgen.New(), idgen.New(), idgen.New()
+	ev := func(typ event.Type, at time.Duration, org, click, flow string) event.Event {
+		return event.Event{Type: typ, EventAt: day.Add(at), OrganizationID: org, CampaignID: campaignID, ClickID: click, FlowID: flow}
+	}
+
+	events := []event.Event{
+		ev(event.SourceClick, 1*time.Hour, orgID, click1, flowA),
+		ev(event.SourceClick, 2*time.Hour, orgID, click2, flowA),
+		ev(event.LandView, 1*time.Hour+time.Minute, orgID, click1, flowA),
+		ev(event.LandView, 1*time.Hour+2*time.Minute, orgID, click1, flowA), // reload
+		ev(event.LandView, 2*time.Hour+time.Minute, orgID, click2, flowA),
+		ev(event.LandClick, 1*time.Hour+3*time.Minute, orgID, click1, flowA),
+		ev(event.CpaAccept, 5*time.Hour, orgID, click1, flowA),
+		ev(event.SourceClick, 3*time.Hour, orgID, click3, flowB),
+		ev(event.SourceClick, 3*time.Hour, orgID, idgen.New(), flowC),    // flow not asked for
+		ev(event.SourceClick, 25*time.Hour, orgID, idgen.New(), flowA),   // after the range
+		ev(event.SourceClick, 1*time.Hour, otherOrg, idgen.New(), flowA), // another organization, same flow id
+		ev(event.LandView, 1*time.Hour, otherOrg, idgen.New(), flowA),
+	}
+	redep := func(at time.Duration, txn string) event.Event {
+		e := ev(event.CpaRedep, at, orgID, click1, flowA)
+		e.NetworkTxnID, e.EventRef = txn, txn
+		return e
+	}
+	events = append(events, redep(6*time.Hour, "txn-1"), redep(7*time.Hour, "txn-2"))
+	if err := store.InsertBatch(ctx, events); err != nil {
+		t.Fatalf("seeding: %v", err)
+	}
+
+	counts, err := store.FlowStageCounts(ctx, orgID, day, day.Add(24*time.Hour), []string{flowA, flowB})
+	if err != nil {
+		t.Fatalf("FlowStageCounts: %v", err)
+	}
+	wantA := map[string]uint64{"SOURCE_CLICK": 2, "LAND_VIEW": 2, "LAND_CLICK": 1, "CPA_ACCEPT": 1, "CPA_REDEP": 2}
+	for typ, want := range wantA {
+		if got := counts[flowA][typ]; got != want {
+			t.Errorf("flow A %s = %d, want %d", typ, got, want)
+		}
+	}
+	if len(counts[flowA]) != len(wantA) {
+		t.Errorf("flow A = %v, want only %v (absent stages stay absent)", counts[flowA], wantA)
+	}
+	if counts[flowB]["SOURCE_CLICK"] != 1 {
+		t.Errorf("flow B SOURCE_CLICK = %d, want 1", counts[flowB]["SOURCE_CLICK"])
+	}
+	if _, ok := counts[flowC]; ok {
+		t.Errorf("flow C was not asked for but came back: %v", counts[flowC])
+	}
+
+	other, err := store.FlowStageCounts(ctx, otherOrg, day, day.Add(24*time.Hour), []string{flowA})
+	if err != nil {
+		t.Fatalf("FlowStageCounts (other org): %v", err)
+	}
+	if other[flowA]["SOURCE_CLICK"] != 1 || other[flowA]["LAND_VIEW"] != 1 || other[flowA]["CPA_REDEP"] != 0 {
+		t.Errorf("other org sees %v, want only its own click and view", other[flowA])
+	}
+}

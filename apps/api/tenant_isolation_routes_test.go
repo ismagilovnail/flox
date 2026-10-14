@@ -823,6 +823,7 @@ var notReferences = map[string]string{
 	"userId":                       "response only (team members, auth/me)",
 	"streamSetId":                  "response only (routing trace, events)",
 	"flowId":                       "response only (routing trace, events)",
+	"flowIds":                      "flow-summary filter: ClickHouse reads filter on the session's org, another org's flow is zeros like a made-up id (chstore TestFlowStageCountsPerFlowAndTenant)",
 }
 
 var idFieldRE = regexp.MustCompile(`json:"([a-zA-Z]*(?:Id|Ids|IDs))(?:,[a-z]+)?"`)

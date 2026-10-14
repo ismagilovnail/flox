@@ -9,6 +9,7 @@ import {
   getDashboardReport,
   getDimensionValues,
   getCostTimezones,
+  getFlowSummary,
   type DateBasis,
 } from "@/lib/api/analytics";
 import type { DimensionKey } from "@/features/analytics/registry";
@@ -94,5 +95,15 @@ export function useCostTimezones(from: Date, to: Date, timezone?: string) {
   return useQuery({
     queryKey: ["analytics-cost-timezones", iso(from), iso(to), timezone],
     queryFn: () => getCostTimezones(from, to, timezone),
+  });
+}
+
+/** Stage counts for a stream set's saved flows (§25 node "analytics
+ * summary"). `enabled` waits for the caller's timezone. */
+export function useFlowSummary(flowIds: string[], from: Date, to: Date, timezone: string | undefined, enabled = true) {
+  return useQuery({
+    queryKey: ["analytics-flow-summary", flowIds, iso(from), iso(to), timezone],
+    queryFn: () => getFlowSummary(flowIds, from, to, timezone),
+    enabled: enabled && flowIds.length > 0,
   });
 }

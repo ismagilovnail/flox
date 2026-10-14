@@ -927,3 +927,57 @@ func deref(ptrs []*string) []string {
 	}
 	return out
 }
+
+// flowStageTypes are the stages FlowStageCounts counts, by the table that
+// carries them (§25 "analytics summary" on a flow's nodes).
+var flowStageTypes = map[string][]string{
+	"click_events":      {"SOURCE_CLICK"},
+	"tracking_events":   {"LAND_VIEW", "LAND_CLICK", "PWA_VIEW", "PWA_INSTALL", "POSTLANDING_VIEW", "POSTLANDING_CLICK"},
+	"conversion_events": {"CPA_ACCEPT", "CPA_REDEP"},
+}
+
+// FlowStageCounts counts, per flow and event type, what happened in
+// [from, to): distinct visits (click_id) for clicks and the landing, PWA
+// and postlanding stages — a reload is not a second view — and events for
+// CPA_ACCEPT/CPA_REDEP, as the report's `conversions` does (a redeposit is
+// a second conversion of the same visit). A flow with nothing is absent;
+// the caller zero-fills.
+func (s *EventStore) FlowStageCounts(ctx context.Context, organizationID string, from, to time.Time, flowIDs []string) (map[string]map[string]uint64, error) {
+	out := map[string]map[string]uint64{}
+	if len(flowIDs) == 0 {
+		return out, nil
+	}
+	for _, table := range []string{"click_events", "tracking_events", "conversion_events"} {
+		count := "count(DISTINCT click_id)"
+		if table == "conversion_events" {
+			count = "count()"
+		}
+		rows, err := s.conn.Query(ctx, `
+			SELECT flow_id, type, `+count+`
+			FROM `+table+`
+			WHERE organization_id = ? AND event_at >= ? AND event_at < ? AND flow_id IN ? AND type IN ?
+			GROUP BY flow_id, type`,
+			organizationID, from, to, flowIDs, flowStageTypes[table])
+		if err != nil {
+			return nil, fmt.Errorf("chstore: querying flow stage counts from %s: %w", table, err)
+		}
+		for rows.Next() {
+			var flowID, typ string
+			var n uint64
+			if err := rows.Scan(&flowID, &typ, &n); err != nil {
+				rows.Close()
+				return nil, fmt.Errorf("chstore: scanning flow stage counts: %w", err)
+			}
+			if out[flowID] == nil {
+				out[flowID] = map[string]uint64{}
+			}
+			out[flowID][typ] = n
+		}
+		err = rows.Err()
+		rows.Close()
+		if err != nil {
+			return nil, fmt.Errorf("chstore: reading flow stage counts: %w", err)
+		}
+	}
+	return out, nil
+}

@@ -23,6 +23,11 @@ import { FilterPickerDialog } from "@/features/stream-sets/filter-picker-dialog"
 import { FilterTreeSummary } from "@/features/stream-sets/filter-tree-summary";
 import { FlowEditor } from "@/features/stream-sets/flow-editor";
 import { buildStreamSetFormSchema, type StreamSetFormValues } from "@/features/stream-sets/stream-set-schema";
+import { FLOW_SUMMARY_DAYS, flowNodeSummaries } from "@/features/stream-sets/flow-summary";
+import { useFlowSummary } from "@/hooks/use-analytics-report";
+import { useOrganization } from "@/hooks/use-organization";
+import { useLocale } from "@/hooks/use-locale";
+import { todayInZone } from "@/lib/timezones";
 
 export type { StreamSetFormValues };
 
@@ -87,6 +92,21 @@ export function StreamSetEditor({
   const rootFilter = useWatch({ control, name: "rootFilter" }) as FilterGroupNode;
   const weightSum = flows.reduce((sum, f) => sum + (f.weight || 0), 0);
 
+  // §25 node analytics: the saved flows (defaultValues) over the last
+  // FLOW_SUMMARY_DAYS of the organization's calendar. A flow added or
+  // duplicated in this form has no id on the server yet — no summary.
+  const locale = useLocale();
+  const org = useOrganization();
+  const timezone = org.isPending ? undefined : org.data?.timezone || "UTC";
+  const savedFlowIds = React.useMemo(() => defaultValues.flows.map((f) => f.id), [defaultValues.flows]);
+  const summaryTo = React.useMemo(() => todayInZone(timezone ?? "UTC"), [timezone]);
+  const summaryFrom = React.useMemo(() => {
+    const d = new Date(summaryTo);
+    d.setUTCDate(d.getUTCDate() - (FLOW_SUMMARY_DAYS - 1));
+    return d;
+  }, [summaryTo]);
+  const summary = useFlowSummary(savedFlowIds, summaryFrom, summaryTo, timezone, timezone !== undefined);
+
   return (
     <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-6 border-t border-border px-4 py-4">
       <fieldset disabled={disabled} className="contents">
@@ -149,6 +169,13 @@ export function StreamSetEditor({
         <div>
           <h3 className="text-sm font-medium">{t("form.flowsTitle")}</h3>
           <p className="text-xs text-muted-foreground">{t("form.flowsDescription")}</p>
+          <p className="text-xs text-muted-foreground" aria-live="polite">
+            {summary.isError
+              ? t("flowSummary.error")
+              : summary.isPending
+                ? t("flowSummary.loading")
+                : t("flowSummary.period", { days: FLOW_SUMMARY_DAYS })}
+          </p>
         </div>
 
         {/* Per-flow edits go through setValue(`flows.${index}`, ...), not
@@ -175,6 +202,7 @@ export function StreamSetEditor({
                 landings={landings}
                 pwas={pwas}
                 postlandings={postlandings}
+                summaries={summary.data?.[flow.id] ? flowNodeSummaries(summary.data[flow.id], t, locale) : undefined}
                 onChange={(patch) => setValue(`flows.${index}`, { ...flow, ...patch }, { shouldDirty: true, shouldValidate: true })}
                 onRemove={() => flowArray.remove(index)}
                 onDuplicate={() =>

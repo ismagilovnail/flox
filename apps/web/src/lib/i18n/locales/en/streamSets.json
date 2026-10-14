@@ -236,5 +236,13 @@
     "deleteConfirmAction": "Delete",
     "noFilters": "No filters — matches all traffic",
     "noOffer": "No offer"
+  },
+  "flowSummary": {
+    "period": "Node stats: last {{days}} days",
+    "loading": "Loading node stats…",
+    "error": "Node stats unavailable right now",
+    "viewsClicks": "{{views}} views · {{clicks}} clicks · CTR {{rate}}",
+    "viewsInstalls": "{{views}} views · {{installs}} installs · CR {{rate}}",
+    "clicksConversions": "{{clicks}} clicks · {{conversions}} conversions · {{redeps}} redeposits"
   }
 }

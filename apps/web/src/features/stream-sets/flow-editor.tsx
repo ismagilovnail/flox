@@ -17,6 +17,7 @@ import type { Postlanding } from "@/lib/api/postlanding";
 import type { StreamSetFormValues } from "@/features/stream-sets/stream-set-schema";
 import { FlowFunnel } from "@/features/stream-sets/flow-funnel";
 import { TagBadgeList } from "@/features/tags/tag-badge-list";
+import type { FlowNodeSummaries } from "@/features/stream-sets/flow-summary";
 
 type FlowFormValue = StreamSetFormValues["flows"][number];
 
@@ -29,6 +30,7 @@ export function FlowEditor({
   landings,
   pwas,
   postlandings,
+  summaries,
   onChange,
   onRemove,
   onDuplicate,
@@ -42,6 +44,7 @@ export function FlowEditor({
   landings: Landing[];
   pwas: Pwa[];
   postlandings: Postlanding[];
+  summaries?: FlowNodeSummaries;
   onChange: (patch: Partial<FlowFormValue>) => void;
   onRemove: () => void;
   onDuplicate: () => void;
@@ -110,6 +113,7 @@ export function FlowEditor({
             landings={landings}
             pwas={pwas}
             postlandings={postlandings}
+            summaries={summaries}
             onChange={onChange}
           />
         </div>

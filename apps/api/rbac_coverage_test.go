@@ -50,6 +50,7 @@ var deliberatelyOpen = map[string]string{
 	"analytics.timeseries":      "read-only query, POST only for its body",
 	"analytics.breakdown":       "read-only query, POST only for its body",
 	"analytics.funnel":          "read-only query, POST only for its body",
+	"analytics.flowSummary":     "read-only query, POST only for its body",
 	"analytics.dashboard":       "read-only query, POST only for its body",
 	"analytics.costTimezones":   "read-only query, POST only for its body",
 	"analytics.dimensionValues": "read-only query, POST only for its body",

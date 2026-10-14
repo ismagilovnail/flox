@@ -177,3 +177,18 @@ export function getCostTimezones(from: Date, to: Date, timezone?: string): Promi
     body: { from: formatDate(from), to: formatDate(to), timezone },
   }).then((res) => res.mismatched);
 }
+
+/** One flow's per-stage counts, keyed by event type — every stage the
+ * backend counts is present (zero-filled). See
+ * apps/internal/chstore.FlowStageCounts: distinct visits for clicks and the
+ * landing/PWA/postlanding stages, events for CPA_ACCEPT/CPA_REDEP. */
+export type FlowStageCounts = Record<string, number>;
+
+/** Per-flow stage counts for the flow builder's nodes (§25 "analytics
+ * summary"). Another organization's flow id simply comes back as zeros. */
+export function getFlowSummary(flowIds: string[], from: Date, to: Date, timezone?: string): Promise<Record<string, FlowStageCounts>> {
+  return apiFetch<{ flows: { flowId: string; counts: FlowStageCounts }[] }>("/analytics/flow-summary", {
+    method: "POST",
+    body: { flowIds, from: formatDate(from), to: formatDate(to), timezone },
+  }).then((res) => Object.fromEntries(res.flows.map((f) => [f.flowId, f.counts])));
+}

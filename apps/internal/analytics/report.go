@@ -1200,3 +1200,55 @@ func (s *Service) Dashboard(ctx context.Context, organizationID string, from, to
 		TopOffers:         topOffers,
 	}, nil
 }
+
+// maxSummaryFlows bounds one flow-summary request — a stream set's flows,
+// or a few sets' worth.
+const maxSummaryFlows = 100
+
+// FlowStages is one flow's §25 node summary: per event type, see
+// chstore.FlowStageCounts for what is counted. Every stage key is present.
+type FlowStages struct {
+	FlowID string
+	Counts map[string]uint64
+}
+
+// FlowSummary counts each flow's stages over [from, to] in timezone's days
+// (§25 "analytics summary" on the flow builder's nodes). Flows are looked
+// up only within organizationID: another organization's flow id simply has
+// nothing.
+func (s *Service) FlowSummary(ctx context.Context, organizationID string, flowIDs []string, from, to time.Time, timezone string) ([]FlowStages, error) {
+	if organizationID == "" {
+		return nil, apierror.Validation("missing organization", nil)
+	}
+	if len(flowIDs) == 0 || len(flowIDs) > maxSummaryFlows {
+		return nil, apierror.Validation(fmt.Sprintf("flowIds: send 1 to %d flow ids", maxSummaryFlows), nil)
+	}
+	if err := s.validateReportInput(nil, nil, from, to); err != nil {
+		return nil, err
+	}
+	sc, err := resolveScope(timezone)
+	if err != nil {
+		return nil, err
+	}
+	defer observeLatency("flow_summary")()
+
+	qFrom, qTo := sc.bounds(from, to)
+	counts, err := s.repo.FlowStageCounts(ctx, organizationID, qFrom, qTo, flowIDs)
+	if err != nil {
+		return nil, fmt.Errorf("analytics: querying flow stage counts: %w", err)
+	}
+	out := make([]FlowStages, len(flowIDs))
+	for i, id := range flowIDs {
+		c := map[string]uint64{}
+		for _, typ := range flowSummaryTypes {
+			c[typ] = counts[id][typ]
+		}
+		out[i] = FlowStages{FlowID: id, Counts: c}
+	}
+	return out, nil
+}
+
+var flowSummaryTypes = []string{
+	"SOURCE_CLICK", "LAND_VIEW", "LAND_CLICK", "PWA_VIEW", "PWA_INSTALL",
+	"POSTLANDING_VIEW", "POSTLANDING_CLICK", "CPA_ACCEPT", "CPA_REDEP",
+}
