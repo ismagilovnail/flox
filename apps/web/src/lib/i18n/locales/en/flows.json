@@ -5,6 +5,7 @@
     "loading": "Loading flows…",
     "loadError": "Couldn't load flows",
     "searchPlaceholder": "Search flows...",
+    "editTagsButton": "Edit Tags",
     "emptyTitle": "No flows yet",
     "emptyDescription": "Flows are created inside a campaign's Stream Sets — open a campaign to add one."
   },
@@ -15,6 +16,7 @@
     "weight": "Weight",
     "status": "Status",
     "destination": "Destination",
+    "tags": "Tags",
     "updated": "Updated"
   },
   "destination": {

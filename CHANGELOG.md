@@ -5,6 +5,13 @@ per-phase, matching `CLAUDE.md`'s phase protocol. The one exception is
 [Between phases], below: spec amendments and the code changes that follow from
 them land between phases and would otherwise be invisible here.
 
+## [Phase 30.15] — Tags in the flows list
+
+Closes gap 11 of `docs/spec-conformance-2026-10-11.md` (§30.6: tags in all seven sections). The backend
+already accepted `flow`; `/flows` now has the shared tags column ("Add tags" when empty, ≤3 + "+N"), the
+OR tag filter, and row selection with bulk "Edit Tags" — the same components as the other six lists, no
+flow-specific tag code. en/ru labels. Verified in the browser (column, filter, bulk dialog).
+
 ## [Phase 30.14] — Content Gallery: system catalog
 
 Closes gap 10 of `docs/spec-conformance-2026-10-11.md` (§30.8: browsable system content with preview and

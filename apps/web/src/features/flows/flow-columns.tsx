@@ -11,6 +11,7 @@ import { RelativeTime } from "@/components/ui/relative-time";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import type { FlowSummary } from "@/lib/api/flows";
 import { viewStatisticsHref } from "@/features/analytics/view-statistics-link";
+import { TagBadgeList } from "@/features/tags/tag-badge-list";
 
 /**
  * weightSumByStreamSetId: weight is a raw integer (Flow.Weight), only
@@ -78,6 +79,12 @@ export function flowColumns(
         }
         return offerNameById[d.offerId] ?? d.offerId;
       },
+    },
+    {
+      id: "tags",
+      header: t("columns.tags", { ns: "flows" }),
+      enableSorting: false,
+      cell: ({ row }) => <TagBadgeList entityType="flow" entityId={row.original.id} />,
     },
     {
       accessorKey: "updatedAt",

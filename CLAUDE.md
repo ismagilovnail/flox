@@ -19,16 +19,16 @@ referenced below as §N).
 ## CURRENT STATE — UPDATE THIS EVERY PHASE
 
 ```
-CURRENT PHASE : PHASE 30.14 — GALLERY SYSTEM CATALOG (closed)
+CURRENT PHASE : PHASE 30.15 — TAGS IN FLOWS LIST (closed)
 STATUS        : Spec conformance gaps (docs/spec-conformance-2026-10-11.md):
-                1–10 closed (… declines/trash metrics, gallery system
-                catalog: creatives, landing and PWA templates). Push
-                leftovers: scheduled/triggered broadcasts, push metrics.
-                Left: gaps 11–15, prod restore drill after deployment.
-LAST COMMIT   : feat(gallery): system catalog with templates and creatives.
+                1–11 closed (… gallery system catalog, tags in /flows).
+                Push leftovers: scheduled/triggered broadcasts, push
+                metrics. Left: gaps 12–15, prod restore drill after
+                deployment.
+LAST COMMIT   : feat(flows): tags in the flows list.
 UNCOMMITTED   : none expected. Dev DB at migration 00071, CH schema 018.
-NEXT          : wait for the user — next gap is 11 (tags in the flows
-                list, §30.6). CI (DO1) is
+NEXT          : wait for the user — next gap is 12 (analytics summary on
+                flow nodes, §25). CI (DO1) is
                 the user's own decision — do not set it up. Run go test with
                 the full env line AND check e2e did not skip (memory:
                 flox-full-test-env); chconn's TestLimitsStopAHeavyQuery
