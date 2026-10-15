@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 func newTestServer(t *testing.T) *httptest.Server {
@@ -38,13 +39,35 @@ func do(t *testing.T, srv *httptest.Server, method, path, body string, hdr map[s
 			req.Header.Set(k, v)
 		}
 	}
-	res, err := srv.Client().Do(req)
+	// A timeout, so a server that deadlocks fails the test instead of
+	// hanging it.
+	client := srv.Client()
+	client.Timeout = 5 * time.Second
+	res, err := client.Do(req)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer res.Body.Close()
 	b, _ := io.ReadAll(res.Body)
 	return res.StatusCode, b
+}
+
+// A PATCH that changes nothing used to read the item through the pool while
+// its transaction still held the only connection: that request, and every
+// one after it, hung for good.
+func TestAPINoOpPatchDoesNotHang(t *testing.T) {
+	srv := newTestServer(t)
+	for i := 0; i < 3; i++ {
+		if code, b := do(t, srv, "PATCH", "/api/items/SEC-1", `{"status":"todo"}`, nil); code != 200 {
+			t.Fatalf("no-op patch %d: %d %s", i, code, b)
+		}
+	}
+	if code, _ := do(t, srv, "GET", "/api/items", "", nil); code != 200 {
+		t.Fatalf("GET after no-op patches: %d", code)
+	}
+	if code, b := do(t, srv, "GET", "/api/items/SEC-1/changes", "", nil); code != 200 || string(b) != "[]\n" {
+		t.Errorf("changes after no-op patches: %d %s, want none", code, b)
+	}
 }
 
 func TestAPIStatusChangeShowsOnDashboard(t *testing.T) {

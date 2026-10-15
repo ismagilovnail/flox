@@ -402,7 +402,6 @@ func (s *server) patchItem(w http.ResponseWriter, r *http.Request) {
 	}
 	old := map[string]string{"status": cur.Status, "priority": cur.Priority, "severity": cur.Severity, "notes": cur.Notes, "title": cur.Title, "fix": cur.Fix, "area": cur.Area}
 	ts := now()
-	changed := false
 	for field, val := range in {
 		set, ok := allowed[field]
 		if !ok {
@@ -431,16 +430,16 @@ func (s *server) patchItem(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 		}
-		changed = true
 	}
-	if changed {
-		if err := tx.Commit(); err != nil {
-			fail(w, 500, err.Error())
-			return
-		}
-	}
-	i, err := scanItem(s.db.QueryRow(`SELECT `+itemCols+` FROM items WHERE id = ?`, id))
+	// Read back through tx, then commit even when nothing changed: the pool
+	// has one connection (openDB), so a read through s.db while tx still
+	// holds it waits forever — and with it every later request.
+	i, err := scanItem(tx.QueryRow(`SELECT `+itemCols+` FROM items WHERE id = ?`, id))
 	if err != nil {
+		fail(w, 500, err.Error())
+		return
+	}
+	if err := tx.Commit(); err != nil {
 		fail(w, 500, err.Error())
 		return
 	}
