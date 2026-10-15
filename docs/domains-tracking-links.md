@@ -73,8 +73,9 @@ the smaller fix — see this entry's own "Fixed" section below):
   migration backlog).
 - ~~No real DNS/SSL/registrar automation~~ — real for Namecheap
   (registrar) and Cloudflare (DNS), added later; see this doc's own
-  "Registrar/DNS automation" section below. GoDaddy/Route53/
-  cloudflare_registrar/unmanaged still have no adapter and stay
+  "Registrar/DNS automation" section below; Cloudflare Registrar read
+  (expiry, auto-renew) since 2026-10-15 ("Cloudflare Registrar" below).
+  GoDaddy/Route53/unmanaged still have no adapter and stay
   operator-declared, unverified fields.
 
 ## Verified
@@ -189,6 +190,42 @@ Verify (a real 422 network call, confirmed via the network log) with no
 console errors, opened both the Renew and Sync DNS confirm dialogs and
 confirmed their real warning copy, and confirmed Sync DNS's real
 network call. Test domain and org_integrations row deleted afterward.
+
+## Cloudflare Registrar (2026-10-15)
+
+`registrar = cloudflare_registrar` is read, not renewed:
+
+- **Verify** reads the registration through the organization's
+  Cloudflare integration (the same API token as DNS; it needs
+  *Account › Registrar: Read*): `GET /accounts` for the accounts the token
+  sees, then in each `GET /accounts/{id}/registrar/registrations/{apex}`
+  (the Registrar API, beta at Cloudflare) — `expires_at`, `auto_renew`,
+  `status` — falling back to the older `/registrar/domains/{apex}` (expiry
+  only) when that answers 404. The apex is the tracking hostname's last two
+  labels, as for DNS zones. A token that cannot list accounts or read
+  registrations, no account holding the domain, or a registration still
+  pending: an error saying so (never carrying the token).
+- **Auto-renew** is stored (`domains.registrar_auto_renew`, migration
+  00079; `null` = unknown — Namecheap does not report it) and shown on the
+  domain's card; the domains list marks "auto-renew off" next to the
+  expiry.
+- **Renew is refused** for it: Cloudflare's API has no renewal
+  ("Renewals are not yet available through the API",
+  developers.cloudflare.com/registrar/registrar-api). The refusal says to
+  turn on auto-renew in the Cloudflare dashboard; the card shows no Renew
+  button, but the same advice.
+
+Code: `internal/domain/cloudflare/registrar.go` (`cloudflare.Registrar`,
+wired with `Service.WithCloudflareRegistrar`). Tests against a fake API in
+the documented shapes (two accounts, the fallback, missing permission,
+not found, pending, Renew making no call) and the service (stored
+auto-renew, the Cloudflare integration used and not Namecheap's adapter,
+another organization refused, the renew refusal) — mutation-checked.
+Not run against the real Cloudflare (no account here); the Registrar API
+being beta, its field names may change. Live on the dev stack: Verify
+without the integration says to connect Cloudflare, Renew refuses, and
+the card and list show auto-renew off (value set in the database). Up to
+50 accounts per token are searched (one page of `GET /accounts`).
 
 ## Copy tracking URL in the campaigns list (§20, 2026-10-14)
 

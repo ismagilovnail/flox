@@ -113,12 +113,19 @@ export function domainColumns(t: TFunction<"domains">): ColumnDef<typeof dataTab
     {
       accessorKey: "expiresAt",
       header: t("columns.expires"),
-      cell: ({ getValue }) => {
+      cell: ({ row, getValue }) => {
         const value = getValue() as string | null;
         if (!value) return <Caption className="text-muted-foreground">—</Caption>;
         const expires = new Date(value);
         const isSoon = expires.getTime() - Date.now() < 1000 * 60 * 60 * 24 * 30;
-        return <RelativeTime date={expires} className={isSoon ? "text-warning" : undefined} />;
+        // Nothing renews it: the registrar said its auto-renew is off.
+        const lapses = row.original.registrarAutoRenew === false;
+        return (
+          <span className="inline-flex items-center gap-1.5">
+            <RelativeTime date={expires} className={isSoon ? "text-warning" : undefined} />
+            {lapses && <Badge variant="warning">{t("automation.autoRenewOff")}</Badge>}
+          </span>
+        );
       },
     },
     {

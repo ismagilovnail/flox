@@ -27,7 +27,8 @@ var domainPattern = regexp.MustCompile(`^([a-z0-9-]+\.)+[a-z]{2,}$`)
 type Service struct {
 	repo             *Repository
 	credentials      CredentialSource
-	registrar        RegistrarProvider
+	registrar        RegistrarProvider // Namecheap
+	cfRegistrar      RegistrarProvider // Cloudflare Registrar; nil: not wired
 	dnsProvider      DNSProviderAdapter
 	trackerDNSTarget string
 	prober           SSLProber
@@ -93,6 +94,27 @@ type SSLProber interface {
 // refused rather than defaulted.
 func NewService(repo *Repository, credentials CredentialSource, registrar RegistrarProvider, dnsProvider DNSProviderAdapter, trackerDNSTarget string, prober SSLProber) *Service {
 	return &Service{repo: repo, credentials: credentials, registrar: registrar, dnsProvider: dnsProvider, trackerDNSTarget: trackerDNSTarget, prober: prober, txt: NetTXTResolver{}}
+}
+
+// WithCloudflareRegistrar adds the Cloudflare Registrar adapter: Verify
+// then reads a cloudflare_registrar domain's expiry and auto-renew through
+// the organization's Cloudflare integration.
+func (s *Service) WithCloudflareRegistrar(p RegistrarProvider) *Service {
+	s.cfRegistrar = p
+	return s
+}
+
+// registrarCheck is how a domain's registrar is read: its adapter, the
+// integration holding the credentials, and the name the errors use.
+// ok false: FLOX has no adapter for that registrar.
+func (s *Service) registrarCheck(r Registrar) (adapter RegistrarProvider, provider integrations.Provider, name string, ok bool) {
+	switch {
+	case r == RegistrarNamecheap && s.registrar != nil:
+		return s.registrar, integrations.ProviderNamecheap, "Namecheap", true
+	case r == RegistrarCloudflareRegistrar && s.cfRegistrar != nil:
+		return s.cfRegistrar, integrations.ProviderCloudflare, "Cloudflare", true
+	}
+	return nil, "", "", false
 }
 
 // List returns one page of the organization's domains and their total.
@@ -257,20 +279,21 @@ func (s *Service) Verify(ctx context.Context, orgID, id string) (Domain, error) 
 	checked := false
 	var notConnected error
 
-	if d.Registrar == RegistrarNamecheap {
-		creds, found, err := s.credentials.CredentialsFor(ctx, orgID, integrations.ProviderNamecheap)
+	if adapter, provider, name, ok := s.registrarCheck(d.Registrar); ok {
+		creds, found, err := s.credentials.CredentialsFor(ctx, orgID, provider)
 		if err != nil {
 			return Domain{}, err
 		}
 		if !found {
-			notConnected = apierror.Validation("cannot verify", map[string]string{"registrar": "connect Namecheap in Settings > Integrations first"})
+			notConnected = apierror.Validation("cannot verify", map[string]string{"registrar": "connect " + name + " in Settings > Integrations first"})
 		} else {
-			info, err := s.registrar.DomainInfo(ctx, creds, d.Domain)
+			info, err := adapter.DomainInfo(ctx, creds, d.Domain)
 			if err != nil {
-				return Domain{}, apierror.Validation("could not verify with Namecheap: "+err.Error(), nil)
+				return Domain{}, apierror.Validation("could not verify with "+name+": "+err.Error(), nil)
 			}
 			expiresAt := info.ExpiresAt
 			res.ExpiresAt = &expiresAt
+			res.AutoRenew = info.AutoRenew
 			checked = true
 		}
 	}
@@ -304,7 +327,7 @@ func (s *Service) Verify(ctx context.Context, orgID, id string) (Domain, error) 
 			return Domain{}, notConnected
 		}
 		return Domain{}, apierror.Validation("cannot verify", map[string]string{
-			"registrar": "must be namecheap and/or dnsProvider must be cloudflare, with the matching integration connected in Settings",
+			"registrar": "must be namecheap or cloudflare_registrar and/or dnsProvider must be cloudflare, with the matching integration connected in Settings",
 		})
 	}
 
@@ -316,7 +339,8 @@ func (s *Service) Verify(ctx context.Context, orgID, id string) (Domain, error) 
 // Renew calls the real Namecheap domains.renew command — a genuine,
 // billable action against the org's connected Namecheap account. A nil
 // error means Namecheap actually charged and extended the registration;
-// this is never a dry run.
+// this is never a dry run. Cloudflare Registrar has no renewal in its API:
+// such a domain is refused with what to do instead (its auto-renew).
 func (s *Service) Renew(ctx context.Context, orgID, id string, years int) (Domain, error) {
 	if years < 1 || years > 10 {
 		return Domain{}, apierror.Validation("invalid renewal", map[string]string{"years": "must be between 1 and 10"})
@@ -324,6 +348,11 @@ func (s *Service) Renew(ctx context.Context, orgID, id string, years int) (Domai
 	d, err := s.repo.GetByID(ctx, orgID, id)
 	if err != nil {
 		return Domain{}, err
+	}
+	if d.Registrar == RegistrarCloudflareRegistrar {
+		return Domain{}, apierror.Validation("cannot renew", map[string]string{
+			"registrar": "Cloudflare Registrar does not renew through its API — turn on auto-renew for the domain in the Cloudflare dashboard",
+		})
 	}
 	if d.Registrar != RegistrarNamecheap {
 		return Domain{}, apierror.Validation("cannot renew", map[string]string{"registrar": "must be namecheap"})

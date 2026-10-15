@@ -136,7 +136,7 @@ scoped phase; none blocks anything that ships today.
 | `TRUSTED_PROXIES` still on its default (no real reverse proxy/LB/CDN deployed yet) | set it once real infrastructure exists in front of `apps/api`/`apps/tracker` |
 | Restore drill against production | after the first deployment (`docs/backup.md`) |
 | CI | the owner's decision (CLAUDE.md) |
-| `cloudflare_registrar` has no adapter, though Cloudflare works as a DNS provider | `apps/internal/domain/model.go` |
+| Renewing a Cloudflare Registrar domain from FLOX (read-only today: expiry and auto-renew) | Cloudflare's API has no renewal yet — `docs/domains-tracking-links.md` "Cloudflare Registrar" |
 | SMS/email 2FA as an alternative delivery channel (TOTP only today) | `apps/internal/totp` |
 | Video upload/transcoding in Content Gallery (images only today) | needs a real ffmpeg/worker pipeline |
 | Pixels: Twitter/X sending (OAuth 1.0a), a "send test event" button | sending works for Facebook/TikTok/Snapchat/generic — `docs/pixels.md` "Not done" |

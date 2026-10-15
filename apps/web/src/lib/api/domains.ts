@@ -2,11 +2,11 @@ import { apiFetch } from "@/lib/api/client";
 import { fetchAllPages } from "@/lib/api/pagination";
 
 /** Mirrors apps/internal/domain's real shape. Registrar connection (via
- * Namecheap) and DNS zone/SSL status + record management (via
- * Cloudflare) are real for those two providers, using the org's own
- * connected Settings > Integrations credentials — verify()/renew()/
- * syncDns() below. GoDaddy/Route53/cloudflare_registrar/unmanaged have
- * no real adapter and stay plain operator-set fields. */
+ * Namecheap; Cloudflare Registrar read-only — its API cannot renew) and
+ * DNS zone/SSL status + record management (via Cloudflare) are real, using
+ * the org's own connected Settings > Integrations credentials —
+ * verify()/renew()/syncDns() below. GoDaddy/Route53/unmanaged have no real
+ * adapter and stay plain operator-set fields. */
 export type DomainStatus = "active" | "pending" | "error" | "expired";
 export type SslStatus = "issued" | "pending" | "none" | "error";
 export type DomainPurpose = "tracking" | "pwa" | "fallback";
@@ -37,6 +37,9 @@ export type Domain = {
   dnsProvider: DnsProvider;
   expiresAt: string | null;
   verifiedAt: string | null;
+  /** Whether the registrar renews the domain by itself, as the last
+   * verify read it (Cloudflare Registrar reports it); null: unknown. */
+  registrarAutoRenew: boolean | null;
   /** When the organization proved it controls the domain's DNS; null until
    * then. Only a verified domain can be active, and only an active one
    * tracks (tech audit T6). */
@@ -83,8 +86,8 @@ export function deleteDomain(id: string): Promise<void> {
   return apiFetch(`/domains/${id}`, { method: "DELETE" });
 }
 
-/** Read-only: a real Namecheap check for registrar=namecheap, a real
- * Cloudflare check for dnsProvider=cloudflare. Neither charges anything
+/** Read-only: a real Namecheap or Cloudflare Registrar check for the
+ * registrar, a real Cloudflare check for dnsProvider=cloudflare. Neither charges anything
  * nor changes any DNS record. */
 /** Checks the domain's ownership TXT record; on success the domain is
  * verified and active. A 422 says what DNS returned. */

@@ -5,6 +5,23 @@ per-phase, matching `CLAUDE.md`'s phase protocol. The one exception is
 [Between phases], below: spec amendments and the code changes that follow from
 them land between phases and would otherwise be invisible here.
 
+## [Phase 30.33] — Cloudflare Registrar adapter
+
+ROADMAP "Known open gaps": `cloudflare_registrar` had no adapter.
+
+- `domain/cloudflare.Registrar` (`domain.RegistrarProvider`): with the Cloudflare integration's token, finds the
+  apex's registration in the accounts the token sees (`/accounts`, then the beta `/registrar/registrations/{apex}`,
+  falling back to `/registrar/domains/{apex}`) — expiry and auto-renew. Errors name the missing permission
+  (Account › Registrar: Read), never the token.
+- Verify works for `registrar = cloudflare_registrar` (`Service.WithCloudflareRegistrar`); Renew refuses it with what
+  to do instead — Cloudflare's API has no renewal.
+- Migration 00079 `domains.registrar_auto_renew` (null = unknown); `RegistrarInfo.AutoRenew`. Web: auto-renew on the
+  domain's card (no Renew button for Cloudflare Registrar, an explanation instead) and "auto-renew off" next to the
+  expiry in the list; en/ru.
+- Tests: the adapter against a fake API (accounts, fallback, permission, not found, pending, Renew), the service
+  (stored auto-renew, the right adapter and integration, cross-organization, renew refusal); mutation-checked. Not
+  run against real Cloudflare; checked live on the dev stack (verify without the integration, renew refusal, the UI).
+
 ## [Phase 30.32] — Frontend layers: types/, schemas/
 
 §31; the last item of `docs/spec-conformance-2026-10-11.md`. Behaviour unchanged.

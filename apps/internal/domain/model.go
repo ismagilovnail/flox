@@ -9,8 +9,9 @@
 // Cloudflare (DNS) — both connected at the org level via apps/internal/
 // integrations' Settings > Integrations credentials, decrypted here
 // through the CredentialSource interface (never a second copy of them).
-// GoDaddy/Route53/cloudflare_registrar/unmanaged have no adapter and stay
-// operator-declared. SSL/ExpiresAt/VerifiedAt are never client input — they
+// GoDaddy/Route53/unmanaged have no adapter and stay operator-declared;
+// cloudflare_registrar is read (expiry, auto-renew) but not renewed — its
+// API cannot. SSL/ExpiresAt/VerifiedAt are never client input — they
 // change only through a real Verify/Renew/SyncDNS call
 // (Repository.ApplyAutomationResult). Status is client input except
 // 'active', which needs the domain's DNS ownership verified first
@@ -36,7 +37,7 @@ type CredentialSource interface {
 }
 
 // RegistrarProvider is what a real registrar adapter (this package's own
-// namecheap subpackage) implements — one shape so Service.Verify/Renew
+// namecheap and cloudflare subpackages) implements — one shape so Service.Verify/Renew
 // never needs to special-case a specific registrar beyond picking which
 // adapter to call.
 type RegistrarProvider interface {
@@ -50,6 +51,9 @@ type RegistrarProvider interface {
 
 type RegistrarInfo struct {
 	ExpiresAt time.Time
+	// AutoRenew is whether the registrar renews the domain by itself; nil
+	// when the registrar does not report it (Namecheap's domains.getInfo).
+	AutoRenew *bool
 }
 
 // DNSProviderAdapter is what a real DNS adapter (this package's own
@@ -159,6 +163,9 @@ type Domain struct {
 	DNSProvider    DNSProvider `json:"dnsProvider"`
 	ExpiresAt      *time.Time  `json:"expiresAt"`
 	VerifiedAt     *time.Time  `json:"verifiedAt"`
+	// RegistrarAutoRenew is whether the registrar renews the domain by
+	// itself, as the last Verify read it; nil when unknown.
+	RegistrarAutoRenew *bool `json:"registrarAutoRenew"`
 	// SSLExpiresAt is the expiry of the certificate the domain served on
 	// the last successful TLS check; SSLError says why the last check
 	// did not find a valid one. Both come from a real connection to the

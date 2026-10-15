@@ -27,7 +27,8 @@ import type { Domain } from "@/lib/api/domains";
 
 /** Shown on the domain edit page only (an unsaved new domain has nothing
  * to verify/renew/sync yet). Verify is always available and read-only —
- * it checks whichever of registrar=namecheap / dnsProvider=cloudflare
+ * it checks whichever of registrar=namecheap|cloudflare_registrar /
+ * dnsProvider=cloudflare
  * actually applies, real API calls against the org's own connected
  * Settings > Integrations credentials, and updates ExpiresAt/SSL/
  * VerifiedAt from what it actually finds. Renew and Sync DNS are each
@@ -47,6 +48,9 @@ export function DomainAutomationCard({ domain }: { domain: Domain }) {
   const [syncOpen, setSyncOpen] = React.useState(false);
 
   const canRenew = domain.registrar === "namecheap";
+  // Cloudflare Registrar cannot renew through its API: its own auto-renew
+  // is what keeps the domain, so the card shows it instead of a Renew.
+  const isCloudflareRegistrar = domain.registrar === "cloudflare_registrar";
   const canSyncDns = domain.dnsProvider === "cloudflare";
 
   function handleVerify() {
@@ -114,6 +118,14 @@ export function DomainAutomationCard({ domain }: { domain: Domain }) {
               <span className="text-sm">—</span>
             )}
           </div>
+          {domain.registrarAutoRenew !== null && (
+            <div className="flex flex-col gap-0.5">
+              <Caption className="text-muted-foreground">{t("automation.autoRenew")}</Caption>
+              <Badge variant={domain.registrarAutoRenew ? "success" : "warning"}>
+                {domain.registrarAutoRenew ? t("automation.autoRenewOn") : t("automation.autoRenewOff")}
+              </Badge>
+            </div>
+          )}
           <div className="flex flex-col gap-0.5">
             <Caption className="text-muted-foreground">{t("automation.lastVerified")}</Caption>
             {domain.verifiedAt ? (
@@ -131,16 +143,18 @@ export function DomainAutomationCard({ domain }: { domain: Domain }) {
           <Button type="button" variant="outline" size="sm" onClick={handleCheckSsl} disabled={checkSsl.isPending}>
             <LockIcon className="size-3.5" /> {checkSsl.isPending ? t("automation.checking") : t("automation.checkSsl")}
           </Button>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={() => setRenewOpen(true)}
-            disabled={!canWrite || !canRenew || renew.isPending}
-            title={!canWrite ? t("automation.noPermission") : canRenew ? undefined : t("automation.needsNamecheap")}
-          >
-            <RefreshCwIcon className="size-3.5" /> {t("automation.renew")}
-          </Button>
+          {!isCloudflareRegistrar && (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => setRenewOpen(true)}
+              disabled={!canWrite || !canRenew || renew.isPending}
+              title={!canWrite ? t("automation.noPermission") : canRenew ? undefined : t("automation.needsNamecheap")}
+            >
+              <RefreshCwIcon className="size-3.5" /> {t("automation.renew")}
+            </Button>
+          )}
           <Button
             type="button"
             variant="outline"
@@ -152,6 +166,11 @@ export function DomainAutomationCard({ domain }: { domain: Domain }) {
             <RefreshCwIcon className="size-3.5" /> {t("automation.syncDns")}
           </Button>
         </div>
+        {isCloudflareRegistrar && (
+          <Caption className="text-muted-foreground">
+            {domain.registrarAutoRenew === false ? t("automation.cloudflareAutoRenewOff") : t("automation.cloudflareRenews")}
+          </Caption>
+        )}
       </CardContent>
 
       <Dialog open={renewOpen} onOpenChange={setRenewOpen}>

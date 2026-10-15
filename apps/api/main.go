@@ -485,7 +485,8 @@ func buildServer(ctx context.Context, cfg config.Config, logger *slog.Logger, re
 	// cloudflare_registrar and unmanaged have no adapter and stay
 	// operator-declared.
 	domainHandler := domain.NewHandler(
-		domain.NewService(domain.NewRepository(db), integrationsSvc, domainnamecheap.New(), domaincloudflare.New(), cfg.TrackerDNSTarget, &tlsprobe.Prober{}),
+		domain.NewService(domain.NewRepository(db), integrationsSvc, domainnamecheap.New(), domaincloudflare.New(), cfg.TrackerDNSTarget, &tlsprobe.Prober{}).
+			WithCloudflareRegistrar(domaincloudflare.NewRegistrar()),
 		requireSettingsWrite,
 		logger,
 	)

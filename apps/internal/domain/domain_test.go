@@ -673,3 +673,90 @@ func seedOrg(t *testing.T, ctx context.Context, pool *pgxpool.Pool) string {
 	})
 	return id
 }
+
+// A cloudflare_registrar domain is read through the Cloudflare
+// integration's token with the Cloudflare Registrar adapter (not
+// Namecheap's): expiry and auto-renew are stored, and another
+// organization cannot verify it. Without the integration, Verify says
+// to connect Cloudflare.
+func TestVerifyCloudflareRegistrar(t *testing.T) {
+	pool := mustPool(t)
+	ctx := context.Background()
+	orgID := seedOrg(t, ctx, pool)
+
+	creds := &fakeCredentialSource{creds: map[integrations.Provider]map[string]string{
+		integrations.ProviderCloudflare: {"apiToken": "t"},
+	}}
+	namecheap := &fakeRegistrar{err: errors.New("Namecheap must not be asked")}
+	off := false
+	expiresAt := time.Date(2027, 2, 1, 0, 0, 0, 0, time.UTC)
+	cf := &fakeRegistrar{info: domain.RegistrarInfo{ExpiresAt: expiresAt, AutoRenew: &off}}
+	svc := newTestService(pool, creds, namecheap, nil, "").WithCloudflareRegistrar(cf)
+
+	d, err := svc.Create(ctx, orgID, domain.CreateInput{
+		Domain: "cfreg.example.com", Purpose: []string{"tracking"}, Registrar: domain.RegistrarCloudflareRegistrar,
+	})
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	if d.RegistrarAutoRenew != nil {
+		t.Fatalf("auto-renew before Verify = %v, want unknown", *d.RegistrarAutoRenew)
+	}
+	verified, err := svc.Verify(ctx, orgID, d.ID)
+	if err != nil {
+		t.Fatalf("Verify: %v", err)
+	}
+	if verified.ExpiresAt == nil || !verified.ExpiresAt.Equal(expiresAt) || verified.RegistrarAutoRenew == nil || *verified.RegistrarAutoRenew {
+		t.Fatalf("verified = expires %v, auto-renew %v; want %v and off", verified.ExpiresAt, verified.RegistrarAutoRenew, expiresAt)
+	}
+	if got, err := svc.Get(ctx, orgID, d.ID); err != nil || got.RegistrarAutoRenew == nil || *got.RegistrarAutoRenew {
+		t.Fatalf("stored auto-renew = %v, %v; want off", got.RegistrarAutoRenew, err)
+	}
+
+	other := seedOrg(t, ctx, pool)
+	if _, err := svc.Verify(ctx, other, d.ID); err == nil {
+		t.Fatal("another organization verified the domain")
+	}
+
+	unconnected := newTestService(pool, nil, nil, nil, "").WithCloudflareRegistrar(cf)
+	if _, err := unconnected.Verify(ctx, orgID, d.ID); !strings.Contains(registrarField(err), "Cloudflare") {
+		t.Fatalf("Verify without the Cloudflare integration = %v, want an error naming Cloudflare", err)
+	}
+}
+
+// Cloudflare Registrar cannot renew through its API: Renew refuses before
+// any adapter is called, and says what to do instead.
+func TestRenewRefusesCloudflareRegistrar(t *testing.T) {
+	pool := mustPool(t)
+	ctx := context.Background()
+	orgID := seedOrg(t, ctx, pool)
+	namecheap, cf := &fakeRegistrar{}, &fakeRegistrar{}
+	svc := newTestService(pool, &fakeCredentialSource{creds: map[integrations.Provider]map[string]string{
+		integrations.ProviderCloudflare: {"apiToken": "t"},
+		integrations.ProviderNamecheap:  {"apiUser": "u"},
+	}}, namecheap, nil, "").WithCloudflareRegistrar(cf)
+
+	d, err := svc.Create(ctx, orgID, domain.CreateInput{
+		Domain: "cfrenew.example.com", Purpose: []string{"tracking"}, Registrar: domain.RegistrarCloudflareRegistrar,
+	})
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	_, err = svc.Renew(ctx, orgID, d.ID, 1)
+	if !strings.Contains(registrarField(err), "auto-renew") {
+		t.Fatalf("Renew = %v, want a refusal pointing at auto-renew", err)
+	}
+	if namecheap.renewCalls+cf.renewCalls != 0 {
+		t.Fatal("a renewal adapter was called")
+	}
+}
+
+// registrarField is a validation error's "registrar" field ("" for any
+// other error).
+func registrarField(err error) string {
+	var apiErr *apierror.Error
+	if errors.As(err, &apiErr) {
+		return apiErr.Fields["registrar"]
+	}
+	return ""
+}

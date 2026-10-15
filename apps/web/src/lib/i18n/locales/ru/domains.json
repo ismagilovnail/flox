@@ -70,7 +70,7 @@
   },
   "automation": {
     "title": "Регистратор и DNS",
-    "description": "Проверки и действия через аккаунты Namecheap (регистратор) и Cloudflare (DNS), подключённые в «Настройки → Интеграции». Другие регистраторы и DNS-провайдеры FLOX не управляет.",
+    "description": "Проверки и действия через аккаунты Namecheap или Cloudflare Registrar (регистратор) и Cloudflare (DNS), подключённые в «Настройки → Интеграции». Другие регистраторы и DNS-провайдеры FLOX не управляет.",
     "lastVerified": "Последняя проверка",
     "never": "Никогда",
     "verify": "Проверить",
@@ -100,7 +100,12 @@
     "renewConfirm": "Продлить и оплатить",
     "syncTitle": "Обновить DNS-запись {{domain}}?",
     "syncDescription": "FLOX создаст или обновит проксируемую CNAME-запись в подключённом аккаунте Cloudflare и направит домен на FLOX. Всё, что сейчас открывается на домене, заменит FLOX.",
-    "syncConfirm": "Обновить DNS-запись"
+    "syncConfirm": "Обновить DNS-запись",
+    "autoRenew": "Автопродление",
+    "autoRenewOn": "Включено",
+    "autoRenewOff": "Автопродление выкл.",
+    "cloudflareRenews": "Cloudflare Registrar продлевает домен сам; FLOX не может продлить его через API Cloudflare.",
+    "cloudflareAutoRenewOff": "Автопродление выключено: домен истечёт в срок. Включите его в панели Cloudflare — FLOX не может продлить через API Cloudflare."
   },
   "ownership": {
     "title": "Владение доменом",

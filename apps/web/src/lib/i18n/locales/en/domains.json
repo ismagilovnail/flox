@@ -70,7 +70,7 @@
   },
   "automation": {
     "title": "Registrar & DNS",
-    "description": "Checks and actions through the Namecheap (registrar) and Cloudflare (DNS) accounts connected under Settings → Integrations. Other registrars and DNS providers are not managed by FLOX.",
+    "description": "Checks and actions through the Namecheap or Cloudflare Registrar (registrar) and Cloudflare (DNS) accounts connected under Settings → Integrations. Other registrars and DNS providers are not managed by FLOX.",
     "lastVerified": "Last verified",
     "never": "Never",
     "verify": "Verify",
@@ -100,7 +100,12 @@
     "renewConfirm": "Renew and charge my account",
     "syncTitle": "Update the DNS record of {{domain}}?",
     "syncDescription": "FLOX creates or updates a proxied CNAME record in your connected Cloudflare account, pointing this domain at FLOX. Whatever the domain serves now will be replaced by FLOX.",
-    "syncConfirm": "Update DNS record"
+    "syncConfirm": "Update DNS record",
+    "autoRenew": "Auto-renew",
+    "autoRenewOn": "On",
+    "autoRenewOff": "Auto-renew off",
+    "cloudflareRenews": "Cloudflare Registrar renews the domain itself; FLOX cannot renew through its API.",
+    "cloudflareAutoRenewOff": "Auto-renew is off: the domain lapses at its expiry. Turn it on in the Cloudflare dashboard — FLOX cannot renew through Cloudflare's API."
   },
   "ownership": {
     "title": "Domain ownership",

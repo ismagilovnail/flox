@@ -23,14 +23,14 @@ type Repository struct {
 
 func NewRepository(db *pgxpool.Pool) *Repository { return &Repository{db: db} }
 
-const selectColumns = `id, organization_id, domain, status, ssl, purpose, registrar, dns_provider, expires_at, verified_at, ssl_expires_at, ssl_checked_at, ssl_error, ownership_verified_at, verification_token, created_at, updated_at`
+const selectColumns = `id, organization_id, domain, status, ssl, purpose, registrar, dns_provider, expires_at, verified_at, ssl_expires_at, ssl_checked_at, ssl_error, ownership_verified_at, verification_token, created_at, updated_at, registrar_auto_renew`
 
 func scanDomain(row pgx.Row) (Domain, error) {
 	var d Domain
 	var token string
 	err := row.Scan(
 		&d.ID, &d.OrganizationID, &d.Domain, &d.Status, &d.SSL, &d.Purpose, &d.Registrar, &d.DNSProvider,
-		&d.ExpiresAt, &d.VerifiedAt, &d.SSLExpiresAt, &d.SSLCheckedAt, &d.SSLError, &d.OwnershipVerifiedAt, &token, &d.CreatedAt, &d.UpdatedAt,
+		&d.ExpiresAt, &d.VerifiedAt, &d.SSLExpiresAt, &d.SSLCheckedAt, &d.SSLError, &d.OwnershipVerifiedAt, &token, &d.CreatedAt, &d.UpdatedAt, &d.RegistrarAutoRenew,
 	)
 	d.OwnershipRecord = ownershipRecord(d.Domain, token)
 	return d, err
@@ -203,6 +203,7 @@ type AutomationResult struct {
 	SSL        *SSL
 	ExpiresAt  *time.Time
 	VerifiedAt *time.Time
+	AutoRenew  *bool
 }
 
 // ApplyAutomationResult persists the outcome of a real registrar/DNS
@@ -227,6 +228,9 @@ func (r *Repository) ApplyAutomationResult(ctx context.Context, orgID, id string
 	}
 	if res.VerifiedAt != nil {
 		sets = append(sets, "verified_at = "+arg(*res.VerifiedAt))
+	}
+	if res.AutoRenew != nil {
+		sets = append(sets, "registrar_auto_renew = "+arg(*res.AutoRenew))
 	}
 	if len(sets) == 0 {
 		return r.GetByID(ctx, orgID, id)
