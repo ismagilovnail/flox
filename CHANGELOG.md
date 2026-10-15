@@ -5,6 +5,26 @@ per-phase, matching `CLAUDE.md`'s phase protocol. The one exception is
 [Between phases], below: spec amendments and the code changes that follow from
 them land between phases and would otherwise be invisible here.
 
+## [Phase 30.42] — Dev panel (tooling, not part of the product)
+
+The audit board (`tools/audit-tracker`, c1f12e8) grew into FLOX's local development panel, `tools/devpanel`
+(`make devpanel`, http://127.0.0.1:8099; `make audit-tracker` still works). Owner's choice: a separate dev tool, not
+a section of the customer product, plus a progress dashboard. The existing SQLite file moved with it, statuses and
+history kept.
+
+- Dashboard tab (default): launch readiness (open P0), tiles (open, P0 open, closed in 7 days, in progress), open items
+  per day — all and P0 — over 14/30/90 days, closed per week, open by priority and by kind, "what next", recent changes.
+  Charts are plain SVG with hover tooltips and a table view; the two-series palette passed the CVD validator in both
+  themes. Tasks and Product map tabs as before; tabs are addressable (`#dashboard`, `#tasks`, `#features`); "what next"
+  and the feed open the item.
+- `GET /api/stats?days=7..180`: computed from items + `item_changes` (`stats.go`) — the board at the end of each local
+  day is rebuilt from the status history, so no snapshot table. Frontend split into `web/index.html`, `app.css`,
+  `app.js`, served from the embedded FS with `no-store`.
+- Tests (the module had none): `stats_test.go` (day-by-day history with out-of-order changes, created-later items,
+  wontfix, "closed this week" needs done now, fixed kind order) and `api_test.go` (status change reaches the
+  dashboard, `days` bounds, Host/Origin/content-type guards, code validation, static files) on a temp SQLite.
+  Mutation-checked (history reconstruction broken → test fails). Checked in the browser on the real board.
+
 ## [Phase 30.41] — Security: vulnerable dependencies and Go toolchain (audit SEC-1, SEC-2)
 
 The product audit of 2026-10-15 (`docs/audit-product-2026-10-15.md`, board in `tools/audit-tracker`, commit

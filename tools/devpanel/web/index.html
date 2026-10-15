@@ -1,0 +1,143 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>FLOX Dev Panel</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Geist+Mono:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="/app.css">
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <div>
+      <div class="eyebrow">Панель разработки · локально · не часть продукта</div>
+      <h1 class="brand"><span class="mark">FLOX</span> Dev Panel</h1>
+    </div>
+    <div class="sync" aria-live="polite"><span class="dot" id="syncDot"></span><span id="syncText">Загружаю…</span></div>
+  </header>
+
+  <div id="notice" hidden></div>
+
+  <nav class="tabs" role="tablist">
+    <button class="tab" role="tab" id="tab-dashboard" aria-controls="panel-dashboard">Дашборд</button>
+    <button class="tab" role="tab" id="tab-tasks" aria-controls="panel-tasks">Задачи<span class="num" id="cntItems"></span></button>
+    <button class="tab" role="tab" id="tab-features" aria-controls="panel-features">Карта продукта<span class="num" id="cntFeatures"></span></button>
+  </nav>
+
+  <!-- ===================== DASHBOARD ===================== -->
+  <section id="panel-dashboard" role="tabpanel" aria-labelledby="tab-dashboard" class="wrap" style="max-width:none">
+    <section class="verdict" aria-label="Готовность">
+      <div class="gate" id="gate">
+        <div class="state" id="gateState">Готовность к платным клиентам</div>
+        <p id="gateText">Считаю открытые задачи P0…</p>
+      </div>
+      <div class="meters" id="meters">
+        <div class="overall">
+          <span>Всего: <b class="mono" id="totalTxt">—</b></span>
+          <div class="bar" id="totalBar"></div>
+          <div class="legend">
+            <span style="--c: var(--ok)">сделано</span>
+            <span style="--c: var(--accent)">в работе</span>
+            <span style="--c: var(--warn)">заблокировано</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="kpis" aria-label="Ключевые цифры">
+      <div class="kpi"><span class="k">Открыто</span><span class="v" id="kOpen">—</span><span class="s" id="kOpenS">&nbsp;</span></div>
+      <div class="kpi" id="kP0Box"><span class="k">P0 открыто</span><span class="v" id="kP0">—</span><span class="s">блокирует запуск</span></div>
+      <div class="kpi"><span class="k">Закрыто за 7 дней</span><span class="v" id="kDone7">—</span><span class="s" id="kDoneS">&nbsp;</span></div>
+      <div class="kpi"><span class="k">В работе</span><span class="v" id="kDoing">—</span><span class="s" id="kBlocked">&nbsp;</span></div>
+    </section>
+
+    <div class="dgrid">
+      <section class="card span-8" aria-labelledby="hBurn">
+        <div class="chead">
+          <h3 id="hBurn">Открытые задачи по дням</h3>
+          <div style="display:flex;gap:12px;align-items:center">
+            <select class="sel" id="days" aria-label="Период">
+              <option value="14">14 дней</option>
+              <option value="30" selected>30 дней</option>
+              <option value="90">90 дней</option>
+            </select>
+            <button class="linkbtn" type="button" data-table="burn">Таблица</button>
+          </div>
+        </div>
+        <div class="legend2"><span><i style="--c: var(--s1)"></i>Всего открыто</span><span><i class="dash" style="--c: var(--s2)"></i>P0 открыто</span></div>
+        <div class="chart" id="cBurn"><div class="empty">Загружаю историю…</div></div>
+      </section>
+
+      <section class="card span-4" aria-labelledby="hNext">
+        <div class="chead"><h3 id="hNext">Что делать дальше</h3><span class="sub">в работе, затем P0 → P3</span></div>
+        <div class="list" id="nextUp"><div class="empty">Загружаю…</div></div>
+      </section>
+
+      <section class="card span-4" aria-labelledby="hWeek">
+        <div class="chead"><h3 id="hWeek">Закрыто по неделям</h3><button class="linkbtn" type="button" data-table="week">Таблица</button></div>
+        <div class="chart" id="cWeek"><div class="empty">Загружаю…</div></div>
+      </section>
+
+      <section class="card span-4" aria-labelledby="hPrio">
+        <div class="chead"><h3 id="hPrio">Открыто по приоритетам</h3><span class="sub">сделано / всего</span></div>
+        <div class="hbars" id="cPrio"><div class="empty">Загружаю…</div></div>
+      </section>
+
+      <section class="card span-4" aria-labelledby="hArea">
+        <div class="chead"><h3 id="hArea">Открыто по типу</h3></div>
+        <div class="hbars" id="cArea"><div class="empty">Загружаю…</div></div>
+      </section>
+
+      <section class="card span-12" aria-labelledby="hFeed">
+        <div class="chead"><h3 id="hFeed">Последние изменения</h3></div>
+        <div class="list feed" id="feed"><div class="empty">Загружаю…</div></div>
+      </section>
+    </div>
+  </section>
+
+  <!-- ===================== TASKS ===================== -->
+  <section id="panel-tasks" role="tabpanel" aria-labelledby="tab-tasks" hidden style="display:grid;gap:14px">
+    <div class="filters">
+      <input class="search" id="q" type="search" placeholder="Поиск: заголовок, код, файл…" aria-label="Поиск">
+      <div class="chips" id="prioChips" role="group" aria-label="Приоритет"></div>
+      <select class="sel" id="fStatus" aria-label="Статус"></select>
+      <select class="sel" id="fKind" aria-label="Тип"></select>
+      <label class="toggle"><input type="checkbox" id="hideDone"> Скрыть сделанное</label>
+    </div>
+    <div id="groups" style="display:grid;gap:14px">
+      <div class="notice">Загружаю задачи…</div>
+    </div>
+    <details class="add" id="addBox">
+      <summary>Добавить задачу или баг</summary>
+      <form id="addForm" class="addgrid">
+        <div class="field full"><label class="k" for="aTitle">Название</label><input id="aTitle" required maxlength="200" placeholder="Например: postback без txn_id двоит выручку"></div>
+        <div class="field"><label class="k" for="aCode">Код (необязательно)</label><input id="aCode" maxlength="13" placeholder="DATA-7" class="mono"></div>
+        <div class="field"><label class="k" for="aPrio">Приоритет</label><select id="aPrio"></select></div>
+        <div class="field"><label class="k" for="aSev">Серьёзность</label><select id="aSev"></select></div>
+        <div class="field"><label class="k" for="aKind">Тип</label><select id="aKind"></select></div>
+        <div class="field"><label class="k" for="aArea">Область</label><input id="aArea" maxlength="60" placeholder="tracker, web, billing…"></div>
+        <div class="field full"><label class="k" for="aFix">Что сделать</label><textarea id="aFix" rows="2"></textarea></div>
+        <div class="full" style="display:flex;gap:10px;align-items:center"><button class="btn" type="submit" id="aSubmit">Добавить</button><span class="foot" id="aMsg"></span></div>
+      </form>
+    </details>
+  </section>
+
+  <!-- ===================== PRODUCT MAP ===================== -->
+  <section id="panel-features" role="tabpanel" aria-labelledby="tab-features" hidden>
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th style="width:28%">Функция</th><th style="width:170px">Статус</th><th>Доказательства</th><th>Ограничения</th></tr></thead>
+        <tbody id="featBody"><tr><td colspan="4" class="empty">Загружаю карту продукта…</td></tr></tbody>
+      </table>
+    </div>
+    <p class="foot">PASS — проверено и работает в рамках тестов; PARTIAL — частично; FAIL — подтверждённая проблема; NOT IMPLEMENTED — нет; NOT VERIFIED — не удалось проверить.</p>
+  </section>
+
+  <p class="foot">Данные: SQLite <code>tools/devpanel/data/tracker.db</code>. Аудит: <code>docs/audit-product-2026-10-15.md</code>.</p>
+</div>
+<script src="/app.js"></script>
+</body>
+</html>

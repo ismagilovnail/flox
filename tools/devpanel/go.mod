@@ -1,4 +1,4 @@
-module github.com/ismagilovnail/flox/tools/audit-tracker
+module github.com/ismagilovnail/flox/tools/devpanel
 
 go 1.26.9
 

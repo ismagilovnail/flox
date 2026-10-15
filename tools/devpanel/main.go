@@ -1,11 +1,12 @@
-// Command audit-tracker is a local, single-user board for the findings of
-// docs/audit-product-2026-10-15.md: what is done, what is not, which bugs
-// are open. It keeps its state in a SQLite file next to the product and is
-// deliberately outside the apps/ Go module, so its dependencies never reach
-// the product's go.mod.
+// Command devpanel is FLOX's local development panel: a dashboard of how
+// far the work is, and a task tracker for findings, bugs and tasks — first
+// filled from docs/audit-product-2026-10-15.md. It keeps its state in a
+// SQLite file next to the product and is deliberately outside the apps/ Go
+// module, so its dependencies never reach the product's go.mod. Customers
+// never see it; it is not part of FLOX.
 //
-//	cd tools/audit-tracker && go run .            # http://127.0.0.1:8099
-//	go run . -addr 127.0.0.1:9000 -db data/x.db
+//	make devpanel                      # http://127.0.0.1:8099
+//	cd tools/devpanel && go run . -addr 127.0.0.1:9000 -db data/x.db
 //
 // On first start (empty database) it seeds the items and the product map
 // from seed/*.json. Re-seeding never overwrites what you changed: use
@@ -35,7 +36,7 @@ import (
 	_ "modernc.org/sqlite"
 )
 
-//go:embed web/index.html
+//go:embed web
 var webFS embed.FS
 
 //go:embed seed/items.json seed/features.json
@@ -127,22 +128,61 @@ CREATE TABLE IF NOT EXISTS item_changes (
 CREATE INDEX IF NOT EXISTS item_changes_item ON item_changes (item_id, id);
 `
 
+// openDB opens (creating) the SQLite file and applies the schema.
+func openDB(path string) (*sql.DB, error) {
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return nil, err
+	}
+	db, err := sql.Open("sqlite", "file:"+path+"?_pragma=journal_mode(WAL)&_pragma=busy_timeout(5000)&_pragma=foreign_keys(1)")
+	if err != nil {
+		return nil, err
+	}
+	db.SetMaxOpenConns(1) // one writer; SQLite serializes anyway
+	if _, err := db.Exec(schema); err != nil {
+		return nil, fmt.Errorf("schema: %w", err)
+	}
+	return db, nil
+}
+
+// newHandler is the whole HTTP surface: the panel's static files and its
+// JSON API, behind the loopback-only guard.
+func newHandler(db *sql.DB) http.Handler {
+	s := &server{db: db, now: time.Now, loc: time.Local}
+	mux := http.NewServeMux()
+	static, _ := fs.Sub(webFS, "web")
+	files := http.FileServerFS(static)
+	mux.Handle("GET /{$}", noStore(files))
+	mux.Handle("GET /app.js", noStore(files))
+	mux.Handle("GET /app.css", noStore(files))
+	mux.HandleFunc("GET /api/stats", s.stats)
+	mux.HandleFunc("GET /api/items", s.listItems)
+	mux.HandleFunc("POST /api/items", s.createItem)
+	mux.HandleFunc("PATCH /api/items/{id}", s.patchItem)
+	mux.HandleFunc("DELETE /api/items/{id}", s.deleteItem)
+	mux.HandleFunc("GET /api/items/{id}/changes", s.itemChanges)
+	mux.HandleFunc("GET /api/features", s.listFeatures)
+	mux.HandleFunc("PATCH /api/features/{id}", s.patchFeature)
+	return localOnly(mux)
+}
+
+// noStore keeps the browser from holding on to an old app.js after an
+// update; everything is local, so caching buys nothing.
+func noStore(h http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Cache-Control", "no-store")
+		h.ServeHTTP(w, r)
+	})
+}
+
 func main() {
 	addr := flag.String("addr", "127.0.0.1:8099", "listen address (keep it on loopback: there is no login)")
 	dbPath := flag.String("db", "data/tracker.db", "SQLite file")
 	reseed := flag.Bool("reseed", false, "insert seed rows that are missing (never overwrites existing rows)")
 	flag.Parse()
 
-	if err := os.MkdirAll(filepath.Dir(*dbPath), 0o755); err != nil {
-		log.Fatal(err)
-	}
-	db, err := sql.Open("sqlite", "file:"+*dbPath+"?_pragma=journal_mode(WAL)&_pragma=busy_timeout(5000)&_pragma=foreign_keys(1)")
+	db, err := openDB(*dbPath)
 	if err != nil {
 		log.Fatal(err)
-	}
-	db.SetMaxOpenConns(1) // one writer; SQLite serializes anyway
-	if _, err := db.Exec(schema); err != nil {
-		log.Fatalf("schema: %v", err)
 	}
 	var n int
 	if err := db.QueryRow(`SELECT count(*) FROM items`).Scan(&n); err != nil {
@@ -156,20 +196,9 @@ func main() {
 		log.Printf("seed: %d rows added", added)
 	}
 
-	s := &server{db: db}
-	mux := http.NewServeMux()
-	mux.HandleFunc("GET /{$}", s.index)
-	mux.HandleFunc("GET /api/items", s.listItems)
-	mux.HandleFunc("POST /api/items", s.createItem)
-	mux.HandleFunc("PATCH /api/items/{id}", s.patchItem)
-	mux.HandleFunc("DELETE /api/items/{id}", s.deleteItem)
-	mux.HandleFunc("GET /api/items/{id}/changes", s.itemChanges)
-	mux.HandleFunc("GET /api/features", s.listFeatures)
-	mux.HandleFunc("PATCH /api/features/{id}", s.patchFeature)
-
-	srv := &http.Server{Addr: *addr, Handler: localOnly(mux), ReadHeaderTimeout: 5 * time.Second}
+	srv := &http.Server{Addr: *addr, Handler: newHandler(db), ReadHeaderTimeout: 5 * time.Second}
 	go func() {
-		log.Printf("audit tracker: http://%s  (db %s)", *addr, *dbPath)
+		log.Printf("FLOX dev panel: http://%s  (db %s)", *addr, *dbPath)
 		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			log.Fatal(err)
 		}
@@ -255,7 +284,11 @@ func seed(db *sql.DB) (int, error) {
 	return added, tx.Commit()
 }
 
-type server struct{ db *sql.DB }
+type server struct {
+	db  *sql.DB
+	now func() time.Time
+	loc *time.Location
+}
 
 func writeJSON(w http.ResponseWriter, status int, v any) {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
@@ -265,17 +298,6 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 
 func fail(w http.ResponseWriter, status int, msg string) {
 	writeJSON(w, status, map[string]string{"error": msg})
-}
-
-func (s *server) index(w http.ResponseWriter, r *http.Request) {
-	b, err := webFS.ReadFile("web/index.html")
-	if err != nil {
-		fail(w, 500, err.Error())
-		return
-	}
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	w.Header().Set("Cache-Control", "no-store")
-	_, _ = w.Write(b)
 }
 
 const itemCols = `id, code, priority, severity, kind, area, title, evidence, fix, impact, status, notes, ord, source, created_at, updated_at`
@@ -496,4 +518,69 @@ func (s *server) patchFeature(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, 200, map[string]string{"status": in.Status})
+}
+
+// stats answers GET /api/stats?days=N (7–180, default 30): the dashboard,
+// computed from the items and their change log.
+func (s *server) stats(w http.ResponseWriter, r *http.Request) {
+	days := 30
+	if v := r.URL.Query().Get("days"); v != "" {
+		var n int
+		if _, err := fmt.Sscan(v, &n); err != nil || n < 7 || n > 180 {
+			fail(w, 422, "days: от 7 до 180.")
+			return
+		}
+		days = n
+	}
+	ctx := r.Context()
+	rows, err := s.db.QueryContext(ctx, `SELECT `+itemCols+` FROM items ORDER BY ord, id`)
+	if err != nil {
+		fail(w, 500, err.Error())
+		return
+	}
+	var items []Item
+	titles := map[string][2]string{}
+	for rows.Next() {
+		i, err := scanItem(rows)
+		if err != nil {
+			rows.Close()
+			fail(w, 500, err.Error())
+			return
+		}
+		items = append(items, i)
+		titles[i.ID] = [2]string{i.Code, i.Title}
+	}
+	rows.Close()
+
+	crows, err := s.db.QueryContext(ctx, `SELECT item_id, field, old, new, at FROM item_changes ORDER BY id`)
+	if err != nil {
+		fail(w, 500, err.Error())
+		return
+	}
+	var changes []Change
+	for crows.Next() {
+		var c Change
+		if err := crows.Scan(&c.ItemID, &c.Field, &c.Old, &c.New, &c.At); err != nil {
+			crows.Close()
+			fail(w, 500, err.Error())
+			return
+		}
+		changes = append(changes, c)
+	}
+	crows.Close()
+
+	st := computeStats(items, changes, s.now(), days, s.loc)
+	// The feed: the latest changes of items that still exist, newest first.
+	for i := len(changes) - 1; i >= 0 && len(st.Recent) < 12; i-- {
+		c := changes[i]
+		t, ok := titles[c.ItemID]
+		if !ok {
+			continue
+		}
+		st.Recent = append(st.Recent, Activity{ItemID: c.ItemID, Code: t[0], Title: t[1], Field: c.Field, Old: c.Old, New: c.New, At: c.At})
+	}
+	if st.Recent == nil {
+		st.Recent = []Activity{}
+	}
+	writeJSON(w, 200, st)
 }

@@ -19,14 +19,14 @@ referenced below as §N).
 ## CURRENT STATE — UPDATE THIS EVERY PHASE
 
 ```
-CURRENT PHASE : PHASE 30.41 — SECURITY: DEPENDENCIES + GO TOOLCHAIN (closed)
+CURRENT PHASE : PHASE 30.42 — DEV PANEL (closed)
 STATUS        : Product audit 2026-10-15 (docs/audit-product-2026-10-15.md)
-                is the backlog now: 36 findings on the local board
-                tools/audit-tracker (make audit-tracker; memory:
+                is the backlog: 37 items on the local dev panel
+                tools/devpanel (make devpanel → 127.0.0.1:8099; memory:
                 flox-audit-tracker — keep statuses current). SEC-1, SEC-2
                 done. P0 left: DATA-1 (revenue without currency = $0),
                 UX-1/UX-2 (postback URL), OPS-1..3 (prod, restore, load).
-LAST COMMIT   : fix(security): next 16.4.1, go 1.26.9, pinned golang image.
+LAST COMMIT   : feat(devpanel): dashboard of progress, task tracker.
 UNCOMMITTED   : the user's gallery-transcoding WIP (00085, processor.go,
                 transcode.go, worker ffmpeg) — not ours, leave it alone.
                 Dev DB at migration 00085, CH schema 019.
