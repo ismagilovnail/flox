@@ -129,6 +129,18 @@
       "internal": "Внутренний",
       "external": "Внешний",
       "ios_app": "iOS-приложение"
+    },
+    "pwaUrlLabel": "URL",
+    "pwaUrlPlaceholder": {
+      "external": "https://pwa.example/?flox={pwa_link}",
+      "ios_app": "https://apps.apple.com/app/id…"
+    },
+    "pwaForOthers": "PWA для остальных устройств",
+    "noPwaForOthers": "Нет — пропустить этап",
+    "pwaHint": {
+      "internal": "FLOX показывает страницу установки этого PWA.",
+      "external": "Посетители уходят на этот URL. Передайте PWA {pwa_link}: при установке он вызывает {pwa_link}installed, а {pwa_link}open ставит своим start URL, чтобы вести дальше к офферу.",
+      "ios_app": "iPhone/iPad уходят по ссылке на приложение; остальные устройства получают PWA, выбранный рядом с типом, или пропускают этап."
     }
   },
   "flowEditor": {
@@ -193,7 +205,9 @@
       "noBackreferences": "Обратные ссылки не поддерживаются RE2",
       "noAtomicGroups": "Атомарные группы не поддерживаются RE2",
       "noPossessiveQuantifiers": "Притяжательные квантификаторы не поддерживаются RE2",
-      "invalidRegex": "Некорректный синтаксис регулярного выражения"
+      "invalidRegex": "Некорректный синтаксис регулярного выражения",
+      "externalPwaUrl": "Укажите URL внешнего PWA (http/https)",
+      "iosAppUrl": "Укажите https-ссылку на приложение (App Store, TestFlight…)"
     }
   },
   "list": {

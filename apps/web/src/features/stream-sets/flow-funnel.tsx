@@ -3,7 +3,10 @@
 import { FileStackIcon, LayoutTemplateIcon, SmartphoneIcon } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
+import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { MacroPicker } from "@/components/shared/macro-picker";
+import { EXTERNAL_PWA_MACROS, IOS_APP_MACROS } from "@/lib/macros";
 import type { Landing } from "@/lib/api/landings";
 import type { Pwa } from "@/lib/api/pwa";
 import type { Postlanding } from "@/lib/api/postlanding";
@@ -58,6 +61,7 @@ export function FlowFunnel({
   const { t } = useTranslation("streamSets");
   const landingOption = landings.find((l) => l.id === flow.landing.landingId);
   const pwaOption = pwas.find((p) => p.id === flow.pwa.pwaId);
+  const pwaType = flow.pwa.pwaType || PWA_TYPES[0];
   const postlandingOption = postlandings.find((p) => p.id === flow.postlanding.postlandingId);
 
   return (
@@ -106,40 +110,64 @@ export function FlowFunnel({
         label={t("flowFunnel.pwa")}
         enabled={flow.pwa.enabled}
         onToggleEnabled={(enabled) => onChange({ pwa: { ...flow.pwa, enabled, pwaType: flow.pwa.pwaType || PWA_TYPES[0] } })}
-        configured={!!flow.pwa.pwaId}
-        previewUrl={pwaOption ? pwaOption.startUrl : undefined}
+        configured={pwaType === "internal" ? !!flow.pwa.pwaId : !!flow.pwa.url}
+        previewUrl={pwaType === "internal" && pwaOption ? pwaOption.startUrl : undefined}
         analytics={summaries?.pwa}
       >
-        <Select
-          value={flow.pwa.pwaId || NONE}
-          onValueChange={(pwaId) => onChange({ pwa: { ...flow.pwa, pwaId: pwaId === NONE ? "" : pwaId } })}
-        >
-          <SelectTrigger size="sm" className="w-40">
-            <SelectValue placeholder={t("flowFunnel.choosePwaPlaceholder")} />
-          </SelectTrigger>
-          <SelectContent>
-            {pwas.map((p) => (
-              <SelectItem key={p.id} value={p.id}>
-                {p.name}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        <Select
-          value={flow.pwa.pwaType || PWA_TYPES[0]}
-          onValueChange={(pwaType) => onChange({ pwa: { ...flow.pwa, pwaType: pwaType as FlowFormValue["pwa"]["pwaType"] } })}
-        >
-          <SelectTrigger size="sm" className="w-32">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {PWA_TYPES.map((type) => (
-              <SelectItem key={type} value={type}>
-                {t(`flowFunnel.pwaType.${type}`)}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        <div className="flex w-full flex-col gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <Select
+              value={pwaType}
+              onValueChange={(value) => onChange({ pwa: { ...flow.pwa, pwaType: value as FlowFormValue["pwa"]["pwaType"] } })}
+            >
+              <SelectTrigger size="sm" className="w-40" aria-label={t("flowFunnel.pwa")}>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {PWA_TYPES.map((type) => (
+                  <SelectItem key={type} value={type}>
+                    {t(`flowFunnel.pwaType.${type}`)}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {pwaType !== "external" && (
+              <Select
+                value={flow.pwa.pwaId || NONE}
+                onValueChange={(pwaId) => onChange({ pwa: { ...flow.pwa, pwaId: pwaId === NONE ? "" : pwaId } })}
+              >
+                <SelectTrigger size="sm" className="w-48" aria-label={pwaType === "ios_app" ? t("flowFunnel.pwaForOthers") : t("flowFunnel.choosePwaPlaceholder")}>
+                  <SelectValue placeholder={pwaType === "ios_app" ? t("flowFunnel.pwaForOthers") : t("flowFunnel.choosePwaPlaceholder")} />
+                </SelectTrigger>
+                <SelectContent>
+                  {pwaType === "ios_app" && <SelectItem value={NONE}>{t("flowFunnel.noPwaForOthers")}</SelectItem>}
+                  {pwas.map((p) => (
+                    <SelectItem key={p.id} value={p.id}>
+                      {p.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
+          </div>
+          {pwaType !== "internal" && (
+            <div className="flex items-center gap-1">
+              <Input
+                value={flow.pwa.url}
+                onChange={(e) => onChange({ pwa: { ...flow.pwa, url: e.target.value } })}
+                placeholder={t(`flowFunnel.pwaUrlPlaceholder.${pwaType}`)}
+                aria-label={t("flowFunnel.pwaUrlLabel")}
+                className="h-8 font-mono text-xs"
+                spellCheck={false}
+              />
+              <MacroPicker
+                macros={pwaType === "external" ? EXTERNAL_PWA_MACROS : IOS_APP_MACROS}
+                onInsert={(token) => onChange({ pwa: { ...flow.pwa, url: flow.pwa.url + token } })}
+              />
+            </div>
+          )}
+          <p className="text-xs text-muted-foreground">{t(`flowFunnel.pwaHint.${pwaType}`)}</p>
+        </div>
       </FlowNode>
 
       <Connector />

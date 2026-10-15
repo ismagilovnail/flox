@@ -231,7 +231,7 @@ export function StreamSetEditor({
                 active: true,
                 weight: 0,
                 landing: { enabled: false, landingId: "", asPwa: false },
-                pwa: { enabled: false, pwaId: "", pwaType: "" },
+                pwa: { enabled: false, pwaId: "", pwaType: "", url: "" },
                 postlanding: { enabled: false, postlandingId: "" },
                 destination: { kind: "offer", networkId: networks[0]?.id ?? "", offerId: "" },
               })

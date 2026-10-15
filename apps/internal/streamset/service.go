@@ -326,11 +326,8 @@ func (s *Service) validateFlows(ctx context.Context, orgID string, flows []FlowI
 			return "choose a landing"
 		}
 		if f.Pwa.Enabled {
-			if !idgen.IsValid(f.Pwa.PwaID) {
-				return "choose a PWA"
-			}
-			if !f.Pwa.PwaType.Valid() {
-				return fmt.Sprintf("pwa type must be %q, %q, or %q", PwaTypeInternal, PwaTypeExternal, PwaTypeIOSApp)
+			if msg := validatePwaStage(f.Pwa); msg != "" {
+				return msg
 			}
 		}
 		if f.Postlanding.Enabled && !idgen.IsValid(f.Postlanding.PostlandingID) {
@@ -465,6 +462,32 @@ func validateCountryValue(value string) string {
 		if !isoAlpha2.MatchString(t) {
 			return fmt.Sprintf("%q is not a 2-letter ISO-3166 country code (e.g. US, GB, DE)", t)
 		}
+	}
+	return ""
+}
+
+// validatePwaStage checks an enabled PWA stage by type: internal needs a
+// PWA; external its URL; ios_app an https app link (its PWA, for other
+// devices, is optional).
+func validatePwaStage(p FlowPwa) string {
+	switch p.PwaType {
+	case PwaTypeInternal:
+		if !idgen.IsValid(p.PwaID) {
+			return "choose a PWA"
+		}
+	case PwaTypeExternal:
+		if !isValidURL(p.URL) {
+			return "enter the external PWA's URL"
+		}
+	case PwaTypeIOSApp:
+		if !isValidURL(p.URL) || !strings.HasPrefix(p.URL, "https://") {
+			return "enter the app's https link"
+		}
+		if p.PwaID != "" && !idgen.IsValid(p.PwaID) {
+			return "choose a PWA"
+		}
+	default:
+		return fmt.Sprintf("pwa type must be %q, %q, or %q", PwaTypeInternal, PwaTypeExternal, PwaTypeIOSApp)
 	}
 	return ""
 }

@@ -78,7 +78,8 @@
     "country": "Geo (ISO country code)",
     "device": "Device type",
     "sub": "Sub parameter {{n}}",
-    "next_url": "Next step link (postlanding)"
+    "next_url": "Next step link (postlanding)",
+    "pwa_link": "PWA reporting link (external PWA)"
   },
   "a11y": {
     "userMenu": "User menu",

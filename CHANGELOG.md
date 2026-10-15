@@ -5,6 +5,22 @@ per-phase, matching `CLAUDE.md`'s phase protocol. The one exception is
 [Between phases], below: spec amendments and the code changes that follow from
 them land between phases and would otherwise be invisible here.
 
+## [Phase 30.36] — PWA types external and ios_app
+
+§24's pwaType: the two types the tracker skipped. `docs/pwa-serving.md` "PWA types". The owner chose the behaviour.
+
+- Migration 00081 `flows.pwa_url`. Validation per type: internal a PWA; external an http(s) URL; ios_app an https app
+  link, its PWA (for other devices) optional.
+- Tracker: the step is decided at the click from the visitor's OS and carried in the signed link (`Claims.PwaType`,
+  `PwaURL`), so it works straight from the click and after an internal landing. External: 302 to its URL with macros
+  and the new `{pwa_link}`, PWA_VIEW; `/pwx/{token}/installed` (GET/POST, CORS) → PWA_INSTALL, `/pwx/{token}/open` →
+  PWA_OPEN and on to postlanding/offer. ios_app: iPhone/iPad → the app link (no event); others → the PWA, or skip.
+- `{pwa_link}` in `internal/macro` and `lib/macros.ts` (picker lists it for an external PWA; en/ru label).
+- Editor: the PWA node's type, URL with macros, "PWA for other devices"; hints; en/ru.
+- Tests: tracker (`TestExternalPwa*`, `TestIOSAppPwa`), streamset validation per type, macro; mutation-checked (the
+  token-type check needed a fix to the test's forged token to be caught). Browser: the editor for each type (not
+  saved). Live tracker: `/pwx/` answers.
+
 ## [Phase 30.35] — Pixel test event
 
 ROADMAP: a "send test event" button. `docs/pixels.md` "Test event".

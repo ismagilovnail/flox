@@ -2,11 +2,15 @@ package streamset_test
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"os"
+	"strings"
 	"testing"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/ismagilovnail/flox/apps/internal/apierror"
 	"github.com/ismagilovnail/flox/apps/internal/idgen"
 	"github.com/ismagilovnail/flox/apps/internal/routing"
 	"github.com/ismagilovnail/flox/apps/internal/streamset"
@@ -264,7 +268,7 @@ func TestFlowFunnelStagesRoundTrip(t *testing.T) {
 
 	flow := redirectFlow("Primary", 100)
 	flow.Landing = streamset.FlowLanding{Enabled: true, LandingID: landingID, AsPwa: true}
-	flow.Pwa = streamset.FlowPwa{Enabled: true, PwaID: pwaID, PwaType: streamset.PwaTypeExternal}
+	flow.Pwa = streamset.FlowPwa{Enabled: true, PwaID: pwaID, PwaType: streamset.PwaTypeIOSApp, URL: "https://apps.apple.com/app/id1?ct={click_id}"}
 	flow.Postlanding = streamset.FlowPostlanding{Enabled: true, PostlandingID: postlandingID}
 
 	created, err := svc.Create(ctx, orgID, campaignID, streamset.CreateInput{
@@ -277,8 +281,8 @@ func TestFlowFunnelStagesRoundTrip(t *testing.T) {
 	if !got.Landing.Enabled || got.Landing.LandingID != landingID || !got.Landing.AsPwa {
 		t.Fatalf("Landing = %+v, want enabled with id %q and asPwa true", got.Landing, landingID)
 	}
-	if !got.Pwa.Enabled || got.Pwa.PwaID != pwaID || got.Pwa.PwaType != streamset.PwaTypeExternal {
-		t.Fatalf("Pwa = %+v, want enabled with id %q and type external", got.Pwa, pwaID)
+	if !got.Pwa.Enabled || got.Pwa.PwaID != pwaID || got.Pwa.PwaType != streamset.PwaTypeIOSApp || got.Pwa.URL != "https://apps.apple.com/app/id1?ct={click_id}" {
+		t.Fatalf("Pwa = %+v, want enabled with id %q, type ios_app and its URL", got.Pwa, pwaID)
 	}
 	if !got.Postlanding.Enabled || got.Postlanding.PostlandingID != postlandingID {
 		t.Fatalf("Postlanding = %+v, want enabled with id %q", got.Postlanding, postlandingID)
@@ -320,6 +324,36 @@ func TestFlowFunnelStageValidation(t *testing.T) {
 			t.Fatal("Create with an invalid pwaType succeeded, want a validation error")
 		}
 	})
+
+	// Each PWA type needs what it serves: internal a PWA, external its
+	// URL, ios_app an https app link (its PWA optional).
+	pwaID := seedPwa(t, ctx, pool, orgID)
+	for name, tc := range map[string]struct {
+		pwa  streamset.FlowPwa
+		want string // "" = accepted
+	}{
+		"internal without a PWA":        {streamset.FlowPwa{Enabled: true, PwaType: streamset.PwaTypeInternal}, "choose a PWA"},
+		"internal":                      {streamset.FlowPwa{Enabled: true, PwaType: streamset.PwaTypeInternal, PwaID: pwaID}, ""},
+		"external without a URL":        {streamset.FlowPwa{Enabled: true, PwaType: streamset.PwaTypeExternal}, "external PWA"},
+		"external with a bad URL":       {streamset.FlowPwa{Enabled: true, PwaType: streamset.PwaTypeExternal, URL: "pwa.example"}, "external PWA"},
+		"external":                      {streamset.FlowPwa{Enabled: true, PwaType: streamset.PwaTypeExternal, URL: "https://pwa.example/?f={pwa_link}"}, ""},
+		"ios_app over http":             {streamset.FlowPwa{Enabled: true, PwaType: streamset.PwaTypeIOSApp, URL: "http://apps.apple.com/app/id1"}, "https"},
+		"ios_app without a URL":         {streamset.FlowPwa{Enabled: true, PwaType: streamset.PwaTypeIOSApp, PwaID: pwaID}, "https"},
+		"ios_app link only":             {streamset.FlowPwa{Enabled: true, PwaType: streamset.PwaTypeIOSApp, URL: "https://apps.apple.com/app/id1"}, ""},
+		"ios_app with a PWA for others": {streamset.FlowPwa{Enabled: true, PwaType: streamset.PwaTypeIOSApp, URL: "https://testflight.apple.com/join/x", PwaID: pwaID}, ""},
+	} {
+		t.Run(name, func(t *testing.T) {
+			flow := redirectFlow("Primary", 100)
+			flow.Pwa = tc.pwa
+			_, err := svc.Create(ctx, orgID, campaignID, streamset.CreateInput{Name: "PWA " + name, RootFilter: root, Flows: []streamset.FlowInput{flow}})
+			if tc.want == "" && err != nil {
+				t.Fatalf("Create: %v", err)
+			}
+			if tc.want != "" && (err == nil || !strings.Contains(fmt.Sprint(err)+fieldsOf(err), tc.want)) {
+				t.Fatalf("Create = %v, want an error mentioning %q", err, tc.want)
+			}
+		})
+	}
 
 	t.Run("postlanding id from another org is rejected even when disabled", func(t *testing.T) {
 		otherOrg := seedOrg(t, ctx, pool)
@@ -798,4 +832,17 @@ func seedPixel(t *testing.T, ctx context.Context, pool *pgxpool.Pool, orgID stri
 		t.Fatalf("seeding pixel: %v", err)
 	}
 	return id
+}
+
+// fieldsOf joins a validation error's field messages ("" otherwise).
+func fieldsOf(err error) string {
+	var apiErr *apierror.Error
+	if !errors.As(err, &apiErr) {
+		return ""
+	}
+	out := ""
+	for _, v := range apiErr.Fields {
+		out += " " + v
+	}
+	return out
 }

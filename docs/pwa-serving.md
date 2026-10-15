@@ -169,10 +169,45 @@ not recognized; opening `/open` directly in Safari (not from the Home
 Screen) on an iPhone would count once, since the server cannot tell the two
 apart — `start_url` is not a link anyone is shown.
 
+## PWA types (2026-10-15)
+
+A flow's PWA stage has a type (§24 "pwaType: internal/external/ios_app";
+`flows.pwa_type`, and `flows.pwa_url`, migration 00081). The tracker
+decides the step at the click, from the visitor's OS, and carries it in
+the signed link — so it is the same whether the stage follows the click
+directly or an internal landing (`/lc/`).
+
+- **internal** — the install page above (needs a PWA).
+- **external** — a PWA FLOX does not host: 302 to its URL with the click's
+  macros and `{pwa_link}`, PWA_VIEW recorded (the visitor was sent there;
+  no PWA id). `{pwa_link}` is `<origin>/pwx/<signed token>/`:
+  - `{pwa_link}installed` — GET (image beacon) or POST (fetch,
+    `navigator.sendBeacon`), CORS open (`OPTIONS` answered): PWA_INSTALL on
+    the click, 204;
+  - `{pwa_link}open` — PWA_OPEN, then on through the funnel (postlanding,
+    offer), like an internal PWA's launch; meant as the external PWA's
+    `start_url` (the token never expires for it, as for `/pwa/.../open`).
+  The token is honoured only on the host it was issued for and only if it
+  was issued for an external PWA — an internal PWA's link, another host's,
+  or a made-up one is 404. Validation: an http(s) URL.
+- **ios_app** — iPhone/iPad (`os = ios`) go to the app link (https; App
+  Store, TestFlight…), macros filled, no event (an App Store install is not
+  seen by the tracker — it comes back as a conversion from the network).
+  Other devices get the stage's PWA, if one is chosen and not paused (it is
+  optional), or skip the stage. A paused PWA leaves the app link working.
+
+Code: `apps/tracker/pwa_external.go`, `routingstore.FlowPwa.URL`,
+`streamset.validatePwaStage`; the editor's PWA node shows the URL field
+with the macros (`{pwa_link}` for external) and, for ios_app, "PWA for
+other devices". Tests: `tracker/pwa_external_test.go` (external redirect,
+beacons GET/POST, open → offer, wrong host / forged / internal-PWA token,
+after a landing; ios_app on iPhone and Android, with and without a PWA,
+paused), `streamset` validation per type, `macro` `{pwa_link}` —
+mutation-checked.
+
 ## Not done
 
-- The landing's `asPwa` flag; PWA types `external`/`ios_app` (no URL
-  fields exist for them).
+- The landing's `asPwa` flag (next phase).
 
 ## Verified
 

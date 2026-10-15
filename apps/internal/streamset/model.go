@@ -124,6 +124,11 @@ type FlowPwa struct {
 	Enabled bool    `json:"enabled"`
 	PwaID   string  `json:"pwaId"`
 	PwaType PwaType `json:"pwaType"`
+	// URL is the stage's address for the types FLOX does not serve:
+	// external — the PWA's own URL (macros, incl. {pwa_link}); ios_app —
+	// the app link iPhone/iPad visitors go to (PwaID, optional, is what
+	// other devices get). "" for internal.
+	URL string `json:"url"`
 }
 
 type FlowPostlanding struct {

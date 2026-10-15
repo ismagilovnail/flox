@@ -129,6 +129,18 @@
       "internal": "Internal",
       "external": "External",
       "ios_app": "iOS app"
+    },
+    "pwaUrlLabel": "URL",
+    "pwaUrlPlaceholder": {
+      "external": "https://pwa.example/?flox={pwa_link}",
+      "ios_app": "https://apps.apple.com/app/id…"
+    },
+    "pwaForOthers": "PWA for other devices",
+    "noPwaForOthers": "None — skip the stage",
+    "pwaHint": {
+      "internal": "FLOX serves this PWA's install page.",
+      "external": "Visitors go to this URL. Give the PWA {pwa_link}: it calls {pwa_link}installed on install and uses {pwa_link}open as its start URL to continue to the offer.",
+      "ios_app": "iPhone/iPad visitors go to this app link; other devices get the PWA chosen next to the type, or skip the stage."
     }
   },
   "flowEditor": {
@@ -193,7 +205,9 @@
       "noBackreferences": "Backreferences aren't supported by RE2",
       "noAtomicGroups": "Atomic groups aren't supported by RE2",
       "noPossessiveQuantifiers": "Possessive quantifiers aren't supported by RE2",
-      "invalidRegex": "Invalid regular expression syntax"
+      "invalidRegex": "Invalid regular expression syntax",
+      "externalPwaUrl": "Enter the external PWA's URL (http/https)",
+      "iosAppUrl": "Enter the app's https link (App Store, TestFlight…)"
     }
   },
   "list": {

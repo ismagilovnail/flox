@@ -45,6 +45,20 @@ export const POSTLANDING_MACROS: MacroDef[] = [
   ...MACROS.filter((m) => CLICK_TIME_TOKENS.has(m.token) || m.sub !== undefined),
 ];
 
+/** {pwa_link} is the signed tracker link an external PWA reports to:
+ * {pwa_link}installed records PWA_INSTALL, {pwa_link}open records PWA_OPEN
+ * and continues to the offer (apps/tracker/pwa_external.go). Resolved only
+ * in an external PWA's URL. */
+export const PWA_LINK_MACRO: MacroDef = { token: "{pwa_link}", label: "PWA reporting link", example: "https://track.example/pwx/…/" };
+
+/** What a PWA stage URL is resolved with: the click's own values, and for
+ * an external PWA {pwa_link}. */
+export const EXTERNAL_PWA_MACROS: MacroDef[] = [
+  PWA_LINK_MACRO,
+  ...MACROS.filter((m) => CLICK_TIME_TOKENS.has(m.token) || m.sub !== undefined),
+];
+export const IOS_APP_MACROS: MacroDef[] = MACROS.filter((m) => CLICK_TIME_TOKENS.has(m.token) || m.sub !== undefined);
+
 /** Replaces every recognized `{token}` in `template` with `values[token]`.
  * Unrecognized or unset tokens are left as-is — never throws on a partial
  * value set (e.g. previewing an offer link before a click has occurred). */

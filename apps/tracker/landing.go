@@ -75,8 +75,8 @@ func (h *Handler) decideLanding(r *http.Request, orgID string, loaded routingsto
 // landing.Render the editor previews with, its trackUrl a signed click
 // link back to this tracker. The caller has already enqueued the
 // SOURCE_CLICK; LAND_VIEW is recorded here, on the same click_id.
-func (h *Handler) serveLanding(w http.ResponseWriter, r *http.Request, d landingDecision, ev event.Event, params params) {
-	trackURL := requestOrigin(r) + landClickPath + h.links.Sign(clickClaims(ev, params, d.landingID, r.Host))
+func (h *Handler) serveLanding(w http.ResponseWriter, r *http.Request, d landingDecision, ev event.Event, params params, pwa pwaStep) {
+	trackURL := requestOrigin(r) + landClickPath + h.links.Sign(clickClaims(ev, params, d.landingID, r.Host, pwa))
 
 	assetBase := ""
 	if h.assets != nil && d.page.BundlePrefix != "" {
@@ -102,9 +102,10 @@ func (h *Handler) serveLanding(w http.ResponseWriter, r *http.Request, d landing
 // PWA page) carries from the original click: routing + attribution
 // context, and which funnel stages (PWA) still lie ahead.
 // clickClaims are the claims of a link issued on host (the request's
-// Host): it is honoured only there (Claims.Host).
-func clickClaims(ev event.Event, params params, landingID, host string) landinglink.Claims {
-	return landinglink.Claims{
+// Host): it is honoured only there (Claims.Host). pwa is the PWA stage
+// still ahead of the visitor.
+func clickClaims(ev event.Event, params params, landingID, host string, pwa pwaStep) landinglink.Claims {
+	c := landinglink.Claims{
 		Host:            landinglink.NormalizeHost(host),
 		OrganizationID:  ev.OrganizationID,
 		CampaignID:      ev.CampaignID,
@@ -132,6 +133,8 @@ func clickClaims(ev event.Event, params params, landingID, host string) landingl
 		TTClickID:       params.ttClickID,
 		Referrer:        params.referrer,
 	}
+	pwa.applyTo(&c)
+	return c
 }
 
 // landClick answers GET /lc/{token} — a visitor clicking through an
@@ -177,6 +180,11 @@ func (h *Handler) landClick(w http.ResponseWriter, r *http.Request) {
 	if claims.PwaID != "" {
 		// Next funnel stage: the PWA install page, on the same token.
 		http.Redirect(w, r, pwaURL(requestOrigin(r), chi.URLParam(r, "token")), http.StatusFound)
+		return
+	}
+	if claims.PwaURL != "" {
+		// An external PWA or an app link (pwa_external.go).
+		h.sendToPwaRedirect(w, r, claims, click)
 		return
 	}
 	h.continueOnward(w, r, claims, func() event.Event { return click })

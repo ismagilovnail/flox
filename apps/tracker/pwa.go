@@ -53,21 +53,28 @@ func (h *Handler) registerPwa(r chi.Router) {
 	r.Get(pwaPathPrefix+"{token}/open", h.pwaOpen)
 	r.Get(pwaPathPrefix+"{token}/continue", h.pwaContinue)
 	h.registerPush(r)
+	h.registerPwaExternal(r)
 }
 
-// decidePwa returns the flow's PWA id when its PWA stage applies: enabled,
-// type "internal" (the only type with a page to serve — "external" and
-// "ios_app" carry no target URL in this schema, so they're skipped rather
-// than guessed at), not paused, and click links signable.
-func (h *Handler) decidePwa(loaded routingstore.CampaignRouting, flowID string) string {
+// decidePwa is the flow's PWA stage for a visitor on os (pwa_external.go):
+// an internal page, an external PWA, or an app link; nothing when the
+// stage is off, its PWA paused (an ios_app stage then keeps only its app
+// link), or click links cannot be signed.
+func (h *Handler) decidePwa(loaded routingstore.CampaignRouting, flowID, os string) pwaStep {
 	if h.links == nil || flowID == "" {
-		return ""
+		return pwaStep{}
 	}
 	stage, ok := loaded.FlowPwas[flowID]
-	if !ok || stage.Type != "internal" || stage.Status == "paused" {
-		return ""
+	if !ok {
+		return pwaStep{}
 	}
-	return stage.PwaID
+	if stage.Status == "paused" {
+		if stage.Type != pwaTypeIOSApp {
+			return pwaStep{}
+		}
+		stage.PwaID = ""
+	}
+	return choosePwaStep(stage, os)
 }
 
 func pwaURL(origin, token string) string { return origin + pwaPathPrefix + token + "/" }

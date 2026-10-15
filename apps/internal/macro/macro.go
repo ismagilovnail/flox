@@ -40,6 +40,10 @@ type Values struct {
 	// with (apps/tracker/postlanding.go). Only a postlanding URL is resolved
 	// with it set; anywhere else {next_url} is known-but-empty.
 	NextURL string
+	// PwaLink is the signed base link an external PWA reports to
+	// (apps/tracker/pwa_external.go): {pwa_link}installed, {pwa_link}open.
+	// Only an external PWA stage's URL is resolved with it set.
+	PwaLink string
 }
 
 var token = regexp.MustCompile(`\{[a-z0-9_]+\}`)
@@ -75,6 +79,7 @@ func resolve(template string, v Values, escape func(string) string) string {
 		"{country}":     v.Country,
 		"{device}":      v.Device,
 		"{next_url}":    v.NextURL,
+		"{pwa_link}":    v.PwaLink,
 	}
 	for i, s := range v.Subs {
 		fields["{sub"+strconv.Itoa(i+1)+"}"] = s

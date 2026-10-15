@@ -85,16 +85,40 @@ function buildFlowLandingSchema(t: TFunction) {
 
 function buildFlowPwaSchema(t: TFunction) {
   return z
-    .object({ enabled: z.boolean(), pwaId: z.string(), pwaType: z.enum(["internal", "external", "ios_app", ""]) })
+    .object({ enabled: z.boolean(), pwaId: z.string(), pwaType: z.enum(["internal", "external", "ios_app", ""]), url: z.string() })
     .superRefine((pwa, ctx) => {
       if (!pwa.enabled) return;
-      if (!pwa.pwaId) {
-        ctx.addIssue({ code: "custom", message: t("form.validation.choosePwa", { ns: "streamSets" }), path: ["pwaId"] });
-      }
-      if (!pwa.pwaType) {
-        ctx.addIssue({ code: "custom", message: t("form.validation.choosePwaType", { ns: "streamSets" }), path: ["pwaType"] });
+      // Mirrors streamset.validatePwaStage.
+      switch (pwa.pwaType) {
+        case "internal":
+          if (!pwa.pwaId) {
+            ctx.addIssue({ code: "custom", message: t("form.validation.choosePwa", { ns: "streamSets" }), path: ["pwaId"] });
+          }
+          break;
+        case "external":
+          if (!isHttpUrl(pwa.url)) {
+            ctx.addIssue({ code: "custom", message: t("form.validation.externalPwaUrl", { ns: "streamSets" }), path: ["url"] });
+          }
+          break;
+        case "ios_app":
+          if (!isHttpUrl(pwa.url) || !pwa.url.startsWith("https://")) {
+            ctx.addIssue({ code: "custom", message: t("form.validation.iosAppUrl", { ns: "streamSets" }), path: ["url"] });
+          }
+          break;
+        default:
+          ctx.addIssue({ code: "custom", message: t("form.validation.choosePwaType", { ns: "streamSets" }), path: ["pwaType"] });
       }
     });
+}
+
+/** An absolute http(s) URL; {macros} allowed (they are plain characters). */
+function isHttpUrl(raw: string): boolean {
+  try {
+    const u = new URL(raw);
+    return (u.protocol === "http:" || u.protocol === "https:") && u.host !== "";
+  } catch {
+    return false;
+  }
 }
 
 function buildFlowPostlandingSchema(t: TFunction) {

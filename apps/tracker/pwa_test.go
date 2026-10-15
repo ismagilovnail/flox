@@ -150,17 +150,6 @@ func TestPwaAfterLanding(t *testing.T) {
 func TestPwaStageSkipped(t *testing.T) {
 	pool := testPool(t)
 
-	t.Run("non-internal type", func(t *testing.T) {
-		var pwaID string
-		fx := seedFlowFixture(t, pool, nil, withPwa(t, pool, &pwaID, streamset.PwaTypeExternal, false))
-		h, sink, closeEvents := newLandingHandler(t, pool, true)
-		assertRedirect(t, get(h, fx.host, "/t/go"), landingTestOffer)
-		closeEvents()
-		if sink.events[0].PwaID != "" {
-			t.Fatal("skipped PWA stage was attributed")
-		}
-	})
-
 	t.Run("paused pwa", func(t *testing.T) {
 		var pwaID string
 		fx := seedFlowFixture(t, pool, nil, withPwa(t, pool, &pwaID, streamset.PwaTypeInternal, false))

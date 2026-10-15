@@ -109,9 +109,12 @@ type FlowPostlanding struct {
 // FlowPwa is the per-flow part of a PWA stage the tracker needs to decide
 // whether to show it; the page itself is read by LoadPwaPage.
 type FlowPwa struct {
-	PwaID  string
+	PwaID  string // "" for external, optional for ios_app
 	Type   string // flows.pwa_type: "internal" | "external" | "ios_app"
-	Status string // pwas.status
+	Status string // pwas.status ("" without a PwaID)
+	// URL: external — the external PWA's address; ios_app — the app link
+	// for iPhone/iPad (docs/pwa-serving.md "PWA types"). Macros unresolved.
+	URL string
 }
 
 // PwaPage is what the tracker renders a PWA install page and its web app
@@ -429,7 +432,7 @@ func (s *Store) loadFlows(ctx context.Context, orgID string, setIDs []string, la
 		       f.destination_kind, f.destination_url, f.destination_offer_id,
 		       o.status, o.network_id, ol.url, f.updated_at,
 		       l.id, l.type, l.status, l.url,
-		       p.id, f.pwa_type, p.status,
+		       p.id, f.pwa_type, p.status, f.pwa_enabled, f.pwa_url,
 		       pl.id, pl.status, pl.url
 		FROM flows f
 		LEFT JOIN offers o ON o.id = f.destination_offer_id AND o.organization_id = f.organization_id
@@ -467,11 +470,13 @@ func (s *Store) loadFlows(ctx context.Context, orgID string, setIDs []string, la
 
 			landingID, landingType, landingStatus, landingURL *string
 			pwaID, pwaType, pwaStatus                         *string
+			pwaEnabled                                        bool
+			pwaURL                                            string
 			postlandingID, postlandingStatus, postlandingURL  *string
 		)
 		if err := rows.Scan(&setID, &f.ID, &f.Name, &f.Active, &f.Weight, &kind, &destURL, &offerID, &offerStatus, &offerNet, &offerURL, &updated,
 			&landingID, &landingType, &landingStatus, &landingURL,
-			&pwaID, &pwaType, &pwaStatus,
+			&pwaID, &pwaType, &pwaStatus, &pwaEnabled, &pwaURL,
 			&postlandingID, &postlandingStatus, &postlandingURL); err != nil {
 			return nil, time.Time{}, fmt.Errorf("scanning flow: %w", err)
 		}
@@ -499,8 +504,8 @@ func (s *Store) loadFlows(ctx context.Context, orgID string, setIDs []string, la
 			}
 		}
 
-		if pwaID != nil {
-			pwas[f.ID] = FlowPwa{PwaID: *pwaID, Type: deref(pwaType), Status: deref(pwaStatus)}
+		if stage, ok := pwaStage(pwaEnabled, deref(pwaType), pwaID, deref(pwaStatus), pwaURL); ok {
+			pwas[f.ID] = stage
 		}
 		if postlandingID != nil {
 			postlandings[f.ID] = FlowPostlanding{PostlandingID: *postlandingID, Status: deref(postlandingStatus), URL: deref(postlandingURL)}
@@ -509,6 +514,26 @@ func (s *Store) loadFlows(ctx context.Context, orgID string, setIDs []string, la
 		flows[setID] = append(flows[setID], f)
 	}
 	return flows, newest, rows.Err()
+}
+
+// pwaStage is a flow's PWA stage when it has what its type needs: internal
+// a PWA (of this organization — the join), external its URL, ios_app its
+// app link (the PWA, for other devices, optional).
+func pwaStage(enabled bool, typ string, pwaID *string, status, url string) (FlowPwa, bool) {
+	if !enabled {
+		return FlowPwa{}, false
+	}
+	stage := FlowPwa{PwaID: deref(pwaID), Type: typ, Status: status, URL: url}
+	switch typ {
+	case "internal":
+		return stage, stage.PwaID != ""
+	case "external", "ios_app":
+		if typ == "external" {
+			stage.PwaID, stage.Status = "", ""
+		}
+		return stage, url != ""
+	}
+	return FlowPwa{}, false
 }
 
 // LoadLandingPage reads an internal landing's entry-file source and asset

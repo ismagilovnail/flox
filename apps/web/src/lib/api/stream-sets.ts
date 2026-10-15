@@ -56,7 +56,10 @@ export const PWA_TYPES: PwaType[] = ["internal", "external", "ios_app"];
  * off keeps its previous pick around rather than clearing it, matching
  * apps/internal/streamset's own FlowLanding/FlowPwa/FlowPostlanding. */
 export type ApiFlowLanding = { enabled: boolean; landingId: string; asPwa: boolean };
-export type ApiFlowPwa = { enabled: boolean; pwaId: string; pwaType: PwaType | "" };
+/** url: the stage's address for the types FLOX does not serve — external:
+ * the external PWA's URL (macros, incl. {pwa_link}); ios_app: the app link
+ * for iPhone/iPad (pwaId, optional, is then for other devices). */
+export type ApiFlowPwa = { enabled: boolean; pwaId: string; pwaType: PwaType | ""; url: string };
 export type ApiFlowPostlanding = { enabled: boolean; postlandingId: string };
 
 export type ApiFlow = {

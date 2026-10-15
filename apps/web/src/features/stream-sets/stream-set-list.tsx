@@ -67,7 +67,7 @@ function emptyStreamSetForm(firstOffer: Offer): CreateStreamSetInput {
         active: true,
         weight: 100,
         landing: { enabled: false, landingId: "", asPwa: false },
-        pwa: { enabled: false, pwaId: "", pwaType: "" },
+        pwa: { enabled: false, pwaId: "", pwaType: "", url: "" },
         postlanding: { enabled: false, postlandingId: "" },
         destination: { kind: "offer", networkId: firstOffer.networkId, offerId: firstOffer.id },
       },

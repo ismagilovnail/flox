@@ -1,6 +1,7 @@
 package macro_test
 
 import (
+	"net/url"
 	"testing"
 
 	"github.com/ismagilovnail/flox/apps/internal/macro"
@@ -78,5 +79,16 @@ func TestResolveURLNextURL(t *testing.T) {
 	}
 	if got := macro.ResolveURL("https://offer.example/?n={next_url}", macro.Values{}); got != "https://offer.example/?n=" {
 		t.Fatalf("unset next_url = %s, want it blank", got)
+	}
+}
+
+// {pwa_link} resolves (escaped) only where it is set: an external PWA's URL.
+func TestResolveURLPwaLink(t *testing.T) {
+	link := "https://t.example/pwx/tok/"
+	if got := macro.ResolveURL("https://pwa.example/?f={pwa_link}", macro.Values{PwaLink: link}); got != "https://pwa.example/?f="+url.QueryEscape(link) {
+		t.Fatalf("got %q", got)
+	}
+	if got := macro.ResolveURL("https://offer.example/?f={pwa_link}", macro.Values{}); got != "https://offer.example/?f=" {
+		t.Fatalf("unset = %q, want empty", got)
 	}
 }

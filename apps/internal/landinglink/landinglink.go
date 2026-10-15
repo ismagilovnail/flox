@@ -59,6 +59,12 @@ type Claims struct {
 	// PwaID is the flow's PWA stage (internal type) — set when the visitor
 	// is to be shown that PWA's install page after this step.
 	PwaID string `json:"p,omitempty"`
+	// PwaType/PwaURL: the flow's PWA stage when it is a redirect rather
+	// than an internal page — "external" (the external PWA's URL, which
+	// then reports through /pwx/) or "ios_app" (the app link, for an
+	// iPhone/iPad visitor). URL unresolved: macros are filled per request.
+	PwaType string `json:"pt,omitempty"`
+	PwaURL  string `json:"pu,omitempty"`
 	// PostlandingID is the flow's postlanding stage — set when the visitor
 	// is to be sent through that postlanding before the destination
 	// (apps/tracker/postlanding.go).

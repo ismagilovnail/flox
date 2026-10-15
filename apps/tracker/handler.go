@@ -203,8 +203,10 @@ func (h *Handler) track(w http.ResponseWriter, r *http.Request) {
 	// external landing is a page we can't link onward from, so the stages
 	// behind it are never reached — and never attributed.
 	var post routingstore.FlowPostlanding
+	var pwa pwaStep
 	if lnd.externalURL == "" {
-		ev.PwaID = h.decidePwa(loaded, result.FlowID)
+		pwa = h.decidePwa(loaded, result.FlowID, attrs[routing.FieldOS])
+		ev.PwaID = pwa.pageID
 		var ok bool
 		if post, ok = h.decidePostlanding(loaded, result.FlowID); ok {
 			ev.PostlandingID = post.PostlandingID
@@ -215,19 +217,24 @@ func (h *Handler) track(w http.ResponseWriter, r *http.Request) {
 
 	if lnd.page != nil {
 		outcome = outcomeLanding
-		h.serveLanding(w, r, lnd, ev, params)
+		h.serveLanding(w, r, lnd, ev, params, pwa)
 		return
 	}
 	if ev.PwaID != "" {
 		outcome = outcomeRedirected
-		token := h.links.Sign(clickClaims(ev, params, "", r.Host))
+		token := h.links.Sign(clickClaims(ev, params, "", r.Host, pwa))
 		http.Redirect(w, r, pwaURL(requestOrigin(r), token), http.StatusFound)
+		return
+	}
+	if pwa.redirectURL != "" {
+		outcome = outcomeRedirected
+		h.sendToPwaRedirect(w, r, clickClaims(ev, params, "", r.Host, pwa), ev)
 		return
 	}
 
 	if ev.PostlandingID != "" {
 		outcome = outcomePostlanding
-		h.sendToPostlanding(w, r, clickClaims(ev, params, "", r.Host), post.URL, ev)
+		h.sendToPostlanding(w, r, clickClaims(ev, params, "", r.Host, pwa), post.URL, ev)
 		return
 	}
 

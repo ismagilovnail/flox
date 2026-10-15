@@ -228,7 +228,7 @@ func (r *Repository) loadFilterTrees(ctx context.Context, orgID string, streamSe
 	return trees, nil
 }
 
-const flowStageColumns = `landing_enabled, landing_id, landing_as_pwa, pwa_enabled, pwa_id, pwa_type, postlanding_enabled, postlanding_id`
+const flowStageColumns = `landing_enabled, landing_id, landing_as_pwa, pwa_enabled, pwa_id, pwa_type, pwa_url, postlanding_enabled, postlanding_id`
 
 // scanFlowStages fills in the nullable landing/pwa/postlanding columns
 // shared by loadFlows and loadFlowsTx's row-scanning.
@@ -269,7 +269,7 @@ func (r *Repository) loadFlows(ctx context.Context, orgID string, streamSetIDs [
 		if err := rows.Scan(
 			&setID, &f.ID, &f.Name, &f.Active, &f.Weight,
 			&f.Landing.Enabled, &landingID, &f.Landing.AsPwa,
-			&f.Pwa.Enabled, &pwaID, &pwaType,
+			&f.Pwa.Enabled, &pwaID, &pwaType, &f.Pwa.URL,
 			&f.Postlanding.Enabled, &postID,
 			&kind, &networkID, &offerID, &url,
 		); err != nil {
@@ -411,14 +411,14 @@ func insertFlows(ctx context.Context, tx pgx.Tx, orgID, streamSetID string, in [
 			INSERT INTO flows (
 				id, organization_id, stream_set_id, name, active, weight, position,
 				landing_enabled, landing_id, landing_as_pwa,
-				pwa_enabled, pwa_id, pwa_type,
+				pwa_enabled, pwa_id, pwa_type, pwa_url,
 				postlanding_enabled, postlanding_id,
 				destination_kind, destination_network_id, destination_offer_id, destination_url
 			)
-			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)`,
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)`,
 			flowID, orgID, streamSetID, f.Name, f.Active, f.Weight, i,
 			f.Landing.Enabled, nullIfEmpty(f.Landing.LandingID), f.Landing.AsPwa,
-			f.Pwa.Enabled, nullIfEmpty(f.Pwa.PwaID), nullIfEmpty(string(f.Pwa.PwaType)),
+			f.Pwa.Enabled, nullIfEmpty(f.Pwa.PwaID), nullIfEmpty(string(f.Pwa.PwaType)), f.Pwa.URL,
 			f.Postlanding.Enabled, nullIfEmpty(f.Postlanding.PostlandingID),
 			f.Destination.Kind, networkID, offerID, url,
 		)
@@ -662,7 +662,7 @@ func (r *Repository) loadFlowsTx(ctx context.Context, tx pgx.Tx, orgID, streamSe
 		if err := rows.Scan(
 			&f.ID, &f.Name, &f.Active, &f.Weight,
 			&f.Landing.Enabled, &landingID, &f.Landing.AsPwa,
-			&f.Pwa.Enabled, &pwaID, &pwaType,
+			&f.Pwa.Enabled, &pwaID, &pwaType, &f.Pwa.URL,
 			&f.Postlanding.Enabled, &postID,
 			&kind, &networkID, &offerID, &url,
 		); err != nil {
@@ -690,7 +690,7 @@ func (r *Repository) ListFlows(ctx context.Context, orgID string) ([]FlowSummary
 	rows, err := r.db.Query(ctx, `
 		SELECT f.id, f.name, f.active, f.weight,
 		       f.landing_enabled, f.landing_id, f.landing_as_pwa,
-		       f.pwa_enabled, f.pwa_id, f.pwa_type,
+		       f.pwa_enabled, f.pwa_id, f.pwa_type, f.pwa_url,
 		       f.postlanding_enabled, f.postlanding_id,
 		       f.destination_kind, f.destination_network_id, f.destination_offer_id, f.destination_url,
 		       f.updated_at,
@@ -718,7 +718,7 @@ func (r *Repository) ListFlows(ctx context.Context, orgID string) ([]FlowSummary
 		if err := rows.Scan(
 			&fs.ID, &fs.Name, &fs.Active, &fs.Weight,
 			&fs.Landing.Enabled, &landingID, &fs.Landing.AsPwa,
-			&fs.Pwa.Enabled, &pwaID, &pwaType,
+			&fs.Pwa.Enabled, &pwaID, &pwaType, &fs.Pwa.URL,
 			&fs.Postlanding.Enabled, &postID,
 			&kind, &networkID, &offerID, &url,
 			&fs.UpdatedAt,
