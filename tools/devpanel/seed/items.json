@@ -664,5 +664,41 @@
   "source": "audit-2026-10-15",
   "createdAt": "2026-10-15T22:00:00+05:00",
   "updatedAt": "2026-10-15T22:00:00+05:00"
+ },
+ {
+  "code": "BUG-5",
+  "priority": "P3",
+  "severity": "medium",
+  "kind": "bug",
+  "area": "devpanel",
+  "title": "Dev-панель зависала после PATCH без изменений",
+  "evidence": "Транзакция держала единственное соединение SQLite, а чтение шло через пул.",
+  "fix": "Чтение внутри транзакции, коммит всегда; TestAPINoOpPatchDoesNotHang.",
+  "impact": "",
+  "status": "done",
+  "notes": "4e887c9",
+  "id": "BUG-5",
+  "order": 37,
+  "source": "session-2026-10-15",
+  "createdAt": "2026-10-15T22:30:00+05:00",
+  "updatedAt": "2026-10-15T22:30:00+05:00"
+ },
+ {
+  "code": "BUG-6",
+  "priority": "P3",
+  "severity": "low",
+  "kind": "bug",
+  "area": "push",
+  "title": "Тест push TestRecurringBroadcast падал каждый вечер 22:00–24:00 (UTC+5)",
+  "evidence": "Тест форматировал дату слота в поясе машины, код — в поясе рассылки (UTC).",
+  "fix": "Исправлено в тесте.",
+  "impact": "",
+  "status": "done",
+  "notes": "e33eb65",
+  "id": "BUG-6",
+  "order": 38,
+  "source": "session-2026-10-15",
+  "createdAt": "2026-10-15T22:30:00+05:00",
+  "updatedAt": "2026-10-15T22:30:00+05:00"
  }
 ]
