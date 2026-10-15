@@ -5,6 +5,28 @@ per-phase, matching `CLAUDE.md`'s phase protocol. The one exception is
 [Between phases], below: spec amendments and the code changes that follow from
 them land between phases and would otherwise be invisible here.
 
+## [Phase 30.41] — Security: vulnerable dependencies and Go toolchain (audit SEC-1, SEC-2)
+
+The product audit of 2026-10-15 (`docs/audit-product-2026-10-15.md`, board in `tools/audit-tracker`, commit
+c1f12e8) found a critical Next.js advisory set and 12 reachable Go advisories. Both closed; no code changed.
+
+- SEC-1, web: `next` and `eslint-config-next` 16.3.0 → 16.4.1 (RCE in Image Optimization with AVIF, RCE in `next/og`,
+  SSRF in image optimization, cache poisoning; `next/image` is used in 4 places), which brings `sharp` 0.35.3 → 0.35.5
+  (libheif, librsvg). `fast-uri` 3.1.5 → 3.1.8 and `source-map-js` 1.2.1 → 1.2.2 updated in place, nothing else in the
+  lockfile moved. `npm audit --omit=dev`: 1 critical + 3 high → 0. The 17 advisories left are dev tooling only
+  (the shadcn CLI's MCP SDK chain, lint), not in the build — tracked as SEC-6.
+- SEC-2, Go: `apps/go.mod` `go 1.26.6` → `1.26.9`, `golang.org/x/net` v0.58.0 → v0.60.0, `google.golang.org/grpc`
+  v1.83.0 → v1.83.1. `govulncheck`: 12 reachable → 0 (the accepted `openpgp` advisory stays unreachable).
+- The images were exposed too: `golang:1.27-alpine` is a floating tag and the build host had go1.27.0 cached, which
+  carries 11 of the same stdlib advisories (fixed in 1.27.2). All Dockerfiles (api, tracker, worker, backup) now pin
+  `golang:1.27.2-alpine`; `docs/security.md` says why and how to check an image's toolchain.
+  `tools/audit-tracker/go.mod` → 1.26.9 as well.
+- Validation, in a clean worktree (HEAD + these changes only): go build/vet; `go test ./...` with the full env —
+  86 packages ok, 1 208 tests; e2e against live api/tracker/worker on 1.26.9 — 4/4 PASS; tsc 0 errors, eslint 0 errors
+  (1 old warning, BUG-4), vitest 158/158, `next build` ok; tracker builder image builds, `go version` go1.27.2.
+- Not done: the running dev containers still have the old Go image and old `node_modules` volume — rebuild with
+  `make build` (or `make <svc>-restart`) and `docker compose … up -d --build web`.
+
 ## [Phase 30.40] — Telegram: token change, joins by channel
 
 ROADMAP: a bot's token could only change by removing and reconnecting it; TG_JOIN did not say which channel. The

@@ -19,17 +19,18 @@ referenced below as §N).
 ## CURRENT STATE — UPDATE THIS EVERY PHASE
 
 ```
-CURRENT PHASE : PHASE 30.40 — TELEGRAM TOKEN CHANGE, JOINS BY CHANNEL (closed)
-STATUS        : Spec conformance gaps (docs/spec-conformance-2026-10-11.md):
-                all 15 closed and its "мелочи" too; every §43 event is
-                produced.
-                Leftovers: ROADMAP.md "Known open gaps" (Google Play
-                parsing, gallery transcoding, Cloudflare renewal…).
-                Prod restore drill after deployment.
-LAST COMMIT   : feat(telegram): token change, joins by channel.
-UNCOMMITTED   : none expected. Dev DB at migration 00084, CH schema 019.
-NEXT          : wait for the user — pick from the leftovers above with the
-                user. CI (DO1) is
+CURRENT PHASE : PHASE 30.41 — SECURITY: DEPENDENCIES + GO TOOLCHAIN (closed)
+STATUS        : Product audit 2026-10-15 (docs/audit-product-2026-10-15.md)
+                is the backlog now: 36 findings on the local board
+                tools/audit-tracker (make audit-tracker; memory:
+                flox-audit-tracker — keep statuses current). SEC-1, SEC-2
+                done. P0 left: DATA-1 (revenue without currency = $0),
+                UX-1/UX-2 (postback URL), OPS-1..3 (prod, restore, load).
+LAST COMMIT   : fix(security): next 16.4.1, go 1.26.9, pinned golang image.
+UNCOMMITTED   : the user's gallery-transcoding WIP (00085, processor.go,
+                transcode.go, worker ffmpeg) — not ours, leave it alone.
+                Dev DB at migration 00085, CH schema 019.
+NEXT          : wait for the user — next P0 from the board. CI (DO1) is
                 the user's own decision — do not set it up. Run go test with
                 the full env line AND check e2e did not skip (memory:
                 flox-full-test-env); chconn's TestLimitsStopAHeavyQuery

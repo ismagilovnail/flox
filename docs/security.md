@@ -273,6 +273,15 @@ where a campaign needs it.
   Fixing this needs auth resolution to happen before the general
   limiter runs, which is a bigger restructuring than §6's phase scoped;
   noted for whoever picks up API traffic at real volume.
+- Go images pin an exact patch (`golang:1.27.2-alpine`), never a floating
+  `golang:1.27-alpine`: a floating tag is whatever the build host pulled
+  last, and on 2026-10-15 that was a cached go1.27.0 carrying 11 reachable
+  stdlib advisories (HTTP/2, net/http, crypto/tls, html/template) fixed in
+  1.27.2. `govulncheck` with the local toolchain does not see this, so
+  check the images' toolchain too:
+  `GOTOOLCHAIN=go<image version> go run golang.org/x/vuln/cmd/govulncheck@latest ./...`
+  (v1.1.4 crashes on Go 1.27). `apps/go.mod`'s `go` line (1.26.9) is the
+  floor for local builds and tests. Bump both on each Go security release.
 
 ## 8. Audit trail (§54, Phase 30.18)
 

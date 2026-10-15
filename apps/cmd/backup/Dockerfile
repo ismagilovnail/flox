@@ -15,7 +15,7 @@
 # ---------- wal-g ----------
 # Built from its tag: v3 tags do not carry a /v3 module path, so
 # `go install ...@v3` cannot fetch them. CGO against musl, for alpine.
-FROM golang:1.27-alpine AS walg
+FROM golang:1.27.2-alpine AS walg
 RUN apk add --no-cache git build-base
 ARG WALG_VERSION=v3.0.8
 RUN git clone --depth 1 --branch ${WALG_VERSION} https://github.com/wal-g/wal-g /walg
@@ -23,7 +23,7 @@ WORKDIR /walg
 RUN CGO_ENABLED=1 go build -trimpath -ldflags "-s -w" -o /out/wal-g ./main/pg
 
 # ---------- flox-backup ----------
-FROM golang:1.27-alpine AS builder
+FROM golang:1.27.2-alpine AS builder
 ENV CGO_ENABLED=0 GOOS=linux
 WORKDIR /src
 COPY go.mod go.sum ./

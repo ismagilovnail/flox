@@ -1,6 +1,6 @@
 module github.com/ismagilovnail/flox/tools/audit-tracker
 
-go 1.26.6
+go 1.26.9
 
 require modernc.org/sqlite v1.60.1
 

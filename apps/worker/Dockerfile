@@ -12,7 +12,7 @@
 # host networking involved.
 
 # ---------- build ----------
-FROM golang:1.27-alpine AS builder
+FROM golang:1.27.2-alpine AS builder
 
 ENV CGO_ENABLED=0 GOOS=linux
 
@@ -32,7 +32,7 @@ RUN go build -trimpath -ldflags "-s -w -X main.version=${VERSION}" -o /out/worke
 # `volumes:`), overwriting whatever COPY put there at build time — only
 # the go.mod/go.sum download below needs to happen at build time, so a
 # source change never requires an image rebuild, just an air restart.
-FROM golang:1.27-alpine AS dev
+FROM golang:1.27.2-alpine AS dev
 
 ENV CGO_ENABLED=0 GOOS=linux
 RUN go install github.com/air-verse/air@v1.61.7

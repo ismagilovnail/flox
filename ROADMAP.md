@@ -93,6 +93,7 @@ session.
 | Security audit finding #4 — API keys: UI honesty pass, then real authentication | done |
 | Security audit finding #6 — Go 1.26.6 + `golang.org/x/crypto` v0.56.0 | done |
 | Security audit finding #7 — shadcn CLI moved to devDependencies | done |
+| Product audit 2026-10-15 (`docs/audit-product-2026-10-15.md`, board `tools/audit-tracker`): SEC-1 Next.js 16.4.1 + sharp, SEC-2 Go 1.26.9 / x/net / grpc, Go images pinned to `golang:1.27.2-alpine` | done |
 | Frontend permission-gating (finding-#1 follow-up: buttons across all 5 write keys) | done |
 | `offer-columns.tsx` `accessorFn` stale-cache fix (closed the one gap the repo-wide audit left open) | done |
 | `MultiSelect` real `disabled` support (closed domain-form.tsx's permission gap) | done |
