@@ -646,5 +646,23 @@
   "updatedAt": "2026-10-15T21:00:00+05:00",
   "source": "audit-2026-10-15",
   "id": "DEV-1"
+ },
+ {
+  "id": "SEC-6",
+  "code": "SEC-6",
+  "priority": "P2",
+  "severity": "low",
+  "kind": "security",
+  "area": "web",
+  "title": "Уязвимости в dev-инструментах (17, из них 1 critical) — цепочка shadcn CLI",
+  "evidence": "npm audit без --omit=dev после SEC-1: proxy-addr (critical), hono, @modelcontextprotocol/sdk, undici, qs, braces, js-yaml и др.",
+  "fix": "Обновить shadcn до 4.21+ отдельной задачей и проверить генерацию компонентов; lint-цепочку — вместе с eslint.",
+  "impact": "В сборку не попадают; риск только на машине разработчика при запуске CLI.",
+  "status": "todo",
+  "notes": "",
+  "order": 36,
+  "source": "audit-2026-10-15",
+  "createdAt": "2026-10-15T22:00:00+05:00",
+  "updatedAt": "2026-10-15T22:00:00+05:00"
  }
 ]

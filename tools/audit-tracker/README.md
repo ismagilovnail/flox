@@ -26,7 +26,8 @@ cd tools/audit-tracker && go run .
 Отдельный Go-модуль: зависимость SQLite (`modernc.org/sqlite`, без cgo) не
 попадает в `apps/go.mod`.
 
-API: `GET /api/items`, `POST /api/items`, `PATCH /api/items/{id}`
+API: `GET /api/items`, `POST /api/items` (`code` необязателен: `ABC-12`,
+иначе `NEW-n`), `PATCH /api/items/{id}`
 (`status`, `priority`, `severity`, `notes`, `title`, `fix`, `area`),
 `DELETE /api/items/{id}`, `GET /api/items/{id}/changes`,
 `GET /api/features`, `PATCH /api/features/{id}` (`status`).

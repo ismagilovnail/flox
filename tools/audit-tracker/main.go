@@ -27,6 +27,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"syscall"
 	"time"
@@ -46,6 +47,8 @@ var (
 	statuses   = map[string]bool{"todo": true, "doing": true, "blocked": true, "done": true, "wontfix": true}
 	kinds      = map[string]bool{"security": true, "bug": true, "data": true, "ux": true, "gap": true, "ops": true, "risk": true, "business": true}
 	featStates = map[string]bool{"PASS": true, "PARTIAL": true, "FAIL": true, "NOT_IMPLEMENTED": true, "NOT_VERIFIED": true}
+
+	codePattern = regexp.MustCompile(`^[A-Z]{2,8}-[0-9]{1,4}$`)
 )
 
 type Item struct {
@@ -317,13 +320,30 @@ func (s *server) createItem(w http.ResponseWriter, r *http.Request) {
 		fail(w, 422, "Неизвестный приоритет, серьёзность или тип.")
 		return
 	}
-	var n int
-	_ = s.db.QueryRow(`SELECT count(*) FROM items WHERE code LIKE 'NEW-%'`).Scan(&n)
 	var maxOrd int
 	_ = s.db.QueryRow(`SELECT coalesce(max(ord), 0) FROM items`).Scan(&maxOrd)
 	ts := now()
-	in.ID = fmt.Sprintf("NEW-%d-%d", n+1, time.Now().UnixMilli())
-	in.Code = fmt.Sprintf("NEW-%d", n+1)
+	// A code in the audit's own scheme (SEC-6, DATA-7…) when the caller
+	// gives one; otherwise NEW-n.
+	in.Code = strings.ToUpper(strings.TrimSpace(in.Code))
+	if in.Code != "" {
+		if !codePattern.MatchString(in.Code) {
+			fail(w, 422, "Код в формате ABC-12.")
+			return
+		}
+		var taken int
+		_ = s.db.QueryRow(`SELECT count(*) FROM items WHERE id = ? OR code = ?`, in.Code, in.Code).Scan(&taken)
+		if taken > 0 {
+			fail(w, 422, "Код "+in.Code+" уже занят.")
+			return
+		}
+		in.ID = in.Code
+	} else {
+		var n int
+		_ = s.db.QueryRow(`SELECT count(*) FROM items WHERE code LIKE 'NEW-%'`).Scan(&n)
+		in.ID = fmt.Sprintf("NEW-%d-%d", n+1, time.Now().UnixMilli())
+		in.Code = fmt.Sprintf("NEW-%d", n+1)
+	}
 	in.Status, in.Order, in.Source, in.CreatedAt, in.UpdatedAt = "todo", maxOrd+1, "manual", ts, ts
 	_, err := s.db.ExecContext(r.Context(), `INSERT INTO items (`+itemCols+`) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
 		in.ID, in.Code, in.Priority, in.Severity, in.Kind, strings.TrimSpace(in.Area), in.Title, in.Evidence, strings.TrimSpace(in.Fix), in.Impact, in.Status, in.Notes, in.Order, in.Source, in.CreatedAt, in.UpdatedAt)
