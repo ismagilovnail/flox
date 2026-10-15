@@ -11,6 +11,7 @@ import (
 	"github.com/ismagilovnail/flox/apps/internal/chstore"
 	"github.com/ismagilovnail/flox/apps/internal/cost"
 	"github.com/ismagilovnail/flox/apps/internal/fx"
+	"github.com/ismagilovnail/flox/apps/internal/push"
 )
 
 // maxReportDims bounds how many dimensions one report can group by at
@@ -130,6 +131,17 @@ type MetricValues struct {
 	// Clicks in percent, nil when there were no clicks.
 	EmptySubs     uint64
 	EmptySubsRate *float64
+
+	// Push metrics (internal/push): what broadcasts sent to the row's
+	// subscribers, counted on the day the deliveries were queued. A
+	// separate data source (§30.5): nil for every row unless the report's
+	// dimensions and filters are ones push statistics have (pushEligible).
+	// PushCTR is opened ÷ delivered in percent, nil with nothing delivered.
+	PushSent         *uint64
+	PushDelivered    *uint64
+	PushOpened       *uint64
+	PushUnsubscribed *uint64
+	PushCTR          *float64
 }
 
 // ReportRow is one output row of Report/Timeseries/Breakdown/Dashboard —
@@ -489,6 +501,19 @@ func (s *Service) groupedReport(ctx context.Context, organizationID string, dims
 		}
 	}
 
+	withPush := s.push != nil && pushEligible(dims, filters)
+	if withPush {
+		if err := s.attachPush(ctx, organizationID, dims, byDay, filters, qFrom, qTo, sc, func(key chstore.ReportKey) *rowAccumulator {
+			acc := get(key)
+			if convSupported && acc.conversions == nil {
+				acc.zeroConversions()
+			}
+			return acc
+		}); err != nil {
+			return nil, err
+		}
+	}
+
 	if s.cost != nil {
 		// A campaign (or source) with spend but no events in the range is
 		// still a row: leaving it out hid money spent on no traffic, and
@@ -514,6 +539,11 @@ func (s *Service) groupedReport(ctx context.Context, organizationID string, dims
 	}
 	for _, acc := range merged {
 		sanitizeMoney(acc)
+		if withPush && acc.push == nil {
+			// Push reached none of this row's subscribers: a real 0, the
+			// cost-only rows above included.
+			acc.push = &push.StatsCounts{}
+		}
 	}
 
 	rows := make([]ReportRow, 0, len(order))
@@ -527,6 +557,73 @@ func (s *Service) groupedReport(ctx context.Context, organizationID string, dims
 		})
 	}
 	return rows, nil
+}
+
+// pushDimensions maps the report dimensions push statistics are split by
+// to their push grouping.
+var pushDimensions = map[chstore.ReportDimension]push.StatsGroup{
+	chstore.DimCampaign: push.StatsByCampaign,
+	chstore.DimCountry:  push.StatsByCountry,
+	chstore.DimPwa:      push.StatsByPwa,
+}
+
+// pushEligible reports whether push metrics can answer a report: grouped
+// and filtered by campaign, country and PWA only (any of them, with or
+// without the day). Anything else — a device, a flow — is not known for a
+// push delivery, so the push columns stay empty rather than show the
+// whole campaign's numbers on every row.
+func pushEligible(dims []chstore.ReportDimension, filters []chstore.ReportFilter) bool {
+	for _, d := range dims {
+		if _, ok := pushDimensions[d]; !ok {
+			return false
+		}
+	}
+	for _, f := range filters {
+		if _, ok := pushDimensions[f.Dimension]; !ok {
+			return false
+		}
+	}
+	return true
+}
+
+// attachPush fills the push metrics of the rows push reached, adding a row
+// of its own for a group that had no traffic in the range (a campaign
+// whose subscribers got a broadcast); groupedReport zeroes the rest.
+// from/to are the report's instants, so days are cut where the report's are.
+func (s *Service) attachPush(ctx context.Context, organizationID string, dims []chstore.ReportDimension, byDay bool, filters []chstore.ReportFilter, from, to time.Time, sc scope, get func(chstore.ReportKey) *rowAccumulator) error {
+	q := push.ReportStatsQuery{From: from, To: to, Timezone: sc.name, ByDay: byDay}
+	for _, d := range dims {
+		q.GroupBy = append(q.GroupBy, pushDimensions[d])
+	}
+	for _, f := range filters {
+		q.Filters = append(q.Filters, push.ReportStatsFilter{Group: pushDimensions[f.Dimension], Value: f.Value})
+	}
+	stats, err := s.push.ReportStats(ctx, organizationID, q)
+	if err != nil {
+		return fmt.Errorf("analytics: querying push metrics: %w", err)
+	}
+	for _, st := range stats {
+		key := chstore.ReportKey{DimValues: make(map[chstore.ReportDimension]string, len(dims))}
+		for _, d := range dims {
+			key.DimValues[d] = st.Keys[pushDimensions[d]]
+		}
+		if byDay {
+			day, err := time.Parse(time.DateOnly, st.Day)
+			if err != nil {
+				return fmt.Errorf("analytics: push metrics day %q: %w", st.Day, err)
+			}
+			key.Day = &day
+		}
+		acc := get(key)
+		if acc.push == nil {
+			acc.push = &push.StatsCounts{}
+		}
+		acc.push.Sent += st.Sent
+		acc.push.Delivered += st.Delivered
+		acc.push.Opened += st.Opened
+		acc.push.Unsubscribed += st.Unsubscribed
+	}
+	return nil
 }
 
 // costEligible reports whether dims resolves to campaign, traffic-source
@@ -800,6 +897,8 @@ type rowAccumulator struct {
 	repurchases, declines, trash    *uint64
 	costUSD                         *float64
 	datedByConversion               uint64
+	// push is nil when push metrics cannot answer the report (pushEligible).
+	push *push.StatsCounts
 	// revenueUnknown: revenue met a day with no reporting-currency rate
 	// (sanitizeMoney); EPC is then unknown too.
 	revenueUnknown bool
@@ -832,6 +931,12 @@ func deriveMetrics(acc *rowAccumulator) MetricValues {
 		Blocked:       acc.blocked,
 		Bots:          acc.bots,
 		EmptySubs:     acc.emptySubs,
+	}
+
+	if p := acc.push; p != nil {
+		sent, delivered, opened, unsub := uint64(p.Sent), uint64(p.Delivered), uint64(p.Opened), uint64(p.Unsubscribed)
+		m.PushSent, m.PushDelivered, m.PushOpened, m.PushUnsubscribed = &sent, &delivered, &opened, &unsub
+		m.PushCTR = percentOf(opened, delivered)
 	}
 
 	m.BlockedRate = percentOf(acc.blocked, acc.clicks+acc.blocked)
@@ -1067,6 +1172,16 @@ func metricFloat(m MetricValues, key string) (float64, bool) {
 		return float64(m.EmptySubs), true
 	case "emptysubsrate":
 		return ptrOrNegInf(m.EmptySubsRate), true
+	case "push_sent":
+		return u64OrNegInf(m.PushSent), true
+	case "push_delivered":
+		return u64OrNegInf(m.PushDelivered), true
+	case "push_opened":
+		return u64OrNegInf(m.PushOpened), true
+	case "push_unsubscribed":
+		return u64OrNegInf(m.PushUnsubscribed), true
+	case "push_ctr":
+		return ptrOrNegInf(m.PushCTR), true
 	default:
 		return 0, false
 	}

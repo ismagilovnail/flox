@@ -702,7 +702,7 @@ func buildServer(ctx context.Context, cfg config.Config, logger *slog.Logger, re
 
 		// Reports in the organization's reporting currency (§50-FX).
 		fxStore := fx.NewStore(db)
-		analyticsSvc := analytics.NewService(events, costSvc).WithMoney(fxStore)
+		analyticsSvc := analytics.NewService(events, costSvc).WithMoney(fxStore).WithPush(push.NewRepository(db))
 		analyticsHandler := analytics.NewHandler(analyticsSvc, logger)
 		srv.Mux().Route("/analytics", func(r chi.Router) {
 			r.Use(tenantMiddleware)

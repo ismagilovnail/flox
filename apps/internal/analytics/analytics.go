@@ -14,6 +14,7 @@ import (
 	"github.com/ismagilovnail/flox/apps/internal/cost"
 	"github.com/ismagilovnail/flox/apps/internal/fx"
 	"github.com/ismagilovnail/flox/apps/internal/metrics"
+	"github.com/ismagilovnail/flox/apps/internal/push"
 )
 
 // Repository is the narrow slice of chstore.EventStore this package needs
@@ -66,6 +67,20 @@ type Service struct {
 	repo  Repository
 	cost  CostSource
 	money MoneySource
+	push  PushSource
+}
+
+// PushSource is push metrics by campaign/country/PWA and day
+// (*push.Repository). Without one, every row's push metrics are nil.
+type PushSource interface {
+	ReportStats(ctx context.Context, organizationID string, q push.ReportStatsQuery) ([]push.ReportStatsRow, error)
+}
+
+// WithPush adds push metrics to reports whose dimensions and filters push
+// statistics have (pushEligible).
+func (s *Service) WithPush(p PushSource) *Service {
+	s.push = p
+	return s
 }
 
 // costSource may be nil — see CostSource's own doc comment on what that

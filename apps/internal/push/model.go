@@ -242,6 +242,32 @@ type StatsRow struct {
 	StatsCounts
 }
 
+// ReportStatsQuery is push metrics for the analytics report builder
+// (internal/analytics): the counters of deliveries queued in [From, To)
+// (instants), grouped by any of campaign, country and PWA and, with ByDay,
+// the day in Timezone; each filter an equality, AND-combined like the
+// report's own.
+type ReportStatsQuery struct {
+	From, To time.Time
+	Timezone string // IANA zone days are cut in ("" = UTC)
+	ByDay    bool
+	GroupBy  []StatsGroup // StatsByCampaign, StatsByCountry, StatsByPwa
+	Filters  []ReportStatsFilter
+}
+
+type ReportStatsFilter struct {
+	Group StatsGroup
+	Value string
+}
+
+// ReportStatsRow is one group: Day (YYYY-MM-DD) when ByDay, Keys the value
+// of each GroupBy.
+type ReportStatsRow struct {
+	Day  string
+	Keys map[StatsGroup]string
+	StatsCounts
+}
+
 // Summary is the subscriber overview: totals and the active subscribers
 // by PWA, campaign and country.
 type Summary struct {

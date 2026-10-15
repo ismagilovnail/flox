@@ -5,9 +5,9 @@
  * that Phase 5 didn't need: CPA Funnel, Push, and LTV.
  *
  * CPA Funnel is catalog-only for now (`live: false`): no surface exposes a
- * formula built from those ids. Push is live: GET /push/stats returns
- * these ids per row, and Push > Statistics (target push_stats) evaluates
- * push formulas there. LTV is catalog-only AND
+ * formula built from those ids. Push is live: GET /push/stats and the
+ * analytics report return these ids per row, so push formulas evaluate on
+ * Push > Statistics (push_stats) and in the report builder. LTV is catalog-only AND
  * `insertable: false` — §30.5 explicitly forbids LTV in custom formulas, not
  * just "not implemented yet".
  *
@@ -17,7 +17,7 @@
  * live under lib/mock/.
  */
 
-import { METRICS, type MetricFormat, type MetricKey } from "@/features/analytics/registry";
+import { METRICS, isPushMetric, type MetricFormat, type MetricKey } from "@/features/analytics/registry";
 
 export type MetricCategory = "Traffic / Performance" | "CPA Funnel" | "Push" | "Fraud" | "LTV";
 export type MetricDataSource = "regular" | "push" | "ltv";
@@ -33,7 +33,7 @@ export type RegistryMetric = {
   live: boolean;
 };
 
-const TRAFFIC_PERFORMANCE: RegistryMetric[] = METRICS.map((m) => ({
+const TRAFFIC_PERFORMANCE: RegistryMetric[] = METRICS.filter((m) => !isPushMetric(m.key)).map((m) => ({
   id: m.key,
   label: m.label,
   category: "Traffic / Performance",
@@ -69,14 +69,11 @@ const FRAUD: RegistryMetric[] = [
   { id: "click_all", label: "All Clicks (incl. bots)" },
 ].map((m) => ({ ...m, category: "Fraud" as const, dataSource: "regular" as const, format: "int" as MetricFormat, insertable: true, live: false }));
 
-const PUSH_BASE: { id: string; label: string; format: MetricFormat }[] = [
-  { id: "push_sent", label: "Push Sent", format: "int" },
-  { id: "push_delivered", label: "Push Delivered", format: "int" },
-  { id: "push_opened", label: "Push Opened", format: "int" },
-  { id: "push_ctr", label: "Push CTR", format: "percent" },
-];
-const PUSH: RegistryMetric[] = PUSH_BASE.map((m) => ({
-  ...m,
+// The report's push columns (the same ids Push > Statistics rows carry).
+const PUSH: RegistryMetric[] = METRICS.filter((m) => isPushMetric(m.key)).map((m) => ({
+  id: m.key,
+  label: m.label,
+  format: m.format,
   category: "Push" as const,
   dataSource: "push" as const,
   insertable: true,
@@ -128,7 +125,7 @@ export const SURFACE_AVAILABLE_METRIC_IDS: Record<ShowInTarget, Set<MetricKey | 
   campaigns_table: new Set(["clicks", "conversions", "revenue", "cost", "profit", "roi", "emptySubsRate"]),
   offers_table: new Set(),
   sources_table: new Set(),
-  push_stats: new Set(["push_sent", "push_delivered", "push_opened", "push_ctr"]),
+  push_stats: new Set(["push_sent", "push_delivered", "push_opened", "push_unsubscribed", "push_ctr"]),
 };
 
 export function surfaceCanCompute(target: ShowInTarget, usedMetricIds: string[]): boolean {

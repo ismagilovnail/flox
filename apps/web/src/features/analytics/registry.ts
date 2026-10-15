@@ -93,7 +93,20 @@ export type MetricKey =
   | "blockedRate"
   | "botRate"
   | "emptySubs"
-  | "emptySubsRate";
+  | "emptySubsRate"
+  | PushMetricKey;
+
+/** Push metrics — a separate data source (§30.5): one formula never mixes
+ * them with the rest. They keep the custom-metric catalog's ids, the same
+ * on Push > Statistics, and are filled only when the report is grouped and
+ * filtered by day, campaign, country or PWA (else "—"). */
+export const PUSH_METRIC_KEYS = ["push_sent", "push_delivered", "push_opened", "push_unsubscribed", "push_ctr"] as const;
+
+export type PushMetricKey = (typeof PUSH_METRIC_KEYS)[number];
+
+export function isPushMetric(key: string): key is PushMetricKey {
+  return (PUSH_METRIC_KEYS as readonly string[]).includes(key);
+}
 
 export type MetricFormat = "int" | "currency" | "percent" | "ratio";
 
@@ -130,6 +143,11 @@ export const METRICS: { key: MetricKey; label: string; format: MetricFormat }[] 
   { key: "botRate", label: "Bot rate", format: "percent" },
   { key: "emptySubs", label: "Empty subs", format: "int" },
   { key: "emptySubsRate", label: "Empty subs %", format: "percent" },
+  { key: "push_sent", label: "Push sent", format: "int" },
+  { key: "push_delivered", label: "Push delivered", format: "int" },
+  { key: "push_opened", label: "Push opened", format: "int" },
+  { key: "push_unsubscribed", label: "Push unsubscribed", format: "int" },
+  { key: "push_ctr", label: "Push CTR", format: "percent" },
 ];
 
 export function metricLabel(t: TFunction, key: MetricKey): string {

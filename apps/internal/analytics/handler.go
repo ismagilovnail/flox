@@ -176,6 +176,14 @@ type metricValuesResponse struct {
 
 	EmptySubs     uint64   `json:"emptySubs"`
 	EmptySubsRate *float64 `json:"emptySubsRate"`
+
+	// Push metrics keep the custom-metric catalog's ids, the same on every
+	// surface (Push > Statistics rows use them too).
+	PushSent         *uint64  `json:"push_sent"`
+	PushDelivered    *uint64  `json:"push_delivered"`
+	PushOpened       *uint64  `json:"push_opened"`
+	PushUnsubscribed *uint64  `json:"push_unsubscribed"`
+	PushCTR          *float64 `json:"push_ctr"`
 }
 
 func metricValuesToResponse(m MetricValues) metricValuesResponse {
@@ -189,6 +197,8 @@ func metricValuesToResponse(m MetricValues) metricValuesResponse {
 		CostPerInstall: m.CostPerInstall, CostPerReg: m.CostPerReg, CostPerPurchase: m.CostPerPurchase,
 		Blocked: m.Blocked, Bots: m.Bots, BlockedRate: m.BlockedRate, BotRate: m.BotRate,
 		EmptySubs: m.EmptySubs, EmptySubsRate: m.EmptySubsRate,
+		PushSent: m.PushSent, PushDelivered: m.PushDelivered, PushOpened: m.PushOpened,
+		PushUnsubscribed: m.PushUnsubscribed, PushCTR: m.PushCTR,
 	}
 }
 

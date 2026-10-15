@@ -5,6 +5,25 @@ per-phase, matching `CLAUDE.md`'s phase protocol. The one exception is
 [Between phases], below: spec amendments and the code changes that follow from
 them land between phases and would otherwise be invisible here.
 
+## [Phase 30.28] — Push metrics in the report builder
+
+Leftover named in `CLAUDE.md`: push numbers next to the traffic ones.
+
+- `analytics.Service.WithPush` adds `push_sent`/`push_delivered`/`push_opened`/`push_unsubscribed`/
+  `push_ctr` to every report row when the report is grouped and filtered only by day, campaign, country
+  and PWA (`pushEligible`); otherwise they are `null`. Rows push did not reach get a real 0 (cost-only rows
+  included); a group with push but no traffic gets a row. Sortable like any metric.
+- `push.Repository.ReportStats`: `push_broadcast_stats` grouped by any of campaign/country/PWA and the day
+  in the report's zone, filtered by equality, organization-scoped.
+- Custom metrics: `push_unsubscribed` joins the push catalog; push formulas may target the report builder
+  (still one data source per formula). Web: the five columns in `METRICS`, the push catalog built from them,
+  en/ru labels and hints.
+- Tests: `TestReportStats` (zone-cut days, filter, other org excluded, broadcast grouping refused),
+  `TestReportPushMetrics*` (by campaign, by day+country, cost-only row zero, `null` and no query for a device
+  dimension / flow filter), `TestPublishKeepsPushTargets`, the registry sync test, and
+  `custom-metrics-registry.test.ts`. Checked live against the dev API (campaign grouping filled,
+  campaign+device `null`).
+
 ## [Phase 30.27] — Pixels for NOTIFICATION_SUBSCRIBE
 
 The last produced, platform-relevant §43 event a pixel could not report.

@@ -460,3 +460,27 @@ Empty subs are stored as empty strings — never an "unknown campaign" — and t
 two numbers make that share visible. They follow the click dimensions like
 `blocked`/`bots`, are in the report builder's metric picker, custom metrics and
 presets, and `emptySubsRate` is a column of the campaigns list ("Empty subs %").
+
+
+## Push metrics (§30.5)
+
+Every metrics object carries `push_sent`, `push_delivered`, `push_opened`,
+`push_unsubscribed` and `push_ctr` — the custom-metric catalog's ids, the same
+Push → Statistics uses. They come from Postgres (`push_broadcast_stats`,
+`push.Repository.ReportStats`), not ClickHouse: what broadcasts sent to the
+row's subscribers, counted on the day the deliveries were queued (in the
+report's time zone).
+
+- Filled only when every dimension and every filter is `campaign`, `country`
+  or `pwa` (with or without `day`) — the split push statistics have. Any other
+  dimension or filter (device, flow, source…) makes all five `null` ("—") for
+  every row, rather than repeat a campaign's numbers on each device; push is
+  then not queried at all.
+- When filled, a row push did not reach is a real `0`; a group push reached
+  with no traffic in the range (subscribers of an old campaign) is a row of its
+  own. `push_ctr = push_opened / push_delivered`, `null` with nothing
+  delivered. Broadcasts sent before migration 00073 have no split and land in
+  the empty campaign/country/PWA group.
+- A separate data source: a custom-metric formula uses push metrics or regular
+  ones, never both (`validateFormula`), so a push formula can target the report
+  builder and Push → Statistics, but not the campaigns table.

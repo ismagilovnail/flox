@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -598,6 +599,77 @@ func (r *Repository) Stats(ctx context.Context, orgID string, from, to time.Time
 		out = append(out, row)
 	}
 	return out, total, rows.Err()
+}
+
+// reportStatsColumns are the push_broadcast_stats columns the report
+// builder can group and filter by.
+var reportStatsColumns = map[StatsGroup]string{
+	StatsByCampaign: "st.campaign_id",
+	StatsByCountry:  "st.country",
+	StatsByPwa:      "st.pwa_id",
+}
+
+// ReportStats is push metrics grouped for the analytics report builder
+// (ReportStatsQuery). Rows without a split (broadcasts sent before
+// migration 00073) carry empty campaign, country and PWA.
+func (r *Repository) ReportStats(ctx context.Context, orgID string, q ReportStatsQuery) ([]ReportStatsRow, error) {
+	args := []any{orgID, q.From, q.To}
+	where := `st.organization_id = $1 AND st.bucket >= $2 AND st.bucket < $3`
+	keys := []string{`''`}
+	if q.ByDay {
+		tz := q.Timezone
+		if tz == "" {
+			tz = "UTC"
+		}
+		args = append(args, tz)
+		keys[0] = fmt.Sprintf(`to_char((st.bucket AT TIME ZONE $%d)::date, 'YYYY-MM-DD')`, len(args))
+	}
+	for _, f := range q.Filters {
+		col, ok := reportStatsColumns[f.Group]
+		if !ok {
+			return nil, fmt.Errorf("push: report stats cannot filter by %q", f.Group)
+		}
+		args = append(args, f.Value)
+		where += fmt.Sprintf(` AND %s = $%d`, col, len(args))
+	}
+	for _, g := range q.GroupBy {
+		col, ok := reportStatsColumns[g]
+		if !ok {
+			return nil, fmt.Errorf("push: report stats cannot group by %q", g)
+		}
+		keys = append(keys, col)
+	}
+	groupBy := make([]string, len(keys))
+	for i := range keys {
+		groupBy[i] = fmt.Sprint(i + 1)
+	}
+	rows, err := r.db.Query(ctx, `
+		SELECT `+strings.Join(keys, ", ")+`, sum(st.sent), sum(st.delivered), sum(st.failed), sum(st.unsubscribed), sum(st.opened)
+		FROM push_broadcast_stats st
+		WHERE `+where+`
+		GROUP BY `+strings.Join(groupBy, ", "), args...)
+	if err != nil {
+		return nil, fmt.Errorf("push: querying report stats: %w", err)
+	}
+	defer rows.Close()
+	out := []ReportStatsRow{}
+	for rows.Next() {
+		row := ReportStatsRow{Keys: make(map[StatsGroup]string, len(q.GroupBy))}
+		vals := make([]string, len(q.GroupBy))
+		dest := []any{&row.Day}
+		for i := range vals {
+			dest = append(dest, &vals[i])
+		}
+		dest = append(dest, &row.Sent, &row.Delivered, &row.Failed, &row.Unsubscribed, &row.Opened)
+		if err := rows.Scan(dest...); err != nil {
+			return nil, fmt.Errorf("push: scanning report stats: %w", err)
+		}
+		for i, g := range q.GroupBy {
+			row.Keys[g] = vals[i]
+		}
+		out = append(out, row)
+	}
+	return out, rows.Err()
 }
 
 const broadcastColumns = `id, name, title, body, icon_url, image_url, target, url, pwa_ids, campaign_ids, countries,

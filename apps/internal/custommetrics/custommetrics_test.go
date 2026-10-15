@@ -195,6 +195,32 @@ func TestPublishFiltersUncomputableTargets(t *testing.T) {
 	}
 }
 
+// A push formula is computable on Push > Statistics and, since push
+// columns are on the report, in the report builder — never on the
+// campaigns table, which has no push numbers.
+func TestPublishKeepsPushTargets(t *testing.T) {
+	pool := mustPool(t)
+	ctx := context.Background()
+	orgID := seedOrg(t, ctx, pool)
+	owner := seedMember(t, ctx, pool, orgID, "Owner")
+	svc := custommetrics.NewService(custommetrics.NewRepository(pool))
+
+	in := validInput("{push_unsubscribed} / {push_delivered}")
+	in.Status = custommetrics.StatusPublished
+	in.Targets = []string{"report_builder", "push_stats", "campaigns_table"}
+	created, err := svc.Create(ctx, orgID, owner, in)
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	got := map[string]bool{}
+	for _, target := range created.Targets {
+		got[target] = true
+	}
+	if len(got) != 2 || !got["report_builder"] || !got["push_stats"] {
+		t.Fatalf("targets = %v, want report_builder and push_stats (campaigns_table dropped)", created.Targets)
+	}
+}
+
 func TestUnpublishClearsTargets(t *testing.T) {
 	pool := mustPool(t)
 	ctx := context.Background()

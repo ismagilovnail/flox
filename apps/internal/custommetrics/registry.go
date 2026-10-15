@@ -66,7 +66,8 @@ func buildCatalog() map[string]registryMetric {
 	add(sourceRegular, true, "click_all")
 
 	// Push — computed by internal/push's stats (GET /push/stats, keyed by
-	// these ids) and shown on Push > Statistics.
+	// these ids) and shown on Push > Statistics, and as the report
+	// builder's push columns (analytics.MetricValues, the same ids).
 	add(sourcePush, true, pushMetricIDs...)
 
 	// LTV — insertable:false is deliberate, not a placeholder: §30.5
@@ -86,7 +87,10 @@ func buildCatalog() map[string]registryMetric {
 // (docs/analytics-report-api.md), so neither surface can honestly
 // compute anything.
 var surfaceAvailableMetricIDs = map[ShowInTarget]map[string]bool{
-	TargetReportBuilder: allRegularMetricIDs(),
+	// The report builder carries both: its regular metrics and, as
+	// separate columns, the push ones. A formula still draws from one of
+	// them (validateFormula refuses a mixed one), so the two never meet in one formula.
+	TargetReportBuilder: union(allRegularMetricIDs(), setOf(pushMetricIDs)),
 	TargetCampaignsTable: {
 		"clicks": true, "conversions": true, "revenue": true,
 		"cost": true, "profit": true, "roi": true, "emptySubsRate": true,
@@ -96,8 +100,16 @@ var surfaceAvailableMetricIDs = map[ShowInTarget]map[string]bool{
 	TargetPushStats:    setOf(pushMetricIDs),
 }
 
-// pushMetricIDs are the push metrics GET /push/stats returns per row.
-var pushMetricIDs = []string{"push_sent", "push_delivered", "push_opened", "push_ctr"}
+// pushMetricIDs are the push metrics GET /push/stats and the analytics
+// report return per row.
+var pushMetricIDs = []string{"push_sent", "push_delivered", "push_opened", "push_unsubscribed", "push_ctr"}
+
+func union(a, b map[string]bool) map[string]bool {
+	for id := range b {
+		a[id] = true
+	}
+	return a
+}
 
 func setOf(ids []string) map[string]bool {
 	out := map[string]bool{}

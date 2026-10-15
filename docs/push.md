@@ -6,10 +6,10 @@ owner on 2026-10-13: subscriptions and broadcasts sent now. Added
 2026-10-14: scheduled broadcasts and push metrics (Push → Statistics,
 custom metrics on the `push_stats` surface), then triggered broadcasts
 ("N hours after subscribing, if no deposit") and recurring broadcasts
-("Mon/Wed/Fri at 19:00"). Not done: multi-step sequences in one trigger,
-an interval mode ("every N hours"), push metrics in the report
-builder (one formula = one data source, §30.5: push metrics are not
-on the regular rows).
+("Mon/Wed/Fri at 19:00"), then push metrics as columns of the report
+builder (2026-10-15, `docs/analytics-report-api.md` "Push metrics").
+Not done: multi-step sequences in one trigger, an interval mode ("every
+N hours").
 
 ## Subscribing (apps/tracker)
 

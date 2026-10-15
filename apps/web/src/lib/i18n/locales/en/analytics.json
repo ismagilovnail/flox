@@ -115,7 +115,12 @@
     "blockedRate": "Blocked rate",
     "botRate": "Bot rate",
     "emptySubs": "Empty subs",
-    "emptySubsRate": "Empty subs %"
+    "emptySubsRate": "Empty subs %",
+    "push_sent": "Push sent",
+    "push_delivered": "Push delivered",
+    "push_opened": "Push opened",
+    "push_unsubscribed": "Push unsubscribed",
+    "push_ctr": "Push CTR"
   },
   "metricHints": {
     "clicks": "All clicks on the campaign, including repeat clicks from the same visitor.",
@@ -148,7 +153,12 @@
     "blockedRate": "Blocked ÷ (clicks + blocked) × 100%. \"—\" when there was no traffic.",
     "botRate": "Bots ÷ (clicks + blocked) × 100%. \"—\" when there was no traffic.",
     "emptySubs": "Clicks that arrived with every sub1–sub10 empty — often Facebook/Instagram traffic opened in the in-app browser, a prefetch or a redirect chain. Recorded as empty, never as an unknown campaign.",
-    "emptySubsRate": "Empty subs ÷ clicks × 100%. The share of clicks whose subs did not arrive, so attribution by sub can't see them. \"—\" when there are no clicks."
+    "emptySubsRate": "Empty subs ÷ clicks × 100%. The share of clicks whose subs did not arrive, so attribution by sub can't see them. \"—\" when there are no clicks.",
+    "push_sent": "Notifications queued by broadcasts to the row's subscribers, on the day they were sent. Filled when the report is grouped and filtered only by day, campaign, country or PWA; otherwise \"—\" — a push has no device, flow or source.",
+    "push_delivered": "Notifications the push service accepted. Same grouping limits as Push sent.",
+    "push_opened": "Notifications opened (first open per notification), counted on the day they were sent.",
+    "push_unsubscribed": "Subscriptions found gone when a notification was sent to them (the push service answered 404/410).",
+    "push_ctr": "Push opened ÷ push delivered × 100%. \"—\" when nothing was delivered."
   },
   "funnelSteps": {
     "SOURCE_CLICK": "Source Click",

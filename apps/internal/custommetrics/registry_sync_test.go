@@ -20,15 +20,32 @@ func TestReportMetricsMatchTheFrontend(t *testing.T) {
 	if block == nil {
 		t.Fatal("METRICS not found in registry.ts")
 	}
-	var frontend []string
+	// The report's push columns are METRICS entries too, but a separate
+	// data source: they must be exactly the push catalog.
+	var frontend, frontendPush []string
 	for _, m := range regexp.MustCompile(`key: "(\w+)"`).FindAllSubmatch(block[1], -1) {
-		frontend = append(frontend, string(m[1]))
+		if id := string(m[1]); metricCatalog[id].dataSource == sourcePush {
+			frontendPush = append(frontendPush, id)
+		} else {
+			frontend = append(frontend, id)
+		}
 	}
 	backend := append([]string(nil), reportMetricIDs...)
 	sort.Strings(frontend)
 	sort.Strings(backend)
 	if len(frontend) == 0 || !equal(frontend, backend) {
 		t.Fatalf("report metrics differ\nfrontend: %v\nbackend:  %v", frontend, backend)
+	}
+	backendPush := append([]string(nil), pushMetricIDs...)
+	sort.Strings(frontendPush)
+	sort.Strings(backendPush)
+	if !equal(frontendPush, backendPush) {
+		t.Fatalf("report push metrics differ\nfrontend: %v\nbackend:  %v", frontendPush, backendPush)
+	}
+	for _, id := range backendPush {
+		if !surfaceAvailableMetricIDs[TargetReportBuilder][id] {
+			t.Errorf("%s is not available on the report builder", id)
+		}
 	}
 	for _, id := range backend {
 		m, ok := metricCatalog[id]

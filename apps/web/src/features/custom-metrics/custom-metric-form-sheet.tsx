@@ -71,6 +71,7 @@ const SAMPLE_VALUES: Record<string, number | null> = {
   push_sent: 12000,
   push_delivered: 11400,
   push_opened: 2280,
+  push_unsubscribed: 150,
   push_ctr: 20,
 };
 

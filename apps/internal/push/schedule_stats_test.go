@@ -228,3 +228,93 @@ func (f *fixture) count(t *testing.T, sql string, args ...any) int {
 	}
 	return n
 }
+
+// ReportStats (the analytics report builder's push columns) groups by any
+// of campaign, country and PWA, cuts days in the report's zone, filters by
+// equality and never reads another organization's rows.
+func TestReportStats(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	svc := push.NewService(f.repo, true)
+	// Broadcasts need subscribers; what they send today is outside the
+	// March range below.
+	f.subscribe(t, f.org, f.pwa, f.camp, "US")
+	b, err := svc.CreateBroadcast(ctx, f.org, "", push.CreateBroadcastInput{Name: "Old", Title: "Hi", Target: push.TargetDestination})
+	if err != nil {
+		t.Fatal(err)
+	}
+	otherOrg, otherPwa, otherCamp := f.seedOrg(t)
+	f.subscribe(t, otherOrg, otherPwa, otherCamp, "US")
+	ob, err := svc.CreateBroadcast(ctx, otherOrg, "", push.CreateBroadcastInput{Name: "Theirs", Title: "Hi", Target: push.TargetDestination})
+	if err != nil {
+		t.Fatal(err)
+	}
+	at := func(s string) time.Time {
+		v, err := time.Parse(time.RFC3339, s)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return v
+	}
+	for _, r := range []struct {
+		org, broadcast, bucket, campaign, country string
+		sent, delivered, opened                   int
+	}{
+		{f.org, b.ID, "2026-03-10T23:30:00Z", "camp-a", "DE", 5, 4, 1},
+		{f.org, b.ID, "2026-03-11T00:15:00Z", "camp-a", "US", 3, 3, 0},
+		{f.org, b.ID, "2026-03-11T10:00:00Z", "camp-b", "DE", 2, 2, 2},
+		{otherOrg, ob.ID, "2026-03-11T10:00:00Z", "camp-a", "DE", 100, 100, 100},
+	} {
+		if _, err := f.pool.Exec(ctx, `INSERT INTO push_broadcast_stats (organization_id, broadcast_id, bucket, pwa_id, campaign_id, country, sent, delivered, opened)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`, r.org, r.broadcast, at(r.bucket), f.pwa, r.campaign, r.country, r.sent, r.delivered, r.opened); err != nil {
+			t.Fatal(err)
+		}
+	}
+	type key struct{ day, campaign string }
+	sum := func(rows []push.ReportStatsRow) map[key]int {
+		out := map[key]int{}
+		for _, r := range rows {
+			out[key{r.Day, r.Keys[push.StatsByCampaign]}] += r.Sent
+		}
+		return out
+	}
+
+	// Berlin is UTC+1 in March: 23:30Z on the 10th is the 11th there.
+	rows, err := f.repo.ReportStats(ctx, f.org, push.ReportStatsQuery{
+		From: at("2026-03-10T23:00:00Z"), To: at("2026-03-12T23:00:00Z"), Timezone: "Europe/Berlin",
+		ByDay: true, GroupBy: []push.StatsGroup{push.StatsByCampaign},
+	})
+	if err != nil {
+		t.Fatalf("ReportStats: %v", err)
+	}
+	if got := sum(rows); len(got) != 2 || got[key{"2026-03-11", "camp-a"}] != 8 || got[key{"2026-03-11", "camp-b"}] != 2 {
+		t.Fatalf("by day in Berlin = %v, want camp-a 8 and camp-b 2 on the 11th", got)
+	}
+	rows, err = f.repo.ReportStats(ctx, f.org, push.ReportStatsQuery{
+		From: at("2026-03-10T00:00:00Z"), To: at("2026-03-12T00:00:00Z"), ByDay: true, GroupBy: []push.StatsGroup{push.StatsByCampaign},
+	})
+	if got := sum(rows); err != nil || got[key{"2026-03-10", "camp-a"}] != 5 || got[key{"2026-03-11", "camp-a"}] != 3 {
+		t.Fatalf("by day in UTC = %v, %v; want camp-a 5 on the 10th and 3 on the 11th", got, err)
+	}
+
+	rows, err = f.repo.ReportStats(ctx, f.org, push.ReportStatsQuery{
+		From: at("2026-03-01T00:00:00Z"), To: at("2026-04-01T00:00:00Z"),
+		GroupBy: []push.StatsGroup{push.StatsByCampaign, push.StatsByPwa},
+		Filters: []push.ReportStatsFilter{{Group: push.StatsByCountry, Value: "DE"}},
+	})
+	if err != nil {
+		t.Fatalf("ReportStats: %v", err)
+	}
+	if got := sum(rows); len(got) != 2 || got[key{"", "camp-a"}] != 5 || got[key{"", "camp-b"}] != 2 || rows[0].Keys[push.StatsByPwa] != f.pwa {
+		t.Fatalf("DE by campaign and PWA = %+v, want camp-a 5 and camp-b 2 (the other organization's 100 left out)", rows)
+	}
+	for _, r := range rows {
+		if r.Keys[push.StatsByCampaign] == "camp-b" && (r.Delivered != 2 || r.Opened != 2) {
+			t.Fatalf("camp-b counters = %+v", r.StatsCounts)
+		}
+	}
+
+	if _, err := f.repo.ReportStats(ctx, f.org, push.ReportStatsQuery{GroupBy: []push.StatsGroup{push.StatsByBroadcast}}); err == nil {
+		t.Fatal("grouping by broadcast succeeded, want an error (not a report dimension)")
+	}
+}
