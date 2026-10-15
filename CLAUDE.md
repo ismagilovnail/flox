@@ -19,14 +19,14 @@ referenced below as §N).
 ## CURRENT STATE — UPDATE THIS EVERY PHASE
 
 ```
-CURRENT PHASE : PHASE 30.44 — INCOMING POSTBACK URL, UX-1/UX-2 (closed)
+CURRENT PHASE : PHASE 30.45 — FIRST STEPS ON THE OVERVIEW, UX-3 part 1 (closed)
 STATUS        : Product audit 2026-10-15 (docs/audit-product-2026-10-15.md)
                 is the backlog: items on the local dev panel tools/devpanel
                 (make devpanel → 127.0.0.1:8099; memory: flox-audit-tracker
                 — keep statuses current). Done: SEC-1, SEC-2, DATA-1, DEV-1,
-                UX-1, UX-2. P0 left: OPS-1..3 (prod, restore, load) — infra,
-                needs the owner's hosting choice.
-LAST COMMIT   : feat(networks): incoming postback URL, optional outgoing.
+                UX-1, UX-2; UX-3 part 1 (part 2: postback dry run). P0 left:
+                OPS-1..3 (prod, restore, load) — needs the owner's hosting.
+LAST COMMIT   : feat(onboarding): first steps on the overview.
 UNCOMMITTED   : the user's gallery-transcoding WIP (00085, processor.go,
                 transcode.go, worker ffmpeg) — not ours, leave it alone.
                 Dev DB wiped 2026-10-15 (dev-fresh), at migration 00086.

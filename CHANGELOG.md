@@ -5,6 +5,20 @@ per-phase, matching `CLAUDE.md`'s phase protocol. The one exception is
 [Between phases], below: spec amendments and the code changes that follow from
 them land between phases and would otherwise be invisible here.
 
+## [Phase 30.45] — First steps on the Overview (audit UX-3, part 1)
+
+A new organization had nothing on the Overview telling it what to do. `docs/onboarding.md`.
+
+- `GET /onboarding` (`apps/internal/onboarding`, `analytics.read`): eight steps read from the organization's own data —
+  source, network, status mapping, offer, campaign with an active tracking link, first click (ClickHouse; `unknown`
+  without it, proved by a conversion), first accepted postback, spend or a connected ad account. Nothing stored.
+- Overview: a "First steps: N of 8" card above the notices — progress bar, each open step with a hint and a link to
+  where it is done, the next one highlighted; gone when all are done; hideable per organization. EN/RU.
+- Tests: `onboarding` (order, click without ClickHouse, organization scope on Postgres — mutation-checked: dropping one
+  `organization_id` filter fails it), `first-steps.test.tsx`. Full Go suite in a clean worktree incl. the RBAC
+  read-gate and cross-tenant route tests and e2e; tsc, eslint, vitest 161/161. Live: demo org 7/8 (no spend), empty
+  org 0/8, viewer 200, no session 401; the card on the Overview.
+
 ## [Phase 30.44] — Incoming postback URL on the network page; outgoing URL optional (audit UX-1, UX-2)
 
 The audit's onboarding blocker: nothing gave a network its incoming postback URL whole. Worse than the audit said:

@@ -58,5 +58,57 @@
     "title_other": "{{count}} conversions' revenue is missing from the reports",
     "description": "These conversions have no USD amount: there is no exchange rate for their date, or the postback came without a currency. Revenue, profit and ROI above are lower by their amount.",
     "link": "Open the postback log"
+  },
+  "firstSteps": {
+    "title": "First steps: {{done}} of {{total}}",
+    "description": "What is left before your first conversion shows up here. Steps tick themselves from your data.",
+    "dismiss": "Hide first steps",
+    "progressAria": "{{done}} of {{total}} done",
+    "doneSr": "done",
+    "todoSr": "not done",
+    "unknownSr": "could not be checked",
+    "unknown": "Could not be checked: the click store is unavailable right now.",
+    "steps": {
+      "source": {
+        "title": "Add a traffic source",
+        "hint": "Where the traffic comes from: Facebook, TikTok, a push network…",
+        "action": "Add"
+      },
+      "network": {
+        "title": "Add an affiliate network",
+        "hint": "Who owns the offers and sends the postbacks.",
+        "action": "Add"
+      },
+      "mapping": {
+        "title": "Map the network's statuses",
+        "hint": "For example reg → CPA_HOLD, ftd → CPA_ACCEPT. Without it postbacks are refused.",
+        "action": "Set up"
+      },
+      "offer": {
+        "title": "Add an offer",
+        "hint": "An offer link with the {click_id} macro — that is how the network returns it in the postback.",
+        "action": "Add"
+      },
+      "campaign": {
+        "title": "Create a campaign with a tracking link",
+        "hint": "An active campaign and the link you put in your ads.",
+        "action": "Create"
+      },
+      "click": {
+        "title": "Get a first click",
+        "hint": "Open the campaign's tracking link yourself — the click shows up in the log.",
+        "action": "Campaigns"
+      },
+      "conversion": {
+        "title": "Get a first conversion",
+        "hint": "Give the network the incoming postback URL from its page.",
+        "action": "Networks"
+      },
+      "cost": {
+        "title": "Enter spend",
+        "hint": "No spend, no profit or ROI. Enter it on the campaign or connect an ad account.",
+        "action": "Campaigns"
+      }
+    }
   }
 }

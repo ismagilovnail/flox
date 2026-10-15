@@ -58,6 +58,7 @@ import (
 	"github.com/ismagilovnail/flox/apps/internal/network"
 	"github.com/ismagilovnail/flox/apps/internal/offer"
 	"github.com/ismagilovnail/flox/apps/internal/offercap"
+	"github.com/ismagilovnail/flox/apps/internal/onboarding"
 	"github.com/ismagilovnail/flox/apps/internal/pixel"
 	"github.com/ismagilovnail/flox/apps/internal/pixelsend"
 	"github.com/ismagilovnail/flox/apps/internal/postback"
@@ -722,6 +723,19 @@ func buildServer(ctx context.Context, cfg config.Config, logger *slog.Logger, re
 		r.Use(tenantMiddleware)
 		r.Use(readGate("campaign.read"))
 		routingSimulateHandler.Register(r)
+	})
+
+	// The Overview's "First steps" checklist (audit 2026-10-15, UX-3).
+	// Without ClickHouse the click step reads as unknown, nothing else.
+	var clickProbe onboarding.ClickProbe
+	if ch != nil {
+		clickProbe = onboarding.NewCHClickProbe(ch)
+	}
+	onboardingHandler := onboarding.NewHandler(onboarding.NewService(onboarding.NewRepository(db), clickProbe, logger), logger)
+	srv.Mux().Route("/onboarding", func(r chi.Router) {
+		r.Use(tenantMiddleware)
+		r.Use(readGate("analytics.read"))
+		onboardingHandler.Register(r)
 	})
 
 	if ch != nil {
