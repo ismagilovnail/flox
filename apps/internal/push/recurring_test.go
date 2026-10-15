@@ -114,7 +114,9 @@ func TestRecurringBroadcast(t *testing.T) {
 	}
 	kid := kids[0]
 	if kid.Kind != push.KindOnce || kid.Status != push.BroadcastSent || kid.Total != 2 ||
-		kid.Name != "Daily · "+slot.Format(time.DateOnly) {
+		// The name carries the slot's date in the recurrence's zone (UTC
+		// here), not the machine's: in UTC+5 after 22:00 they differ.
+		kid.Name != "Daily · "+slot.UTC().Format(time.DateOnly) {
 		t.Fatalf("send = %+v", kid)
 	}
 	got, _ := svc.GetBroadcast(ctx, f.org, b.ID)
