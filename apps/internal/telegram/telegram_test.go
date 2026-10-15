@@ -190,9 +190,10 @@ func TestConnect(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Connect: %v", err)
 	}
-	if b.Username != "lucky_bot" || b.DeepLink != "https://t.me/lucky_bot?start={click_id}" || b.Channel == nil ||
-		b.Channel.ID != -1001234567 || b.Channel.InviteLink != "https://t.me/luckychan" || b.Channel.Title != "Lucky" {
-		t.Fatalf("bot = %+v (channel %+v)", b, b.Channel)
+	if b.Username != "lucky_bot" || b.DeepLink != "https://t.me/lucky_bot?start={click_id}" || len(b.Channels) != 1 ||
+		b.Channels[0].TgChatID != -1001234567 || b.Channels[0].InviteLink != "https://t.me/luckychan" || b.Channels[0].Title != "Lucky" ||
+		b.Channels[0].ClickInviteLink != "https://t.example/tgj/"+b.Channels[0].ID+"?click={click_id}" {
+		t.Fatalf("bot = %+v (channels %+v)", b, b.Channels)
 	}
 	hook := f.api.webhooks[token]
 	if hook["url"] != "https://t.example/tg/"+b.ID || len(fmt.Sprint(hook["secret_token"])) < 32 ||
@@ -216,7 +217,7 @@ func TestConnect(t *testing.T) {
 	f.api.chats["-1009876543"] = telegram.Chat{ID: -1009876543, Type: "channel", Title: "Private"}
 	f.api.admins[me2.ID] = true
 	b2, err := f.svc.Connect(ctx, f.org, "", telegram.ConnectInput{Token: token2, Channel: "-1009876543"})
-	if err != nil || b2.Channel == nil || b2.Channel.InviteLink != "https://t.me/+private" || f.api.invites != 1 {
+	if err != nil || len(b2.Channels) != 1 || b2.Channels[0].InviteLink != "https://t.me/+private" || f.api.invites != 1 {
 		t.Fatalf("private channel = %+v, %v (invites %d)", b2, err, f.api.invites)
 	}
 
@@ -320,6 +321,7 @@ func (failingResolver) ByExternalClickID(context.Context, string, string) ([]att
 type webhookFixture struct {
 	*fixture
 	bot    telegram.Bot
+	ch     telegram.Channel // the bot's channel
 	secret string
 	router chi.Router
 	events *sink
@@ -334,7 +336,7 @@ func newWebhookFixture(t *testing.T, clicks attribution.ClickResolver) *webhookF
 	if err != nil {
 		t.Fatal(err)
 	}
-	w := &webhookFixture{fixture: f, bot: b, secret: fmt.Sprint(f.api.webhooks[token]["secret_token"]), router: chi.NewRouter(), events: &sink{}}
+	w := &webhookFixture{fixture: f, bot: b, ch: b.Channels[0], secret: fmt.Sprint(f.api.webhooks[token]["secret_token"]), router: chi.NewRouter(), events: &sink{}}
 	telegram.NewWebhook(f.repo, clicks, w.events, f.logger).Register(w.router)
 	return w
 }
@@ -370,7 +372,7 @@ func TestWebhook(t *testing.T) {
 	theirs := attribution.Click{ClickID: idgen.New(), OrganizationID: idgen.New(), CampaignID: "theirs"}
 	clicks.Record(theirs)
 	const alice, bob, carol = 1001, 1002, 1003
-	channel := w.bot.Channel.ID
+	channel := w.ch.TgChatID
 
 	// The secret is Telegram's proof; a wrong one is nobody.
 	if rec := w.post(t, "wrong", start(alice, "/start "+click.ClickID)); rec.Code != http.StatusNotFound {

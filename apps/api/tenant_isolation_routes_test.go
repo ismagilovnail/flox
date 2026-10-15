@@ -70,6 +70,7 @@ var segmentKinds = map[string]string{
 	"stream-sets":     "streamSet",
 	"tracking-links":  "trackingLink",
 	"telegram-bots":   "telegramBot",
+	"channels":        "telegramChannel", // /telegram-bots/{id}/channels/{channelId}
 	"folders":         "folder",
 	"custom-metrics":  "customMetric",
 	"domains":         "domain",
@@ -659,6 +660,10 @@ func seedEveryKind(t *testing.T, ctx context.Context, pool *pgxpool.Pool, orgID,
 	_, err = pool.Exec(ctx, `INSERT INTO telegram_bots (id, organization_id, tg_bot_id, username, token_encrypted, webhook_secret_hash)
 		VALUES ($1, $2, $3, 'seed_bot', 'x', 'x')`, ids["telegramBot"], orgID, mrand.Int64N(1<<40))
 	must("telegram bot", err)
+	ids["telegramChannel"] = idgen.New()
+	_, err = pool.Exec(ctx, `INSERT INTO telegram_channels (id, bot_id, organization_id, tg_chat_id, title, invite_link)
+		VALUES ($1, $2, $3, $4, 'Seed', 'https://t.me/seedchan')`, ids["telegramChannel"], ids["telegramBot"], orgID, -mrand.Int64N(1<<40))
+	must("telegram channel", err)
 
 	// A push subscriber and a broadcast, written directly: a broadcast
 	// sent through the service would queue deliveries the dev worker sends.
@@ -809,6 +814,7 @@ func referenceCases(env *isolationEnv) []refCase {
 // a referenceCases entry or listed here with a reason.
 var notReferences = map[string]string{
 	"adAccountId":                  "the ad platform's own account id",
+	"tgChatId":                     "response only: Telegram's id of a channel",
 	"clientId":                     "the ad platform's OAuth client id",
 	"pixelId":                      "the ad platform's pixel id",
 	"sourceEventId":                "pixel.Event, a queue payload FLOX writes itself — never read from a request",

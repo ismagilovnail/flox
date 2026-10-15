@@ -17,28 +17,34 @@ type Bot struct {
 	ID          string    `json:"id"`
 	Username    string    `json:"username"`
 	WelcomeText string    `json:"welcomeText"`
-	Channel     *Channel  `json:"channel"`
+	Channels    []Channel `json:"channels"`
 	CreatedAt   time.Time `json:"createdAt"`
 	// DeepLink is what to put as a destination URL: the {click_id} macro
 	// makes each visit open the bot with its own click.
 	DeepLink string `json:"deepLink"`
-	// ClickInviteLink (a bot with a channel, on a configured deployment):
-	// a destination URL sending each click to its own invite link of the
-	// channel, so a join is attributed without a /start. FreeInviteLinks is
-	// the pool left (InvitePool keeps it at InvitePoolSize).
+}
+
+// Channel is a channel the bot administers: joining it is TG_JOIN.
+type Channel struct {
+	ID         string    `json:"id"`
+	TgChatID   int64     `json:"tgChatId"`
+	Title      string    `json:"title"`
+	InviteLink string    `json:"inviteLink"`
+	CreatedAt  time.Time `json:"createdAt"`
+	// ClickInviteLink (on a configured deployment): a destination URL
+	// sending each click to its own invite link of the channel, so a join
+	// is attributed without a /start. FreeInviteLinks is the pool left
+	// (InvitePool keeps it at InvitePoolSize).
 	ClickInviteLink string `json:"clickInviteLink,omitempty"`
 	FreeInviteLinks int    `json:"freeInviteLinks"`
 }
 
-// Channel is the channel a bot administers: joining it is TG_JOIN.
-type Channel struct {
-	ID         int64  `json:"id"`
-	Title      string `json:"title"`
-	InviteLink string `json:"inviteLink"`
-}
+// MaxChannels bounds a bot's channels (each keeps a pool of invite links).
+const MaxChannels = 10
 
-// ConnectInput connects a bot. Channel is optional: "@username" or the
-// numeric id ("-100…") of a channel the bot is an admin of.
+// ConnectInput connects a bot. Channel is optional (more can be added
+// later): "@username" or the numeric id ("-100…") of a channel the bot is
+// an admin of.
 type ConnectInput struct {
 	Token       string
 	WelcomeText string
@@ -53,6 +59,9 @@ var (
 	channelPattern = regexp.MustCompile(`^(@[A-Za-z][A-Za-z0-9_]{4,31}|-100\d{5,15})$`)
 	// clickPattern is a click id (a ULID) as a /start payload carries it.
 	clickPattern = regexp.MustCompile(`^[0-7][0-9A-HJKMNP-TV-Z]{25}$`)
+	// idPattern is a bot's or channel's id (a ULID): anything else is not
+	// found, before Postgres' ulid domain refuses it as an error.
+	idPattern = clickPattern
 )
 
 func deepLink(username string) string {

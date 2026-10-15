@@ -93,10 +93,10 @@ func (h *Webhook) handle(ctx context.Context, b webhookBot, upd Update) (map[str
 	case upd.ChatMember != nil:
 		return nil, h.chatMember(ctx, b, upd.ChatMember)
 	case upd.ChatJoinRequest != nil:
-		// The bot manages its channel: anyone asking to join is let in, and
-		// the chat_member update that follows records the join.
-		if b.ChannelID != 0 && upd.ChatJoinRequest.Chat.ID == b.ChannelID {
-			return map[string]any{"method": "approveChatJoinRequest", "chat_id": b.ChannelID, "user_id": upd.ChatJoinRequest.From.ID}, nil
+		// The bot manages its channels: anyone asking to join one is let in,
+		// and the chat_member update that follows records the join.
+		if c, ok := b.channel(upd.ChatJoinRequest.Chat.ID); ok {
+			return map[string]any{"method": "approveChatJoinRequest", "chat_id": c.TgChatID, "user_id": upd.ChatJoinRequest.From.ID}, nil
 		}
 	}
 	return nil, nil
@@ -131,15 +131,18 @@ func (h *Webhook) message(ctx context.Context, b webhookBot, m *Message) (map[st
 	return h.welcome(b, m.Chat.ID), nil
 }
 
-// chatMember records TG_JOIN when someone becomes a member of the bot's
-// channel: on the click of the per-click invite link they joined through,
-// else on the click of their last /start.
+// chatMember records TG_JOIN when someone becomes a member of one of the
+// bot's channels: on the click of the per-click invite link they joined
+// through, else on the click of their last /start. One TG_JOIN per click,
+// whichever channel — the event does not name one, so a second channel
+// joined from the same click is not a second join.
 func (h *Webhook) chatMember(ctx context.Context, b webhookBot, u *ChatMemberUpdated) error {
-	if b.ChannelID == 0 || u.Chat.ID != b.ChannelID || !isMember(u.NewChatMember.Status) || isMember(u.OldChatMember.Status) {
+	c, ok := b.channel(u.Chat.ID)
+	if !ok || !isMember(u.NewChatMember.Status) || isMember(u.OldChatMember.Status) {
 		return nil
 	}
 	if u.InviteLink != nil {
-		done, err := h.inviteJoin(ctx, b, u.InviteLink.InviteLink)
+		done, err := h.inviteJoin(ctx, b, c, u.InviteLink.InviteLink)
 		if err != nil || done {
 			return err
 		}
@@ -167,8 +170,8 @@ func (h *Webhook) chatMember(ctx context.Context, b webhookBot, u *ChatMemberUpd
 // link. done: the join is the link's (recorded now or before); false
 // leaves it to the /start path — not one of the bot's claimed links, or
 // its click is unknown.
-func (h *Webhook) inviteJoin(ctx context.Context, b webhookBot, link string) (bool, error) {
-	claim, found, err := h.repo.invitedClick(ctx, b, link)
+func (h *Webhook) inviteJoin(ctx context.Context, b webhookBot, c webhookChannel, link string) (bool, error) {
+	claim, found, err := h.repo.invitedClick(ctx, c, link)
 	if err != nil || !found {
 		return false, err
 	}
@@ -189,7 +192,7 @@ func (h *Webhook) inviteJoin(ctx context.Context, b webhookBot, link string) (bo
 		}
 		return false, nil
 	}
-	isNew, err := h.repo.recordInviteJoin(ctx, b, link, h.now())
+	isNew, err := h.repo.recordInviteJoin(ctx, c, link, h.now())
 	if err != nil {
 		return false, err
 	}
@@ -226,23 +229,30 @@ func (h *Webhook) record(t event.Type, b webhookBot, click attribution.Click) {
 	}
 }
 
-// welcome is the answer to /start: the welcome text, with a button to the
-// channel when there is one. Neither: no answer.
+// welcome is the answer to /start: the welcome text, with a button to each
+// channel. Neither: no answer.
 func (h *Webhook) welcome(b webhookBot, chatID int64) map[string]any {
+	var rows [][]map[string]string
+	for _, c := range b.Channels {
+		if c.InviteLink == "" {
+			continue
+		}
+		label := c.Title
+		if label == "" {
+			label = c.InviteLink
+		}
+		rows = append(rows, []map[string]string{{"text": label, "url": c.InviteLink}})
+	}
 	text := b.WelcomeText
-	if text == "" {
-		text = b.InviteLink
+	if text == "" && len(rows) > 0 {
+		text = rows[0][0]["url"]
 	}
 	if text == "" {
 		return nil
 	}
 	msg := map[string]any{"method": "sendMessage", "chat_id": chatID, "text": text}
-	if b.InviteLink != "" {
-		label := b.ChannelTitle
-		if label == "" {
-			label = b.InviteLink
-		}
-		msg["reply_markup"] = map[string]any{"inline_keyboard": [][]map[string]string{{{"text": label, "url": b.InviteLink}}}}
+	if len(rows) > 0 {
+		msg["reply_markup"] = map[string]any{"inline_keyboard": rows}
 	}
 	return msg
 }

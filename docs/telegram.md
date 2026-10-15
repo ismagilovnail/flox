@@ -4,7 +4,8 @@
 chosen by the owner on 2026-10-14: FLOX takes the bot's webhook; a join of
 the bot's channel is attributed through the user's `/start`; pixels for TG
 events came next (2026-10-15, `docs/pixels.md`), then per-click invite
-links, so a join without /start is attributed too (2026-10-15, below).
+links, so a join without /start is attributed too, then several channels
+per bot and editing a bot (2026-10-15, below).
 
 ## Flow
 
@@ -25,7 +26,11 @@ link Settings shows (`deepLink`) — so no routing change was needed.
 ## Connecting (apps/api, `internal/telegram`)
 
 Settings → Integrations → **Telegram bots** (`settings.write`):
-`GET/POST /telegram-bots`, `DELETE /telegram-bots/{id}`. Connecting:
+`GET/POST /telegram-bots`, `PATCH /telegram-bots/{id}` (`welcomeText`),
+`DELETE /telegram-bots/{id}`, and the bot's channels
+`POST /telegram-bots/{id}/channels` (`channel`),
+`DELETE /telegram-bots/{id}/channels/{channelId}` (see "Channels").
+Connecting:
 
 1. `getMe` with the token (malformed or refused: a `token` field error
    carrying Telegram's own reason).
@@ -72,12 +77,38 @@ join approval) is returned in the HTTP response, which Telegram executes.
 The route is listed in the api's `deliberatelyOpen` (no session — the
 secret authenticates it).
 
+## Channels
+
+A bot has up to `MaxChannels` (10) channels (`telegram_channels`,
+migration 00078 — the one channel of before moved there). The first can
+be given on connect; more are added later, each checked like the first
+(`getChat`; the bot an administrator that can invite; the public t.me link
+or one `createChatInviteLink` made now) — Telegram's refusal is a
+`channel` field error, a channel already on the bot 409, an 11th a field
+error. Removing a channel drops it and its invite-link pool: the free links
+were never handed out, the claimed ones stay valid in Telegram (someone who
+just clicked still gets in) but their joins are no longer attributed. The
+channel and its members in Telegram are untouched.
+
+- **/start** is answered with the welcome text and a button per channel
+  (oldest first; no welcome text: the first channel's link as the text).
+- **Join requests** to any of the bot's channels are approved.
+- **TG_JOIN** on a join of any of them. Through /start: once per click,
+  whichever channel — the event does not name a channel, so a second
+  channel joined from the same click would count one visitor twice.
+  Through a per-click link: once per link (one click, one channel).
+- **Editing** a bot is its welcome text (`PATCH`) and its channels; a new
+  token is still remove and connect again.
+- Ids in the API's paths and in `/tgj/` that are not ULIDs are 404 before
+  Postgres (its `ulid` domain would refuse them as an error).
+
 ## Per-click invite links
 
-To send visitors straight to the channel, use the bot's **channel link per
-click** (Settings, shown for a bot with a channel on a configured
-deployment) as the destination:
-`TELEGRAM_WEBHOOK_BASE_URL/tgj/{botId}?click={click_id}`.
+To send visitors straight to a channel, use its **channel link per click**
+(Settings, shown per channel on a configured deployment) as the
+destination: `TELEGRAM_WEBHOOK_BASE_URL/tgj/{channelId}?click={click_id}`.
+`/tgj/{botId}` — the form Phase 30.29 showed — still works and means the
+bot's first channel.
 
 ```
 click /t/{slug} ──► /tgj/{botId}?click={click_id}  (tracker)
@@ -90,7 +121,7 @@ click /t/{slug} ──► /tgj/{botId}?click={click_id}  (tracker)
 - **Pool** (`telegram_invite_links`, migration 00077). Telegram creates
   invite links and the redirect may not call it (CLAUDE.md #9), so the
   worker (`telegram.InvitePool`, every minute) keeps `InvitePoolSize` (50)
-  free links per bot with a channel, at most 20 new per bot per run
+  free links per channel, at most 20 new per channel per run
   (`createChatInviteLink`, named "FLOX click"). It needs
   `INTEGRATION_ENCRYPTION_KEY` (the bots' tokens) and `TELEGRAM_API_URL` if
   set. A bot Telegram refuses (rights taken away, token revoked) is logged
@@ -102,20 +133,20 @@ click /t/{slug} ──► /tgj/{botId}?click={click_id}  (tracker)
   (the template opened as is), redirects to the channel's shared link: the
   visitor gets in, the join counts only through a /start;
   `flox_telegram_invite_fallback_total` counts the empty-pool case. Unknown
-  bot or one without a channel: 404. `Cache-Control: no-store`.
+  channel (or a bot without channels): 404. `Cache-Control: no-store`.
 - **Join.** `chat_member` carries the link the user joined through
   (`invite_link`, in full for links the bot created). A claimed link of
-  this bot: TG_JOIN on its click, once per link (`joined_at`). The link
+  that channel: TG_JOIN on its click, once per link (`joined_at`). The link
   already used (passed on to someone else), or not one of ours (the shared
   link): the /start path as before. The link's click not in ClickHouse yet
   and claimed under 10 minutes ago: 503, Telegram re-sends the update;
   later: nothing recorded.
 - **Expiry.** Claimed links are revoked (`revokeChatInviteLink`) and
-  forgotten after `InviteLinkTTL` (30 days), up to 100 per bot per run; a
+  forgotten after `InviteLinkTTL` (30 days), up to 100 per channel per run; a
   link Telegram refuses to revoke is forgotten too, one it could not be
   asked about is kept for the next run.
-- Settings shows the link with a copy button and the free links left
-  (`freeInviteLinks`; 0 is shown as a warning).
+- Settings shows each channel's link with a copy button and its free
+  links left (`freeInviteLinks`; 0 is shown as a warning).
 
 The click id in `/tgj/` is not signed, like the `/start` payload: anyone can
 claim links with made-up ids. That only spends the pool (refilled each
@@ -124,9 +155,8 @@ join comes, so nothing is recorded.
 
 ## Not done
 
-Several channels per bot; editing a bot (remove and connect again);
-revoking a removed bot's unclaimed pool links (its token is gone with it —
-they stay valid invites to the channel, attributed to nothing).
+Changing a connected bot's token (remove and connect again); which channel
+a TG_JOIN was in, in reports (the event has no channel).
 
 ## Pixels
 
@@ -184,3 +214,29 @@ names: Facebook/TikTok `Contact` / `Subscribe`, Snapchat `CUSTOM_EVENT_1` /
   whose token cannot be decrypted. The panel's new row was not seen in the
   browser: the dev deployment is not configured for Telegram (no
   `TELEGRAM_WEBHOOK_BASE_URL`), so the API leaves `clickInviteLink` out.
+
+## Verified (2026-10-15, channels and editing)
+
+- Migration 00078 up → down → up on a dev bot with a channel and two pool
+  links (one claimed): the channel and links moved and came back; a bot
+  without a channel got none.
+- Tests (`channels_test.go`): add a public and a private channel after
+  connecting, the same one again 409, malformed/unknown channel field
+  errors, up to 10 then a field error, welcome edited (trimmed) and too
+  long refused, another organization's update/add/remove 404 and list
+  empty, remove then 404; with two channels a button each, TG_JOIN on the
+  second channel, none for the first from the same click, join request to
+  the second approved, a pool per channel, a link reported in the other
+  channel not counted. The api's route and reference isolation tests cover
+  the new routes (`channels` → a seeded channel; `tgChatId` is Telegram's).
+  Mutation-checked: the channel limit, the organization filter of update
+  and of channel delete, only the first channel matched, one button.
+- Live on the dev stack: `/tgj/{channelId}` of the second channel → its
+  pool link (same on reload), `/tgj/{botId}` → the first channel's shared
+  link (empty pool), malformed id 404; /start answered with two buttons; a
+  join through the second channel's link → TG_JOIN in ClickHouse; API
+  malformed ids 404, a bad channel 422. In Chrome: the bot with two
+  channels, the welcome edited (toast, text updated, audit
+  `telegram_bot.updated`), an invalid channel refused inline, a channel
+  removed after confirming (toast, 1/10, audit `telegram_bot.channel_removed`).
+  Adding a channel for real was not done: it needs Telegram.

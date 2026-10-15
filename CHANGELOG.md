@@ -5,6 +5,25 @@ per-phase, matching `CLAUDE.md`'s phase protocol. The one exception is
 [Between phases], below: spec amendments and the code changes that follow from
 them land between phases and would otherwise be invisible here.
 
+## [Phase 30.30] — Telegram: several channels per bot, editing a bot
+
+The rest of `docs/telegram.md` "Not done".
+
+- Migration 00078 `telegram_channels` (up to 10 per bot); the bots' one channel moves there, `telegram_bots.channel_*`
+  dropped (Down restores the first channel). `telegram_invite_links.channel_id`: a pool per channel.
+- API: `PATCH /telegram-bots/{id}` (welcome text), `POST /telegram-bots/{id}/channels` (checked with Telegram like on
+  connect; 409 for one already there), `DELETE /telegram-bots/{id}/channels/{channelId}`; audited. Bots return
+  `channels: [...]` (each with `tgChatId`, `clickInviteLink`, `freeInviteLinks`) instead of `channel`. Ids that are
+  not ULIDs are 404.
+- Tracker: `/tgj/{channelId}?click=`; `/tgj/{botId}` still works (the first channel). Webhook: joins and join
+  requests of any of the bot's channels; /start answered with a button per channel; TG_JOIN stays once per click.
+- Worker: the invite pool is kept per channel.
+- Web: Settings → Telegram bots — edit the welcome message, a channel list per bot (add, remove with confirm,
+  shared link, link per click, pool), `telegram-bot-row.tsx`; en/ru.
+- Tests: `TestChannelsAndEditing`, `TestWebhookSeveralChannels`, existing telegram tests on channels, the api's
+  isolation tests extended to the channel routes; mutation-checked; migration up/down/up on data; checked live and
+  in the browser (adding a channel for real needs Telegram, not done).
+
 ## [Phase 30.29] — Telegram per-click invite links
 
 Leftover of Phase 30.25 (`docs/telegram.md` "Not done"): a join of a bot's channel without /start is

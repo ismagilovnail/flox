@@ -1,22 +1,37 @@
 import { apiFetch } from "@/lib/api/client";
 
+/** Mirrors internal/telegram's Channel: a channel the bot administers;
+ * joining any of a bot's channels is TG_JOIN (once per click). */
+export type TelegramChannel = {
+  id: string;
+  /** Telegram's id of the channel (-100…). */
+  tgChatId: number;
+  title: string;
+  /** The channel's shared link. */
+  inviteLink: string;
+  createdAt: string;
+  /** On a configured deployment: destination URL sending each click to its
+   * own invite link of this channel, so a join is TG_JOIN without a /start. */
+  clickInviteLink?: string;
+  /** Invite links left in the channel's pool (the worker keeps it topped up). */
+  freeInviteLinks: number;
+};
+
 /** Mirrors internal/telegram's Bot. The token never comes back. */
 export type TelegramBot = {
   id: string;
   username: string;
   welcomeText: string;
-  /** The channel the bot administers; joining it is TG_JOIN. */
-  channel: { id: number; title: string; inviteLink: string } | null;
+  /** Oldest first, at most MAX_TELEGRAM_CHANNELS. */
+  channels: TelegramChannel[];
   createdAt: string;
   /** Destination URL to use: {click_id} makes each visit open the bot
    * with its own click (TG_START). */
   deepLink: string;
-  /** With a channel: destination URL sending each click to its own invite
-   * link of the channel, so a join is TG_JOIN without a /start. */
-  clickInviteLink?: string;
-  /** Invite links left in the pool (the worker keeps it topped up). */
-  freeInviteLinks: number;
 };
+
+/** telegram.MaxChannels. */
+export const MAX_TELEGRAM_CHANNELS = 10;
 
 export type ConnectTelegramBotInput = {
   token: string;
@@ -36,4 +51,17 @@ export function connectTelegramBot(input: ConnectTelegramBotInput): Promise<Tele
 
 export function deleteTelegramBot(id: string): Promise<void> {
   return apiFetch(`/telegram-bots/${id}`, { method: "DELETE" });
+}
+
+export function updateTelegramBot(id: string, input: { welcomeText: string }): Promise<TelegramBot> {
+  return apiFetch(`/telegram-bots/${id}`, { method: "PATCH", body: input });
+}
+
+/** channel: "@channelname" or "-100…"; Telegram checks the bot can invite. */
+export function addTelegramChannel(botId: string, channel: string): Promise<TelegramBot> {
+  return apiFetch(`/telegram-bots/${botId}/channels`, { method: "POST", body: { channel } });
+}
+
+export function removeTelegramChannel(botId: string, channelId: string): Promise<TelegramBot> {
+  return apiFetch(`/telegram-bots/${botId}/channels/${channelId}`, { method: "DELETE" });
 }

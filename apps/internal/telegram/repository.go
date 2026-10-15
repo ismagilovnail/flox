@@ -30,25 +30,24 @@ type newBot struct {
 	TokenEncrypted             string
 	WebhookSecretHash          string
 	WelcomeText                string
-	Channel                    *Channel
+	Channel                    *Channel // optional first channel
 }
 
 func (r *Repository) create(ctx context.Context, b newBot) (Bot, error) {
-	var channelID *int64
-	title, link := "", ""
-	if b.Channel != nil {
-		channelID, title, link = &b.Channel.ID, b.Channel.Title, b.Channel.InviteLink
-	}
 	var userID *string
 	if b.UserID != "" {
 		userID = &b.UserID
 	}
-	_, err := r.db.Exec(ctx, `
+	tx, err := r.db.Begin(ctx)
+	if err != nil {
+		return Bot{}, fmt.Errorf("telegram: storing bot: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	_, err = tx.Exec(ctx, `
 		INSERT INTO telegram_bots (id, organization_id, tg_bot_id, username, token_encrypted, webhook_secret_hash,
-		                           welcome_text, channel_id, channel_title, channel_invite_link, created_by_user_id)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
-		b.ID, b.OrganizationID, b.TgBotID, b.Username, b.TokenEncrypted, b.WebhookSecretHash,
-		b.WelcomeText, channelID, title, link, userID)
+		                           welcome_text, created_by_user_id)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+		b.ID, b.OrganizationID, b.TgBotID, b.Username, b.TokenEncrypted, b.WebhookSecretHash, b.WelcomeText, userID)
 	var pgErr *pgconn.PgError
 	if errors.As(err, &pgErr) && pgErr.Code == "23505" {
 		return Bot{}, apierror.Conflict("this bot is already connected")
@@ -56,20 +55,39 @@ func (r *Repository) create(ctx context.Context, b newBot) (Bot, error) {
 	if err != nil {
 		return Bot{}, fmt.Errorf("telegram: storing bot: %w", err)
 	}
+	if b.Channel != nil {
+		if err := insertChannel(ctx, tx, b.OrganizationID, b.ID, *b.Channel); err != nil {
+			return Bot{}, err
+		}
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return Bot{}, fmt.Errorf("telegram: storing bot: %w", err)
+	}
 	return r.Get(ctx, b.OrganizationID, b.ID)
 }
 
-const botColumns = `id, username, welcome_text, channel_id, channel_title, channel_invite_link, created_at`
+func insertChannel(ctx context.Context, q interface {
+	Exec(context.Context, string, ...any) (pgconn.CommandTag, error)
+}, orgID, botID string, c Channel) error {
+	_, err := q.Exec(ctx, `
+		INSERT INTO telegram_channels (id, bot_id, organization_id, tg_chat_id, title, invite_link)
+		VALUES ($1, $2, $3, $4, $5, $6)`, c.ID, botID, orgID, c.TgChatID, c.Title, c.InviteLink)
+	var pgErr *pgconn.PgError
+	if errors.As(err, &pgErr) && pgErr.Code == "23505" {
+		return apierror.Conflict("this channel is already added to the bot")
+	}
+	if err != nil {
+		return fmt.Errorf("telegram: storing channel: %w", err)
+	}
+	return nil
+}
+
+const botColumns = `id, username, welcome_text, created_at`
 
 func scanBot(row pgx.Row) (Bot, error) {
-	var b Bot
-	var channelID *int64
-	var title, link string
-	if err := row.Scan(&b.ID, &b.Username, &b.WelcomeText, &channelID, &title, &link, &b.CreatedAt); err != nil {
+	b := Bot{Channels: []Channel{}}
+	if err := row.Scan(&b.ID, &b.Username, &b.WelcomeText, &b.CreatedAt); err != nil {
 		return Bot{}, err
-	}
-	if channelID != nil {
-		b.Channel = &Channel{ID: *channelID, Title: title, InviteLink: link}
 	}
 	b.DeepLink = deepLink(b.Username)
 	return b, nil
@@ -83,10 +101,15 @@ func (r *Repository) Get(ctx context.Context, orgID, id string) (Bot, error) {
 	if err != nil {
 		return Bot{}, fmt.Errorf("telegram: reading bot: %w", err)
 	}
-	return b, nil
+	bots := []Bot{b}
+	if err := r.attachChannels(ctx, orgID, bots); err != nil {
+		return Bot{}, err
+	}
+	return bots[0], nil
 }
 
-// List is the organization's bots, newest first.
+// List is the organization's bots, newest first, each with its channels
+// (oldest first).
 func (r *Repository) List(ctx context.Context, orgID string) ([]Bot, error) {
 	rows, err := r.db.Query(ctx, `SELECT `+botColumns+` FROM telegram_bots WHERE organization_id = $1 ORDER BY created_at DESC, id DESC`, orgID)
 	if err != nil {
@@ -101,7 +124,111 @@ func (r *Repository) List(ctx context.Context, orgID string) ([]Bot, error) {
 		}
 		out = append(out, b)
 	}
-	return out, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("telegram: listing bots: %w", err)
+	}
+	rows.Close()
+	return out, r.attachChannels(ctx, orgID, out)
+}
+
+// attachChannels fills the bots' channels with their free invite links.
+func (r *Repository) attachChannels(ctx context.Context, orgID string, bots []Bot) error {
+	if len(bots) == 0 {
+		return nil
+	}
+	ids := make([]string, len(bots))
+	byID := make(map[string]*Bot, len(bots))
+	for i := range bots {
+		ids[i] = bots[i].ID
+		byID[bots[i].ID] = &bots[i]
+	}
+	rows, err := r.db.Query(ctx, `
+		SELECT c.bot_id, c.id, c.tg_chat_id, c.title, c.invite_link, c.created_at,
+		       (SELECT count(*) FROM telegram_invite_links l WHERE l.channel_id = c.id AND l.click_id IS NULL)
+		FROM telegram_channels c
+		WHERE c.organization_id = $1 AND c.bot_id = ANY($2)
+		ORDER BY c.created_at, c.id`, orgID, ids)
+	if err != nil {
+		return fmt.Errorf("telegram: listing channels: %w", err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var botID string
+		var c Channel
+		if err := rows.Scan(&botID, &c.ID, &c.TgChatID, &c.Title, &c.InviteLink, &c.CreatedAt, &c.FreeInviteLinks); err != nil {
+			return fmt.Errorf("telegram: scanning channel: %w", err)
+		}
+		b := byID[botID]
+		b.Channels = append(b.Channels, c)
+	}
+	return rows.Err()
+}
+
+// updateWelcome sets the bot's welcome message.
+func (r *Repository) updateWelcome(ctx context.Context, orgID, id, text string) error {
+	tag, err := r.db.Exec(ctx, `UPDATE telegram_bots SET welcome_text = $3 WHERE id = $1 AND organization_id = $2`, id, orgID, text)
+	if err != nil {
+		return fmt.Errorf("telegram: updating bot: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return apierror.NotFound("bot not found")
+	}
+	return nil
+}
+
+// addChannel stores a channel of the bot, refusing a bot already at
+// MaxChannels. The bot row is locked so two adds cannot both pass the count.
+func (r *Repository) addChannel(ctx context.Context, orgID, botID string, c Channel) error {
+	tx, err := r.db.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("telegram: adding channel: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	var n int
+	err = tx.QueryRow(ctx, `
+		SELECT (SELECT count(*) FROM telegram_channels c WHERE c.bot_id = b.id)
+		FROM telegram_bots b WHERE b.id = $1 AND b.organization_id = $2 FOR UPDATE`, botID, orgID).Scan(&n)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return apierror.NotFound("bot not found")
+	}
+	if err != nil {
+		return fmt.Errorf("telegram: adding channel: %w", err)
+	}
+	if n >= MaxChannels {
+		return apierror.Validation("too many channels", map[string]string{"channel": fmt.Sprintf("a bot has at most %d channels", MaxChannels)})
+	}
+	if err := insertChannel(ctx, tx, orgID, botID, c); err != nil {
+		return err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("telegram: adding channel: %w", err)
+	}
+	return nil
+}
+
+// deleteChannel removes a channel of the bot with its invite-link pool.
+func (r *Repository) deleteChannel(ctx context.Context, orgID, botID, channelID string) error {
+	tag, err := r.db.Exec(ctx, `DELETE FROM telegram_channels WHERE id = $1 AND bot_id = $2 AND organization_id = $3`, channelID, botID, orgID)
+	if err != nil {
+		return fmt.Errorf("telegram: deleting channel: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return apierror.NotFound("channel not found")
+	}
+	return nil
+}
+
+// credentials is the bot's stored token and Telegram id, for checking a
+// channel it is added to.
+func (r *Repository) credentials(ctx context.Context, orgID, id string) (token string, tgBotID int64, err error) {
+	err = r.db.QueryRow(ctx, `SELECT token_encrypted, tg_bot_id FROM telegram_bots WHERE id = $1 AND organization_id = $2`, id, orgID).Scan(&token, &tgBotID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return "", 0, apierror.NotFound("bot not found")
+	}
+	if err != nil {
+		return "", 0, fmt.Errorf("telegram: reading bot token: %w", err)
+	}
+	return token, tgBotID, nil
 }
 
 // encryptedToken is the bot's stored token, for removing its webhook.
@@ -134,30 +261,55 @@ type webhookBot struct {
 	SecretHash         string
 	Username           string
 	WelcomeText        string
-	ChannelID          int64 // 0: none
-	ChannelTitle       string
-	InviteLink         string
+	Channels           []webhookChannel // oldest first
+}
+
+type webhookChannel struct {
+	ID         string
+	TgChatID   int64
+	Title      string
+	InviteLink string
+}
+
+// channel is the bot's channel with Telegram id chatID.
+func (b webhookBot) channel(chatID int64) (webhookChannel, bool) {
+	for _, c := range b.Channels {
+		if c.TgChatID == chatID {
+			return c, true
+		}
+	}
+	return webhookChannel{}, false
 }
 
 // webhookBot finds a bot by id alone: the webhook's URL names it, and its
 // secret header proves the call is Telegram's (checked by the caller).
 func (r *Repository) webhookBot(ctx context.Context, id string) (webhookBot, bool, error) {
 	var b webhookBot
-	var channelID *int64
 	err := r.db.QueryRow(ctx, `
-		SELECT id, organization_id, webhook_secret_hash, username, welcome_text, channel_id, channel_title, channel_invite_link
+		SELECT id, organization_id, webhook_secret_hash, username, welcome_text
 		FROM telegram_bots WHERE id = $1`, id,
-	).Scan(&b.ID, &b.OrganizationID, &b.SecretHash, &b.Username, &b.WelcomeText, &channelID, &b.ChannelTitle, &b.InviteLink)
+	).Scan(&b.ID, &b.OrganizationID, &b.SecretHash, &b.Username, &b.WelcomeText)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return webhookBot{}, false, nil
 	}
 	if err != nil {
 		return webhookBot{}, false, fmt.Errorf("telegram: reading bot for webhook: %w", err)
 	}
-	if channelID != nil {
-		b.ChannelID = *channelID
+	rows, err := r.db.Query(ctx, `
+		SELECT id, tg_chat_id, title, invite_link FROM telegram_channels
+		WHERE bot_id = $1 ORDER BY created_at, id`, id)
+	if err != nil {
+		return webhookBot{}, false, fmt.Errorf("telegram: reading bot channels for webhook: %w", err)
 	}
-	return b, true, nil
+	defer rows.Close()
+	for rows.Next() {
+		var c webhookChannel
+		if err := rows.Scan(&c.ID, &c.TgChatID, &c.Title, &c.InviteLink); err != nil {
+			return webhookBot{}, false, fmt.Errorf("telegram: scanning bot channel: %w", err)
+		}
+		b.Channels = append(b.Channels, c)
+	}
+	return b, true, rows.Err()
 }
 
 // recordStart remembers that tgUser started bot from clickID and reports

@@ -40,22 +40,30 @@ func (s *Service) List(ctx context.Context, orgID string) ([]Bot, error) {
 	if err != nil {
 		return nil, err
 	}
-	free, err := s.repo.freeInvites(ctx, orgID)
-	if err != nil {
-		return nil, err
-	}
 	for i := range bots {
-		s.decorate(&bots[i], free[bots[i].ID])
+		s.decorate(&bots[i])
 	}
 	return bots, nil
 }
 
-// decorate adds what depends on the deployment and the pool.
-func (s *Service) decorate(b *Bot, free int) {
-	if b.Channel != nil && s.webhookBase != "" {
-		b.ClickInviteLink = ClickInviteLink(s.webhookBase, b.ID)
+// Get is one of the organization's bots.
+func (s *Service) Get(ctx context.Context, orgID, id string) (Bot, error) {
+	b, err := s.repo.Get(ctx, orgID, id)
+	if err != nil {
+		return Bot{}, err
 	}
-	b.FreeInviteLinks = free
+	s.decorate(&b)
+	return b, nil
+}
+
+// decorate adds what depends on the deployment.
+func (s *Service) decorate(b *Bot) {
+	if s.webhookBase == "" {
+		return
+	}
+	for i := range b.Channels {
+		b.Channels[i].ClickInviteLink = ClickInviteLink(s.webhookBase, b.Channels[i].ID)
+	}
 }
 
 // Connect checks the token with Telegram, the channel (the bot must be an
@@ -109,11 +117,10 @@ func (s *Service) Connect(ctx context.Context, orgID, userID string, in ConnectI
 	if err := s.api.SetWebhook(ctx, in.Token, s.webhookBase+"/tg/"+id, secret, AllowedUpdates); err != nil {
 		return Bot{}, telegramError(err, "token")
 	}
-	b, err := s.repo.create(ctx, newBot{
+	if _, err := s.repo.create(ctx, newBot{
 		ID: id, OrganizationID: orgID, UserID: userID, TgBotID: me.ID, Username: me.Username,
 		TokenEncrypted: encrypted, WebhookSecretHash: hashSecret(secret), WelcomeText: in.WelcomeText, Channel: channel,
-	})
-	if err != nil {
+	}); err != nil {
 		// Not stored: the webhook just set would point at nothing. A bot
 		// already connected (409) keeps its own: setWebhook replaced it, so
 		// put nothing back — the operator reconnects it by deleting first.
@@ -122,8 +129,58 @@ func (s *Service) Connect(ctx context.Context, orgID, userID string, in ConnectI
 		}
 		return Bot{}, err
 	}
-	s.decorate(&b, 0)
-	return b, nil
+	return s.Get(ctx, orgID, id)
+}
+
+// UpdateWelcome sets the bot's welcome message (sent on /start).
+func (s *Service) UpdateWelcome(ctx context.Context, orgID, id, text string) (Bot, error) {
+	text = strings.TrimSpace(text)
+	if utf8.RuneCountInString(text) > MaxWelcomeText {
+		return Bot{}, apierror.Validation("invalid bot", map[string]string{"welcomeText": fmt.Sprintf("at most %d characters", MaxWelcomeText)})
+	}
+	if err := s.repo.updateWelcome(ctx, orgID, id, text); err != nil {
+		return Bot{}, err
+	}
+	return s.Get(ctx, orgID, id)
+}
+
+// AddChannel checks channel with Telegram as Connect does (the bot an
+// admin that can invite) and adds it to the bot.
+func (s *Service) AddChannel(ctx context.Context, orgID, botID, channel string) (Bot, error) {
+	if len(s.key) == 0 {
+		return Bot{}, apierror.Unavailable("Telegram is not configured on this deployment (INTEGRATION_ENCRYPTION_KEY)")
+	}
+	channel = strings.TrimSpace(channel)
+	if !channelPattern.MatchString(channel) {
+		return Bot{}, apierror.Validation("invalid channel", map[string]string{"channel": "@channelname or the channel's id (-100…)"})
+	}
+	encrypted, tgBotID, err := s.repo.credentials(ctx, orgID, botID)
+	if err != nil {
+		return Bot{}, err
+	}
+	token, err := integrations.Decrypt(s.key, encrypted)
+	if err != nil {
+		return Bot{}, fmt.Errorf("telegram: decrypting bot token: %w", err)
+	}
+	c, err := s.checkChannel(ctx, token, channel, tgBotID)
+	if err != nil {
+		return Bot{}, err
+	}
+	if err := s.repo.addChannel(ctx, orgID, botID, *c); err != nil {
+		return Bot{}, err
+	}
+	return s.Get(ctx, orgID, botID)
+}
+
+// RemoveChannel removes a channel from the bot, with its invite-link pool.
+// Its free links were never handed to anyone; claimed ones stay valid in
+// Telegram (a visitor who just clicked can still get in) but are no longer
+// attributed.
+func (s *Service) RemoveChannel(ctx context.Context, orgID, botID, channelID string) (Bot, error) {
+	if err := s.repo.deleteChannel(ctx, orgID, botID, channelID); err != nil {
+		return Bot{}, err
+	}
+	return s.Get(ctx, orgID, botID)
 }
 
 // checkChannel resolves channel and checks botID can invite to it; the
@@ -149,7 +206,7 @@ func (s *Service) checkChannel(ctx context.Context, token, channel string, botID
 	} else if link, err = s.api.CreateChatInviteLink(ctx, token, chat.ID, "FLOX"); err != nil {
 		return nil, telegramError(err, "channel")
 	}
-	return &Channel{ID: chat.ID, Title: chat.Title, InviteLink: link}, nil
+	return &Channel{ID: idgen.New(), TgChatID: chat.ID, Title: chat.Title, InviteLink: link}, nil
 }
 
 // Delete removes the bot and, as far as Telegram lets it (a revoked token

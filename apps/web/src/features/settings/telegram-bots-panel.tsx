@@ -4,7 +4,7 @@ import * as React from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { toast } from "sonner";
-import { CopyIcon, PlusIcon, Trash2Icon } from "lucide-react";
+import { PlusIcon } from "lucide-react";
 import { z } from "zod";
 import { useTranslation } from "react-i18next";
 import type { TFunction } from "i18next";
@@ -13,15 +13,14 @@ import { Button } from "@/components/ui/button";
 import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { ErrorState } from "@/components/ui/error-state";
-import { IconButton } from "@/components/ui/icon-button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { LoadingState } from "@/components/ui/loading-state";
 import { Textarea } from "@/components/ui/textarea";
-import { Mono } from "@/components/ui/typography";
 import { useConnectTelegramBot, useDeleteTelegramBot, useTelegramBots } from "@/hooks/use-telegram";
 import { ApiError } from "@/lib/api/client";
 import type { TelegramBot } from "@/lib/api/telegram";
+import { TELEGRAM_CHANNEL_PATTERN, TELEGRAM_MAX_WELCOME, TelegramBotRow } from "@/features/settings/telegram-bot-row";
 
 /** Mirrors telegram.Service's validation (internal/telegram/service.go). */
 function connectSchema(t: TFunction<"settings">) {
@@ -30,23 +29,16 @@ function connectSchema(t: TFunction<"settings">) {
     channel: z
       .string()
       .trim()
-      .refine((v) => v === "" || /^(@[A-Za-z][A-Za-z0-9_]{4,31}|-100\d{5,15})$/.test(v), t("telegram.errors.channel")),
-    welcomeText: z.string().trim().max(2000, t("telegram.errors.welcomeText")),
+      .refine((v) => v === "" || TELEGRAM_CHANNEL_PATTERN.test(v), t("telegram.errors.channel")),
+    welcomeText: z.string().trim().max(TELEGRAM_MAX_WELCOME, t("telegram.errors.welcomeText")),
   });
 }
 
 type ConnectValues = z.infer<ReturnType<typeof connectSchema>>;
 
-function copy(text: string, done: string) {
-  navigator.clipboard.writeText(text).then(
-    () => toast(done, { description: text }),
-    () => toast.error(text),
-  );
-}
-
 /** Settings → Integrations → Telegram bots (docs/telegram.md): connect an
- * organization's own bot (and its channel) so visits that start the bot
- * record TG_START and joins of its channel TG_JOIN. */
+ * organization's own bot (and its channels) so visits that start the bot
+ * record TG_START and joins of its channels TG_JOIN. */
 export function TelegramBotsPanel() {
   const { t } = useTranslation(["settings", "common"]);
   const query = useTelegramBots();
@@ -109,54 +101,11 @@ export function TelegramBotsPanel() {
           </div>
         )}
         {query.isSuccess && query.data.bots.length === 0 && <p className="px-4 py-6 text-sm text-muted-foreground">{t("telegram.empty")}</p>}
-        {query.data?.bots.map((bot) => (
-          <div key={bot.id} className="flex items-start gap-3 px-4 py-3">
-            <div className="flex min-w-0 flex-1 flex-col gap-1">
-              <span className="text-sm font-medium">@{bot.username}</span>
-              <span className="text-xs text-muted-foreground">
-                {bot.channel ? t("telegram.channel", { title: bot.channel.title }) : t("telegram.noChannel")}
-              </span>
-              <div className="flex min-w-0 items-center gap-1">
-                <Mono className="truncate text-xs">{bot.deepLink}</Mono>
-                <IconButton
-                  aria-label={t("telegram.copyDeepLink")}
-                  size="icon-sm"
-                  variant="ghost"
-                  onClick={() => copy(bot.deepLink, t("telegram.copied"))}
-                >
-                  <CopyIcon className="size-3.5" />
-                </IconButton>
-              </div>
-              {bot.clickInviteLink && (
-                <div className="flex min-w-0 flex-col gap-0.5">
-                  <span className="text-xs text-muted-foreground">{t("telegram.clickInviteLink")}</span>
-                  <div className="flex min-w-0 items-center gap-1">
-                    <Mono className="truncate text-xs">{bot.clickInviteLink}</Mono>
-                    <IconButton
-                      aria-label={t("telegram.copyClickInviteLink")}
-                      size="icon-sm"
-                      variant="ghost"
-                      onClick={() => copy(bot.clickInviteLink!, t("telegram.copied"))}
-                    >
-                      <CopyIcon className="size-3.5" />
-                    </IconButton>
-                  </div>
-                  <span className={bot.freeInviteLinks === 0 ? "text-xs text-warning" : "text-xs text-muted-foreground"}>
-                    <Mono className="tabular-nums">{bot.freeInviteLinks}</Mono>{" "}
-                    {bot.freeInviteLinks === 0 ? t("telegram.inviteLinksEmpty") : t("telegram.inviteLinksFree")}
-                  </span>
-                </div>
-              )}
-            </div>
-            <IconButton aria-label={t("telegram.removeAria", { name: bot.username })} size="icon-sm" onClick={() => setRemoving(bot)}>
-              <Trash2Icon className="size-3.5" />
-            </IconButton>
-          </div>
-        ))}
+        {query.data?.bots.map((bot) => <TelegramBotRow key={bot.id} bot={bot} onRemove={() => setRemoving(bot)} />)}
         {query.isSuccess && query.data.bots.length > 0 && (
           <div className="flex flex-col gap-1 px-4 py-3 text-xs text-muted-foreground">
             <p>{t("telegram.deepLinkHint")}</p>
-            {query.data.bots.some((b) => b.clickInviteLink) && <p>{t("telegram.clickInviteLinkHint")}</p>}
+            {query.data.bots.some((b) => b.channels.some((c) => c.clickInviteLink)) && <p>{t("telegram.clickInviteLinkHint")}</p>}
           </div>
         )}
       </CardContent>
@@ -188,7 +137,7 @@ export function TelegramBotsPanel() {
             </div>
             <div className="grid gap-1.5">
               <Label htmlFor="tg-welcome">{t("telegram.welcome")}</Label>
-              <Textarea id="tg-welcome" rows={3} maxLength={2000} {...form.register("welcomeText")} aria-invalid={!!form.formState.errors.welcomeText} />
+              <Textarea id="tg-welcome" rows={3} maxLength={TELEGRAM_MAX_WELCOME} {...form.register("welcomeText")} aria-invalid={!!form.formState.errors.welcomeText} />
               {form.formState.errors.welcomeText ? (
                 <p className="text-xs text-danger">{form.formState.errors.welcomeText.message}</p>
               ) : (

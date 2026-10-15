@@ -19,15 +19,15 @@ referenced below as §N).
 ## CURRENT STATE — UPDATE THIS EVERY PHASE
 
 ```
-CURRENT PHASE : PHASE 30.29 — TELEGRAM PER-CLICK INVITE LINKS (closed)
+CURRENT PHASE : PHASE 30.30 — TELEGRAM CHANNELS AND BOT EDITING (closed)
 STATUS        : Spec conformance gaps (docs/spec-conformance-2026-10-11.md):
                 all 15 closed; every §43 event is now produced. Left from
                 that doc's "мелочи": DataGrid, types/ schemas/ dirs.
-                Leftovers: Telegram several channels per bot / bot editing
+                Leftovers: Telegram token change / TG_JOIN by channel
                 (docs/telegram.md "Not done").
                 Prod restore drill after deployment.
-LAST COMMIT   : feat(telegram): per-click invite links.
-UNCOMMITTED   : none expected. Dev DB at migration 00077, CH schema 018.
+LAST COMMIT   : feat(telegram): several channels per bot, bot editing.
+UNCOMMITTED   : none expected. Dev DB at migration 00078, CH schema 018.
 NEXT          : wait for the user — pick from the leftovers above with the
                 user. CI (DO1) is
                 the user's own decision — do not set it up. Run go test with

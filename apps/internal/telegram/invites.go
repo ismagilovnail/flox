@@ -15,16 +15,16 @@ import (
 )
 
 // Per-click invite links (docs/telegram.md "Per-click invite links"): a
-// destination of /tgj/{botId}?click={click_id} sends each click to its own
-// invite link of the bot's channel, so a join through it is TG_JOIN on that
+// destination of /tgj/{channelId}?click={click_id} sends each click to its
+// own invite link of the channel, so a join through it is TG_JOIN on that
 // click without a /start. Telegram makes the links and the redirect may
 // not call it (CLAUDE.md #9): the worker keeps a pool (InvitePool), the
 // tracker claims from it (InviteRedirect).
 
 const (
-	// InvitePoolSize is how many free links the worker keeps per bot.
+	// InvitePoolSize is how many free links the worker keeps per channel.
 	InvitePoolSize = 50
-	// invitesPerRun bounds the links created per bot in one run, to stay
+	// invitesPerRun bounds the links created per channel in one run, to stay
 	// well inside Telegram's rate limits; the next run tops up the rest.
 	invitesPerRun = 20
 	// InviteLinkTTL is how long a claimed link stays valid: after it the
@@ -43,33 +43,35 @@ const (
 // inviteLinkName labels the pool's links in the channel's admin list.
 const inviteLinkName = "FLOX click"
 
-// ClickInviteLink is the destination URL for a bot's channel with a link of
-// its own per click (base: TELEGRAM_WEBHOOK_BASE_URL, the tracker).
-func ClickInviteLink(base, botID string) string {
-	return base + "/tgj/" + botID + "?click={click_id}"
+// ClickInviteLink is the destination URL for a channel with a link of its
+// own per click (base: TELEGRAM_WEBHOOK_BASE_URL, the tracker).
+func ClickInviteLink(base, channelID string) string {
+	return base + "/tgj/" + channelID + "?click={click_id}"
 }
 
-// claimInvite returns clickID's invite link of bot's channel: the one it
-// already has, else a free one from the pool, claimed now. found is false
-// for an unknown bot or one without a channel; link is "" when the pool is
-// empty — channel is then the channel's shared link.
-func (r *Repository) claimInvite(ctx context.Context, botID, clickID string) (link, channel string, found bool, err error) {
+// claimInvite returns clickID's invite link of a channel: the one it
+// already has, else a free one from the channel's pool, claimed now. id is
+// the channel's id or — the form Phase 30.29 published — a bot's, meaning
+// its first channel. found is false for no such channel; link is "" when
+// the pool is empty — shared is then the channel's shared link.
+func (r *Repository) claimInvite(ctx context.Context, id, clickID string) (link, shared string, found bool, err error) {
 	var claimed *string
 	err = r.db.QueryRow(ctx, `
-		WITH bot AS (
-		  SELECT channel_invite_link FROM telegram_bots WHERE id = $1 AND channel_id IS NOT NULL
+		WITH ch AS (
+		  SELECT id, invite_link FROM telegram_channels WHERE id = $1 OR bot_id = $1
+		  ORDER BY created_at, id LIMIT 1
 		), existing AS (
-		  SELECT invite_link FROM telegram_invite_links WHERE bot_id = $1 AND click_id = $2 LIMIT 1
+		  SELECT l.invite_link FROM telegram_invite_links l, ch WHERE l.channel_id = ch.id AND l.click_id = $2 LIMIT 1
 		), claimed AS (
 		  UPDATE telegram_invite_links SET click_id = $2, claimed_at = now()
 		  WHERE invite_link = (
-		    SELECT invite_link FROM telegram_invite_links
-		    WHERE bot_id = $1 AND click_id IS NULL AND NOT EXISTS (SELECT 1 FROM existing)
-		    ORDER BY created_at LIMIT 1 FOR UPDATE SKIP LOCKED)
+		    SELECT l.invite_link FROM telegram_invite_links l, ch
+		    WHERE l.channel_id = ch.id AND l.click_id IS NULL AND NOT EXISTS (SELECT 1 FROM existing)
+		    ORDER BY l.created_at LIMIT 1 FOR UPDATE OF l SKIP LOCKED)
 		  RETURNING invite_link
 		)
-		SELECT bot.channel_invite_link, coalesce((SELECT invite_link FROM existing), (SELECT invite_link FROM claimed))
-		FROM bot`, botID, clickID).Scan(&channel, &claimed)
+		SELECT ch.invite_link, coalesce((SELECT invite_link FROM existing), (SELECT invite_link FROM claimed))
+		FROM ch`, id, clickID).Scan(&shared, &claimed)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return "", "", false, nil
 	}
@@ -79,13 +81,15 @@ func (r *Repository) claimInvite(ctx context.Context, botID, clickID string) (li
 	if claimed != nil {
 		link = *claimed
 	}
-	return link, channel, true, nil
+	return link, shared, true, nil
 }
 
-// channelLink is bot's channel's shared link (found: a bot with a channel).
-func (r *Repository) channelLink(ctx context.Context, botID string) (string, bool, error) {
+// channelLink is a channel's shared link (id: as claimInvite's).
+func (r *Repository) channelLink(ctx context.Context, id string) (string, bool, error) {
 	var link string
-	err := r.db.QueryRow(ctx, `SELECT channel_invite_link FROM telegram_bots WHERE id = $1 AND channel_id IS NOT NULL`, botID).Scan(&link)
+	err := r.db.QueryRow(ctx, `
+		SELECT invite_link FROM telegram_channels WHERE id = $1 OR bot_id = $1
+		ORDER BY created_at, id LIMIT 1`, id).Scan(&link)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return "", false, nil
 	}
@@ -102,104 +106,83 @@ type inviteClaim struct {
 	Joined    bool
 }
 
-// invitedClick is the claim of link among bot's links (found false: not a
-// claimed link of this bot).
-func (r *Repository) invitedClick(ctx context.Context, b webhookBot, link string) (inviteClaim, bool, error) {
-	var c inviteClaim
+// invitedClick is the claim of link among c's links (found false: not a
+// claimed link of this channel).
+func (r *Repository) invitedClick(ctx context.Context, c webhookChannel, link string) (inviteClaim, bool, error) {
+	var claim inviteClaim
 	err := r.db.QueryRow(ctx, `
 		SELECT click_id, claimed_at, joined_at IS NOT NULL FROM telegram_invite_links
-		WHERE invite_link = $1 AND bot_id = $2 AND click_id IS NOT NULL`, link, b.ID).Scan(&c.ClickID, &c.ClaimedAt, &c.Joined)
+		WHERE invite_link = $1 AND channel_id = $2 AND click_id IS NOT NULL`, link, c.ID).Scan(&claim.ClickID, &claim.ClaimedAt, &claim.Joined)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return inviteClaim{}, false, nil
 	}
 	if err != nil {
 		return inviteClaim{}, false, fmt.Errorf("telegram: reading invite link: %w", err)
 	}
-	return c, true, nil
+	return claim, true, nil
 }
 
 // recordInviteJoin marks link's join and reports whether it was not marked
 // yet — one TG_JOIN per link, so per click.
-func (r *Repository) recordInviteJoin(ctx context.Context, b webhookBot, link string, at time.Time) (bool, error) {
+func (r *Repository) recordInviteJoin(ctx context.Context, c webhookChannel, link string, at time.Time) (bool, error) {
 	tag, err := r.db.Exec(ctx, `
 		UPDATE telegram_invite_links SET joined_at = $3
-		WHERE invite_link = $1 AND bot_id = $2 AND click_id IS NOT NULL AND joined_at IS NULL`, link, b.ID, at)
+		WHERE invite_link = $1 AND channel_id = $2 AND click_id IS NOT NULL AND joined_at IS NULL`, link, c.ID, at)
 	if err != nil {
 		return false, fmt.Errorf("telegram: recording invite join: %w", err)
 	}
 	return tag.RowsAffected() == 1, nil
 }
 
-// freeInvites is how many free links each bot has.
-func (r *Repository) freeInvites(ctx context.Context, orgID string) (map[string]int, error) {
+// poolChannel is a channel whose pool the worker keeps.
+type poolChannel struct {
+	ID, BotID, OrganizationID string
+	TokenEncrypted            string
+	TgChatID                  int64
+	Free                      int
+}
+
+// poolChannels is every channel and its free links — across organizations
+// (the worker's job), or one organization's when orgID is set (tests share
+// the dev database).
+func (r *Repository) poolChannels(ctx context.Context, orgID string) ([]poolChannel, error) {
 	rows, err := r.db.Query(ctx, `
-		SELECT bot_id, count(*) FROM telegram_invite_links
-		WHERE organization_id = $1 AND click_id IS NULL GROUP BY bot_id`, orgID)
+		SELECT c.id, c.bot_id, c.organization_id, b.token_encrypted, c.tg_chat_id,
+		       (SELECT count(*) FROM telegram_invite_links l WHERE l.channel_id = c.id AND l.click_id IS NULL)
+		FROM telegram_channels c JOIN telegram_bots b ON b.id = c.bot_id
+		WHERE $1 = '' OR c.organization_id = $1
+		ORDER BY c.id`, orgID)
 	if err != nil {
-		return nil, fmt.Errorf("telegram: counting free invite links: %w", err)
+		return nil, fmt.Errorf("telegram: listing channels for invite links: %w", err)
 	}
 	defer rows.Close()
-	out := map[string]int{}
+	var out []poolChannel
 	for rows.Next() {
-		var id string
-		var n int
-		if err := rows.Scan(&id, &n); err != nil {
-			return nil, fmt.Errorf("telegram: scanning free invite links: %w", err)
+		var c poolChannel
+		if err := rows.Scan(&c.ID, &c.BotID, &c.OrganizationID, &c.TokenEncrypted, &c.TgChatID, &c.Free); err != nil {
+			return nil, fmt.Errorf("telegram: scanning channel for invite links: %w", err)
 		}
-		out[id] = n
+		out = append(out, c)
 	}
 	return out, rows.Err()
 }
 
-// poolBot is a bot whose pool the worker keeps.
-type poolBot struct {
-	ID, OrganizationID string
-	TokenEncrypted     string
-	ChannelID          int64
-	Free               int
-}
-
-// poolBots is every bot with a channel and its free links — across
-// organizations (the worker's job), or one organization's when orgID is
-// set (tests share the dev database).
-func (r *Repository) poolBots(ctx context.Context, orgID string) ([]poolBot, error) {
-	rows, err := r.db.Query(ctx, `
-		SELECT b.id, b.organization_id, b.token_encrypted, b.channel_id,
-		       (SELECT count(*) FROM telegram_invite_links l WHERE l.bot_id = b.id AND l.click_id IS NULL)
-		FROM telegram_bots b
-		WHERE b.channel_id IS NOT NULL AND ($1 = '' OR b.organization_id = $1)
-		ORDER BY b.id`, orgID)
-	if err != nil {
-		return nil, fmt.Errorf("telegram: listing bots for invite links: %w", err)
-	}
-	defer rows.Close()
-	var out []poolBot
-	for rows.Next() {
-		var b poolBot
-		if err := rows.Scan(&b.ID, &b.OrganizationID, &b.TokenEncrypted, &b.ChannelID, &b.Free); err != nil {
-			return nil, fmt.Errorf("telegram: scanning bot for invite links: %w", err)
-		}
-		out = append(out, b)
-	}
-	return out, rows.Err()
-}
-
-func (r *Repository) addInvite(ctx context.Context, b poolBot, link string) error {
+func (r *Repository) addInvite(ctx context.Context, c poolChannel, link string) error {
 	_, err := r.db.Exec(ctx, `
-		INSERT INTO telegram_invite_links (invite_link, bot_id, organization_id) VALUES ($1, $2, $3)
-		ON CONFLICT (invite_link) DO NOTHING`, link, b.ID, b.OrganizationID)
+		INSERT INTO telegram_invite_links (invite_link, bot_id, channel_id, organization_id) VALUES ($1, $2, $3, $4)
+		ON CONFLICT (invite_link) DO NOTHING`, link, c.BotID, c.ID, c.OrganizationID)
 	if err != nil {
 		return fmt.Errorf("telegram: storing invite link: %w", err)
 	}
 	return nil
 }
 
-// expiredInvites is b's links claimed before cutoff, oldest first.
-func (r *Repository) expiredInvites(ctx context.Context, b poolBot, cutoff time.Time, limit int) ([]string, error) {
+// expiredInvites is c's links claimed before cutoff, oldest first.
+func (r *Repository) expiredInvites(ctx context.Context, c poolChannel, cutoff time.Time, limit int) ([]string, error) {
 	rows, err := r.db.Query(ctx, `
 		SELECT invite_link FROM telegram_invite_links
-		WHERE bot_id = $1 AND click_id IS NOT NULL AND claimed_at < $2
-		ORDER BY claimed_at LIMIT $3`, b.ID, cutoff, limit)
+		WHERE channel_id = $1 AND click_id IS NOT NULL AND claimed_at < $2
+		ORDER BY claimed_at LIMIT $3`, c.ID, cutoff, limit)
 	if err != nil {
 		return nil, fmt.Errorf("telegram: listing expired invite links: %w", err)
 	}
@@ -215,15 +198,15 @@ func (r *Repository) expiredInvites(ctx context.Context, b poolBot, cutoff time.
 	return out, rows.Err()
 }
 
-func (r *Repository) deleteInvite(ctx context.Context, b poolBot, link string) error {
-	if _, err := r.db.Exec(ctx, `DELETE FROM telegram_invite_links WHERE invite_link = $1 AND bot_id = $2`, link, b.ID); err != nil {
+func (r *Repository) deleteInvite(ctx context.Context, c poolChannel, link string) error {
+	if _, err := r.db.Exec(ctx, `DELETE FROM telegram_invite_links WHERE invite_link = $1 AND channel_id = $2`, link, c.ID); err != nil {
 		return fmt.Errorf("telegram: deleting invite link: %w", err)
 	}
 	return nil
 }
 
-// InviteRedirect serves GET /tgj/{botId}?click= on apps/tracker: the click's
-// own invite link of the bot's channel, claimed from the pool — one indexed
+// InviteRedirect serves GET /tgj/{channelId}?click= on apps/tracker: the
+// click's own invite link of the channel, claimed from its pool — one indexed
 // Postgres statement, no Telegram call. An empty pool (or no click id)
 // falls back to the channel's shared link: the visitor still gets in, and
 // the join is attributed only through a /start.
@@ -240,25 +223,29 @@ func NewInviteRedirect(repo *Repository, logger *slog.Logger) *InviteRedirect {
 }
 
 func (h *InviteRedirect) Register(r chi.Router) {
-	r.Get("/tgj/{botId}", h.serve)
+	r.Get("/tgj/{id}", h.serve)
 }
 
 func (h *InviteRedirect) serve(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	botID := chi.URLParam(r, "botId")
+	id := chi.URLParam(r, "id")
 	clickID := r.URL.Query().Get("click")
+	if !idPattern.MatchString(id) {
+		http.NotFound(w, r)
+		return
+	}
 	var link, channel string
 	var found bool
 	var err error
 	if clickPattern.MatchString(clickID) {
-		link, channel, found, err = h.repo.claimInvite(ctx, botID, clickID)
+		link, channel, found, err = h.repo.claimInvite(ctx, id, clickID)
 	} else {
 		// Opened without a click (the template itself, a typo): the
 		// shared link, and no pool link spent on it.
-		channel, found, err = h.repo.channelLink(ctx, botID)
+		channel, found, err = h.repo.channelLink(ctx, id)
 	}
 	if err != nil {
-		h.logger.Error("telegram invite redirect", "bot_id", botID, "error", err)
+		h.logger.Error("telegram invite redirect", "id", id, "error", err)
 		http.Error(w, "unavailable", http.StatusServiceUnavailable)
 		return
 	}
@@ -269,7 +256,7 @@ func (h *InviteRedirect) serve(w http.ResponseWriter, r *http.Request) {
 	if link == "" {
 		link = channel
 		if clickPattern.MatchString(clickID) {
-			h.logger.Warn("telegram invite pool empty, shared channel link used", "bot_id", botID)
+			h.logger.Warn("telegram invite pool empty, shared channel link used", "id", id)
 			if h.Fallbacks != nil {
 				h.Fallbacks.Inc()
 			}
@@ -280,8 +267,8 @@ func (h *InviteRedirect) serve(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, link, http.StatusFound)
 }
 
-// InvitePool is the worker's job: every bot with a channel keeps
-// InvitePoolSize free links, and claimed links are revoked after
+// InvitePool is the worker's job: every channel keeps InvitePoolSize free
+// links, and claimed links are revoked after
 // InviteLinkTTL.
 type InvitePool struct {
 	Repo   *Repository
@@ -293,11 +280,11 @@ type InvitePool struct {
 	Now            func() time.Time
 }
 
-// RunOnce tops up and revokes for every bot. One bot failing (a revoked
+// RunOnce tops up and revokes for every channel. One failing (a revoked
 // token, the bot no longer admin, Telegram unreachable) is logged and does
 // not stop the others; created counts the links added.
 func (p *InvitePool) RunOnce(ctx context.Context) (created, revoked int, err error) {
-	bots, err := p.Repo.poolBots(ctx, p.OrganizationID)
+	channels, err := p.Repo.poolChannels(ctx, p.OrganizationID)
 	if err != nil {
 		return 0, 0, err
 	}
@@ -305,21 +292,21 @@ func (p *InvitePool) RunOnce(ctx context.Context) (created, revoked int, err err
 	if p.Now != nil {
 		now = p.Now
 	}
-	for _, b := range bots {
-		token, err := integrations.Decrypt(p.Key, b.TokenEncrypted)
+	for _, c := range channels {
+		token, err := integrations.Decrypt(p.Key, c.TokenEncrypted)
 		if err != nil {
-			p.Logger.Warn("telegram invite pool: cannot decrypt bot token", "bot_id", b.ID, "error", err)
+			p.Logger.Warn("telegram invite pool: cannot decrypt bot token", "bot_id", c.BotID, "error", err)
 			continue
 		}
-		c, err := p.topUp(ctx, b, token)
-		created += c
+		n, err := p.topUp(ctx, c, token)
+		created += n
 		if err != nil {
-			p.Logger.Warn("telegram invite pool: creating links", "bot_id", b.ID, "error", err)
+			p.Logger.Warn("telegram invite pool: creating links", "bot_id", c.BotID, "channel_id", c.ID, "error", err)
 		}
-		v, err := p.revoke(ctx, b, token, now().Add(-InviteLinkTTL))
-		revoked += v
+		n, err = p.revoke(ctx, c, token, now().Add(-InviteLinkTTL))
+		revoked += n
 		if err != nil {
-			p.Logger.Warn("telegram invite pool: revoking links", "bot_id", b.ID, "error", err)
+			p.Logger.Warn("telegram invite pool: revoking links", "bot_id", c.BotID, "channel_id", c.ID, "error", err)
 		}
 		if ctx.Err() != nil {
 			return created, revoked, ctx.Err()
@@ -328,15 +315,15 @@ func (p *InvitePool) RunOnce(ctx context.Context) (created, revoked int, err err
 	return created, revoked, nil
 }
 
-func (p *InvitePool) topUp(ctx context.Context, b poolBot, token string) (int, error) {
-	n := min(InvitePoolSize-b.Free, invitesPerRun)
+func (p *InvitePool) topUp(ctx context.Context, c poolChannel, token string) (int, error) {
+	n := min(InvitePoolSize-c.Free, invitesPerRun)
 	created := 0
 	for range n {
-		link, err := p.API.CreateChatInviteLink(ctx, token, b.ChannelID, inviteLinkName)
+		link, err := p.API.CreateChatInviteLink(ctx, token, c.TgChatID, inviteLinkName)
 		if err != nil {
 			return created, err
 		}
-		if err := p.Repo.addInvite(ctx, b, link); err != nil {
+		if err := p.Repo.addInvite(ctx, c, link); err != nil {
 			return created, err
 		}
 		created++
@@ -344,23 +331,23 @@ func (p *InvitePool) topUp(ctx context.Context, b poolBot, token string) (int, e
 	return created, nil
 }
 
-// revoke revokes b's links claimed before cutoff and forgets them. A link
+// revoke revokes c's links claimed before cutoff and forgets them. A link
 // Telegram refuses to revoke (already revoked, the channel gone) is
 // forgotten too; one it could not be asked about is kept for the next run.
-func (p *InvitePool) revoke(ctx context.Context, b poolBot, token string, cutoff time.Time) (int, error) {
-	links, err := p.Repo.expiredInvites(ctx, b, cutoff, revokesPerRun)
+func (p *InvitePool) revoke(ctx context.Context, c poolChannel, token string, cutoff time.Time) (int, error) {
+	links, err := p.Repo.expiredInvites(ctx, c, cutoff, revokesPerRun)
 	if err != nil {
 		return 0, err
 	}
 	revoked := 0
 	for _, link := range links {
-		if err := p.API.RevokeChatInviteLink(ctx, token, b.ChannelID, link); err != nil {
+		if err := p.API.RevokeChatInviteLink(ctx, token, c.TgChatID, link); err != nil {
 			var apiErr *APIError
 			if !errors.As(err, &apiErr) {
 				return revoked, err
 			}
 		}
-		if err := p.Repo.deleteInvite(ctx, b, link); err != nil {
+		if err := p.Repo.deleteInvite(ctx, c, link); err != nil {
 			return revoked, err
 		}
 		revoked++

@@ -48,7 +48,7 @@ func (w *webhookFixture) free(t *testing.T) int {
 	if err != nil || len(bots) != 1 {
 		t.Fatalf("List = %v, %v", bots, err)
 	}
-	return bots[0].FreeInviteLinks
+	return bots[0].Channels[0].FreeInviteLinks
 }
 
 func newInviteFixture(t *testing.T, clicks attribution.ClickResolver) *webhookFixture {
@@ -65,7 +65,7 @@ func TestInviteRedirect(t *testing.T) {
 	ctx := context.Background()
 
 	clickA, clickB := idgen.New(), idgen.New()
-	if code, loc := w.claim(t, w.bot.ID, "?click="+clickA); code != http.StatusFound || loc != "https://t.me/joinchan" {
+	if code, loc := w.claim(t, w.ch.ID, "?click="+clickA); code != http.StatusFound || loc != "https://t.me/joinchan" {
 		t.Fatalf("empty pool = %d %q, want the shared link", code, loc)
 	}
 
@@ -79,27 +79,34 @@ func TestInviteRedirect(t *testing.T) {
 	}
 
 	bots, _ := w.svc.List(ctx, w.org)
-	if bots[0].ClickInviteLink != "https://t.example/tgj/"+w.bot.ID+"?click={click_id}" {
-		t.Fatalf("clickInviteLink = %q", bots[0].ClickInviteLink)
+	if bots[0].Channels[0].ClickInviteLink != "https://t.example/tgj/"+w.ch.ID+"?click={click_id}" {
+		t.Fatalf("clickInviteLink = %q", bots[0].Channels[0].ClickInviteLink)
 	}
 
-	_, linkA := w.claim(t, w.bot.ID, "?click="+clickA)
-	_, againA := w.claim(t, w.bot.ID, "?click="+clickA)
-	_, linkB := w.claim(t, w.bot.ID, "?click="+clickB)
+	_, linkA := w.claim(t, w.ch.ID, "?click="+clickA)
+	_, againA := w.claim(t, w.ch.ID, "?click="+clickA)
+	_, linkB := w.claim(t, w.ch.ID, "?click="+clickB)
 	if linkA == "https://t.me/joinchan" || linkA == "" || againA != linkA || linkB == linkA || linkB == "https://t.me/joinchan" {
 		t.Fatalf("A = %q, A again = %q, B = %q; want A's own link twice and another for B", linkA, againA, linkB)
 	}
-	if code, loc := w.claim(t, w.bot.ID, ""); code != http.StatusFound || loc != "https://t.me/joinchan" {
+	if code, loc := w.claim(t, w.ch.ID, ""); code != http.StatusFound || loc != "https://t.me/joinchan" {
 		t.Fatalf("no click = %d %q, want the shared link", code, loc)
 	}
-	if code, loc := w.claim(t, w.bot.ID, "?click=%7Bclick_id%7D"); code != http.StatusFound || loc != "https://t.me/joinchan" {
+	if code, loc := w.claim(t, w.ch.ID, "?click=%7Bclick_id%7D"); code != http.StatusFound || loc != "https://t.me/joinchan" {
 		t.Fatalf("unresolved macro = %d %q, want the shared link", code, loc)
 	}
 	if n := w.free(t); n != telegram.InvitePoolSize-2 {
 		t.Fatalf("free = %d, want %d (two clicks claimed)", n, telegram.InvitePoolSize-2)
 	}
 	if code, _ := w.claim(t, idgen.New(), "?click="+clickA); code != http.StatusNotFound {
-		t.Fatalf("unknown bot = %d, want 404", code)
+		t.Fatalf("unknown channel = %d, want 404", code)
+	}
+	if code, _ := w.claim(t, "not-an-id", "?click="+clickA); code != http.StatusNotFound {
+		t.Fatalf("malformed id = %d, want 404", code)
+	}
+	// Phase 30.29's form, /tgj/{botId}: the bot's first channel.
+	if code, loc := w.claim(t, w.bot.ID, "?click="+clickA); code != http.StatusFound || loc != linkA {
+		t.Fatalf("by bot id = %d %q, want A's link %q", code, loc, linkA)
 	}
 
 	// Clicks at the same moment never share a link.
@@ -108,7 +115,7 @@ func TestInviteRedirect(t *testing.T) {
 	var wg sync.WaitGroup
 	for range 20 {
 		wg.Go(func() {
-			_, loc := w.claim(t, w.bot.ID, "?click="+idgen.New())
+			_, loc := w.claim(t, w.ch.ID, "?click="+idgen.New())
 			mu.Lock()
 			defer mu.Unlock()
 			if seen[loc] {
@@ -129,8 +136,8 @@ func TestInviteJoin(t *testing.T) {
 	w.fillPool(t)
 	click := attribution.Click{ClickID: idgen.New(), OrganizationID: w.org, CampaignID: "camp-tg", Country: "PL"}
 	clicks.Record(click)
-	_, link := w.claim(t, w.bot.ID, "?click="+click.ClickID)
-	channel := w.bot.Channel.ID
+	_, link := w.claim(t, w.ch.ID, "?click="+click.ClickID)
+	channel := w.ch.TgChatID
 	const dave, erin = 2001, 2002
 
 	joined := func(user int64, link string) map[string]any {
@@ -166,8 +173,8 @@ func TestInviteJoin(t *testing.T) {
 func TestInviteJoinWaitsForTheClick(t *testing.T) {
 	w := newInviteFixture(t, attribution.NewMemoryResolver())
 	w.fillPool(t)
-	_, link := w.claim(t, w.bot.ID, "?click="+idgen.New())
-	u := member(w.bot.Channel.ID, 3001, "left", "member")
+	_, link := w.claim(t, w.ch.ID, "?click="+idgen.New())
+	u := member(w.ch.TgChatID, 3001, "left", "member")
 	u["chat_member"].(map[string]any)["invite_link"] = map[string]any{"invite_link": link}
 	if rec := w.post(t, w.secret, u); rec.Code != http.StatusServiceUnavailable {
 		t.Fatalf("join before the click is stored = %d, want 503", rec.Code)
@@ -187,8 +194,8 @@ func TestInvitePoolRevokesAndIsScoped(t *testing.T) {
 	w := newInviteFixture(t, attribution.NewMemoryResolver())
 	ctx := context.Background()
 	w.fillPool(t)
-	_, old := w.claim(t, w.bot.ID, "?click="+idgen.New())
-	_, fresh := w.claim(t, w.bot.ID, "?click="+idgen.New())
+	_, old := w.claim(t, w.ch.ID, "?click="+idgen.New())
+	_, fresh := w.claim(t, w.ch.ID, "?click="+idgen.New())
 	if _, err := w.pool.Exec(ctx, `UPDATE telegram_invite_links SET claimed_at = $2 WHERE invite_link = $1`,
 		old, time.Now().Add(-telegram.InviteLinkTTL-time.Hour)); err != nil {
 		t.Fatal(err)
@@ -217,7 +224,7 @@ func TestInvitePoolRevokesAndIsScoped(t *testing.T) {
 	if err := w.pool.QueryRow(ctx, `SELECT count(*) FROM telegram_invite_links WHERE organization_id = $1`, other).Scan(&n); err != nil || n != 0 {
 		t.Fatalf("other organization's links = %d, %v; want none from a scoped run", n, err)
 	}
-	if bots, err := w.svc.List(ctx, other); err != nil || len(bots) != 1 || bots[0].FreeInviteLinks != 0 {
+	if bots, err := w.svc.List(ctx, other); err != nil || len(bots) != 1 || bots[0].Channels[0].FreeInviteLinks != 0 {
 		t.Fatalf("other organization's list = %+v, %v", bots, err)
 	}
 
