@@ -95,5 +95,16 @@
   "apiErrors": {
     "query_too_heavy": "Отчёту нужно больше времени или памяти, чем разрешено. Сузьте период или уберите одну из группировок.",
     "forbidden": "Нет прав на это действие."
+  },
+  "dataGrid": {
+    "range": "{{first}}–{{last}} из {{total}}",
+    "noRows": "Нет строк",
+    "rowsPerPage": "Строк на странице",
+    "firstPageAria": "Первая страница",
+    "exporting": "Выгрузка {{done}} из {{total}}…",
+    "exportError": "Не удалось выгрузить",
+    "exportTruncated": "Выгружены первые {{count}} строк из {{total}}. Сузьте период, чтобы выгрузить остальные.",
+    "clickIdPlaceholder": "Точный click ID…",
+    "clearClickId": "Сбросить click ID"
   }
 }

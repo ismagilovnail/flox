@@ -3,18 +3,22 @@
 import * as React from "react";
 import { useTranslation } from "react-i18next";
 
-import { DataTable } from "@/components/ui/data-table";
-import { ErrorState } from "@/components/ui/error-state";
-import { LoadingState } from "@/components/ui/loading-state";
+import { LogGrid } from "@/components/shared/log-grid";
 import { useCampaigns } from "@/hooks/use-campaigns";
 import { useClickLogs } from "@/hooks/use-click-logs";
+import { useLogGrid } from "@/hooks/use-log-grid";
 import { useApiErrorMessage } from "@/hooks/use-api-error-message";
+import { listClickLogs, type ClickLog, type ListClickLogsParams } from "@/lib/api/click-logs";
 import { CLICK_LOG_INITIAL_COLUMN_VISIBILITY, clickLogColumns } from "@/features/clicklogs/click-log-columns";
+
+const fetchClickLogPage = (filter: ListClickLogsParams, offset: number, limit: number) =>
+  listClickLogs({ ...filter, offset, limit }).then((r) => ({ rows: r.logs, total: r.total }));
 
 export function ClickLogView() {
   const { t } = useTranslation("clickLog");
   const errorMessage = useApiErrorMessage();
-  const logsQuery = useClickLogs();
+  const grid = useLogGrid();
+  const logsQuery = useClickLogs(grid.params);
   const campaignsQuery = useCampaigns();
 
   const campaignNameById = React.useMemo(
@@ -31,25 +35,24 @@ export function ClickLogView() {
         <p className="text-sm text-muted-foreground">{t("view.description")}</p>
       </div>
 
-      {logsQuery.isPending ? (
-        <LoadingState label={t("view.loading")} />
-      ) : logsQuery.isError ? (
-        <ErrorState title={t("view.loadError")} description={errorMessage(logsQuery.error)} onRetry={() => logsQuery.refetch()} />
-      ) : (
-        <DataTable
-          columns={columns}
-          data={logsQuery.data.logs}
-          getRowId={(row) => `${row.clickId}:${row.eventAt}`}
-          exportFilename="click-log"
-          searchPlaceholder={t("view.searchPlaceholder")}
-          emptyTitle={t("view.emptyTitle")}
-          emptyDescription={t("view.emptyDescription")}
-          initialColumnVisibility={CLICK_LOG_INITIAL_COLUMN_VISIBILITY}
-          pageSize={20}
-          enableColumnReorder
-          persistKey="click-log"
-        />
-      )}
+      <LogGrid<ClickLog>
+        grid={grid}
+        query={logsQuery}
+        select={() => logsQuery.data && { rows: logsQuery.data.logs, total: logsQuery.data.total }}
+        fetchPage={fetchClickLogPage}
+        loadingLabel={t("view.loading")}
+        errorTitle={t("view.loadError")}
+        errorMessage={errorMessage}
+        ariaLabel={t("view.title")}
+        columns={columns}
+        getRowId={(row) => `${row.clickId}:${row.eventAt}:${row.type}`}
+        exportFilename="click-log"
+        emptyTitle={t("view.emptyTitle")}
+        emptyDescription={t("view.emptyDescription")}
+        initialColumnVisibility={CLICK_LOG_INITIAL_COLUMN_VISIBILITY}
+        enableColumnReorder
+        persistKey="click-log"
+      />
     </div>
   );
 }

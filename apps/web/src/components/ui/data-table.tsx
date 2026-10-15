@@ -1,72 +1,27 @@
 "use client"
 
 import * as React from "react"
-import {
-  columnVisibilityFeature,
-  columnOrderingFeature,
-  columnFilteringFeature,
-  columnResizingFeature,
-  columnSizingFeature,
-  globalFilteringFeature,
-  createFilteredRowModel,
-  createPaginatedRowModel,
-  createSortedRowModel,
-  filterFn_includesString,
-  rowPaginationFeature,
-  rowSelectionFeature,
-  rowSortingFeature,
-  sortFn_alphanumeric,
-  sortFn_text,
-  tableFeatures,
-  useTable,
-  type ColumnDef,
-  type ColumnSizingState,
-  type RowSelectionState,
-} from "@tanstack/react-table"
-import {
-  ArrowDownIcon,
-  ArrowUpIcon,
-  ArrowUpDownIcon,
-  ChevronLeftIcon,
-  CircleHelpIcon,
-  GripVerticalIcon,
-  ChevronRightIcon,
-  DownloadIcon,
-  SearchIcon,
-} from "lucide-react"
+import { useTable, type ColumnDef, type RowSelectionState } from "@tanstack/react-table"
+import { ChevronLeftIcon, ChevronRightIcon, DownloadIcon, SearchIcon } from "lucide-react"
 import { useTranslation } from "react-i18next"
 
 import { cn } from "@/lib/utils"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { EmptyState } from "@/components/ui/empty-state"
 import {
-  DropdownMenu,
-  DropdownMenuCheckboxItem,
-  DropdownMenuContent,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
+  ColumnsMenu,
+  SELECT_COLUMN_ID,
+  dataTableFeatures,
+  TableHeaderCell,
+  downloadCsv,
+  exportableColumns,
+  toCsv,
+  useColumnState,
+  useHeaderInteractions,
+} from "@/components/ui/table-parts"
 
-export const dataTableFeatures = tableFeatures({
-  rowSortingFeature,
-  sortedRowModel: createSortedRowModel(),
-  sortFns: { alphanumeric: sortFn_alphanumeric, text: sortFn_text },
-  rowPaginationFeature,
-  paginatedRowModel: createPaginatedRowModel(),
-  columnFilteringFeature,
-  globalFilteringFeature,
-  filteredRowModel: createFilteredRowModel(),
-  filterFns: { includesString: filterFn_includesString },
-  columnVisibilityFeature,
-  columnOrderingFeature,
-  rowSelectionFeature,
-  columnSizingFeature,
-  columnResizingFeature,
-})
-
-const SELECT_COLUMN_ID = "__select__"
 
 function buildSelectColumn<TData extends Record<string, unknown>>(
   selectAllLabel: string,
@@ -95,88 +50,11 @@ function buildSelectColumn<TData extends Record<string, unknown>>(
   }
 }
 
-/** RFC 4180-ish CSV cell quoting: wrap in quotes and escape embedded quotes
- * whenever the value contains a comma, quote, or newline — the three cases
- * a bare value would otherwise corrupt the file structure for. */
-function csvCell(value: unknown): string {
-  if (value === null || value === undefined) return ""
-  const s = value instanceof Date ? value.toISOString() : String(value)
-  return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s
-}
-
 /**
- * Client-side table: sort, paginate, search, column visibility. "Virtualize
- * large sets" (UX floor) is handled by pagination rather than DOM windowing
- * — scannable rows stay bounded per page instead of an unbounded live list.
+ * Client-side table: sort, paginate, search, column visibility. For a list
+ * the server pages (a log of events), use DataGrid instead: paging here
+ * would only ever see the rows of the first request.
  */
-/** Optional column explanation (`columnDef.meta.hint`) shown as a tooltip on the header. */
-function HeaderHint({ hint, children }: { hint?: string; children: React.ReactElement }) {
-  if (!hint) return children
-  return (
-    <Tooltip>
-      <TooltipTrigger asChild>{children}</TooltipTrigger>
-      <TooltipContent className="max-w-64">{hint}</TooltipContent>
-    </Tooltip>
-  )
-}
-
-type PersistedTable = {
-  visibility?: Record<string, boolean>
-  order?: string[]
-  sizing?: Record<string, number>
-}
-
-const persistedStorageKey = (key: string) => `flox.table.${key}`
-
-function readPersisted(key: string): PersistedTable {
-  try {
-    const raw = window.localStorage.getItem(persistedStorageKey(key))
-    return raw ? (JSON.parse(raw) as PersistedTable) : {}
-  } catch {
-    return {}
-  }
-}
-
-const EMPTY_PERSISTED: PersistedTable = {}
-const subscribePersisted = (onChange: () => void) => {
-  window.addEventListener("storage", onChange)
-  return () => window.removeEventListener("storage", onChange)
-}
-
-/** The stored choices for `key`. Empty on the server and on the first client
- * render (so hydration agrees), then what this browser remembers. */
-function usePersistedTable(key: string | undefined): PersistedTable {
-  const raw = React.useSyncExternalStore(
-    subscribePersisted,
-    () => {
-      if (!key) return null
-      try {
-        return window.localStorage.getItem(persistedStorageKey(key))
-      } catch {
-        return null
-      }
-    },
-    () => null,
-  )
-  return React.useMemo(() => {
-    if (!raw) return EMPTY_PERSISTED
-    try {
-      return JSON.parse(raw) as PersistedTable
-    } catch {
-      return EMPTY_PERSISTED
-    }
-  }, [raw])
-}
-
-/** Merges `patch` into what is stored for `key`; storage errors (private window) are ignored. */
-function writePersisted(key: string, patch: PersistedTable) {
-  try {
-    window.localStorage.setItem(persistedStorageKey(key), JSON.stringify({ ...readPersisted(key), ...patch }))
-  } catch {
-    // the choice just won't survive a reload
-  }
-}
-
 function DataTable<TData extends Record<string, unknown>>({
   columns,
   data,
@@ -241,48 +119,21 @@ function DataTable<TData extends Record<string, unknown>>({
     { id: string; desc: boolean }[]
   >([])
   const [globalFilter, setGlobalFilter] = React.useState("")
-  const [internalColumnVisibility, setInternalColumnVisibility] = React.useState<
-    Record<string, boolean>
-  >(initialColumnVisibility ?? {})
-  const persisted = usePersistedTable(persistKey)
-  const columnVisibility = controlledColumnVisibility ?? persisted.visibility ?? internalColumnVisibility
-  const setColumnVisibility = (
-    next: Record<string, boolean> | ((old: Record<string, boolean>) => Record<string, boolean>),
-  ) => {
-    const resolved = typeof next === "function" ? next(columnVisibility) : next
-    setInternalColumnVisibility(resolved)
-    onColumnVisibilityChange?.(resolved)
-    if (persistKey && !controlledColumnVisibility) writePersisted(persistKey, { visibility: resolved })
-  }
+  const { columnVisibility, setColumnVisibility, columnOrder, setColumnOrder, columnSizing, setColumnSizing } = useColumnState({
+    initialColumnVisibility,
+    columnOrder: controlledColumnOrder,
+    onColumnOrderChange,
+    columnSizing: controlledColumnSizing,
+    onColumnSizingChange,
+    columnVisibility: controlledColumnVisibility,
+    onColumnVisibilityChange,
+    persistKey,
+  })
   const [pagination, setPagination] = React.useState({
     pageIndex: 0,
     pageSize,
   })
-  const [internalColumnOrder, setInternalColumnOrder] = React.useState<string[]>([])
-  const columnOrder = controlledColumnOrder ?? persisted.order ?? internalColumnOrder
-  const setColumnOrder = (next: string[] | ((old: string[]) => string[])) => {
-    const resolved = typeof next === "function" ? next(columnOrder) : next
-    setInternalColumnOrder(resolved)
-    onColumnOrderChange?.(resolved)
-    if (persistKey && !controlledColumnOrder) writePersisted(persistKey, { order: resolved })
-  }
-  const [resizingColumnId, setResizingColumnId] = React.useState<string | null>(null)
-  const [dragColumnId, setDragColumnId] = React.useState<string | null>(null)
-  const [dropColumnId, setDropColumnId] = React.useState<string | null>(null)
   const [rowSelection, setRowSelection] = React.useState<RowSelectionState>({})
-  // Empty by default means every column renders at its natural, auto-layout
-  // width exactly as before this feature existed — a width only ever gets
-  // pinned here once a user actually drags that column's own resize handle
-  // (below), so tables nobody resizes look and behave identically to
-  // before, with zero visual change across the app.
-  const [internalColumnSizing, setInternalColumnSizing] = React.useState<ColumnSizingState>({})
-  const columnSizing = controlledColumnSizing ?? persisted.sizing ?? internalColumnSizing
-  const setColumnSizing = (next: ColumnSizingState | ((old: ColumnSizingState) => ColumnSizingState)) => {
-    const resolved = typeof next === "function" ? next(columnSizing) : next
-    setInternalColumnSizing(resolved)
-    onColumnSizingChange?.(resolved)
-    if (persistKey && !controlledColumnSizing) writePersisted(persistKey, { sizing: resolved })
-  }
 
   const tableColumns = React.useMemo(
     () =>
@@ -310,88 +161,20 @@ function DataTable<TData extends Record<string, unknown>>({
     globalFilterFn: "includesString",
   })
 
-  function moveColumn(fromId: string, toId: string) {
-    // The selection checkbox column stays first: nothing is dropped onto it.
-    if (fromId === toId || toId === SELECT_COLUMN_ID) return
-    const ids = table.getAllLeafColumns().map((c) => c.id)
-    const from = ids.indexOf(fromId)
-    const to = ids.indexOf(toId)
-    if (from < 0 || to < 0) return
-    ids.splice(to, 0, ids.splice(from, 1)[0])
-    setColumnOrder(ids)
-  }
-
-  /** Own resize handler instead of header.getResizeHandler(): TanStack measures the
-   * start size from the column def (150 by default), not the rendered width, so a
-   * column that auto-layout made wider snapped to ~150px on the first pixel dragged. */
-  function startColumnResize(
-    e: React.MouseEvent<HTMLElement> | React.TouchEvent<HTMLElement>,
-    columnId: string,
-  ) {
-    const th = e.currentTarget.parentElement
-    if (!th) return
-    const isTouch = "touches" in e
-    const startX = isTouch ? e.touches[0].clientX : e.clientX
-    const startWidth = th.getBoundingClientRect().width
-    const resize = (clientX: number) =>
-      setColumnSizing((prev) => ({ ...prev, [columnId]: Math.max(48, Math.round(startWidth + clientX - startX)) }))
-    setResizingColumnId(columnId)
-    if (isTouch) {
-      const onMove = (ev: TouchEvent) => resize(ev.touches[0].clientX)
-      const onEnd = () => {
-        document.removeEventListener("touchmove", onMove)
-        document.removeEventListener("touchend", onEnd)
-        document.removeEventListener("touchcancel", onEnd)
-        setResizingColumnId(null)
-      }
-      document.addEventListener("touchmove", onMove)
-      document.addEventListener("touchend", onEnd)
-      document.addEventListener("touchcancel", onEnd)
-      return
-    }
-    e.preventDefault()
-    const onMove = (ev: MouseEvent) => resize(ev.clientX)
-    const onUp = () => {
-      document.removeEventListener("mousemove", onMove)
-      document.removeEventListener("mouseup", onUp)
-      setResizingColumnId(null)
-    }
-    document.addEventListener("mousemove", onMove)
-    document.addEventListener("mouseup", onUp)
-  }
+  const interactions = useHeaderInteractions(table, setColumnOrder, setColumnSizing)
 
   const rows = table.getRowModel().rows
   const selectedRows = enableRowSelection ? table.getSelectedRowModel().rows.map((r) => r.original) : []
 
   // Every row matching the current search/sort, across every page — not
-  // just the rows currently on screen (table.getRowModel(), post-
-  // pagination) — since "export what I've filtered down to" is the
-  // useful contract for a CSV button, not "export this one page." Value
-  // extraction is accessor-based (cell.getValue()), the same mechanism
-  // the search box above already filters with — a column with no
-  // accessor (a pure computed/joined `cell` renderer and no
-  // accessorKey/accessorFn) was already unsearchable for that same
-  // reason and exports as an empty column here too, a pre-existing,
-  // consistent limitation rather than a new one. Columns with no
-  // meaningful string header (the row-actions column's icon buttons,
-  // conventionally `header: ""`) are skipped outright, not exported as
-  // an empty trailing column with nothing to label it.
+  // just the rows on screen — since "export what I've filtered down to" is
+  // the useful contract for a CSV button. Values come from the accessors
+  // (the same the search filters with): a column with only a `cell`
+  // renderer exports empty, as it is unsearchable.
   function exportCsv() {
-    const exportColumns = table
-      .getVisibleLeafColumns()
-      .filter((c) => c.id !== SELECT_COLUMN_ID && typeof c.columnDef.header === "string" && c.columnDef.header !== "")
-    const header = exportColumns.map((c) => csvCell(c.columnDef.header as string))
-    const body = table.getSortedRowModel().rows.map((row) =>
-      exportColumns.map((c) => csvCell(row.getValue(c.id))).join(","),
-    )
-    const csv = [header.join(","), ...body].join("\n")
-    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement("a")
-    a.href = url
-    a.download = `${exportFilename ?? "export"}.csv`
-    a.click()
-    URL.revokeObjectURL(url)
+    const cols = exportableColumns(table)
+    const body = table.getSortedRowModel().rows.map((row) => cols.map((c) => row.getValue(c.id)))
+    downloadCsv(exportFilename ?? "export", toCsv(cols.map((c) => c.columnDef.header as string), body))
   }
 
   return (
@@ -437,28 +220,7 @@ function DataTable<TData extends Record<string, unknown>>({
             <DownloadIcon className="size-3.5" />
             {t("dataTable.exportCsv")}
           </Button>
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="outline" size="sm">
-                {t("dataTable.columns")}
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              {table
-                .getAllLeafColumns()
-                .filter((column) => column.getCanHide())
-                .map((column) => (
-                  <DropdownMenuCheckboxItem
-                    key={column.id}
-                    checked={column.getIsVisible()}
-                    onCheckedChange={(value) => column.toggleVisibility(!!value)}
-                    onSelect={(e) => e.preventDefault()}
-                  >
-                    {String(column.columnDef.header ?? column.id)}
-                  </DropdownMenuCheckboxItem>
-                ))}
-            </DropdownMenuContent>
-          </DropdownMenu>
+          <ColumnsMenu table={table} />
         </div>
       </div>
 
@@ -467,108 +229,16 @@ function DataTable<TData extends Record<string, unknown>>({
           <thead>
             {table.getHeaderGroups().map((headerGroup) => (
               <tr key={headerGroup.id} className="border-b border-border">
-                {headerGroup.headers.map((header) => {
-                  const sortDir = header.column.getIsSorted()
-                  // A width is only ever pinned once this column's own
-                  // entry exists in columnSizing (i.e. someone actually
-                  // dragged its handle) — every other column keeps
-                  // rendering at its natural, auto-layout width exactly
-                  // as before this feature existed.
-                  const resized = header.column.id in columnSizing
-                  return (
-                    <th
-                      key={header.id}
-                      className={cn(
-                        "relative h-9 px-3 text-left align-middle text-xs font-medium text-muted-foreground",
-                        enableColumnReorder && dropColumnId === header.column.id && dragColumnId !== header.column.id && "bg-primary/10",
-                      )}
-                      onDragOver={
-                        enableColumnReorder && dragColumnId
-                          ? (e) => {
-                              e.preventDefault()
-                              setDropColumnId(header.column.id)
-                            }
-                          : undefined
-                      }
-                      onDrop={
-                        enableColumnReorder && dragColumnId
-                          ? (e) => {
-                              e.preventDefault()
-                              moveColumn(dragColumnId, header.column.id)
-                              setDragColumnId(null)
-                              setDropColumnId(null)
-                            }
-                          : undefined
-                      }
-                      style={resized ? { width: header.getSize(), minWidth: header.getSize(), maxWidth: header.getSize() } : undefined}
-                    >
-                      {header.isPlaceholder ? null : header.column.getCanSort() ? (
-                        <HeaderHint hint={(header.column.columnDef.meta as { hint?: string } | undefined)?.hint}>
-                        <button
-                          type="button"
-                          onClick={header.column.getToggleSortingHandler()}
-                          draggable={enableColumnReorder && header.column.id !== SELECT_COLUMN_ID}
-                          onDragStart={(e) => {
-                            e.dataTransfer.effectAllowed = "move"
-                            setDragColumnId(header.column.id)
-                          }}
-                          onDragEnd={() => {
-                            setDragColumnId(null)
-                            setDropColumnId(null)
-                          }}
-                          title={
-                            enableColumnReorder &&
-                            header.column.id !== SELECT_COLUMN_ID &&
-                            !(header.column.columnDef.meta as { hint?: string } | undefined)?.hint
-                              ? t("dataTable.reorderColumnAria")
-                              : undefined
-                          }
-                          className={cn(
-                            "inline-flex max-w-full items-center gap-1 truncate hover:text-foreground",
-                            enableColumnReorder && "cursor-grab active:cursor-grabbing",
-                            dragColumnId === header.column.id && "opacity-50",
-                          )}
-                        >
-                          {enableColumnReorder && header.column.id !== SELECT_COLUMN_ID && (
-                            <GripVerticalIcon
-                              className="-ml-1.5 size-3 shrink-0 opacity-40"
-                              aria-hidden
-                            />
-                          )}
-                          <table.FlexRender header={header} />
-                          {(header.column.columnDef.meta as { hint?: string } | undefined)?.hint && (
-                            <CircleHelpIcon className="size-3 shrink-0 opacity-60" />
-                          )}
-                          {sortDir === "asc" ? (
-                            <ArrowUpIcon className="size-3 shrink-0" />
-                          ) : sortDir === "desc" ? (
-                            <ArrowDownIcon className="size-3 shrink-0" />
-                          ) : (
-                            <ArrowUpDownIcon className="size-3 shrink-0 opacity-40" />
-                          )}
-                        </button>
-                        </HeaderHint>
-                      ) : (
-                        <table.FlexRender header={header} />
-                      )}
-                      {header.column.getCanResize() && (
-                        <div
-                          onMouseDown={(e) => startColumnResize(e, header.column.id)}
-                          onTouchStart={(e) => startColumnResize(e, header.column.id)}
-                          onClick={(e) => e.stopPropagation()}
-                          role="separator"
-                          aria-orientation="vertical"
-                          aria-label={t("dataTable.resizeColumnAria")}
-                          title={t("dataTable.resizeColumnAria")}
-                          className={cn(
-                            "group/resize absolute right-0 top-0 h-full w-1.5 -translate-x-1/2 cursor-col-resize touch-none select-none after:absolute after:inset-y-2 after:left-1/2 after:w-px after:-translate-x-1/2 after:bg-border after:content-[''] hover:bg-primary/50 hover:after:bg-transparent",
-                            resizingColumnId === header.column.id && "bg-primary",
-                          )}
-                        />
-                      )}
-                    </th>
-                  )
-                })}
+                {headerGroup.headers.map((header) => (
+                  <TableHeaderCell
+                    key={header.id}
+                    table={table}
+                    header={header}
+                    columnSizing={columnSizing}
+                    enableColumnReorder={enableColumnReorder}
+                    interactions={interactions}
+                  />
+                ))}
               </tr>
             ))}
           </thead>
@@ -639,4 +309,6 @@ function DataTable<TData extends Record<string, unknown>>({
   )
 }
 
-export { DataTable }
+// dataTableFeatures lives with the shared parts (DataGrid uses it too);
+// column files import it from here.
+export { DataTable, dataTableFeatures }

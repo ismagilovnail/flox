@@ -5,6 +5,27 @@ per-phase, matching `CLAUDE.md`'s phase protocol. The one exception is
 [Between phases], below: spec amendments and the code changes that follow from
 them land between phases and would otherwise be invisible here.
 
+## [Phase 30.31] — DataGrid: server-paged logs
+
+§16 DataGrid; spec-conformance "мелочи". `docs/data-grid.md`.
+
+- **The bug it fixes:** the click log, postback logs and conversions read only their API's first page (50 rows) and
+  paged it client-side — rows past 50 were unreachable, and search and CSV covered those 50 alone.
+- `components/ui/data-grid.tsx`: server paging (range and total from the server, 50/100/200 per page, the page kept on
+  screen while the next loads), rows windowed with `@tanstack/react-virtual` 3.14.13 (pinned; new dependency), sticky
+  header, `role="grid"` with ↑/↓/PageUp/PageDown/Home/End and Enter, export of every page of the filter up to 10,000
+  rows (with progress; a warning past the cap), row keys unique even when rows are alike.
+- `components/ui/table-parts.tsx`: what DataTable and DataGrid share (feature set, column state remembered per browser,
+  header cell, Columns menu, CSV) — moved out of `data-table.tsx`, DataTable's behaviour unchanged.
+- The three logs on `components/shared/log-grid.tsx`: date range (UTC days, last 7 by default) and an exact click ID
+  filter, kept visible on loading and error. Conversions: Enter/click opens the timeline. Postback logs' row id now
+  includes status, event ref and attempt (two rows had the same key).
+- API: `clickId` (exact) on `GET /click-log`, `/postback-logs`, `/conversions` (`chstore.logWindow`), after the
+  organization filter.
+- Style guide: a DataGrid example over 2,500 rows.
+- Tests: `data-grid.test.tsx` (10, mutation-checked), `chstore.TestLogsFilterByClickID`; checked live with 450
+  synthetic clicks (removed afterwards) — paging, windowing (40 of 200 rows in the DOM), click ID, export of 460 rows.
+
 ## [Phase 30.30] — Telegram: several channels per bot, editing a bot
 
 The rest of `docs/telegram.md` "Not done".

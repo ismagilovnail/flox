@@ -68,7 +68,7 @@ func TestListAndCountClickLog(t *testing.T) {
 
 	from, to := day, day.Add(24*time.Hour)
 
-	total, err := store.CountClickLog(ctx, orgID, from, to)
+	total, err := store.CountClickLog(ctx, orgID, from, to, "")
 	if err != nil {
 		t.Fatalf("CountClickLog: %v", err)
 	}
@@ -76,7 +76,7 @@ func TestListAndCountClickLog(t *testing.T) {
 		t.Fatalf("CountClickLog = %d, want 3", total)
 	}
 
-	got, err := store.ListClickLog(ctx, orgID, from, to, 2, 0)
+	got, err := store.ListClickLog(ctx, orgID, from, to, "", 2, 0)
 	if err != nil {
 		t.Fatalf("ListClickLog: %v", err)
 	}
@@ -98,7 +98,7 @@ func TestListAndCountClickLog(t *testing.T) {
 		t.Fatalf("ListClickLog[0].Subs[0] = %q, want affid-1", got[0].Subs[0])
 	}
 
-	rest, err := store.ListClickLog(ctx, orgID, from, to, 2, 2)
+	rest, err := store.ListClickLog(ctx, orgID, from, to, "", 2, 2)
 	if err != nil {
 		t.Fatalf("ListClickLog page 2: %v", err)
 	}
@@ -107,7 +107,7 @@ func TestListAndCountClickLog(t *testing.T) {
 	}
 
 	// Tenant isolation: a different org sees none of this.
-	otherTotal, err := store.CountClickLog(ctx, idgen.New(), from, to)
+	otherTotal, err := store.CountClickLog(ctx, idgen.New(), from, to, "")
 	if err != nil {
 		t.Fatalf("CountClickLog for another org: %v", err)
 	}

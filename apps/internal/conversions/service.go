@@ -24,8 +24,8 @@ const (
 // — satisfied structurally, the same decoupling pattern internal/analytics
 // already uses.
 type Repository interface {
-	ListConversions(ctx context.Context, organizationID string, from, to time.Time, limit, offset int) ([]chstore.ConversionEvent, error)
-	CountConversions(ctx context.Context, organizationID string, from, to time.Time) (int, error)
+	ListConversions(ctx context.Context, organizationID string, from, to time.Time, clickID string, limit, offset int) ([]chstore.ConversionEvent, error)
+	CountConversions(ctx context.Context, organizationID string, from, to time.Time, clickID string) (int, error)
 	ConversionsByClickID(ctx context.Context, organizationID, clickID string) ([]chstore.ConversionEvent, error)
 	FunnelByClickID(ctx context.Context, organizationID, clickID string) ([]chstore.FunnelEvent, error)
 	StatusHistoryByClickIDs(ctx context.Context, organizationID string, clickIDs []string) ([]chstore.StatusStep, error)
@@ -53,7 +53,7 @@ func validateRange(organizationID string, from, to time.Time) error {
 
 // List returns one organization's conversion events over [from, to],
 // newest first, paginated.
-func (s *Service) List(ctx context.Context, organizationID string, from, to time.Time, limit, offset int) (ListResult, error) {
+func (s *Service) List(ctx context.Context, organizationID string, from, to time.Time, clickID string, limit, offset int) (ListResult, error) {
 	if err := validateRange(organizationID, from, to); err != nil {
 		return ListResult{}, err
 	}
@@ -67,11 +67,11 @@ func (s *Service) List(ctx context.Context, organizationID string, from, to time
 		offset = 0
 	}
 
-	rows, err := s.repo.ListConversions(ctx, organizationID, from, to, limit, offset)
+	rows, err := s.repo.ListConversions(ctx, organizationID, from, to, clickID, limit, offset)
 	if err != nil {
 		return ListResult{}, err
 	}
-	total, err := s.repo.CountConversions(ctx, organizationID, from, to)
+	total, err := s.repo.CountConversions(ctx, organizationID, from, to, clickID)
 	if err != nil {
 		return ListResult{}, err
 	}

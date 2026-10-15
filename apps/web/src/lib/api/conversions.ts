@@ -123,6 +123,8 @@ export type ClickTimeline = {
 export type ListConversionsParams = {
   from?: string;
   to?: string;
+  /** Exact click id: that click only (the logs\' "find a click"). */
+  clickId?: string;
   limit?: number;
   offset?: number;
 };
@@ -132,6 +134,7 @@ export function listConversions(params: ListConversionsParams = {}): Promise<Lis
     searchParams: {
       from: params.from,
       to: params.to,
+      clickId: params.clickId || undefined,
       limit: params.limit?.toString(),
       offset: params.offset?.toString(),
     },

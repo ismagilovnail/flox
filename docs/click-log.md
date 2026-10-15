@@ -28,12 +28,14 @@ a thin `Service` (`apps/internal/clicklogs/service.go`) with the same
 isn't a retriable action the way a postback attempt is, so this package
 is deliberately narrower than `postbacklogs`.
 
-Frontend: `features/clicklogs/click-log-view.tsx`, a single `DataTable`
-page (`app/(app)/click-log`), nav entry under "Traffic" right after
+Frontend: `features/clicklogs/click-log-view.tsx`, a server-paged
+`DataGrid` page (`docs/data-grid.md`: date range, exact click ID, every
+page reachable; it was a `DataTable` over the first 50 rows until
+2026-10-15) (`app/(app)/click-log`), nav entry under "Traffic" right after
 Campaigns. Every column on the schema is reachable via the Columns menu;
 only a practical default subset (time, type, campaign, click id, country,
 city, device, OS, browser, IP) is visible on first load —
-`DataTable` gained an `initialColumnVisibility` prop for this, generic to
+the table's `initialColumnVisibility` prop does this, generic to
 any future table with more columns than fit a default view. Campaign IDs
 are resolved to names client-side via the existing org-wide
 `useCampaigns()` list; stream-set/flow ids are left as raw ids (no

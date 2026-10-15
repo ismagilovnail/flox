@@ -80,6 +80,12 @@ only because the still-mocked Postback Logs feature
 (`lib/mock/postback-logs.ts`) cross-references a fake conversion feed to
 synthesize fake postback attempts.
 
+## The list (2026-10-15)
+
+`GET /conversions?from=&to=&clickId=&limit=&offset=` — `clickId` an exact
+match, optional. The page is a server-paged `DataGrid`
+(`docs/data-grid.md`); Enter or a click on a row opens its timeline.
+
 ## A real bug caught during manual browser verification: date-only `to` excluded same-day events
 
 `GET /conversions?to=YYYY-MM-DD` parses `to` as midnight UTC of that date.

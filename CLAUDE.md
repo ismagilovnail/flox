@@ -19,14 +19,14 @@ referenced below as §N).
 ## CURRENT STATE — UPDATE THIS EVERY PHASE
 
 ```
-CURRENT PHASE : PHASE 30.30 — TELEGRAM CHANNELS AND BOT EDITING (closed)
+CURRENT PHASE : PHASE 30.31 — DATAGRID (closed)
 STATUS        : Spec conformance gaps (docs/spec-conformance-2026-10-11.md):
                 all 15 closed; every §43 event is now produced. Left from
-                that doc's "мелочи": DataGrid, types/ schemas/ dirs.
+                that doc's "мелочи": types/ schemas/ dirs.
                 Leftovers: Telegram token change / TG_JOIN by channel
                 (docs/telegram.md "Not done").
                 Prod restore drill after deployment.
-LAST COMMIT   : feat(telegram): several channels per bot, bot editing.
+LAST COMMIT   : feat(ui): data grid for server-paged logs.
 UNCOMMITTED   : none expected. Dev DB at migration 00078, CH schema 018.
 NEXT          : wait for the user — pick from the leftovers above with the
                 user. CI (DO1) is

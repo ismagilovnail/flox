@@ -93,6 +93,7 @@ import { FilterChip } from "@/components/ui/filter-chip";
 import { FilterGroup } from "@/components/ui/filter-group";
 import { DateRangePicker } from "@/components/ui/date-range-picker";
 import { DataTable, dataTableFeatures } from "@/components/ui/data-table";
+import { DataGrid, type GridPage } from "@/components/ui/data-grid";
 
 const SEMANTIC_COLORS = [
   { name: "success", className: "bg-success" },
@@ -154,6 +155,42 @@ const campaignColumns: ColumnDef<typeof dataTableFeatures, Campaign>[] = [
   { accessorKey: "cvr", header: "CVR", cell: ({ getValue }) => <Mono>{String(getValue())}</Mono> },
   { accessorKey: "roi", header: "ROI", cell: ({ getValue }) => <Mono>{String(getValue())}</Mono> },
 ];
+
+// A server-paged log stand-in for the DataGrid example: 2,500 events,
+// served a page at a time as the real logs are.
+type LogEvent = { id: string; at: string; type: string; country: string; clickId: string };
+const LOG_EVENTS: LogEvent[] = Array.from({ length: 2500 }, (_, i) => ({
+  id: `e${i}`,
+  at: new Date(Date.UTC(2026, 9, 15, 12) - i * 61_000).toISOString().replace("T", " ").slice(0, 19),
+  type: i % 7 === 0 ? "SOURCE_FILTER" : "SOURCE_CLICK",
+  country: ["US", "DE", "PL", "BR", "IN"][i % 5],
+  clickId: `01M4Z${String(i).padStart(21, "0")}`,
+}));
+const logColumns: ColumnDef<typeof dataTableFeatures, LogEvent>[] = [
+  { id: "at", accessorKey: "at", header: "Time" },
+  { id: "type", accessorKey: "type", header: "Type" },
+  { id: "country", accessorKey: "country", header: "Country" },
+  { id: "clickId", accessorKey: "clickId", header: "Click ID", cell: ({ getValue }) => <span className="font-mono">{getValue() as string}</span> },
+];
+const fetchLogPage = async (offset: number, limit: number) => ({ rows: LOG_EVENTS.slice(offset, offset + limit), total: LOG_EVENTS.length });
+
+function DataGridExample() {
+  const [page, setPage] = React.useState<GridPage>({ offset: 0, limit: 100 });
+  return (
+    <DataGrid
+      ariaLabel="Event log example"
+      columns={logColumns}
+      rows={LOG_EVENTS.slice(page.offset, page.offset + page.limit)}
+      total={LOG_EVENTS.length}
+      page={page}
+      onPageChange={setPage}
+      getRowId={(r) => r.id}
+      fetchPage={fetchLogPage}
+      exportFilename="event-log-example"
+      enableColumnReorder
+    />
+  );
+}
 
 export default function StyleGuidePage() {
   const [dateRange, setDateRange] = React.useState<DateRange | undefined>();
@@ -470,6 +507,9 @@ export default function StyleGuidePage() {
           emptyDescription="Create a campaign to see it here."
           pageSize={5}
         />
+
+        <Caption>DataGrid — a server-paged log: the server&apos;s range and total, rows windowed, ↑/↓ on the focused grid.</Caption>
+        <DataGridExample />
       </Section>
 
       <Section id="filters" title="Filters">

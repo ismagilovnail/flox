@@ -41,7 +41,6 @@
     "description": "FLOX calls a network's postback URL whenever a conversion status changes for that network. Managed here and on the Networks page — they're the same data."
   },
   "logs": {
-    "searchPlaceholder": "Search by click ID...",
     "emptyTitle": "No postback activity yet",
     "emptyDescription": "Every incoming and outgoing postback attempt is logged here, success or not.",
     "loading": "Loading postback logs…",
@@ -53,7 +52,8 @@
       "replayError": "Couldn't replay delivery",
       "replayedIncoming": "Incoming postback replayed",
       "replayIncomingError": "Couldn't replay incoming postback"
-    }
+    },
+    "title": "Postback logs"
   },
   "columns": {
     "direction": "Direction",

@@ -15,7 +15,7 @@ type fakeRepo struct {
 	rowsByOrg map[string][]chstore.ClickLogRow
 }
 
-func (f *fakeRepo) ListClickLog(_ context.Context, orgID string, from, to time.Time, limit, offset int) ([]chstore.ClickLogRow, error) {
+func (f *fakeRepo) ListClickLog(_ context.Context, orgID string, from, to time.Time, clickID string, limit, offset int) ([]chstore.ClickLogRow, error) {
 	rows := f.rowsByOrg[orgID]
 	sorted := make([]chstore.ClickLogRow, len(rows))
 	copy(sorted, rows)
@@ -36,7 +36,7 @@ func (f *fakeRepo) ListClickLog(_ context.Context, orgID string, from, to time.T
 	return sorted[offset:end], nil
 }
 
-func (f *fakeRepo) CountClickLog(_ context.Context, orgID string, from, to time.Time) (int, error) {
+func (f *fakeRepo) CountClickLog(_ context.Context, orgID string, from, to time.Time, clickID string) (int, error) {
 	return len(f.rowsByOrg[orgID]), nil
 }
 
@@ -48,17 +48,17 @@ func TestListValidatesDateRangeAndClampsLimit(t *testing.T) {
 	ctx := context.Background()
 	now := time.Now()
 
-	if _, err := svc.List(ctx, "", now.AddDate(0, 0, -1), now, 0, 0); err == nil {
+	if _, err := svc.List(ctx, "", now.AddDate(0, 0, -1), now, "", 0, 0); err == nil {
 		t.Fatal("List with empty org id: want an error")
 	}
-	if _, err := svc.List(ctx, "org1", now, now.AddDate(0, 0, -1), 0, 0); err == nil {
+	if _, err := svc.List(ctx, "org1", now, now.AddDate(0, 0, -1), "", 0, 0); err == nil {
 		t.Fatal("List with to before from: want an error")
 	}
-	if _, err := svc.List(ctx, "org1", now.AddDate(0, 0, -200), now, 0, 0); err == nil {
+	if _, err := svc.List(ctx, "org1", now.AddDate(0, 0, -200), now, "", 0, 0); err == nil {
 		t.Fatal("List with a 200-day range: want a validation error (cap is 90 days)")
 	}
 
-	result, err := svc.List(ctx, "org1", now.AddDate(0, 0, -1), now, 0, 0)
+	result, err := svc.List(ctx, "org1", now.AddDate(0, 0, -1), now, "", 0, 0)
 	if err != nil {
 		t.Fatalf("List: %v", err)
 	}
@@ -81,7 +81,7 @@ func TestListPaginatesNewestFirst(t *testing.T) {
 	}}
 	svc := clicklogs.NewService(repo)
 
-	result, err := svc.List(context.Background(), "org1", base.Add(-time.Hour), base.Add(time.Hour), 2, 0)
+	result, err := svc.List(context.Background(), "org1", base.Add(-time.Hour), base.Add(time.Hour), "", 2, 0)
 	if err != nil {
 		t.Fatalf("List: %v", err)
 	}
@@ -109,7 +109,7 @@ func TestListMapsIPGeoDeviceAndSubsThrough(t *testing.T) {
 	repo := &fakeRepo{rowsByOrg: map[string][]chstore.ClickLogRow{"org1": {row}}}
 	svc := clicklogs.NewService(repo)
 
-	result, err := svc.List(context.Background(), "org1", base.Add(-time.Hour), base.Add(time.Hour), 0, 0)
+	result, err := svc.List(context.Background(), "org1", base.Add(-time.Hour), base.Add(time.Hour), "", 0, 0)
 	if err != nil {
 		t.Fatalf("List: %v", err)
 	}

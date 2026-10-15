@@ -1,7 +1,6 @@
 {
   "list": {
     "title": "Conversions",
-    "searchPlaceholder": "Search by click ID...",
     "emptyTitle": "No conversions yet",
     "emptyDescription": "CPA events will show up here once the tracker starts recording postbacks.",
     "loading": "Loading conversions…",

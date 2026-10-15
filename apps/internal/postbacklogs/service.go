@@ -24,8 +24,8 @@ const (
 // — satisfied structurally, the same decoupling pattern
 // internal/analytics/internal/conversions already use.
 type Repository interface {
-	ListPostbackAttempts(ctx context.Context, organizationID string, from, to time.Time, limit, offset int) ([]chstore.PostbackAttempt, error)
-	CountPostbackAttempts(ctx context.Context, organizationID string, from, to time.Time) (int, error)
+	ListPostbackAttempts(ctx context.Context, organizationID string, from, to time.Time, clickID string, limit, offset int) ([]chstore.PostbackAttempt, error)
+	CountPostbackAttempts(ctx context.Context, organizationID string, from, to time.Time, clickID string) (int, error)
 }
 
 // SourcePostbackLookup resolves the Postgres postbacks row a successful
@@ -140,7 +140,7 @@ func NewService(repo Repository, sourceLookup SourcePostbackLookup, deliveries O
 
 // List returns one organization's postback attempts (both directions)
 // over [from, to], newest first, paginated.
-func (s *Service) List(ctx context.Context, organizationID string, from, to time.Time, limit, offset int) (ListResult, error) {
+func (s *Service) List(ctx context.Context, organizationID string, from, to time.Time, clickID string, limit, offset int) (ListResult, error) {
 	if organizationID == "" {
 		return ListResult{}, apierror.Validation("missing organization", nil)
 	}
@@ -160,11 +160,11 @@ func (s *Service) List(ctx context.Context, organizationID string, from, to time
 		offset = 0
 	}
 
-	rows, err := s.repo.ListPostbackAttempts(ctx, organizationID, from, to, limit, offset)
+	rows, err := s.repo.ListPostbackAttempts(ctx, organizationID, from, to, clickID, limit, offset)
 	if err != nil {
 		return ListResult{}, err
 	}
-	total, err := s.repo.CountPostbackAttempts(ctx, organizationID, from, to)
+	total, err := s.repo.CountPostbackAttempts(ctx, organizationID, from, to, clickID)
 	if err != nil {
 		return ListResult{}, err
 	}

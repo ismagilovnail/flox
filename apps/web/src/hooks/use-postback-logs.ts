@@ -1,6 +1,6 @@
 "use client";
 
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import {
   listPostbackLogs,
@@ -12,7 +12,7 @@ import {
 const postbackLogsKey = (params: ListPostbackLogsParams) => ["postback-logs", params] as const;
 
 export function usePostbackLogs(params: ListPostbackLogsParams = {}) {
-  return useQuery({ queryKey: postbackLogsKey(params), queryFn: () => listPostbackLogs(params) });
+  return useQuery({ queryKey: postbackLogsKey(params), queryFn: () => listPostbackLogs(params), placeholderData: keepPreviousData });
 }
 
 /** The replayed attempt only shows up in the log once apps/worker's

@@ -43,7 +43,8 @@ phase exactly.
 
 ## One list, both directions mixed — matching the frontend's single table
 
-`GET /postback-logs?from=&to=&limit=&offset=` returns incoming and
+`GET /postback-logs?from=&to=&clickId=&limit=&offset=` (`clickId`: exact
+match, optional — `docs/data-grid.md`) returns incoming and
 outgoing attempts together, newest first, discriminated by `direction` —
 the frontend never queried them separately, so the backend doesn't
 either. New `chstore` read methods (`ListPostbackAttempts`,

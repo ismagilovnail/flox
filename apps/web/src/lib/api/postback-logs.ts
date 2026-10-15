@@ -57,6 +57,8 @@ export type ListPostbackLogsResult = {
 export type ListPostbackLogsParams = {
   from?: string;
   to?: string;
+  /** Exact click id: that click only (the logs\' "find a click"). */
+  clickId?: string;
   limit?: number;
   offset?: number;
 };
@@ -66,6 +68,7 @@ export function listPostbackLogs(params: ListPostbackLogsParams = {}): Promise<L
     searchParams: {
       from: params.from,
       to: params.to,
+      clickId: params.clickId || undefined,
       limit: params.limit?.toString(),
       offset: params.offset?.toString(),
     },

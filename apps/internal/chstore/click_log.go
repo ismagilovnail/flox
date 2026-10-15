@@ -75,17 +75,31 @@ func scanClickLogRow(r driver.Rows) (ClickLogRow, error) {
 	return row, err
 }
 
+// logWindow is the WHERE of the raw-event logs (click log, conversions,
+// postback attempts): one organization over [from, to] and, when clickID is
+// set, that click only — the lists' "find a click" (exact match).
+func logWindow(organizationID string, from, to time.Time, clickID string) (string, []any) {
+	where := `organization_id = ? AND event_at >= ? AND event_at <= ?`
+	args := []any{organizationID, from, to}
+	if clickID != "" {
+		where += ` AND click_id = ?`
+		args = append(args, clickID)
+	}
+	return where, args
+}
+
 // ListClickLog reads click_events for one organization over [from, to],
 // newest first — the Click Log page's raw per-visit table, mirroring
 // ListPostbackAttempts' shape (postback_events.go).
-func (s *EventStore) ListClickLog(ctx context.Context, organizationID string, from, to time.Time, limit, offset int) ([]ClickLogRow, error) {
+func (s *EventStore) ListClickLog(ctx context.Context, organizationID string, from, to time.Time, clickID string, limit, offset int) ([]ClickLogRow, error) {
+	where, args := logWindow(organizationID, from, to, clickID)
 	rows, err := s.conn.Query(ctx, `
 		SELECT `+clickLogColumns+`
 		FROM click_events
-		WHERE organization_id = ? AND event_at >= ? AND event_at <= ?
+		WHERE `+where+`
 		ORDER BY event_at DESC
 		LIMIT ? OFFSET ?`,
-		organizationID, from, to, limit, offset,
+		append(args, limit, offset)...,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("chstore: querying click log: %w", err)
@@ -108,13 +122,12 @@ func (s *EventStore) ListClickLog(ctx context.Context, organizationID string, fr
 
 // CountClickLog is ListClickLog's companion for the list page's total count
 // (pagination), over the same [from, to] window.
-func (s *EventStore) CountClickLog(ctx context.Context, organizationID string, from, to time.Time) (int, error) {
+func (s *EventStore) CountClickLog(ctx context.Context, organizationID string, from, to time.Time, clickID string) (int, error) {
+	where, args := logWindow(organizationID, from, to, clickID)
 	row := s.conn.QueryRow(ctx, `
 		SELECT count()
 		FROM click_events
-		WHERE organization_id = ? AND event_at >= ? AND event_at <= ?`,
-		organizationID, from, to,
-	)
+		WHERE `+where, args...)
 	var total uint64
 	if err := row.Scan(&total); err != nil {
 		return 0, fmt.Errorf("chstore: counting click log rows: %w", err)

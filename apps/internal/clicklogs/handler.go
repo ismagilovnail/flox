@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -69,7 +70,7 @@ func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	result, err := h.svc.List(r.Context(), orgID, from, to, limit, offset)
+	result, err := h.svc.List(r.Context(), orgID, from, to, strings.TrimSpace(r.URL.Query().Get("clickId")), limit, offset)
 	if err != nil {
 		apierror.Write(w, h.logger, err)
 		return

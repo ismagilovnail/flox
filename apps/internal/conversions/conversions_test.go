@@ -25,7 +25,7 @@ type fakeRepo struct {
 	offersByOrg map[string]map[string]string
 }
 
-func (f *fakeRepo) ListConversions(_ context.Context, orgID string, from, to time.Time, limit, offset int) ([]chstore.ConversionEvent, error) {
+func (f *fakeRepo) ListConversions(_ context.Context, orgID string, from, to time.Time, clickID string, limit, offset int) ([]chstore.ConversionEvent, error) {
 	rows := f.conversionsByOrg[orgID]
 	// newest first, matching the real chstore query's ORDER BY
 	sorted := make([]chstore.ConversionEvent, len(rows))
@@ -47,7 +47,7 @@ func (f *fakeRepo) ListConversions(_ context.Context, orgID string, from, to tim
 	return sorted[offset:end], nil
 }
 
-func (f *fakeRepo) CountConversions(_ context.Context, orgID string, from, to time.Time) (int, error) {
+func (f *fakeRepo) CountConversions(_ context.Context, orgID string, from, to time.Time, clickID string) (int, error) {
 	return len(f.conversionsByOrg[orgID]), nil
 }
 
@@ -101,7 +101,7 @@ func TestListEnrichesRowsWithFlowOfferSubsAndStatusHistory(t *testing.T) {
 	}
 	svc := conversions.NewService(repo)
 
-	res, err := svc.List(context.Background(), "org1", t0.AddDate(0, 0, -1), t0.AddDate(0, 0, 5), 0, 0)
+	res, err := svc.List(context.Background(), "org1", t0.AddDate(0, 0, -1), t0.AddDate(0, 0, 5), "", 0, 0)
 	if err != nil {
 		t.Fatalf("List: %v", err)
 	}
@@ -131,19 +131,19 @@ func TestListValidatesDateRangeAndClampsLimit(t *testing.T) {
 	ctx := context.Background()
 	now := time.Now()
 
-	if _, err := svc.List(ctx, "", now.AddDate(0, 0, -1), now, 0, 0); err == nil {
+	if _, err := svc.List(ctx, "", now.AddDate(0, 0, -1), now, "", 0, 0); err == nil {
 		t.Fatal("List with empty org id: want an error")
 	}
 
-	if _, err := svc.List(ctx, "org1", now, now.AddDate(0, 0, -1), 0, 0); err == nil {
+	if _, err := svc.List(ctx, "org1", now, now.AddDate(0, 0, -1), "", 0, 0); err == nil {
 		t.Fatal("List with to before from: want an error")
 	}
 
-	if _, err := svc.List(ctx, "org1", now.AddDate(0, 0, -200), now, 0, 0); err == nil {
+	if _, err := svc.List(ctx, "org1", now.AddDate(0, 0, -200), now, "", 0, 0); err == nil {
 		t.Fatal("List with a 200-day range: want a validation error (cap is 90 days)")
 	}
 
-	result, err := svc.List(ctx, "org1", now.AddDate(0, 0, -1), now, 0, 0)
+	result, err := svc.List(ctx, "org1", now.AddDate(0, 0, -1), now, "", 0, 0)
 	if err != nil {
 		t.Fatalf("List: %v", err)
 	}

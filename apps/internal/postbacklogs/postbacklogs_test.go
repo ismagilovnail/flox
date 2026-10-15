@@ -15,7 +15,7 @@ type fakeRepo struct {
 	attemptsByOrg map[string][]chstore.PostbackAttempt
 }
 
-func (f *fakeRepo) ListPostbackAttempts(_ context.Context, orgID string, from, to time.Time, limit, offset int) ([]chstore.PostbackAttempt, error) {
+func (f *fakeRepo) ListPostbackAttempts(_ context.Context, orgID string, from, to time.Time, clickID string, limit, offset int) ([]chstore.PostbackAttempt, error) {
 	rows := f.attemptsByOrg[orgID]
 	sorted := make([]chstore.PostbackAttempt, len(rows))
 	copy(sorted, rows)
@@ -36,7 +36,7 @@ func (f *fakeRepo) ListPostbackAttempts(_ context.Context, orgID string, from, t
 	return sorted[offset:end], nil
 }
 
-func (f *fakeRepo) CountPostbackAttempts(_ context.Context, orgID string, from, to time.Time) (int, error) {
+func (f *fakeRepo) CountPostbackAttempts(_ context.Context, orgID string, from, to time.Time, clickID string) (int, error) {
 	return len(f.attemptsByOrg[orgID]), nil
 }
 
@@ -48,17 +48,17 @@ func TestListValidatesDateRangeAndClampsLimit(t *testing.T) {
 	ctx := context.Background()
 	now := time.Now()
 
-	if _, err := svc.List(ctx, "", now.AddDate(0, 0, -1), now, 0, 0); err == nil {
+	if _, err := svc.List(ctx, "", now.AddDate(0, 0, -1), now, "", 0, 0); err == nil {
 		t.Fatal("List with empty org id: want an error")
 	}
-	if _, err := svc.List(ctx, "org1", now, now.AddDate(0, 0, -1), 0, 0); err == nil {
+	if _, err := svc.List(ctx, "org1", now, now.AddDate(0, 0, -1), "", 0, 0); err == nil {
 		t.Fatal("List with to before from: want an error")
 	}
-	if _, err := svc.List(ctx, "org1", now.AddDate(0, 0, -200), now, 0, 0); err == nil {
+	if _, err := svc.List(ctx, "org1", now.AddDate(0, 0, -200), now, "", 0, 0); err == nil {
 		t.Fatal("List with a 200-day range: want a validation error (cap is 90 days)")
 	}
 
-	result, err := svc.List(ctx, "org1", now.AddDate(0, 0, -1), now, 0, 0)
+	result, err := svc.List(ctx, "org1", now.AddDate(0, 0, -1), now, "", 0, 0)
 	if err != nil {
 		t.Fatalf("List: %v", err)
 	}
@@ -81,7 +81,7 @@ func TestListPaginates(t *testing.T) {
 	}}
 	svc := postbacklogs.NewService(repo, nil, nil, nil, nil)
 
-	result, err := svc.List(context.Background(), "org1", base.Add(-time.Hour), base.Add(time.Hour), 2, 0)
+	result, err := svc.List(context.Background(), "org1", base.Add(-time.Hour), base.Add(time.Hour), "", 2, 0)
 	if err != nil {
 		t.Fatalf("List: %v", err)
 	}

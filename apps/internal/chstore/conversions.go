@@ -60,14 +60,15 @@ func scanConversionEvent(r driver.Rows) (ConversionEvent, error) {
 
 // ListConversions reads conversion_events for one organization over
 // [from, to], newest first — the Conversions list page's data source.
-func (s *EventStore) ListConversions(ctx context.Context, organizationID string, from, to time.Time, limit, offset int) ([]ConversionEvent, error) {
+func (s *EventStore) ListConversions(ctx context.Context, organizationID string, from, to time.Time, clickID string, limit, offset int) ([]ConversionEvent, error) {
+	where, args := logWindow(organizationID, from, to, clickID)
 	rows, err := s.conn.Query(ctx, `
 		SELECT `+conversionEventColumns+`
 		FROM conversion_events
-		WHERE organization_id = ? AND event_at >= ? AND event_at <= ?
+		WHERE `+where+`
 		ORDER BY event_at DESC
 		LIMIT ? OFFSET ?`,
-		organizationID, from, to, limit, offset,
+		append(args, limit, offset)...,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("chstore: querying conversions: %w", err)
@@ -90,13 +91,12 @@ func (s *EventStore) ListConversions(ctx context.Context, organizationID string,
 
 // CountConversions is ListConversions' companion for the list page's total
 // count (pagination), over the same [from, to] window.
-func (s *EventStore) CountConversions(ctx context.Context, organizationID string, from, to time.Time) (int, error) {
+func (s *EventStore) CountConversions(ctx context.Context, organizationID string, from, to time.Time, clickID string) (int, error) {
+	where, args := logWindow(organizationID, from, to, clickID)
 	row := s.conn.QueryRow(ctx, `
 		SELECT count()
 		FROM conversion_events
-		WHERE organization_id = ? AND event_at >= ? AND event_at <= ?`,
-		organizationID, from, to,
-	)
+		WHERE `+where, args...)
 	var total uint64
 	if err := row.Scan(&total); err != nil {
 		return 0, fmt.Errorf("chstore: counting conversions: %w", err)

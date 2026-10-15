@@ -72,7 +72,7 @@
 |---|---|---|---|
 | 0 Repository inspection | ✔ | `ARCHITECTURE.md` §6-SHARED: Strategy A | — |
 | 1 Product foundation | ✔ | README, ARCHITECTURE, PRODUCT, ROADMAP, `.env.example` | — |
-| 2 Design system | ◐ | Компоненты §16 в `components/ui` (Combobox = `searchable-select`, Drawer = `sheet`, CommandMenu = `command`) | Нет отдельного **DataGrid** (только DataTable) — мелочь |
+| 2 Design system | ◐ | Компоненты §16 в `components/ui` (Combobox = `searchable-select`, Drawer = `sheet`, CommandMenu = `command`) | ~~Нет отдельного **DataGrid**~~ — есть с 2026-10-15 (docs/data-grid.md) |
 | 3 Application shell | ◐ | Сайдбар (с Push с 2026-10-13), ⌘K, workspace selector, уведомления, user menu, mobile nav | В сайдбаре нет **Reports** (роль играет Analytics) |
 | 4 Dashboard | ✔ | KPI, 4 графика, 4 «Top»-таблицы, «—» без расхода | — |
 | 5 Analytics | ✔ | Таблица/линия/столбцы/воронка из 8 шагов §43, все 16 измерений §19 (плюс `stream_set`; `postlanding` и `network` с 2026-10-13), все метрики | — |
@@ -155,7 +155,7 @@
 14. ~~Нет ротации API-ключа; audit_logs покрывает только команду и настройки (§54).~~ Закрыто 2026-10-14.
 15. ~~Нет теста на неактивную кампанию в tracker (§58).~~ Закрыто 2026-10-14.
 
-**Мелочи:** нет DataGrid (§16), нет отдельных `types/`/`schemas/` (§31),
+**Мелочи:** ~~нет DataGrid (§16)~~ (закрыто 2026-10-15, docs/data-grid.md), нет отдельных `types/`/`schemas/` (§31),
 ~~Copy tracking URL не в строке списка кампаний (§20)~~ (закрыто
 2026-10-14), ~~событие IOS_INSTALL не генерируется~~ (закрыто 2026-10-14, первый
 запуск с экрана «Домой»), ~~события TG_* не генерируются~~ (закрыто 2026-10-14,

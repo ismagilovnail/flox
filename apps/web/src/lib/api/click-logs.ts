@@ -72,6 +72,8 @@ export type ListClickLogsResult = {
 export type ListClickLogsParams = {
   from?: string;
   to?: string;
+  /** Exact click id: that click only (the logs\' "find a click"). */
+  clickId?: string;
   limit?: number;
   offset?: number;
 };
@@ -81,6 +83,7 @@ export function listClickLogs(params: ListClickLogsParams = {}): Promise<ListCli
     searchParams: {
       from: params.from,
       to: params.to,
+      clickId: params.clickId || undefined,
       limit: params.limit?.toString(),
       offset: params.offset?.toString(),
     },

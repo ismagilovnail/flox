@@ -4,7 +4,6 @@
     "description": "Every click (SOURCE_CLICK) and blocked click (SOURCE_FILTER) of the last 7 days, one row per visit — IP, geo, device and everything else the tracker captured.",
     "loading": "Loading click log…",
     "loadError": "Couldn't load the click log",
-    "searchPlaceholder": "Search click log…",
     "emptyTitle": "No clicks yet",
     "emptyDescription": "Clicks will show up here once traffic starts hitting a tracking link."
   },

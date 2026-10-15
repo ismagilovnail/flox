@@ -29,7 +29,7 @@ func TestListAndCountConversions(t *testing.T) {
 		t.Fatalf("InsertBatch: %v", err)
 	}
 
-	total, err := store.CountConversions(ctx, orgID, day, day.Add(24*time.Hour))
+	total, err := store.CountConversions(ctx, orgID, day, day.Add(24*time.Hour), "")
 	if err != nil {
 		t.Fatalf("CountConversions: %v", err)
 	}
@@ -37,7 +37,7 @@ func TestListAndCountConversions(t *testing.T) {
 		t.Fatalf("CountConversions = %d, want 3", total)
 	}
 
-	rows, err := store.ListConversions(ctx, orgID, day, day.Add(24*time.Hour), 2, 0)
+	rows, err := store.ListConversions(ctx, orgID, day, day.Add(24*time.Hour), "", 2, 0)
 	if err != nil {
 		t.Fatalf("ListConversions: %v", err)
 	}
@@ -52,7 +52,7 @@ func TestListAndCountConversions(t *testing.T) {
 		t.Fatalf("ListConversions[0].Type = %q, want CPA_TRASH (newest)", rows[0].Type)
 	}
 
-	page2, err := store.ListConversions(ctx, orgID, day, day.Add(24*time.Hour), 2, 2)
+	page2, err := store.ListConversions(ctx, orgID, day, day.Add(24*time.Hour), "", 2, 2)
 	if err != nil {
 		t.Fatalf("ListConversions page 2: %v", err)
 	}
@@ -174,7 +174,7 @@ func TestStatusHistoryAndOffersByClickIDsAreOrgScoped(t *testing.T) {
 		t.Fatalf("offers has an entry for a click without an offer: %+v", offers)
 	}
 
-	rows, err := store.ListConversions(ctx, orgID, day, day.Add(24*time.Hour), 10, 0)
+	rows, err := store.ListConversions(ctx, orgID, day, day.Add(24*time.Hour), "", 10, 0)
 	if err != nil {
 		t.Fatalf("ListConversions: %v", err)
 	}

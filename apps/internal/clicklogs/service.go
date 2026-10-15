@@ -22,8 +22,8 @@ const (
 // the same structural-interface decoupling internal/postbacklogs and
 // internal/conversions already use.
 type Repository interface {
-	ListClickLog(ctx context.Context, organizationID string, from, to time.Time, limit, offset int) ([]chstore.ClickLogRow, error)
-	CountClickLog(ctx context.Context, organizationID string, from, to time.Time) (int, error)
+	ListClickLog(ctx context.Context, organizationID string, from, to time.Time, clickID string, limit, offset int) ([]chstore.ClickLogRow, error)
+	CountClickLog(ctx context.Context, organizationID string, from, to time.Time, clickID string) (int, error)
 }
 
 type Service struct {
@@ -36,7 +36,7 @@ func NewService(repo Repository) *Service {
 
 // List returns one organization's click_events rows over [from, to], newest
 // first, paginated.
-func (s *Service) List(ctx context.Context, organizationID string, from, to time.Time, limit, offset int) (ListResult, error) {
+func (s *Service) List(ctx context.Context, organizationID string, from, to time.Time, clickID string, limit, offset int) (ListResult, error) {
 	if organizationID == "" {
 		return ListResult{}, apierror.Validation("missing organization", nil)
 	}
@@ -56,11 +56,11 @@ func (s *Service) List(ctx context.Context, organizationID string, from, to time
 		offset = 0
 	}
 
-	rows, err := s.repo.ListClickLog(ctx, organizationID, from, to, limit, offset)
+	rows, err := s.repo.ListClickLog(ctx, organizationID, from, to, clickID, limit, offset)
 	if err != nil {
 		return ListResult{}, err
 	}
-	total, err := s.repo.CountClickLog(ctx, organizationID, from, to)
+	total, err := s.repo.CountClickLog(ctx, organizationID, from, to, clickID)
 	if err != nil {
 		return ListResult{}, err
 	}

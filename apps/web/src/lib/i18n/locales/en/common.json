@@ -91,5 +91,16 @@
   "apiErrors": {
     "query_too_heavy": "This report needs more time or memory than allowed. Narrow the date range or remove a breakdown.",
     "forbidden": "You don't have permission for this action."
+  },
+  "dataGrid": {
+    "range": "{{first}}–{{last}} of {{total}}",
+    "noRows": "No rows",
+    "rowsPerPage": "Rows per page",
+    "firstPageAria": "First page",
+    "exporting": "Exporting {{done}} of {{total}}…",
+    "exportError": "Couldn't export",
+    "exportTruncated": "Exported the first {{count}} rows of {{total}}. Narrow the date range to export the rest.",
+    "clickIdPlaceholder": "Exact click ID…",
+    "clearClickId": "Clear click ID"
   }
 }
