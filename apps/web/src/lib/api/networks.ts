@@ -18,6 +18,9 @@ export type Network = {
   /** Payout currency (ISO 4217): a postback with revenue but no currency
    * is priced in it. USD unless the operator chose another. */
   currency: string;
+  /** TRACKER_PUBLIC_URL + /postback/{id}, no query; "" when the platform has
+   * no public tracker URL configured. lib/postback-url.ts adds the query. */
+  incomingPostbackUrl: string;
   status: NetworkStatus;
   createdAt: string;
   updatedAt: string;

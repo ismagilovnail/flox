@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { toast } from "sonner";
 import { CopyIcon } from "lucide-react";
 import { useTranslation } from "react-i18next";
@@ -13,10 +14,8 @@ import { LoadingState } from "@/components/ui/loading-state";
 import { Mono } from "@/components/ui/typography";
 import { useNetworks } from "@/hooks/use-networks";
 import { useEventMappings } from "@/hooks/use-event-mappings";
+import { incomingPostbackTemplate } from "@/lib/postback-url";
 
-function incomingUrl(networkId: string) {
-  return `https://api.floxlink.io/postback/${networkId}?click_id={click_id}&status={status}&revenue={revenue}&currency={currency}`;
-}
 
 export function IncomingPostbacksPanel() {
   const { t } = useTranslation("postbacks");
@@ -63,7 +62,9 @@ export function IncomingPostbacksPanel() {
       <div className="flex flex-col gap-3">
         {networks.map((network) => {
           const mappedCount = mappings.filter((m) => m.networkId === network.id).length;
-          const url = incomingUrl(network.id);
+          // From the server (TRACKER_PUBLIC_URL); this used to be a made-up
+          // api.floxlink.io address without the secret (audit 2026-10-15, UX-1).
+          const url = network.incomingPostbackUrl ? incomingPostbackTemplate(network.incomingPostbackUrl) : "";
           return (
             <Card key={network.id}>
               <CardHeader>
@@ -74,15 +75,24 @@ export function IncomingPostbacksPanel() {
                   </Badge>
                 </CardDescription>
               </CardHeader>
-              <CardContent className="flex items-center gap-2">
-                <Mono className="min-w-0 flex-1 truncate text-xs">{url}</Mono>
-                <IconButton
-                  aria-label={t("incoming.copyAria", { name: network.name })}
-                  size="icon-sm"
-                  onClick={() => copy(url)}
-                >
-                  <CopyIcon className="size-3.5" />
-                </IconButton>
+              <CardContent className="flex flex-col gap-2">
+                {url ? (
+                  <div className="flex items-center gap-2">
+                    <Mono className="min-w-0 flex-1 truncate text-xs">{url}</Mono>
+                    <IconButton
+                      aria-label={t("incoming.copyAria", { name: network.name })}
+                      size="icon-sm"
+                      onClick={() => copy(url)}
+                    >
+                      <CopyIcon className="size-3.5" />
+                    </IconButton>
+                  </div>
+                ) : (
+                  <p className="text-xs text-muted-foreground">{t("incoming.noTracker")}</p>
+                )}
+                <Link href={`/networks/${network.id}`} className="text-xs font-medium text-primary underline-offset-4 hover:underline">
+                  {t("incoming.setupLink")}
+                </Link>
               </CardContent>
             </Card>
           );

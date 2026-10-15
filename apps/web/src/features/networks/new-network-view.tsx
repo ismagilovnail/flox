@@ -20,7 +20,7 @@ export function NewNetworkView() {
   // time it's ever in a response (§54/Phase 30); showing it here instead
   // of navigating straight away is the only chance the operator gets to
   // copy it.
-  const [revealed, setRevealed] = React.useState<{ networkId: string; secret: string } | null>(null);
+  const [revealed, setRevealed] = React.useState<{ name: string; incomingPostbackUrl: string; secret: string } | null>(null);
 
   function handleSubmit(values: NetworkFormValues) {
     createNetwork.mutate(
@@ -28,7 +28,7 @@ export function NewNetworkView() {
       {
         onSuccess: (created) => {
           toast(t("toast.created"), { description: values.name });
-          setRevealed({ networkId: created.id, secret: created.postbackSecret });
+          setRevealed({ name: created.name, incomingPostbackUrl: created.incomingPostbackUrl, secret: created.postbackSecret });
         },
         onError: (err) => toast.error(t("toast.createError"), { description: err.message }),
       },
@@ -42,7 +42,8 @@ export function NewNetworkView() {
   if (revealed) {
     return (
       <PostbackSecretDialog
-        networkId={revealed.networkId}
+        networkName={revealed.name}
+        incomingPostbackUrl={revealed.incomingPostbackUrl}
         secret={revealed.secret}
         onDone={() => router.push("/networks")}
       />

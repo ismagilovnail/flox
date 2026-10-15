@@ -8,6 +8,7 @@ import { ErrorState } from "@/components/ui/error-state";
 import { useNetwork, useUpdateNetwork } from "@/hooks/use-networks";
 import { usePermission } from "@/hooks/use-auth";
 import { NetworkForm, type NetworkFormValues } from "@/features/networks/network-form";
+import { IncomingPostbackCard } from "@/features/networks/incoming-postback-card";
 
 export function NetworkDetailView({ id }: { id: string }) {
   const { t } = useTranslation("networks");
@@ -42,7 +43,9 @@ export function NetworkDetailView({ id }: { id: string }) {
   }
 
   return (
-    <NetworkForm
+    <div className="flex flex-col gap-4">
+      <IncomingPostbackCard network={network} canWrite={canWrite} />
+      <NetworkForm
       title={t("form.titleEdit", { name: network.name })}
       defaultValues={{
         name: network.name,
@@ -55,6 +58,7 @@ export function NetworkDetailView({ id }: { id: string }) {
       showStatus
       onSubmit={handleSubmit}
       disabled={!canWrite}
-    />
+      />
+    </div>
   );
 }

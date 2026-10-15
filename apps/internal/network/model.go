@@ -32,10 +32,16 @@ type Network struct {
 	AcceptDuplicates bool   `json:"acceptDuplicates"`
 	// Currency is the payout currency: a postback with revenue but no
 	// currency is taken to be in it (ISO 4217, upper case; USD default).
-	Currency  string    `json:"currency"`
-	Status    Status    `json:"status"`
-	CreatedAt time.Time `json:"createdAt"`
-	UpdatedAt time.Time `json:"updatedAt"`
+	Currency string `json:"currency"`
+	// IncomingPostbackURL is where the network sends its postbacks:
+	// TRACKER_PUBLIC_URL + /postback/{id}, without the query (the secret is
+	// shown once and only the client composes it in). Empty when
+	// TRACKER_PUBLIC_URL is not configured — never a guessed host (audit
+	// 2026-10-15, UX-1).
+	IncomingPostbackURL string    `json:"incomingPostbackUrl"`
+	Status              Status    `json:"status"`
+	CreatedAt           time.Time `json:"createdAt"`
+	UpdatedAt           time.Time `json:"updatedAt"`
 }
 
 type CreateInput struct {

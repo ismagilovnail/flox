@@ -24,7 +24,8 @@ import { CURRENCIES } from "@/lib/countries";
 export function buildNetworkFormSchema(t: TFunction) {
   return z.object({
     name: nameField(t("form.validation.nameMin", { ns: "networks" }), { max: 80 }),
-    postbackUrl: z.url(t("form.validation.urlInvalid", { ns: "networks" })),
+    // Optional (audit 2026-10-15, UX-2): empty means no outgoing postback.
+    postbackUrl: z.union([z.literal(""), z.url(t("form.validation.urlInvalid", { ns: "networks" }))]),
     acceptDuplicates: z.boolean(),
     currency: z.string().regex(/^[A-Z]{3}$/, t("form.validation.currencyInvalid", { ns: "networks" })),
     status: z.enum(["active", "paused", "archived"] as [NetworkStatus, ...NetworkStatus[]]).optional(),

@@ -358,3 +358,52 @@ func TestCurrency(t *testing.T) {
 		t.Errorf("duplicate currency = %q, want GBP (copied)", dup.Currency)
 	}
 }
+
+// Audit 2026-10-15, UX-1/UX-2: the incoming postback URL comes from the
+// server (TRACKER_PUBLIC_URL), never a guessed host, and the outgoing URL is
+// optional.
+func TestIncomingURLAndOptionalOutgoing(t *testing.T) {
+	pool := mustPool(t)
+	ctx := context.Background()
+	orgID := seedOrg(t, ctx, pool)
+	repo := network.NewRepository(pool)
+	svc := network.NewService(repo).WithTrackerURL(" https://track.example/ ")
+
+	res, err := svc.Create(ctx, orgID, network.CreateInput{Name: "No Outgoing"})
+	if err != nil {
+		t.Fatalf("Create without an outgoing postback URL: %v", err)
+	}
+	n := res.Network
+	if n.PostbackURL != "" {
+		t.Errorf("postbackUrl = %q, want empty", n.PostbackURL)
+	}
+	want := "https://track.example/postback/" + n.ID
+	if n.IncomingPostbackURL != want {
+		t.Errorf("incoming URL = %q, want %q", n.IncomingPostbackURL, want)
+	}
+	if got, _ := svc.Get(ctx, orgID, n.ID); got.IncomingPostbackURL != want {
+		t.Errorf("Get: incoming URL = %q, want %q", got.IncomingPostbackURL, want)
+	}
+	list, _, err := svc.List(ctx, orgID, pagination.Page{Limit: 10})
+	if err != nil || len(list) == 0 || list[0].IncomingPostbackURL == "" {
+		t.Errorf("List: %v %+v, want incoming URLs", err, list)
+	}
+
+	if _, err := svc.Create(ctx, orgID, network.CreateInput{Name: "Bad Outgoing", PostbackURL: "not-a-url"}); err == nil {
+		t.Error("Create with a malformed outgoing URL succeeded, want a validation error")
+	}
+	set := "https://partner.example/pb?cid={click_id}"
+	if _, err := svc.Update(ctx, orgID, n.ID, network.UpdateInput{PostbackURL: &set}); err != nil {
+		t.Fatalf("Update to an outgoing URL: %v", err)
+	}
+	clear := " "
+	cleared, err := svc.Update(ctx, orgID, n.ID, network.UpdateInput{PostbackURL: &clear})
+	if err != nil || cleared.PostbackURL != "" {
+		t.Errorf("clearing the outgoing URL: %v, %q", err, cleared.PostbackURL)
+	}
+
+	// Without TRACKER_PUBLIC_URL there is no URL to show, not a made-up one.
+	if got, _ := network.NewService(repo).Get(ctx, orgID, n.ID); got.IncomingPostbackURL != "" {
+		t.Errorf("without a tracker URL: incoming URL = %q, want empty", got.IncomingPostbackURL)
+	}
+}

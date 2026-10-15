@@ -93,6 +93,7 @@ session.
 | Security audit finding #4 — API keys: UI honesty pass, then real authentication | done |
 | Security audit finding #6 — Go 1.26.6 + `golang.org/x/crypto` v0.56.0 | done |
 | Security audit finding #7 — shadcn CLI moved to devDependencies | done |
+| Audit UX-1/UX-2: the network page gives the real incoming postback URL (from `TRACKER_PUBLIC_URL`, with parameters and mapped statuses; the Incoming tab's made-up host replaced); the outgoing URL is optional | done |
 | Audit DATA-1: network payout currency (00086) prices revenue sent without a currency; Overview warns about revenue with no USD value (`unpricedConversions`) | done |
 | Dev panel `tools/devpanel` (`make devpanel`): dashboard of progress + task tracker, SQLite, outside the product | done |
 | Product audit 2026-10-15 (`docs/audit-product-2026-10-15.md`, board `tools/devpanel`): SEC-1 Next.js 16.4.1 + sharp, SEC-2 Go 1.26.9 / x/net / grpc, Go images pinned to `golang:1.27.2-alpine` | done |

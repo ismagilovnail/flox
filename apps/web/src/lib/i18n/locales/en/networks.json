@@ -27,9 +27,9 @@
     "description": "Networks are the CPA/CPL partners your offers belong to.",
     "nameLabel": "Name",
     "namePlaceholder": "AffTrust CPA",
-    "postbackUrlLabel": "Postback URL",
+    "postbackUrlLabel": "Outgoing postback (optional)",
     "postbackUrlPlaceholder": "https://network.example/postback?click_id={click_id}&status={status}",
-    "postbackUrlHint": "Called when a conversion of this network changes status. Macros such as {click_id} and {status} are filled in.",
+    "postbackUrlHint": "Where FLOX itself sends a request when one of this network's conversions changes status — to an ad source, for example. Leave empty if you need none. Macros like {click_id} and {status} are filled in.",
     "currencyLabel": "Payout currency",
     "currencyHint": "When a postback sends an amount without a currency, FLOX takes it to be in this one. Without it, that revenue would be left out of reports.",
     "acceptDuplicatesLabel": "Accept duplicate postbacks",
@@ -58,11 +58,13 @@
   },
   "postbackSecret": {
     "title": "Incoming postback secret",
-    "description": "Append ?secret=... with this value to the incoming postback URL you give {{networkId}} — FLOX rejects any postback missing it or with the wrong one. Shown once; if you lose it, regenerate a new one from the row menu.",
+    "description": "Save it now: the secret is shown once. Give this URL to “{{name}}”.",
     "copyAria": "Copy postback secret",
     "copied": "Secret copied",
     "done": "Done",
-    "regenerateError": "Couldn't regenerate the postback secret"
+    "regenerateError": "Couldn't regenerate the postback secret",
+    "urlLabel": "URL for the network, with the secret",
+    "secretLabel": "The secret on its own"
   },
   "toast": {
     "updated": "Network updated",
@@ -76,5 +78,36 @@
     "archived": "Network archived",
     "archiveError": "Couldn't archive network",
     "duplicateError": "Couldn't duplicate network"
+  },
+  "incoming": {
+    "title": "Incoming postback — for the network",
+    "description": "Enter this URL in the network's dashboard: it is how the network tells FLOX about registrations, deposits and rejections.",
+    "copyAria": "Copy the incoming postback URL",
+    "copied": "Incoming postback URL copied",
+    "copyFailed": "Could not copy — select the text and copy it yourself",
+    "macrosHint": "Replace the values in braces with your network's macros (for example click_id={sub1}, revenue={payout}). {secret} is this network's secret.",
+    "secretHint": "The secret is shown once, when the network is created. If you did not keep it, get a new one: the old one stops working and the URL in the network's dashboard has to be updated.",
+    "newSecret": "Get a new secret",
+    "confirmTitle": "Issue a new secret?",
+    "confirmDescription": "The old secret stops working at once: postbacks carrying it are refused until you update the URL in the network's dashboard.",
+    "confirmAction": "Issue secret",
+    "noTrackerTitle": "The tracker address is not set",
+    "noTrackerDescription": "The platform has no public tracker address (TRACKER_PUBLIC_URL), so FLOX cannot show the URL. Contact the platform administrator.",
+    "paramColumn": "Parameter",
+    "meaningColumn": "What to send",
+    "params": {
+      "secret": "Required. The network's secret — without it the postback is refused.",
+      "click_id": "Required. The FLOX click id: the network gets it in the offer link when that link carries the {click_id} macro.",
+      "status": "Required. The status in the network's terms — it has to be in the mapping below.",
+      "revenue": "The payout, a number with a dot. Without it the conversion carries no money.",
+      "currency": "The amount's currency (USD, EUR…). If it is not sent, FLOX takes this network's payout currency: {{currency}}.",
+      "txn_id": "The network's transaction id. Needed for repeat deposits: without it a second deposit on the same click counts as a duplicate.",
+      "event_time": "When the conversion happened (unix time or ISO 8601). Without it, when the postback arrived."
+    },
+    "statusesTitle": "Statuses FLOX understands",
+    "statusesLoading": "Loading the mapping…",
+    "noStatusesTitle": "No statuses set up",
+    "noStatusesDescription": "No network status is mapped to a FLOX status — every postback from this network will be refused.",
+    "openMapping": "Set up the status mapping"
   }
 }

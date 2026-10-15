@@ -5,6 +5,7 @@ import Link from "next/link";
 import { toast } from "sonner";
 import { CopyIcon, PlusIcon, TagIcon } from "lucide-react";
 import { useTranslation } from "react-i18next";
+import { incomingPostbackTemplate } from "@/lib/postback-url";
 
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
@@ -124,28 +125,30 @@ export function NetworkList() {
 }
 
 /** Shown once, right after a network is created (new-network-view.tsx)
- * and again after NetworkRowActions' "Regenerate secret" action — same
- * "reveal a secret once, copy button" pattern as features/settings/api-
- * keys-panel.tsx's API key reveal and Phase 28's invite-link reveal.
- * secret is the value to append as ?secret=... on the incoming postback
- * URL FLOX doesn't construct a single canonical form of (tracking domains
- * are per-org, apps/web has no one "the tracker's base URL" to prepend) —
- * the hint text says so explicitly rather than showing a URL that might
- * be wrong. */
+ * and after a secret is regenerated — the one time the secret is known.
+ * It hands over the whole incoming URL with the secret already in it
+ * (audit 2026-10-15, UX-1); the bare secret stays below for networks that
+ * take it as a separate field. Without TRACKER_PUBLIC_URL there is no URL,
+ * only the secret. */
 export function PostbackSecretDialog({
-  networkId,
+  networkName,
+  incomingPostbackUrl,
   secret,
   onDone,
 }: {
-  networkId: string;
+  networkName: string;
+  incomingPostbackUrl: string;
   secret: string;
   onDone: () => void;
 }) {
   const { t } = useTranslation("networks");
+  const url = incomingPostbackUrl ? incomingPostbackTemplate(incomingPostbackUrl, secret) : "";
 
-  function copy() {
-    navigator.clipboard.writeText(secret);
-    toast(t("postbackSecret.copied"));
+  function copy(value: string, message: string) {
+    navigator.clipboard.writeText(value).then(
+      () => toast(message),
+      () => toast.error(t("incoming.copyFailed")),
+    );
   }
 
   return (
@@ -153,13 +156,28 @@ export function PostbackSecretDialog({
       <DialogContent>
         <DialogHeader>
           <DialogTitle>{t("postbackSecret.title")}</DialogTitle>
-          <DialogDescription>{t("postbackSecret.description", { networkId })}</DialogDescription>
+          <DialogDescription>{t("postbackSecret.description", { name: networkName })}</DialogDescription>
         </DialogHeader>
-        <div className="flex items-center gap-2 rounded-md border border-border bg-muted px-3 py-2">
-          <Mono className="min-w-0 flex-1 truncate text-xs">{secret}</Mono>
-          <IconButton aria-label={t("postbackSecret.copyAria")} size="icon-sm" onClick={copy}>
-            <CopyIcon className="size-3.5" />
-          </IconButton>
+        {url && (
+          <div className="grid gap-1.5">
+            <p className="text-xs font-medium">{t("postbackSecret.urlLabel")}</p>
+            <div className="flex items-start gap-2 rounded-md border border-border bg-muted px-3 py-2">
+              <Mono className="min-w-0 flex-1 text-xs break-all">{url}</Mono>
+              <IconButton aria-label={t("incoming.copyAria")} size="icon-sm" onClick={() => copy(url, t("incoming.copied"))}>
+                <CopyIcon className="size-3.5" />
+              </IconButton>
+            </div>
+            <p className="text-xs text-muted-foreground">{t("incoming.macrosHint")}</p>
+          </div>
+        )}
+        <div className="grid gap-1.5">
+          <p className="text-xs font-medium">{t("postbackSecret.secretLabel")}</p>
+          <div className="flex items-center gap-2 rounded-md border border-border bg-muted px-3 py-2">
+            <Mono className="min-w-0 flex-1 truncate text-xs">{secret}</Mono>
+            <IconButton aria-label={t("postbackSecret.copyAria")} size="icon-sm" onClick={() => copy(secret, t("postbackSecret.copied"))}>
+              <CopyIcon className="size-3.5" />
+            </IconButton>
+          </div>
         </div>
         <DialogFooter>
           <Button onClick={onDone}>{t("postbackSecret.done")}</Button>

@@ -5,6 +5,24 @@ per-phase, matching `CLAUDE.md`'s phase protocol. The one exception is
 [Between phases], below: spec amendments and the code changes that follow from
 them land between phases and would otherwise be invisible here.
 
+## [Phase 30.44] — Incoming postback URL on the network page; outgoing URL optional (audit UX-1, UX-2)
+
+The audit's onboarding blocker: nothing gave a network its incoming postback URL whole. Worse than the audit said:
+Postbacks → Incoming showed a made-up `https://api.floxlink.io/postback/{id}` — the API's host, no secret — so every
+postback sent there would have been refused. `docs/networks-offers.md` "Incoming and outgoing postback URLs".
+
+- API: `incomingPostbackUrl` on every network, from `TRACKER_PUBLIC_URL` (`network.Service.WithTrackerURL`); empty,
+  not guessed, when it is unset.
+- Network page: an "Incoming postback" card — copyable URL (`lib/postback-url.ts`), what each parameter means, the
+  network's mapped statuses or a warning with a link to the mapping, "Get a new secret" with a confirmation. The
+  create/regenerate dialog shows the whole URL with the secret in it. The Incoming tab uses the real URL and links to
+  the card. Regenerating from the row menu asks first.
+- UX-2: the outgoing postback URL is optional (create and update; whitespace clears it), labelled as outgoing with
+  what it is for.
+- Tests: `network` `TestIncomingURLAndOptionalOutgoing`. Full suite in a clean worktree, e2e 4/4 (chconn's
+  `TestLimitsStopAHeavyQuery` flaked under the parallel run, passes alone 3/3 — the known flake). tsc, eslint, vitest
+  158/158. Live: network created without an outgoing URL, the dialog's URL sent as-is → accepted, mapped → `success`.
+
 ## [Phase 30.43] — Revenue without a currency (audit DATA-1)
 
 The product audit's money finding: a postback with `revenue` but no `currency` was stored with no USD value, so a

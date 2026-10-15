@@ -515,7 +515,7 @@ func buildServer(ctx context.Context, cfg config.Config, logger *slog.Logger, re
 		domainHandler.Register(r)
 	})
 
-	networkHandler := network.NewHandler(network.NewService(network.NewRepository(db)), requireOfferWrite, logger)
+	networkHandler := network.NewHandler(network.NewService(network.NewRepository(db)).WithTrackerURL(cfg.TrackerPublicURL), requireOfferWrite, logger)
 	srv.Mux().Route("/networks", func(r chi.Router) {
 		r.Use(tenantMiddleware)
 		r.Use(readGate("offer.read"))

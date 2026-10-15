@@ -125,6 +125,40 @@ Before this the tracker redirected with a literal `{click_id}`: a network
 never received the id it has to echo back in its postback. `apps/e2e` now
 takes the click id from the redirect itself, not from ClickHouse.
 
+## Incoming and outgoing postback URLs (audit 2026-10-15, UX-1, UX-2)
+
+**Incoming** — what the network calls. The API returns
+`incomingPostbackUrl` on every network: `TRACKER_PUBLIC_URL` +
+`/postback/{id}`, no query (`network.Service.WithTrackerURL`, set in
+`apps/api/main.go`). It is empty when `TRACKER_PUBLIC_URL` is not set; the
+UI then says so instead of guessing a host. `lib/postback-url.ts` adds the
+query `apps/tracker/postback.go` reads:
+`?secret={secret}&click_id={click_id}&status={status}&revenue={revenue}&currency={currency}&txn_id={txn_id}`
+— braces are for the operator to swap for the network's macros.
+
+- Network page: an "Incoming postback" card — the URL with a copy button,
+  what each parameter means (the currency row names the network's payout
+  currency), the statuses FLOX maps for this network (a warning with a link
+  to the mapping when there are none), and "Get a new secret" behind a
+  confirmation.
+- Right after a create or a regenerate (the only time the secret is
+  known) the dialog shows the whole URL with the secret already in it.
+- Postbacks → Incoming lists the same URL per network. It used to show a
+  made-up `https://api.floxlink.io/postback/{id}` — the API's host, not
+  the tracker's, and no secret: every postback sent to it would have been
+  refused.
+- Regenerating from the row menu now asks first too: the old secret stops
+  working at once.
+
+**Outgoing** — what FLOX calls when a conversion of this network changes
+status (`postback_url`, §46). Optional now: empty means no outgoing
+postback (`conversion` already skipped delivery for an empty URL); a
+non-empty value is still validated. Saving `" "` clears it.
+
+Verified live: a network created without an outgoing URL; the URL copied
+from the dialog accepted (secret, then "no event mapping" until one was
+added, then `success`).
+
 ## Reports by network (2026-10-13)
 
 A click routed to an offer carries that offer's network (`network_id`,

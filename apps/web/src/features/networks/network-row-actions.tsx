@@ -38,11 +38,15 @@ export function NetworkRowActions({ network }: { network: Network }) {
   const archive = useArchiveNetwork();
   const regenerateSecret = useRegeneratePostbackSecret();
   const [confirmArchive, setConfirmArchive] = React.useState(false);
+  const [confirmRegenerate, setConfirmRegenerate] = React.useState(false);
   const [revealedSecret, setRevealedSecret] = React.useState<string | null>(null);
 
   function handleRegenerateSecret() {
     regenerateSecret.mutate(network.id, {
-      onSuccess: (result) => setRevealedSecret(result.postbackSecret),
+      onSuccess: (result) => {
+        setConfirmRegenerate(false);
+        setRevealedSecret(result.postbackSecret);
+      },
       onError: (err) => toast.error(t("postbackSecret.regenerateError"), { description: err.message }),
     });
   }
@@ -130,7 +134,7 @@ export function NetworkRowActions({ network }: { network: Network }) {
         {canWrite && (
           <Tooltip>
             <TooltipTrigger asChild>
-              <IconButton aria-label={t("rowActions.regenerateSecret")} size="icon-sm" onClick={handleRegenerateSecret}>
+              <IconButton aria-label={t("rowActions.regenerateSecret")} size="icon-sm" onClick={() => setConfirmRegenerate(true)}>
                 <KeyRoundIcon className="size-3.5" />
               </IconButton>
             </TooltipTrigger>
@@ -167,8 +171,30 @@ export function NetworkRowActions({ network }: { network: Network }) {
         </DialogContent>
       </Dialog>
 
+      <Dialog open={confirmRegenerate} onOpenChange={setConfirmRegenerate}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{t("incoming.confirmTitle")}</DialogTitle>
+            <DialogDescription>{t("incoming.confirmDescription")}</DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setConfirmRegenerate(false)}>
+              {t("actions.cancel", { ns: "common" })}
+            </Button>
+            <Button onClick={handleRegenerateSecret} disabled={regenerateSecret.isPending}>
+              {t("incoming.confirmAction")}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       {revealedSecret && (
-        <PostbackSecretDialog networkId={network.id} secret={revealedSecret} onDone={() => setRevealedSecret(null)} />
+        <PostbackSecretDialog
+          networkName={network.name}
+          incomingPostbackUrl={network.incomingPostbackUrl}
+          secret={revealedSecret}
+          onDone={() => setRevealedSecret(null)}
+        />
       )}
     </>
   );
