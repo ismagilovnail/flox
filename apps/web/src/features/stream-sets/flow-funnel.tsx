@@ -92,15 +92,24 @@ export function FlowFunnel({
             ))}
           </SelectContent>
         </Select>
-        <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
+        {/* Only an internal landing can be made installable: FLOX serves it
+            (apps/tracker/landing_pwa.go); an external one is someone else's page. */}
+        <label
+          className="flex items-center gap-1.5 text-xs text-muted-foreground"
+          title={landingOption?.type === "external" ? t("flowFunnel.asPwaInternalOnly") : t("flowFunnel.asPwaHint")}
+        >
           <input
             type="checkbox"
-            checked={flow.landing.asPwa}
+            checked={flow.landing.asPwa && landingOption?.type !== "external"}
+            disabled={landingOption?.type === "external"}
             onChange={(e) => onChange({ landing: { ...flow.landing, asPwa: e.target.checked } })}
             className="size-3.5 accent-primary"
           />
           {t("flowFunnel.showAsPwa")}
         </label>
+        {flow.landing.asPwa && landingOption?.type !== "external" && (
+          <p className="w-full text-xs text-muted-foreground">{t("flowFunnel.asPwaHint")}</p>
+        )}
       </FlowNode>
 
       <Connector />

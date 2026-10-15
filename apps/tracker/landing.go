@@ -27,6 +27,9 @@ type landingDecision struct {
 	externalURL string                    // redirect here instead of the destination
 	page        *routingstore.LandingPage // serve this internal landing
 	landingID   string
+	// asPwa: the internal landing is shown as an installable app, from
+	// /lpwa/ (landing_pwa.go).
+	asPwa bool
 }
 
 // decideLanding resolves the routed flow's landing stage:
@@ -65,7 +68,7 @@ func (h *Handler) decideLanding(r *http.Request, orgID string, loaded routingsto
 			h.logger.Error("loading landing page, redirecting past it", "error", err, "landing_id", stage.LandingID)
 			return landingDecision{}
 		}
-		return landingDecision{page: &page, landingID: stage.LandingID}
+		return landingDecision{page: &page, landingID: stage.LandingID, asPwa: stage.AsPwa}
 	}
 	return landingDecision{}
 }

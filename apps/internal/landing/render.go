@@ -61,10 +61,16 @@ window.engine_onClickButton = function (e) {
 // tracker serving real visitors share it, so what the operator previews
 // is exactly what visitors get.
 func Render(source, assetBaseURL, trackURL string) string {
+	return RenderWithHead(source, assetBaseURL, trackURL, "")
+}
+
+// RenderWithHead is Render with extraHead (trusted markup, e.g. a web app
+// manifest link) injected into <head> right after the runtime.
+func RenderWithHead(source, assetBaseURL, trackURL, extraHead string) string {
 	out := trackURLMacro.ReplaceAllLiteralString(source, html.EscapeString(trackURL))
 
 	encoded, _ := json.Marshal(trackURL) // json escapes <, >, & — safe inside <script>
-	inject := strings.Replace(runtimeScript, "%s", string(encoded), 1)
+	inject := strings.Replace(runtimeScript, "%s", string(encoded), 1) + extraHead
 	if assetBaseURL != "" && !baseTag.MatchString(out) {
 		inject = `<base href="` + html.EscapeString(assetBaseURL) + `">` + inject
 	}

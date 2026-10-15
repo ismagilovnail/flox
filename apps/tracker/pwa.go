@@ -54,6 +54,7 @@ func (h *Handler) registerPwa(r chi.Router) {
 	r.Get(pwaPathPrefix+"{token}/continue", h.pwaContinue)
 	h.registerPush(r)
 	h.registerPwaExternal(r)
+	h.registerLandingPwa(r)
 }
 
 // decidePwa is the flow's PWA stage for a visitor on os (pwa_external.go):
@@ -295,6 +296,12 @@ const iosInstalledMaxAge = 400 * 24 * 60 * 60
 // first launch, marking it launched. Not iOS (os from the classifier,
 // iPhone and iPad), or already marked: false.
 func (h *Handler) iosFirstLaunch(w http.ResponseWriter, r *http.Request, os string) bool {
+	return iosFirstLaunchAt(w, r, os, pwaPathPrefix+chi.URLParam(r, "token")+"/")
+}
+
+// iosFirstLaunchAt is iosFirstLaunch with the cookie scoped to path (the
+// installed app's own path: /pwa/<token>/ or /lpwa/<token>/).
+func iosFirstLaunchAt(w http.ResponseWriter, r *http.Request, os, path string) bool {
 	if os != "ios" {
 		return false
 	}
@@ -304,7 +311,7 @@ func (h *Handler) iosFirstLaunch(w http.ResponseWriter, r *http.Request, os stri
 	http.SetCookie(w, &http.Cookie{
 		Name:     iosInstalledCookie,
 		Value:    "1",
-		Path:     pwaPathPrefix + chi.URLParam(r, "token") + "/",
+		Path:     path,
 		MaxAge:   iosInstalledMaxAge,
 		HttpOnly: true,
 		Secure:   strings.HasPrefix(requestOrigin(r), "https:"),

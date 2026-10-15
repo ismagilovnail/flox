@@ -207,12 +207,19 @@ type FlowLanding struct {
 	Type      string // "internal" | "external"
 	Status    string // "active" | "paused" | "archived"
 	URL       string // external landings only
+	// AsPwa: an internal landing shown as an installable app
+	// (apps/tracker/landing_pwa.go, flows.landing_as_pwa).
+	AsPwa bool
 }
 
 // LandingPage is an internal landing's renderable source.
 type LandingPage struct {
 	Content      string
 	BundlePrefix string
+	// Title and LogoURL name and picture the landing when it is installed
+	// as an app (its web app manifest).
+	Title   string
+	LogoURL string
 }
 
 // LoadRoutingConfig assembles the campaign's full routing configuration:
@@ -431,7 +438,7 @@ func (s *Store) loadFlows(ctx context.Context, orgID string, setIDs []string, la
 		SELECT f.stream_set_id, f.id, f.name, f.active, f.weight,
 		       f.destination_kind, f.destination_url, f.destination_offer_id,
 		       o.status, o.network_id, ol.url, f.updated_at,
-		       l.id, l.type, l.status, l.url,
+		       l.id, l.type, l.status, l.url, f.landing_as_pwa,
 		       p.id, f.pwa_type, p.status, f.pwa_enabled, f.pwa_url,
 		       pl.id, pl.status, pl.url
 		FROM flows f
@@ -469,13 +476,14 @@ func (s *Store) loadFlows(ctx context.Context, orgID string, setIDs []string, la
 			updated     time.Time
 
 			landingID, landingType, landingStatus, landingURL *string
+			landingAsPwa                                      bool
 			pwaID, pwaType, pwaStatus                         *string
 			pwaEnabled                                        bool
 			pwaURL                                            string
 			postlandingID, postlandingStatus, postlandingURL  *string
 		)
 		if err := rows.Scan(&setID, &f.ID, &f.Name, &f.Active, &f.Weight, &kind, &destURL, &offerID, &offerStatus, &offerNet, &offerURL, &updated,
-			&landingID, &landingType, &landingStatus, &landingURL,
+			&landingID, &landingType, &landingStatus, &landingURL, &landingAsPwa,
 			&pwaID, &pwaType, &pwaStatus, &pwaEnabled, &pwaURL,
 			&postlandingID, &postlandingStatus, &postlandingURL); err != nil {
 			return nil, time.Time{}, fmt.Errorf("scanning flow: %w", err)
@@ -483,6 +491,7 @@ func (s *Store) loadFlows(ctx context.Context, orgID string, setIDs []string, la
 		if landingID != nil {
 			landings[f.ID] = FlowLanding{
 				LandingID: *landingID, Type: deref(landingType), Status: deref(landingStatus), URL: deref(landingURL),
+				AsPwa: landingAsPwa,
 			}
 		}
 		if updated.After(newest) {
@@ -542,11 +551,11 @@ func pwaStage(enabled bool, typ string, pwaID *string, status, url string) (Flow
 func (s *Store) LoadLandingPage(ctx context.Context, orgID, landingID string) (LandingPage, error) {
 	var p LandingPage
 	err := s.db.QueryRow(ctx, `
-		SELECT content, bundle_prefix
+		SELECT content, bundle_prefix, title, logo_url
 		FROM landings
 		WHERE id = $1 AND organization_id = $2 AND type = 'internal'`,
 		landingID, orgID,
-	).Scan(&p.Content, &p.BundlePrefix)
+	).Scan(&p.Content, &p.BundlePrefix, &p.Title, &p.LogoURL)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return LandingPage{}, ErrNotFound
 	}

@@ -215,6 +215,14 @@ func (h *Handler) track(w http.ResponseWriter, r *http.Request) {
 
 	h.events.Enqueue(ev)
 
+	if lnd.page != nil && lnd.asPwa {
+		// Its own path, so the page is in its manifest's and service
+		// worker's scope; LAND_VIEW is recorded when it loads.
+		outcome = outcomeRedirected
+		token := h.links.Sign(clickClaims(ev, params, lnd.landingID, r.Host, pwa))
+		http.Redirect(w, r, requestOrigin(r)+landingPwaPrefix+token+"/", http.StatusFound)
+		return
+	}
 	if lnd.page != nil {
 		outcome = outcomeLanding
 		h.serveLanding(w, r, lnd, ev, params, pwa)

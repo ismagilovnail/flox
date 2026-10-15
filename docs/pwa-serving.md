@@ -205,9 +205,48 @@ after a landing; ios_app on iPhone and Android, with and without a PWA,
 paused), `streamset` validation per type, `macro` `{pwa_link}` —
 mutation-checked.
 
+## Landing as PWA (2026-10-15)
+
+A flow's landing stage with **Show as PWA** (`flows.landing_as_pwa`) and an
+internal landing: the click goes to `/lpwa/<token>/` instead of the landing
+being written on the click itself — its own path, so the page is inside the
+scope of its manifest and service worker (installability).
+
+- `/lpwa/<token>/` — the landing, rendered as on the click (its trackUrl a
+  `/lc/` link — the landing's own button is still LAND_CLICK), plus in
+  `<head>` the manifest link, `apple-touch-icon` (the logo), the service
+  worker registration and the `appinstalled` beacon — all absolute URLs:
+  the landing carries a `<base href>` to object storage.
+  `window.floxPwa.install()` shows the browser's install prompt when it has
+  one (`installable()`, event `floxpwa:installable`), for a landing that
+  wants its own install button; otherwise the browser's own install UI
+  applies. Records LAND_VIEW and PWA_VIEW. An in-app WebView is bounced to
+  the external browser first (§28/§73), recording nothing.
+- `manifest.webmanifest` — name: the landing's title, icon: its logo,
+  `start_url` `open`, scope the app's path, standalone. `sw.js` — the same
+  pass-through worker as a PWA's.
+- `POST installed` — PWA_INSTALL. `open` — the installed app's start_url:
+  PWA_OPEN (and IOS_INSTALL on an iPhone's first launch, cookie scoped to
+  the app's path), then the funnel's next step after the landing: the
+  flow's PWA stage (page, external PWA, app link), else postlanding/offer.
+- Attribution: the landing app's PWA_* events carry the landing and **no
+  PWA id** (they are the landing's installs, not the next stage's PWA's);
+  LAND_VIEW/LAND_CLICK are attributed like any landing's.
+- Only internal landings (the editor disables the box for an external one;
+  the tracker ignores the flag there). A landing that cannot load sends the
+  visitor on to the next step.
+
+Code: `apps/tracker/landing_pwa.go`, `landing.RenderWithHead`,
+`routingstore.FlowLanding.AsPwa`, `LandingPage.Title/LogoURL`. Tests:
+`tracker/landing_pwa_test.go` (the whole path, manifest, beacon, launch →
+offer, launch → external PWA with IOS_INSTALL, launch → internal PWA page
+with the right attribution, in-app bounce, the flag off, another host) —
+mutation-checked.
+
 ## Not done
 
-- The landing's `asPwa` flag (next phase).
+- Installability itself was not checked in a real Chrome/Safari (the dev
+  campaign is paused; the HTTP path is covered by the tests).
 
 ## Verified
 

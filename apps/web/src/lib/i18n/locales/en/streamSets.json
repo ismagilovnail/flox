@@ -141,7 +141,9 @@
       "internal": "FLOX serves this PWA's install page.",
       "external": "Visitors go to this URL. Give the PWA {pwa_link}: it calls {pwa_link}installed on install and uses {pwa_link}open as its start URL to continue to the offer.",
       "ios_app": "iPhone/iPad visitors go to this app link; other devices get the PWA chosen next to the type, or skip the stage."
-    }
+    },
+    "asPwaHint": "Visitors can install the landing as an app (name and icon: the landing's title and logo). Installs and launches are recorded; the app opens the next step of the funnel.",
+    "asPwaInternalOnly": "Only an internal landing can be shown as an app"
   },
   "flowEditor": {
     "collapseAria": "Collapse flow",

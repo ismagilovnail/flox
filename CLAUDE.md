@@ -19,15 +19,15 @@ referenced below as §N).
 ## CURRENT STATE — UPDATE THIS EVERY PHASE
 
 ```
-CURRENT PHASE : PHASE 30.36 — PWA TYPES EXTERNAL / IOS_APP (closed)
+CURRENT PHASE : PHASE 30.37 — LANDING AS PWA (closed)
 STATUS        : Spec conformance gaps (docs/spec-conformance-2026-10-11.md):
                 all 15 closed and its "мелочи" too; every §43 event is
                 produced.
                 Leftovers: ROADMAP.md "Known open gaps" (Telegram token
-                change / TG_JOIN by channel, landing asPwa (next: 30.37, agreed),
+                change / TG_JOIN by channel,
                 SMS/email 2FA, gallery video, Google Play parsing…).
                 Prod restore drill after deployment.
-LAST COMMIT   : feat(pwa): external and ios_app types.
+LAST COMMIT   : feat(landings): landing as pwa.
 UNCOMMITTED   : none expected. Dev DB at migration 00081, CH schema 018.
 NEXT          : wait for the user — pick from the leftovers above with the
                 user. CI (DO1) is

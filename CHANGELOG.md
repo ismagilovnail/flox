@@ -5,6 +5,20 @@ per-phase, matching `CLAUDE.md`'s phase protocol. The one exception is
 [Between phases], below: spec amendments and the code changes that follow from
 them land between phases and would otherwise be invisible here.
 
+## [Phase 30.37] — Landing as PWA
+
+§24's landingAsPwa toggle, which was stored but did nothing. `docs/pwa-serving.md` "Landing as PWA".
+
+- Tracker: an internal landing with the flag goes to `/lpwa/<token>/` — the landing plus manifest (title, logo),
+  apple-touch-icon, service worker, install beacon (absolute URLs, past the landing's `<base>`), `window.floxPwa`;
+  LAND_VIEW + PWA_VIEW. `installed` → PWA_INSTALL; `open` → PWA_OPEN (IOS_INSTALL on an iPhone's first launch) and the
+  next step after the landing (the flow's PWA stage, else postlanding/offer). In-app WebViews bounced. The landing
+  app's PWA_* events have no PWA id; its LAND_* are attributed as any landing's.
+- `landing.RenderWithHead`; `routingstore` loads `landing_as_pwa`, the landing's title and logo.
+- Editor: the box only for internal landings, with a hint; en/ru.
+- Tests: `tracker/landing_pwa_test.go` (4), mutation-checked (the PWA-id one needed a new test with an internal PWA
+  stage after the landing app). Not checked for installability in a real browser.
+
 ## [Phase 30.36] — PWA types external and ios_app
 
 §24's pwaType: the two types the tracker skipped. `docs/pwa-serving.md` "PWA types". The owner chose the behaviour.
