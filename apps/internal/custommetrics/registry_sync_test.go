@@ -12,13 +12,13 @@ import (
 // form accepts a formula the API then rejects as an unknown metric — what
 // happened with the funnel metrics (marketer audit #12).
 func TestReportMetricsMatchTheFrontend(t *testing.T) {
-	src, err := os.ReadFile("../../web/src/features/analytics/registry.ts")
+	src, err := os.ReadFile("../../web/src/lib/analytics-registry.ts")
 	if err != nil {
 		t.Skipf("frontend source not available: %v", err)
 	}
 	block := regexp.MustCompile(`(?s)export const METRICS[^=]*=\s*\[(.*?)\n\];`).FindSubmatch(src)
 	if block == nil {
-		t.Fatal("METRICS not found in registry.ts")
+		t.Fatal("METRICS not found in analytics-registry.ts")
 	}
 	// The report's push columns are METRICS entries too, but a separate
 	// data source: they must be exactly the push catalog.

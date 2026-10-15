@@ -30,7 +30,7 @@ type Period struct {
 	To   *string    `json:"to,omitempty"`
 }
 
-// validMetrics mirrors features/analytics/registry.ts's MetricKey union
+// validMetrics mirrors apps/web/src/types/analytics.ts's MetricKey union
 // exactly — 27 entries. No Go-side metrics registry exists to import (the
 // real /analytics/report endpoint always returns every metric; there's
 // nothing server-side to validate a client-selected metric list against),

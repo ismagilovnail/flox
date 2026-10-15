@@ -18,10 +18,11 @@ import { useLogin, useResendVerification } from "@/hooks/use-auth";
 import { ApiError } from "@/lib/api/client";
 import { isPendingTOTP } from "@/lib/api/auth";
 import { TOTPCodeStep, TOTPEnrollStep } from "@/features/auth/totp-step";
+import { emailField } from "@/schemas/fields";
 
 function buildLoginSchema(t: TFunction) {
   return z.object({
-    email: z.email(t("login.validation.emailInvalid", { ns: "auth" })),
+    email: emailField(t("login.validation.emailInvalid", { ns: "auth" })),
     password: z.string().min(1, t("login.validation.passwordRequired", { ns: "auth" })),
   });
 }

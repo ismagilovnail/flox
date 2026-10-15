@@ -36,6 +36,7 @@ import { countryOptions } from "@/lib/countries";
 import { formatInZone, todayInZone, utcOffsetLabel, utcToZonedLocal, zonedLocalToUtc } from "@/lib/timezones";
 import { DELAY_UNIT_MINUTES, describeTrigger, type DelayUnit } from "@/features/push/trigger-format";
 import { ISO_WEEKDAYS, describeRecurrence, weekdayName } from "@/features/push/recurrence-format";
+import { nameField } from "@/schemas/fields";
 
 // Mirrors push.MinScheduleAhead / MaxScheduleAhead (internal/push/model.go).
 const MIN_AHEAD_MS = 60_000;
@@ -51,7 +52,7 @@ const httpsURL = (msg: string) => z.union([z.literal(""), z.url({ protocol: /^ht
 function buildSchema(t: TFunction, timeZone: string) {
   return z
     .object({
-      name: z.string().trim().min(2, t("form.validation.name")).max(100, t("form.validation.name")),
+      name: nameField(t("form.validation.name"), { max: 100, maxMessage: t("form.validation.name"), trim: true }),
       title: z.string().trim().min(1, t("form.validation.title")).max(80, t("form.validation.title")),
       body: z.string().trim().max(240, t("form.validation.body")),
       iconUrl: httpsURL(t("form.validation.https")),

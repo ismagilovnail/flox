@@ -14,10 +14,10 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { chartBaseOption, chartBarOption, CHART_RGB, rgba, type ChartMode } from "@/lib/chart-theme";
-import type { ReportRow } from "@/features/analytics/aggregate";
+import { METRICS, metricLabel, formatMetric } from "@/lib/analytics-registry";
+import type { ReportRow, DimensionKey, MetricKey } from "@/types/analytics";
 import type { TimeseriesPoint } from "@/lib/api/analytics";
 import { useReportingCurrency } from "@/hooks/use-organization";
-import { METRICS, metricLabel, formatMetric, type DimensionKey, type MetricKey } from "@/features/analytics/registry";
 import { useDimensionValueLabel } from "@/features/analytics/use-dimension-value-label";
 
 function MetricPicker({

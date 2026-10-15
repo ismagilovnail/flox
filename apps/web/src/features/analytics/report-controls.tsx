@@ -25,8 +25,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { FILTER_DIMENSIONS, MAX_REPORT_DIMENSIONS, REPORT_DIMENSIONS, METRICS, dimensionLabel as dimensionLabelFor, metricLabel as metricLabelFor, type DimensionKey, type MetricKey } from "@/features/analytics/registry";
-import type { FilterCondition } from "@/features/analytics/aggregate";
+import { FILTER_DIMENSIONS, MAX_REPORT_DIMENSIONS, REPORT_DIMENSIONS, METRICS, dimensionLabel as dimensionLabelFor, metricLabel as metricLabelFor } from "@/lib/analytics-registry";
+import type { DimensionKey, MetricKey, FilterCondition } from "@/types/analytics";
 import { TimezoneSelect } from "@/components/ui/timezone-select";
 import { useDimensionValues } from "@/hooks/use-analytics-report";
 import { useDimensionValueLabel } from "@/features/analytics/use-dimension-value-label";

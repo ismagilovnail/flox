@@ -144,7 +144,7 @@ export function StreamSetRow({
                * site where the filter has to carry the value that actually
                * matches the column, not a display name. The filter chip
                * shows the raw id as a result — FilterCondition has no
-               * separate display-label field (analytics/aggregate.ts), and
+               * separate display-label field (types/analytics.ts), and
                * adding one is out of this phase's query-layer/UI-only
                * scope. */}
               <Tooltip>

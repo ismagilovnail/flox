@@ -1,6 +1,5 @@
 import type { Campaign } from "@/lib/api/campaigns";
-import type { ReportRow } from "@/features/analytics/aggregate";
-import type { MetricKey } from "@/features/analytics/registry";
+import type { ReportRow, MetricKey } from "@/types/analytics";
 import type { CustomMetric } from "@/lib/custom-metrics";
 
 /** The registry metrics the campaigns table shows — the same set custom

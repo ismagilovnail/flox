@@ -5,6 +5,25 @@ per-phase, matching `CLAUDE.md`'s phase protocol. The one exception is
 [Between phases], below: spec amendments and the code changes that follow from
 them land between phases and would otherwise be invisible here.
 
+## [Phase 30.32] — Frontend layers: types/, schemas/
+
+§31; the last item of `docs/spec-conformance-2026-10-11.md`. Behaviour unchanged.
+
+- **The layering it fixes:** `lib/api`, `lib/*` and `hooks/` imported the report types and the metric catalog from
+  `features/analytics`, and the shell its notification text from `features/alerts`.
+- `src/types/analytics.ts`: `DimensionKey`, `MetricKey`, `PushMetricKey`, `MetricFormat`, `FilterCondition`,
+  `ReportRow` (`features/analytics/aggregate.ts`, types only, removed). The catalog moved
+  `features/analytics/registry.ts` → `lib/analytics-registry.ts` (`custommetrics.TestReportMetricsMatchTheFrontend`
+  reads the new path); `PUSH_METRIC_KEYS` is checked against `PushMetricKey` at compile time.
+  `features/alerts/notification-text.ts` → `hooks/use-notification-text.ts`.
+- `src/schemas/fields.ts`: `nameField` (min 2, the API's; each entity's max), `newPasswordField` (auth's 8 —
+  `auth.TestPasswordMinimumMatchesTheFrontend` keeps them equal), `emailField`, used by 16 forms in place of their
+  copies. Form schemas stay in their features.
+- `src/architecture.test.ts`: the shared layers may not import `@/features` (a planted violation fails it).
+- Docs: `docs/frontend-integration.md` "Layers"; Go comments pointing at the old paths updated.
+- Checked: tsc, eslint, vitest (155), `next build`, Go sync tests; analytics page and a form's name rule in the
+  browser.
+
 ## [Phase 30.31] — DataGrid: server-paged logs
 
 §16 DataGrid; spec-conformance "мелочи". `docs/data-grid.md`.

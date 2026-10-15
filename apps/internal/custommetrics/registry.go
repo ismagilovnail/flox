@@ -5,7 +5,7 @@ package custommetrics
 // exactly (id, dataSource, insertable). Two independent copies (this one
 // and the frontend's) rather than one shared source, same tradeoff
 // already accepted for the report dimension whitelist between
-// registry.ts and chstore.ReportDimension — kept deliberately small and
+// analytics-registry.ts and chstore.ReportDimension — kept deliberately small and
 // flat so a future drift is easy to spot in review. LTV entries are
 // insertable:false, which is what actually enforces §30.5's "LTV not
 // allowed in formulas" rule — not a separate check.
@@ -24,7 +24,7 @@ type registryMetric struct {
 }
 
 // reportMetricIDs are the analytics report's metrics — every key of
-// features/analytics/registry.ts's METRICS, the numbers each report row
+// lib/analytics-registry.ts's METRICS, the numbers each report row
 // carries. Formulas on the report builder can use any of them.
 // TestReportMetricsMatchTheFrontend keeps the two lists equal (marketer
 // audit #12: the funnel metrics were missing here, so a formula the form
@@ -48,7 +48,7 @@ func buildCatalog() map[string]registryMetric {
 		}
 	}
 
-	// Traffic / Performance — features/analytics/registry.ts's METRICS.
+	// Traffic / Performance — lib/analytics-registry.ts's METRICS.
 	add(sourceRegular, true, reportMetricIDs...)
 
 	// CPA Funnel — catalog-only until apps/tracker emits these, matching

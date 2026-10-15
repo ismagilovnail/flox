@@ -1,5 +1,4 @@
-import type { DimensionKey, MetricKey } from "@/features/analytics/registry";
-import type { ReportRow } from "@/features/analytics/aggregate";
+import type { DimensionKey, MetricKey, ReportRow } from "@/types/analytics";
 
 /** null spend/roi models "no cost data for this slice" (§27-COST) — must render as "—", never 0. */
 export type PerformanceRow = {

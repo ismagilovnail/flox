@@ -20,12 +20,13 @@ import {
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { type CampaignStatus } from "@/lib/api/campaigns";
 import { useTrafficSources } from "@/hooks/use-traffic-sources";
+import { nameField } from "@/schemas/fields";
 
 /** A factory, not a module-level const — see the identical pattern (and
  * rationale) in features/traffic-sources/source-form-sheet.tsx. */
 export function buildCampaignFormSchema(t: TFunction) {
   return z.object({
-    name: z.string().min(2, t("form.validation.nameMin", { ns: "campaigns" })).max(80),
+    name: nameField(t("form.validation.nameMin", { ns: "campaigns" }), { max: 80 }),
     trafficSourceId: z.string().min(1, t("form.validation.sourceRequired", { ns: "campaigns" })),
     fallbackUrl: z.url(t("form.validation.urlInvalid", { ns: "campaigns" })),
     externalCampaignId: z.string().max(200, t("form.validation.externalCampaignIdMax", { ns: "campaigns" })).optional(),

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import type { Campaign } from "@/lib/api/campaigns";
-import type { ReportRow } from "@/features/analytics/aggregate";
+import type { ReportRow } from "@/types/analytics";
 import { SURFACE_AVAILABLE_METRIC_IDS } from "@/lib/custom-metrics-registry";
 import { evaluateFormula } from "@/lib/formula-engine";
 import type { CustomMetric } from "@/lib/custom-metrics";

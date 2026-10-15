@@ -29,7 +29,7 @@ import {
 } from "@/hooks/use-report-presets";
 import { todayInZone } from "@/lib/timezones";
 import { dateRangeToPeriod, periodToDateRange, type ReportPreset } from "@/lib/report-presets";
-import type { FilterCondition } from "@/features/analytics/aggregate";
+import type { FilterCondition } from "@/types/analytics";
 import type { ReportControlsState } from "@/features/analytics/report-controls";
 
 /** The chosen preset survives a reload; per browser, like any view preference

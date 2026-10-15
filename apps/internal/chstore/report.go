@@ -25,7 +25,7 @@ const (
 // verbatim; every method in this file rejects anything not in
 // reportClickColumns/reportConversionColumns below before it gets near SQL.
 //
-// The 17 here match apps/web's registry.ts DIMENSIONS.
+// The 17 here match apps/web's lib/analytics-registry.ts DIMENSIONS.
 type ReportDimension string
 
 const (
@@ -189,7 +189,7 @@ func needsClickJoin(q ReportQuery) bool {
 
 // ReportFilter is one equals-condition ("dimension = value"), AND-combined
 // with every other filter in a request — the same shape
-// apps/web/src/features/analytics/aggregate.ts's client-side FilterCondition
+// apps/web/src/types/analytics.ts's client-side FilterCondition
 // already used against mock data.
 type ReportFilter struct {
 	Dimension ReportDimension

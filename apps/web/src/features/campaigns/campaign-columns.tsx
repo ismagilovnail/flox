@@ -10,7 +10,7 @@ import { RelativeTime } from "@/components/ui/relative-time";
 import type { CampaignStatus } from "@/lib/api/campaigns";
 import type { CustomMetric } from "@/lib/custom-metrics";
 import { evaluateFormula } from "@/lib/formula-engine";
-import { METRICS, formatMetric, metricLabel } from "@/features/analytics/registry";
+import { METRICS, formatMetric, metricLabel } from "@/lib/analytics-registry";
 import { CAMPAIGN_TABLE_METRICS, type CampaignRow } from "@/features/campaigns/campaign-metrics";
 import { CampaignRowActions } from "@/features/campaigns/campaign-row-actions";
 import { TagBadgeList } from "@/features/tags/tag-badge-list";

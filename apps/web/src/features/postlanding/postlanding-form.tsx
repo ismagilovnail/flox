@@ -16,13 +16,14 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { MacroPicker } from "@/components/shared/macro-picker";
 import { POSTLANDING_MACROS } from "@/lib/macros";
 import { POSTLANDING_EVENT_TYPES, type PostlandingEventType, type PostlandingStatus } from "@/lib/api/postlanding";
+import { nameField } from "@/schemas/fields";
 
 /** Factory, not a module-level const — see source-form.tsx's
  * buildSourceFormSchema for why (Zod messages are user-facing text and
  * need the live translator). */
 export function buildPostlandingFormSchema(t: TFunction) {
   return z.object({
-    name: z.string().min(2, t("form.validation.nameMin", { ns: "postlanding" })).max(100),
+    name: nameField(t("form.validation.nameMin", { ns: "postlanding" }), { max: 100 }),
     url: z.url(t("form.validation.urlInvalid", { ns: "postlanding" })),
     events: z.array(z.enum(POSTLANDING_EVENT_TYPES)).min(1, t("form.validation.eventsRequired", { ns: "postlanding" })),
     status: z.enum(["active", "paused", "archived"] as [PostlandingStatus, ...PostlandingStatus[]]),

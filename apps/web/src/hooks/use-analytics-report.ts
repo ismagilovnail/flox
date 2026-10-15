@@ -12,8 +12,7 @@ import {
   getFlowSummary,
   type DateBasis,
 } from "@/lib/api/analytics";
-import type { DimensionKey } from "@/features/analytics/registry";
-import type { FilterCondition } from "@/features/analytics/aggregate";
+import type { DimensionKey, FilterCondition } from "@/types/analytics";
 
 function iso(d: Date): string {
   return d.toISOString().slice(0, 10);

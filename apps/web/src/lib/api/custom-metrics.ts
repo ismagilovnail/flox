@@ -1,7 +1,7 @@
 import { apiFetch } from "@/lib/api/client";
 import type { CustomMetric, CustomMetricStatus } from "@/lib/custom-metrics";
 import type { ShowInTarget } from "@/lib/custom-metrics-registry";
-import type { MetricFormat } from "@/features/analytics/registry";
+import type { MetricFormat } from "@/types/analytics";
 
 export type CustomMetricInput = {
   name: string;

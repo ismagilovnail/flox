@@ -154,10 +154,10 @@ missing data. The stream sets list's "View statistics" action
 dimension with the set's real id, not its display name — it filters on
 the same value the column stores.
 The filter chip it produces shows that raw id, since `FilterCondition`
-(`features/analytics/aggregate.ts`) has no separate display-label field;
+(`types/analytics.ts`) has no separate display-label field;
 adding one is out of scope for a query-layer/UI change.
 
-Every `DimensionKey` in `features/analytics/registry.ts` is backed since
+Every `DimensionKey` (`types/analytics.ts`) is backed since
 2026-10-13 (gap 4 of `docs/spec-conformance-2026-10-11.md`); a dimension
 outside the whitelist 400s with `apierror.Validation`.
 
@@ -350,7 +350,7 @@ nullable now too. Details: `docs/fx.md` "Reporting currency".
   `useFunnelReport` (`hooks/use-analytics-report.ts`, TanStack Query)
   replace the old `SLICES` mock array + `aggregateReport`/
   `aggregateTimeSeries`/`aggregateByDimension` client-side aggregation
-  (`features/analytics/aggregate.ts` now holds only the `ReportRow`/
+  (`types/analytics.ts` now holds the `ReportRow`/
   `FilterCondition` types those functions used to build — `ReportTable`'s
   custom-metric formula evaluation keys off that same shape, so nothing
   downstream of the fetch needed to change). Each tab gates on its own

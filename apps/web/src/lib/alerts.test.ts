@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import i18next from "@/lib/i18n/config";
-import { notificationText } from "@/features/alerts/notification-text";
+import { notificationText } from "@/hooks/use-notification-text";
 import { kindUsesCampaign, kindUsesThreshold, notificationHref, type AppNotification } from "@/lib/alerts";
 
 function n(kind: AppNotification["kind"], params: AppNotification["params"]): AppNotification {

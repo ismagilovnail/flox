@@ -23,6 +23,7 @@ import {
   type SourceStatus,
   type SourceType,
 } from "@/lib/api/traffic-sources";
+import { nameField } from "@/schemas/fields";
 
 const COST_INTEGRATIONS: CostIntegration[] = ["none", "manual", "facebook_ads", "tiktok_ads", "google_ads"];
 
@@ -37,7 +38,7 @@ function isAdAccountCostIntegration(value: CostIntegration): value is AdAccountC
  * never changes across locales — only the message strings do. */
 export function buildSourceFormSchema(t: TFunction) {
   return z.object({
-    name: z.string().min(2, t("form.validation.nameMin", { ns: "trafficSources" })).max(80),
+    name: nameField(t("form.validation.nameMin", { ns: "trafficSources" }), { max: 80 }),
     type: z.enum(SOURCE_TYPES as [SourceType, ...SourceType[]]),
     trackingTemplate: z.url(t("form.validation.urlInvalid", { ns: "trafficSources" })),
     costIntegration: z.enum(COST_INTEGRATIONS as [CostIntegration, ...CostIntegration[]]),

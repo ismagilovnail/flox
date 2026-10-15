@@ -11,7 +11,7 @@ import { useOffers } from "@/hooks/use-offers";
 import { usePwas } from "@/hooks/use-pwas";
 import { usePostlandings } from "@/hooks/use-postlandings";
 import { useNetworks } from "@/hooks/use-networks";
-import type { DimensionKey } from "@/features/analytics/registry";
+import type { DimensionKey } from "@/types/analytics";
 
 /**
  * Display label for one dimension value. The report API groups by ids

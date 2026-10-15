@@ -1,6 +1,6 @@
 /**
  * Custom Metrics catalog (§30.5) — extends the ONE metrics registry
- * (features/analytics/registry.ts, which already implements §50 and is
+ * (lib/analytics-registry.ts, which already implements §50 and is
  * reused here verbatim, not duplicated) with the categories §50 documents
  * that Phase 5 didn't need: CPA Funnel, Push, and LTV.
  *
@@ -17,7 +17,8 @@
  * live under lib/mock/.
  */
 
-import { METRICS, isPushMetric, type MetricFormat, type MetricKey } from "@/features/analytics/registry";
+import { METRICS, isPushMetric } from "@/lib/analytics-registry";
+import type { MetricFormat, MetricKey } from "@/types/analytics";
 
 export type MetricCategory = "Traffic / Performance" | "CPA Funnel" | "Push" | "Fraud" | "LTV";
 export type MetricDataSource = "regular" | "push" | "ltv";

@@ -67,11 +67,10 @@ func (sc scope) bounds(from, to time.Time) (time.Time, time.Time) {
 }
 
 // MetricValues is the full §50 metrics-registry row every report/
-// timeseries/breakdown/dashboard endpoint returns — ports
-// apps/web/src/features/analytics/aggregate.ts's deriveMetrics 1:1 so the
-// two never drift on formulas (that file's own client-side version is
-// deleted once apps/web switches to this endpoint, not kept as a second
-// implementation — CLAUDE.md's "no duplicate business logic"). Pointer
+// timeseries/breakdown/dashboard endpoint returns — ported 1:1 from the
+// web's former client-side deriveMetrics (deleted once apps/web switched to
+// this endpoint, not kept as a second implementation — CLAUDE.md's "no
+// duplicate business logic"; the row's keys are apps/web/src/types/analytics.ts). Pointer
 // fields are nil exactly when CLAUDE.md #6 says they must be: no cost
 // data on file (Cost/Profit/ROI/ROAS/CPC/CPA), or the requested
 // dimensions can't be answered by the conversion report at all
@@ -914,9 +913,8 @@ func (acc *rowAccumulator) zeroConversions() {
 	acc.declines, acc.trash = &declines, &trash
 }
 
-// deriveMetrics ports apps/web/src/features/analytics/aggregate.ts's
-// deriveMetrics formula for formula, field for field — see that
-// function's own doc comment for why nothing here may drift from it.
+// deriveMetrics is the one implementation of the §50 formulas (the web's
+// former client-side copy was ported here field for field and deleted).
 func deriveMetrics(acc *rowAccumulator) MetricValues {
 	m := MetricValues{
 		Clicks:        acc.clicks,

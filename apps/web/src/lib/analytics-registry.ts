@@ -1,26 +1,15 @@
+/**
+ * The report catalog: every dimension and metric the analytics API answers,
+ * their labels and formats — shared by the report builder, the dashboard,
+ * custom metrics and report presets. The types are `@/types/analytics`.
+ * apps/internal/custommetrics' registry_sync_test.go reads METRICS from this
+ * file to keep the Go catalog in step.
+ */
 import type { TFunction } from "i18next";
 
 import { formatMoney, formatInt } from "@/lib/format";
+import type { DimensionKey, MetricFormat, MetricKey, PushMetricKey } from "@/types/analytics";
 
-export type DimensionKey =
-  | "campaign"
-  | "source"
-  | "country"
-  | "region"
-  | "city"
-  | "device"
-  | "platform"
-  | "os"
-  | "browser"
-  | "language"
-  | "flow"
-  | "stream_set"
-  | "landing"
-  | "pwa"
-  | "postlanding"
-  | "offer"
-  | "network"
-  | "day";
 
 /** Mirrors maxReportDims in apps/internal/analytics/report.go — the API rejects more. */
 export const MAX_REPORT_DIMENSIONS = 4;
@@ -62,53 +51,29 @@ export function dimensionLabel(t: TFunction, key: DimensionKey): string {
   return t(`dimensions.${key}`, { ns: "analytics" });
 }
 
-export type MetricKey =
-  | "clicks"
-  | "uniqueClicks"
-  | "conversions"
-  | "revenue"
-  | "cost"
-  | "profit"
-  | "roi"
-  | "roas"
-  | "ctr"
-  | "cvr"
-  | "cpc"
-  | "cpa"
-  | "epc"
-  | "pwaInstalls"
-  | "registrations"
-  | "purchases"
-  | "repurchases"
-  | "declines"
-  | "trash"
-  | "clickToInstall"
-  | "installToReg"
-  | "regToPurchase"
-  | "costPerInstall"
-  | "costPerReg"
-  | "costPerPurchase"
-  | "blocked"
-  | "bots"
-  | "blockedRate"
-  | "botRate"
-  | "emptySubs"
-  | "emptySubsRate"
-  | PushMetricKey;
 
 /** Push metrics — a separate data source (§30.5): one formula never mixes
  * them with the rest. They keep the custom-metric catalog's ids, the same
  * on Push > Statistics, and are filled only when the report is grouped and
  * filtered by day, campaign, country or PWA (else "—"). */
-export const PUSH_METRIC_KEYS = ["push_sent", "push_delivered", "push_opened", "push_unsubscribed", "push_ctr"] as const;
+export const PUSH_METRIC_KEYS = [
+  "push_sent",
+  "push_delivered",
+  "push_opened",
+  "push_unsubscribed",
+  "push_ctr",
+] as const satisfies readonly PushMetricKey[];
 
-export type PushMetricKey = (typeof PUSH_METRIC_KEYS)[number];
+// Every PushMetricKey is listed above (a new one added to the type alone
+// fails to compile here).
+const allPushMetricsListed: Exclude<PushMetricKey, (typeof PUSH_METRIC_KEYS)[number]> extends never ? true : false = true;
+void allPushMetricsListed;
+
 
 export function isPushMetric(key: string): key is PushMetricKey {
   return (PUSH_METRIC_KEYS as readonly string[]).includes(key);
 }
 
-export type MetricFormat = "int" | "currency" | "percent" | "ratio";
 
 /** Formulas match §50 (METRICS REGISTRY) — never recompute these ad hoc elsewhere. */
 export const METRICS: { key: MetricKey; label: string; format: MetricFormat }[] = [

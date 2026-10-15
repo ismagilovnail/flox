@@ -15,7 +15,7 @@ import { LoadingState } from "@/components/ui/loading-state";
 import { ErrorState } from "@/components/ui/error-state";
 import { useMarkNotificationsRead, useNotifications } from "@/hooks/use-alerts";
 import { notificationHref } from "@/lib/alerts";
-import { useNotificationText } from "@/features/alerts/notification-text";
+import { useNotificationText } from "@/hooks/use-notification-text";
 
 export function Notifications() {
   const { t } = useTranslation("alerts");

@@ -58,6 +58,33 @@ single concrete, honestly-deliverable slice:
   isn't entered (or, for CPA, when conversions are zero — a division by
   zero, not a $0.00 acquisition cost).
 
+## Layers (§31, 2026-10-15)
+
+```
+app/          routes (thin: a page renders a feature view)
+features/     domain code — screens, their columns, their form schemas
+components/   shared UI (ui/ primitives, shell/, shared/ e.g. LogGrid)
+hooks/        shared React hooks (TanStack Query hooks over lib/api, …)
+lib/          lib/api (the only place that calls the server), shared
+              domain data (analytics-registry, custom-metrics-registry…)
+stores/       Zustand stores
+types/        contract types several layers share (analytics.ts)
+schemas/      field rules several forms share, mirroring the API (fields.ts)
+```
+
+Features build on the shared layers, never the other way round:
+`src/architecture.test.ts` fails if anything in components/, hooks/, lib/,
+stores/, types/ or schemas/ imports `@/features/…` (tests may cross). Until
+2026-10-15 lib/api, hooks and lib took the report types and the metric
+catalog from `features/analytics`, and the shell its notification text from
+`features/alerts`; they now live in `types/analytics.ts`,
+`lib/analytics-registry.ts` and `hooks/use-notification-text.ts`.
+
+A form's schema stays in its feature; what several share is in
+`schemas/fields.ts` — `nameField` (at least 2 characters, the entity's own
+max), `newPasswordField` (auth's `minPasswordLength`, kept equal by
+`auth.TestPasswordMinimumMatchesTheFrontend`), `emailField`.
+
 ## API version: every route under /v1 (tech audit 2026-10-06, API3)
 
 Every apps/api domain route is served under `/v1` — `GET /v1/campaigns`,

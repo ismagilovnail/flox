@@ -1,4 +1,4 @@
-import type { MetricFormat } from "@/features/analytics/registry";
+import type { MetricFormat } from "@/types/analytics";
 import type { ShowInTarget } from "@/lib/custom-metrics-registry";
 
 /** Real domain type (§30.5) — mirrors apps/internal/custommetrics.CustomMetric's

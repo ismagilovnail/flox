@@ -10,6 +10,7 @@ import {
   type FilterField,
   type FilterOperator,
 } from "@/lib/filters";
+import { nameField } from "@/schemas/fields";
 
 function buildFilterConditionSchema(t: TFunction) {
   return z
@@ -124,7 +125,7 @@ function buildFlowSchema(t: TFunction) {
  * need the live translator). */
 export function buildStreamSetFormSchema(t: TFunction) {
   return z.object({
-    name: z.string().min(2, t("form.validation.nameMin", { ns: "streamSets" })).max(80),
+    name: nameField(t("form.validation.nameMin", { ns: "streamSets" }), { max: 80 }),
     status: z.enum(["active", "paused"]),
     rootFilter: buildFilterGroupSchema(t),
     flows: z.array(buildFlowSchema(t)).min(1, t("form.validation.atLeastOneFlow", { ns: "streamSets" })),

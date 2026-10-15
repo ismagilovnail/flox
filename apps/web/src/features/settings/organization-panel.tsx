@@ -18,6 +18,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useOrganization, useUpdateOrganization } from "@/hooks/use-organization";
 import { TimezoneSelect } from "@/components/ui/timezone-select";
 import { CURRENCIES } from "@/lib/countries";
+import { nameField } from "@/schemas/fields";
 
 // Plain non-empty strings, not a z.enum against the curated
 // TIMEZONES/CURRENCIES dropdown lists — the real backend
@@ -28,7 +29,7 @@ import { CURRENCIES } from "@/lib/countries";
 // frontend-only check the backend itself doesn't share.
 function organizationSchema(t: TFunction<"settings">) {
   return z.object({
-    name: z.string().min(2, t("organization.errors.name")).max(80),
+    name: nameField(t("organization.errors.name"), { max: 80 }),
     timezone: z.string().min(1, t("organization.errors.timezone")),
     currency: z.string().min(1, t("organization.errors.currency")),
   });

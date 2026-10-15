@@ -12,8 +12,7 @@
  * lib/tags.ts, lib/custom-metrics.ts, lib/organization.ts.
  */
 
-import type { DimensionKey, MetricKey } from "@/features/analytics/registry";
-import type { FilterCondition } from "@/features/analytics/aggregate";
+import type { DimensionKey, MetricKey, FilterCondition } from "@/types/analytics";
 import type { DateBasis } from "@/lib/api/analytics";
 
 export type ReportPeriod = { type: "relative"; days: number } | { type: "custom"; from: string; to: string };

@@ -1,6 +1,5 @@
 import { apiFetch } from "@/lib/api/client";
-import type { DimensionKey, MetricKey } from "@/features/analytics/registry";
-import type { FilterCondition, ReportRow } from "@/features/analytics/aggregate";
+import type { DimensionKey, MetricKey, FilterCondition, ReportRow } from "@/types/analytics";
 
 /** Mirrors apps/internal/analytics's response shapes exactly. */
 

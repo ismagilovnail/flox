@@ -17,13 +17,14 @@ import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { useResendVerification, useSignup } from "@/hooks/use-auth";
 import { ApiError } from "@/lib/api/client";
+import { emailField, newPasswordField } from "@/schemas/fields";
 
 function buildSignupSchema(t: TFunction) {
   return z.object({
     organizationName: z.string().min(1, t("signup.validation.organizationNameRequired", { ns: "auth" })).max(120),
     name: z.string().min(1, t("signup.validation.nameRequired", { ns: "auth" })).max(120),
-    email: z.email(t("signup.validation.emailInvalid", { ns: "auth" })),
-    password: z.string().min(8, t("signup.validation.passwordMin", { ns: "auth" })),
+    email: emailField(t("signup.validation.emailInvalid", { ns: "auth" })),
+    password: newPasswordField(t("signup.validation.passwordMin", { ns: "auth" })),
   });
 }
 

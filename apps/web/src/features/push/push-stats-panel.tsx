@@ -12,7 +12,7 @@ import { LoadingState } from "@/components/ui/loading-state";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { StatCard } from "@/components/ui/stat-card";
 import { Mono } from "@/components/ui/typography";
-import { formatMetric } from "@/features/analytics/registry";
+import { formatMetric } from "@/lib/analytics-registry";
 import { useCampaigns } from "@/hooks/use-campaigns";
 import { useCustomMetrics } from "@/hooks/use-custom-metrics";
 import { useOrganization } from "@/hooks/use-organization";

@@ -22,7 +22,8 @@ import {
 } from "@/components/ui/sheet";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Mono } from "@/components/ui/typography";
-import { formatMetric, type MetricFormat } from "@/features/analytics/registry";
+import { formatMetric } from "@/lib/analytics-registry";
+import type { MetricFormat } from "@/types/analytics";
 import { useReportingCurrency } from "@/hooks/use-organization";
 import {
   METRIC_CATALOG,
@@ -35,6 +36,7 @@ import { evaluateFormula, validateFormula } from "@/lib/formula-engine";
 import { MetricCatalogPanel } from "@/features/custom-metrics/metric-catalog-panel";
 import { FormulaInput, type FormulaInputHandle } from "@/features/custom-metrics/formula-input";
 import { targetLabel } from "@/features/custom-metrics/metric-label";
+import { nameField } from "@/schemas/fields";
 
 const FORMATS: MetricFormat[] = ["int", "currency", "percent", "ratio"];
 
@@ -77,7 +79,7 @@ const SAMPLE_VALUES: Record<string, number | null> = {
 
 function customMetricFormSchema(t: TFunction<"customMetrics">) {
   return z.object({
-    name: z.string().min(2, t("form.errors.name")).max(80),
+    name: nameField(t("form.errors.name"), { max: 80 }),
     group: z.string().min(1, t("form.errors.group")).max(40),
     format: z.enum(FORMATS as [MetricFormat, ...MetricFormat[]]),
     formula: z.string().min(1, t("form.errors.formula")),

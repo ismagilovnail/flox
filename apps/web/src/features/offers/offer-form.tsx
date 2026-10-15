@@ -21,6 +21,7 @@ import { genId } from "@/lib/id";
 import { COUNTRIES, CURRENCIES } from "@/lib/countries";
 import type { OfferStatus } from "@/lib/api/offers";
 import type { Network } from "@/lib/api/networks";
+import { nameField } from "@/schemas/fields";
 
 /** Factory, not a module-level const — Zod's validation messages are
  * user-facing text and need the live translator, which only exists inside
@@ -34,7 +35,7 @@ export function buildOfferFormSchema(t: TFunction) {
 
   return z.object({
     networkId: z.string().min(1, t("form.validation.networkRequired", { ns: "offers" })),
-    name: z.string().min(2, t("form.validation.nameMin", { ns: "offers" })).max(100),
+    name: nameField(t("form.validation.nameMin", { ns: "offers" }), { max: 100 }),
     countries: z.array(z.string()).min(1, t("form.validation.countriesMin", { ns: "offers" })),
     payout: z
       .number(t("form.validation.payoutRequired", { ns: "offers" }))

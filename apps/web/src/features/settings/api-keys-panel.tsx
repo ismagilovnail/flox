@@ -30,10 +30,11 @@ import { LoadingState } from "@/components/ui/loading-state";
 import { ErrorState } from "@/components/ui/error-state";
 import { useApiKeys, useCreateApiKey, useRevokeApiKey, useRotateApiKey } from "@/hooks/use-api-keys";
 import { API_KEY_SCOPES, type ApiKeyScope } from "@/lib/api-keys";
+import { nameField } from "@/schemas/fields";
 
 function createKeySchema(t: TFunction<"settings">) {
   return z.object({
-    name: z.string().min(2, t("apiKeys.errors.name")).max(60),
+    name: nameField(t("apiKeys.errors.name"), { max: 60 }),
     scope: z.enum(API_KEY_SCOPES as [ApiKeyScope, ...ApiKeyScope[]]),
   });
 }

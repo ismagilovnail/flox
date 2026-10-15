@@ -32,6 +32,7 @@ import {
   type PixelStatus,
   type UpdatePixelInput,
 } from "@/lib/api/pixels";
+import { nameField } from "@/schemas/fields";
 
 /** Factory, not a module-level const — Zod's validation messages are
  * user-facing text and need the live translator, which only exists inside
@@ -40,7 +41,7 @@ import {
 export function buildPixelFormSchema(t: TFunction) {
   return z
     .object({
-      name: z.string().trim().min(2, t("form.validation.nameMin", { ns: "pixels" })).max(100),
+      name: nameField(t("form.validation.nameMin", { ns: "pixels" }), { max: 100, trim: true }),
       provider: z.enum(PIXEL_PROVIDERS as [PixelProvider, ...PixelProvider[]]),
       pixelId: z.string().trim().max(80, t("form.validation.pixelIdMax", { ns: "pixels" })),
       events: z.array(z.enum(PIXEL_EVENT_TYPES)).min(1, t("form.validation.eventsRequired", { ns: "pixels" })),

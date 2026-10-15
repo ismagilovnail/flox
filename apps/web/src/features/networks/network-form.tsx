@@ -15,13 +15,14 @@ import { Switch } from "@/components/ui/switch";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { MacroPicker } from "@/components/shared/macro-picker";
 import type { NetworkStatus } from "@/lib/api/networks";
+import { nameField } from "@/schemas/fields";
 
 /** Factory, not a module-level const — see source-form.tsx's
  * buildSourceFormSchema for why (Zod messages are user-facing text and
  * need the live translator). */
 export function buildNetworkFormSchema(t: TFunction) {
   return z.object({
-    name: z.string().min(2, t("form.validation.nameMin", { ns: "networks" })).max(80),
+    name: nameField(t("form.validation.nameMin", { ns: "networks" }), { max: 80 }),
     postbackUrl: z.url(t("form.validation.urlInvalid", { ns: "networks" })),
     acceptDuplicates: z.boolean(),
     status: z.enum(["active", "paused", "archived"] as [NetworkStatus, ...NetworkStatus[]]).optional(),

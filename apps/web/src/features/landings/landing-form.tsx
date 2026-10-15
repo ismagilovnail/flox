@@ -21,6 +21,7 @@ import { GalleryFilePickerDialog } from "@/features/content-gallery/gallery-file
 import { LandingTemplateEditor } from "@/features/landings/landing-template-editor";
 import { formatBytes } from "@/features/landings/format-bytes";
 import type { Landing, LandingStatus, LandingType } from "@/lib/api/landings";
+import { nameField } from "@/schemas/fields";
 
 /** Mirrors apps/internal/landing/bundle.go's maxArchiveBytes — checked
  * here only to fail fast before uploading; the server enforces it. */
@@ -33,7 +34,7 @@ const MAX_ARCHIVE_BYTES = 50 * 1024 * 1024;
 export function buildLandingFormSchema(t: TFunction, requireArchive: boolean) {
   return z
     .object({
-      name: z.string().trim().min(2, t("form.validation.nameMin", { ns: "landings" })).max(100),
+      name: nameField(t("form.validation.nameMin", { ns: "landings" }), { max: 100, trim: true }),
       title: z.string().trim().max(200),
       logoUrl: z.string(),
       type: z.enum(["internal", "external"] as [LandingType, ...LandingType[]]),

@@ -19,13 +19,14 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import { ROLES, type Role } from "@/lib/mock/team";
+import { emailField, nameField } from "@/schemas/fields";
 
 const INVITABLE_ROLES = ROLES.filter((r) => r !== "Owner") as [Role, ...Role[]];
 
 export function inviteMemberSchema(t: TFunction<"team">) {
   return z.object({
-    name: z.string().min(2, t("invite.errors.name")).max(80),
-    email: z.email(t("invite.errors.email")),
+    name: nameField(t("invite.errors.name"), { max: 80 }),
+    email: emailField(t("invite.errors.email")),
     role: z.enum(INVITABLE_ROLES),
   });
 }

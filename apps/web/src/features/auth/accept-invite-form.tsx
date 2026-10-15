@@ -18,11 +18,12 @@ import { useAcceptInvite, usePreviewInvite } from "@/hooks/use-auth";
 import { ApiError } from "@/lib/api/client";
 import { isPendingTOTP } from "@/lib/api/auth";
 import { TOTPCodeStep, TOTPEnrollStep } from "@/features/auth/totp-step";
+import { newPasswordField } from "@/schemas/fields";
 
 function buildAcceptInviteSchema(t: TFunction) {
   return z.object({
     name: z.string().min(1, t("acceptInvite.validation.nameRequired", { ns: "auth" })).max(120),
-    password: z.string().min(8, t("acceptInvite.validation.passwordMin", { ns: "auth" })),
+    password: newPasswordField(t("acceptInvite.validation.passwordMin", { ns: "auth" })),
   });
 }
 
