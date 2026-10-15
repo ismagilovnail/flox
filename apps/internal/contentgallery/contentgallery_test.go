@@ -3,7 +3,9 @@ package contentgallery_test
 import (
 	"bytes"
 	"context"
+	"net/http"
 	"os"
+	"strings"
 	"testing"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -326,7 +328,7 @@ func TestDeleteFilesOnlyRemovesArchived(t *testing.T) {
 	}
 }
 
-func TestUploadRejectsVideoOversizeAndWrongContent(t *testing.T) {
+func TestUploadRejectsOversizeWrongContentAndMov(t *testing.T) {
 	pool := mustPool(t)
 	ctx := context.Background()
 	orgID := seedOrg(t, ctx, pool)
@@ -334,11 +336,19 @@ func TestUploadRejectsVideoOversizeAndWrongContent(t *testing.T) {
 	storageClient := mustStorage(t)
 	svc := contentgallery.NewService(contentgallery.NewRepository(pool), storageClient)
 
+	// A .mp4 whose bytes are not an MP4 (the handler's sniff says text).
 	_, err := svc.UploadFile(ctx, orgID, userID, contentgallery.UploadInput{
-		Filename: "clip.mp4", ContentType: "video/mp4", Size: 1024, Reader: bytes.NewReader([]byte("not really a video")),
+		Filename: "clip.mp4", ContentType: "text/plain; charset=utf-8", Size: 18, Reader: bytes.NewReader([]byte("not really a video")),
 	})
 	if !isValidation(err) {
-		t.Fatalf("video upload: err = %v, want validation", err)
+		t.Fatalf("fake video upload: err = %v, want validation", err)
+	}
+	// MOV is refused with what to do instead.
+	_, err = svc.UploadFile(ctx, orgID, userID, contentgallery.UploadInput{
+		Filename: "IMG_0001.MOV", ContentType: "application/octet-stream", Size: 8, Reader: bytes.NewReader([]byte("whatever")),
+	})
+	if !isValidation(err) || !strings.Contains(err.Error(), "MP4") {
+		t.Fatalf("mov upload: err = %v, want a validation error pointing at MP4", err)
 	}
 
 	_, err = svc.UploadFile(ctx, orgID, userID, contentgallery.UploadInput{
@@ -428,4 +438,100 @@ func isValidation(err error) bool {
 func isNotFound(err error) bool {
 	apiErr, ok := err.(*apierror.Error)
 	return ok && apiErr.Code == "not_found"
+}
+
+// minimalMP4 and minimalWebM are just enough of each format's header for
+// http.DetectContentType — what the handler sniffs — to name it.
+var (
+	minimalMP4  = append([]byte{0, 0, 0, 0x18, 'f', 't', 'y', 'p', 'm', 'p', '4', '2', 0, 0, 0, 0, 'm', 'p', '4', '2', 'i', 's', 'o', 'm'}, make([]byte, 64)...)
+	minimalWebM = append([]byte{0x1A, 0x45, 0xDF, 0xA3, 0x9F, 0x42, 0x86, 0x81, 0x01, 0x42, 0xF7, 0x81, 0x01, 0x42, 0xF2, 0x81, 0x04, 0x42, 0xF3, 0x81, 0x08, 0x42, 0x82, 0x84, 'w', 'e', 'b', 'm'}, make([]byte, 64)...)
+)
+
+func intp(v int) *int { return &v }
+
+func objectExists(t *testing.T, url string) bool {
+	t.Helper()
+	resp, err := http.Get(url)
+	if err != nil {
+		t.Fatalf("GET %s: %v", url, err)
+	}
+	resp.Body.Close()
+	return resp.StatusCode == http.StatusOK
+}
+
+// Videos: MP4 and WebM (as the handler sniffs them) are stored as video
+// with their poster and display metadata; the type filter finds them;
+// deleting removes the poster object too; bad metadata and a poster that
+// is not an image are refused.
+func TestUploadVideo(t *testing.T) {
+	if got := http.DetectContentType(minimalMP4); got != "video/mp4" {
+		t.Fatalf("sniffed MP4 = %q", got)
+	}
+	if got := http.DetectContentType(minimalWebM); got != "video/webm" {
+		t.Fatalf("sniffed WebM = %q", got)
+	}
+	pool := mustPool(t)
+	ctx := context.Background()
+	orgID := seedOrg(t, ctx, pool)
+	userID := seedUser(t, ctx, pool)
+	storageClient := mustStorage(t)
+	svc := contentgallery.NewService(contentgallery.NewRepository(pool), storageClient)
+
+	video, err := svc.UploadFile(ctx, orgID, userID, contentgallery.UploadInput{
+		Filename: "promo.mp4", ContentType: "video/mp4", Size: int64(len(minimalMP4)), Reader: bytes.NewReader(minimalMP4),
+		Poster: &contentgallery.PosterInput{ContentType: "image/png", Size: int64(len(onePixelPNG)), Reader: bytes.NewReader(onePixelPNG)},
+		Meta:   contentgallery.VideoMeta{DurationMs: intp(15300), Width: intp(1080), Height: intp(1920)},
+	})
+	if err != nil {
+		t.Fatalf("UploadFile mp4: %v", err)
+	}
+	if video.FileType != contentgallery.FileTypeVideo || video.MimeType != "video/mp4" || video.PosterURL == "" ||
+		video.DurationMs == nil || *video.DurationMs != 15300 || *video.Width != 1080 || *video.Height != 1920 {
+		t.Fatalf("video = %+v", video)
+	}
+	if !objectExists(t, video.URL) || !objectExists(t, video.PosterURL) {
+		t.Fatal("the video or its poster is not in storage")
+	}
+	webm, err := svc.UploadFile(ctx, orgID, userID, contentgallery.UploadInput{
+		Filename: "loop.webm", ContentType: "video/webm", Size: int64(len(minimalWebM)), Reader: bytes.NewReader(minimalWebM),
+	})
+	if err != nil || webm.FileType != contentgallery.FileTypeVideo || webm.PosterURL != "" || webm.DurationMs != nil {
+		t.Fatalf("webm without a poster = %+v, %v", webm, err)
+	}
+	image := mustUpload(t, ctx, svc, orgID, userID, nil)
+
+	videos, err := svc.ListFiles(ctx, orgID, contentgallery.ListFilesParams{FileType: contentgallery.FileTypeVideo})
+	if err != nil || videos.Total != 2 {
+		t.Fatalf("videos = %d, %v; want 2", videos.Total, err)
+	}
+	for _, f := range videos.Files {
+		if f.ID == video.ID && (f.PosterURL != video.PosterURL || f.DurationMs == nil) {
+			t.Fatalf("listed video = %+v, want its poster and duration", f)
+		}
+	}
+	if images, _ := svc.ListFiles(ctx, orgID, contentgallery.ListFilesParams{FileType: contentgallery.FileTypeImage}); images.Total != 1 || images.Files[0].ID != image.ID {
+		t.Fatalf("images = %+v, want the PNG only", images.Files)
+	}
+
+	for name, in := range map[string]contentgallery.UploadInput{
+		"duration 0":       {Meta: contentgallery.VideoMeta{DurationMs: intp(0)}},
+		"too wide":         {Meta: contentgallery.VideoMeta{Width: intp(20000)}},
+		"poster not image": {Poster: &contentgallery.PosterInput{ContentType: "text/plain; charset=utf-8", Size: 5, Reader: bytes.NewReader([]byte("hello"))}},
+		"poster too big":   {Poster: &contentgallery.PosterInput{ContentType: "image/png", Size: 3 << 20, Reader: bytes.NewReader(onePixelPNG)}},
+	} {
+		in.Filename, in.ContentType, in.Size, in.Reader = "x.mp4", "video/mp4", int64(len(minimalMP4)), bytes.NewReader(minimalMP4)
+		if _, err := svc.UploadFile(ctx, orgID, userID, in); !isValidation(err) {
+			t.Fatalf("%s: err = %v, want validation", name, err)
+		}
+	}
+
+	if _, err := svc.ArchiveFiles(ctx, orgID, []string{video.ID}); err != nil {
+		t.Fatal(err)
+	}
+	if n, err := svc.DeleteFiles(ctx, orgID, []string{video.ID}); err != nil || n != 1 {
+		t.Fatalf("DeleteFiles = %d, %v; want 1", n, err)
+	}
+	if objectExists(t, video.URL) || objectExists(t, video.PosterURL) {
+		t.Fatal("the video or its poster is still in storage after delete")
+	}
 }

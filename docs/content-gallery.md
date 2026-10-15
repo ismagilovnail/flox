@@ -1,10 +1,43 @@
 # Content Gallery (§30.8)
 
-Two sections on `/content-gallery`: the **team library** (images the team
-uploads; tenant-scoped, object storage — `internal/contentgallery`) and the
+Two sections on `/content-gallery`: the **team library** (images and videos
+the team uploads; tenant-scoped, object storage — `internal/contentgallery`) and the
 **system catalog** (content shipped with FLOX, the same for every
 organization). §30.8: "distinguish system-provided gallery content from
 team-uploaded content".
+
+## Video (2026-10-15)
+
+MP4 and WebM up to 20 MB (the reference product's video cap), **stored as
+uploaded — no transcoding** (the owner's choice: no ffmpeg on the server).
+The type is checked from the file's own bytes (`http.DetectContentType`:
+an MP4 `ftyp` box with an mp4 brand, WebM's EBML header) against its
+extension. MOV is refused with a hint to save it as MP4 (H.264) — iPhone
+QuickTime files are not MP4s.
+
+The uploading browser reads the video (`lib/video-poster.ts`): a frame
+~0.5 s in, scaled to 640 px on the long side, as a JPEG **poster**; the
+**duration** and **frame size**. They go with the upload (`poster`,
+`durationMs`, `width`, `height` form fields; migration 00082 adds
+`poster_object_key`, `duration_ms`, `width`, `height`) — display only,
+range-checked; a poster must be a JPEG/WebP/PNG up to 2 MB. A video the
+browser cannot decode (or that takes over 8 s) uploads without them.
+Deleting a video deletes its poster object too.
+
+UI: the gallery accepts videos (the upload cell says so); cards show the
+poster (or a film icon), the duration and a play button that opens a
+player with the file's facts and its link to copy; a type filter (all /
+images / videos). Every picker that attaches a gallery file to a field
+(PWA icon and screenshots, landing logo, comment avatar) offers images
+only — it lists `type=image` and its upload cell accepts images only.
+
+Tests: `TestUploadVideo` (MP4 and WebM as sniffed, poster and metadata
+stored and listed, the type filter, bad metadata and posters refused, the
+poster object removed on delete), MOV and fake-MP4 refusals —
+mutation-checked; `lib/video-poster.test.ts`. Live: a 2 s WebM recorded in
+Chrome uploaded through the gallery's own file input → poster, 1946 ms,
+320×568; played in the dialog; archived and deleted (video and poster gone
+from storage).
 
 ## System catalog
 

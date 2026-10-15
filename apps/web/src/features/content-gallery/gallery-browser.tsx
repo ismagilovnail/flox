@@ -33,8 +33,9 @@ import { useTeamMembers } from "@/hooks/use-team";
 import { GalleryFileCard } from "@/features/content-gallery/gallery-file-card";
 import { GalleryFolderPanel, GALLERY_ROOT } from "@/features/content-gallery/gallery-folder-panel";
 import { GalleryUploadCell } from "@/features/content-gallery/gallery-upload-cell";
+import { GalleryVideoDialog } from "@/features/content-gallery/gallery-video-dialog";
 import { CROPPABLE_MIME_TYPES, ImageCropDialog } from "@/features/content-gallery/image-crop-dialog";
-import type { GalleryFile, GalleryFileStatus, GalleryFolder } from "@/lib/api/content-gallery";
+import type { GalleryFile, GalleryFileStatus, GalleryFileType, GalleryFolder } from "@/lib/api/content-gallery";
 
 const PAGE_SIZE = 50;
 
@@ -71,6 +72,12 @@ export function GalleryBrowser({
   const [folder, setFolderRaw] = React.useState<string | undefined>(undefined);
   const [status, setStatusRaw] = React.useState<GalleryFileStatus>("active");
   const [uploadedBy, setUploadedByRaw] = React.useState<string | undefined>(undefined);
+  // Manage mode filters by type; pick mode only ever offers images (every
+  // field that picks from the gallery — icon, screenshots, logo, avatar —
+  // needs one).
+  const [typeFilter, setTypeFilterRaw] = React.useState<GalleryFileType | undefined>(undefined);
+  const fileType: GalleryFileType | undefined = mode === "pick" ? "image" : typeFilter;
+  const [previewing, setPreviewing] = React.useState<GalleryFile | null>(null);
   const [page, setPage] = React.useState(0);
   const [selected, setSelected] = React.useState<Set<string>>(new Set());
   // Pick mode's actual chosen file object, kept alongside `selected`
@@ -101,11 +108,16 @@ export function GalleryBrowser({
     setUploadedByRaw(value);
     setPage(0);
   }
+  function setTypeFilter(value: GalleryFileType | undefined) {
+    setTypeFilterRaw(value);
+    setPage(0);
+  }
 
   const folderId = folder === GALLERY_ROOT ? "root" : folder;
   const { data, isPending, isError, error, refetch } = useGalleryFiles({
     folderId,
     status: mode === "pick" ? "active" : status,
+    type: fileType,
     uploadedBy,
     limit: PAGE_SIZE,
     offset: page * PAGE_SIZE,
@@ -217,19 +229,31 @@ export function GalleryBrowser({
             </TabsList>
           </Tabs>
 
-          <Select value={uploadedBy ?? "all"} onValueChange={(v) => setUploadedBy(v === "all" ? undefined : v)}>
-            <SelectTrigger className="w-48">
-              <SelectValue placeholder={t("uploadedBy")} />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">{t("everyone")}</SelectItem>
-              {members?.map((m) => (
-                <SelectItem key={m.userId} value={m.userId}>
-                  {m.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <div className="flex flex-wrap items-center gap-2">
+            <Select value={typeFilter ?? "all"} onValueChange={(v) => setTypeFilter(v === "all" ? undefined : (v as GalleryFileType))}>
+              <SelectTrigger className="w-36" aria-label={t("typeFilter.label")}>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">{t("typeFilter.all")}</SelectItem>
+                <SelectItem value="image">{t("typeFilter.image")}</SelectItem>
+                <SelectItem value="video">{t("typeFilter.video")}</SelectItem>
+              </SelectContent>
+            </Select>
+            <Select value={uploadedBy ?? "all"} onValueChange={(v) => setUploadedBy(v === "all" ? undefined : v)}>
+              <SelectTrigger className="w-48">
+                <SelectValue placeholder={t("uploadedBy")} />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">{t("everyone")}</SelectItem>
+                {members?.map((m) => (
+                  <SelectItem key={m.userId} value={m.userId}>
+                    {m.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
         </div>
       )}
 
@@ -265,6 +289,7 @@ export function GalleryBrowser({
                   <GalleryUploadCell
                     folderId={folderId === "root" ? undefined : folderId}
                     onUploaded={mode === "pick" ? handleUploaded : undefined}
+                    allowVideo={mode === "manage"}
                   />
                 )}
                 {files.length === 0 && !(mode === "pick" || status === "active") && (
@@ -280,6 +305,7 @@ export function GalleryBrowser({
                     selected={selected.has(file.id)}
                     onToggleSelect={() => toggleSelect(file.id)}
                     onClick={() => toggleSelect(file.id)}
+                    onPreview={file.fileType === "video" ? () => setPreviewing(file) : undefined}
                     onMove={
                       mode === "manage" && status === "active" && canWrite
                         ? (folderId) => moveFiles.mutate({ ids: [file.id], folderId })
@@ -342,6 +368,8 @@ export function GalleryBrowser({
           onSkip={skipCrop}
         />
       )}
+
+      <GalleryVideoDialog file={previewing} onOpenChange={(open) => !open && setPreviewing(null)} />
 
       <Dialog open={confirmDeleteIds !== null} onOpenChange={(open) => !open && setConfirmDeleteIds(null)}>
         <DialogContent>

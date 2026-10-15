@@ -124,13 +124,14 @@ func (r *Repository) DeleteFolder(ctx context.Context, orgID, id string) error {
 	return tx.Commit(ctx)
 }
 
-const fileColumns = `id, organization_id, folder_id, uploaded_by_user_id, file_type, object_key, original_filename, mime_type, size_bytes, status, created_at, updated_at`
+const fileColumns = `id, organization_id, folder_id, uploaded_by_user_id, file_type, object_key, original_filename, mime_type, size_bytes, status, created_at, updated_at, poster_object_key, duration_ms, width, height`
 
 func scanFile(row pgx.Row) (File, error) {
 	var f File
 	err := row.Scan(
 		&f.ID, &f.OrganizationID, &f.FolderID, &f.UploadedByUserID, &f.FileType, &f.ObjectKey,
 		&f.OriginalFilename, &f.MimeType, &f.SizeBytes, &f.Status, &f.CreatedAt, &f.UpdatedAt,
+		&f.PosterObjectKey, &f.DurationMs, &f.Width, &f.Height,
 	)
 	return f, err
 }
@@ -143,15 +144,21 @@ type CreateFileInput struct {
 	OriginalFilename string
 	MimeType         string
 	SizeBytes        int64
+	// Video only (VideoMeta).
+	PosterObjectKey string
+	DurationMs      *int
+	Width, Height   *int
 }
 
 func (r *Repository) CreateFile(ctx context.Context, id, orgID string, in CreateFileInput) (File, error) {
 	row := r.db.QueryRow(ctx, `
 		INSERT INTO content_gallery_files
-			(id, organization_id, folder_id, uploaded_by_user_id, file_type, object_key, original_filename, mime_type, size_bytes)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+			(id, organization_id, folder_id, uploaded_by_user_id, file_type, object_key, original_filename, mime_type, size_bytes,
+			 poster_object_key, duration_ms, width, height)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
 		RETURNING `+fileColumns,
 		id, orgID, in.FolderID, in.UploadedByUserID, in.FileType, in.ObjectKey, in.OriginalFilename, in.MimeType, in.SizeBytes,
+		in.PosterObjectKey, in.DurationMs, in.Width, in.Height,
 	)
 	f, err := scanFile(row)
 	if err != nil {
@@ -266,11 +273,17 @@ func (r *Repository) SetFilesStatus(ctx context.Context, orgID string, ids []str
 // deletion only ever happens from the Inactive list, never directly off
 // an active file. Returns the deleted rows' object keys so the caller can
 // clean them up in object storage.
-func (r *Repository) DeleteFiles(ctx context.Context, orgID string, ids []string) ([]string, error) {
+// deletedFile is a deleted row's storage objects: the file and, for a
+// video, its poster ("" when none).
+type deletedFile struct {
+	Key, PosterKey string
+}
+
+func (r *Repository) DeleteFiles(ctx context.Context, orgID string, ids []string) ([]deletedFile, error) {
 	rows, err := r.db.Query(ctx, `
 		DELETE FROM content_gallery_files
 		WHERE organization_id = $1 AND id = ANY($2) AND status = $3
-		RETURNING object_key`,
+		RETURNING object_key, poster_object_key`,
 		orgID, ids, FileStatusArchived,
 	)
 	if err != nil {
@@ -278,13 +291,13 @@ func (r *Repository) DeleteFiles(ctx context.Context, orgID string, ids []string
 	}
 	defer rows.Close()
 
-	keys := []string{}
+	out := []deletedFile{}
 	for rows.Next() {
-		var key string
-		if err := rows.Scan(&key); err != nil {
+		var d deletedFile
+		if err := rows.Scan(&d.Key, &d.PosterKey); err != nil {
 			return nil, fmt.Errorf("contentgallery: scanning deleted key: %w", err)
 		}
-		keys = append(keys, key)
+		out = append(out, d)
 	}
-	return keys, rows.Err()
+	return out, rows.Err()
 }

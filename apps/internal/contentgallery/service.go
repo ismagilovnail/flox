@@ -36,10 +36,30 @@ var allowedImageExt = map[string]string{
 	".gif":  "image/gif",
 }
 
-// videoExt exists only to give a video upload a clear, honest rejection
-// message ("not supported yet") instead of the generic "unsupported file
-// type" a truly unknown extension gets.
-var videoExt = map[string]bool{".mp4": true, ".mov": true, ".webm": true}
+// allowedVideoExt is allowedImageExt for videos: stored as uploaded, no
+// transcoding (docs/content-gallery.md "Video") — the two formats every
+// browser plays. http.DetectContentType recognises both (an MP4's ftyp
+// box with an mp4 brand, WebM's EBML header).
+var allowedVideoExt = map[string]string{
+	".mp4":  "video/mp4",
+	".webm": "video/webm",
+}
+
+// posterTypes are the images a video's poster may be (the uploading
+// browser draws the first frame on a canvas: JPEG, else WebP/PNG).
+var posterTypes = map[string]string{
+	"image/jpeg": ".jpg",
+	"image/webp": ".webp",
+	"image/png":  ".png",
+}
+
+const (
+	// maxPosterBytes bounds a poster: one frame, downscaled by the browser.
+	maxPosterBytes = 2 << 20
+	// maxVideoDurationMs and maxVideoSide bound the display metadata.
+	maxVideoDurationMs = 24 * 60 * 60 * 1000
+	maxVideoSide       = 16384
+)
 
 type Service struct {
 	repo     *Repository
@@ -96,8 +116,12 @@ type UploadInput struct {
 	FolderID    *string // nil or "" = root
 	Filename    string
 	ContentType string // sniffed by Handler via http.DetectContentType, not client-supplied
-	Size        int64
-	Reader      io.Reader
+	// Poster and Meta come with a video only (ignored for an image), both
+	// optional: made by the uploading browser.
+	Poster *PosterInput
+	Meta   VideoMeta
+	Size   int64
+	Reader io.Reader
 }
 
 func (s *Service) UploadFile(ctx context.Context, orgID, uploadedByUserID string, in UploadInput) (File, error) {
@@ -112,15 +136,30 @@ func (s *Service) UploadFile(ctx context.Context, orgID, uploadedByUserID string
 	}
 
 	ext := strings.ToLower(filepath.Ext(in.Filename))
-	if videoExt[ext] {
-		return File{}, apierror.Validation("video uploads aren't supported yet", nil)
-	}
+	fileType := FileTypeImage
 	wantType, ok := allowedImageExt[ext]
 	if !ok {
-		return File{}, apierror.Validation("unsupported file type — allowed: webp, jpg, jpeg, png, gif", nil)
+		if wantType, ok = allowedVideoExt[ext]; ok {
+			fileType = FileTypeVideo
+		}
 	}
-	if in.ContentType != wantType {
+	switch {
+	case ext == ".mov":
+		return File{}, apierror.Validation("MOV isn't supported — save the video as MP4 (H.264) and upload that", nil)
+	case !ok:
+		return File{}, apierror.Validation("unsupported file type — allowed: webp, jpg, jpeg, png, gif, mp4, webm", nil)
+	case in.ContentType != wantType:
 		return File{}, apierror.Validation("file content doesn't match its extension", nil)
+	}
+	if fileType == FileTypeVideo {
+		if err := in.Meta.validate(); err != nil {
+			return File{}, err
+		}
+		if in.Poster != nil {
+			if err := in.Poster.validate(); err != nil {
+				return File{}, err
+			}
+		}
 	}
 
 	var folderID *string
@@ -136,22 +175,38 @@ func (s *Service) UploadFile(ctx context.Context, orgID, uploadedByUserID string
 	if err := s.storage.PutObject(ctx, objectKey, in.Reader, in.Size, in.ContentType); err != nil {
 		return File{}, fmt.Errorf("contentgallery: uploading: %w", err)
 	}
-
-	f, err := s.repo.CreateFile(ctx, id, orgID, CreateFileInput{
+	create := CreateFileInput{
 		FolderID:         folderID,
 		UploadedByUserID: uploadedByUserID,
-		FileType:         FileTypeImage,
+		FileType:         fileType,
 		ObjectKey:        objectKey,
 		OriginalFilename: in.Filename,
 		MimeType:         in.ContentType,
 		SizeBytes:        in.Size,
-	})
+	}
+	if fileType == FileTypeVideo {
+		create.DurationMs, create.Width, create.Height = in.Meta.DurationMs, in.Meta.Width, in.Meta.Height
+		if in.Poster != nil {
+			posterKey := orgID + "/" + id + "-poster" + posterTypes[in.Poster.ContentType]
+			if err := s.storage.PutObject(ctx, posterKey, in.Poster.Reader, in.Poster.Size, in.Poster.ContentType); err != nil {
+				_ = s.storage.DeleteObject(ctx, objectKey)
+				return File{}, fmt.Errorf("contentgallery: uploading poster: %w", err)
+			}
+			create.PosterObjectKey = posterKey
+		}
+	}
+
+	f, err := s.repo.CreateFile(ctx, id, orgID, create)
 	if err != nil {
-		_ = s.storage.DeleteObject(ctx, objectKey) // best-effort: avoid an orphaned object outliving its (failed) DB row
+		// best-effort: avoid orphaned objects outliving their (failed) DB row
+		_ = s.storage.DeleteObject(ctx, objectKey)
+		if create.PosterObjectKey != "" {
+			_ = s.storage.DeleteObject(ctx, create.PosterObjectKey)
+		}
 		return File{}, err
 	}
 
-	f.URL = s.storage.PublicURL(f.ObjectKey)
+	s.withURLs(&f)
 	return f, nil
 }
 
@@ -175,7 +230,7 @@ func (s *Service) ListFiles(ctx context.Context, orgID string, p ListFilesParams
 	}
 
 	for i := range result.Files {
-		result.Files[i].URL = s.storage.PublicURL(result.Files[i].ObjectKey)
+		s.withURLs(&result.Files[i])
 	}
 	return result, nil
 }
@@ -229,14 +284,56 @@ func (s *Service) DeleteFiles(ctx context.Context, orgID string, ids []string) (
 	if err := validateIDs(ids); err != nil {
 		return 0, err
 	}
-	keys, err := s.repo.DeleteFiles(ctx, orgID, ids)
+	deleted, err := s.repo.DeleteFiles(ctx, orgID, ids)
 	if err != nil {
 		return 0, err
 	}
 	if s.storage != nil {
-		for _, key := range keys {
-			_ = s.storage.DeleteObject(ctx, key)
+		for _, d := range deleted {
+			_ = s.storage.DeleteObject(ctx, d.Key)
+			if d.PosterKey != "" {
+				_ = s.storage.DeleteObject(ctx, d.PosterKey)
+			}
 		}
 	}
-	return len(keys), nil
+	return len(deleted), nil
+}
+
+// withURLs fills a file's public URLs from its storage keys.
+func (s *Service) withURLs(f *File) {
+	f.URL = s.storage.PublicURL(f.ObjectKey)
+	if f.PosterObjectKey != "" {
+		f.PosterURL = s.storage.PublicURL(f.PosterObjectKey)
+	}
+}
+
+// PosterInput is a video's poster image, sniffed by Handler.
+type PosterInput struct {
+	ContentType string
+	Size        int64
+	Reader      io.Reader
+}
+
+func (p PosterInput) validate() error {
+	if _, ok := posterTypes[p.ContentType]; !ok {
+		return apierror.Validation("the video's poster must be a JPEG, WebP or PNG image", nil)
+	}
+	if p.Size <= 0 || p.Size > maxPosterBytes {
+		return apierror.Validation(fmt.Sprintf("the video's poster exceeds the %dMB limit", maxPosterBytes>>20), nil)
+	}
+	return nil
+}
+
+// VideoMeta is what the uploading browser read from a video — for display
+// only, never trusted for anything else; each nil when not sent.
+type VideoMeta struct {
+	DurationMs, Width, Height *int
+}
+
+func (m VideoMeta) validate() error {
+	inRange := func(v *int, max int) bool { return v == nil || (*v > 0 && *v <= max) }
+	if !inRange(m.DurationMs, maxVideoDurationMs) || !inRange(m.Width, maxVideoSide) || !inRange(m.Height, maxVideoSide) {
+		return apierror.Validation("invalid video duration or frame size", nil)
+	}
+	return nil
 }

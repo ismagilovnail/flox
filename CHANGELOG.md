@@ -5,6 +5,19 @@ per-phase, matching `CLAUDE.md`'s phase protocol. The one exception is
 [Between phases], below: spec amendments and the code changes that follow from
 them land between phases and would otherwise be invisible here.
 
+## [Phase 30.38] — Video in the Content Gallery
+
+ROADMAP: the gallery took images only. The owner chose videos as uploaded, without server-side transcoding.
+`docs/content-gallery.md` "Video".
+
+- MP4 and WebM up to 20 MB, type sniffed from the bytes; MOV refused with a hint. Migration 00082: poster object key,
+  duration, width, height — made by the uploading browser (`lib/video-poster.ts`: a frame as a JPEG poster, read
+  duration and size), optional and range-checked; a poster is a JPEG/WebP/PNG up to 2 MB; deleted with its video.
+- Web: video cards (poster or film icon, duration, play), a player dialog with the link to copy, a type filter;
+  pickers for icons/screenshots/logos/avatars list and upload images only. en/ru.
+- Tests: `TestUploadVideo`, the MOV/fake-MP4 refusals (mutation-checked), `lib/video-poster.test.ts`. Live: a WebM
+  recorded in Chrome uploaded, played, deleted with its poster.
+
 ## [Phase 30.37] — Landing as PWA
 
 §24's landingAsPwa toggle, which was stored but did nothing. `docs/pwa-serving.md` "Landing as PWA".

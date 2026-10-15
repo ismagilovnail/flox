@@ -18,6 +18,7 @@ import {
   uploadFile,
   type ListFilesParams,
 } from "@/lib/api/content-gallery";
+import { isVideoFile, readVideoInfo } from "@/lib/video-poster";
 
 const foldersKey = ["content-gallery", "folders"] as const;
 const filesKey = (params: ListFilesParams) => ["content-gallery", "files", params] as const;
@@ -64,7 +65,10 @@ export function useDeleteGalleryFolder() {
 export function useUploadGalleryFile() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ file, folderId }: { file: File; folderId?: string }) => uploadFile(file, folderId),
+    // A video's poster, duration and size are read here, in the browser —
+    // FLOX does not transcode (lib/video-poster.ts).
+    mutationFn: async ({ file, folderId }: { file: File; folderId?: string }) =>
+      uploadFile(file, folderId, isVideoFile(file) ? await readVideoInfo(file) : undefined),
     onSuccess: () => invalidateFiles(qc),
   });
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { ArchiveIcon, ArchiveRestoreIcon, FolderInputIcon, MoreVerticalIcon, Trash2Icon } from "lucide-react";
+import { ArchiveIcon, ArchiveRestoreIcon, FilmIcon, FolderInputIcon, MoreVerticalIcon, PlayIcon, Trash2Icon } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 import { Checkbox } from "@/components/ui/checkbox";
@@ -17,6 +17,12 @@ import {
 import { IconButton } from "@/components/ui/icon-button";
 import { cn } from "@/lib/utils";
 import type { GalleryFile, GalleryFolder } from "@/lib/api/content-gallery";
+
+/** A video's length as m:ss. */
+export function formatDuration(ms: number): string {
+  const total = Math.round(ms / 1000);
+  return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, "0")}`;
+}
 
 function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
@@ -35,8 +41,11 @@ export function GalleryFileCard({
   onArchive,
   onRestore,
   onDeletePermanently,
+  onPreview,
 }: {
   file: GalleryFile;
+  /** A video's play button: opens it in a player. */
+  onPreview?: () => void;
   folders: GalleryFolder[];
   selected: boolean;
   onToggleSelect: () => void;
@@ -55,9 +64,40 @@ export function GalleryFileCard({
       )}
     >
       <button type="button" onClick={onClick} className="absolute inset-0 flex items-center justify-center">
-        {/* eslint-disable-next-line @next/next/no-img-element -- a presigned object-storage URL, not a Next-optimizable static asset */}
-        <img src={file.url} alt={file.originalFilename} className="size-full object-cover" loading="lazy" />
+        {file.fileType === "video" ? (
+          file.posterUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element -- an object-storage URL, not a Next-optimizable static asset
+            <img src={file.posterUrl} alt={file.originalFilename} className="size-full object-cover" loading="lazy" />
+          ) : (
+            <FilmIcon className="size-8 text-muted-foreground" aria-label={file.originalFilename} />
+          )
+        ) : (
+          // eslint-disable-next-line @next/next/no-img-element -- a presigned object-storage URL, not a Next-optimizable static asset
+          <img src={file.url} alt={file.originalFilename} className="size-full object-cover" loading="lazy" />
+        )}
       </button>
+      {file.fileType === "video" && (
+        <>
+          {onPreview && (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onPreview();
+              }}
+              aria-label={t("card.play", { name: file.originalFilename })}
+              className="absolute top-1/2 left-1/2 flex size-10 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full bg-black/55 text-white transition-colors hover:bg-black/75"
+            >
+              <PlayIcon className="size-4 translate-x-px fill-current" />
+            </button>
+          )}
+          {file.durationMs ? (
+            <span className="pointer-events-none absolute right-1.5 bottom-1.5 rounded bg-black/65 px-1 font-mono text-[10px] text-white tabular-nums group-hover:opacity-0">
+              {formatDuration(file.durationMs)}
+            </span>
+          ) : null}
+        </>
+      )}
 
       <div
         className={cn(

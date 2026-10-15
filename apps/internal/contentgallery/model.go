@@ -72,6 +72,15 @@ type File struct {
 	// ObjectKey is the raw storage key — never serialized, a client has no
 	// legitimate use for it, only the presigned URL above.
 	ObjectKey string `json:"-"`
+
+	// A video's poster (its first frame, made by the uploading browser),
+	// duration and frame size — display only; nil/"" when unknown (the
+	// browser could not decode it) and for images.
+	PosterURL       string `json:"posterUrl,omitempty"`
+	DurationMs      *int   `json:"durationMs,omitempty"`
+	Width           *int   `json:"width,omitempty"`
+	Height          *int   `json:"height,omitempty"`
+	PosterObjectKey string `json:"-"`
 }
 
 // ListFilesParams' FolderID is tri-state, matching the reference's own

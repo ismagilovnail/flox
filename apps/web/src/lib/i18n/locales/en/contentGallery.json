@@ -26,13 +26,15 @@
   "upload": {
     "label": "Upload",
     "pending": "Uploading…",
-    "error": "Upload failed"
+    "error": "Upload failed",
+    "videoHint": "or MP4/WebM video"
   },
   "card": {
     "select": "Select",
     "deselect": "Deselect",
     "actions": "File actions",
-    "moveTo": "Move to"
+    "moveTo": "Move to",
+    "play": "Play {{name}}"
   },
   "actions": {
     "archive": "Archive",
@@ -150,5 +152,16 @@
       "landing": "Landing created from the template",
       "error": "Couldn't use this item"
     }
+  },
+  "typeFilter": {
+    "label": "File type",
+    "all": "All files",
+    "image": "Images",
+    "video": "Videos"
+  },
+  "video": {
+    "unsupported": "This browser cannot play this video.",
+    "copyLink": "Copy link",
+    "copied": "Link copied"
   }
 }

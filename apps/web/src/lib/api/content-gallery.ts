@@ -1,10 +1,11 @@
 import { apiFetch } from "@/lib/api/client";
+import type { VideoInfo } from "@/lib/video-poster";
 
 /** Mirrors apps/internal/contentgallery's real shape — a tenant-scoped
  * media library modeled on the reference tracker's own Content Gallery
  * (https://adset.pro/guide_ru/galereya-kontenta), replacing the former
- * lib/mock/content-gallery.ts "template gallery" mock. Video is
- * intentionally not supported yet — see that package's own doc comment. */
+ * lib/mock/content-gallery.ts "template gallery" mock. Images and videos
+ * (MP4/WebM, stored as uploaded — docs/content-gallery.md "Video"). */
 export type GalleryFileType = "image" | "video";
 export type GalleryFileStatus = "active" | "archived";
 
@@ -32,6 +33,12 @@ export type GalleryFile = {
    * across a long-lived page (apps/internal/contentgallery.Service's own
    * doc explains why it's never a permanent URL). */
   url: string;
+  /** A video's poster (its first frame, made by the uploading browser),
+   * duration and frame size — absent when unknown and for images. */
+  posterUrl?: string;
+  durationMs?: number;
+  width?: number;
+  height?: number;
 };
 
 export type ListFilesParams = {
@@ -79,10 +86,17 @@ export function listFiles(params: ListFilesParams = {}): Promise<ListFilesResult
   });
 }
 
-export function uploadFile(file: File, folderId?: string): Promise<GalleryFile> {
+/** video: what the browser read from a video file (lib/video-poster.ts). */
+export function uploadFile(file: File, folderId?: string, video?: VideoInfo): Promise<GalleryFile> {
   const form = new FormData();
   form.append("file", file);
   if (folderId) form.append("folderId", folderId);
+  if (video?.poster) form.append("poster", video.poster, "poster.jpg");
+  if (video?.durationMs) form.append("durationMs", String(video.durationMs));
+  if (video?.width && video.height) {
+    form.append("width", String(video.width));
+    form.append("height", String(video.height));
+  }
   return apiFetch("/content-gallery/files", { method: "POST", body: form });
 }
 

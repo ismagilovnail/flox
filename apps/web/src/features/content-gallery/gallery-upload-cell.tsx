@@ -9,7 +9,8 @@ import { cn } from "@/lib/utils";
 import { useUploadGalleryFile } from "@/hooks/use-content-gallery";
 import type { GalleryFile } from "@/lib/api/content-gallery";
 
-const ACCEPT = ".webp,.jpg,.jpeg,.png,.gif,image/webp,image/jpeg,image/png,image/gif";
+const ACCEPT_IMAGES = ".webp,.jpg,.jpeg,.png,.gif,image/webp,image/jpeg,image/png,image/gif";
+const ACCEPT_VIDEOS = ".mp4,.webm,video/mp4,video/webm";
 
 /** The upload cell always renders first in the grid (matches the
  * reference's own layout) — click it or drag a file onto it. Uploads go
@@ -22,8 +23,12 @@ export function GalleryUploadCell({
   folderId,
   onUploaded,
   className,
+  allowVideo = false,
 }: {
   folderId?: string;
+  /** Accept MP4/WebM too (the gallery page); a field that needs an image
+   * (an icon, a screenshot) leaves it off. */
+  allowVideo?: boolean;
   onUploaded?: (file: GalleryFile) => void;
   /** Merged over the default `aspect-square` via `cn` (tailwind-merge) —
    * pass e.g. `aspect-[9/16]` to fit a differently-shaped grid (PWA
@@ -70,10 +75,11 @@ export function GalleryUploadCell({
     >
       {upload.isPending ? <Loader2Icon className="size-6 animate-spin" /> : <UploadCloudIcon className="size-6" />}
       <span className="text-xs font-medium">{upload.isPending ? t("upload.pending") : t("upload.label")}</span>
+      {!upload.isPending && allowVideo && <span className="px-2 text-center text-[11px]">{t("upload.videoHint")}</span>}
       <input
         ref={inputRef}
         type="file"
-        accept={ACCEPT}
+        accept={allowVideo ? `${ACCEPT_IMAGES},${ACCEPT_VIDEOS}` : ACCEPT_IMAGES}
         className="hidden"
         onChange={(e) => {
           const file = e.target.files?.[0];

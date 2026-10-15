@@ -202,10 +202,10 @@ func (h *Handler) listFiles(w http.ResponseWriter, r *http.Request) {
 }
 
 // maxUploadFormBytes caps the whole multipart body a little above
-// maxUploadBytes (service.go) to leave room for the form's own field
-// overhead, so a file that's actually within the real limit is never
-// rejected by this outer cap first.
-const maxUploadFormBytes = maxUploadBytes + 1<<20
+// maxUploadBytes plus a video's poster (service.go) to leave room for the
+// form's own field overhead, so a file that's actually within the real
+// limit is never rejected by this outer cap first.
+const maxUploadFormBytes = maxUploadBytes + maxPosterBytes + 1<<20
 
 func (h *Handler) uploadFile(w http.ResponseWriter, r *http.Request) {
 	orgID, _ := tenant.OrgID(r.Context())
@@ -238,13 +238,36 @@ func (h *Handler) uploadFile(w http.ResponseWriter, r *http.Request) {
 		folderID = &v
 	}
 
-	f, err := h.svc.UploadFile(r.Context(), orgID, userID, UploadInput{
+	in := UploadInput{
 		FolderID:    folderID,
 		Filename:    header.Filename,
 		ContentType: contentType,
 		Size:        header.Size,
 		Reader:      reader,
-	})
+	}
+	// A video's poster and metadata, made by the uploading browser.
+	if poster, posterHeader, err := r.FormFile("poster"); err == nil {
+		defer poster.Close()
+		head := make([]byte, 512)
+		n, _ := io.ReadFull(poster, head)
+		in.Poster = &PosterInput{
+			ContentType: http.DetectContentType(head[:n]),
+			Size:        posterHeader.Size,
+			Reader:      io.MultiReader(bytes.NewReader(head[:n]), poster),
+		}
+	}
+	for field, dst := range map[string]**int{"durationMs": &in.Meta.DurationMs, "width": &in.Meta.Width, "height": &in.Meta.Height} {
+		if v := r.FormValue(field); v != "" {
+			n, err := strconv.Atoi(v)
+			if err != nil {
+				apierror.Write(w, h.logger, apierror.Validation("invalid "+field, nil))
+				return
+			}
+			*dst = &n
+		}
+	}
+
+	f, err := h.svc.UploadFile(r.Context(), orgID, userID, in)
 	if err != nil {
 		apierror.Write(w, h.logger, err)
 		return
