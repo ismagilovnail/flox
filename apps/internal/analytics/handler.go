@@ -157,6 +157,8 @@ type metricValuesResponse struct {
 	EPC          *float64 `json:"epc"`
 
 	PwaInstalls     uint64   `json:"pwaInstalls"`
+	TgStarts        uint64   `json:"tgStarts"`
+	TgJoins         uint64   `json:"tgJoins"`
 	Registrations   *uint64  `json:"registrations"`
 	Purchases       *uint64  `json:"purchases"`
 	Repurchases     *uint64  `json:"repurchases"`
@@ -191,7 +193,7 @@ func metricValuesToResponse(m MetricValues) metricValuesResponse {
 		Clicks: m.Clicks, UniqueClicks: m.UniqueClicks, Conversions: m.Conversions,
 		Revenue: m.Revenue, Cost: m.Cost, Profit: m.Profit, ROI: m.ROI, ROAS: m.ROAS,
 		CTR: m.CTR, CVR: m.CVR, CPC: m.CPC, CPA: m.CPA, EPC: m.EPC,
-		PwaInstalls: m.PwaInstalls, Registrations: m.Registrations, Purchases: m.Purchases, Repurchases: m.Repurchases,
+		PwaInstalls: m.PwaInstalls, TgStarts: m.TgStarts, TgJoins: m.TgJoins, Registrations: m.Registrations, Purchases: m.Purchases, Repurchases: m.Repurchases,
 		Declines: m.Declines, Trash: m.Trash,
 		ClickToInstall: m.ClickToInstall, InstallToReg: m.InstallToReg, RegToPurchase: m.RegToPurchase,
 		CostPerInstall: m.CostPerInstall, CostPerReg: m.CostPerReg, CostPerPurchase: m.CostPerPurchase,

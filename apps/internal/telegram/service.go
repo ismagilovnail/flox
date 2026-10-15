@@ -144,6 +144,59 @@ func (s *Service) UpdateWelcome(ctx context.Context, orgID, id, text string) (Bo
 	return s.Get(ctx, orgID, id)
 }
 
+// ChangeToken replaces the bot's token with a new one of the same bot (a
+// token revoked and reissued in @BotFather): getMe must name the bot
+// already connected — another bot is refused, it is removed and connected
+// instead. The webhook is set again with the new token and a new secret;
+// channels, invite links and /start history stay.
+func (s *Service) ChangeToken(ctx context.Context, orgID, id, token string) (Bot, error) {
+	if !s.Configured() {
+		return Bot{}, apierror.Unavailable("Telegram is not configured on this deployment (TELEGRAM_WEBHOOK_BASE_URL, INTEGRATION_ENCRYPTION_KEY)")
+	}
+	token = strings.TrimSpace(token)
+	if !tokenPattern.MatchString(token) {
+		return Bot{}, apierror.Validation("invalid bot", map[string]string{"token": "a bot token from @BotFather (123456:ABC…)"})
+	}
+	_, tgBotID, err := s.repo.credentials(ctx, orgID, id)
+	if err != nil {
+		return Bot{}, err
+	}
+	me, err := s.api.GetMe(ctx, token)
+	if err != nil {
+		return Bot{}, telegramError(err, "token")
+	}
+	if !me.IsBot || me.Username == "" {
+		return Bot{}, apierror.Validation("invalid bot", map[string]string{"token": "not a bot's token"})
+	}
+	if me.ID != tgBotID {
+		return Bot{}, apierror.Validation("another bot", map[string]string{
+			"token": "this is the token of @" + me.Username + ", another bot — to switch bots, remove this one and connect the other"})
+	}
+	secret, err := randomSecret()
+	if err != nil {
+		return Bot{}, err
+	}
+	encrypted, err := integrations.Encrypt(s.key, token)
+	if err != nil {
+		return Bot{}, fmt.Errorf("telegram: encrypting token: %w", err)
+	}
+	if err := s.api.SetWebhook(ctx, token, s.webhookBase+"/tg/"+id, secret, AllowedUpdates); err != nil {
+		return Bot{}, telegramError(err, "token")
+	}
+	if err := s.repo.replaceToken(ctx, orgID, id, me.Username, encrypted, hashSecret(secret)); err != nil {
+		// The webhook now carries a secret not stored: Telegram's updates
+		// are refused (and re-sent) until the change is made again.
+		s.logger.Error("telegram: token changed in Telegram but not stored", "bot_id", id, "error", err)
+		return Bot{}, err
+	}
+	return s.Get(ctx, orgID, id)
+}
+
+// ChannelNames is every channel of the organization's bots, for reports.
+func (s *Service) ChannelNames(ctx context.Context, orgID string) ([]ChannelName, error) {
+	return s.repo.ChannelNames(ctx, orgID)
+}
+
 // AddChannel checks channel with Telegram as Connect does (the bot an
 // admin that can invite) and adds it to the bot.
 func (s *Service) AddChannel(ctx context.Context, orgID, botID, channel string) (Bot, error) {

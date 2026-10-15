@@ -124,7 +124,7 @@ func (h *Webhook) message(ctx context.Context, b webhookBot, m *Message) (map[st
 				return nil, err
 			}
 			if isNew {
-				h.record(event.TgStart, b, click)
+				h.record(event.TgStart, b, click, "")
 			}
 		}
 	}
@@ -133,9 +133,8 @@ func (h *Webhook) message(ctx context.Context, b webhookBot, m *Message) (map[st
 
 // chatMember records TG_JOIN when someone becomes a member of one of the
 // bot's channels: on the click of the per-click invite link they joined
-// through, else on the click of their last /start. One TG_JOIN per click,
-// whichever channel — the event does not name one, so a second channel
-// joined from the same click is not a second join.
+// through, else on the click of their last /start. One TG_JOIN per click
+// and channel; the event names the channel (TelegramChannelID).
 func (h *Webhook) chatMember(ctx context.Context, b webhookBot, u *ChatMemberUpdated) error {
 	c, ok := b.channel(u.Chat.ID)
 	if !ok || !isMember(u.NewChatMember.Status) || isMember(u.OldChatMember.Status) {
@@ -148,7 +147,7 @@ func (h *Webhook) chatMember(ctx context.Context, b webhookBot, u *ChatMemberUpd
 		}
 	}
 	userID := u.NewChatMember.User.ID
-	clickID, joined, err := h.repo.startedClick(ctx, b, userID)
+	clickID, joined, err := h.repo.startedClick(ctx, b, c, userID)
 	if err != nil || clickID == "" || joined {
 		return err // joined without /start: no click to attribute it to
 	}
@@ -156,12 +155,12 @@ func (h *Webhook) chatMember(ctx context.Context, b webhookBot, u *ChatMemberUpd
 	if err != nil || !found {
 		return err
 	}
-	isNew, err := h.repo.recordJoin(ctx, b, userID, clickID, h.now())
+	isNew, err := h.repo.recordJoin(ctx, b, c, userID, clickID, h.now())
 	if err != nil {
 		return err
 	}
 	if isNew {
-		h.record(event.TgJoin, b, click)
+		h.record(event.TgJoin, b, click, c.ID)
 	}
 	return nil
 }
@@ -197,7 +196,7 @@ func (h *Webhook) inviteJoin(ctx context.Context, b webhookBot, c webhookChannel
 		return false, err
 	}
 	if isNew {
-		h.record(event.TgJoin, b, click)
+		h.record(event.TgJoin, b, click, c.ID)
 	}
 	return true, nil
 }
@@ -221,9 +220,11 @@ func (h *Webhook) click(ctx context.Context, b webhookBot, clickID string) (attr
 	return click, true, nil
 }
 
-func (h *Webhook) record(t event.Type, b webhookBot, click attribution.Click) {
+// record enqueues t on click; channelID names the channel of a TG_JOIN.
+func (h *Webhook) record(t event.Type, b webhookBot, click attribution.Click, channelID string) {
 	ev := event.Event{Type: t, EventAt: h.now().UTC(), OrganizationID: b.OrganizationID, ClickID: click.ClickID}
 	click.CopyTo(&ev)
+	ev.TelegramChannelID = channelID
 	if !h.events.Enqueue(ev) {
 		h.logger.Error("telegram webhook: event buffer full, event dropped", "type", t, "click_id", click.ClickID)
 	}

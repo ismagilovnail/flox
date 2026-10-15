@@ -419,6 +419,10 @@ func TestWebhook(t *testing.T) {
 			t.Fatalf("%s = %+v, want the click's context", e.Type, e)
 		}
 	}
+	if w.events.events[0].TelegramChannelID != "" || w.events.events[1].TelegramChannelID != w.ch.ID {
+		t.Fatalf("channels = %q, %q; want none on TG_START, the channel on TG_JOIN",
+			w.events.events[0].TelegramChannelID, w.events.events[1].TelegramChannelID)
+	}
 
 	// A join request to the channel is approved.
 	rec = w.post(t, w.secret, map[string]any{"update_id": 3, "chat_join_request": map[string]any{

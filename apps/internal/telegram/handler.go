@@ -34,6 +34,22 @@ func (h *Handler) Register(r chi.Router) {
 	r.With(h.requireWrite).Delete("/{id}/channels/{channelId}", h.removeChannel)
 }
 
+// RegisterChannelNames mounts GET / — the channels' names for reports. The
+// caller applies tenant.Middleware and the analytics.read gate.
+func (h *Handler) RegisterChannelNames(r chi.Router) {
+	r.Get("/", h.channelNames)
+}
+
+func (h *Handler) channelNames(w http.ResponseWriter, r *http.Request) {
+	orgID, _ := tenant.OrgID(r.Context())
+	names, err := h.svc.ChannelNames(r.Context(), orgID)
+	if err != nil {
+		apierror.Write(w, h.logger, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"channels": names})
+}
+
 func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
 	orgID, _ := tenant.OrgID(r.Context())
 	bots, err := h.svc.List(r.Context(), orgID)
@@ -67,8 +83,11 @@ func (h *Handler) connect(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusCreated, b)
 }
 
+// updateRequest changes the welcome text, the token (a new token of the
+// same bot), or both.
 type updateRequest struct {
 	WelcomeText *string `json:"welcomeText"`
+	Token       *string `json:"token"`
 }
 
 func (h *Handler) update(w http.ResponseWriter, r *http.Request) {
@@ -78,16 +97,28 @@ func (h *Handler) update(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var req updateRequest
-	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 64<<10)).Decode(&req); err != nil || req.WelcomeText == nil {
-		apierror.Write(w, h.logger, apierror.Validation("invalid JSON body", map[string]string{"welcomeText": "required"}))
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 64<<10)).Decode(&req); err != nil || (req.WelcomeText == nil && req.Token == nil) {
+		apierror.Write(w, h.logger, apierror.Validation("invalid JSON body", map[string]string{"welcomeText": "welcomeText or token required"}))
 		return
 	}
-	b, err := h.svc.UpdateWelcome(r.Context(), orgID, id, *req.WelcomeText)
-	if err != nil {
-		apierror.Write(w, h.logger, err)
-		return
+	var b Bot
+	var err error
+	if req.Token != nil {
+		if b, err = h.svc.ChangeToken(r.Context(), orgID, id, *req.Token); err != nil {
+			apierror.Write(w, h.logger, err)
+			return
+		}
+		audit.Annotate(r.Context(), audit.Entry{Action: "telegram_bot.token_changed", EntityType: "telegram_bot", EntityID: b.ID})
 	}
-	audit.Annotate(r.Context(), audit.Entry{Action: "telegram_bot.updated", EntityType: "telegram_bot", EntityID: b.ID})
+	if req.WelcomeText != nil {
+		if b, err = h.svc.UpdateWelcome(r.Context(), orgID, id, *req.WelcomeText); err != nil {
+			apierror.Write(w, h.logger, err)
+			return
+		}
+		if req.Token == nil {
+			audit.Annotate(r.Context(), audit.Entry{Action: "telegram_bot.updated", EntityType: "telegram_bot", EntityID: b.ID})
+		}
+	}
 	writeJSON(w, http.StatusOK, b)
 }
 

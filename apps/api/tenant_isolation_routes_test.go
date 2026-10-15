@@ -815,6 +815,7 @@ func referenceCases(env *isolationEnv) []refCase {
 var notReferences = map[string]string{
 	"adAccountId":                  "the ad platform's own account id",
 	"tgChatId":                     "response only: Telegram's id of a channel",
+	"telegramChannelId":            "event payload only: set by the tracker's webhook from the bot's own channel, never read from a request",
 	"clientId":                     "the ad platform's OAuth client id",
 	"pixelId":                      "the ad platform's pixel id",
 	"sourceEventId":                "pixel.Event, a queue payload FLOX writes itself — never read from a request",

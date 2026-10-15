@@ -213,6 +213,15 @@
     "editWelcomeAria": "Изменить приветствие @{{name}}",
     "editWelcomeTitle": "Приветствие @{{name}}",
     "welcomeSaved": "Приветствие сохранено",
-    "welcomeSaveError": "Не удалось сохранить приветствие"
+    "welcomeSaveError": "Не удалось сохранить приветствие",
+    "changeToken": "Сменить токен",
+    "changeTokenAria": "Сменить токен @{{name}}",
+    "changeTokenTitle": "Новый токен для @{{name}}",
+    "changeTokenDescription": "После /revoke в @BotFather: вставьте новый токен этого бота. Каналы, ссылки и история /start сохранятся. Токен другого бота не примется — удалите этого бота и подключите другой.",
+    "newToken": "Новый токен",
+    "newTokenHint": "@BotFather → ваш бот → API Token. Хранится зашифрованным, больше не показывается.",
+    "tokenChanged": "Токен изменён",
+    "tokenChangeError": "Не удалось сменить токен",
+    "joins30d": "Вступлений за 30 дней:"
   }
 }

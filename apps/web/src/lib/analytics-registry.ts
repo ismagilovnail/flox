@@ -32,6 +32,7 @@ export const DIMENSIONS: { key: DimensionKey; label: string }[] = [
   { key: "postlanding", label: "Postlanding" },
   { key: "offer", label: "Offer" },
   { key: "network", label: "Network" },
+  { key: "telegram_channel", label: "Telegram channel" },
   { key: "day", label: "Day" },
 ];
 
@@ -91,6 +92,8 @@ export const METRICS: { key: MetricKey; label: string; format: MetricFormat }[] 
   { key: "cpa", label: "CPA", format: "currency" },
   { key: "epc", label: "EPC", format: "currency" },
   { key: "pwaInstalls", label: "PWA installs", format: "int" },
+  { key: "tgStarts", label: "Bot starts", format: "int" },
+  { key: "tgJoins", label: "Channel joins", format: "int" },
   { key: "registrations", label: "Registrations", format: "int" },
   { key: "purchases", label: "Purchases", format: "int" },
   { key: "repurchases", label: "Repurchases", format: "int" },

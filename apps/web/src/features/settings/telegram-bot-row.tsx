@@ -4,7 +4,7 @@ import * as React from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { toast } from "sonner";
-import { CopyIcon, PencilIcon, PlusIcon, Trash2Icon, XIcon } from "lucide-react";
+import { CopyIcon, KeyRoundIcon, PencilIcon, PlusIcon, Trash2Icon, XIcon } from "lucide-react";
 import { z } from "zod";
 import { useTranslation } from "react-i18next";
 import type { TFunction } from "i18next";
@@ -29,6 +29,13 @@ function channelSchema(t: TFunction<"settings">) {
   return z.object({ channel: z.string().trim().regex(TELEGRAM_CHANNEL_PATTERN, t("telegram.errors.channel")) });
 }
 
+/** telegram.tokenPattern. */
+export const TELEGRAM_TOKEN_PATTERN = /^\d{5,15}:[A-Za-z0-9_-]{30,50}$/;
+
+function tokenSchema(t: TFunction<"settings">) {
+  return z.object({ token: z.string().trim().regex(TELEGRAM_TOKEN_PATTERN, t("telegram.errors.token")) });
+}
+
 function welcomeSchema(t: TFunction<"settings">) {
   return z.object({ welcomeText: z.string().trim().max(TELEGRAM_MAX_WELCOME, t("telegram.errors.welcomeText")) });
 }
@@ -51,11 +58,14 @@ function CopyLine({ value, label, copied }: { value: string; label: string; copi
   );
 }
 
-/** One connected bot: its link, welcome message (editable) and channels
- * (added and removed here; each with its per-click link and pool). */
-export function TelegramBotRow({ bot, onRemove }: { bot: TelegramBot; onRemove: () => void }) {
+/** One connected bot: its link, welcome message (editable), token
+ * (replaceable by a new one of the same bot) and channels (added and removed
+ * here; each with its per-click link, pool and joins). joins: TG_JOIN per
+ * channel id over the last 30 days — undefined while unknown. */
+export function TelegramBotRow({ bot, onRemove, joins }: { bot: TelegramBot; onRemove: () => void; joins?: Map<string, number> }) {
   const { t } = useTranslation(["settings", "common"]);
   const [editing, setEditing] = React.useState(false);
+  const [changingToken, setChangingToken] = React.useState(false);
   const [adding, setAdding] = React.useState(false);
   const [removing, setRemoving] = React.useState<TelegramChannel | null>(null);
   const update = useUpdateTelegramBot();
@@ -63,6 +73,8 @@ export function TelegramBotRow({ bot, onRemove }: { bot: TelegramBot; onRemove: 
   const removeChannel = useRemoveTelegramChannel();
   const welcomeForm = useForm<{ welcomeText: string }>({ resolver: zodResolver(welcomeSchema(t)), defaultValues: { welcomeText: bot.welcomeText } });
   const channelForm = useForm<{ channel: string }>({ resolver: zodResolver(channelSchema(t)), defaultValues: { channel: "" } });
+  const tokenForm = useForm<{ token: string }>({ resolver: zodResolver(tokenSchema(t)), defaultValues: { token: "" } });
+  const changeToken = useUpdateTelegramBot();
   const full = bot.channels.length >= MAX_TELEGRAM_CHANNELS;
 
   function openEdit() {
@@ -84,6 +96,31 @@ export function TelegramBotRow({ bot, onRemove }: { bot: TelegramBot; onRemove: 
             return;
           }
           toast.error(t("telegram.welcomeSaveError"), { description: err.message });
+        },
+      },
+    );
+  }
+
+  function openChangeToken() {
+    tokenForm.reset({ token: "" });
+    setChangingToken(true);
+  }
+
+  function handleChangeToken(values: { token: string }) {
+    changeToken.mutate(
+      { id: bot.id, token: values.token },
+      {
+        onSuccess: () => {
+          setChangingToken(false);
+          tokenForm.reset({ token: "" });
+          toast(t("telegram.tokenChanged"), { description: "@" + bot.username });
+        },
+        onError: (err) => {
+          if (err instanceof ApiError && err.fields?.token) {
+            tokenForm.setError("token", { message: err.fields.token });
+            return;
+          }
+          toast.error(t("telegram.tokenChangeError"), { description: err.message });
         },
       },
     );
@@ -138,6 +175,9 @@ export function TelegramBotRow({ bot, onRemove }: { bot: TelegramBot; onRemove: 
         <IconButton aria-label={t("telegram.editWelcomeAria", { name: bot.username })} size="icon-sm" variant="ghost" onClick={openEdit}>
           <PencilIcon className="size-3.5" />
         </IconButton>
+        <IconButton aria-label={t("telegram.changeTokenAria", { name: bot.username })} size="icon-sm" variant="ghost" onClick={openChangeToken}>
+          <KeyRoundIcon className="size-3.5" />
+        </IconButton>
         <IconButton aria-label={t("telegram.removeAria", { name: bot.username })} size="icon-sm" onClick={onRemove}>
           <Trash2Icon className="size-3.5" />
         </IconButton>
@@ -159,6 +199,11 @@ export function TelegramBotRow({ bot, onRemove }: { bot: TelegramBot; onRemove: 
               <span className="text-xs font-medium">
                 {ch.title || ch.inviteLink} <Mono className="text-muted-foreground">{ch.tgChatId}</Mono>
               </span>
+              {joins && (
+                <span className="text-xs text-muted-foreground">
+                  {t("telegram.joins30d")} <Mono className="tabular-nums text-foreground">{joins.get(ch.id) ?? 0}</Mono>
+                </span>
+              )}
               <CopyLine value={ch.inviteLink} label={t("telegram.copyChannelLink")} copied={t("telegram.copied")} />
               {ch.clickInviteLink && (
                 <>
@@ -204,6 +249,41 @@ export function TelegramBotRow({ bot, onRemove }: { bot: TelegramBot; onRemove: 
               </Button>
               <Button type="submit" disabled={update.isPending || !welcomeForm.formState.isDirty}>
                 {t("common:actions.save")}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={changingToken} onOpenChange={(o) => !changeToken.isPending && setChangingToken(o)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{t("telegram.changeTokenTitle", { name: bot.username })}</DialogTitle>
+            <DialogDescription>{t("telegram.changeTokenDescription")}</DialogDescription>
+          </DialogHeader>
+          <form className="grid gap-4" onSubmit={tokenForm.handleSubmit(handleChangeToken)} noValidate>
+            <div className="grid gap-1.5">
+              <Label htmlFor={`tg-token-${bot.id}`}>{t("telegram.newToken")}</Label>
+              <Input
+                id={`tg-token-${bot.id}`}
+                type="password"
+                autoComplete="off"
+                className="font-mono text-xs"
+                {...tokenForm.register("token")}
+                aria-invalid={!!tokenForm.formState.errors.token}
+              />
+              {tokenForm.formState.errors.token ? (
+                <p className="text-xs text-danger">{tokenForm.formState.errors.token.message}</p>
+              ) : (
+                <p className="text-xs text-muted-foreground">{t("telegram.newTokenHint")}</p>
+              )}
+            </div>
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => setChangingToken(false)} disabled={changeToken.isPending}>
+                {t("common:actions.cancel")}
+              </Button>
+              <Button type="submit" disabled={changeToken.isPending}>
+                {t("telegram.changeToken")}
               </Button>
             </DialogFooter>
           </form>

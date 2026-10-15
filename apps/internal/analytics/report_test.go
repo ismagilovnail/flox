@@ -211,6 +211,26 @@ func TestReportPwaAndCpaFunnelMetrics(t *testing.T) {
 	eq("CostPerPurchase", m.CostPerPurchase, 200.0/6)
 }
 
+// Telegram counts ride with the installs; by telegram_channel the
+// conversion side is unknown (—), never a fabricated zero.
+func TestReportTelegramMetrics(t *testing.T) {
+	k := dimKey(chstore.DimTelegramChannel, "chan-1")
+	repo := &reportFakeRepo{
+		installs: []chstore.InstallAgg{{Key: k, TgStarts: 0, TgJoins: 7}},
+		conv:     []chstore.ConversionAgg{{Key: k, Conversions: 99}},
+	}
+	rows, err := analytics.NewService(repo, nil).Report(context.Background(), "org-1", analytics.ReportInput{
+		Dims: []chstore.ReportDimension{chstore.DimTelegramChannel},
+		From: time.Date(2026, 8, 1, 0, 0, 0, 0, time.UTC), To: time.Date(2026, 8, 7, 0, 0, 0, 0, time.UTC),
+	})
+	if err != nil || len(rows) != 1 {
+		t.Fatalf("Report: %v rows=%d", err, len(rows))
+	}
+	if m := rows[0].Metrics; m.TgJoins != 7 || m.TgStarts != 0 || m.Conversions != nil {
+		t.Fatalf("metrics = joins %d starts %d conversions %v; want 7, 0, unknown", m.TgJoins, m.TgStarts, m.Conversions)
+	}
+}
+
 func TestReportFunnelMetricsAreNullNotZeroWhenUndefined(t *testing.T) {
 	k := dimKey(chstore.DimCampaign, "camp-a")
 	// Clicks but no installs/registrations/purchases, and no cost on file.

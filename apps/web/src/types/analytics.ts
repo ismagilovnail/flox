@@ -24,6 +24,7 @@ export type DimensionKey =
   | "postlanding"
   | "offer"
   | "network"
+  | "telegram_channel"
   | "day";
 
 /** Push metrics — a separate data source (§30.5): one formula never mixes
@@ -47,6 +48,8 @@ export type MetricKey =
   | "cpa"
   | "epc"
   | "pwaInstalls"
+  | "tgStarts"
+  | "tgJoins"
   | "registrations"
   | "purchases"
   | "repurchases"

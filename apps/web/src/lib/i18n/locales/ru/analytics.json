@@ -82,6 +82,7 @@
     "postlanding": "Постлендинг",
     "offer": "Оффер",
     "network": "Сеть",
+    "telegram_channel": "Telegram-канал",
     "day": "День"
   },
   "metrics": {
@@ -99,6 +100,8 @@
     "cpa": "CPA",
     "epc": "EPC",
     "pwaInstalls": "Установки PWA",
+    "tgStarts": "Старты бота",
+    "tgJoins": "Вступления в канал",
     "registrations": "Регистрации",
     "purchases": "Покупки",
     "repurchases": "Повторные покупки",
@@ -137,6 +140,8 @@
     "cpa": "CPA = расход ÷ конверсии. Средняя цена одной конверсии.",
     "epc": "EPC = доход ÷ клики. Средний доход с одного клика.",
     "pwaInstalls": "Количество установок PWA: сигнал установки (PWA_INSTALL) плюс установки на iOS, засчитанные при первом запуске с экрана «Домой» (IOS_INSTALL).",
+    "tgStarts": "Старты Telegram-бота (TG_START): посетитель открыл бота организации по ссылке из клика.",
+    "tgJoins": "Вступления в Telegram-канал (TG_JOIN), раз на клик и канал. Разбивка — измерение «Telegram-канал».",
     "registrations": "Регистрации у партнёрки — события со статусом CPA_HOLD.",
     "purchases": "Первые покупки (FTD) — события со статусом CPA_ACCEPT.",
     "repurchases": "Повторные покупки — события со статусом CPA_REDEP.",
@@ -176,6 +181,7 @@
     "noPwa": "Без PWA",
     "noPostlanding": "Без постлендинга",
     "noNetwork": "Без сети",
+    "noTelegramChannel": "Без канала",
     "noSource": "Без источника",
     "noFlow": "Без потока",
     "noStreamSet": "Без набора",

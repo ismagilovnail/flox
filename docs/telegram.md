@@ -26,7 +26,8 @@ link Settings shows (`deepLink`) — so no routing change was needed.
 ## Connecting (apps/api, `internal/telegram`)
 
 Settings → Integrations → **Telegram bots** (`settings.write`):
-`GET/POST /telegram-bots`, `PATCH /telegram-bots/{id}` (`welcomeText`),
+`GET/POST /telegram-bots`, `PATCH /telegram-bots/{id}` (`welcomeText`,
+`token` — see "Changing the token"),
 `DELETE /telegram-bots/{id}`, and the bot's channels
 `POST /telegram-bots/{id}/channels` (`channel`),
 `DELETE /telegram-bots/{id}/channels/{channelId}` (see "Channels").
@@ -93,14 +94,50 @@ channel and its members in Telegram are untouched.
 - **/start** is answered with the welcome text and a button per channel
   (oldest first; no welcome text: the first channel's link as the text).
 - **Join requests** to any of the bot's channels are approved.
-- **TG_JOIN** on a join of any of them. Through /start: once per click,
-  whichever channel — the event does not name a channel, so a second
-  channel joined from the same click would count one visitor twice.
-  Through a per-click link: once per link (one click, one channel).
-- **Editing** a bot is its welcome text (`PATCH`) and its channels; a new
-  token is still remove and connect again.
+- **TG_JOIN** on a join of any of them, naming the channel
+  (`event.TelegramChannelID`, ClickHouse `tg_channel_id`, schema 019).
+  Through /start: once per click and channel (`telegram_joins`, migration
+  00084) — joining two channels from one click is two joins, a re-sent
+  update is none. Through a per-click link: once per link (one click, one
+  channel).
+- **Editing** a bot is its welcome text, its token (below) and its
+  channels.
 - Ids in the API's paths and in `/tgj/` that are not ULIDs are 404 before
   Postgres (its `ulid` domain would refuse them as an error).
+
+## Changing the token
+
+`PATCH /telegram-bots/{id}` with `token` (Settings: the key icon on a bot):
+for a token revoked and reissued in @BotFather. `getMe` must name the bot
+already connected (`tg_bot_id`); another bot's token is a `token` field
+error saying to remove this bot and connect the other — switching bots
+would orphan the channels, links and /start history, which all belong to
+this bot. Then `setWebhook` with the new token and a **new secret**, and
+the token (encrypted) and secret hash are stored; the old secret is
+refused from then on. Channels, invite links and `telegram_users` stay. If
+storing fails after Telegram accepted the webhook, updates are refused
+(and re-sent by Telegram) until the change is made again — logged as an
+error. Audit: `telegram_bot.token_changed`.
+
+## Joins by channel in reports
+
+- Report builder: the **Telegram channel** dimension (`telegram_channel`,
+  `chstore.DimTelegramChannel`) and the metrics **Bot starts** (`tgStarts`,
+  TG_START) and **Channel joins** (`tgJoins`, TG_JOIN), counted off
+  tracking_events with the PWA installs. By channel, joins split per
+  channel; clicks, starts and joins from before migration 00084 / schema
+  019 are in "No channel". Conversions cannot be split by channel (one
+  click may join several), so revenue/conversion columns are "—" there.
+  Both metrics can be used in custom metric formulas and report presets.
+- Labels: `GET /telegram-channels` (`analytics.read`) — id, title, bot
+  username — so whoever reads reports sees "Title (@bot)", not ids,
+  without access to the bots' settings.
+- Settings shows each channel's joins over the last 30 days (the same
+  report).
+
+Joins marked before migration 00084 moved to `telegram_joins` when their
+bot had exactly one channel; with several, which channel was not recorded
+and the mark was dropped (such a click joining again counts once more).
 
 ## Per-click invite links
 
@@ -155,8 +192,7 @@ join comes, so nothing is recorded.
 
 ## Not done
 
-Changing a connected bot's token (remove and connect again); which channel
-a TG_JOIN was in, in reports (the event has no channel).
+Switching a connected bot to another bot (remove and connect the other).
 
 ## Pixels
 
@@ -214,6 +250,28 @@ names: Facebook/TikTok `Contact` / `Subscribe`, Snapchat `CUSTOM_EVENT_1` /
   whose token cannot be decrypted. The panel's new row was not seen in the
   browser: the dev deployment is not configured for Telegram (no
   `TELEGRAM_WEBHOOK_BASE_URL`), so the API leaves `clickInviteLink` out.
+
+## Verified (2026-10-15, token change and joins by channel)
+
+- Tests: `TestChangeToken` (another bot's token, malformed, refused by
+  Telegram, another organization — nothing changed; the same bot's new
+  token: webhook set again with a new secret, the old one 404, the /start
+  made before still attributed), `TestChannelNames` (scoped),
+  `TestWebhookSeveralChannels` (a TG_JOIN per channel naming it, re-sent
+  join not counted), chstore `TestReportTelegramByChannel` (counts by
+  channel, clicks in the empty bucket, conversions not claimed, filter),
+  analytics `TestReportTelegramMetrics`. Mutation-checked: per-channel
+  dedup, the event's channel, the same-bot check, the new secret.
+  Migration 00084 down and up.
+- Live on the dev stack with a fake Bot API (`TELEGRAM_API_URL`): connect
+  in the UI, a second channel, another bot's token refused at the field,
+  the new token accepted (channels kept); Telegram-shaped updates to the
+  tracker — old secret 404, /start and joins of both channels on a dev
+  click → two TG_JOIN in ClickHouse with their channel ids; Settings
+  showed 1 join per channel; the report builder by Telegram channel showed
+  "Live A (@flox_live_bot)" / "Live B" with 1 join each and older joins in
+  "No channel". A viewer reads `/telegram-channels` (200), not
+  `/telegram-bots` (403).
 
 ## Verified (2026-10-15, channels and editing)
 

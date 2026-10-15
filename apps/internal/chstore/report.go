@@ -75,6 +75,12 @@ const (
 	// postback (schema/003). Empty is a real bucket: redirect flows,
 	// fallbacks, blocked clicks.
 	DimNetwork ReportDimension = "network"
+	// DimTelegramChannel groups TG_JOIN by the channel joined
+	// (schema/019). Everything else — clicks, every other event, joins
+	// from before the channel was recorded — is the empty bucket; the
+	// conversion report cannot answer it (a click may join several
+	// channels).
+	DimTelegramChannel ReportDimension = "telegram_channel"
 )
 
 // reportClickColumns is the whitelist for click_events and tracking_events,
@@ -82,23 +88,24 @@ const (
 // on the same underlying event.Event struct — see schema/002's own
 // comment on why they're still two tables).
 var reportClickColumns = map[ReportDimension]string{
-	DimCampaign:    "campaign_id",
-	DimSource:      "traffic_source_id",
-	DimCountry:     "country",
-	DimRegion:      "region",
-	DimCity:        "city",
-	DimDevice:      "device",
-	DimPlatform:    "platform",
-	DimOS:          "os",
-	DimBrowser:     "browser",
-	DimLanguage:    "language",
-	DimFlow:        "flow_id",
-	DimStreamSet:   "stream_set_id",
-	DimLanding:     "landing_id",
-	DimOffer:       "offer_id",
-	DimPwa:         "pwa_id",
-	DimPostlanding: "postlanding_id",
-	DimNetwork:     "network_id",
+	DimCampaign:        "campaign_id",
+	DimSource:          "traffic_source_id",
+	DimCountry:         "country",
+	DimRegion:          "region",
+	DimCity:            "city",
+	DimDevice:          "device",
+	DimPlatform:        "platform",
+	DimOS:              "os",
+	DimBrowser:         "browser",
+	DimLanguage:        "language",
+	DimFlow:            "flow_id",
+	DimStreamSet:       "stream_set_id",
+	DimLanding:         "landing_id",
+	DimOffer:           "offer_id",
+	DimPwa:             "pwa_id",
+	DimPostlanding:     "postlanding_id",
+	DimNetwork:         "network_id",
+	DimTelegramChannel: "tg_channel_id",
 }
 
 // reportConversionColumns is the narrower whitelist for conversion_events
@@ -353,10 +360,13 @@ type ConversionAgg struct {
 	DatedByConversion uint64
 }
 
-// InstallAgg is the PWA_INSTALL count of one group.
+// InstallAgg is one group's stage events counted off tracking_events:
+// PWA installs and the Telegram events (TG_START, TG_JOIN).
 type InstallAgg struct {
 	Key         ReportKey
 	PwaInstalls uint64
+	TgStarts    uint64
+	TgJoins     uint64
 }
 
 // buildGroupBy resolves q.Dims against cols, returning the SELECT
@@ -521,7 +531,8 @@ const (
 )
 
 // ReportPwaInstalls answers "how many PWA_INSTALL + IOS_INSTALL rows" for
-// q — the pwaInstalls metric. Same table and dimensions as ReportLandViews.
+// q — the pwaInstalls metric — and TG_START / TG_JOIN (tgStarts, tgJoins).
+// Same table and dimensions as ReportLandViews.
 func (s *EventStore) ReportPwaInstalls(ctx context.Context, q ReportQuery) ([]InstallAgg, error) {
 	selectCols, ok := buildGroupBy(reportClickColumns, q.Dims)
 	if !ok {
@@ -536,9 +547,11 @@ func (s *EventStore) ReportPwaInstalls(ctx context.Context, q ReportQuery) ([]In
 	selectExpr, groupByExpr := selectAndGroupByExprs(selectCols, q.ByDay, q.Timezone)
 
 	query := fmt.Sprintf(`
-		SELECT %scount() AS pwa_installs
+		SELECT %scountIf(type IN `+installTypes+`) AS pwa_installs,
+		       countIf(type = 'TG_START') AS tg_starts, countIf(type = 'TG_JOIN') AS tg_joins
 		FROM tracking_events
-		WHERE organization_id = ? AND event_at >= ? AND event_at < ? AND type IN `+installTypes+`%s
+		WHERE organization_id = ? AND event_at >= ? AND event_at < ?
+		  AND (type IN `+installTypes+` OR type IN ('TG_START', 'TG_JOIN'))%s
 		%s`,
 		selectExpr, filterClause, groupByExpr,
 	)
@@ -552,12 +565,12 @@ func (s *EventStore) ReportPwaInstalls(ctx context.Context, q ReportQuery) ([]In
 	var out []InstallAgg
 	for rows.Next() {
 		dimVals, day, dest := scanDest(q.Dims, q.ByDay)
-		var installs uint64
-		dest = append(dest, &installs)
+		var installs, starts, joins uint64
+		dest = append(dest, &installs, &starts, &joins)
 		if err := rows.Scan(dest...); err != nil {
 			return nil, fmt.Errorf("chstore: scanning pwa-install report row: %w", err)
 		}
-		out = append(out, InstallAgg{Key: scanKey(q.Dims, deref(dimVals), day), PwaInstalls: installs})
+		out = append(out, InstallAgg{Key: scanKey(q.Dims, deref(dimVals), day), PwaInstalls: installs, TgStarts: starts, TgJoins: joins})
 	}
 	return out, rows.Err()
 }

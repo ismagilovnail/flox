@@ -213,6 +213,15 @@
     "editWelcomeAria": "Edit the welcome message of @{{name}}",
     "editWelcomeTitle": "Welcome message of @{{name}}",
     "welcomeSaved": "Welcome message saved",
-    "welcomeSaveError": "Couldn't save the welcome message"
+    "welcomeSaveError": "Couldn't save the welcome message",
+    "changeToken": "Change token",
+    "changeTokenAria": "Change the token of @{{name}}",
+    "changeTokenTitle": "New token for @{{name}}",
+    "changeTokenDescription": "After /revoke in @BotFather: paste the bot's new token. Channels, links and the /start history stay. Another bot's token is refused — remove this bot and connect the other instead.",
+    "newToken": "New token",
+    "newTokenHint": "From @BotFather → your bot → API Token. Stored encrypted, never shown again.",
+    "tokenChanged": "Token changed",
+    "tokenChangeError": "Couldn't change the token",
+    "joins30d": "Joins, 30 days:"
   }
 }

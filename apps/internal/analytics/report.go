@@ -98,7 +98,11 @@ type MetricValues struct {
 	// requested dimensions). Purchases = CPA_ACCEPT (the first purchase,
 	// FTD), Repurchases = CPA_REDEP, Registrations = CPA_HOLD, Declines =
 	// CPA_DECLINE (chargebacks included), Trash = CPA_TRASH.
-	PwaInstalls   uint64
+	PwaInstalls uint64
+	// TgStarts / TgJoins: TG_START and TG_JOIN (docs/telegram.md), from
+	// tracking_events like PwaInstalls.
+	TgStarts      uint64
+	TgJoins       uint64
 	Registrations *uint64
 	Purchases     *uint64
 	Repurchases   *uint64
@@ -471,6 +475,7 @@ func (s *Service) groupedReport(ctx context.Context, organizationID string, dims
 	for _, a := range installAggs {
 		acc := get(a.Key)
 		acc.pwaInstalls = a.PwaInstalls
+		acc.tgStarts, acc.tgJoins = a.TgStarts, a.TgJoins
 	}
 	if convSupported {
 		// Default every row seen so far (from clicks/land) to a real zero
@@ -892,6 +897,7 @@ type rowAccumulator struct {
 	conversions                     *uint64
 	revenueUSD                      *float64
 	pwaInstalls                     uint64
+	tgStarts, tgJoins               uint64
 	registrations, purchases        *uint64
 	repurchases, declines, trash    *uint64
 	costUSD                         *float64
@@ -921,6 +927,8 @@ func deriveMetrics(acc *rowAccumulator) MetricValues {
 		UniqueClicks:  acc.uniqueClicks,
 		Conversions:   acc.conversions,
 		PwaInstalls:   acc.pwaInstalls,
+		TgStarts:      acc.tgStarts,
+		TgJoins:       acc.tgJoins,
 		Registrations: acc.registrations,
 		Purchases:     acc.purchases,
 		Repurchases:   acc.repurchases,
@@ -1136,6 +1144,10 @@ func metricFloat(m MetricValues, key string) (float64, bool) {
 		return ptrOrNegInf(m.EPC), true
 	case "pwainstalls":
 		return float64(m.PwaInstalls), true
+	case "tgstarts":
+		return float64(m.TgStarts), true
+	case "tgjoins":
+		return float64(m.TgJoins), true
 	case "registrations":
 		return u64OrNegInf(m.Registrations), true
 	case "purchases":

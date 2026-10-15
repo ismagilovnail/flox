@@ -218,6 +218,41 @@ func (r *Repository) deleteChannel(ctx context.Context, orgID, botID, channelID 
 	return nil
 }
 
+// replaceToken stores a new token of the same bot (Telegram id checked by
+// the caller) with the secret of the webhook just set for it.
+func (r *Repository) replaceToken(ctx context.Context, orgID, id, username, tokenEncrypted, secretHash string) error {
+	tag, err := r.db.Exec(ctx, `
+		UPDATE telegram_bots SET username = $3, token_encrypted = $4, webhook_secret_hash = $5
+		WHERE id = $1 AND organization_id = $2`, id, orgID, username, tokenEncrypted, secretHash)
+	if err != nil {
+		return fmt.Errorf("telegram: replacing bot token: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return apierror.NotFound("bot not found")
+	}
+	return nil
+}
+
+// ChannelNames is every channel of the organization's bots, for reports.
+func (r *Repository) ChannelNames(ctx context.Context, orgID string) ([]ChannelName, error) {
+	rows, err := r.db.Query(ctx, `
+		SELECT c.id, c.title, b.username FROM telegram_channels c JOIN telegram_bots b ON b.id = c.bot_id
+		WHERE c.organization_id = $1 ORDER BY b.username, c.created_at, c.id`, orgID)
+	if err != nil {
+		return nil, fmt.Errorf("telegram: listing channel names: %w", err)
+	}
+	defer rows.Close()
+	out := []ChannelName{}
+	for rows.Next() {
+		var c ChannelName
+		if err := rows.Scan(&c.ID, &c.Title, &c.BotUsername); err != nil {
+			return nil, fmt.Errorf("telegram: scanning channel name: %w", err)
+		}
+		out = append(out, c)
+	}
+	return out, rows.Err()
+}
+
 // credentials is the bot's stored token and Telegram id, for checking a
 // channel it is added to.
 func (r *Repository) credentials(ctx context.Context, orgID, id string) (token string, tgBotID int64, err error) {
@@ -333,27 +368,29 @@ func (r *Repository) recordStart(ctx context.Context, b webhookBot, tgUser int64
 }
 
 // startedClick is the click of tgUser's last /start of bot, and whether
-// that click's join is already recorded. No /start: "".
-func (r *Repository) startedClick(ctx context.Context, b webhookBot, tgUser int64) (clickID string, joined bool, err error) {
-	var joinedClick string
-	err = r.db.QueryRow(ctx, `SELECT click_id, joined_click_id FROM telegram_users WHERE bot_id = $1 AND tg_user_id = $2`,
-		b.ID, tgUser).Scan(&clickID, &joinedClick)
+// that click's join of channel c is already recorded. No /start: "".
+func (r *Repository) startedClick(ctx context.Context, b webhookBot, c webhookChannel, tgUser int64) (clickID string, joined bool, err error) {
+	err = r.db.QueryRow(ctx, `
+		SELECT u.click_id, EXISTS (SELECT 1 FROM telegram_joins j
+		                           WHERE j.channel_id = $3 AND j.tg_user_id = u.tg_user_id AND j.click_id = u.click_id)
+		FROM telegram_users u WHERE u.bot_id = $1 AND u.tg_user_id = $2`,
+		b.ID, tgUser, c.ID).Scan(&clickID, &joined)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return "", false, nil
 	}
 	if err != nil {
 		return "", false, fmt.Errorf("telegram: reading started click: %w", err)
 	}
-	return clickID, joinedClick == clickID, nil
+	return clickID, joined, nil
 }
 
-// recordJoin marks tgUser's join of bot's channel for clickID and reports
+// recordJoin marks tgUser's join of channel c for clickID and reports
 // whether it was not marked yet — so two deliveries of one join record
-// one TG_JOIN.
-func (r *Repository) recordJoin(ctx context.Context, b webhookBot, tgUser int64, clickID string, at time.Time) (bool, error) {
+// one TG_JOIN, and the same click joining another channel records its own.
+func (r *Repository) recordJoin(ctx context.Context, b webhookBot, c webhookChannel, tgUser int64, clickID string, at time.Time) (bool, error) {
 	tag, err := r.db.Exec(ctx, `
-		UPDATE telegram_users SET joined_click_id = click_id, joined_at = $4
-		WHERE bot_id = $1 AND tg_user_id = $2 AND click_id = $3 AND joined_click_id <> click_id`, b.ID, tgUser, clickID, at)
+		INSERT INTO telegram_joins (channel_id, tg_user_id, click_id, organization_id, joined_at)
+		VALUES ($1, $2, $3, $4, $5) ON CONFLICT DO NOTHING`, c.ID, tgUser, clickID, b.OrganizationID, at)
 	if err != nil {
 		return false, fmt.Errorf("telegram: recording join: %w", err)
 	}

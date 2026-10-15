@@ -7,6 +7,7 @@ import {
   connectTelegramBot,
   deleteTelegramBot,
   listTelegramBots,
+  listTelegramChannelNames,
   removeTelegramChannel,
   updateTelegramBot,
   type ConnectTelegramBotInput,
@@ -37,8 +38,18 @@ export function useDeleteTelegramBot() {
 export function useUpdateTelegramBot() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, welcomeText }: { id: string; welcomeText: string }) => updateTelegramBot(id, { welcomeText }),
+    mutationFn: ({ id, ...input }: { id: string; welcomeText?: string; token?: string }) => updateTelegramBot(id, input),
     onSuccess: () => qc.invalidateQueries({ queryKey: telegramKey }),
+  });
+}
+
+/** Channel names for report labels; `enabled` off where nothing shows them. */
+export function useTelegramChannelNames(options?: { enabled?: boolean }) {
+  return useQuery({
+    queryKey: ["telegram-channel-names"],
+    queryFn: listTelegramChannelNames,
+    enabled: options?.enabled,
+    staleTime: 60_000,
   });
 }
 

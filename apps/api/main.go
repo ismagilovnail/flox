@@ -491,6 +491,13 @@ func buildServer(ctx context.Context, cfg config.Config, logger *slog.Logger, re
 		r.Use(readGate("settings.write"))
 		telegramHandler.Register(r)
 	})
+	// The channels' names for the report builder's telegram_channel
+	// dimension: whoever reads reports, not only settings.write.
+	srv.Mux().Route("/telegram-channels", func(r chi.Router) {
+		r.Use(tenantMiddleware)
+		r.Use(readGate("analytics.read"))
+		telegramHandler.RegisterChannelNames(r)
+	})
 
 	// Registrar/DNS automation (§30): domain.Service reads Namecheap and
 	// Cloudflare credentials through integrationsSvc. GoDaddy, Route53,

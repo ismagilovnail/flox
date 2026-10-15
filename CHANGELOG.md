@@ -5,6 +5,26 @@ per-phase, matching `CLAUDE.md`'s phase protocol. The one exception is
 [Between phases], below: spec amendments and the code changes that follow from
 them land between phases and would otherwise be invisible here.
 
+## [Phase 30.40] — Telegram: token change, joins by channel
+
+ROADMAP: a bot's token could only change by removing and reconnecting it; TG_JOIN did not say which channel. The
+owner chose: only a new token of the same bot; joins by channel both in the report builder and in the bot's panel.
+`docs/telegram.md` "Changing the token", "Joins by channel in reports".
+
+- `PATCH /telegram-bots/{id}` takes `token`: `getMe` must be the connected bot (another bot: a `token` field error),
+  the webhook is set again with a new secret, token and secret hash stored; channels, links, /start history stay.
+  Audit `telegram_bot.token_changed`. Settings: a key icon per bot, a dialog with inline errors.
+- TG_JOIN names its channel (`event.TelegramChannelID`; ClickHouse schema 019 `tg_channel_id`). Joins through /start
+  are once per click and channel (migration 00084 `telegram_joins`, replacing `telegram_users.joined_click_id`; old
+  marks kept where the bot had one channel).
+- Reports: the `telegram_channel` dimension and the `tgStarts` / `tgJoins` metrics (also in custom metrics and
+  presets); conversions are "—" by channel. `GET /telegram-channels` (analytics.read) names channels for labels.
+  Settings shows each channel's joins over 30 days. en/ru.
+- Tests: `TestChangeToken`, `TestChannelNames`, per-channel joins in `TestWebhookSeveralChannels`/`TestWebhook`,
+  `TestReportTelegramByChannel`, `TestReportTelegramMetrics`; mutation-checked; 00084 down/up. Live with a fake Bot
+  API: connect, second channel, another bot's token refused, new token accepted; old secret 404; joins of both
+  channels in ClickHouse with their ids; Settings and the report builder show them per channel.
+
 ## [Phase 30.39] — Two-factor by email and SMS
 
 ROADMAP: 2FA was the authenticator app only. The owner chose email and SMS, SMS through a universal HTTP webhook.

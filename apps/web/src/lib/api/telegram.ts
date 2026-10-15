@@ -53,8 +53,18 @@ export function deleteTelegramBot(id: string): Promise<void> {
   return apiFetch(`/telegram-bots/${id}`, { method: "DELETE" });
 }
 
-export function updateTelegramBot(id: string, input: { welcomeText: string }): Promise<TelegramBot> {
+/** welcomeText, and/or token: a new token of the same bot (revoked and
+ * reissued in @BotFather) — another bot's is a `token` field error. */
+export function updateTelegramBot(id: string, input: { welcomeText?: string; token?: string }): Promise<TelegramBot> {
   return apiFetch(`/telegram-bots/${id}`, { method: "PATCH", body: input });
+}
+
+/** A channel as reports name it (the `telegram_channel` dimension's ids). */
+export type TelegramChannelName = { id: string; title: string; botUsername: string };
+
+/** GET /telegram-channels: readable with analytics.read, for report labels. */
+export function listTelegramChannelNames(): Promise<{ channels: TelegramChannelName[] }> {
+  return apiFetch("/telegram-channels");
 }
 
 /** channel: "@channelname" or "-100…"; Telegram checks the bot can invite. */

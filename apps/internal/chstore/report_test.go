@@ -279,6 +279,58 @@ func TestReportPwaInstallsCountsAndIsTenantScoped(t *testing.T) {
 	}
 }
 
+// TG_START / TG_JOIN are counted with the installs; the telegram_channel
+// dimension splits joins by channel, everything else in the empty bucket.
+func TestReportTelegramByChannel(t *testing.T) {
+	conn := mustConn(t)
+	store := chstore.NewEventStore(conn)
+	ctx := context.Background()
+	orgID, otherOrg, campaignID := idgen.New(), idgen.New(), idgen.New()
+	chA, chB := idgen.New(), idgen.New()
+	click := idgen.New()
+	day := time.Date(2026, 8, 22, 0, 0, 0, 0, time.UTC)
+	ev := func(t event.Type, org, channel string, h time.Duration) event.Event {
+		return event.Event{Type: t, EventAt: day.Add(h), OrganizationID: org, CampaignID: campaignID, ClickID: click, TelegramChannelID: channel}
+	}
+	if err := store.InsertBatch(ctx, []event.Event{
+		ev(event.SourceClick, orgID, "", 0),
+		ev(event.TgStart, orgID, "", time.Hour),
+		ev(event.TgJoin, orgID, chA, 2*time.Hour),
+		ev(event.TgJoin, orgID, chB, 3*time.Hour),
+		ev(event.TgJoin, orgID, chB, 4*time.Hour),
+		ev(event.PwaInstall, orgID, "", 5*time.Hour),
+		ev(event.TgJoin, otherOrg, chA, 2*time.Hour),
+	}); err != nil {
+		t.Fatalf("seeding: %v", err)
+	}
+	q := chstore.ReportQuery{OrganizationID: orgID, Dims: []chstore.ReportDimension{chstore.DimTelegramChannel}, From: day, To: day.Add(24 * time.Hour)}
+	aggs, err := store.ReportPwaInstalls(ctx, q)
+	if err != nil {
+		t.Fatalf("ReportPwaInstalls: %v", err)
+	}
+	type counts struct{ installs, starts, joins uint64 }
+	got := map[string]counts{}
+	for _, a := range aggs {
+		got[a.Key.DimValues[chstore.DimTelegramChannel]] = counts{a.PwaInstalls, a.TgStarts, a.TgJoins}
+	}
+	want := map[string]counts{"": {1, 1, 0}, chA: {0, 0, 1}, chB: {0, 0, 2}}
+	if len(got) != len(want) || got[""] != want[""] || got[chA] != want[chA] || got[chB] != want[chB] {
+		t.Fatalf("by channel = %+v, want %+v", got, want)
+	}
+	clicks, err := store.ReportClicks(ctx, q)
+	if err != nil || len(clicks) != 1 || clicks[0].Key.DimValues[chstore.DimTelegramChannel] != "" || clicks[0].Clicks != 1 {
+		t.Fatalf("clicks by channel = %+v, %v; want the one click in the empty bucket", clicks, err)
+	}
+	if chstore.SupportedByConversions(q.Dims) {
+		t.Fatal("conversions claim to answer telegram_channel")
+	}
+	q.Filters = []chstore.ReportFilter{{Dimension: chstore.DimTelegramChannel, Value: chB}}
+	q.Dims = nil
+	if aggs, err := store.ReportPwaInstalls(ctx, q); err != nil || len(aggs) != 1 || aggs[0].TgJoins != 2 {
+		t.Fatalf("filtered to one channel = %+v, %v", aggs, err)
+	}
+}
+
 func TestReportConversionsCountsRedepsSeparately(t *testing.T) {
 	conn := mustConn(t)
 	store := chstore.NewEventStore(conn)

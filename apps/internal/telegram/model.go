@@ -39,6 +39,14 @@ type Channel struct {
 	FreeInviteLinks int    `json:"freeInviteLinks"`
 }
 
+// ChannelName is a channel as reports name it (GET /telegram-channels,
+// analytics.read): the `telegram_channel` dimension groups by ID.
+type ChannelName struct {
+	ID          string `json:"id"`
+	Title       string `json:"title"`
+	BotUsername string `json:"botUsername"`
+}
+
 // MaxChannels bounds a bot's channels (each keeps a pool of invite links).
 const MaxChannels = 10
 

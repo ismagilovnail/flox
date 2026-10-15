@@ -92,9 +92,10 @@ func TestChannelsAndEditing(t *testing.T) {
 	}
 }
 
-// With two channels: /start offers both; joining either is TG_JOIN, once
-// per click; a join request to either is approved; each channel has its
-// own pool, and a link counts only in its own channel.
+// With two channels: /start offers both; joining each is its own TG_JOIN
+// naming the channel, once per click and channel; a join request to either
+// is approved; each channel has its own pool, and a link counts only in its
+// own channel.
 func TestWebhookSeveralChannels(t *testing.T) {
 	clicks := attribution.NewMemoryResolver()
 	w := newInviteFixture(t, clicks)
@@ -114,9 +115,12 @@ func TestWebhookSeveralChannels(t *testing.T) {
 		t.Fatalf("welcome = %s, want a button per channel", body)
 	}
 	w.post(t, w.secret, member(second.TgChatID, frank, "left", "member"))
-	w.post(t, w.secret, member(first.TgChatID, frank, "left", "member")) // the other channel, same click
-	if got := w.events.types(); len(got) != 2 || got[1] != event.TgJoin {
-		t.Fatalf("events = %v, want TG_START and one TG_JOIN", got)
+	w.post(t, w.secret, member(first.TgChatID, frank, "left", "member"))  // the other channel, same click
+	w.post(t, w.secret, member(second.TgChatID, frank, "left", "member")) // Telegram re-sent the first join
+	evs := w.events.events
+	if got := w.events.types(); len(got) != 3 || got[1] != event.TgJoin || got[2] != event.TgJoin ||
+		evs[1].TelegramChannelID != second.ID || evs[2].TelegramChannelID != first.ID || evs[0].TelegramChannelID != "" {
+		t.Fatalf("events = %v, want TG_START and a TG_JOIN per channel, each naming it", got)
 	}
 	rec = w.post(t, w.secret, map[string]any{"update_id": 5, "chat_join_request": map[string]any{
 		"chat": map[string]any{"id": second.TgChatID, "type": "channel"}, "from": map[string]any{"id": gina}}})
@@ -147,11 +151,11 @@ func TestWebhookSeveralChannels(t *testing.T) {
 		return u
 	}
 	w.post(t, w.secret, joined(first.TgChatID)) // the link reported in another channel: not its join
-	if got := w.events.types(); len(got) != 2 {
+	if got := w.events.types(); len(got) != 3 {
 		t.Fatalf("events = %v, want nothing new for a link outside its channel", got)
 	}
 	w.post(t, w.secret, joined(second.TgChatID))
-	if got := w.events.types(); len(got) != 3 || w.events.events[2].ClickID != other.ClickID {
-		t.Fatalf("events = %v, want TG_JOIN on the link's click", got)
+	if got := w.events.types(); len(got) != 4 || w.events.events[3].ClickID != other.ClickID || w.events.events[3].TelegramChannelID != second.ID {
+		t.Fatalf("events = %v, want TG_JOIN on the link's click, naming its channel", got)
 	}
 }

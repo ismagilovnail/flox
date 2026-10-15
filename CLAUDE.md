@@ -19,16 +19,15 @@ referenced below as §N).
 ## CURRENT STATE — UPDATE THIS EVERY PHASE
 
 ```
-CURRENT PHASE : PHASE 30.39 — 2FA BY EMAIL AND SMS (closed)
+CURRENT PHASE : PHASE 30.40 — TELEGRAM TOKEN CHANGE, JOINS BY CHANNEL (closed)
 STATUS        : Spec conformance gaps (docs/spec-conformance-2026-10-11.md):
                 all 15 closed and its "мелочи" too; every §43 event is
                 produced.
-                Leftovers: ROADMAP.md "Known open gaps" (Telegram token
-                change / TG_JOIN by channel, Google Play parsing,
-                gallery transcoding…).
+                Leftovers: ROADMAP.md "Known open gaps" (Google Play
+                parsing, gallery transcoding, Cloudflare renewal…).
                 Prod restore drill after deployment.
-LAST COMMIT   : feat(auth): two-factor by email and sms.
-UNCOMMITTED   : none expected. Dev DB at migration 00083, CH schema 018.
+LAST COMMIT   : feat(telegram): token change, joins by channel.
+UNCOMMITTED   : none expected. Dev DB at migration 00084, CH schema 019.
 NEXT          : wait for the user — pick from the leftovers above with the
                 user. CI (DO1) is
                 the user's own decision — do not set it up. Run go test with

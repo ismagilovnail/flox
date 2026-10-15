@@ -209,6 +209,11 @@ type Event struct {
 	// fallbacks). Backs the `network` report dimension.
 	NetworkID string `json:"networkId,omitempty"`
 
+	// TelegramChannelID is, on TG_JOIN, the FLOX id of the channel joined
+	// (telegram_channels.id). Backs the `telegram_channel` report
+	// dimension; empty on every other event.
+	TelegramChannelID string `json:"telegramChannelId,omitempty"`
+
 	// CPA conversion fields (§45), set on CPA_* events only.
 
 	// Revenue/Currency are exactly as the network reported them; USDValue

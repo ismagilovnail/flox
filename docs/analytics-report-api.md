@@ -66,11 +66,19 @@ data" bar applies here the same way it does to cost: a genuine "nothing
 yet" must render as nothing, never as a plausible-looking placeholder
 value that isn't real.
 
-## Dimension whitelist: 17 backed (the original 16, plus stream_set)
+## Dimension whitelist: 18 backed (the original 16, plus stream_set and telegram_channel)
 
-`chstore.ReportDimension` (17): campaign, source (the traffic source of the click's
+`chstore.ReportDimension` (18): campaign, source (the traffic source of the click's
 campaign, `traffic_source_id`, schema/011), country, region, city, device, platform, os,
-browser, language, flow, stream_set, landing, offer, pwa, postlanding, network.
+browser, language, flow, stream_set, landing, offer, pwa, postlanding, network,
+telegram_channel.
+
+`telegram_channel` (`DimTelegramChannel`, `tg_channel_id`,
+`chstore/schema/019_tg_channel_id.sql`) is set on TG_JOIN only: the channel
+joined (`docs/telegram.md` "Joins by channel in reports"). Everything else
+is the empty bucket ("No channel"). The conversion report cannot answer it,
+so conversion-backed metrics are `null` there. Names in the UI come from
+`GET /telegram-channels`.
 
 `network` (`DimNetwork`, `network_id`) answers from two sides:
 clicks and tracking events by the network of the offer the click was
@@ -161,9 +169,9 @@ Every `DimensionKey` (`types/analytics.ts`) is backed since
 2026-10-13 (gap 4 of `docs/spec-conformance-2026-10-11.md`); a dimension
 outside the whitelist 400s with `apierror.Validation`.
 
-Of the 17 backed dimensions, 14 have a column on `conversion_events`
+Of the 18 backed dimensions, 14 have a column on `conversion_events`
 (`chstore.reportConversionColumns`) — it carries no `os`/`browser`/
-`language`. Grouping or filtering by those three is answered by joining
+`language`, and `telegram_channel` is not answered at all. Grouping or filtering by those three is answered by joining
 `click_events` onto each conversion via `click_id`
 (`EventStore.reportConversionsJoined`): `any(os/browser/language)` per
 `click_id` (a sticky returning visitor repeats the click row), restricted to
@@ -407,6 +415,7 @@ instead of throwing or showing a fabricated number. `tsc --noEmit`/
 ## PWA / CPA funnel metrics
 
 Every metrics object also carries: `pwaInstalls` (PWA_INSTALL count),
+`tgStarts` (TG_START) and `tgJoins` (TG_JOIN), counted off tracking_events with the installs,
 `registrations` (CPA_HOLD), `purchases` (CPA_ACCEPT), `repurchases` (CPA_REDEP),
 `declines` (CPA_DECLINE, §50 cpa_decline), `trash` (CPA_TRASH, §50 cpa_trash),
 `clickToInstall`, `installToReg`, `regToPurchase` (percent) and

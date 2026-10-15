@@ -40,7 +40,7 @@ var validMetrics = map[string]bool{
 	"clicks": true, "uniqueClicks": true, "conversions": true, "revenue": true,
 	"cost": true, "profit": true, "roi": true, "roas": true, "ctr": true,
 	"cvr": true, "cpc": true, "cpa": true, "epc": true,
-	"pwaInstalls": true, "registrations": true, "purchases": true, "repurchases": true,
+	"pwaInstalls": true, "tgStarts": true, "tgJoins": true, "registrations": true, "purchases": true, "repurchases": true,
 	"declines": true, "trash": true,
 	"clickToInstall": true, "installToReg": true, "regToPurchase": true,
 	"costPerInstall": true, "costPerReg": true, "costPerPurchase": true,

@@ -17,15 +17,36 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { LoadingState } from "@/components/ui/loading-state";
 import { Textarea } from "@/components/ui/textarea";
+import { useReport } from "@/hooks/use-analytics-report";
 import { useConnectTelegramBot, useDeleteTelegramBot, useTelegramBots } from "@/hooks/use-telegram";
 import { ApiError } from "@/lib/api/client";
 import type { TelegramBot } from "@/lib/api/telegram";
-import { TELEGRAM_CHANNEL_PATTERN, TELEGRAM_MAX_WELCOME, TelegramBotRow } from "@/features/settings/telegram-bot-row";
+import { TELEGRAM_CHANNEL_PATTERN, TELEGRAM_MAX_WELCOME, TELEGRAM_TOKEN_PATTERN, TelegramBotRow } from "@/features/settings/telegram-bot-row";
+
+const JOINS_DAYS = 30;
+
+/** TG_JOIN per channel id over the last JOINS_DAYS days (the report's
+ * telegram_channel dimension); undefined until known or when the report
+ * cannot be read. */
+function useChannelJoins(enabled: boolean): Map<string, number> | undefined {
+  const [range] = React.useState(() => {
+    const to = new Date();
+    return { from: new Date(to.getTime() - (JOINS_DAYS - 1) * 86_400_000), to };
+  });
+  const report = useReport(
+    { dims: ["telegram_channel"], filters: [], from: range.from, to: range.to, sort: { key: "tgJoins", dir: "desc" } },
+    { enabled },
+  );
+  return React.useMemo(() => {
+    if (!report.data) return undefined;
+    return new Map(report.data.map((r) => [r.dims.telegram_channel ?? "", r.metrics.tgJoins ?? 0]));
+  }, [report.data]);
+}
 
 /** Mirrors telegram.Service's validation (internal/telegram/service.go). */
 function connectSchema(t: TFunction<"settings">) {
   return z.object({
-    token: z.string().trim().regex(/^\d{5,15}:[A-Za-z0-9_-]{30,50}$/, t("telegram.errors.token")),
+    token: z.string().trim().regex(TELEGRAM_TOKEN_PATTERN, t("telegram.errors.token")),
     channel: z
       .string()
       .trim()
@@ -48,6 +69,7 @@ export function TelegramBotsPanel() {
   const [removing, setRemoving] = React.useState<TelegramBot | null>(null);
   const form = useForm<ConnectValues>({ resolver: zodResolver(connectSchema(t)), defaultValues: { token: "", channel: "", welcomeText: "" } });
   const configured = query.data?.configured ?? true;
+  const joins = useChannelJoins(!!query.data?.bots.some((b) => b.channels.length > 0));
 
   function handleConnect(values: ConnectValues) {
     connect.mutate(values, {
@@ -101,7 +123,7 @@ export function TelegramBotsPanel() {
           </div>
         )}
         {query.isSuccess && query.data.bots.length === 0 && <p className="px-4 py-6 text-sm text-muted-foreground">{t("telegram.empty")}</p>}
-        {query.data?.bots.map((bot) => <TelegramBotRow key={bot.id} bot={bot} onRemove={() => setRemoving(bot)} />)}
+        {query.data?.bots.map((bot) => <TelegramBotRow key={bot.id} bot={bot} joins={joins} onRemove={() => setRemoving(bot)} />)}
         {query.isSuccess && query.data.bots.length > 0 && (
           <div className="flex flex-col gap-1 px-4 py-3 text-xs text-muted-foreground">
             <p>{t("telegram.deepLinkHint")}</p>
