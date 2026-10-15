@@ -295,3 +295,40 @@ func TestTriggerSinkQueuesIosInstallAsPwaInstall(t *testing.T) {
 		t.Fatalf("queued event = %+v, want the iOS install as PWA_INSTALL", ev)
 	}
 }
+
+// TG_START and TG_JOIN come from Telegram's servers (the bot's webhook):
+// the platform gets the visitor's IP and user agent from the click, each
+// event goes only to the pixels set for it, and is reported under its own
+// platform name.
+func TestTriggerSinkQueuesTelegramEventsWithTheClicksVisitor(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	store := pixelsend.NewPostgresStoreOnTable(f.pool, testpg.PrivateTable(t, f.pool, "pixel_deliveries"))
+	join := f.pixel(t, pixel.CreateInput{Name: "FB join", Provider: pixel.ProviderFacebook, PixelID: "1", Events: []string{"TG_JOIN"}}, true)
+
+	clicks := attribution.NewMemoryResolver()
+	clickAt := time.Date(2026, 10, 14, 9, 0, 0, 0, time.UTC)
+	clicks.Record(attribution.Click{ClickID: "click-tg", OrganizationID: f.org, OccurredAt: clickAt,
+		IP: "203.0.113.7", UserAgent: "Instagram 300", FBClickID: "fb-tg"})
+	sink := &pixelsend.TriggerSink{Next: &fakeInserter{}, Queue: store, Clicks: clicks}
+
+	start := event.Event{ID: idgen.New(), Type: event.TgStart, OrganizationID: f.org, StreamSetID: f.streamSet,
+		ClickID: "click-tg", EventAt: clickAt.Add(time.Minute)}
+	joined := event.Event{ID: idgen.New(), Type: event.TgJoin, OrganizationID: f.org, StreamSetID: f.streamSet,
+		ClickID: "click-tg", EventAt: clickAt.Add(2 * time.Minute)}
+	if err := sink.InsertBatch(ctx, []event.Event{start, joined}); err != nil {
+		t.Fatal(err)
+	}
+	claimed, err := store.ClaimDue(ctx, 10)
+	if err != nil || len(claimed) != 1 {
+		t.Fatalf("claimed = %v, %v; want one delivery: the join (no pixel reports TG_START)", claimed, err)
+	}
+	ev := claimed[0].Event
+	if claimed[0].PixelID != join.ID || ev.SourceEventID != joined.ID || ev.Type != event.TgJoin ||
+		ev.IP != "203.0.113.7" || ev.UserAgent != "Instagram 300" || ev.FBClickID != "fb-tg" || !ev.ClickAt.Equal(clickAt) {
+		t.Fatalf("queued event = %+v, want the join with its click's visitor", ev)
+	}
+	if name := pixel.EventName(pixel.ProviderFacebook, nil, string(ev.Type)); name != "Subscribe" {
+		t.Fatalf("facebook name for TG_JOIN = %q, want Subscribe", name)
+	}
+}

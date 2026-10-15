@@ -61,11 +61,12 @@ func (p Provider) UsesToken() bool {
 
 // ValidEventTypes is the part of the §43 event model a pixel can report:
 // the events FLOX actually produces that an ad platform optimizes for.
-// TG_JOIN and NOTIFICATION_SUBSCRIBE used to be offered too; both are
-// produced now (internal/telegram, internal/push) but not offered yet —
-// each needs its per-platform event mapping (a later phase).
+// NOTIFICATION_SUBSCRIBE is produced (internal/push) but not offered yet —
+// it needs its per-platform event mapping.
 var ValidEventTypes = []string{
 	"PWA_INSTALL",
+	"TG_START",
+	"TG_JOIN",
 	"CPA_HOLD",
 	"CPA_ACCEPT",
 	"CPA_REDEP",
@@ -78,18 +79,24 @@ var ValidEventTypes = []string{
 var DefaultEventNames = map[Provider]map[string]string{
 	ProviderFacebook: {
 		"PWA_INSTALL": "CompleteRegistration",
+		"TG_START":    "Contact",
+		"TG_JOIN":     "Subscribe",
 		"CPA_HOLD":    "Lead",
 		"CPA_ACCEPT":  "Purchase",
 		"CPA_REDEP":   "Purchase",
 	},
 	ProviderTikTok: {
 		"PWA_INSTALL": "CompleteRegistration",
+		"TG_START":    "Contact",
+		"TG_JOIN":     "Subscribe",
 		"CPA_HOLD":    "SubmitForm",
 		"CPA_ACCEPT":  "CompletePayment",
 		"CPA_REDEP":   "CompletePayment",
 	},
 	ProviderSnapchat: {
 		"PWA_INSTALL": "SIGN_UP",
+		"TG_START":    "CUSTOM_EVENT_1",
+		"TG_JOIN":     "SUBSCRIBE",
 		"CPA_HOLD":    "SIGN_UP",
 		"CPA_ACCEPT":  "PURCHASE",
 		"CPA_REDEP":   "PURCHASE",

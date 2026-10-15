@@ -14,16 +14,17 @@ was ever sent (`docs/spec-conformance-2026-10-11.md`, gap 1). Now:
 A pixel sends the events it is set to (`events`) for clicks that went
 through a stream set it is attached to (`stream_set_pixels`), while it is
 active. Reportable events (`pixel.ValidEventTypes`): `PWA_INSTALL`,
-`CPA_HOLD`, `CPA_ACCEPT`, `CPA_REDEP` — what FLOX produces and a platform
-optimizes for. `TG_JOIN` and `NOTIFICATION_SUBSCRIBE` were offered before
-but nothing produces them, so they were dropped (an old pixel loses them on
-its next save).
+`TG_START`, `TG_JOIN` (since 2026-10-15), `CPA_HOLD`, `CPA_ACCEPT`,
+`CPA_REDEP` — what FLOX produces and a platform optimizes for.
+`NOTIFICATION_SUBSCRIBE` is produced (push) but not offered yet: it needs
+its platform mapping.
 
 | Event | Queued by | When |
 |---|---|---|
 | `CPA_*` | `conversion.PostgresStore.Record`, in the conversion's own transaction (`conversion.PixelWriter`) | the conversion is recorded as a success and attributed to a click with a stream set |
 | `CPA_*`, attributed late | `reattribute`, in the transaction that writes the attribution | an `unknown_click` conversion whose click turns up: its pixels had no stream set to go on before, so — unlike the outgoing postback, which already left — they get it now |
 | `PWA_INSTALL` | `pixelsend.TriggerSink`, wrapping the worker's ClickHouse writer (event queue flusher and NATS consumer) | the event is taken off the stream, before it is written |
+| `TG_START`, `TG_JOIN` | the same `TriggerSink` | the bot's webhook event (`docs/telegram.md`) is taken off the stream; it carries the click's stream set |
 
 Unattributed conversions reach no pixel: pixels belong to a stream set,
 and only the click knows which one.
@@ -43,7 +44,9 @@ the macro values for generic URLs. For conversions these come from the
 attributed click — `click_lookup` gained `ip`, `user_agent`,
 `fb_click_id`, `tt_click_id` (ClickHouse `schema/015`; clicks from before
 it have them empty). For `PWA_INSTALL` the IP/UA are the install request's
-and the platform click ids come from the click (`ClickResolver`).
+and the platform click ids come from the click (`ClickResolver`). Telegram
+events arrive from Telegram's servers, not the visitor, so they carry no
+IP/UA: the click's are sent (any event without both takes the click's).
 
 Same mechanics as `postback_deliveries`: fair claim across organizations
 (`internal/pgqueue`), 10 sends at a time, 10 s per send, the reaper returns
@@ -82,7 +85,9 @@ and retrying them for 21 hours only hides the problem from the delivery log.
   rejects a `Purchase` without a value; that shows up in the log.
 - **Event names**: per provider defaults (`pixel.DefaultEventNames`: FB
   Lead/Purchase/CompleteRegistration, TikTok SubmitForm/CompletePayment/
-  CompleteRegistration, Snap SIGN_UP/PURCHASE), overridable per event
+  CompleteRegistration, Snap SIGN_UP/PURCHASE; TG_START → FB/TikTok
+  `Contact`, Snap `CUSTOM_EVENT_1` (Snap has no standard "contact" event);
+  TG_JOIN → `Subscribe` / `SUBSCRIBE`), overridable per event
   (`event_names`). `GET /v1/pixels/event-names` serves the defaults to the
   form.
 - **Test mode**: `test_event_code` (Facebook, TikTok) sends to the

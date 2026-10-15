@@ -5,6 +5,21 @@ per-phase, matching `CLAUDE.md`'s phase protocol. The one exception is
 [Between phases], below: spec amendments and the code changes that follow from
 them land between phases and would otherwise be invisible here.
 
+## [Phase 30.26] — Pixels for TG_START, TG_JOIN
+
+Leftover of Phase 30.25 (`docs/telegram.md` "Not done"): Telegram events now reach ad platforms.
+
+- `pixel.ValidEventTypes` (and the web's `PIXEL_EVENT_TYPES`) offer `TG_START` and `TG_JOIN`. Default
+  platform names: Facebook/TikTok `Contact` / `Subscribe`, Snapchat `CUSTOM_EVENT_1` / `SUBSCRIBE`;
+  overridable per pixel as before. `NOTIFICATION_SUBSCRIBE` is still not offered.
+- `pixelsend.TriggerSink` queues both, like `PWA_INSTALL`, for the pixels of the click's stream set. The
+  webhook request comes from Telegram, not the visitor: an event without IP and user agent gets the
+  click's (`attribution.Click`), so Facebook's `client_user_agent` and the platforms' matching still work.
+- Tests: `TestTriggerSinkQueuesTelegramEventsWithTheClicksVisitor` (only the pixel set for the event, the
+  click's visitor and fbclid, `Subscribe`), mutation-checked (dropping TG_JOIN, dropping the IP/UA
+  fallback); the old "TG_JOIN is refused" case now checks `NOTIFICATION_SUBSCRIBE`. Not sent live to a
+  platform (no test credentials).
+
 ## [Phase 30.25] — Telegram bots: TG_START, TG_JOIN
 
 The last §43 events nothing produced (`docs/spec-conformance-2026-10-11.md`). Scope (owner, 2026-10-14): the

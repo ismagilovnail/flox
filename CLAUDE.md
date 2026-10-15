@@ -19,14 +19,15 @@ referenced below as §N).
 ## CURRENT STATE — UPDATE THIS EVERY PHASE
 
 ```
-CURRENT PHASE : PHASE 30.25 — TELEGRAM BOTS: TG_START, TG_JOIN (closed)
+CURRENT PHASE : PHASE 30.26 — PIXELS FOR TG_START, TG_JOIN (closed)
 STATUS        : Spec conformance gaps (docs/spec-conformance-2026-10-11.md):
                 all 15 closed; every §43 event is now produced. Left from
                 that doc's "мелочи": DataGrid, types/ schemas/ dirs.
-                Leftovers: push metrics in the report builder; pixels for
-                TG_START/TG_JOIN (docs/telegram.md "Not done").
+                Leftovers: push metrics in the report builder; Telegram
+                per-click invite links / several channels / bot editing
+                (docs/telegram.md "Not done"); NOTIFICATION_SUBSCRIBE pixels.
                 Prod restore drill after deployment.
-LAST COMMIT   : feat(telegram): bot webhook, tg start and join.
+LAST COMMIT   : feat(pixels): tg start and join.
 UNCOMMITTED   : none expected. Dev DB at migration 00076, CH schema 018.
 NEXT          : wait for the user — pick from the leftovers above with the
                 user. CI (DO1) is

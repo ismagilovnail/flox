@@ -15,10 +15,14 @@ import (
 // (pixel.ValidEventTypes); CPA statuses are queued by the conversion's own
 // transaction instead.
 // IOS_INSTALL is an install too (docs/pwa-serving.md): it reaches the
-// pixels set for PWA_INSTALL, as PWA_INSTALL (pixelType).
+// pixels set for PWA_INSTALL, as PWA_INSTALL (pixelType). TG_START and
+// TG_JOIN come from the bot's webhook (internal/telegram), a request from
+// Telegram's servers: the visitor's IP and user agent are the click's.
 var trackerTriggered = map[event.Type]bool{
 	event.PwaInstall: true,
 	event.IosInstall: true,
+	event.TgStart:    true,
+	event.TgJoin:     true,
 }
 
 // pixelType is the event type a pixel is configured and mapped by.
@@ -44,7 +48,8 @@ type TriggerSink struct {
 	Next  Inserter
 	Queue *PostgresStore
 	// Clicks finds the click an event belongs to, for the platform click
-	// ids and the time of the click; nil or a miss sends without them.
+	// ids, the time of the click and — when the event has none — the
+	// visitor's IP and user agent; nil or a miss sends without them.
 	Clicks attribution.ClickResolver
 	Logger *slog.Logger
 }
@@ -100,6 +105,9 @@ func (t *TriggerSink) queue(ctx context.Context, ev event.Event) error {
 			}
 			if pe.TTClickID == "" {
 				pe.TTClickID = click.TTClickID
+			}
+			if pe.IP == "" && pe.UserAgent == "" {
+				pe.IP, pe.UserAgent = click.IP, click.UserAgent
 			}
 		} else if t.Logger != nil {
 			t.Logger.Debug("pixel event without its click", "event_id", ev.ID, "error", err)

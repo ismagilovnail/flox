@@ -40,7 +40,7 @@ export const PIXEL_PROVIDER_I18N_KEY: Record<PixelProvider, string> = {
  * The §43 events a pixel can report — matches pixel.ValidEventTypes
  * exactly: the events FLOX produces that an ad platform optimizes for.
  */
-export const PIXEL_EVENT_TYPES = ["PWA_INSTALL", "CPA_HOLD", "CPA_ACCEPT", "CPA_REDEP"] as const;
+export const PIXEL_EVENT_TYPES = ["PWA_INSTALL", "TG_START", "TG_JOIN", "CPA_HOLD", "CPA_ACCEPT", "CPA_REDEP"] as const;
 
 export type PixelEventType = (typeof PIXEL_EVENT_TYPES)[number];
 

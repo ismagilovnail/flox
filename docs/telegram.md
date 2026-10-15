@@ -3,7 +3,7 @@
 §43's TELEGRAM events, produced by an organization's **own** bot. Scope
 chosen by the owner on 2026-10-14: FLOX takes the bot's webhook; a join of
 the bot's channel is attributed through the user's `/start` (no per-click
-invite links); pixels for TG events come later.
+invite links); pixels for TG events came next (2026-10-15, `docs/pixels.md`).
 
 ## Flow
 
@@ -73,9 +73,18 @@ secret authenticates it).
 
 ## Not done
 
-Pixels for TG_START/TG_JOIN (per-platform mapping); per-click invite links
+Per-click invite links
 (joins without /start); several channels per bot; editing a bot (remove and
 connect again).
+
+## Pixels
+
+A pixel can report TG_START and TG_JOIN (`pixel.ValidEventTypes`): the
+worker's `pixelsend.TriggerSink` queues them like PWA_INSTALL, for the
+pixels of the click's stream set. The webhook is called by Telegram, so the
+visitor's IP and user agent sent to the platform are the click's. Default
+names: Facebook/TikTok `Contact` / `Subscribe`, Snapchat `CUSTOM_EVENT_1` /
+`SUBSCRIBE`.
 
 ## Verified (2026-10-14)
 
