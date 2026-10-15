@@ -352,6 +352,13 @@ cost, profit, cpc, cpa, epc, cost-per-*) is in it, each day converted at
 that day's rate. A day with no rate makes the amount `null`, so `epc` is
 nullable now too. Details: `docs/fx.md` "Reporting currency".
 
+`dashboard` also answers `"unpricedConversions": N` — CPA_ACCEPT/CPA_REDEP
+conversions in the range with revenue but no USD value (no currency and no
+network currency to assume, or no FX rate for the day). Their money is
+missing from the totals; the Overview shows a warning with a link to the
+postback log when N > 0 (`chstore.ConversionAgg.Unpriced`, audit
+2026-10-15 DATA-1, `docs/conversion.md`).
+
 ## Frontend integration
 
 - `features/analytics/analytics-view.tsx`: `useReport`/`useTimeseries`/

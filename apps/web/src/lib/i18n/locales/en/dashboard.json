@@ -52,5 +52,11 @@
     "roiHint": "ROI = (revenue − cost) ÷ cost × 100%. \"—\" when no cost is entered.",
     "offersHint": "The offer a click was routed to. Offers that received conversions in the period, by revenue."
   },
-  "comparedWith": "Changes are against the previous period of the same length: {{from}} – {{to}}."
+  "comparedWith": "Changes are against the previous period of the same length: {{from}} – {{to}}.",
+  "unpriced": {
+    "title_one": "{{count}} conversion's revenue is missing from the reports",
+    "title_other": "{{count}} conversions' revenue is missing from the reports",
+    "description": "These conversions have no USD amount: there is no exchange rate for their date, or the postback came without a currency. Revenue, profit and ROI above are lower by their amount.",
+    "link": "Open the postback log"
+  }
 }

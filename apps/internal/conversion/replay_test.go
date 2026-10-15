@@ -33,14 +33,14 @@ func (f *fakeNetworkLookup) ByID(_ context.Context, networkID string) (conversio
 // conversion to recognize the sentinel.
 func TestReplayNetworkLookupMapsFieldsAndErrorThrough(t *testing.T) {
 	lookup := conversion.NewReplayNetworkLookup(&fakeNetworkLookup{byID: map[string]conversion.Network{
-		"net-1": {ID: "net-1", OrganizationID: orgA, AcceptDuplicates: true, PostbackURL: "https://network.example/out"},
+		"net-1": {ID: "net-1", OrganizationID: orgA, AcceptDuplicates: true, PostbackURL: "https://network.example/out", Currency: "EUR"},
 	}})
 
 	n, err := lookup.ByID(ctx(), "net-1")
 	if err != nil {
 		t.Fatalf("ByID: %v", err)
 	}
-	want := postbacklogs.IncomingNetwork{OrganizationID: orgA, AcceptDuplicates: true, PostbackURL: "https://network.example/out"}
+	want := postbacklogs.IncomingNetwork{OrganizationID: orgA, AcceptDuplicates: true, PostbackURL: "https://network.example/out", Currency: "EUR"}
 	if n != want {
 		t.Fatalf("ByID = %+v, want %+v", n, want)
 	}

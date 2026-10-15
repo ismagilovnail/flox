@@ -480,12 +480,15 @@ type dashboardResponse struct {
 	Totals metricValuesResponse `json:"totals"`
 	// DatedByConversion: dated by click, conversions without a click in
 	// the totals, counted on their own date.
-	DatedByConversion uint64              `json:"datedByConversion,omitempty"`
-	Daily             []reportRowResponse `json:"daily"`
-	TopCampaigns      []reportRowResponse `json:"topCampaigns"`
-	TopCountries      []reportRowResponse `json:"topCountries"`
-	TopFlows          []reportRowResponse `json:"topFlows"`
-	TopOffers         []reportRowResponse `json:"topOffers"`
+	DatedByConversion uint64 `json:"datedByConversion,omitempty"`
+	// UnpricedConversions: conversions in the range whose revenue has no
+	// USD value (no currency, or no rate) and is missing from the totals.
+	UnpricedConversions uint64              `json:"unpricedConversions"`
+	Daily               []reportRowResponse `json:"daily"`
+	TopCampaigns        []reportRowResponse `json:"topCampaigns"`
+	TopCountries        []reportRowResponse `json:"topCountries"`
+	TopFlows            []reportRowResponse `json:"topFlows"`
+	TopOffers           []reportRowResponse `json:"topOffers"`
 	// Currency is the reporting currency every amount above is in.
 	Currency string `json:"currency"`
 }
@@ -516,14 +519,15 @@ func (h *Handler) dashboard(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, dashboardResponse{
-		Totals:            metricValuesToResponse(result.Totals),
-		DatedByConversion: result.DatedByConversion,
-		Daily:             reportRowsToResponse(result.Daily),
-		TopCampaigns:      reportRowsToResponse(result.TopCampaigns),
-		TopCountries:      reportRowsToResponse(result.TopCountries),
-		TopFlows:          reportRowsToResponse(result.TopFlows),
-		TopOffers:         reportRowsToResponse(result.TopOffers),
-		Currency:          cur,
+		Totals:              metricValuesToResponse(result.Totals),
+		DatedByConversion:   result.DatedByConversion,
+		UnpricedConversions: result.Unpriced,
+		Daily:               reportRowsToResponse(result.Daily),
+		TopCampaigns:        reportRowsToResponse(result.TopCampaigns),
+		TopCountries:        reportRowsToResponse(result.TopCountries),
+		TopFlows:            reportRowsToResponse(result.TopFlows),
+		TopOffers:           reportRowsToResponse(result.TopOffers),
+		Currency:            cur,
 	})
 }
 

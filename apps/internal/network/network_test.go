@@ -306,3 +306,55 @@ func seedOrg(t *testing.T, ctx context.Context, pool *pgxpool.Pool) string {
 	})
 	return id
 }
+
+// TestCurrency: the payout currency a postback with revenue but no currency
+// is priced in (audit 2026-10-15, DATA-1).
+func TestCurrency(t *testing.T) {
+	pool := mustPool(t)
+	ctx := context.Background()
+	orgID := seedOrg(t, ctx, pool)
+	svc := network.NewService(network.NewRepository(pool))
+
+	def, err := svc.Create(ctx, orgID, network.CreateInput{Name: "Default Currency", PostbackURL: "https://example.com/pb"})
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	if def.Network.Currency != "USD" {
+		t.Errorf("default currency = %q, want USD", def.Network.Currency)
+	}
+
+	eur, err := svc.Create(ctx, orgID, network.CreateInput{Name: "Euro Network", PostbackURL: "https://example.com/pb", Currency: " eur "})
+	if err != nil {
+		t.Fatalf("Create EUR: %v", err)
+	}
+	if eur.Network.Currency != "EUR" {
+		t.Errorf("currency = %q, want EUR (normalized)", eur.Network.Currency)
+	}
+
+	for _, bad := range []string{"EURO", "E1R", "$"} {
+		if _, err := svc.Create(ctx, orgID, network.CreateInput{Name: "Bad Currency", PostbackURL: "https://example.com/pb", Currency: bad}); err == nil {
+			t.Errorf("Create with currency %q succeeded, want a validation error", bad)
+		}
+		b := bad
+		if _, err := svc.Update(ctx, orgID, eur.Network.ID, network.UpdateInput{Currency: &b}); err == nil {
+			t.Errorf("Update to currency %q succeeded, want a validation error", bad)
+		}
+	}
+
+	gbp := "gbp"
+	updated, err := svc.Update(ctx, orgID, eur.Network.ID, network.UpdateInput{Currency: &gbp})
+	if err != nil {
+		t.Fatalf("Update: %v", err)
+	}
+	if updated.Currency != "GBP" {
+		t.Errorf("updated currency = %q, want GBP", updated.Currency)
+	}
+
+	dup, err := svc.Duplicate(ctx, orgID, eur.Network.ID)
+	if err != nil {
+		t.Fatalf("Duplicate: %v", err)
+	}
+	if dup.Currency != "GBP" {
+		t.Errorf("duplicate currency = %q, want GBP (copied)", dup.Currency)
+	}
+}

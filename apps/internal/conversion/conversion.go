@@ -65,6 +65,19 @@ type Postback struct {
 	Revenue  *float64
 	Currency string
 
+	// NetworkCurrency is the network's payout currency (networks.currency,
+	// USD unless the operator chose another). A postback that carries
+	// revenue but no currency is taken to be in it — otherwise the amount
+	// has no USD value and drops out of every revenue figure (audit
+	// 2026-10-15, DATA-1). Like OrganizationID it comes from the network
+	// lookup, never from the request.
+	NetworkCurrency string
+	// currencyAssumed is set when NetworkCurrency stood in for a missing
+	// currency; unpriced when the revenue got no USD value (no rate on
+	// file). The outcome's message then says so (annotate).
+	currencyAssumed bool
+	unpriced        bool
+
 	// NetworkTxnID is the network's own transaction/order id, when sent.
 	// Stored regardless of whether this status's dedup key uses it (§45).
 	NetworkTxnID string
@@ -115,6 +128,9 @@ type Network struct {
 	// network has no outgoing integration configured, and the handler must
 	// not populate Postback.PostbackURL in that case.
 	PostbackURL string
+	// Currency is the payout currency assumed for a postback with revenue
+	// but no currency (Postback.NetworkCurrency).
+	Currency string
 	// PostbackSecretHash authenticates an incoming postback (§54):
 	// apps/tracker's PostbackHandler hashes the request's secret param and
 	// compares it with this before calling Service.Record. Network has no
@@ -354,7 +370,7 @@ func (s *Service) logAttempt(ctx context.Context, p Postback, clickID string, st
 // infrastructure failure, where the honest answer is "retry me," not a
 // fabricated result.
 func (s *Service) Record(ctx context.Context, p Postback) (Result, error) {
-	p = p.trimmed()
+	p = p.trimmed().withNetworkCurrency()
 
 	if refusal := validate(p); refusal != "" {
 		// A postback without a status is logged without its click.
@@ -388,6 +404,7 @@ func (s *Service) Record(ctx context.Context, p Postback) (Result, error) {
 		return Result{}, err
 	}
 	usdValue, revenue := s.convertRevenue(ctx, p)
+	p.unpriced = revenue != nil && usdValue == nil
 
 	return s.commit(ctx, p, newEntry(p, status, eventRef, attr, revenue, usdValue), attr)
 }
@@ -398,10 +415,49 @@ func (p Postback) trimmed() Postback {
 	p.ClickID = strings.TrimSpace(p.ClickID)
 	p.ExternalClickID = strings.TrimSpace(p.ExternalClickID)
 	p.RawStatus = strings.TrimSpace(p.RawStatus)
-	p.Currency = strings.TrimSpace(p.Currency)
+	p.Currency = strings.ToUpper(strings.TrimSpace(p.Currency))
 	p.NetworkTxnID = strings.TrimSpace(p.NetworkTxnID)
 	p.PostbackURL = strings.TrimSpace(p.PostbackURL)
 	return p
+}
+
+// withNetworkCurrency fills a missing currency from the network's when the
+// postback carries revenue. A postback without revenue keeps no currency:
+// there is nothing to price.
+func (p Postback) withNetworkCurrency() Postback {
+	if p.Revenue == nil || p.Currency != "" {
+		return p
+	}
+	if c := strings.ToUpper(strings.TrimSpace(p.NetworkCurrency)); c != "" {
+		p.Currency = c
+		p.currencyAssumed = true
+	}
+	return p
+}
+
+// annotate adds to an outcome's message that the currency was assumed, or
+// that the revenue could not be priced in USD, so the postback log shows
+// why an amount is (or is not) in the reports.
+func (p Postback) annotate(message string) string {
+	var notes []string
+	if p.currencyAssumed {
+		notes = append(notes, fmt.Sprintf("currency not sent, the network's %s assumed", p.Currency))
+	}
+	if p.unpriced {
+		if p.Currency == "" {
+			notes = append(notes, "revenue without a currency is left out of revenue reports")
+		} else {
+			notes = append(notes, fmt.Sprintf("no %s rate for %s, revenue is left out of revenue reports", p.Currency, p.OccurredAt.UTC().Format("2006-01-02")))
+		}
+	}
+	for _, n := range notes {
+		if message == "" {
+			message = n
+		} else {
+			message += "; " + n
+		}
+	}
+	return message
 }
 
 // validate returns why a postback cannot be recorded, or "". The HTTP
@@ -520,6 +576,7 @@ func (s *Service) commit(ctx context.Context, p Postback, entry Entry, attr attr
 	if rec.Kind == ResultIgnored || rec.Kind == ResultSuccess {
 		message = rec.Message
 	}
+	message = p.annotate(message)
 	s.logAttempt(ctx, p, entry.ClickID, entry.Status, entry.EventRef, rec.Kind, message)
 	return Result{ID: rec.ID, Kind: rec.Kind, Status: entry.Status, Attribution: attr, Message: message}, nil
 }
@@ -544,6 +601,11 @@ func (s *Service) recordRefusal(ctx context.Context, p Postback, clickID string,
 	})
 	if err != nil {
 		return Result{}, fmt.Errorf("conversion: logging %s: %w", kind, err)
+	}
+	// A postback refused as unusable records no money, so how its money
+	// would have been priced is beside the point.
+	if kind != ResultError {
+		message = p.annotate(message)
 	}
 	s.logAttempt(ctx, p, clickID, status, eventRef, kind, message)
 	return Result{ID: rec.ID, Kind: kind, Status: status, Message: message}, nil

@@ -86,6 +86,9 @@ type IncomingNetwork struct {
 	OrganizationID   string
 	AcceptDuplicates bool
 	PostbackURL      string
+	// Currency is the network's payout currency, assumed for a replayed
+	// postback with revenue but no currency, as on the live path.
+	Currency string
 }
 
 // IncomingRecord is what IncomingRecorder.Record persists — the same
@@ -100,6 +103,7 @@ type IncomingRecord struct {
 	NetworkTxnID     string
 	Revenue          *float64
 	Currency         string
+	NetworkCurrency  string
 	PostbackURL      string
 	OccurredAt       time.Time
 }
@@ -293,6 +297,7 @@ func (s *Service) ReplayIncoming(ctx context.Context, organizationID string, in 
 		NetworkTxnID:     in.EventRef,
 		Revenue:          in.Revenue,
 		Currency:         in.Currency,
+		NetworkCurrency:  network.Currency,
 		PostbackURL:      network.PostbackURL,
 		OccurredAt:       time.Now().UTC(),
 	})

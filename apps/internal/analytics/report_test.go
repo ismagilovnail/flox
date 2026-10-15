@@ -1098,3 +1098,29 @@ func TestFlowSummaryRejectsBadInput(t *testing.T) {
 		})
 	}
 }
+
+// totalsRepo answers the totals query (no dims, not by day) with one row.
+type totalsRepo struct {
+	reportFakeRepo
+	totals chstore.ConversionAgg
+}
+
+func (r *totalsRepo) ReportConversions(_ context.Context, q chstore.ReportQuery) ([]chstore.ConversionAgg, error) {
+	if len(q.Dims) == 0 && !q.ByDay {
+		return []chstore.ConversionAgg{r.totals}, nil
+	}
+	return nil, nil
+}
+
+// Audit 2026-10-15, DATA-1: the Overview says how many conversions carry
+// revenue missing from the totals, instead of a quietly lower Revenue.
+func TestDashboardReportsUnpricedConversions(t *testing.T) {
+	repo := &totalsRepo{totals: chstore.ConversionAgg{Conversions: 3, RevenueUSD: 25, Unpriced: 2}}
+	result, err := analytics.NewService(repo, nil).Dashboard(context.Background(), "org-1", time.Now().AddDate(0, 0, -7), time.Now(), "", "")
+	if err != nil {
+		t.Fatalf("Dashboard: %v", err)
+	}
+	if result.Unpriced != 2 {
+		t.Fatalf("Unpriced = %d, want 2", result.Unpriced)
+	}
+}

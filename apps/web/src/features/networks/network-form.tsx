@@ -16,6 +16,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { MacroPicker } from "@/components/shared/macro-picker";
 import type { NetworkStatus } from "@/lib/api/networks";
 import { nameField } from "@/schemas/fields";
+import { CURRENCIES } from "@/lib/countries";
 
 /** Factory, not a module-level const — see source-form.tsx's
  * buildSourceFormSchema for why (Zod messages are user-facing text and
@@ -25,6 +26,7 @@ export function buildNetworkFormSchema(t: TFunction) {
     name: nameField(t("form.validation.nameMin", { ns: "networks" }), { max: 80 }),
     postbackUrl: z.url(t("form.validation.urlInvalid", { ns: "networks" })),
     acceptDuplicates: z.boolean(),
+    currency: z.string().regex(/^[A-Z]{3}$/, t("form.validation.currencyInvalid", { ns: "networks" })),
     status: z.enum(["active", "paused", "archived"] as [NetworkStatus, ...NetworkStatus[]]).optional(),
   });
 }
@@ -60,8 +62,12 @@ export function NetworkForm({
   const { t } = useTranslation(["networks", "common"]);
   const form = useForm<NetworkFormValues>({
     resolver: zodResolver(buildNetworkFormSchema(t)),
-    defaultValues: { name: "", postbackUrl: "", acceptDuplicates: false, status: "active", ...defaultValues },
+    defaultValues: { name: "", postbackUrl: "", acceptDuplicates: false, currency: "USD", status: "active", ...defaultValues },
   });
+  // A network saved with a currency outside the short list keeps it as an
+  // option, same as the organization's currency (organization-panel.tsx).
+  const current = defaultValues.currency;
+  const currencyOptions = current && !CURRENCIES.includes(current) ? [current, ...CURRENCIES] : CURRENCIES;
 
   const {
     register,
@@ -112,6 +118,30 @@ export function NetworkForm({
             {errors.postbackUrl && <p className="text-xs text-danger">{errors.postbackUrl.message}</p>}
             <p className="text-xs text-muted-foreground">{t("form.postbackUrlHint", { ns: "networks" })}</p>
           </div>
+
+          <div className="grid gap-1.5 sm:w-1/3">
+            <Label htmlFor="net-currency">{t("form.currencyLabel", { ns: "networks" })}</Label>
+            <Controller
+              control={control}
+              name="currency"
+              render={({ field }) => (
+                <Select value={field.value} onValueChange={field.onChange} disabled={disabled}>
+                  <SelectTrigger id="net-currency" className="w-full font-mono" aria-invalid={!!errors.currency}>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {currencyOptions.map((c) => (
+                      <SelectItem key={c} value={c} className="font-mono">
+                        {c}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
+            />
+            {errors.currency && <p className="text-xs text-danger">{errors.currency.message}</p>}
+          </div>
+          <p className="-mt-2 text-xs text-muted-foreground">{t("form.currencyHint", { ns: "networks" })}</p>
 
           <div className="flex items-center justify-between rounded-md border border-border p-2.5">
             <div>

@@ -33,7 +33,7 @@ export function NetworkDetailView({ id }: { id: string }) {
 
   function handleSubmit(values: NetworkFormValues) {
     updateNetwork.mutate(
-      { name: values.name, postbackUrl: values.postbackUrl, acceptDuplicates: values.acceptDuplicates, status: values.status },
+      { name: values.name, postbackUrl: values.postbackUrl, acceptDuplicates: values.acceptDuplicates, currency: values.currency, status: values.status },
       {
         onSuccess: () => toast(t("toast.updated"), { description: values.name }),
         onError: (err) => toast.error(t("toast.updateError"), { description: err.message }),
@@ -48,6 +48,7 @@ export function NetworkDetailView({ id }: { id: string }) {
         name: network.name,
         postbackUrl: network.postbackUrl,
         acceptDuplicates: network.acceptDuplicates,
+        currency: network.currency,
         status: network.status,
       }}
       submitLabel={t("form.submitEdit")}

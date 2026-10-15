@@ -32,6 +32,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"math"
 	"net/http"
 	"net/http/cookiejar"
 	"net/url"
@@ -691,7 +692,9 @@ func (s *scenario) recordEvent() {
 // sendConversionPostback hits the tracker's inbound conversion endpoint
 // (GET/POST /postback/{networkId}, §45/§46) the way a real network would,
 // including the postback secret (§54/Phase 30).
-func (s *scenario) sendConversionPostback(rawStatus string, revenue *float64, txnID string) (result, status string) {
+// currency "" sends revenue without a currency: the network's own (USD,
+// its default) is then assumed (audit 2026-10-15, DATA-1).
+func (s *scenario) sendConversionPostback(rawStatus string, revenue *float64, currency, txnID string) (result, status string) {
 	s.t.Helper()
 	q := url.Values{}
 	q.Set("secret", s.postbackSecret)
@@ -699,7 +702,9 @@ func (s *scenario) sendConversionPostback(rawStatus string, revenue *float64, tx
 	q.Set("status", rawStatus)
 	if revenue != nil {
 		q.Set("revenue", fmt.Sprintf("%.2f", *revenue))
-		q.Set("currency", "USD")
+		if currency != "" {
+			q.Set("currency", currency)
+		}
 	}
 	if txnID != "" {
 		q.Set("txn_id", txnID)
@@ -735,20 +740,22 @@ func (s *scenario) receiveConversions() {
 
 	revenue := func(v float64) *float64 { return &v }
 
-	if result, status := s.sendConversionPostback("reg", nil, ""); result != "success" || status != "CPA_HOLD" {
+	if result, status := s.sendConversionPostback("reg", nil, "", ""); result != "success" || status != "CPA_HOLD" {
 		s.t.Fatalf("HOLD postback: want result=success status=CPA_HOLD, got result=%s status=%s", result, status)
 	}
 	s.t.Log("received conversion: CPA_HOLD")
 
-	if result, status := s.sendConversionPostback("ftd", revenue(25.50), "txn-accept-1"); result != "success" || status != "CPA_ACCEPT" {
+	if result, status := s.sendConversionPostback("ftd", revenue(25.50), "USD", "txn-accept-1"); result != "success" || status != "CPA_ACCEPT" {
 		s.t.Fatalf("ACCEPT postback: want result=success status=CPA_ACCEPT, got result=%s status=%s", result, status)
 	}
 	s.t.Log("received conversion: CPA_ACCEPT ($25.50)")
 
-	if result, status := s.sendConversionPostback("redep", revenue(10.00), "txn-redep-1"); result != "success" || status != "CPA_REDEP" {
+	// No currency on purpose: it must be priced in the network's (USD) and
+	// reach the revenue report, not drop out of it as $0.
+	if result, status := s.sendConversionPostback("redep", revenue(10.00), "", "txn-redep-1"); result != "success" || status != "CPA_REDEP" {
 		s.t.Fatalf("REDEP postback: want result=success status=CPA_REDEP, got result=%s status=%s", result, status)
 	}
-	s.t.Log("received conversion: CPA_REDEP ($10.00)")
+	s.t.Log("received conversion: CPA_REDEP ($10.00, no currency sent)")
 }
 
 // attributeConversion polls GET /conversions/{clickId} (apps/internal/
@@ -950,17 +957,23 @@ func (s *scenario) analyticsAndLTV() {
 	}
 	ok = pollUntil(s.t, pollBudget, 500*time.Millisecond, func() bool {
 		s.get(fmt.Sprintf("/analytics/campaigns/%s/daily-revenue?from=%s&to=%s", s.campaignID, today, today), &revenue, http.StatusOK)
+		var accept, redep bool
 		for _, r := range revenue.Revenue {
 			if r.Type == "CPA_ACCEPT" && r.RevenueUSD > 0 {
-				return true
+				accept = true
+			}
+			// Sent without a currency (receiveConversions): $10 in the
+			// network's USD, not $0.
+			if r.Type == "CPA_REDEP" && math.Abs(r.RevenueUSD-10) < 0.001 {
+				redep = true
 			}
 		}
-		return false
+		return accept && redep
 	})
 	if !ok {
-		s.t.Fatalf("analytics: CPA_ACCEPT revenue never appeared in /analytics/campaigns/%s/daily-revenue (got %+v)", s.campaignID, revenue.Revenue)
+		s.t.Fatalf("analytics: CPA_ACCEPT revenue and the $10 CPA_REDEP sent without a currency never both appeared in /analytics/campaigns/%s/daily-revenue (got %+v)", s.campaignID, revenue.Revenue)
 	}
-	s.t.Log("analytics: CPA_ACCEPT revenue confirmed in daily-revenue aggregate")
+	s.t.Log("analytics: CPA_ACCEPT and currency-less CPA_REDEP revenue confirmed in daily-revenue aggregate")
 
 	// ?from=today&to=today deliberately exercises the same-day filter a
 	// real report load would use. internal/chstore's LTVFilter query is a

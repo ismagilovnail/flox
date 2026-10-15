@@ -5,6 +5,29 @@ per-phase, matching `CLAUDE.md`'s phase protocol. The one exception is
 [Between phases], below: spec amendments and the code changes that follow from
 them land between phases and would otherwise be invisible here.
 
+## [Phase 30.43] — Revenue without a currency (audit DATA-1)
+
+The product audit's money finding: a postback with `revenue` but no `currency` was stored with no USD value, so a
+$50 FTD reported as $0 in Revenue, ROI and LTV with no warning. `docs/conversion.md` "Revenue without a currency".
+No production existed, so nothing is repriced; the dev stores were wiped the same day at the owner's request.
+
+- Networks have a payout currency: migration 00086 `networks.currency` (`USD` default, `^[A-Z]{3}$`), in the API
+  (create/update, normalized upper case, copied by duplicate) and the network form ("Payout currency"). Numbered 00086
+  because 00085 is the owner's gallery-transcoding work, still uncommitted.
+- `conversion.Postback.NetworkCurrency` (from the network lookup, live and replay): revenue without a currency is
+  priced in it; a sent currency wins and is upper-cased. Accepted postbacks say what happened — `currency not sent,
+  the network's EUR assumed` or `no TRY rate for <day>, revenue is left out of revenue reports` — in the response and
+  the postback log; refusals stay bare.
+- Overview: `/analytics/dashboard` answers `unpricedConversions` (ACCEPT/REDEP with revenue and no USD value,
+  `chstore.ConversionAgg.Unpriced`, both report queries); the Overview shows a warning with a link to the postback log.
+- Tests: `conversion/currency_test.go` (assumed currency, sent currency wins, no revenue, unpriced note, replay,
+  refusal), `network` `TestCurrency`, `chstore` `TestReportCountsUnpricedConversions` (plain and joined),
+  `analytics` `TestDashboardReportsUnpricedConversions`; e2e `TestFullFunnel` now sends the REDEP without a currency
+  and waits for its $10 in the revenue report. Full suite with the full env in a clean worktree, e2e 4/4. Live: no
+  currency → `USD assumed`, XAF without a rate → the note, dashboard `unpricedConversions: 1`, banner on the Overview.
+- Also: `push` `TestRecurringBroadcast` failed every evening 22:00–24:00 in UTC+5 — it formatted the slot's date in
+  the machine's zone, the code (rightly) in the recurrence's UTC. Fixed in the test.
+
 ## [Phase 30.42] — Dev panel (tooling, not part of the product)
 
 The audit board (`tools/audit-tracker`, c1f12e8) grew into FLOX's local development panel, `tools/devpanel`

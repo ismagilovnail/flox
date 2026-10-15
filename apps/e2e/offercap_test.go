@@ -138,7 +138,7 @@ func TestOfferDailyCap(t *testing.T) {
 		t.Fatal("no click on offer A reached ClickHouse")
 	}
 	s.clickID = clickID
-	if res, _ := s.sendConversionPostback("reg", nil, ""); res == "" {
+	if res, _ := s.sendConversionPostback("reg", nil, "", ""); res == "" {
 		t.Fatal("postback was not recorded")
 	}
 

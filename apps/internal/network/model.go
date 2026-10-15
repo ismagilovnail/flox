@@ -25,20 +25,25 @@ func (s Status) Valid() bool {
 }
 
 type Network struct {
-	ID               string    `json:"id"`
-	OrganizationID   string    `json:"organizationId"`
-	Name             string    `json:"name"`
-	PostbackURL      string    `json:"postbackUrl"`
-	AcceptDuplicates bool      `json:"acceptDuplicates"`
-	Status           Status    `json:"status"`
-	CreatedAt        time.Time `json:"createdAt"`
-	UpdatedAt        time.Time `json:"updatedAt"`
+	ID               string `json:"id"`
+	OrganizationID   string `json:"organizationId"`
+	Name             string `json:"name"`
+	PostbackURL      string `json:"postbackUrl"`
+	AcceptDuplicates bool   `json:"acceptDuplicates"`
+	// Currency is the payout currency: a postback with revenue but no
+	// currency is taken to be in it (ISO 4217, upper case; USD default).
+	Currency  string    `json:"currency"`
+	Status    Status    `json:"status"`
+	CreatedAt time.Time `json:"createdAt"`
+	UpdatedAt time.Time `json:"updatedAt"`
 }
 
 type CreateInput struct {
 	Name             string
 	PostbackURL      string
 	AcceptDuplicates bool
+	// Currency empty means USD.
+	Currency string
 }
 
 // UpdateInput fields are pointers so PATCH can distinguish "not sent"
@@ -47,6 +52,7 @@ type UpdateInput struct {
 	Name             *string
 	PostbackURL      *string
 	AcceptDuplicates *bool
+	Currency         *string
 	Status           *Status
 }
 

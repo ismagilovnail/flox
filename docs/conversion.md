@@ -103,6 +103,30 @@ check for other callers (postback replay) and logs those as `error`. A
 negative amount is refused too: a reversal is a `CPA_DECLINE` status
 (§45), not a negative payout.
 
+## Revenue without a currency: the network's currency (audit 2026-10-15, DATA-1)
+
+Each network has a payout currency, `networks.currency` (migration 00086,
+`USD` by default, any 3-letter code; the network form's "Payout currency").
+A postback that carries `revenue` but no `currency` is taken to be in it:
+`conversion.Postback.NetworkCurrency`, filled from the network lookup —
+never from the request — on the live path (`apps/tracker/postback.go`) and
+on replay (`postbacklogs` → `ReplayRecorder`). Before this, such an amount
+was stored with no USD value and silently left out of Revenue, ROI and
+LTV: a $50 FTD reported as $0.
+
+- A sent currency always wins; it is upper-cased (`usd` → `USD`).
+- No revenue, no currency: a HOLD ping stays without one.
+- The outcome's message says what happened, and the postback log keeps
+  it: `currency not sent, the network's EUR assumed`, or, when the
+  amount still has no USD value, `no TRY rate for 2026-10-15, revenue is
+  left out of revenue reports`.
+- The Overview counts such conversions (`unpricedConversions`,
+  `docs/analytics-report-api.md`) and shows a warning above the KPIs, so a
+  low Revenue never reads as the truth.
+
+Conversions stored before 00086 are not repriced: there was no production
+data, and the dev stores were wiped on the same day.
+
 ## When the conversion happened: `event_time` (tech audit T3)
 
 A postback may say when the conversion happened at the network:

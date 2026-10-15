@@ -358,6 +358,10 @@ type ConversionAgg struct {
 	// DatedByConversion counts, by click, the group's conversions with no
 	// attributed click, reported on their own date instead.
 	DatedByConversion uint64
+	// Unpriced counts the group's ACCEPT/REDEP conversions that carried
+	// revenue but got no USD value (no currency, or no rate on file): their
+	// money is missing from RevenueUSD (audit 2026-10-15, DATA-1).
+	Unpriced uint64
 }
 
 // InstallAgg is one group's stage events counted off tracking_events:
@@ -612,7 +616,8 @@ func (s *EventStore) ReportConversions(ctx context.Context, q ReportQuery) ([]Co
 			countIf(type = 'CPA_REDEP') AS repurchases,
 			countIf(type = 'CPA_DECLINE') AS declines,
 			countIf(type = 'CPA_TRASH') AS trash,
-			%s AS dated_by_conversion
+			%s AS dated_by_conversion,
+			countIf(type IN ('CPA_ACCEPT', 'CPA_REDEP') AND revenue > 0 AND has_usd_value = 0) AS unpriced
 		FROM conversion_events
 		WHERE organization_id = ? AND %s AND type IN `+reportCPATypes+`%s
 		%s`,
@@ -628,9 +633,9 @@ func (s *EventStore) ReportConversions(ctx context.Context, q ReportQuery) ([]Co
 	var out []ConversionAgg
 	for rows.Next() {
 		dimVals, day, dest := scanDest(q.Dims, q.ByDay)
-		var conversions, registrations, purchases, repurchases, declines, trash, datedByConversion uint64
+		var conversions, registrations, purchases, repurchases, declines, trash, datedByConversion, unpriced uint64
 		var revenueUSD float64
-		dest = append(dest, &conversions, &revenueUSD, &registrations, &purchases, &repurchases, &declines, &trash, &datedByConversion)
+		dest = append(dest, &conversions, &revenueUSD, &registrations, &purchases, &repurchases, &declines, &trash, &datedByConversion, &unpriced)
 		if err := rows.Scan(dest...); err != nil {
 			return nil, fmt.Errorf("chstore: scanning conversion report row: %w", err)
 		}
@@ -639,6 +644,7 @@ func (s *EventStore) ReportConversions(ctx context.Context, q ReportQuery) ([]Co
 			Registrations: registrations, Purchases: purchases, Repurchases: repurchases,
 			Declines: declines, Trash: trash,
 			DatedByConversion: datedByConversion,
+			Unpriced:          unpriced,
 		})
 	}
 	return out, rows.Err()
@@ -709,7 +715,8 @@ func (s *EventStore) reportConversionsJoined(ctx context.Context, q ReportQuery)
 			countIf(c.type = 'CPA_REDEP') AS repurchases,
 			countIf(c.type = 'CPA_DECLINE') AS declines,
 			countIf(c.type = 'CPA_TRASH') AS trash,
-			%s AS dated_by_conversion
+			%s AS dated_by_conversion,
+			countIf(c.type IN ('CPA_ACCEPT', 'CPA_REDEP') AND c.revenue > 0 AND c.has_usd_value = 0) AS unpriced
 		FROM conversion_events AS c
 		LEFT JOIN (
 			SELECT click_id, any(os) AS os, any(browser) AS browser, any(language) AS language
@@ -734,9 +741,9 @@ func (s *EventStore) reportConversionsJoined(ctx context.Context, q ReportQuery)
 	var out []ConversionAgg
 	for rows.Next() {
 		dimVals, day, dest := scanDest(q.Dims, q.ByDay)
-		var conversions, registrations, purchases, repurchases, declines, trash, datedByConversion uint64
+		var conversions, registrations, purchases, repurchases, declines, trash, datedByConversion, unpriced uint64
 		var revenueUSD float64
-		dest = append(dest, &conversions, &revenueUSD, &registrations, &purchases, &repurchases, &declines, &trash, &datedByConversion)
+		dest = append(dest, &conversions, &revenueUSD, &registrations, &purchases, &repurchases, &declines, &trash, &datedByConversion, &unpriced)
 		if err := rows.Scan(dest...); err != nil {
 			return nil, fmt.Errorf("chstore: scanning joined conversion report row: %w", err)
 		}
@@ -745,6 +752,7 @@ func (s *EventStore) reportConversionsJoined(ctx context.Context, q ReportQuery)
 			Registrations: registrations, Purchases: purchases, Repurchases: repurchases,
 			Declines: declines, Trash: trash,
 			DatedByConversion: datedByConversion,
+			Unpriced:          unpriced,
 		})
 	}
 	return out, rows.Err()

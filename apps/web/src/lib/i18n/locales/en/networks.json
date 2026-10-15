@@ -30,6 +30,8 @@
     "postbackUrlLabel": "Postback URL",
     "postbackUrlPlaceholder": "https://network.example/postback?click_id={click_id}&status={status}",
     "postbackUrlHint": "Called when a conversion of this network changes status. Macros such as {click_id} and {status} are filled in.",
+    "currencyLabel": "Payout currency",
+    "currencyHint": "When a postback sends an amount without a currency, FLOX takes it to be in this one. Without it, that revenue would be left out of reports.",
     "acceptDuplicatesLabel": "Accept duplicate postbacks",
     "acceptDuplicatesHint": "By default FLOX records each status once per click (a redeposit once per transaction id) and drops repeats. Some partners re-send the same status on purpose — turn this on only if this network needs it. A status still never moves back to hold.",
     "acceptDuplicatesAria": "Accept duplicate postbacks",
@@ -38,7 +40,8 @@
     "submitEdit": "Save changes",
     "validation": {
       "nameMin": "Name must be at least 2 characters",
-      "urlInvalid": "Enter a valid URL"
+      "urlInvalid": "Enter a valid URL",
+      "currencyInvalid": "A 3-letter currency code, e.g. USD"
     }
   },
   "rowActions": {

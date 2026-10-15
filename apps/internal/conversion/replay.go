@@ -39,6 +39,7 @@ func (l *ReplayNetworkLookup) ByID(ctx context.Context, networkID string) (postb
 		OrganizationID:   n.OrganizationID,
 		AcceptDuplicates: n.AcceptDuplicates,
 		PostbackURL:      n.PostbackURL,
+		Currency:         n.Currency,
 	}, nil
 }
 
@@ -66,6 +67,7 @@ func (r *ReplayRecorder) Record(ctx context.Context, in postbacklogs.IncomingRec
 		NetworkTxnID:     in.NetworkTxnID,
 		Revenue:          in.Revenue,
 		Currency:         in.Currency,
+		NetworkCurrency:  in.NetworkCurrency,
 		PostbackURL:      in.PostbackURL,
 		OccurredAt:       in.OccurredAt,
 	})

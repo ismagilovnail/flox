@@ -15,6 +15,9 @@ export type Network = {
   name: string;
   postbackUrl: string;
   acceptDuplicates: boolean;
+  /** Payout currency (ISO 4217): a postback with revenue but no currency
+   * is priced in it. USD unless the operator chose another. */
+  currency: string;
   status: NetworkStatus;
   createdAt: string;
   updatedAt: string;
@@ -24,6 +27,7 @@ export type CreateNetworkInput = {
   name: string;
   postbackUrl: string;
   acceptDuplicates: boolean;
+  currency: string;
 };
 
 export type UpdateNetworkInput = Partial<CreateNetworkInput> & { status?: NetworkStatus };

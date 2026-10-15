@@ -130,6 +130,9 @@ export type DashboardReport = {
   /** Dated by click: conversions in the totals with no attributed click,
    * counted on their own date. 0 otherwise. */
   datedByConversion: number;
+  /** Conversions in the range whose revenue has no USD value (no currency
+   * or no FX rate) and is missing from the totals. */
+  unpricedConversions: number;
   daily: TimeseriesPoint[];
   topCampaigns: ReportRow[];
   topCountries: ReportRow[];
@@ -146,6 +149,7 @@ export function getDashboardReport(
   return apiFetch<{
     totals: ApiMetrics;
     datedByConversion?: number;
+    unpricedConversions?: number;
     daily: ApiReportRow[];
     topCampaigns: ApiReportRow[];
     topCountries: ApiReportRow[];
@@ -157,6 +161,7 @@ export function getDashboardReport(
   }).then((res) => ({
     totals: res.totals,
     datedByConversion: res.datedByConversion ?? 0,
+    unpricedConversions: res.unpricedConversions ?? 0,
     daily: res.daily.map((d) => ({ day: d.day!, metrics: d.metrics })),
     topCampaigns: res.topCampaigns.map((r) => toReportRow(r, ["campaign"])),
     topCountries: res.topCountries.map((r) => toReportRow(r, ["country"])),

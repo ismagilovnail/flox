@@ -3,6 +3,7 @@ package network
 import (
 	"context"
 	"fmt"
+	"regexp"
 	"strings"
 
 	"github.com/ismagilovnail/flox/apps/internal/apierror"
@@ -15,6 +16,16 @@ const (
 	nameMinLen = 2
 	nameMaxLen = 80
 )
+
+// currencyPattern accepts any ISO 4217-shaped code, like the organization's
+// currency (internal/auth): a currency without a rate on file is still
+// stored, the conversion engine just cannot price it.
+var currencyPattern = regexp.MustCompile(`^[A-Z]{3}$`)
+
+const currencyMessage = "must be a 3-letter currency code, e.g. USD"
+
+// normalizeCurrency upper-cases a currency; empty stays empty.
+func normalizeCurrency(c string) string { return strings.ToUpper(strings.TrimSpace(c)) }
 
 type Service struct {
 	repo *Repository
@@ -43,6 +54,10 @@ func (s *Service) Get(ctx context.Context, orgID, id string) (Network, error) {
 
 func (s *Service) Create(ctx context.Context, orgID string, in CreateInput) (CreateResult, error) {
 	in.Name = strings.TrimSpace(in.Name)
+	in.Currency = normalizeCurrency(in.Currency)
+	if in.Currency == "" {
+		in.Currency = "USD"
+	}
 	if fields := validateCreate(in); len(fields) > 0 {
 		return CreateResult{}, apierror.Validation("invalid network", fields)
 	}
@@ -84,6 +99,13 @@ func (s *Service) Update(ctx context.Context, orgID, id string, in UpdateInput) 
 	if in.PostbackURL != nil && urlsafety.ValidateURL(*in.PostbackURL) != nil {
 		fields["postbackUrl"] = "must be a valid absolute URL"
 	}
+	if in.Currency != nil {
+		c := normalizeCurrency(*in.Currency)
+		in.Currency = &c
+		if !currencyPattern.MatchString(c) {
+			fields["currency"] = currencyMessage
+		}
+	}
 	if in.Status != nil && !in.Status.Valid() {
 		fields["status"] = "must be one of active, paused, archived"
 	}
@@ -119,6 +141,7 @@ func (s *Service) Duplicate(ctx context.Context, orgID, id string) (Network, err
 		Name:             source.Name + " (Copy)",
 		PostbackURL:      source.PostbackURL,
 		AcceptDuplicates: source.AcceptDuplicates,
+		Currency:         source.Currency,
 	}, secretHash)
 	if err != nil {
 		return Network{}, err
@@ -169,6 +192,9 @@ func validateCreate(in CreateInput) map[string]string {
 	}
 	if urlsafety.ValidateURL(in.PostbackURL) != nil {
 		fields["postbackUrl"] = "must be a valid absolute URL"
+	}
+	if !currencyPattern.MatchString(in.Currency) {
+		fields["currency"] = currencyMessage
 	}
 	return fields
 }

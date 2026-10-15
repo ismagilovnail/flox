@@ -70,6 +70,7 @@ type createRequest struct {
 	Name             string `json:"name"`
 	PostbackURL      string `json:"postbackUrl"`
 	AcceptDuplicates bool   `json:"acceptDuplicates"`
+	Currency         string `json:"currency"`
 }
 
 func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
@@ -85,6 +86,7 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 		Name:             req.Name,
 		PostbackURL:      req.PostbackURL,
 		AcceptDuplicates: req.AcceptDuplicates,
+		Currency:         req.Currency,
 	})
 	if err != nil {
 		apierror.Write(w, h.logger, err)
@@ -106,6 +108,7 @@ type updateRequest struct {
 	Name             *string `json:"name"`
 	PostbackURL      *string `json:"postbackUrl"`
 	AcceptDuplicates *bool   `json:"acceptDuplicates"`
+	Currency         *string `json:"currency"`
 	Status           *Status `json:"status"`
 }
 
@@ -122,6 +125,7 @@ func (h *Handler) update(w http.ResponseWriter, r *http.Request) {
 		Name:             req.Name,
 		PostbackURL:      req.PostbackURL,
 		AcceptDuplicates: req.AcceptDuplicates,
+		Currency:         req.Currency,
 		Status:           req.Status,
 	})
 	if err != nil {

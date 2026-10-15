@@ -158,6 +158,9 @@ type ReportRow struct {
 	// DatedByConversion counts, when dated by click, the row's conversions
 	// with no attributed click, which keep their own date.
 	DatedByConversion uint64
+	// Unpriced counts the row's conversions whose revenue has no USD value
+	// and is therefore missing from Revenue (chstore.ConversionAgg.Unpriced).
+	Unpriced uint64
 }
 
 // ReportInput is Report's request shape — mirrors
@@ -502,6 +505,7 @@ func (s *Service) groupedReport(ctx context.Context, organizationID string, dims
 			declines, trash := a.Declines, a.Trash
 			acc.declines, acc.trash = &declines, &trash
 			acc.datedByConversion = a.DatedByConversion
+			acc.unpriced = a.Unpriced
 		}
 	}
 
@@ -558,6 +562,7 @@ func (s *Service) groupedReport(ctx context.Context, organizationID string, dims
 			DimValues:         acc.dimValues,
 			Metrics:           deriveMetrics(acc),
 			DatedByConversion: acc.datedByConversion,
+			Unpriced:          acc.unpriced,
 		})
 	}
 	return rows, nil
@@ -902,6 +907,7 @@ type rowAccumulator struct {
 	repurchases, declines, trash    *uint64
 	costUSD                         *float64
 	datedByConversion               uint64
+	unpriced                        uint64
 	// push is nil when push metrics cannot answer the report (pushEligible).
 	push *push.StatsCounts
 	// revenueUnknown: revenue met a day with no reporting-currency rate
@@ -1263,8 +1269,9 @@ func (s *Service) Funnel(ctx context.Context, organizationID string, from, to ti
 // (the offer a click was actually routed to — chstore.DimOffer).
 type DashboardResult struct {
 	Totals MetricValues
-	// DatedByConversion: as ReportRow's, for the totals.
+	// DatedByConversion / Unpriced: as ReportRow's, for the totals.
 	DatedByConversion uint64
+	Unpriced          uint64
 	Daily             []ReportRow
 	TopCampaigns      []ReportRow
 	TopCountries      []ReportRow
@@ -1299,9 +1306,9 @@ func (s *Service) Dashboard(ctx context.Context, organizationID string, from, to
 	// aggregate row (see chstore's own note: an empty-result COUNT() is
 	// still a real row, not an absent one).
 	var totals MetricValues
-	var datedByConversion uint64
+	var datedByConversion, unpriced uint64
 	if len(totalsRows) == 1 {
-		totals, datedByConversion = totalsRows[0].Metrics, totalsRows[0].DatedByConversion
+		totals, datedByConversion, unpriced = totalsRows[0].Metrics, totalsRows[0].DatedByConversion, totalsRows[0].Unpriced
 	}
 
 	daily, err := s.groupedReport(ctx, organizationID, nil, true, nil, from, to, sc, basis, false)
@@ -1331,6 +1338,7 @@ func (s *Service) Dashboard(ctx context.Context, organizationID string, from, to
 	return DashboardResult{
 		Totals:            totals,
 		DatedByConversion: datedByConversion,
+		Unpriced:          unpriced,
 		Daily:             daily,
 		TopCampaigns:      topCampaigns,
 		TopCountries:      topCountries,

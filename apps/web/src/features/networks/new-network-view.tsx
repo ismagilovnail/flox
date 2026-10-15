@@ -24,7 +24,7 @@ export function NewNetworkView() {
 
   function handleSubmit(values: NetworkFormValues) {
     createNetwork.mutate(
-      { name: values.name, postbackUrl: values.postbackUrl, acceptDuplicates: values.acceptDuplicates },
+      { name: values.name, postbackUrl: values.postbackUrl, acceptDuplicates: values.acceptDuplicates, currency: values.currency },
       {
         onSuccess: (created) => {
           toast(t("toast.created"), { description: values.name });
