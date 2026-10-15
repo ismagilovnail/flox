@@ -132,21 +132,28 @@ scoped phase; none blocks anything that ships today.
 | Gap | Where |
 |---|---|
 | Brave is indistinguishable from Chrome by User-Agent (audit #13) | platform limit, not fixable |
+| `golang.org/x/crypto/openpgp` (`GO-2026-5932`) has no upstream fix | permanent, accepted, unreachable — this codebase only imports `bcrypt`; see `docs/security.md` Known limitations |
+| `TRUSTED_PROXIES` still on its default (no real reverse proxy/LB/CDN deployed yet) | set it once real infrastructure exists in front of `apps/api`/`apps/tracker` |
+| Restore drill against production | after the first deployment (`docs/backup.md`) |
+| CI | the owner's decision (CLAUDE.md) |
 | `cloudflare_registrar` has no adapter, though Cloudflare works as a DNS provider | `apps/internal/domain/model.go` |
 | SMS/email 2FA as an alternative delivery channel (TOTP only today) | `apps/internal/totp` |
 | Video upload/transcoding in Content Gallery (images only today) | needs a real ffmpeg/worker pipeline |
-| Pixels: Twitter/X sending (OAuth 1.0a), a "send test event" button, `event_source_url` | sending works for Facebook/TikTok/Snapchat/generic — `docs/pixels.md` "Not done" |
-| Campaign list: "Copy tracking URL" in the row (a campaign can have several links — which one to copy is undecided) | `apps/web/src/features/campaigns/campaign-row-actions.tsx` |
-| Push: scheduled/recurring/triggered broadcasts; push metrics in reports and custom metrics | subscriptions and broadcasts sent now are done (`docs/push.md`) |
-| Cost: no CSV import, no per-country spend | `apps/internal/cost` |
-| Organization base currency is stored but reports are always USD | §50-FX |
-| LTV filters source/offer; `cpa_decline`/`cpa_trash` report metrics | `ltv_events` lacks the columns; report registry |
-| Content Gallery has no system content/templates; flows list has no tags; flow nodes show no analytics summary; no "empty subs %" diagnostic | see the conformance doc |
-| No API-key rotation; `audit_logs` covers team and settings only; no tracker test for an inactive campaign | §54, §58 |
-| PWA types `external`/`ios_app`, landing `asPwa`, push from installed PWAs | no target-URL fields exist for the two types; `docs/pwa-serving.md` "Not done" |
+| Pixels: Twitter/X sending (OAuth 1.0a), a "send test event" button | sending works for Facebook/TikTok/Snapchat/generic — `docs/pixels.md` "Not done" |
+| PWA types `external`/`ios_app`, landing `asPwa` | no target-URL fields exist for the two types; `docs/pwa-serving.md` "Not done" |
 | Google Play URL parsing for the PWA listing preview | would need a scraper behind `apps/internal/urlsafety` |
-| `TRUSTED_PROXIES` still on its default (no real reverse proxy/LB/CDN deployed yet) | set it once real infrastructure exists in front of `apps/api`/`apps/tracker` |
-| `golang.org/x/crypto/openpgp` (`GO-2026-5932`) has no upstream fix | permanent, accepted, unreachable — this codebase only imports `bcrypt`; see `docs/security.md` Known limitations |
+| Telegram: changing a connected bot's token; TG_JOIN by channel in reports | `docs/telegram.md` "Not done" |
+| A sidebar item named "Reports" (§17) | removed on purpose (audit #5): the report builder is Analytics |
+
+Closed since this list was first written (2026-10-11 → 2026-10-15): push
+(scheduled, triggered, recurring broadcasts; metrics in Push → Statistics,
+custom metrics and the report builder), cost CSV import and per-country
+spend, reports in the organization's currency, LTV filters by source and
+offer and the decline/trash metrics, Content Gallery system content, tags
+on flows, flow-node analytics, the empty-subs diagnostic, API-key
+rotation, wider audit logs, the inactive-campaign tracker test, "Copy
+tracking URL" in the campaign row, IOS_INSTALL and TG_* events with
+pixels, DataGrid, and the `types/`/`schemas/` layers — see CHANGELOG.md.
 
 Full acceptance criteria per phase: `docs/FLOX-master-prompt-v3.md`; their
 state on 2026-10-11, phase by phase: `docs/spec-conformance-2026-10-11.md`.

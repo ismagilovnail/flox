@@ -68,21 +68,23 @@
 
 ## По фазам
 
+Таблица обновлена 2026-10-15: статусы приведены к коду (строки 2, 6, 27-COST, 43 закрыты раньше, но отметки оставались «◐»). Открыта одна строка — 3, только название пункта меню.
+
 | Фаза | Статус | Что проверено | Расхождения |
 |---|---|---|---|
 | 0 Repository inspection | ✔ | `ARCHITECTURE.md` §6-SHARED: Strategy A | — |
 | 1 Product foundation | ✔ | README, ARCHITECTURE, PRODUCT, ROADMAP, `.env.example` | — |
-| 2 Design system | ◐ | Компоненты §16 в `components/ui` (Combobox = `searchable-select`, Drawer = `sheet`, CommandMenu = `command`) | ~~Нет отдельного **DataGrid**~~ — есть с 2026-10-15 (docs/data-grid.md) |
-| 3 Application shell | ◐ | Сайдбар (с Push с 2026-10-13), ⌘K, workspace selector, уведомления, user menu, mobile nav | В сайдбаре нет **Reports** (роль играет Analytics) |
+| 2 Design system | ✔ | Компоненты §16 в `components/ui` (Combobox = `searchable-select`, Drawer = `sheet`, CommandMenu = `command`) | ~~Нет отдельного **DataGrid**~~ — есть с 2026-10-15 (docs/data-grid.md) |
+| 3 Application shell | ◐ | Сайдбар (с Push с 2026-10-13), ⌘K, workspace selector, уведомления, user menu, mobile nav | В сайдбаре нет **Reports** — убран сознательно (маркетинговый аудит #5): конструктор отчётов — это «Аналитика». Открыто только название пункта |
 | 4 Dashboard | ✔ | KPI, 4 графика, 4 «Top»-таблицы, «—» без расхода | — |
 | 5 Analytics | ✔ | Таблица/линия/столбцы/воронка из 8 шагов §43, все 16 измерений §19 (плюс `stream_set`; `postlanding` и `network` с 2026-10-13), все метрики | — |
-| 6 Campaigns | ◐ | Список с метриками за период (с 2026-10-11), создание, детальная, настройки; Open/Pause/Duplicate/Archive | Copy tracking URL — только на странице кампании, не в строке |
+| 6 Campaigns | ✔ | Список с метриками за период (с 2026-10-11), создание, детальная, настройки; Open/Pause/Duplicate/Archive | ~~Copy tracking URL — только на странице кампании, не в строке~~ — в строке с 2026-10-14 (`CopyTrackingUrlButton`) |
 | 7 Stream sets | ✔ | Приоритет, drag-reorder, дублирование, вкл/выкл, пиксели, fallback | — |
 | 8 Filter builder | ✔ | Все 31 поле и 16 операторов §22, AND/OR, вложенность, ISO-коды, bot/proxy как флаги | — |
 | 9 Flow builder | ✔ | Landing/PWA/Postlanding/Offer/Redirect, веса с нормализованным %, превью, сводка аналитики на узлах за 7 дней (с 2026-10-14) | ~~Сводка аналитики на узле не выводится~~ — закрыто |
 | 10 Routing simulator | ✔ | Тонкий UI над `/routing/simulate`, все поля фильтра на входе, sticky-пояснение | — |
 | 11 Sources/Networks/Offers | ✔ | Все поля §27, один резолвер макросов (`internal/macro` + `lib/macros.ts`), дневной лимит оффера | — |
-| 27-COST | ◐ | Ручной ввод, синк FB/TikTok/Google по расписанию, USD по курсу даты, «—» без расхода | Нет **импорта CSV** и **разреза расхода по стране** |
+| 27-COST | ✔ | Ручной ввод, синк FB/TikTok/Google по расписанию, USD по курсу даты, «—» без расхода | ~~Нет импорта CSV и разреза расхода по стране~~ — есть с 2026-10-13 (`cost/csvimport.go`, миграция 00071, docs/cost-ingestion.md) |
 | 12 Landing/PWA/Postlanding | ✔ | Внутренние (ZIP) и внешние лендинги, PWA, постлендинги (показываются трекером с 2026-10-13), обход in-app WebView | — |
 | 13 Conversions/Postbacks/Pixels | ✔ | Конверсии с таймлайном, входящие/исходящие постбэки, логи, маппинг событий, пиксели с server-side отправкой и журналом (с 2026-10-11) | ~~Пиксели не отправляют события~~ — закрыто |
 | 14 Domains/Team/Settings | ✔ | Домены с TXT-верификацией, SSL, Namecheap/Cloudflare; команда, роли, права, активность; организация, API-ключи, интеграции, безопасность | — |
@@ -100,7 +102,7 @@
 | 20 Classifier | ✔ | Все поля, Geo/ASN/Bot за интерфейсами | — |
 | 21 Tracking engine | ✔ | Отдельный бинарник, асинхронная запись, p50/p95 в бюджете | — |
 | 42 Tracking link | ✔ | click_id (ULID), utm, sub1–10, fbclid/ttclid/external_click_id; метрики «Пустые sub» и «Пустые sub, %» в отчётах и списке кампаний (с 2026-10-14) | ~~Нет диагностики «% пустых sub»~~ — закрыто |
-| 43 Event model | ◐ | Все ~20 типов в enum и схеме ClickHouse | Генерируются 14 (SOURCE_CLICK/FILTER, LAND_VIEW/CLICK, POSTLANDING_VIEW/CLICK, PWA_VIEW/OPEN/INSTALL, NOTIFICATION_REQUEST/SUBSCRIBE/DECLINE/UNSUBSCRIBE/CLICK); **IOS_INSTALL, TG_*** не создаёт никто |
+| 43 Event model | ✔ | Все ~20 типов в enum и схеме ClickHouse | Генерируются все: ~~IOS_INSTALL, TG_* не создаёт никто~~ — IOS_INSTALL с 2026-10-14 (первый запуск с экрана «Домой»), TG_START/TG_JOIN с 2026-10-14 (свой бот, docs/telegram.md) |
 | 22 Attribution | ✔ | click_id / external_click_id, без выдумывания, повторная атрибуция | — |
 | 23 Conversion engine | ✔ | Ключ (click_id, status, event_ref), progression, acceptDuplicates, FX на дату события, outbox | Быстрый путь Redis хранит последний статус, дедуп — уникальный индекс PG (корректно; Redis-ключа дедупа как такового нет) |
 | 24 Postback engine | ✔ | Очередь, ретраи, dead-letter, все 6 статусов, справедливая выдача | — |
