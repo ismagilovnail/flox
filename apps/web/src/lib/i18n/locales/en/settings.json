@@ -38,7 +38,7 @@
   },
   "totp": {
     "title": "Your two-factor authentication",
-    "description": "A code from an authenticator app, asked at sign-in in addition to your password.",
+    "description": "Asked at sign-in in addition to your password: a code from an authenticator app, by email or by SMS.",
     "loading": "Loading…",
     "loadError": "Couldn't load 2FA status",
     "enabled": "Enabled",
@@ -55,7 +55,13 @@
     "disableError": "Couldn't disable two-factor authentication",
     "disableTitle": "Disable two-factor authentication?",
     "disableDescription": "Confirm your password to turn off 2FA for your account.",
-    "password": "Password"
+    "password": "Password",
+    "method": {
+      "totp": "Authenticator app",
+      "email": "Email",
+      "sms": "SMS"
+    },
+    "changeMethod": "Change method"
   },
   "apiKeys": {
     "title": "API keys",

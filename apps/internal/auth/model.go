@@ -191,8 +191,14 @@ type Result struct {
 type LoginOutcome struct {
 	Session                *Result
 	PendingToken           string
-	RequiresTOTP           bool
+	RequiresTOTP           bool // a second factor is asked for (any method)
 	RequiresTOTPEnrollment bool
+	// TwoFactorMethod is the user's method when RequiresTOTP: totp, email
+	// or sms; CodeSentTo where an email/SMS code went (masked).
+	TwoFactorMethod string
+	CodeSentTo      string
+	// SMSAvailable, with RequiresTOTPEnrollment: SMS can be chosen.
+	SMSAvailable bool
 }
 
 // ActivityEntry is one audit_logs row (migration 00010): the

@@ -8,39 +8,55 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Skeleton } from "@/components/ui/skeleton";
-import { useConfirmTOTP, useEnrollTOTP, useLoginTOTP } from "@/hooks/use-auth";
+import { RESEND_COOLDOWN_SECONDS, TwoFactorSetup, useCooldown } from "@/features/auth/two-factor-setup";
+import { useLoginTOTP, useResendLoginCode } from "@/hooks/use-auth";
 import { ApiError } from "@/lib/api/client";
-import type { AuthResponse } from "@/lib/api/auth";
+import type { AuthResponse, PendingLogin } from "@/lib/api/auth";
 
-/** Shown when LoginOutcome.requiresTotp is true — this account already
- * has TOTP enabled, exchange pendingToken plus a live code (or a backup
- * code — the same field, same endpoint, apps/internal/auth.Service.
- * VerifyPendingLogin tries a live code first and falls back to a backup
- * code automatically) for a real session. */
+/** Shown when LoginOutcome.requiresTotp is true — exchange pendingToken
+ * plus the second factor's code (or a backup code — the same field, same
+ * endpoint, apps/internal/auth.Service.VerifyPendingLogin falls back to a
+ * backup code automatically) for a real session. With email/SMS the code
+ * was sent by the sign-in itself; another can be sent after a minute. */
 export function TOTPCodeStep({
-  pendingToken,
+  pending,
   onComplete,
 }: {
-  pendingToken: string;
+  pending: PendingLogin;
   onComplete: (res: AuthResponse) => void;
 }) {
   const { t } = useTranslation("auth");
   const loginTOTP = useLoginTOTP();
+  const resend = useResendLoginCode();
   const [code, setCode] = React.useState("");
+  const method = pending.twoFactorMethod ?? "totp";
+  const sentCode = method === "email" || method === "sms";
+  const [sentTo, setSentTo] = React.useState(pending.codeSentTo ?? "");
+  const [cooldown, startCooldown] = useCooldown(RESEND_COOLDOWN_SECONDS, sentCode);
 
   function submit(e: React.FormEvent) {
     e.preventDefault();
-    loginTOTP.mutate({ pendingToken, code: code.trim() }, { onSuccess: onComplete });
+    loginTOTP.mutate({ pendingToken: pending.pendingToken, code: code.trim() }, { onSuccess: onComplete });
   }
 
-  const error = loginTOTP.error instanceof ApiError ? loginTOTP.error : null;
+  function sendAgain() {
+    resend.mutate(pending.pendingToken, {
+      onSuccess: (res) => {
+        setSentTo(res.sentTo);
+        startCooldown();
+      },
+    });
+  }
+
+  const error = [loginTOTP.error, resend.error].find((e) => e instanceof ApiError) as ApiError | undefined;
 
   return (
     <Card>
       <CardHeader>
         <CardTitle>{t("totp.codeTitle")}</CardTitle>
-        <CardDescription>{t("totp.codeDescription")}</CardDescription>
+        <CardDescription aria-live="polite">
+          {sentCode ? t(`twoFactor.codeDescription.${method}`, { to: sentTo }) : t("totp.codeDescription")}
+        </CardDescription>
       </CardHeader>
       <CardContent>
         <form onSubmit={submit} className="flex flex-col gap-4">
@@ -60,11 +76,24 @@ export function TOTPCodeStep({
               placeholder="123456"
               autoFocus
             />
-            <p className="text-xs text-muted-foreground">{t("totp.backupCodeHint")}</p>
+            <p className="text-xs text-muted-foreground">
+              {sentCode ? t("twoFactor.backupCodeHint") : t("totp.backupCodeHint")}
+            </p>
           </div>
           <Button type="submit" className="w-full" disabled={loginTOTP.isPending || !code.trim()}>
             {t("totp.verifyButton")}
           </Button>
+          {sentCode && (
+            <Button
+              type="button"
+              variant="outline"
+              className="w-full"
+              onClick={sendAgain}
+              disabled={cooldown > 0 || resend.isPending}
+            >
+              {cooldown > 0 ? t("twoFactor.resendIn", { seconds: cooldown }) : t("twoFactor.resend")}
+            </Button>
+          )}
         </form>
       </CardContent>
     </Card>
@@ -72,105 +101,31 @@ export function TOTPCodeStep({
 }
 
 /** Shown when LoginOutcome.requiresTotpEnrollment is true — the org's own
- * two_factor_required policy is on and this account hasn't set up TOTP
- * yet. Generates a real enrollment immediately on mount (one call, not
- * per-render — the ref guard survives React Strict Mode's double-invoke
- * without generating and discarding a second secret), then confirming
- * the code ALSO completes the login that triggered this step in one
- * step (apps/internal/auth.TOTPHandler.confirm's own doc comment). */
+ * two_factor_required policy is on and this account has no second factor
+ * yet. The user picks one (two-factor-setup.tsx); confirming its code
+ * ALSO completes the login that triggered this step. */
 export function TOTPEnrollStep({
-  pendingToken,
+  pending,
   onComplete,
 }: {
-  pendingToken: string;
+  pending: PendingLogin;
   onComplete: (res: AuthResponse) => void;
 }) {
   const { t } = useTranslation("auth");
-  const enroll = useEnrollTOTP();
-  const confirm = useConfirmTOTP();
-  const [code, setCode] = React.useState("");
-  const enrolledOnce = React.useRef(false);
-
-  React.useEffect(() => {
-    if (enrolledOnce.current) return;
-    enrolledOnce.current = true;
-    enroll.mutate(pendingToken);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pendingToken]);
-
-  function submit(e: React.FormEvent) {
-    e.preventDefault();
-    confirm.mutate(
-      { code: code.trim(), pendingToken },
-      {
-        onSuccess: (result) => {
-          if ("user" in result) onComplete(result);
-        },
-      },
-    );
-  }
-
-  const confirmError = confirm.error instanceof ApiError ? confirm.error : null;
-
-  if (enroll.isPending || !enroll.data) {
-    return (
-      <Card>
-        <CardHeader>
-          <CardTitle>{t("totp.enrollTitle")}</CardTitle>
-          <CardDescription>{t("totp.enrollLoading")}</CardDescription>
-        </CardHeader>
-        <CardContent className="flex flex-col gap-3">
-          <Skeleton className="mx-auto size-48" />
-          <Skeleton className="h-9 w-full" />
-        </CardContent>
-      </Card>
-    );
-  }
-
   return (
     <Card>
       <CardHeader>
         <CardTitle>{t("totp.enrollTitle")}</CardTitle>
-        <CardDescription>{t("totp.enrollDescription")}</CardDescription>
+        <CardDescription>{t("twoFactor.enrollDescription")}</CardDescription>
       </CardHeader>
-      <CardContent className="flex flex-col gap-4">
-        {/* eslint-disable-next-line @next/next/no-img-element -- a base64 data: URI, not a remote asset next/image would optimize */}
-        <img
-          src={enroll.data.qrCodeDataUri}
-          alt={t("totp.qrAlt")}
-          className="mx-auto size-48"
+      <CardContent>
+        <TwoFactorSetup
+          pendingToken={pending.pendingToken}
+          smsAvailable={pending.smsAvailable ?? false}
+          onDone={(result) => {
+            if ("user" in result) onComplete(result);
+          }}
         />
-        <p className="text-center font-mono text-xs text-muted-foreground">{enroll.data.secret}</p>
-        <div className="rounded-md border border-border bg-muted p-3">
-          <p className="mb-2 text-xs font-medium">{t("totp.backupCodesTitle")}</p>
-          <div className="grid grid-cols-2 gap-1 font-mono text-xs">
-            {enroll.data.backupCodes.map((c) => (
-              <span key={c}>{c}</span>
-            ))}
-          </div>
-          <p className="mt-2 text-xs text-muted-foreground">{t("totp.backupCodesHint")}</p>
-        </div>
-        <form onSubmit={submit} className="flex flex-col gap-3">
-          {confirmError && (
-            <Alert variant="destructive">
-              <AlertDescription>{confirmError.message}</AlertDescription>
-            </Alert>
-          )}
-          <div className="grid gap-1.5">
-            <Label htmlFor="totp-enroll-code">{t("totp.codeLabel")}</Label>
-            <Input
-              id="totp-enroll-code"
-              value={code}
-              onChange={(e) => setCode(e.target.value)}
-              inputMode="numeric"
-              autoComplete="one-time-code"
-              placeholder="123456"
-            />
-          </div>
-          <Button type="submit" className="w-full" disabled={confirm.isPending || !code.trim()}>
-            {t("totp.confirmButton")}
-          </Button>
-        </form>
       </CardContent>
     </Card>
   );

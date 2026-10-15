@@ -175,6 +175,17 @@ only for staging/production; `MAIL_FROM` should also become a real,
 deliverability-sane From address at that point (SPF/DKIM configured for
 its domain), not `floxlink.io`'s placeholder value.
 
+### SMS (two-factor codes)
+
+`SMS_WEBHOOK_URL` / `SMS_WEBHOOK_SECRET` — optional. When set,
+`apps/internal/smswebhook` posts SMS two-factor codes there as
+`{"to", "text"}`, signed with `X-Flox-Timestamp` and
+`X-Flox-Signature` = hex(HMAC-SHA256(secret, timestamp + "." + body)); the
+receiver forwards them to an SMS provider. The secret must be at least 16
+characters; setting only one of the two fails startup. Unset: SMS is not
+offered as a second factor (email and the app still are). See
+`docs/auth.md` "Second factor: email and SMS".
+
 ### OpenTelemetry
 
 `OTEL_EXPORTER_OTLP_ENDPOINT` — empty/unset is a valid, intentional value

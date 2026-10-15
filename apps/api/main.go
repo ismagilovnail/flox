@@ -74,6 +74,7 @@ import (
 	"github.com/ismagilovnail/flox/apps/internal/routing"
 	"github.com/ismagilovnail/flox/apps/internal/routingsimulate"
 	"github.com/ismagilovnail/flox/apps/internal/routingstore"
+	"github.com/ismagilovnail/flox/apps/internal/smswebhook"
 	"github.com/ismagilovnail/flox/apps/internal/storage"
 	"github.com/ismagilovnail/flox/apps/internal/streamset"
 	"github.com/ismagilovnail/flox/apps/internal/tags"
@@ -311,6 +312,17 @@ func buildServer(ctx context.Context, cfg config.Config, logger *slog.Logger, re
 		return nil, nil, err
 	}
 	authSvc.SetTOTPKey(totpKey)
+	// 2FA codes by SMS go through the operator's gateway (docs/auth.md
+	// "Second factor: email and SMS"); without one, SMS is not offered.
+	if cfg.SMSWebhookURL != "" || cfg.SMSWebhookSecret != "" {
+		sms, err := smswebhook.New(cfg.SMSWebhookURL, cfg.SMSWebhookSecret)
+		if err != nil {
+			return nil, nil, err
+		}
+		authSvc.SetSMSSender(sms)
+	} else {
+		logger.Info("SMS_WEBHOOK_URL not set: two-factor codes by SMS are not offered")
+	}
 
 	// Same "fail loudly at boot" bar as TOTP's own key, above — a
 	// misconfigured/missing key must never silently run Settings >

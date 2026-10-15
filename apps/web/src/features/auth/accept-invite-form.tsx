@@ -16,7 +16,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useAcceptInvite, usePreviewInvite } from "@/hooks/use-auth";
 import { ApiError } from "@/lib/api/client";
-import { isPendingTOTP } from "@/lib/api/auth";
+import { isPendingTOTP, type PendingLogin } from "@/lib/api/auth";
 import { TOTPCodeStep, TOTPEnrollStep } from "@/features/auth/totp-step";
 import { newPasswordField } from "@/schemas/fields";
 
@@ -37,7 +37,7 @@ export function AcceptInviteForm({ token }: { token: string }) {
   // §30 Security: joining an org that already requires 2FA forces
   // enrollment before a session is granted — same pattern login-form.tsx
   // uses for its own pending-2FA outcome.
-  const [pending, setPending] = React.useState<{ token: string; needsEnrollment: boolean } | null>(null);
+  const [pending, setPending] = React.useState<PendingLogin | null>(null);
 
   const form = useForm<AcceptInviteFormValues>({
     resolver: zodResolver(buildAcceptInviteSchema(t)),
@@ -63,7 +63,7 @@ export function AcceptInviteForm({ token }: { token: string }) {
       {
         onSuccess: (outcome) => {
           if (isPendingTOTP(outcome)) {
-            setPending({ token: outcome.pendingToken, needsEnrollment: outcome.requiresTotpEnrollment });
+            setPending(outcome);
           } else {
             router.push("/overview");
           }
@@ -74,10 +74,10 @@ export function AcceptInviteForm({ token }: { token: string }) {
 
   if (pending) {
     const onComplete = () => router.push("/overview");
-    return pending.needsEnrollment ? (
-      <TOTPEnrollStep pendingToken={pending.token} onComplete={onComplete} />
+    return pending.requiresTotpEnrollment ? (
+      <TOTPEnrollStep pending={pending} onComplete={onComplete} />
     ) : (
-      <TOTPCodeStep pendingToken={pending.token} onComplete={onComplete} />
+      <TOTPCodeStep pending={pending} onComplete={onComplete} />
     );
   }
 

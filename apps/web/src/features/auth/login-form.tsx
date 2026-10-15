@@ -16,7 +16,7 @@ import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { useLogin, useResendVerification } from "@/hooks/use-auth";
 import { ApiError } from "@/lib/api/client";
-import { isPendingTOTP } from "@/lib/api/auth";
+import { isPendingTOTP, type PendingLogin } from "@/lib/api/auth";
 import { TOTPCodeStep, TOTPEnrollStep } from "@/features/auth/totp-step";
 import { emailField } from "@/schemas/fields";
 
@@ -39,7 +39,7 @@ export function LoginForm() {
   // both cases replace this form with one of totp-step.tsx's two steps,
   // same "swap the whole card, don't try to layer a second form on top"
   // pattern signup-form.tsx already uses for its own post-submit state.
-  const [pending, setPending] = React.useState<{ token: string; needsEnrollment: boolean } | null>(null);
+  const [pending, setPending] = React.useState<PendingLogin | null>(null);
 
   const form = useForm<LoginFormValues>({
     resolver: zodResolver(buildLoginSchema(t)),
@@ -50,7 +50,7 @@ export function LoginForm() {
     login.mutate(values, {
       onSuccess: (outcome) => {
         if (isPendingTOTP(outcome)) {
-          setPending({ token: outcome.pendingToken, needsEnrollment: outcome.requiresTotpEnrollment });
+          setPending(outcome);
         } else {
           router.push("/overview");
         }
@@ -67,10 +67,10 @@ export function LoginForm() {
 
   if (pending) {
     const onComplete = () => router.push("/overview");
-    return pending.needsEnrollment ? (
-      <TOTPEnrollStep pendingToken={pending.token} onComplete={onComplete} />
+    return pending.requiresTotpEnrollment ? (
+      <TOTPEnrollStep pending={pending} onComplete={onComplete} />
     ) : (
-      <TOTPCodeStep pendingToken={pending.token} onComplete={onComplete} />
+      <TOTPCodeStep pending={pending} onComplete={onComplete} />
     );
   }
 

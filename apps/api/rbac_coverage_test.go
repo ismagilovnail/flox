@@ -41,6 +41,7 @@ var deliberatelyOpen = map[string]string{
 	"auth.acceptInvite":       "pre-session",
 	"auth.logout":             "ends the caller's own session",
 	"auth.loginTOTP":          "pre-session second factor",
+	"auth.resendLoginCode":    "pre-session second factor: a fresh email/SMS code for a pending login (per-user send limits)",
 	"auth.enroll":             "personal 2FA, every role manages its own",
 	"auth.confirm":            "personal 2FA, every role manages its own",
 	"auth.disable":            "personal 2FA, re-proves the caller's password",

@@ -260,6 +260,69 @@ accepting an invite, which runs before any session exists, still writes
 its row directly. Each entry carries the route it came through and, for a
 change made with an API key, that key's name.
 
+## Second factor: email and SMS (Phase 30.39)
+
+Besides the authenticator app (TOTP), a user's second factor can be a code
+sent by email or by SMS. One method per user — `users.two_factor_method`
+(`totp` | `email` | `sms`, NULL = none; migration 00083 backfilled `totp`
+for every confirmed TOTP user). `apps/internal/auth/twofactor.go`.
+
+- **Codes.** 6 digits from `crypto/rand`, stored SHA-256-hashed in
+  `two_factor_codes` (purpose `login` | `enroll`), valid 10 minutes, single
+  use. A new code replaces the live ones of its purpose — only once it is
+  actually going out, so a refused resend leaves the sent code working.
+- **Limits.** One code a minute per user and purpose (setting up, then
+  signing in, is two codes), at most 5 an hour per user. Over either: 429.
+- **Wrong codes.** Each one counts as a failed login (the per-account
+  lockout budget, `docs/security.md` §5); the third on a code spends it and
+  the pending login (sign in again). TOTP is unchanged: its first wrong code
+  ends the pending login.
+- **Backup codes** for every method: the same 10 codes, each working once in
+  place of the sent code. For email/SMS they are generated with the setup
+  code and become the user's only on confirmation (the hashes ride on the
+  enroll code's row). Setting up the app still replaces them when the QR is
+  shown, as before.
+- **Switching.** The current method stays until the new one is confirmed;
+  confirming email/SMS drops the TOTP secret, confirming the app clears the
+  phone. Disabling (with the password) clears method, secret, phone.
+- **Where it went.** Responses and the security page show masked targets:
+  `o***@flox.local`, `+7******4567`.
+- **SMS gateway.** A universal HTTP webhook (`apps/internal/smswebhook`):
+  `POST SMS_WEBHOOK_URL` with `{"to": "+79001234567", "text": "FLOX code: …"}`,
+  headers `X-Flox-Timestamp` (unix seconds) and `X-Flox-Signature` =
+  hex(HMAC-SHA256(`SMS_WEBHOOK_SECRET`, timestamp + "." + body)); any 2xx is
+  delivered. The receiver verifies the signature and forwards to its SMS
+  provider. Without `SMS_WEBHOOK_URL` SMS is not offered (`smsAvailable:
+  false`); a user already on SMS cannot sign in there (503) until it is back.
+  Phones are normalised to E.164 (`+` and 8–15 digits; spaces, dashes and
+  brackets dropped).
+- **Audit:** `security.two_factor_enabled.<method>` on a self-serve
+  confirmation.
+
+API (all under `/v1`):
+
+| Endpoint | Change |
+|---|---|
+| `POST /auth/login`, `/auth/accept-invite`, `/auth/verify-email` | a pending outcome adds `twoFactorMethod`, `codeSentTo` (email/SMS: the code is already sent), and `smsAvailable` when enrollment is required |
+| `POST /auth/login/2fa/resend` | `{pendingToken}` → `{method, sentTo}`; a fresh code for an email/SMS sign-in |
+| `POST /auth/login/totp` | takes the email/SMS code (or a backup code) too |
+| `POST /auth/2fa/enroll` | `{method: "email" \| "sms", phone?, pendingToken?}` → `{method, sentTo, backupCodes}`; without `method` the app, as before |
+| `POST /auth/2fa/confirm` | `{code, method?, pendingToken?}`; with a pendingToken completes a forced enrollment's sign-in |
+| `GET /auth/2fa/status` | `{enabled, method, phone (masked), smsAvailable}` |
+
+Web: `features/auth/two-factor-setup.tsx` (choose the method, send/resend
+with a 60 s countdown, backup codes, confirm) is used both by the forced
+enrollment at sign-in and by Settings → Security, which also offers
+"Change method". The sign-in code step names where the code went and can
+send another.
+
+Out of scope: an organization restricting which methods its members may use.
+
+Verified live: email set up, sign-in, refused resend within the minute (the
+sent code still worked — this check found and fixed the code being dropped),
+SMS through a local fake gateway (signature checked), forced enrollment by
+email in a fresh org — through the UI.
+
 ## Cookie details
 
 `Path=/`, `HttpOnly`, `SameSite=Lax`. `Secure` is `cfg.Env != "development"`

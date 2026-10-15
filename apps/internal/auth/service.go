@@ -3,6 +3,7 @@ package auth
 import (
 	"context"
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net"
@@ -83,6 +84,8 @@ type Service struct {
 	// graceful no-op, so every existing NewService call site (including
 	// every test not exercising 2FA) stays unchanged.
 	totpKey []byte
+	// sms sends SMS codes (SetSMSSender); nil: SMS is not offered.
+	sms SMSSender
 }
 
 // appURL is apps/web's own origin (config.AppURL) — an invite link, and
@@ -332,7 +335,7 @@ func (s *Service) VerifyEmail(ctx context.Context, token, clientIP string) (Logi
 // IP allowlist and 2FA policy are enforced exactly once, here, rather
 // than duplicated per caller.
 func (s *Service) completeLogin(ctx context.Context, userID, orgID, userName, userEmail, roleKey, orgName, clientIP string) (LoginOutcome, error) {
-	sec, userHasTOTP, err := s.repo.LoginSecurityContext(ctx, userID, orgID)
+	sec, method, err := s.repo.LoginSecurityContext(ctx, userID, orgID)
 	if err != nil {
 		return LoginOutcome{}, err
 	}
@@ -345,21 +348,50 @@ func (s *Service) completeLogin(ctx context.Context, userID, orgID, userName, us
 		}
 	}
 
-	if userHasTOTP || sec.TwoFactorRequired {
+	if method != "" || sec.TwoFactorRequired {
 		token, tokenHash, err := newBearerToken()
 		if err != nil {
 			return LoginOutcome{}, err
 		}
 		expiresAt := time.Now().Add(pendingTOTPLoginTTL)
-		requiresEnrollment := !userHasTOTP
-		if err := s.repo.CreatePendingTOTPLogin(ctx, idgen.New(), userID, orgID, tokenHash, requiresEnrollment, expiresAt); err != nil {
+		requiresEnrollment := method == ""
+		pendingID := idgen.New()
+		if err := s.repo.CreatePendingTOTPLogin(ctx, pendingID, userID, orgID, tokenHash, requiresEnrollment, expiresAt); err != nil {
 			return LoginOutcome{}, err
 		}
-		return LoginOutcome{
+		out := LoginOutcome{
 			PendingToken:           token,
-			RequiresTOTP:           userHasTOTP,
+			RequiresTOTP:           !requiresEnrollment,
 			RequiresTOTPEnrollment: requiresEnrollment,
-		}, nil
+			TwoFactorMethod:        method,
+			SMSAvailable:           requiresEnrollment && s.SMSAvailable(),
+		}
+		if method == MethodEmail || method == MethodSMS {
+			// The code goes out now; the password is right, the second
+			// factor is what is left (twofactor.go).
+			st, err := s.repo.twoFactorState(ctx, userID)
+			if err != nil {
+				return LoginOutcome{}, err
+			}
+			sent, err := s.startCodeLogin(ctx, userID, pendingID, st)
+			if err != nil {
+				var apiErr *apierror.Error
+				if !errors.As(err, &apiErr) || apiErr.Status != http.StatusTooManyRequests {
+					_ = s.repo.DeletePendingTOTPLogin(ctx, pendingID)
+					return LoginOutcome{}, err
+				}
+				// Rate-limited: the code sent a moment ago still works.
+				sent = CodeSent{Method: method, SentTo: MaskEmail(st.Email)}
+				if method == MethodSMS {
+					sent.SentTo = MaskPhone(st.Phone)
+				}
+				if err := s.repo.attachLiveLoginCode(ctx, userID, pendingID); err != nil {
+					return LoginOutcome{}, err
+				}
+			}
+			out.CodeSentTo = sent.SentTo
+		}
+		return out, nil
 	}
 
 	res, err := s.createSession(ctx, userID, orgID, userName, userEmail, roleKey, orgName, sec.SessionTimeoutMinutes)
@@ -911,15 +943,25 @@ func (s *Service) DisableTOTP(ctx context.Context, userID, orgID, password strin
 // a real session — the only place completeLogin's "second factor still
 // outstanding" bridge ever resolves into an actual session.
 func (s *Service) VerifyPendingLogin(ctx context.Context, pendingToken, code string) (Result, error) {
-	if s.totpKey == nil {
-		return Result{}, fmt.Errorf("auth: TOTP encryption key not configured")
-	}
 	pending, err := s.repo.FindPendingTOTPLogin(ctx, hashToken(pendingToken))
 	if err != nil {
 		return Result{}, err
 	}
 	if pending.RequiresEnrollment {
 		return Result{}, apierror.Validation("complete enrollment first", map[string]string{"code": "enrollment required"})
+	}
+	st, err := s.repo.twoFactorState(ctx, pending.UserID)
+	if err != nil {
+		return Result{}, err
+	}
+	if st.Method == MethodEmail || st.Method == MethodSMS {
+		if err := s.verifyCodeLogin(ctx, pending, code); err != nil {
+			return Result{}, err
+		}
+		return s.finishPendingLogin(ctx, pending)
+	}
+	if s.totpKey == nil {
+		return Result{}, fmt.Errorf("auth: TOTP encryption key not configured")
 	}
 
 	encrypted, enabled, err := s.repo.GetUserTOTPSecret(ctx, pending.UserID)

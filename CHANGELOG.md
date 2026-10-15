@@ -5,6 +5,26 @@ per-phase, matching `CLAUDE.md`'s phase protocol. The one exception is
 [Between phases], below: spec amendments and the code changes that follow from
 them land between phases and would otherwise be invisible here.
 
+## [Phase 30.39] — Two-factor by email and SMS
+
+ROADMAP: 2FA was the authenticator app only. The owner chose email and SMS, SMS through a universal HTTP webhook.
+`docs/auth.md` "Second factor: email and SMS".
+
+- One method per user (migration 00083: `users.two_factor_method`, `phone`, `phone_pending`, table
+  `two_factor_codes`). 6-digit codes, hashed, 10 minutes, single use; 1 a minute per purpose, 5 an hour per user; three
+  wrong codes spend the sign-in, each counting toward the account lockout. Backup codes for every method. A new
+  method replaces the old one only on confirmation. Masked destinations. Audit `security.two_factor_enabled.<method>`.
+- `apps/internal/smswebhook`: POST `{to, text}` to `SMS_WEBHOOK_URL`, HMAC-SHA256 signature over timestamp + body.
+  Without it SMS is not offered. `POST /auth/login/2fa/resend`; enroll/confirm take `method`; pending sign-ins carry
+  `twoFactorMethod`, `codeSentTo`, `smsAvailable`; status returns method and masked phone.
+- Web: `features/auth/two-factor-setup.tsx` — method choice, phone, send/resend with a countdown, backup codes —
+  for forced enrollment at sign-in and Settings → Security ("Change method"); the sign-in code step names where the
+  code went and resends. en/ru.
+- Tests: `apps/internal/auth/twofactor_test.go` (email, SMS with a fake gateway, resend, cooldown, hourly cap,
+  attempts, expiry, backup codes, forced enrollment, masks), `smswebhook` signature tests; mutation-checked. The live
+  check found a resend refused by the cooldown dropping the code already sent — fixed and covered.
+  Live: email and SMS (local fake gateway, signature verified) through the UI, forced enrollment in a fresh org.
+
 ## [Phase 30.38] — Video in the Content Gallery
 
 ROADMAP: the gallery took images only. The owner chose videos as uploaded, without server-side transcoding.

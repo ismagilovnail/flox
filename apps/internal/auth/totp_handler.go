@@ -35,6 +35,7 @@ func NewTOTPHandler(svc *Service, logger *slog.Logger, secureCookies bool) *TOTP
 // resolveSubject).
 func (h *TOTPHandler) RegisterPublic(r chi.Router) {
 	r.Post("/auth/login/totp", h.loginTOTP)
+	r.Post("/auth/login/2fa/resend", h.resendLoginCode)
 	r.Post("/auth/2fa/enroll", h.enroll)
 	r.Post("/auth/2fa/confirm", h.confirm)
 }
@@ -62,8 +63,12 @@ func (h *TOTPHandler) resolveSubject(r *http.Request, pendingToken string) (user
 	return h.svc.ResolvePendingLoginSubject(r.Context(), pendingToken)
 }
 
+// enrollTOTPRequest: Method "" or "totp" sets up the app (the original
+// shape of this endpoint); "email" or "sms" (with Phone) sends a code.
 type enrollTOTPRequest struct {
 	PendingToken string `json:"pendingToken"`
+	Method       string `json:"method"`
+	Phone        string `json:"phone"`
 }
 
 type enrollTOTPResponse struct {
@@ -79,6 +84,15 @@ func (h *TOTPHandler) enroll(w http.ResponseWriter, r *http.Request) {
 	userID, orgID, err := h.resolveSubject(r, body.PendingToken)
 	if err != nil {
 		apierror.Write(w, h.logger, err)
+		return
+	}
+	if body.Method == MethodEmail || body.Method == MethodSMS {
+		enrollment, err := h.svc.EnrollCode(r.Context(), userID, EnrollCodeInput{Method: body.Method, Phone: body.Phone})
+		if err != nil {
+			apierror.Write(w, h.logger, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, enrollment)
 		return
 	}
 	who, err := h.svc.Me(r.Context(), userID, orgID)
@@ -101,6 +115,8 @@ func (h *TOTPHandler) enroll(w http.ResponseWriter, r *http.Request) {
 type confirmTOTPRequest struct {
 	PendingToken string `json:"pendingToken"`
 	Code         string `json:"code"`
+	// Method "email"/"sms" confirms a sent code; "" or "totp" the app.
+	Method string `json:"method"`
 }
 
 // confirm has two real outcomes depending on how it was reached:
@@ -119,8 +135,13 @@ func (h *TOTPHandler) confirm(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	codeMethod := body.Method == MethodEmail || body.Method == MethodSMS
 	if body.PendingToken != "" {
-		res, err := h.svc.CompleteEnrollmentLogin(r.Context(), body.PendingToken, body.Code)
+		complete := h.svc.CompleteEnrollmentLogin
+		if codeMethod {
+			complete = h.svc.CompleteCodeEnrollmentLogin
+		}
+		res, err := complete(r.Context(), body.PendingToken, body.Code)
 		if err != nil {
 			apierror.Write(w, h.logger, err)
 			return
@@ -135,16 +156,23 @@ func (h *TOTPHandler) confirm(w http.ResponseWriter, r *http.Request) {
 		apierror.Write(w, h.logger, apierror.Unauthorized("sign in first, or provide a pendingToken"))
 		return
 	}
-	_, userID, err := h.svc.ResolveSession(r.Context(), cookie.Value)
+	orgID, userID, err := h.svc.ResolveSession(r.Context(), cookie.Value)
 	if err != nil {
 		apierror.Write(w, h.logger, err)
 		return
 	}
-	if err := h.svc.ConfirmTOTP(r.Context(), userID, body.Code); err != nil {
+	method := MethodTOTP
+	if codeMethod {
+		method, err = h.svc.ConfirmCode(r.Context(), userID, body.Code)
+	} else {
+		err = h.svc.ConfirmTOTP(r.Context(), userID, body.Code)
+	}
+	if err != nil {
 		apierror.Write(w, h.logger, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"enabled": true})
+	h.svc.recordActivity(r.Context(), orgID, userID, "security.two_factor_enabled."+method, "user", userID)
+	writeJSON(w, http.StatusOK, map[string]any{"enabled": true, "method": method})
 }
 
 type loginTOTPRequest struct {
@@ -167,14 +195,33 @@ func (h *TOTPHandler) loginTOTP(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, toAuthResponse(res))
 }
 
-func (h *TOTPHandler) status(w http.ResponseWriter, r *http.Request) {
-	userID, _ := tenant.UserID(r.Context())
-	enabled, err := h.svc.TOTPStatus(r.Context(), userID)
+// resendLoginCode sends a fresh email/SMS code for a pending login.
+func (h *TOTPHandler) resendLoginCode(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		PendingToken string `json:"pendingToken"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		apierror.Write(w, h.logger, apierror.Validation("invalid JSON body", nil))
+		return
+	}
+	sent, err := h.svc.ResendLoginCode(r.Context(), body.PendingToken)
 	if err != nil {
 		apierror.Write(w, h.logger, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"enabled": enabled})
+	writeJSON(w, http.StatusOK, sent)
+}
+
+// status is the user's second factor: {enabled, method, phone (masked),
+// smsAvailable}.
+func (h *TOTPHandler) status(w http.ResponseWriter, r *http.Request) {
+	userID, _ := tenant.UserID(r.Context())
+	st, err := h.svc.TwoFactorStatus(r.Context(), userID)
+	if err != nil {
+		apierror.Write(w, h.logger, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, st)
 }
 
 type disableTOTPRequest struct {

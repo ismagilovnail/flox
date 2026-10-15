@@ -6,18 +6,21 @@ import {
   acceptInvite,
   confirmTOTP,
   disableTOTP,
+  enrollCode,
   enrollTOTP,
   getMe,
   login,
   loginTOTP,
   logout,
   previewInvite,
+  resendLoginCode,
   resendVerification,
   signup,
   totpStatus,
   verifyEmail,
   type AcceptInviteInput,
   type LoginInput,
+  type TwoFactorMethod,
   type SignupInput,
 } from "@/lib/api/auth";
 import { ApiError } from "@/lib/api/client";
@@ -164,12 +167,23 @@ export function useEnrollTOTP() {
 export function useConfirmTOTP() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (input: { code: string; pendingToken?: string }) => confirmTOTP(input),
+    mutationFn: (input: { code: string; pendingToken?: string; method?: TwoFactorMethod }) => confirmTOTP(input),
     onSuccess: (result) => {
       if ("user" in result) qc.invalidateQueries({ queryKey: meKey });
       else qc.invalidateQueries({ queryKey: totpStatusKey });
     },
   });
+}
+
+// Email/SMS setup: sends a code (again, on a resend).
+export function useEnrollCode() {
+  return useMutation({
+    mutationFn: (input: { method: "email" | "sms"; phone?: string; pendingToken?: string }) => enrollCode(input),
+  });
+}
+
+export function useResendLoginCode() {
+  return useMutation({ mutationFn: (pendingToken: string) => resendLoginCode(pendingToken) });
 }
 
 export function useLoginTOTP() {

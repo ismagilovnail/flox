@@ -96,11 +96,27 @@ export type LoginOutcome = {
   requiresTotp?: boolean;
   requiresTotpEnrollment?: boolean;
   pendingToken?: string;
+  /** With requiresTotp: the account's method; codeSentTo is where an
+   * email/SMS code went (masked). */
+  twoFactorMethod?: TwoFactorMethod;
+  codeSentTo?: string;
+  /** With requiresTotpEnrollment: SMS is one of the methods to choose. */
+  smsAvailable?: boolean;
 };
 
-export function isPendingTOTP(
-  outcome: LoginOutcome,
-): outcome is { requiresTotp: boolean; requiresTotpEnrollment: boolean; pendingToken: string } {
+/** A login waiting for its second factor. */
+export type PendingLogin = {
+  requiresTotp: boolean;
+  requiresTotpEnrollment: boolean;
+  pendingToken: string;
+  twoFactorMethod?: TwoFactorMethod;
+  codeSentTo?: string;
+  smsAvailable?: boolean;
+};
+
+export type TwoFactorMethod = "totp" | "email" | "sms";
+
+export function isPendingTOTP(outcome: LoginOutcome): outcome is PendingLogin {
   return outcome.pendingToken !== undefined;
 }
 
@@ -124,7 +140,22 @@ export type TOTPEnrollment = {
  * login and returns a real AuthResponse; a self-serve confirm (an
  * already-signed-in user opting in) just flips 2FA on and returns
  * `{enabled: true}`. */
-export type ConfirmTOTPResponse = { enabled: true } | AuthResponse;
+export type ConfirmTOTPResponse = { enabled: true; method?: TwoFactorMethod } | AuthResponse;
+
+/** Where an email/SMS code went (masked). */
+export type CodeSent = { method: "email" | "sms"; sentTo: string };
+
+/** A started email/SMS setup: the backup codes become the user's once the
+ * sent code is confirmed. */
+export type CodeEnrollment = CodeSent & { backupCodes: string[] };
+
+export type TwoFactorStatus = {
+  enabled: boolean;
+  method?: TwoFactorMethod;
+  /** Masked, for sms. */
+  phone?: string;
+  smsAvailable: boolean;
+};
 
 export type InvitePreview = {
   organizationName: string;
@@ -176,7 +207,26 @@ export function enrollTOTP(pendingToken?: string): Promise<TOTPEnrollment> {
   return apiFetch("/auth/2fa/enroll", { method: "POST", body: pendingToken ? { pendingToken } : undefined });
 }
 
-export function confirmTOTP(input: { code: string; pendingToken?: string }): Promise<ConfirmTOTPResponse> {
+/** Starts setting up email or SMS (phone in any common format) as the
+ * second factor: a code is sent; confirm it with confirmTOTP({method}). */
+export function enrollCode(input: {
+  method: "email" | "sms";
+  phone?: string;
+  pendingToken?: string;
+}): Promise<CodeEnrollment> {
+  return apiFetch("/auth/2fa/enroll", { method: "POST", body: input });
+}
+
+/** A fresh email/SMS code for a pending login (1 per minute, 5 per hour). */
+export function resendLoginCode(pendingToken: string): Promise<CodeSent> {
+  return apiFetch("/auth/login/2fa/resend", { method: "POST", body: { pendingToken } });
+}
+
+export function confirmTOTP(input: {
+  code: string;
+  pendingToken?: string;
+  method?: TwoFactorMethod;
+}): Promise<ConfirmTOTPResponse> {
   return apiFetch("/auth/2fa/confirm", { method: "POST", body: input });
 }
 
@@ -184,7 +234,7 @@ export function loginTOTP(pendingToken: string, code: string): Promise<AuthRespo
   return apiFetch("/auth/login/totp", { method: "POST", body: { pendingToken, code } });
 }
 
-export function totpStatus(): Promise<{ enabled: boolean }> {
+export function totpStatus(): Promise<TwoFactorStatus> {
   return apiFetch("/auth/2fa/status");
 }
 

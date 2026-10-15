@@ -701,18 +701,23 @@ func (r *Repository) UpdateSecuritySettings(ctx context.Context, orgID string, i
 // Security policy plus whether this specific user has a confirmed TOTP
 // secret — bundled into a single round trip since every account-entry
 // path needs all of it together.
-func (r *Repository) LoginSecurityContext(ctx context.Context, userID, orgID string) (SecuritySettings, bool, error) {
+// LoginSecurityContext is the organization's login policy and the user's
+// second-factor method ("" when none).
+func (r *Repository) LoginSecurityContext(ctx context.Context, userID, orgID string) (SecuritySettings, string, error) {
 	var sec SecuritySettings
-	var userHasTOTP bool
+	var method *string
 	err := r.db.QueryRow(ctx, `
-		SELECT o.session_timeout_minutes, o.ip_allowlist, o.two_factor_required, (u.totp_enabled_at IS NOT NULL)
+		SELECT o.session_timeout_minutes, o.ip_allowlist, o.two_factor_required, u.two_factor_method
 		FROM organizations o, users u
 		WHERE o.id = $1 AND u.id = $2`, orgID, userID,
-	).Scan(&sec.SessionTimeoutMinutes, &sec.IPAllowlist, &sec.TwoFactorRequired, &userHasTOTP)
+	).Scan(&sec.SessionTimeoutMinutes, &sec.IPAllowlist, &sec.TwoFactorRequired, &method)
 	if errors.Is(err, pgx.ErrNoRows) {
-		return SecuritySettings{}, false, apierror.Unauthorized("session expired or invalid")
+		return SecuritySettings{}, "", apierror.Unauthorized("session expired or invalid")
 	}
-	return sec, userHasTOTP, err
+	if method == nil {
+		return sec, "", err
+	}
+	return sec, *method, err
 }
 
 func (r *Repository) CreatePendingTOTPLogin(ctx context.Context, id, userID, orgID, tokenHash string, requiresEnrollment bool, expiresAt time.Time) error {
@@ -785,7 +790,8 @@ func (r *Repository) SetPendingUserTOTPSecret(ctx context.Context, userID, encry
 }
 
 func (r *Repository) ConfirmUserTOTP(ctx context.Context, userID string) error {
-	_, err := r.db.Exec(ctx, `UPDATE users SET totp_enabled_at = now() WHERE id = $1`, userID)
+	// The app becomes the user's method, replacing email/SMS.
+	_, err := r.db.Exec(ctx, `UPDATE users SET totp_enabled_at = now(), two_factor_method = 'totp', phone = '', phone_pending = '' WHERE id = $1`, userID)
 	if err != nil {
 		return fmt.Errorf("auth: confirming totp: %w", err)
 	}
@@ -802,7 +808,7 @@ func (r *Repository) DisableUserTOTP(ctx context.Context, userID string) error {
 	}
 	defer tx.Rollback(ctx)
 
-	if _, err := tx.Exec(ctx, `UPDATE users SET totp_secret = NULL, totp_enabled_at = NULL WHERE id = $1`, userID); err != nil {
+	if _, err := tx.Exec(ctx, `UPDATE users SET totp_secret = NULL, totp_enabled_at = NULL, two_factor_method = NULL, phone = '', phone_pending = '' WHERE id = $1`, userID); err != nil {
 		return fmt.Errorf("auth: clearing totp secret: %w", err)
 	}
 	if _, err := tx.Exec(ctx, `DELETE FROM user_totp_backup_codes WHERE user_id = $1`, userID); err != nil {

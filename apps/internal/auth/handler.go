@@ -185,12 +185,10 @@ func (h *Handler) verifyEmail(w http.ResponseWriter, r *http.Request) {
 	}
 	if outcome.RequiresTOTP || outcome.RequiresTOTPEnrollment {
 		writeJSON(w, http.StatusOK, struct {
-			Verified               bool   `json:"verified"`
-			LoggedIn               bool   `json:"loggedIn"`
-			RequiresTOTP           bool   `json:"requiresTotp"`
-			RequiresTOTPEnrollment bool   `json:"requiresTotpEnrollment"`
-			PendingToken           string `json:"pendingToken"`
-		}{true, false, outcome.RequiresTOTP, outcome.RequiresTOTPEnrollment, outcome.PendingToken})
+			Verified bool `json:"verified"`
+			LoggedIn bool `json:"loggedIn"`
+			pendingOutcome
+		}{true, false, toPendingOutcome(outcome)})
 		return
 	}
 
@@ -233,11 +231,24 @@ func (h *Handler) writeLoginOutcome(w http.ResponseWriter, outcome LoginOutcome)
 		writeJSON(w, http.StatusOK, toAuthResponse(*outcome.Session))
 		return
 	}
-	writeJSON(w, http.StatusOK, struct {
-		RequiresTOTP           bool   `json:"requiresTotp"`
-		RequiresTOTPEnrollment bool   `json:"requiresTotpEnrollment"`
-		PendingToken           string `json:"pendingToken,omitempty"`
-	}{outcome.RequiresTOTP, outcome.RequiresTOTPEnrollment, outcome.PendingToken})
+	writeJSON(w, http.StatusOK, toPendingOutcome(outcome))
+}
+
+// pendingOutcome is a login waiting for its second factor: requiresTotp
+// means any method (twoFactorMethod says which; codeSentTo where an
+// email/SMS code went), requiresTotpEnrollment that one must be set up
+// (smsAvailable: SMS is one of the choices).
+type pendingOutcome struct {
+	RequiresTOTP           bool   `json:"requiresTotp"`
+	RequiresTOTPEnrollment bool   `json:"requiresTotpEnrollment"`
+	PendingToken           string `json:"pendingToken,omitempty"`
+	TwoFactorMethod        string `json:"twoFactorMethod,omitempty"`
+	CodeSentTo             string `json:"codeSentTo,omitempty"`
+	SMSAvailable           bool   `json:"smsAvailable,omitempty"`
+}
+
+func toPendingOutcome(o LoginOutcome) pendingOutcome {
+	return pendingOutcome{o.RequiresTOTP, o.RequiresTOTPEnrollment, o.PendingToken, o.TwoFactorMethod, o.CodeSentTo, o.SMSAvailable}
 }
 
 func (h *Handler) login(w http.ResponseWriter, r *http.Request) {

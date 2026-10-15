@@ -87,6 +87,10 @@ type Config struct {
 	// TelegramAPIURL is the Bot API (default https://api.telegram.org).
 	TelegramWebhookBaseURL, TelegramAPIURL string
 
+	// SMSWebhookURL/SMSWebhookSecret: the operator's SMS gateway for 2FA
+	// codes (internal/smswebhook). Both set: SMS is offered; else not.
+	SMSWebhookURL, SMSWebhookSecret string
+
 	// SentryDSN enables error tracking (internal/errtrack) — any tracker
 	// that speaks the Sentry protocol. Empty: off. SentryEnvironment labels
 	// events; it defaults to Env.
@@ -305,6 +309,8 @@ func load(portVar, portDefault, defaultServiceName string, ch chLimits) (Config,
 		PushVAPIDSubject:         getEnv("PUSH_VAPID_SUBJECT", ""),
 		TelegramWebhookBaseURL:   getEnv("TELEGRAM_WEBHOOK_BASE_URL", ""),
 		TelegramAPIURL:           getEnv("TELEGRAM_API_URL", ""),
+		SMSWebhookURL:            getEnv("SMS_WEBHOOK_URL", ""),
+		SMSWebhookSecret:         getEnv("SMS_WEBHOOK_SECRET", ""),
 		LandingLinkKey:           getEnv("LANDING_LINK_KEY", ""),
 		StickyCookieKey:          getEnv("STICKY_COOKIE_KEY", ""),
 		FXProvider:               getEnv("FX_PROVIDER", "ecb"),

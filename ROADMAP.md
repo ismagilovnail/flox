@@ -82,7 +82,7 @@ session.
 | Settings → Organization + API Keys | done |
 | Report Presets — real backend | done |
 | Referral Program — real backend | done |
-| Settings → Security (session timeout, IP allowlist, TOTP 2FA) | done |
+| Settings → Security (session timeout, IP allowlist, 2FA: app, email, SMS) | done |
 | Repo-wide `accessorFn` stale-cache audit | done |
 | Settings → Integrations (Namecheap / Cloudflare / Slack) | done |
 | Google Ads cost integration | done |
@@ -137,7 +137,6 @@ scoped phase; none blocks anything that ships today.
 | Restore drill against production | after the first deployment (`docs/backup.md`) |
 | CI | the owner's decision (CLAUDE.md) |
 | Renewing a Cloudflare Registrar domain from FLOX (read-only today: expiry and auto-renew) | Cloudflare's API has no renewal yet — `docs/domains-tracking-links.md` "Cloudflare Registrar" |
-| SMS/email 2FA as an alternative delivery channel (TOTP only today) | `apps/internal/totp` |
 | Video transcoding in Content Gallery (MOV and other formats; videos are MP4/WebM as uploaded today) | would need an ffmpeg worker — `docs/content-gallery.md` "Video" |
 | Google Play URL parsing for the PWA listing preview | would need a scraper behind `apps/internal/urlsafety` |
 | Telegram: changing a connected bot's token; TG_JOIN by channel in reports | `docs/telegram.md` "Not done" |

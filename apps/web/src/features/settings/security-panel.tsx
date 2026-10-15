@@ -8,7 +8,6 @@ import { z } from "zod";
 import { useTranslation } from "react-i18next";
 import type { TFunction } from "i18next";
 
-import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -17,12 +16,11 @@ import { ErrorState } from "@/components/ui/error-state";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { LoadingState } from "@/components/ui/loading-state";
-import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
-import { useConfirmTOTP, useDisableTOTP, useEnrollTOTP, usePermission, useTOTPStatus } from "@/hooks/use-auth";
+import { TwoFactorSetup } from "@/features/auth/two-factor-setup";
+import { useDisableTOTP, usePermission, useTOTPStatus } from "@/hooks/use-auth";
 import { useSecuritySettings, useUpdateSecuritySettings } from "@/hooks/use-security";
-import { ApiError } from "@/lib/api/client";
 
 // Matches migration 00032's own real CHECK constraint (15-86400 minutes)
 // deliberately wider than a curated dropdown would suggest — a real org
@@ -121,39 +119,17 @@ function SecurityForm({ security }: { security: SecurityValues }) {
 }
 
 /** "Your two-factor authentication" — a personal, per-user concern
- * (real TOTP enrollment) shown on the same Settings > Security page as
+ * (the authenticator app, email or SMS — two-factor-setup.tsx) shown on the same Settings > Security page as
  * the org-wide policy toggle above, but not gated by settings.write:
  * every member manages their own 2FA regardless of role. */
 function PersonalTOTPCard() {
   const { t } = useTranslation(["settings", "common"]);
   const status = useTOTPStatus();
-  const enroll = useEnrollTOTP();
-  const confirm = useConfirmTOTP();
   const disable = useDisableTOTP();
 
   const [enrolling, setEnrolling] = React.useState(false);
-  const [code, setCode] = React.useState("");
   const [disabling, setDisabling] = React.useState(false);
   const [password, setPassword] = React.useState("");
-
-  function startEnroll() {
-    setEnrolling(true);
-    enroll.mutate(undefined);
-  }
-
-  function submitConfirm(e: React.FormEvent) {
-    e.preventDefault();
-    confirm.mutate(
-      { code: code.trim() },
-      {
-        onSuccess: () => {
-          setEnrolling(false);
-          setCode("");
-          toast(t("totp.enabledToast"));
-        },
-      },
-    );
-  }
 
   function submitDisable(e: React.FormEvent) {
     e.preventDefault();
@@ -167,7 +143,7 @@ function PersonalTOTPCard() {
     });
   }
 
-  const confirmError = confirm.error instanceof ApiError ? confirm.error : null;
+  const st = status.data;
 
   return (
     <Card>
@@ -180,72 +156,44 @@ function PersonalTOTPCard() {
         {status.isError && (
           <ErrorState title={t("totp.loadError")} description={status.error.message} onRetry={() => status.refetch()} />
         )}
-        {status.isSuccess && !enrolling && (
-          <div className="flex items-center justify-between">
-            <Badge variant={status.data.enabled ? "success" : "secondary"}>
-              {status.data.enabled ? t("totp.enabled") : t("totp.notEnabled")}
-            </Badge>
-            {status.data.enabled ? (
-              <Button variant="outline" onClick={() => setDisabling(true)}>
-                {t("totp.disable")}
-              </Button>
+        {st && !enrolling && (
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="flex flex-wrap items-center gap-2">
+              <Badge variant={st.enabled ? "success" : "secondary"}>
+                {st.enabled ? t("totp.enabled") : t("totp.notEnabled")}
+              </Badge>
+              {st.enabled && st.method && (
+                <span className="text-sm text-muted-foreground">
+                  {t(`totp.method.${st.method}`)}
+                  {st.phone && <span className="ml-1 font-mono text-xs">{st.phone}</span>}
+                </span>
+              )}
+            </div>
+            {st.enabled ? (
+              <div className="flex gap-2">
+                <Button variant="outline" onClick={() => setEnrolling(true)}>
+                  {t("totp.changeMethod")}
+                </Button>
+                <Button variant="outline" onClick={() => setDisabling(true)}>
+                  {t("totp.disable")}
+                </Button>
+              </div>
             ) : (
-              <Button onClick={startEnroll}>{t("totp.setUp")}</Button>
+              <Button onClick={() => setEnrolling(true)}>{t("totp.setUp")}</Button>
             )}
           </div>
         )}
 
-        {enrolling && (
-          <div className="flex flex-col gap-4">
-            {enroll.isPending || !enroll.data ? (
-              <>
-                <Skeleton className="mx-auto size-48" />
-                <Skeleton className="h-9 w-full" />
-              </>
-            ) : (
-              <>
-                {/* eslint-disable-next-line @next/next/no-img-element -- a base64 data: URI, not a remote asset next/image would optimize */}
-                <img src={enroll.data.qrCodeDataUri} alt={t("totp.qrAlt")} className="mx-auto size-48" />
-                <p className="text-center font-mono text-xs text-muted-foreground">{enroll.data.secret}</p>
-                <div className="rounded-md border border-border bg-muted p-3">
-                  <p className="mb-2 text-xs font-medium">{t("totp.backupTitle")}</p>
-                  <div className="grid grid-cols-2 gap-1 font-mono text-xs">
-                    {enroll.data.backupCodes.map((c) => (
-                      <span key={c}>{c}</span>
-                    ))}
-                  </div>
-                  <p className="mt-2 text-xs text-muted-foreground">{t("totp.backupHint")}</p>
-                </div>
-                <form onSubmit={submitConfirm} className="flex flex-col gap-3">
-                  {confirmError && (
-                    <Alert variant="destructive">
-                      <AlertDescription>{confirmError.message}</AlertDescription>
-                    </Alert>
-                  )}
-                  <div className="grid gap-1.5">
-                    <Label htmlFor="personal-totp-code">{t("totp.code")}</Label>
-                    <Input
-                      id="personal-totp-code"
-                      value={code}
-                      onChange={(e) => setCode(e.target.value)}
-                      inputMode="numeric"
-                      autoComplete="one-time-code"
-                      placeholder="123456"
-                      autoFocus
-                    />
-                  </div>
-                  <div className="flex gap-2">
-                    <Button type="button" variant="outline" onClick={() => setEnrolling(false)}>
-                      {t("common:actions.cancel")}
-                    </Button>
-                    <Button type="submit" disabled={confirm.isPending || !code.trim()}>
-                      {t("totp.confirm")}
-                    </Button>
-                  </div>
-                </form>
-              </>
-            )}
-          </div>
+        {st && enrolling && (
+          <TwoFactorSetup
+            smsAvailable={st.smsAvailable}
+            exclude={st.enabled ? st.method : undefined}
+            onCancel={() => setEnrolling(false)}
+            onDone={() => {
+              setEnrolling(false);
+              toast(t("totp.enabledToast"));
+            }}
+          />
         )}
       </CardContent>
 
