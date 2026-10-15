@@ -1,0 +1,182 @@
+[
+ {
+  "name": "Клик → маршрутизация → редирект",
+  "status": "PASS",
+  "evidence": "живой клик 302; e2e TestFullFunnel, TestFilterMatrix; tracker/handler.go",
+  "limits": "",
+  "order": 0,
+  "updatedAt": "2026-10-15T21:00:00+05:00",
+  "id": "f00"
+ },
+ {
+  "name": "Sticky и взвешенный выбор потока",
+  "status": "PASS",
+  "evidence": "tracker/sticky_test.go, internal/routing (тесты)",
+  "limits": "живьём не проверялось",
+  "order": 1,
+  "updatedAt": "2026-10-15T21:00:00+05:00",
+  "id": "f01"
+ },
+ {
+  "name": "Postback: дедупликация и прогрессия статусов",
+  "status": "PASS",
+  "evidence": "14 живых сценариев; гонка 40 параллельных → 1 success",
+  "limits": "REDEP без txn_id = дубль",
+  "order": 2,
+  "updatedAt": "2026-10-15T21:00:00+05:00",
+  "id": "f02"
+ },
+ {
+  "name": "Сторно (DECLINE)",
+  "status": "PASS",
+  "evidence": "ClickHouse: ACCEPT +100 / DECLINE −100",
+  "limits": "повторный ACCEPT после DECLINE невозможен",
+  "order": 3,
+  "updatedAt": "2026-10-15T21:00:00+05:00",
+  "id": "f03"
+ },
+ {
+  "name": "FX по дате события",
+  "status": "PARTIAL",
+  "evidence": "EUR 30 → 33.62 USD; fx_rates заполнены",
+  "limits": "без currency → USD=0",
+  "order": 4,
+  "updatedAt": "2026-10-15T21:00:00+05:00",
+  "id": "f04"
+ },
+ {
+  "name": "Отчёты revenue / profit / ROI",
+  "status": "PARTIAL",
+  "evidence": "ROI = null без расходов; HOLD не входит в выручку",
+  "limits": "дефект с валютой (DATA-1)",
+  "order": 5,
+  "updatedAt": "2026-10-15T21:00:00+05:00",
+  "id": "f05"
+ },
+ {
+  "name": "Unique clicks",
+  "status": "PARTIAL",
+  "evidence": "chstore/report.go:452 — кампания+IP+UA",
+  "limits": "гипотеза: склейка на CGNAT",
+  "order": 6,
+  "updatedAt": "2026-10-15T21:00:00+05:00",
+  "id": "f06"
+ },
+ {
+  "name": "Изоляция тенантов",
+  "status": "PASS",
+  "evidence": "IDOR → 404 на GET/PATCH/regenerate; api/tenant_isolation_routes_test.go",
+  "limits": "",
+  "order": 7,
+  "updatedAt": "2026-10-15T21:00:00+05:00",
+  "id": "f07"
+ },
+ {
+  "name": "CSRF и сессия",
+  "status": "PASS",
+  "evidence": "чужой Origin → 403; без сессии → 401; cookie HttpOnly + Lax",
+  "limits": "",
+  "order": 8,
+  "updatedAt": "2026-10-15T21:00:00+05:00",
+  "id": "f08"
+ },
+ {
+  "name": "Отсутствие потерь событий под нагрузкой",
+  "status": "PASS",
+  "evidence": "vegeta: 36 000 кликов → 36 000 строк, p99 0,24 мс",
+  "limits": "только loopback",
+  "order": 9,
+  "updatedAt": "2026-10-15T21:00:00+05:00",
+  "id": "f09"
+ },
+ {
+  "name": "Импорт расходов FB / TikTok / Google",
+  "status": "NOT_VERIFIED",
+  "evidence": "реальные endpoints в adaccount/*",
+  "limits": "нет реальных токенов",
+  "order": 10,
+  "updatedAt": "2026-10-15T21:00:00+05:00",
+  "id": "f10"
+ },
+ {
+  "name": "Пиксели FB CAPI / TikTok Events",
+  "status": "NOT_VERIFIED",
+  "evidence": "pixelsend/providers.go",
+  "limits": "нет реальных токенов",
+  "order": 11,
+  "updatedAt": "2026-10-15T21:00:00+05:00",
+  "id": "f11"
+ },
+ {
+  "name": "PWA, лендинги, postlanding",
+  "status": "PASS",
+  "evidence": "tracker/pwa_test.go, landing_test.go; живой клик ушёл на /pwa/",
+  "limits": "установка на устройстве не проверялась",
+  "order": 12,
+  "updatedAt": "2026-10-15T21:00:00+05:00",
+  "id": "f12"
+ },
+ {
+  "name": "Push и Telegram",
+  "status": "NOT_VERIFIED",
+  "evidence": "код и тесты есть",
+  "limits": "внешние сервисы не настроены",
+  "order": 13,
+  "updatedAt": "2026-10-15T21:00:00+05:00",
+  "id": "f13"
+ },
+ {
+  "name": "Биллинг, тарифы, квоты",
+  "status": "NOT_IMPLEMENTED",
+  "evidence": "поиск по коду — ничего",
+  "limits": "",
+  "order": 14,
+  "updatedAt": "2026-10-15T21:00:00+05:00",
+  "id": "f14"
+ },
+ {
+  "name": "Онбординг-визард и тестовая конверсия",
+  "status": "NOT_IMPLEMENTED",
+  "evidence": "только empty-state и replay журнала",
+  "limits": "",
+  "order": 15,
+  "updatedAt": "2026-10-15T21:00:00+05:00",
+  "id": "f15"
+ },
+ {
+  "name": "Публичный API (OpenAPI)",
+  "status": "NOT_IMPLEMENTED",
+  "evidence": "упоминание только в spec",
+  "limits": "API-ключи есть",
+  "order": 16,
+  "updatedAt": "2026-10-15T21:00:00+05:00",
+  "id": "f16"
+ },
+ {
+  "name": "Импорт из Keitaro/Binom, шаблоны партнёрок",
+  "status": "NOT_IMPLEMENTED",
+  "evidence": "—",
+  "limits": "есть пресеты макросов FB/TikTok",
+  "order": 17,
+  "updatedAt": "2026-10-15T21:00:00+05:00",
+  "id": "f17"
+ },
+ {
+  "name": "GDPR: удаление, экспорт, анонимизация IP",
+  "status": "NOT_IMPLEMENTED",
+  "evidence": "docs/retention.md",
+  "limits": "",
+  "order": 18,
+  "updatedAt": "2026-10-15T21:00:00+05:00",
+  "id": "f18"
+ },
+ {
+  "name": "Production, CI, restore-drill",
+  "status": "NOT_IMPLEMENTED",
+  "evidence": "ROADMAP.md",
+  "limits": "k8s-манифесты есть",
+  "order": 19,
+  "updatedAt": "2026-10-15T21:00:00+05:00",
+  "id": "f19"
+ }
+]

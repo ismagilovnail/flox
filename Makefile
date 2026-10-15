@@ -36,7 +36,7 @@ DATABASE_URL ?= postgres://flox:flox@localhost:5432/flox?sslmode=disable
         backup-now backup-drill backup-list \
         migrate-up migrate-down migrate-status dev-reset dev-fresh dev-status fixtures reconcile \
         test-stack-up test-stack-down test-stack-restart test-stack-logs \
-        fmt vet test lint check clean
+        fmt vet test lint check clean audit-tracker
 
 help: ## Show this help
 	@echo "FLOX — make targets"
@@ -207,6 +207,11 @@ lint: ## eslint (apps/web) + tsc --noEmit (apps/web)
 	cd $(WEB_DIR) && npx tsc --noEmit
 
 check: fmt vet test lint ## Run the full validation suite (fmt+vet+test+lint)
+
+# --- Audit tracker (tools/audit-tracker, its own Go module) ----------------
+
+audit-tracker: ## Local board of the 2026-10-15 audit findings: http://127.0.0.1:8099 (SQLite in tools/audit-tracker/data)
+	cd tools/audit-tracker && go run .
 
 # --- Cleanup -----------------------------------------------------------------
 
