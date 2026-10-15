@@ -29,8 +29,8 @@
 - **2026-10-11 — пиксели (расхождение 1).** Server-side отправка в
   Facebook CAPI, TikTok Events API, Snapchat CAPI и generic URL из worker
   через очередь `pixel_deliveries`: CPA-события из транзакции конверсии,
-  PWA_INSTALL из потока событий. Twitter/X не отправляет (нужен OAuth
-  1.0a) и больше не выбирается. `docs/pixels.md` «Sending».
+  PWA_INSTALL из потока событий. Twitter/X не отправлял (нужен OAuth
+  1.0a); 2026-10-15 убран как провайдер совсем (решение владельца). `docs/pixels.md` «Sending».
 - **2026-10-11 — метрики в списке кампаний (расхождение 2).** Колонки
   Clicks, Conversions, Revenue, Spend, Profit, ROI за выбранный период (по
   умолчанию 30 дней, часовой пояс организации) из `/analytics/report` по

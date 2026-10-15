@@ -5,6 +5,20 @@ per-phase, matching `CLAUDE.md`'s phase protocol. The one exception is
 [Between phases], below: spec amendments and the code changes that follow from
 them land between phases and would otherwise be invisible here.
 
+## [Phase 30.34] — Twitter/X pixels removed
+
+The owner's decision: not needed at all. A twitter pixel could never send (X's Conversions API needs OAuth 1.0a app
+credentials), and was kept only as an editable leftover.
+
+- Migration 00080 deletes twitter pixels (with their stream-set links and delivery history; there were none in dev)
+  and drops `twitter` from `pixels_provider_check`. Down allows the value again; deleted rows are not restored.
+- Go: `pixel.ProviderTwitter` and `Provider.Sends` gone (every provider sends); the delivery queries no longer
+  exclude twitter. Web: the provider, its warning and the keep-an-old-one option gone from the pixel form; en/ru keys
+  removed.
+- Tests: `TestTwitterRejectedByTheDatabase`, `TestSendersCoverEveryProvider` (4 senders, twitter not valid), the
+  create refusal; the "existing twitter pixel stays editable" test and the twitter row in the queue test removed.
+  Migration up → down → up checked.
+
 ## [Phase 30.33] — Cloudflare Registrar adapter
 
 ROADMAP "Known open gaps": `cloudflare_registrar` had no adapter.

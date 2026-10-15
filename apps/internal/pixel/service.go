@@ -59,15 +59,10 @@ func (v *sendable) normalize() {
 	v.eventNames = names
 }
 
-// validate adds field errors to fields. providerChanged: the provider is
-// being set (create, or a switch) — twitter cannot be (Provider.Sends), but
-// an existing twitter pixel can still be edited.
-func (v sendable) validate(fields map[string]string, providerChanged bool) {
-	switch {
-	case !v.provider.Valid():
+// validate adds field errors to fields.
+func (v sendable) validate(fields map[string]string) {
+	if !v.provider.Valid() {
 		fields["provider"] = "must be one of facebook, tiktok, snapchat, generic"
-	case providerChanged && !v.provider.Sends():
-		fields["provider"] = "twitter cannot send events: its Conversions API needs OAuth 1.0a app credentials FLOX does not have"
 	}
 	if len(v.pixelID) > pixelIDMax {
 		fields["pixelId"] = fmt.Sprintf("must be at most %d characters", pixelIDMax)
@@ -140,7 +135,7 @@ func (s *Service) Create(ctx context.Context, orgID string, in CreateInput) (Pix
 		testCode: in.TestEventCode, url: in.URL, eventNames: in.EventNames,
 	}
 	v.normalize()
-	v.validate(fields, true)
+	v.validate(fields)
 
 	if len(fields) > 0 {
 		return Pixel{}, apierror.Validation("invalid pixel", fields)
@@ -196,7 +191,7 @@ func (s *Service) Update(ctx context.Context, orgID, id string, in UpdateInput) 
 		v.eventNames = *in.EventNames
 	}
 	v.normalize()
-	v.validate(fields, in.Provider != nil && *in.Provider != current.Provider)
+	v.validate(fields)
 	if len(fields) > 0 {
 		return Pixel{}, apierror.Validation("invalid pixel", fields)
 	}

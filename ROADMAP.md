@@ -139,7 +139,7 @@ scoped phase; none blocks anything that ships today.
 | Renewing a Cloudflare Registrar domain from FLOX (read-only today: expiry and auto-renew) | Cloudflare's API has no renewal yet — `docs/domains-tracking-links.md` "Cloudflare Registrar" |
 | SMS/email 2FA as an alternative delivery channel (TOTP only today) | `apps/internal/totp` |
 | Video upload/transcoding in Content Gallery (images only today) | needs a real ffmpeg/worker pipeline |
-| Pixels: Twitter/X sending (OAuth 1.0a), a "send test event" button | sending works for Facebook/TikTok/Snapchat/generic — `docs/pixels.md` "Not done" |
+| Pixels: a "send test event" button | sending works for Facebook/TikTok/Snapchat/generic — `docs/pixels.md` "Not done" |
 | PWA types `external`/`ios_app`, landing `asPwa` | no target-URL fields exist for the two types; `docs/pwa-serving.md` "Not done" |
 | Google Play URL parsing for the PWA listing preview | would need a scraper behind `apps/internal/urlsafety` |
 | Telegram: changing a connected bot's token; TG_JOIN by channel in reports | `docs/telegram.md` "Not done" |

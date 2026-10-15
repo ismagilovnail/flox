@@ -78,7 +78,6 @@ and retrying them for 21 hours only hides the problem from the delivery log.
 | tiktok | Events API 2.0 `POST business-api.tiktok.com/open_api/v1.3/event/track/`, `event_source=web` | `Access-Token` header | `ttclid`, `ip`, `user_agent`, `external_id` = SHA-256(click id) |
 | snapchat | Conversions API v3 `POST tr.snapchat.com/v3/{pixel}/events`, `action_source=WEB` | `access_token` query parameter | `client_ip_address`, `client_user_agent`, `external_id` = SHA-256(click id) |
 | generic | `GET` of the pixel's URL template, macros resolved (`internal/macro`); `{status}` is the event name | — | whatever the template asks for |
-| twitter | none: cannot be created or switched to; existing ones are kept, editable, and send nothing | X's Conversions API needs OAuth 1.0a app + user credentials (4 secrets) FLOX does not have — the owner's decision 2026-10-11 | — |
 
 - **Value**: USD at the event date's rate when known, else the reported
   amount in its own currency, else none — never a made-up 0. Facebook
@@ -122,7 +121,6 @@ platform's error message, refreshed every 15 s.
 
 ### Not done
 
-- Twitter/X sending (see above).
 - A "send test event" button (today: set the test event code and send a
   test conversion through the funnel).
 - Browser-side pixels (`fbq` on landings): FLOX's own landings could load
@@ -147,8 +145,11 @@ not a page a visitor is sent to.
 
 Validation in `pixel.Service`:
 - `name`: 2-100 chars.
-- `provider`: one of `facebook`/`tiktok`/`snapchat`/`twitter`/`generic`
-  (`Provider.Valid()`).
+- `provider`: one of `facebook`/`tiktok`/`snapchat`/`generic`
+  (`Provider.Valid()`). Twitter/X was removed as a provider on 2026-10-15
+  (the owner's decision; it could never send — X's Conversions API needs
+  OAuth 1.0a app credentials): migration 00080 deleted any twitter pixels
+  and the database no longer accepts the value.
 - `pixelId`: free-form string, at most 80 chars — **not required**.
   Matches the frontend's own pre-existing zod schema
   (`z.string().max(80)`, no `.min(1)`): an operator can save a pixel

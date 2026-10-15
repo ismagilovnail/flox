@@ -77,7 +77,7 @@ func enqueue(ctx context.Context, db execer, table string, ev pixel.Event) (int6
 		FROM stream_set_pixels ssp
 		JOIN pixels p ON p.id = ssp.pixel_id AND p.organization_id = ssp.organization_id
 		WHERE ssp.organization_id = $1 AND ssp.stream_set_id = $2
-		  AND p.status = 'active' AND $4 = ANY(p.events) AND p.provider <> 'twitter'
+		  AND p.status = 'active' AND $4 = ANY(p.events)
 		ON CONFLICT (pixel_id, source_event_id) DO NOTHING`,
 		ev.OrganizationID, ev.StreamSetID, ev.SourceEventID, string(ev.Type), ev.ClickID, payload,
 	)
@@ -96,7 +96,7 @@ func (s *PostgresStore) Wanted(ctx context.Context, orgID, streamSetID string, t
 			SELECT 1 FROM stream_set_pixels ssp
 			JOIN pixels p ON p.id = ssp.pixel_id AND p.organization_id = ssp.organization_id
 			WHERE ssp.organization_id = $1 AND ssp.stream_set_id = $2
-			  AND p.status = 'active' AND $3 = ANY(p.events) AND p.provider <> 'twitter')`,
+			  AND p.status = 'active' AND $3 = ANY(p.events))`,
 		orgID, streamSetID, string(t),
 	).Scan(&ok)
 	if err != nil {

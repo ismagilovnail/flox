@@ -32,25 +32,16 @@ const (
 	ProviderFacebook Provider = "facebook"
 	ProviderTikTok   Provider = "tiktok"
 	ProviderSnapchat Provider = "snapchat"
-	ProviderTwitter  Provider = "twitter"
 	ProviderGeneric  Provider = "generic"
 )
 
 func (p Provider) Valid() bool {
 	switch p {
-	case ProviderFacebook, ProviderTikTok, ProviderSnapchat, ProviderTwitter, ProviderGeneric:
+	case ProviderFacebook, ProviderTikTok, ProviderSnapchat, ProviderGeneric:
 		return true
 	default:
 		return false
 	}
-}
-
-// Sends reports whether events can be sent to this provider. Twitter/X's
-// Conversions API needs OAuth 1.0a app and user credentials, which FLOX
-// does not have: no new twitter pixel can be created, and existing ones
-// are kept but send nothing.
-func (p Provider) Sends() bool {
-	return p.Valid() && p != ProviderTwitter
 }
 
 // UsesToken reports whether the provider authenticates with the pixel's

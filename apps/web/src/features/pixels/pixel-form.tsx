@@ -6,14 +6,12 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { useTranslation } from "react-i18next";
 import type { TFunction } from "i18next";
-import { TriangleAlertIcon } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { MultiSelect } from "@/components/ui/multi-select";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { MacroPicker } from "@/components/shared/macro-picker";
@@ -22,7 +20,6 @@ import {
   PIXEL_EVENT_TYPES,
   PIXEL_PROVIDERS,
   PIXEL_PROVIDER_I18N_KEY,
-  SENDING_PIXEL_PROVIDERS,
   providerHasTestCode,
   providerUsesToken,
   type CreatePixelInput,
@@ -144,9 +141,6 @@ export function PixelForm({
   const events = useWatch({ control, name: "events" });
   const clearToken = useWatch({ control, name: "clearAccessToken" });
   const usesToken = providerUsesToken(provider);
-  // Twitter cannot be chosen, but an existing twitter pixel keeps showing
-  // its provider until it is moved to one that sends.
-  const providerOptions = pixel?.provider === "twitter" ? [...SENDING_PIXEL_PROVIDERS, "twitter" as const] : SENDING_PIXEL_PROVIDERS;
   const tokenSaved = !!pixel?.hasAccessToken && pixel.provider === provider;
 
   return (
@@ -158,14 +152,6 @@ export function PixelForm({
             <CardDescription>{t("form.description", { ns: "pixels" })}</CardDescription>
           </CardHeader>
           <CardContent className="flex flex-col gap-4">
-            {provider === "twitter" && (
-              <Alert>
-                <TriangleAlertIcon />
-                <AlertTitle>{t("form.twitterTitle", { ns: "pixels" })}</AlertTitle>
-                <AlertDescription>{t("form.twitterDescription", { ns: "pixels" })}</AlertDescription>
-              </Alert>
-            )}
-
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="grid gap-1.5">
                 <Label htmlFor="pxl-name">{t("form.nameLabel", { ns: "pixels" })}</Label>
@@ -189,8 +175,8 @@ export function PixelForm({
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        {providerOptions.map((p) => (
-                          <SelectItem key={p} value={p} disabled={p === "twitter"}>
+                        {PIXEL_PROVIDERS.map((p) => (
+                          <SelectItem key={p} value={p}>
                             {t(PIXEL_PROVIDER_I18N_KEY[p], { ns: "pixels" })}
                           </SelectItem>
                         ))}

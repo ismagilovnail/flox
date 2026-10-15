@@ -3,7 +3,6 @@
     "facebook": "Facebook Pixel",
     "tiktok": "TikTok Pixel",
     "snapchat": "Snap Pixel",
-    "twitter": "X (Twitter) Pixel",
     "generic": "Generic S2S"
   },
   "columns": {
@@ -47,9 +46,7 @@
     "urlHint": "Called with GET for every event. {status} is the event name below.",
     "eventNamesLabel": "Event names",
     "eventNamesHint": "What each event is reported as. Empty uses the platform standard event shown.",
-    "eventNameAria": "Platform event name for {{event}}",
-    "twitterTitle": "X (Twitter) pixels cannot send events",
-    "twitterDescription": "X's Conversions API needs OAuth 1.0a app credentials FLOX does not have. This pixel sends nothing; move it to another provider or archive it."
+    "eventNameAria": "Platform event name for {{event}}"
   },
   "list": {
     "title": "Pixels",

@@ -3,7 +3,6 @@
     "facebook": "Facebook Pixel",
     "tiktok": "TikTok Pixel",
     "snapchat": "Snap Pixel",
-    "twitter": "X (Twitter) Pixel",
     "generic": "Generic S2S"
   },
   "columns": {
@@ -47,9 +46,7 @@
     "urlHint": "Вызывается GET-запросом на каждое событие. {status} — имя события ниже.",
     "eventNamesLabel": "Имена событий",
     "eventNamesHint": "Под каким именем отправляется каждое событие. Пусто — стандартное событие платформы из подсказки.",
-    "eventNameAria": "Имя события платформы для {{event}}",
-    "twitterTitle": "Пиксели X (Twitter) не отправляют события",
-    "twitterDescription": "Conversions API площадки X требует учётных данных приложения OAuth 1.0a, которых у FLOX нет. Этот пиксель ничего не отправляет: смените провайдера или архивируйте его."
+    "eventNameAria": "Имя события платформы для {{event}}"
   },
   "list": {
     "title": "Пиксели",

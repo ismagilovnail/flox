@@ -95,14 +95,6 @@ func TestEnqueueGoesToMatchingPixelsOnce(t *testing.T) {
 	if _, err := pixel.NewService(f.repo).Pause(ctx, f.org, paused.ID); err != nil {
 		t.Fatal(err)
 	}
-	tw := idgen.New()
-	if _, err := f.pool.Exec(ctx, `INSERT INTO pixels (id, organization_id, name, provider, pixel_id, events) VALUES ($1, $2, 'TW', 'twitter', 'x', '{CPA_ACCEPT}');
-		`, tw, f.org); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := f.pool.Exec(ctx, `INSERT INTO stream_set_pixels (organization_id, stream_set_id, pixel_id) VALUES ($1, $2, $3)`, f.org, f.streamSet, tw); err != nil {
-		t.Fatal(err)
-	}
 
 	ev := f.event(event.CpaAccept)
 	wanted, err := store.Wanted(ctx, f.org, f.streamSet, event.CpaAccept)

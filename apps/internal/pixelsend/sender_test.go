@@ -228,11 +228,14 @@ func TestGenericFillsMacros(t *testing.T) {
 	}
 }
 
-func TestSendersCoverEveryProviderThatSends(t *testing.T) {
+func TestSendersCoverEveryProvider(t *testing.T) {
 	senders := pixelsend.Senders(http.DefaultClient)
-	for _, p := range []pixel.Provider{pixel.ProviderFacebook, pixel.ProviderTikTok, pixel.ProviderSnapchat, pixel.ProviderTwitter, pixel.ProviderGeneric} {
-		if _, ok := senders[p]; ok != p.Sends() {
-			t.Errorf("provider %s: has sender %v, Sends() %v", p, ok, p.Sends())
+	for _, p := range []pixel.Provider{pixel.ProviderFacebook, pixel.ProviderTikTok, pixel.ProviderSnapchat, pixel.ProviderGeneric} {
+		if _, ok := senders[p]; !ok || !p.Valid() {
+			t.Errorf("provider %s: has sender %v, valid %v", p, ok, p.Valid())
 		}
+	}
+	if len(senders) != 4 || pixel.Provider("twitter").Valid() {
+		t.Errorf("senders = %d, twitter valid %v; want 4 and no twitter", len(senders), pixel.Provider("twitter").Valid())
 	}
 }

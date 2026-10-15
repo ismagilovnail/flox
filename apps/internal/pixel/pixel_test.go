@@ -114,9 +114,9 @@ func TestCreateRejectsInvalidShapes(t *testing.T) {
 		t.Fatal("Create with NOTIFICATION_CLICK (not a reportable event) succeeded, want a validation error")
 	}
 	if _, err := svc.Create(ctx, orgID, pixel.CreateInput{
-		Name: "Twitter", Provider: pixel.ProviderTwitter, Events: []string{"CPA_HOLD"},
+		Name: "Twitter", Provider: pixel.Provider("twitter"), Events: []string{"CPA_HOLD"},
 	}); err == nil {
-		t.Fatal("Create with provider twitter succeeded, want a validation error (it cannot send)")
+		t.Fatal("Create with provider twitter succeeded, want a validation error (no longer a provider)")
 	}
 	for _, url := range []string{"", "not a url", "ftp://example.com/p", "http://127.0.0.1/p"} {
 		if _, err := svc.Create(ctx, orgID, pixel.CreateInput{
@@ -344,28 +344,15 @@ func TestSwitchToGenericDropsTokenAndRequiresURL(t *testing.T) {
 	}
 }
 
-func TestExistingTwitterPixelStaysEditable(t *testing.T) {
+// The provider is gone from the database too (migration 00080): a row
+// cannot be written with it.
+func TestTwitterRejectedByTheDatabase(t *testing.T) {
 	pool := mustPool(t)
 	ctx := context.Background()
 	orgID := seedOrg(t, ctx, pool)
-	svc := pixel.NewService(pixel.NewRepository(pool, testKey))
-
-	id := idgen.New()
 	if _, err := pool.Exec(ctx, `INSERT INTO pixels (id, organization_id, name, provider, pixel_id, events)
-		VALUES ($1, $2, 'Old twitter', 'twitter', 'tw1', '{CPA_HOLD}')`, id, orgID); err != nil {
-		t.Fatal(err)
-	}
-	name := "Old twitter (renamed)"
-	if _, err := svc.Update(ctx, orgID, id, pixel.UpdateInput{Name: &name}); err != nil {
-		t.Fatalf("renaming an existing twitter pixel: %v", err)
-	}
-	fb := pixel.ProviderFacebook
-	if _, err := svc.Update(ctx, orgID, id, pixel.UpdateInput{Provider: &fb}); err != nil {
-		t.Fatalf("moving a twitter pixel to facebook: %v", err)
-	}
-	tw := pixel.ProviderTwitter
-	if _, err := svc.Update(ctx, orgID, id, pixel.UpdateInput{Provider: &tw}); err == nil {
-		t.Fatal("switching back to twitter succeeded, want a validation error")
+		VALUES ($1, $2, 'Old twitter', 'twitter', 'tw1', '{CPA_HOLD}')`, idgen.New(), orgID); err == nil {
+		t.Fatal("a twitter pixel was stored, want the provider check to refuse it")
 	}
 }
 

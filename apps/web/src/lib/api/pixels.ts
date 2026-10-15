@@ -4,15 +4,10 @@ import { fetchAllPages } from "@/lib/api/pagination";
 /** Mirrors apps/internal/pixel's real shape. */
 export type PixelStatus = "active" | "paused" | "archived";
 
-export type PixelProvider = "facebook" | "tiktok" | "snapchat" | "twitter" | "generic";
+export type PixelProvider = "facebook" | "tiktok" | "snapchat" | "generic";
 
-export const PIXEL_PROVIDERS: PixelProvider[] = ["facebook", "tiktok", "snapchat", "twitter", "generic"];
-
-/** Providers a pixel can be created with or switched to: every one that
- * sends (pixel.Provider.Sends). Twitter/X's Conversions API needs OAuth
- * 1.0a app credentials FLOX does not have — existing twitter pixels stay
- * editable but send nothing. */
-export const SENDING_PIXEL_PROVIDERS: PixelProvider[] = ["facebook", "tiktok", "snapchat", "generic"];
+/** pixel.Provider's values — every one sends. */
+export const PIXEL_PROVIDERS: PixelProvider[] = ["facebook", "tiktok", "snapchat", "generic"];
 
 /** Providers that authenticate with the pixel's access token (all but
  * generic, which calls its URL). */
@@ -32,7 +27,6 @@ export const PIXEL_PROVIDER_I18N_KEY: Record<PixelProvider, string> = {
   facebook: "provider.facebook",
   tiktok: "provider.tiktok",
   snapchat: "provider.snapchat",
-  twitter: "provider.twitter",
   generic: "provider.generic",
 };
 

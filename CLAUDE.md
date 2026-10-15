@@ -19,16 +19,16 @@ referenced below as §N).
 ## CURRENT STATE — UPDATE THIS EVERY PHASE
 
 ```
-CURRENT PHASE : PHASE 30.33 — CLOUDFLARE REGISTRAR ADAPTER (closed)
+CURRENT PHASE : PHASE 30.34 — TWITTER PIXELS REMOVED (closed)
 STATUS        : Spec conformance gaps (docs/spec-conformance-2026-10-11.md):
                 all 15 closed and its "мелочи" too; every §43 event is
                 produced.
                 Leftovers: ROADMAP.md "Known open gaps" (Telegram token
-                change / TG_JOIN by channel, Twitter/X pixel, PWA types,
+                change / TG_JOIN by channel, pixel test-event button, PWA types,
                 SMS/email 2FA, gallery video, Google Play parsing…).
                 Prod restore drill after deployment.
-LAST COMMIT   : feat(domains): cloudflare registrar adapter.
-UNCOMMITTED   : none expected. Dev DB at migration 00079, CH schema 018.
+LAST COMMIT   : refactor(pixels): drop twitter provider.
+UNCOMMITTED   : none expected. Dev DB at migration 00080, CH schema 018.
 NEXT          : wait for the user — pick from the leftovers above with the
                 user. CI (DO1) is
                 the user's own decision — do not set it up. Run go test with
