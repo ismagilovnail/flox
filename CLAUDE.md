@@ -19,15 +19,15 @@ referenced below as §N).
 ## CURRENT STATE — UPDATE THIS EVERY PHASE
 
 ```
-CURRENT PHASE : PHASE 30.26 — PIXELS FOR TG_START, TG_JOIN (closed)
+CURRENT PHASE : PHASE 30.27 — PIXELS FOR NOTIFICATION_SUBSCRIBE (closed)
 STATUS        : Spec conformance gaps (docs/spec-conformance-2026-10-11.md):
                 all 15 closed; every §43 event is now produced. Left from
                 that doc's "мелочи": DataGrid, types/ schemas/ dirs.
                 Leftovers: push metrics in the report builder; Telegram
                 per-click invite links / several channels / bot editing
-                (docs/telegram.md "Not done"); NOTIFICATION_SUBSCRIBE pixels.
+                (docs/telegram.md "Not done").
                 Prod restore drill after deployment.
-LAST COMMIT   : feat(pixels): tg start and join.
+LAST COMMIT   : feat(pixels): notification subscribe.
 UNCOMMITTED   : none expected. Dev DB at migration 00076, CH schema 018.
 NEXT          : wait for the user — pick from the leftovers above with the
                 user. CI (DO1) is

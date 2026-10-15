@@ -332,3 +332,36 @@ func TestTriggerSinkQueuesTelegramEventsWithTheClicksVisitor(t *testing.T) {
 		t.Fatalf("facebook name for TG_JOIN = %q, want Subscribe", name)
 	}
 }
+
+// A push subscription comes from the visitor's own installed app: its IP
+// and user agent are kept, not replaced by the click's; the platform click
+// id still comes from the click.
+func TestTriggerSinkQueuesPushSubscribeWithItsOwnVisitor(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	store := pixelsend.NewPostgresStoreOnTable(f.pool, testpg.PrivateTable(t, f.pool, "pixel_deliveries"))
+	px := f.pixel(t, pixel.CreateInput{Name: "TT push", Provider: pixel.ProviderTikTok, PixelID: "1", Events: []string{"NOTIFICATION_SUBSCRIBE"}}, true)
+
+	clicks := attribution.NewMemoryResolver()
+	clicks.Record(attribution.Click{ClickID: "click-push", OrganizationID: f.org, OccurredAt: time.Now().Add(-time.Hour),
+		IP: "203.0.113.8", UserAgent: "TikTok webview", TTClickID: "tt-push"})
+	sink := &pixelsend.TriggerSink{Next: &fakeInserter{}, Queue: store, Clicks: clicks}
+
+	sub := event.Event{ID: idgen.New(), Type: event.NotificationSubscribe, OrganizationID: f.org, StreamSetID: f.streamSet,
+		ClickID: "click-push", EventAt: time.Now(), IP: "198.51.100.9", UserAgent: "Chrome PWA"}
+	if err := sink.InsertBatch(ctx, []event.Event{sub}); err != nil {
+		t.Fatal(err)
+	}
+	claimed, err := store.ClaimDue(ctx, 10)
+	if err != nil || len(claimed) != 1 {
+		t.Fatalf("claimed = %v, %v; want one delivery for the subscription", claimed, err)
+	}
+	ev := claimed[0].Event
+	if claimed[0].PixelID != px.ID || ev.Type != event.NotificationSubscribe ||
+		ev.IP != "198.51.100.9" || ev.UserAgent != "Chrome PWA" || ev.TTClickID != "tt-push" {
+		t.Fatalf("queued event = %+v, want the subscription with its own visitor and the click's ttclid", ev)
+	}
+	if name := pixel.EventName(pixel.ProviderTikTok, nil, string(ev.Type)); name != "Subscribe" {
+		t.Fatalf("tiktok name for NOTIFICATION_SUBSCRIBE = %q, want Subscribe", name)
+	}
+}

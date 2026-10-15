@@ -109,9 +109,9 @@ func TestCreateRejectsInvalidShapes(t *testing.T) {
 		t.Fatal("Create with a 1-character name succeeded, want a validation error")
 	}
 	if _, err := svc.Create(ctx, orgID, pixel.CreateInput{
-		Name: "Not offered", Provider: pixel.ProviderTikTok, Events: []string{"NOTIFICATION_SUBSCRIBE"},
+		Name: "Not offered", Provider: pixel.ProviderTikTok, Events: []string{"NOTIFICATION_CLICK"},
 	}); err == nil {
-		t.Fatal("Create with NOTIFICATION_SUBSCRIBE (no platform mapping) succeeded, want a validation error")
+		t.Fatal("Create with NOTIFICATION_CLICK (not a reportable event) succeeded, want a validation error")
 	}
 	if _, err := svc.Create(ctx, orgID, pixel.CreateInput{
 		Name: "Twitter", Provider: pixel.ProviderTwitter, Events: []string{"CPA_HOLD"},

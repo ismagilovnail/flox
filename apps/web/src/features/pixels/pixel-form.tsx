@@ -302,7 +302,7 @@ export function PixelForm({
                 </div>
                 <div className="grid gap-2 sm:grid-cols-2">
                   {events.map((e) => (
-                    <div key={e} className="grid grid-cols-[8.5rem_1fr] items-center gap-2">
+                    <div key={e} className="grid grid-cols-[11rem_1fr] items-center gap-2">
                       <span className="font-mono text-xs text-muted-foreground">{e}</span>
                       <Input
                         aria-label={t("form.eventNameAria", { ns: "pixels", event: e })}

@@ -91,13 +91,15 @@ function MultiSelect({
                   >
                     <span
                       className={cn(
-                        "flex size-4 items-center justify-center rounded-sm border border-input",
+                        "flex size-4 shrink-0 items-center justify-center rounded-sm border border-input",
                         checked && "border-primary bg-primary text-primary-foreground",
                       )}
                     >
                       {checked && <CheckIcon className="size-3" />}
                     </span>
-                    {option.label}
+                    <span className="truncate" title={option.label}>
+                      {option.label}
+                    </span>
                   </CommandItem>
                 );
               })}

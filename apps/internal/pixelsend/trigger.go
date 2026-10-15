@@ -19,10 +19,11 @@ import (
 // TG_JOIN come from the bot's webhook (internal/telegram), a request from
 // Telegram's servers: the visitor's IP and user agent are the click's.
 var trackerTriggered = map[event.Type]bool{
-	event.PwaInstall: true,
-	event.IosInstall: true,
-	event.TgStart:    true,
-	event.TgJoin:     true,
+	event.PwaInstall:            true,
+	event.IosInstall:            true,
+	event.NotificationSubscribe: true,
+	event.TgStart:               true,
+	event.TgJoin:                true,
 }
 
 // pixelType is the event type a pixel is configured and mapped by.

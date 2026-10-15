@@ -61,10 +61,9 @@ func (p Provider) UsesToken() bool {
 
 // ValidEventTypes is the part of the §43 event model a pixel can report:
 // the events FLOX actually produces that an ad platform optimizes for.
-// NOTIFICATION_SUBSCRIBE is produced (internal/push) but not offered yet —
-// it needs its per-platform event mapping.
 var ValidEventTypes = []string{
 	"PWA_INSTALL",
+	"NOTIFICATION_SUBSCRIBE",
 	"TG_START",
 	"TG_JOIN",
 	"CPA_HOLD",
@@ -78,28 +77,31 @@ var ValidEventTypes = []string{
 // name itself.
 var DefaultEventNames = map[Provider]map[string]string{
 	ProviderFacebook: {
-		"PWA_INSTALL": "CompleteRegistration",
-		"TG_START":    "Contact",
-		"TG_JOIN":     "Subscribe",
-		"CPA_HOLD":    "Lead",
-		"CPA_ACCEPT":  "Purchase",
-		"CPA_REDEP":   "Purchase",
+		"PWA_INSTALL":            "CompleteRegistration",
+		"NOTIFICATION_SUBSCRIBE": "Subscribe",
+		"TG_START":               "Contact",
+		"TG_JOIN":                "Subscribe",
+		"CPA_HOLD":               "Lead",
+		"CPA_ACCEPT":             "Purchase",
+		"CPA_REDEP":              "Purchase",
 	},
 	ProviderTikTok: {
-		"PWA_INSTALL": "CompleteRegistration",
-		"TG_START":    "Contact",
-		"TG_JOIN":     "Subscribe",
-		"CPA_HOLD":    "SubmitForm",
-		"CPA_ACCEPT":  "CompletePayment",
-		"CPA_REDEP":   "CompletePayment",
+		"PWA_INSTALL":            "CompleteRegistration",
+		"NOTIFICATION_SUBSCRIBE": "Subscribe",
+		"TG_START":               "Contact",
+		"TG_JOIN":                "Subscribe",
+		"CPA_HOLD":               "SubmitForm",
+		"CPA_ACCEPT":             "CompletePayment",
+		"CPA_REDEP":              "CompletePayment",
 	},
 	ProviderSnapchat: {
-		"PWA_INSTALL": "SIGN_UP",
-		"TG_START":    "CUSTOM_EVENT_1",
-		"TG_JOIN":     "SUBSCRIBE",
-		"CPA_HOLD":    "SIGN_UP",
-		"CPA_ACCEPT":  "PURCHASE",
-		"CPA_REDEP":   "PURCHASE",
+		"PWA_INSTALL":            "SIGN_UP",
+		"NOTIFICATION_SUBSCRIBE": "SUBSCRIBE",
+		"TG_START":               "CUSTOM_EVENT_1",
+		"TG_JOIN":                "SUBSCRIBE",
+		"CPA_HOLD":               "SIGN_UP",
+		"CPA_ACCEPT":             "PURCHASE",
+		"CPA_REDEP":              "PURCHASE",
 	},
 }
 

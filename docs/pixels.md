@@ -14,16 +14,16 @@ was ever sent (`docs/spec-conformance-2026-10-11.md`, gap 1). Now:
 A pixel sends the events it is set to (`events`) for clicks that went
 through a stream set it is attached to (`stream_set_pixels`), while it is
 active. Reportable events (`pixel.ValidEventTypes`): `PWA_INSTALL`,
-`TG_START`, `TG_JOIN` (since 2026-10-15), `CPA_HOLD`, `CPA_ACCEPT`,
-`CPA_REDEP` — what FLOX produces and a platform optimizes for.
-`NOTIFICATION_SUBSCRIBE` is produced (push) but not offered yet: it needs
-its platform mapping.
+`NOTIFICATION_SUBSCRIBE`, `TG_START`, `TG_JOIN` (these three since
+2026-10-15), `CPA_HOLD`, `CPA_ACCEPT`, `CPA_REDEP` — what FLOX produces and
+a platform optimizes for.
 
 | Event | Queued by | When |
 |---|---|---|
 | `CPA_*` | `conversion.PostgresStore.Record`, in the conversion's own transaction (`conversion.PixelWriter`) | the conversion is recorded as a success and attributed to a click with a stream set |
 | `CPA_*`, attributed late | `reattribute`, in the transaction that writes the attribution | an `unknown_click` conversion whose click turns up: its pixels had no stream set to go on before, so — unlike the outgoing postback, which already left — they get it now |
 | `PWA_INSTALL` | `pixelsend.TriggerSink`, wrapping the worker's ClickHouse writer (event queue flusher and NATS consumer) | the event is taken off the stream, before it is written |
+| `NOTIFICATION_SUBSCRIBE` | the same `TriggerSink` | a new push subscription from an installed PWA (`docs/push.md`) is taken off the stream; IP/UA are the subscribing app's |
 | `TG_START`, `TG_JOIN` | the same `TriggerSink` | the bot's webhook event (`docs/telegram.md`) is taken off the stream; it carries the click's stream set |
 
 Unattributed conversions reach no pixel: pixels belong to a stream set,
@@ -87,7 +87,9 @@ and retrying them for 21 hours only hides the problem from the delivery log.
   Lead/Purchase/CompleteRegistration, TikTok SubmitForm/CompletePayment/
   CompleteRegistration, Snap SIGN_UP/PURCHASE; TG_START → FB/TikTok
   `Contact`, Snap `CUSTOM_EVENT_1` (Snap has no standard "contact" event);
-  TG_JOIN → `Subscribe` / `SUBSCRIBE`), overridable per event
+  TG_JOIN and NOTIFICATION_SUBSCRIBE → `Subscribe` / `SUBSCRIBE` — a pixel
+  reporting both sends both as Subscribe unless one is renamed), overridable
+  per event
   (`event_names`). `GET /v1/pixels/event-names` serves the defaults to the
   form.
 - **Test mode**: `test_event_code` (Facebook, TikTok) sends to the

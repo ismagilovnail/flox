@@ -5,6 +5,22 @@ per-phase, matching `CLAUDE.md`'s phase protocol. The one exception is
 [Between phases], below: spec amendments and the code changes that follow from
 them land between phases and would otherwise be invisible here.
 
+## [Phase 30.27] — Pixels for NOTIFICATION_SUBSCRIBE
+
+The last produced, platform-relevant §43 event a pixel could not report.
+
+- `pixel.ValidEventTypes` / web `PIXEL_EVENT_TYPES` offer `NOTIFICATION_SUBSCRIBE`; default names
+  Facebook/TikTok `Subscribe`, Snapchat `SUBSCRIBE` (the same as TG_JOIN — rename one per pixel to tell them
+  apart). `pixelsend.TriggerSink` queues it for the click's stream set pixels. The subscription request
+  comes from the visitor's installed app, so its own IP/UA are sent; the platform click ids come from the
+  click.
+- **UI fixes found while checking the form live:** `MultiSelect` squeezed the checkbox of a long option to
+  nothing (`shrink-0`, the label truncates with a title); the pixel form's event-name label column was too
+  narrow for `NOTIFICATION_SUBSCRIBE` (8.5rem → 11rem).
+- Tests: `TestTriggerSinkQueuesPushSubscribeWithItsOwnVisitor`, mutation-checked (dropping the event,
+  always taking the click's IP/UA); the "not offered" case now uses `NOTIFICATION_CLICK`. Form checked in
+  the browser (list, event-name rows with platform placeholders). Not sent live to a platform.
+
 ## [Phase 30.26] — Pixels for TG_START, TG_JOIN
 
 Leftover of Phase 30.25 (`docs/telegram.md` "Not done"): Telegram events now reach ad platforms.
