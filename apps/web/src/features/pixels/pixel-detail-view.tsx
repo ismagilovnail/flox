@@ -9,6 +9,7 @@ import { usePermission } from "@/hooks/use-auth";
 import { usePixel, useUpdatePixel } from "@/hooks/use-pixels";
 import { PixelForm, toPixelInput, type PixelFormValues } from "@/features/pixels/pixel-form";
 import { PixelDeliveryLog } from "@/features/pixels/pixel-delivery-log";
+import { PixelTestEvent } from "@/features/pixels/pixel-test-event";
 import { PIXEL_EVENT_TYPES, type Pixel, type PixelEventType } from "@/lib/api/pixels";
 
 function toFormValues(pixel: Pixel): PixelFormValues {
@@ -65,6 +66,7 @@ export function PixelDetailView({ id }: { id: string }) {
         onSubmit={handleSubmit}
         disabled={!canWrite}
       />
+      <PixelTestEvent key={`test-event-${pixel.updatedAt}`} pixel={pixel} disabled={!canWrite} />
       <PixelDeliveryLog pixelId={pixel.id} />
     </div>
   );

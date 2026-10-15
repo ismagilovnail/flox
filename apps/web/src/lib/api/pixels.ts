@@ -143,3 +143,30 @@ export function activatePixel(id: string): Promise<Pixel> {
 export function archivePixel(id: string): Promise<Pixel> {
   return apiFetch(`/pixels/${id}`, { method: "PATCH", body: { status: "archived" } });
 }
+
+/** pixelsend.TestResult: how the platform answered a test event. */
+export type PixelTestResult = {
+  deliveryId: string;
+  eventType: string;
+  clickId: string;
+  delivered: boolean;
+  statusCode: number;
+  message: string;
+  /** The platform's test tool got it (a test event code is set), not the
+   * ad account's statistics. */
+  testMode: boolean;
+  sentAt: string;
+};
+
+/** Facebook and TikTok with a test event code receive test events in their
+ * test tool only; anywhere else the platform counts them as real
+ * (pixelsend.InTestMode). */
+export function pixelInTestMode(p: Pick<Pixel, "provider" | "testEventCode">): boolean {
+  return (p.provider === "facebook" || p.provider === "tiktok") && p.testEventCode !== "";
+}
+
+/** Sends one test event now. `confirmReal` must be true when the platform
+ * would count it (pixelInTestMode false), or the API refuses (422). */
+export function sendPixelTestEvent(id: string, input: { eventType: string; confirmReal: boolean }): Promise<PixelTestResult> {
+  return apiFetch(`/pixels/${id}/test-event`, { method: "POST", body: input });
+}

@@ -103,5 +103,27 @@
       "retrying": "Retrying",
       "dead": "Failed"
     }
+  },
+  "testEvent": {
+    "title": "Test event",
+    "descriptionTestMode": "Sends one made-up event to {{platform}} now. A test event code is set, so it goes to the platform's test tool (Test Events), not to your statistics.",
+    "descriptionReal": "Sends one made-up event to {{platform}} now. Without a test event code {{platform}} counts it as a real event — you will be asked to confirm.",
+    "eventLabel": "Event",
+    "send": "Send test event",
+    "sending": "Sending…",
+    "noEvents": "Choose the events this pixel reports first.",
+    "noPermission": "You don't have permission to do this",
+    "savedSettings": "Uses the pixel's saved settings — save your changes first. The send appears in the delivery log below.",
+    "sent": "Test event sent",
+    "sentTestMode": "Look for it in {{platform}}'s test tool (Test Events).",
+    "sentReal": "{{platform}} accepted it as a real event.",
+    "refused": "{{platform}} refused the test event",
+    "error": "Couldn't send the test event",
+    "lastOk": "Last test: accepted",
+    "lastFailed": "Last test: refused",
+    "confirmTitle": "Send a real event to {{platform}}?",
+    "confirmDescription": "{{platform}} will count this {{event}} as a real event in your statistics: no test event code is set (Snapchat and generic pixels have none). It has a test click id and, for a conversion, a value of 1.00 USD.",
+    "cancel": "Cancel",
+    "confirm": "Send real event"
   }
 }

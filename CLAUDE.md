@@ -19,15 +19,15 @@ referenced below as §N).
 ## CURRENT STATE — UPDATE THIS EVERY PHASE
 
 ```
-CURRENT PHASE : PHASE 30.34 — TWITTER PIXELS REMOVED (closed)
+CURRENT PHASE : PHASE 30.35 — PIXEL TEST EVENT (closed)
 STATUS        : Spec conformance gaps (docs/spec-conformance-2026-10-11.md):
                 all 15 closed and its "мелочи" too; every §43 event is
                 produced.
                 Leftovers: ROADMAP.md "Known open gaps" (Telegram token
-                change / TG_JOIN by channel, pixel test-event button, PWA types,
+                change / TG_JOIN by channel, PWA types,
                 SMS/email 2FA, gallery video, Google Play parsing…).
                 Prod restore drill after deployment.
-LAST COMMIT   : refactor(pixels): drop twitter provider.
+LAST COMMIT   : feat(pixels): send test event.
 UNCOMMITTED   : none expected. Dev DB at migration 00080, CH schema 018.
 NEXT          : wait for the user — pick from the leftovers above with the
                 user. CI (DO1) is

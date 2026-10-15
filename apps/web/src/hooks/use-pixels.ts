@@ -12,6 +12,7 @@ import {
   listPixelDeliveries,
   listPixels,
   pausePixel,
+  sendPixelTestEvent,
   updatePixel,
   type CreatePixelInput,
   type UpdatePixelInput,
@@ -100,5 +101,14 @@ export function useArchivePixel() {
       qc.invalidateQueries({ queryKey: pixelsKey });
       qc.invalidateQueries({ queryKey: pixelKey(id) });
     },
+  });
+}
+
+/** Sends a test event; the delivery log then shows it. */
+export function useSendPixelTestEvent(id: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { eventType: string; confirmReal: boolean }) => sendPixelTestEvent(id, input),
+    onSettled: () => qc.invalidateQueries({ queryKey: ["pixels", id, "deliveries"] }),
   });
 }

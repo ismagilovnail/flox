@@ -5,6 +5,20 @@ per-phase, matching `CLAUDE.md`'s phase protocol. The one exception is
 [Between phases], below: spec amendments and the code changes that follow from
 them land between phases and would otherwise be invisible here.
 
+## [Phase 30.35] — Pixel test event
+
+ROADMAP: a "send test event" button. `docs/pixels.md` "Test event".
+
+- `POST /pixels/{id}/test-event` (`pixelsend.Tester` + `TestHandler`, apps/api): one made-up event (`flox-test-…`
+  ids, new each time; the operator's IP/UA; 1.00 USD for a conversion) through the pixel's `Sender`, synchronously,
+  behind the SSRF guard. Facebook/TikTok with a test event code: test tool only. Anywhere else the platform counts
+  it — refused without `confirmReal`. Written to the delivery log already finished (never claimed by the worker, IP/UA
+  not kept); audit `pixel.test_event_sent`.
+- Web: a "Test event" card on the pixel's page — event choice, the test-mode or real-event explanation, a
+  confirmation for a real event, the last result; the delivery log refreshes. en/ru.
+- Tests: `TestSendTestEvent*`, `TestRecordedTestIsNotClaimed` (mutation-checked); live with a generic pixel whose host
+  does not resolve (confirmation, refusal, log row, audit). Not sent to a real platform.
+
 ## [Phase 30.34] — Twitter/X pixels removed
 
 The owner's decision: not needed at all. A twitter pixel could never send (X's Conversions API needs OAuth 1.0a app

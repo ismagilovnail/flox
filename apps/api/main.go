@@ -625,11 +625,18 @@ func buildServer(ctx context.Context, cfg config.Config, logger *slog.Logger, re
 		postlandingHandler.Register(r)
 	})
 
-	pixelHandler := pixel.NewHandler(pixel.NewService(pixel.NewRepository(db, pixelKey)), requireContentWrite, logger)
+	pixelRepo := pixel.NewRepository(db, pixelKey)
+	pixelHandler := pixel.NewHandler(pixel.NewService(pixelRepo), requireContentWrite, logger)
+	// "Send test event" (docs/pixels.md): sent from here, synchronously,
+	// through the worker's senders and the same SSRF guard.
+	pixelTestHandler := pixelsend.NewTestHandler(
+		pixelsend.NewTester(pixelRepo, pixelsend.Senders(pixelsend.NewSafeClient()), pixelsend.NewPostgresStore(db)),
+		requireContentWrite, clientIP.NetIP, logger)
 	srv.Mux().Route("/pixels", func(r chi.Router) {
 		r.Use(tenantMiddleware)
 		r.Use(readGate("content.read"))
 		pixelHandler.Register(r)
+		pixelTestHandler.Register(r)
 	})
 
 	offerHandler := offer.NewHandler(offer.NewService(offer.NewRepository(db)), requireOfferWrite, logger)

@@ -119,10 +119,44 @@ platform default as placeholder. The pixel page has a **Deliveries** card:
 the last 100 deliveries with status, attempts, HTTP code and the
 platform's error message, refreshed every 15 s.
 
+### Test event (2026-10-15)
+
+The pixel's page has **Send test event**: one made-up event to the
+platform now, with the pixel's saved settings —
+`POST /pixels/{id}/test-event` `{eventType, confirmReal}` (pixel write;
+`pixelsend.Tester`, wired in apps/api).
+
+- The event: one of the pixel's events (the first by default), a click id
+  and event id `flox-test-<ulid>` — new each time, so the platform does not
+  deduplicate repeats — the operator's own IP and user agent (Facebook
+  needs both for a website event) and, for a conversion, 1.00 USD
+  (Facebook refuses a Purchase without a value).
+- Sent synchronously from apps/api through the same `Sender` as the worker,
+  through the same dial-time SSRF guard (`NewSafeClient`), bounded by the
+  send timeout. A platform's refusal is a result (`delivered: false`, its
+  HTTP status and message), never carrying the token.
+- **Test mode**: Facebook and TikTok with a test event code get it in their
+  test tool only. Otherwise (no code, Snapchat, generic) the platform
+  counts it: without `confirmReal: true` the API refuses (422), and the UI
+  asks first, saying so.
+- The send is written to the delivery log already finished (`success` /
+  `dead`, one attempt, message "test event…") — the worker never claims it;
+  the operator's IP and user agent are not kept in its payload. Audit:
+  `pixel.test_event_sent`.
+
+Tests (`pixelsend/testevent_test.go`): the event's content and fresh ids,
+the credentials and test code reaching the sender, through the real
+Facebook sender against a fake Graph API (`test_event_code` in the body,
+the token not in the result), the confirmation for Snapchat and Facebook
+without a code, a refusal logged as dead with its status, a test row the
+worker does not claim, another organization 404, an event the pixel does
+not report refused — mutation-checked. Live: a generic pixel pointing at a
+host that does not resolve → confirmation dialog, the refusal in the card
+and as a dead row in the log, the audit entry. Not sent to a real platform
+(no accounts here).
+
 ### Not done
 
-- A "send test event" button (today: set the test event code and send a
-  test conversion through the funnel).
 - Browser-side pixels (`fbq` on landings): FLOX's own landings could load
   them, but server-side covers every landing type and needs no page change.
 
