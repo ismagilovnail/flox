@@ -36,7 +36,26 @@ func NewService(repo *Repository, api BotAPI, key []byte, webhookBase string, lo
 func (s *Service) Configured() bool { return len(s.key) > 0 && s.webhookBase != "" }
 
 func (s *Service) List(ctx context.Context, orgID string) ([]Bot, error) {
-	return s.repo.List(ctx, orgID)
+	bots, err := s.repo.List(ctx, orgID)
+	if err != nil {
+		return nil, err
+	}
+	free, err := s.repo.freeInvites(ctx, orgID)
+	if err != nil {
+		return nil, err
+	}
+	for i := range bots {
+		s.decorate(&bots[i], free[bots[i].ID])
+	}
+	return bots, nil
+}
+
+// decorate adds what depends on the deployment and the pool.
+func (s *Service) decorate(b *Bot, free int) {
+	if b.Channel != nil && s.webhookBase != "" {
+		b.ClickInviteLink = ClickInviteLink(s.webhookBase, b.ID)
+	}
+	b.FreeInviteLinks = free
 }
 
 // Connect checks the token with Telegram, the channel (the bot must be an
@@ -103,6 +122,7 @@ func (s *Service) Connect(ctx context.Context, orgID, userID string, in ConnectI
 		}
 		return Bot{}, err
 	}
+	s.decorate(&b, 0)
 	return b, nil
 }
 

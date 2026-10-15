@@ -127,6 +127,26 @@ export function TelegramBotsPanel() {
                   <CopyIcon className="size-3.5" />
                 </IconButton>
               </div>
+              {bot.clickInviteLink && (
+                <div className="flex min-w-0 flex-col gap-0.5">
+                  <span className="text-xs text-muted-foreground">{t("telegram.clickInviteLink")}</span>
+                  <div className="flex min-w-0 items-center gap-1">
+                    <Mono className="truncate text-xs">{bot.clickInviteLink}</Mono>
+                    <IconButton
+                      aria-label={t("telegram.copyClickInviteLink")}
+                      size="icon-sm"
+                      variant="ghost"
+                      onClick={() => copy(bot.clickInviteLink!, t("telegram.copied"))}
+                    >
+                      <CopyIcon className="size-3.5" />
+                    </IconButton>
+                  </div>
+                  <span className={bot.freeInviteLinks === 0 ? "text-xs text-warning" : "text-xs text-muted-foreground"}>
+                    <Mono className="tabular-nums">{bot.freeInviteLinks}</Mono>{" "}
+                    {bot.freeInviteLinks === 0 ? t("telegram.inviteLinksEmpty") : t("telegram.inviteLinksFree")}
+                  </span>
+                </div>
+              )}
             </div>
             <IconButton aria-label={t("telegram.removeAria", { name: bot.username })} size="icon-sm" onClick={() => setRemoving(bot)}>
               <Trash2Icon className="size-3.5" />
@@ -134,7 +154,10 @@ export function TelegramBotsPanel() {
           </div>
         ))}
         {query.isSuccess && query.data.bots.length > 0 && (
-          <p className="px-4 py-3 text-xs text-muted-foreground">{t("telegram.deepLinkHint")}</p>
+          <div className="flex flex-col gap-1 px-4 py-3 text-xs text-muted-foreground">
+            <p>{t("telegram.deepLinkHint")}</p>
+            {query.data.bots.some((b) => b.clickInviteLink) && <p>{t("telegram.clickInviteLinkHint")}</p>}
+          </div>
         )}
       </CardContent>
 

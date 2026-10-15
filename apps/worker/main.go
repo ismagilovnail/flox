@@ -75,6 +75,7 @@ import (
 	"github.com/ismagilovnail/flox/apps/internal/reconcile"
 	"github.com/ismagilovnail/flox/apps/internal/retention"
 	"github.com/ismagilovnail/flox/apps/internal/sslcheck"
+	"github.com/ismagilovnail/flox/apps/internal/telegram"
 	"github.com/ismagilovnail/flox/apps/internal/telemetry"
 	"github.com/ismagilovnail/flox/apps/internal/urlsafety"
 )
@@ -522,7 +523,7 @@ func run() error {
 		Logger: logger,
 	}
 	if cfg.IntegrationEncryptionKey == "" {
-		logger.Warn("INTEGRATION_ENCRYPTION_KEY is not set: alert notifications are not sent to Slack")
+		logger.Warn("INTEGRATION_ENCRYPTION_KEY is not set: alert notifications are not sent to Slack, Telegram invite links are not made")
 	} else {
 		integrationKey, err := integrations.ParseKey(cfg.IntegrationEncryptionKey)
 		if err != nil {
@@ -530,6 +531,13 @@ func run() error {
 			return err
 		}
 		alertEvaluator.Slack = slackPoster{integrations.NewService(integrations.NewRepository(db), integrationKey, nil)}
+
+		// Telegram channels' per-click invite links (docs/telegram.md): the
+		// bots' tokens are encrypted with the same key.
+		invitePool := &telegram.InvitePool{Repo: telegram.NewRepository(db), API: telegram.NewHTTPBotAPI(cfg.TelegramAPIURL),
+			Key: integrationKey, Logger: logger}
+		logger.Info("telegram invite pool starting", "interval", telegram.InvitePoolInterval)
+		start(func() { invitePool.RunLoop(ctx, telegram.InvitePoolInterval) })
 	}
 	logger.Info("alert evaluation starting", "interval", alert.Interval)
 	start(func() { alertEvaluator.RunLoop(ctx, alert.Interval) })

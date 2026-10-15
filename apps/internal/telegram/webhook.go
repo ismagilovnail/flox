@@ -66,6 +66,11 @@ func (h *Webhook) serve(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	reply, err := h.handle(ctx, b, upd)
+	if errors.Is(err, errClickPending) {
+		h.logger.Info("telegram webhook: join through an invite link before its click is stored, retried", "bot_id", b.ID)
+		http.Error(w, "unavailable", http.StatusServiceUnavailable)
+		return
+	}
 	if err != nil {
 		h.logger.Error("telegram webhook", "bot_id", b.ID, "error", err)
 		http.Error(w, "unavailable", http.StatusServiceUnavailable)
@@ -126,11 +131,18 @@ func (h *Webhook) message(ctx context.Context, b webhookBot, m *Message) (map[st
 	return h.welcome(b, m.Chat.ID), nil
 }
 
-// chatMember records TG_JOIN when someone who started the bot from a click
-// becomes a member of the bot's channel.
+// chatMember records TG_JOIN when someone becomes a member of the bot's
+// channel: on the click of the per-click invite link they joined through,
+// else on the click of their last /start.
 func (h *Webhook) chatMember(ctx context.Context, b webhookBot, u *ChatMemberUpdated) error {
 	if b.ChannelID == 0 || u.Chat.ID != b.ChannelID || !isMember(u.NewChatMember.Status) || isMember(u.OldChatMember.Status) {
 		return nil
+	}
+	if u.InviteLink != nil {
+		done, err := h.inviteJoin(ctx, b, u.InviteLink.InviteLink)
+		if err != nil || done {
+			return err
+		}
 	}
 	userID := u.NewChatMember.User.ID
 	clickID, joined, err := h.repo.startedClick(ctx, b, userID)
@@ -150,6 +162,44 @@ func (h *Webhook) chatMember(ctx context.Context, b webhookBot, u *ChatMemberUpd
 	}
 	return nil
 }
+
+// inviteJoin records TG_JOIN on the click link was claimed for, once per
+// link. done: the join is the link's (recorded now or before); false
+// leaves it to the /start path — not one of the bot's claimed links, or
+// its click is unknown.
+func (h *Webhook) inviteJoin(ctx context.Context, b webhookBot, link string) (bool, error) {
+	claim, found, err := h.repo.invitedClick(ctx, b, link)
+	if err != nil || !found {
+		return false, err
+	}
+	if claim.Joined {
+		// The link's click already joined: someone it was passed on to
+		// may still have a /start of their own.
+		return false, nil
+	}
+	click, found, err := h.click(ctx, b, claim.ClickID)
+	if err != nil {
+		return false, err
+	}
+	if !found {
+		if h.now().Sub(claim.ClaimedAt) < clickLag {
+			// Claimed moments ago: the click is still on its way to
+			// ClickHouse. Telegram re-sends the update.
+			return false, errClickPending
+		}
+		return false, nil
+	}
+	isNew, err := h.repo.recordInviteJoin(ctx, b, link, h.now())
+	if err != nil {
+		return false, err
+	}
+	if isNew {
+		h.record(event.TgJoin, b, click)
+	}
+	return true, nil
+}
+
+var errClickPending = errors.New("telegram: invite link's click not in ClickHouse yet")
 
 func isMember(status string) bool {
 	return status == "member" || status == "administrator" || status == "creator"

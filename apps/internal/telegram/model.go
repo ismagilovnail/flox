@@ -22,6 +22,12 @@ type Bot struct {
 	// DeepLink is what to put as a destination URL: the {click_id} macro
 	// makes each visit open the bot with its own click.
 	DeepLink string `json:"deepLink"`
+	// ClickInviteLink (a bot with a channel, on a configured deployment):
+	// a destination URL sending each click to its own invite link of the
+	// channel, so a join is attributed without a /start. FreeInviteLinks is
+	// the pool left (InvitePool keeps it at InvitePoolSize).
+	ClickInviteLink string `json:"clickInviteLink,omitempty"`
+	FreeInviteLinks int    `json:"freeInviteLinks"`
 }
 
 // Channel is the channel a bot administers: joining it is TG_JOIN.

@@ -13,8 +13,9 @@ import (
 )
 
 // BotAPI is the part of the Telegram Bot API apps/api calls when a bot is
-// connected or removed (§74: behind an interface; tests use a fake server).
-// The tracker never calls it: webhook answers ride in the HTTP response.
+// connected or removed, and apps/worker for the per-click invite links
+// (InvitePool) (§74: behind an interface; tests use a fake server). The
+// tracker never calls it: webhook answers ride in the HTTP response.
 type BotAPI interface {
 	GetMe(ctx context.Context, token string) (User, error)
 	SetWebhook(ctx context.Context, token, webhookURL, secret string, allowedUpdates []string) error
@@ -22,6 +23,7 @@ type BotAPI interface {
 	GetChat(ctx context.Context, token, chat string) (Chat, error)
 	GetChatMember(ctx context.Context, token string, chatID, userID int64) (ChatMember, error)
 	CreateChatInviteLink(ctx context.Context, token string, chatID int64, name string) (string, error)
+	RevokeChatInviteLink(ctx context.Context, token string, chatID int64, link string) error
 }
 
 // HTTPBotAPI calls the Bot API at BaseURL (https://api.telegram.org).
@@ -128,6 +130,10 @@ func (a *HTTPBotAPI) CreateChatInviteLink(ctx context.Context, token string, cha
 	return link.InviteLink, err
 }
 
+func (a *HTTPBotAPI) RevokeChatInviteLink(ctx context.Context, token string, chatID int64, link string) error {
+	return a.call(ctx, token, "revokeChatInviteLink", map[string]any{"chat_id": chatID, "invite_link": link}, nil)
+}
+
 // Bot API types — only the fields FLOX reads.
 
 type User struct {
@@ -167,6 +173,13 @@ type ChatMemberUpdated struct {
 	Chat          Chat       `json:"chat"`
 	OldChatMember ChatMember `json:"old_chat_member"`
 	NewChatMember ChatMember `json:"new_chat_member"`
+	// InviteLink is the link the user joined through, when they did; a
+	// link the bot created itself comes in full.
+	InviteLink *ChatInviteLink `json:"invite_link"`
+}
+
+type ChatInviteLink struct {
+	InviteLink string `json:"invite_link"`
 }
 
 type ChatJoinRequest struct {

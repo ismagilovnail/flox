@@ -11,6 +11,11 @@ export type TelegramBot = {
   /** Destination URL to use: {click_id} makes each visit open the bot
    * with its own click (TG_START). */
   deepLink: string;
+  /** With a channel: destination URL sending each click to its own invite
+   * link of the channel, so a join is TG_JOIN without a /start. */
+  clickInviteLink?: string;
+  /** Invite links left in the pool (the worker keeps it topped up). */
+  freeInviteLinks: number;
 };
 
 export type ConnectTelegramBotInput = {

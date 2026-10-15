@@ -37,6 +37,10 @@ type fakeTelegram struct {
 	webhooks map[string]map[string]any
 	deleted  []string
 	invites  int
+	revoked  []string
+	// failInvites makes createChatInviteLink refuse (the bot lost its
+	// admin rights).
+	failInvites bool
 }
 
 func newFakeTelegram(t *testing.T) (*fakeTelegram, *httptest.Server) {
@@ -80,8 +84,19 @@ func newFakeTelegram(t *testing.T) (*fakeTelegram, *httptest.Server) {
 				answer(map[string]any{"status": "member"})
 			}
 		case "createChatInviteLink":
+			if f.failInvites {
+				fail(400, "Bad Request: not enough rights to manage chat invite links")
+				return
+			}
 			f.invites++
-			answer(map[string]any{"invite_link": "https://t.me/+private"})
+			if p["name"] == "FLOX" { // the channel's shared link, made on connect
+				answer(map[string]any{"invite_link": "https://t.me/+private"})
+				return
+			}
+			answer(map[string]any{"invite_link": fmt.Sprintf("https://t.me/+inv%d-%d", bot.ID, f.invites)})
+		case "revokeChatInviteLink":
+			f.revoked = append(f.revoked, fmt.Sprint(p["invite_link"]))
+			answer(map[string]any{"invite_link": p["invite_link"]})
 		default:
 			fail(404, "Not Found")
 		}
@@ -108,6 +123,7 @@ type fixture struct {
 	svc    *telegram.Service
 	org    string
 	logger *slog.Logger
+	apiURL string
 }
 
 var key = mustKey()
@@ -134,7 +150,7 @@ func newFixture(t *testing.T) *fixture {
 	api, srv := newFakeTelegram(t)
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	repo := telegram.NewRepository(pool)
-	f := &fixture{pool: pool, repo: repo, api: api, logger: logger,
+	f := &fixture{pool: pool, repo: repo, api: api, logger: logger, apiURL: srv.URL,
 		svc: telegram.NewService(repo, telegram.NewHTTPBotAPI(srv.URL), key, "https://t.example", logger)}
 	f.org = f.seedOrg(t)
 	return f

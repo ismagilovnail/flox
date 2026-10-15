@@ -309,6 +309,10 @@ func run() error {
 	postbackHandler.Register(r)
 	// Telegram bots' webhook (docs/telegram.md): TG_START, TG_JOIN.
 	telegram.NewWebhook(telegram.NewRepository(db), clickResolver, events, logger).Register(r)
+	// A channel's per-click invite links, claimed from the worker's pool.
+	inviteRedirect := telegram.NewInviteRedirect(telegram.NewRepository(db), logger)
+	inviteRedirect.Fallbacks = metrics.TelegramInviteFallbackTotal
+	inviteRedirect.Register(r)
 
 	// Whole-request bounds (tech audit RL5). Requests here are a redirect,
 	// a landing or PWA page, or a postback — small, so short: a slow client

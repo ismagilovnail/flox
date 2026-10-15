@@ -182,6 +182,11 @@
       "token": "A bot token from @BotFather (123456:ABC…)",
       "channel": "@channelname or the channel id (-100…)",
       "welcomeText": "At most 2000 characters"
-    }
+    },
+    "clickInviteLink": "Channel link per click",
+    "copyClickInviteLink": "Copy the channel link per click",
+    "inviteLinksFree": "invite links ready",
+    "inviteLinksEmpty": "invite links ready — clicks get the shared channel link until the pool is refilled (about a minute)",
+    "clickInviteLinkHint": "Or send visitors straight to the channel: the channel link per click gives each click its own invite link, so a join records TG_JOIN on it without opening the bot."
   }
 }

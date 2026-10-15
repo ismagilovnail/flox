@@ -5,6 +5,27 @@ per-phase, matching `CLAUDE.md`'s phase protocol. The one exception is
 [Between phases], below: spec amendments and the code changes that follow from
 them land between phases and would otherwise be invisible here.
 
+## [Phase 30.29] — Telegram per-click invite links
+
+Leftover of Phase 30.25 (`docs/telegram.md` "Not done"): a join of a bot's channel without /start is
+attributed.
+
+- Migration 00077 `telegram_invite_links`: a pool of invite links per bot (free: `click_id` NULL), the click
+  each was claimed for, the join.
+- Worker `telegram.InvitePool` (every minute, with `INTEGRATION_ENCRYPTION_KEY`): tops each bot with a channel up
+  to 50 free links (20 per run, `createChatInviteLink`), revokes links claimed over 30 days ago
+  (`revokeChatInviteLink`); a refusing bot is logged and skipped.
+- Tracker `GET /tgj/{botId}?click=`: claims the click's link in one Postgres statement (`FOR UPDATE SKIP LOCKED`,
+  the same link on a reload) and redirects to it — no Telegram call on the redirect. Empty pool or no click: the
+  channel's shared link; metric `flox_telegram_invite_fallback_total`.
+- Webhook: `chat_member.invite_link` of a claimed link → TG_JOIN on its click, once per link; otherwise the
+  /start path. A join before the click reaches ClickHouse (claimed < 10 min ago) is 503 so Telegram retries.
+- API/web: `clickInviteLink` and `freeInviteLinks` on each bot; Settings → Telegram bots shows the channel link
+  per click with copy and the pool left (en/ru).
+- Tests: `TestInviteRedirect`, `TestInviteJoin`, `TestInviteJoinWaitsForTheClick`,
+  `TestInvitePoolRevokesAndIsScoped`, mutation-checked; live on the dev stack (claim, reuse, fallback, one TG_JOIN
+  in ClickHouse from two deliveries). Not run against real Telegram.
+
 ## [Phase 30.28] — Push metrics in the report builder
 
 Leftover named in `CLAUDE.md`: push numbers next to the traffic ones.
