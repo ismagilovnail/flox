@@ -833,6 +833,8 @@ var notReferences = map[string]string{
 	"ttClickId":                    "TikTok's click id",
 	"networkTxnId":                 "the network's transaction id",
 	"clickId":                      "a click id: ClickHouse reads filter on the session's org (chstore TestCrossTenantIsolation)",
+	"clickIds":                     "click ids to erase: every delete filters on the session's org (visitordata TestFindAndEraseAVisitor)",
+	"tgUserId":                     "response only: Telegram's id of a user",
 	"unmatchedExternalCampaignIds": "response only: platform campaign ids a sync could not match",
 	"createdByUserId":              "response only",
 	"uploadedByUserId":             "response only; the list filter is uploadedBy, covered",

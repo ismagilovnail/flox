@@ -88,6 +88,7 @@ import (
 	totpengine "github.com/ismagilovnail/flox/apps/internal/totp"
 	"github.com/ismagilovnail/flox/apps/internal/trackinglink"
 	"github.com/ismagilovnail/flox/apps/internal/trafficsource"
+	"github.com/ismagilovnail/flox/apps/internal/visitordata"
 )
 
 func main() {
@@ -305,6 +306,10 @@ func buildServer(ctx context.Context, cfg config.Config, logger *slog.Logger, re
 	// (internal/orgdeletion, audit GDPR-1); apps/worker carries it out.
 	deletionHandler := orgdeletion.NewHandler(orgdeletion.NewService(db, mail, cfg.AppURL, logger),
 		authSvc.RequirePermission("settings.write", logger), logger)
+	// A visitor's data request: find and erase (internal/visitordata,
+	// audit GDPR-1).
+	visitorDataHandler := visitordata.NewHandler(visitordata.NewService(db, ch),
+		authSvc.RequirePermission("settings.write", logger), logger)
 	securityHandler := auth.NewSecurityHandler(authSvc, logger, clientIP)
 	totpHandler := auth.NewTOTPHandler(authSvc, logger, cfg.Env != "development")
 
@@ -441,6 +446,7 @@ func buildServer(ctx context.Context, cfg config.Config, logger *slog.Logger, re
 		teamHandler.Register(r)
 		organizationHandler.Register(r)
 		deletionHandler.Register(r)
+		visitorDataHandler.Register(r)
 		securityHandler.Register(r)
 		totpHandler.RegisterAuthenticated(r)
 	})

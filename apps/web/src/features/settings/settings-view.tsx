@@ -13,10 +13,11 @@ import { TelegramBotsPanel } from "@/features/settings/telegram-bots-panel";
 import { SecurityPanel } from "@/features/settings/security-panel";
 import { CustomMetricsList } from "@/features/custom-metrics/custom-metrics-list";
 import { AlertsPanel } from "@/features/alerts/alerts-panel";
+import { VisitorDataPanel } from "@/features/privacy/visitor-data-panel";
 
-const TABS = ["organization", "api-keys", "integrations", "alerts", "security", "custom-metrics"];
+const TABS = ["organization", "api-keys", "integrations", "alerts", "visitor-data", "security", "custom-metrics"];
 /** Tabs whose data the API serves only with settings.write. */
-const SETTINGS_WRITE_TABS = ["api-keys", "integrations", "alerts"];
+const SETTINGS_WRITE_TABS = ["api-keys", "integrations", "alerts", "visitor-data"];
 
 export function SettingsView() {
   const { t } = useTranslation(["settings", "alerts"]);
@@ -45,6 +46,7 @@ export function SettingsView() {
           {canManage && <TabsTrigger value="api-keys">{t("tabs.apiKeys")}</TabsTrigger>}
           {canManage && <TabsTrigger value="integrations">{t("tabs.integrations")}</TabsTrigger>}
           {canManage && <TabsTrigger value="alerts">{t("alerts:tab")}</TabsTrigger>}
+          {canManage && <TabsTrigger value="visitor-data">{t("tabs.visitorData")}</TabsTrigger>}
           <TabsTrigger value="security">{t("tabs.security")}</TabsTrigger>
           <TabsTrigger value="custom-metrics">{t("tabs.customMetrics")}</TabsTrigger>
         </TabsList>
@@ -64,6 +66,9 @@ export function SettingsView() {
             </TabsContent>
             <TabsContent value="alerts">
               <AlertsPanel />
+            </TabsContent>
+            <TabsContent value="visitor-data">
+              <VisitorDataPanel />
             </TabsContent>
           </>
         )}

@@ -91,7 +91,8 @@ func TestSetPersonalDataTTL(t *testing.T) {
 		days        int
 		wantChanged int
 	}{
-		{0, 6}, {0, 0}, {90, 6}, {90, 0}, {9, 6}, {90, 6},
+		// ip + user_agent in three tables, referrer in two.
+		{0, 8}, {0, 0}, {90, 8}, {90, 0}, {9, 8}, {90, 8},
 	} {
 		changed, err := chstore.SetPersonalDataTTL(ctx, conn, step.days)
 		if err != nil {

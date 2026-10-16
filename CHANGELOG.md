@@ -5,6 +5,31 @@ per-phase, matching `CLAUDE.md`'s phase protocol. The one exception is
 [Between phases], below: spec amendments and the code changes that follow from
 them land between phases and would otherwise be invisible here.
 
+## [Phase 30.53] — A visitor's data request; referrer expires (audit GDPR-1, part 3)
+
+`docs/visitor-data.md`.
+
+- `apps/internal/visitordata` (`settings.write`, org-scoped):
+  - `GET /privacy/visitor?clickId=|ip=`: what FLOX holds about one visitor — clicks (IP, UA, referrer, geo, device),
+    events, conversions, push subscriptions (endpoint host only), Telegram users, pixel sends; by IP up to 500
+    clicks;
+  - `POST /privacy/visitor/erase {clickIds}`: deletes the visitor's clicks, visits and lookup rows in ClickHouse,
+    then their push subscription, Telegram user/joins/invites and pixel sends in Postgres. Conversions, the postback
+    ledger and outgoing postbacks stay: they are the organization's records and name the visitor only by click id.
+- Settings → Visitor data (owners/admins): search by click id or IP, summary, JSON download, erasure behind a
+  confirmation. EN/RU.
+- `referrer` expires with IP and user agent (`RETENTION_IP_DAYS`, `chstore.SetPersonalDataTTL`): it can carry the
+  referring page's query string.
+- Tests: `visitordata_test.go` (Postgres + ClickHouse; mutation-checked: without the organization filter the IP
+  search fails it); `visitor-data-panel.test.tsx`; `TestSetPersonalDataTTL` covers referrer. Live: viewer 403,
+  another organization gets nothing, owner sees the click; my own test click from Phase 30.51 found and erased in
+  the browser. That showed the panel listing an erased click id with zero rows, so an empty report now reads
+  "nothing found" (tested).
+- The reference guard test caught `clickIds` / `tgUserId` without an isolation entry: listed with reasons, and the
+  visitor test now also checks that another organization naming this one's click id erases nothing. Full Go suite:
+  only the known gallery-WIP failure; vitest 179/179; build.
+- Not in this part: the organization's data export (next).
+
 ## [Phase 30.52] — Organization deletion (audit GDPR-1, part 2)
 
 An owner can delete their organization and all its data. `docs/organization-deletion.md`.

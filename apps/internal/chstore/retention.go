@@ -42,12 +42,18 @@ func SetPostbackLogTTL(ctx context.Context, conn driver.Conn, months int) (chang
 	return true, nil
 }
 
-// personalDataTables hold visitors' raw IP addresses and user agents.
+// personalDataTables hold visitors' raw IP addresses, user agents and
+// referrers.
 var personalDataTables = []string{"click_events", "tracking_events", "click_lookup"}
 
-// SetPersonalDataTTL makes visitors' ip and user_agent expire after days
-// in every table that holds them — a column TTL: the row stays, the two
-// values are reset to '' (audit 2026-10-15, GDPR-1; docs/retention.md).
+// personalDataColumns are the columns that expire; a table without one
+// (click_lookup has no referrer) is skipped for it. referrer can carry
+// the referring page's query string — an email, a search, an id.
+var personalDataColumns = []string{"ip", "user_agent", "referrer"}
+
+// SetPersonalDataTTL makes visitors' ip, user_agent and referrer expire
+// after days in every table that holds them — a column TTL: the row stays,
+// the values are reset to '' (audit 2026-10-15, GDPR-1; docs/retention.md).
 // 0 removes the TTL. Unique clicks count the keyed pseudonym (schema/020),
 // which has no TTL, so reports do not change when the values go.
 //
@@ -62,7 +68,10 @@ func SetPersonalDataTTL(ctx context.Context, conn driver.Conn, days int) (change
 			SELECT create_table_query FROM system.tables WHERE database = currentDatabase() AND name = ?`, table).Scan(&create); err != nil {
 			return changed, fmt.Errorf("chstore: reading %s definition: %w", table, err)
 		}
-		for _, col := range []string{"ip", "user_agent"} {
+		for _, col := range personalDataColumns {
+			if !strings.Contains(create, "`"+col+"` String") {
+				continue
+			}
 			want := fmt.Sprintf("`%s` String TTL toDateTime(event_at) + toIntervalDay(%d)", col, days)
 			has := strings.Contains(create, "`"+col+"` String TTL ")
 			var stmt string

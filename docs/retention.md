@@ -12,7 +12,7 @@ personal data and expire (audit GDPR-1, below); the rows stay.
 | Pixel deliveries, sent or dead-lettered | Postgres `pixel_deliveries` | `RETENTION_PIXEL_DELIVERIES_DAYS`, default 30 | A send log carrying the visitor's IP and user agent the platform matched on (§54); the pixel page shows the last 100 |
 | Postback attempt log (in and out) | ClickHouse `postback_events` | `RETENTION_POSTBACK_LOG_MONTHS`, default 13 | What the Postback Logs screen shows; a year plus a month covers a yearly dispute |
 | Clicks, landing/PWA events, conversions, LTV, click lookup, costs | ClickHouse `click_events`, `tracking_events`, `conversion_events`, `ltv_events`, `click_lookup`, `cost_events` | forever | Every report reads them for any period; a TTL would empty old reports without a word, and a conversion on a click older than the TTL would become `unknown_click` |
-| Visitors' IP address and user agent (columns, not rows) | ClickHouse `click_events`, `tracking_events`, `click_lookup` | `RETENTION_IP_DAYS`, default 90 | Personal data (GDPR-1). Unique clicks count `visitor_key`, a keyed pseudonym that stays, so reports do not change. Pixels match a conversion to its ad click by IP + user agent: a conversion more than 90 days after its click goes to the ad platform without them (the platforms take events of the last 7 days anyway) |
+| Visitors' IP address, user agent and referrer (columns, not rows) | ClickHouse `click_events`, `tracking_events`, `click_lookup` | `RETENTION_IP_DAYS`, default 90 | Personal data (GDPR-1). Unique clicks count `visitor_key`, a keyed pseudonym that stays, so reports do not change. Pixels match a conversion to its ad click by IP + user agent: a conversion more than 90 days after its click goes to the ad platform without them (the platforms take events of the last 7 days anyway) |
 | Daily aggregates | ClickHouse `*_daily_*` | forever | Small |
 | Expired sign-in state: sessions, pending second-factor logins | Postgres `sessions`, `pending_totp_logins` | until `expires_at` | Unusable once expired — every lookup requires `expires_at > now()` (DB5) |
 | Expired invite and email-verification tokens | Postgres `memberships.invite_token_*`, `users.email_verification_token_*` | until expiry; then the token is cleared, the row kept | The invite still shows on the Team page and can be resent; the user is still the account |
@@ -78,8 +78,10 @@ the campaign screen reads.
   outlive its day by hours. The order matters: a click whose IP went
   before it got its pseudonym would count as its own unique visitor.
   `0` removes the TTL.
-- **Not covered here:** `referrer` (it can carry query strings), the
-  operator audit trail's IPs, organization deletion and data export — the
-  rest of GDPR-1. Pixel deliveries already expire
+- **`referrer`** expires with them (since 2026-10-16): it can carry the
+  referring page's query string. `click_lookup` has none.
+- **Elsewhere:** organization deletion (`docs/organization-deletion.md`),
+  a visitor's data request (`docs/visitor-data.md`). Not covered: the
+  operator audit trail's IPs. Pixel deliveries already expire
   (`RETENTION_PIXEL_DELIVERIES_DAYS`).
 

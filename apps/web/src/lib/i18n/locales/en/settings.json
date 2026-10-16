@@ -153,7 +153,8 @@
     "apiKeys": "API keys",
     "integrations": "Integrations",
     "security": "Security",
-    "customMetrics": "Custom metrics"
+    "customMetrics": "Custom metrics",
+    "visitorData": "Visitor data"
   },
   "telegram": {
     "title": "Telegram bots",
@@ -244,5 +245,35 @@
     "cancelError": "Could not cancel the deletion",
     "banner": "This organization will be deleted on {{date}} with all its data.",
     "details": "Details"
+  },
+  "visitorData": {
+    "title": "A visitor's data request",
+    "description": "When a visitor asks what you hold about them, or to delete it: find their data by click id or IP address, send them the JSON, erase it. Erasure deletes their clicks and visits (IP, user agent, referrer, geo, device), push subscription, Telegram user and pixel sends. Conversions stay — they are your records, and name the visitor only by click id.",
+    "query": "Click id or IP address",
+    "placeholder": "01J… or 203.0.113.5",
+    "find": "Find",
+    "ipHint": "IP addresses are kept for 90 days by default: an older click is found only by its click id.",
+    "loading": "Looking up…",
+    "loadError": "Could not look the visitor up",
+    "nothing": "Nothing found for this visitor.",
+    "truncated_one": "The IP matched more clicks than one request covers; the first {{count}} are shown.",
+    "truncated_other": "The IP matched more clicks than one request covers; the first {{count}} are shown.",
+    "counts": {
+      "clickIds": "Click ids",
+      "clicks": "Clicks",
+      "events": "Visits and other events",
+      "conversions": "Conversions (kept)",
+      "push": "Push subscriptions",
+      "telegram": "Telegram users",
+      "pixels": "Pixel sends"
+    },
+    "download": "Download JSON",
+    "erase": "Erase visitor data",
+    "confirmTitle_one": "Erase the data of {{count}} click?",
+    "confirmTitle_other": "Erase the data of {{count}} clicks?",
+    "confirmDescription": "Their clicks, visits, push subscription, Telegram user and pixel sends are deleted for good, and reports lose those clicks. Conversions stay. Download the JSON first if the visitor asked for it.",
+    "confirm": "Erase",
+    "erasedToast": "Visitor data erased",
+    "eraseError": "Could not erase the visitor data"
   }
 }
