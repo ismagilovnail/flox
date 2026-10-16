@@ -407,3 +407,25 @@ func TestIncomingURLAndOptionalOutgoing(t *testing.T) {
 		t.Errorf("without a tracker URL: incoming URL = %q, want empty", got.IncomingPostbackURL)
 	}
 }
+
+// The affiliate-platform template a network was set up from (audit
+// 2026-10-15, INT-3): stored, changed, copied by Duplicate.
+func TestTemplateKey(t *testing.T) {
+	pool := mustPool(t)
+	ctx := context.Background()
+	orgID := seedOrg(t, ctx, pool)
+	svc := network.NewService(network.NewRepository(pool))
+	created, err := svc.Create(ctx, orgID, network.CreateInput{Name: "Affise Partner", TemplateKey: " affise "})
+	if err != nil || created.Network.TemplateKey != "affise" {
+		t.Fatalf("Create = %+v, %v; want template affise", created.Network, err)
+	}
+	scaleo := "scaleo"
+	updated, err := svc.Update(ctx, orgID, created.Network.ID, network.UpdateInput{TemplateKey: &scaleo})
+	if err != nil || updated.TemplateKey != "scaleo" {
+		t.Fatalf("Update = %+v, %v", updated, err)
+	}
+	dup, err := svc.Duplicate(ctx, orgID, created.Network.ID)
+	if err != nil || dup.TemplateKey != "scaleo" {
+		t.Fatalf("Duplicate = %+v, %v", dup, err)
+	}
+}

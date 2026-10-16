@@ -16,6 +16,7 @@ import { useEventMappings } from "@/hooks/use-event-mappings";
 import { useRegeneratePostbackSecret } from "@/hooks/use-networks";
 import type { Network } from "@/lib/api/networks";
 import { INCOMING_POSTBACK_PARAMS, incomingPostbackTemplate } from "@/lib/postback-url";
+import { networkTemplate } from "@/lib/network-templates";
 import { PostbackSecretDialog } from "@/features/networks/network-list";
 
 /** What to give the network so its conversions reach FLOX: the URL, what
@@ -29,7 +30,8 @@ export function IncomingPostbackCard({ network, canWrite }: { network: Network; 
   const [secret, setSecret] = React.useState<string | null>(null);
 
   const mappings = (mappingsQuery.data?.eventMappings ?? []).filter((m) => m.networkId === network.id);
-  const url = network.incomingPostbackUrl ? incomingPostbackTemplate(network.incomingPostbackUrl) : "";
+  const url = network.incomingPostbackUrl ? incomingPostbackTemplate(network.incomingPostbackUrl, undefined, network.templateKey) : "";
+  const template = networkTemplate(network.templateKey);
 
   function copy() {
     navigator.clipboard.writeText(url).then(
@@ -69,7 +71,26 @@ export function IncomingPostbackCard({ network, canWrite }: { network: Network; 
                 <CopyIcon className="size-3.5" />
               </IconButton>
             </div>
-            <p className="text-xs text-muted-foreground">{t("incoming.macrosHint")}</p>
+            {template ? (
+              <div className="flex flex-col gap-1 rounded-md border border-border p-2.5 text-xs">
+                <p>{t("template.urlHint", { name: template.name })}</p>
+                <p>
+                  {t("template.offerLink", { name: template.name })} <Mono className="text-xs">{`${template.offerLinkParam}={click_id}`}</Mono>
+                </p>
+                {template.note === "perGoal" && <p className="text-warning">{t("template.perGoal")}</p>}
+                {template.statusMappings.length > 0 && <p className="text-muted-foreground">{t("template.mappingsCreated")}</p>}
+                <p className="text-muted-foreground">
+                  {t("template.sources")}{" "}
+                  {template.sources.map((u, i) => (
+                    <a key={u} href={u} target="_blank" rel="noreferrer" className="text-primary underline-offset-4 hover:underline">
+                      [{i + 1}]
+                    </a>
+                  ))}
+                </p>
+              </div>
+            ) : (
+              <p className="text-xs text-muted-foreground">{t("incoming.macrosHint")}</p>
+            )}
           </div>
         )}
 

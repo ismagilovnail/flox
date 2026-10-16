@@ -21,6 +21,8 @@ export type Network = {
   /** TRACKER_PUBLIC_URL + /postback/{id}, no query; "" when the platform has
    * no public tracker URL configured. lib/postback-url.ts adds the query. */
   incomingPostbackUrl: string;
+  /** The affiliate-platform template (lib/network-templates.ts); "" = none. */
+  templateKey: string;
   status: NetworkStatus;
   createdAt: string;
   updatedAt: string;
@@ -31,6 +33,7 @@ export type CreateNetworkInput = {
   postbackUrl: string;
   acceptDuplicates: boolean;
   currency: string;
+  templateKey?: string;
 };
 
 export type UpdateNetworkInput = Partial<CreateNetworkInput> & { status?: NetworkStatus };

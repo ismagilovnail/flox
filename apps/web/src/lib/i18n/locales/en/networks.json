@@ -158,5 +158,16 @@
       "riskDescription": "Redeposits without the network's transaction id over {{days}} days: {{received}}. None was lost yet, but a second deposit on the same click would be refused as a duplicate.",
       "fix": "Add txn_id to the postback URL in the network's dashboard, with the network's transaction-id macro — for example txn_id={transaction_id}. Deposits already refused are not recovered."
     }
+  },
+  "template": {
+    "label": "Affiliate platform",
+    "none": "Other / custom",
+    "hint": "On a known platform the incoming URL comes with its macros, and its statuses are mapped when the network is created.",
+    "urlHint": "The URL already carries {{name}}'s macros: paste it into the postback settings there as it is.",
+    "offerLink": "In the offer link at {{name}}, pass FLOX's click id as",
+    "perGoal": "This platform sends one postback per goal and has no status macro: create one postback per goal (registration, first deposit…) with the goal's name in place of REPLACE_GOAL, and map those names below.",
+    "mappingsCreated": "Its status codes were mapped when the network was created — see the statuses below.",
+    "mappingsError": "The network was created, but some of the platform's status mappings were not: add them under Event Mapping.",
+    "sources": "Sources:"
   }
 }

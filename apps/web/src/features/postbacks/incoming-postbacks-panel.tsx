@@ -64,7 +64,7 @@ export function IncomingPostbacksPanel() {
           const mappedCount = mappings.filter((m) => m.networkId === network.id).length;
           // From the server (TRACKER_PUBLIC_URL); this used to be a made-up
           // api.floxlink.io address without the secret (audit 2026-10-15, UX-1).
-          const url = network.incomingPostbackUrl ? incomingPostbackTemplate(network.incomingPostbackUrl) : "";
+          const url = network.incomingPostbackUrl ? incomingPostbackTemplate(network.incomingPostbackUrl, undefined, network.templateKey) : "";
           return (
             <Card key={network.id}>
               <CardHeader>

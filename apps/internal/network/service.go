@@ -81,6 +81,7 @@ func (s *Service) Create(ctx context.Context, orgID string, in CreateInput) (Cre
 	in.Name = strings.TrimSpace(in.Name)
 	in.PostbackURL = strings.TrimSpace(in.PostbackURL)
 	in.Currency = normalizeCurrency(in.Currency)
+	in.TemplateKey = strings.TrimSpace(in.TemplateKey)
 	if in.Currency == "" {
 		in.Currency = "USD"
 	}
@@ -172,6 +173,7 @@ func (s *Service) Duplicate(ctx context.Context, orgID, id string) (Network, err
 		PostbackURL:      source.PostbackURL,
 		AcceptDuplicates: source.AcceptDuplicates,
 		Currency:         source.Currency,
+		TemplateKey:      source.TemplateKey,
 	}, secretHash)
 	if err != nil {
 		return Network{}, err

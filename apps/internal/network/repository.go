@@ -20,11 +20,11 @@ type Repository struct {
 
 func NewRepository(db *pgxpool.Pool) *Repository { return &Repository{db: db} }
 
-const selectColumns = `id, organization_id, name, postback_url, accept_duplicates, currency, status, created_at, updated_at`
+const selectColumns = `id, organization_id, name, postback_url, accept_duplicates, currency, status, created_at, updated_at, template_key`
 
 func scanNetwork(row pgx.Row) (Network, error) {
 	var n Network
-	err := row.Scan(&n.ID, &n.OrganizationID, &n.Name, &n.PostbackURL, &n.AcceptDuplicates, &n.Currency, &n.Status, &n.CreatedAt, &n.UpdatedAt)
+	err := row.Scan(&n.ID, &n.OrganizationID, &n.Name, &n.PostbackURL, &n.AcceptDuplicates, &n.Currency, &n.Status, &n.CreatedAt, &n.UpdatedAt, &n.TemplateKey)
 	return n, err
 }
 
@@ -93,10 +93,10 @@ func (r *Repository) Diagnostics(ctx context.Context, orgID, id string) (Diagnos
 
 func (r *Repository) Create(ctx context.Context, id, orgID string, in CreateInput, postbackSecretHash string) (Network, error) {
 	row := r.db.QueryRow(ctx, `
-		INSERT INTO networks (id, organization_id, name, postback_url, accept_duplicates, currency, postback_secret_hash)
-		VALUES ($1, $2, $3, $4, $5, $6, $7)
+		INSERT INTO networks (id, organization_id, name, postback_url, accept_duplicates, currency, postback_secret_hash, template_key)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 		RETURNING `+selectColumns,
-		id, orgID, in.Name, in.PostbackURL, in.AcceptDuplicates, in.Currency, postbackSecretHash,
+		id, orgID, in.Name, in.PostbackURL, in.AcceptDuplicates, in.Currency, postbackSecretHash, in.TemplateKey,
 	)
 	return scanNetwork(row)
 }
@@ -135,6 +135,9 @@ func (r *Repository) Update(ctx context.Context, orgID, id string, in UpdateInpu
 	}
 	if in.AcceptDuplicates != nil {
 		sets = append(sets, "accept_duplicates = "+arg(*in.AcceptDuplicates))
+	}
+	if in.TemplateKey != nil {
+		sets = append(sets, "template_key = "+arg(strings.TrimSpace(*in.TemplateKey)))
 	}
 	if in.Currency != nil {
 		sets = append(sets, "currency = "+arg(*in.Currency))

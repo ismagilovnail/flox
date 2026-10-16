@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { CopyIcon, PlusIcon, TagIcon } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { incomingPostbackTemplate } from "@/lib/postback-url";
+import { networkTemplate } from "@/lib/network-templates";
 
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
@@ -134,15 +135,18 @@ export function PostbackSecretDialog({
   networkName,
   incomingPostbackUrl,
   secret,
+  templateKey,
   onDone,
 }: {
   networkName: string;
   incomingPostbackUrl: string;
   secret: string;
+  templateKey?: string;
   onDone: () => void;
 }) {
   const { t } = useTranslation("networks");
-  const url = incomingPostbackUrl ? incomingPostbackTemplate(incomingPostbackUrl, secret) : "";
+  const url = incomingPostbackUrl ? incomingPostbackTemplate(incomingPostbackUrl, secret, templateKey) : "";
+  const template = networkTemplate(templateKey);
 
   function copy(value: string, message: string) {
     navigator.clipboard.writeText(value).then(
@@ -167,7 +171,9 @@ export function PostbackSecretDialog({
                 <CopyIcon className="size-3.5" />
               </IconButton>
             </div>
-            <p className="text-xs text-muted-foreground">{t("incoming.macrosHint")}</p>
+            <p className="text-xs text-muted-foreground">
+              {template ? t("template.urlHint", { name: template.name }) : t("incoming.macrosHint")}
+            </p>
           </div>
         )}
         <div className="grid gap-1.5">

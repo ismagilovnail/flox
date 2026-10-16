@@ -182,6 +182,33 @@ so FLOX now says so:
   check) says the redeposit came without `txn_id`. A duplicate's outcome
   now carries the store's message rather than the attribution note.
 
+## Affiliate-platform templates (audit 2026-10-15, INT-3; migration 00093)
+
+`networks.template_key`; the catalog is `apps/web/src/lib/network-templates.ts`.
+When a network is created on a known platform:
+- **Incoming URL.** The URL the operator copies carries the platform's own
+  macros, and only the parameters the platform has macros for. A FLOX
+  placeholder left in would reach FLOX literally; a missing currency
+  falls back to the network's payout currency.
+- **Offer link.** The card says which offer-link parameter passes FLOX's
+  click id to the platform.
+- **Status mappings** come with the network (created by the form right
+  after the network; a failure is reported, the network stands).
+
+Only platforms with public postback docs are in the catalog:
+- **Affise:** `click_id={sub1}` ("there is no clickid macro for affiliate
+  postback"), `status={status}` with 1 Approved → CPA_ACCEPT, 2 Pending →
+  CPA_HOLD, 3 Declined → CPA_DECLINE, 5 approved-and-on-Hold → CPA_HOLD (a
+  hold after an accept is refused by the progression rule anyway),
+  `revenue={sum}`, `currency={currency}`, `txn_id={transactionid}`.
+- **Scaleo:** `click_id={aff_click_id}`, `revenue={payout}`. It sends one
+  postback per goal and has no status macro, so the operator puts the
+  goal's name in place of `REPLACE_GOAL` and maps those names.
+
+Affilka, Cellxpert, MyAffiliates, Income Access, NetRefer and IREV keep
+their docs behind login (checked 2026-10-16). A template is one catalog
+entry once their macros are known.
+
 ## Reports by network (2026-10-13)
 
 A click routed to an offer carries that offer's network (`network_id`,

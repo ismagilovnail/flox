@@ -5,6 +5,29 @@ per-phase, matching `CLAUDE.md`'s phase protocol. The one exception is
 [Between phases], below: spec amendments and the code changes that follow from
 them land between phases and would otherwise be invisible here.
 
+## [Phase 30.56] — Affiliate-platform templates (audit INT-3)
+
+You chose the mechanism plus the platforms with public docs. `docs/networks-offers.md` "Affiliate-platform
+templates".
+
+- `networks.template_key` (migration 00093, API, Duplicate copies it). Catalog `lib/network-templates.ts`:
+  - Affise: `{sub1}` click id, `{status}` 1/2/3/5 mapped, `{sum}`, `{currency}`, `{transactionid}`;
+  - Scaleo: `{aff_click_id}`, `{payout}`, one postback per goal with the goal name as status.
+
+  Each with its sources.
+- Network form: platform select. On create, the incoming URL in the secret dialog and the network card carries the
+  platform's macros (only those it has). The card shows the offer-link parameter for FLOX's click id and sources.
+  The platform's status mappings are created with the network. EN/RU.
+- Research: Affilka, Cellxpert, MyAffiliates, Income Access, NetRefer and IREV have no public postback docs
+  (behind login or 403); each becomes one catalog entry once their macros are known.
+- Tests: `network-templates.test.ts` (sources, valid mappings, Affise codes, URL with only the template's
+  parameters — a test caught FLOX placeholders such as `{currency}` being left for Scaleo, which would reach FLOX
+  literally), `TestTemplateKey`. Full Go suite: only the known gallery-WIP failure; vitest 191/191; build.
+- Live: an Affise network created in the browser came with its 4 mappings and the URL with Affise macros. Then
+  Affise-shaped postbacks went through the real tracker: `status=2` → CPA_HOLD, `status=1` → CPA_ACCEPT, amount and
+  txn id stored. The secret dialog's hint now says the URL is ready to paste. All test data removed from Postgres
+  and ClickHouse.
+
 ## [Phase 30.55] — Traffic source templates and the postback to the source (audit INT-1)
 
 You chose the traffic-source direction from the adset.pro list. The networks there are ad networks, not affiliate

@@ -2,6 +2,8 @@
 
 import Link from "next/link";
 import { Controller, useForm } from "react-hook-form";
+
+import { NETWORK_TEMPLATES } from "@/lib/network-templates";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { useTranslation } from "react-i18next";
@@ -28,6 +30,7 @@ export function buildNetworkFormSchema(t: TFunction) {
     postbackUrl: z.union([z.literal(""), z.url(t("form.validation.urlInvalid", { ns: "networks" }))]),
     acceptDuplicates: z.boolean(),
     currency: z.string().regex(/^[A-Z]{3}$/, t("form.validation.currencyInvalid", { ns: "networks" })),
+    templateKey: z.string(),
     status: z.enum(["active", "paused", "archived"] as [NetworkStatus, ...NetworkStatus[]]).optional(),
   });
 }
@@ -63,7 +66,7 @@ export function NetworkForm({
   const { t } = useTranslation(["networks", "common"]);
   const form = useForm<NetworkFormValues>({
     resolver: zodResolver(buildNetworkFormSchema(t)),
-    defaultValues: { name: "", postbackUrl: "", acceptDuplicates: false, currency: "USD", status: "active", ...defaultValues },
+    defaultValues: { name: "", postbackUrl: "", acceptDuplicates: false, currency: "USD", status: "active", templateKey: "", ...defaultValues },
   });
   // A network saved with a currency outside the short list keeps it as an
   // option, same as the organization's currency (organization-panel.tsx).
@@ -143,6 +146,30 @@ export function NetworkForm({
             {errors.currency && <p className="text-xs text-danger">{errors.currency.message}</p>}
           </div>
           <p className="-mt-2 text-xs text-muted-foreground">{t("form.currencyHint", { ns: "networks" })}</p>
+
+          <div className="grid gap-1.5 sm:w-1/3">
+            <Label htmlFor="net-template">{t("template.label", { ns: "networks" })}</Label>
+            <Controller
+              control={control}
+              name="templateKey"
+              render={({ field }) => (
+                <Select value={field.value || "none"} onValueChange={(v) => field.onChange(v === "none" ? "" : v)}>
+                  <SelectTrigger id="net-template" className="w-full">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">{t("template.none", { ns: "networks" })}</SelectItem>
+                    {NETWORK_TEMPLATES.map((tpl) => (
+                      <SelectItem key={tpl.key} value={tpl.key}>
+                        {tpl.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
+            />
+          </div>
+          <p className="-mt-2 text-xs text-muted-foreground">{t("template.hint", { ns: "networks" })}</p>
 
           <div className="flex items-center justify-between rounded-md border border-border p-2.5">
             <div>

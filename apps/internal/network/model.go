@@ -33,6 +33,9 @@ type Network struct {
 	// Currency is the payout currency: a postback with revenue but no
 	// currency is taken to be in it (ISO 4217, upper case; USD default).
 	Currency string `json:"currency"`
+	// TemplateKey is the affiliate-platform template the network was set
+	// up from (apps/web lib/network-templates.ts; audit INT-3); "" = none.
+	TemplateKey string `json:"templateKey"`
 	// IncomingPostbackURL is where the network sends its postbacks:
 	// TRACKER_PUBLIC_URL + /postback/{id}, without the query (the secret is
 	// shown once and only the client composes it in). Empty when
@@ -49,7 +52,8 @@ type CreateInput struct {
 	PostbackURL      string
 	AcceptDuplicates bool
 	// Currency empty means USD.
-	Currency string
+	Currency    string
+	TemplateKey string
 }
 
 // UpdateInput fields are pointers so PATCH can distinguish "not sent"
@@ -59,6 +63,7 @@ type UpdateInput struct {
 	PostbackURL      *string
 	AcceptDuplicates *bool
 	Currency         *string
+	TemplateKey      *string
 	Status           *Status
 }
 

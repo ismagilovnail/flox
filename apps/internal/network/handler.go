@@ -82,6 +82,7 @@ type createRequest struct {
 	PostbackURL      string `json:"postbackUrl"`
 	AcceptDuplicates bool   `json:"acceptDuplicates"`
 	Currency         string `json:"currency"`
+	TemplateKey      string `json:"templateKey"`
 }
 
 func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
@@ -98,6 +99,7 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 		PostbackURL:      req.PostbackURL,
 		AcceptDuplicates: req.AcceptDuplicates,
 		Currency:         req.Currency,
+		TemplateKey:      req.TemplateKey,
 	})
 	if err != nil {
 		apierror.Write(w, h.logger, err)
@@ -120,6 +122,7 @@ type updateRequest struct {
 	PostbackURL      *string `json:"postbackUrl"`
 	AcceptDuplicates *bool   `json:"acceptDuplicates"`
 	Currency         *string `json:"currency"`
+	TemplateKey      *string `json:"templateKey"`
 	Status           *Status `json:"status"`
 }
 
@@ -137,6 +140,7 @@ func (h *Handler) update(w http.ResponseWriter, r *http.Request) {
 		PostbackURL:      req.PostbackURL,
 		AcceptDuplicates: req.AcceptDuplicates,
 		Currency:         req.Currency,
+		TemplateKey:      req.TemplateKey,
 		Status:           req.Status,
 	})
 	if err != nil {
