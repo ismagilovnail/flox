@@ -2408,6 +2408,19 @@ DEDUP KEY: (click_id, status, event_ref)
       here would turn every retry into a new conversion.
       The txn id is still STORED on the event — it is just not part of the key.
 
+    RE-APPROVAL AFTER A REVERSAL (amended 2026-10-16, audit DATA-3)
+      ACCEPT → DECLINE → ACCEPT is a real dispute outcome, and with
+      event_ref = "" the second ACCEPT was a duplicate: the revenue was lost.
+      An ACCEPT recorded while the click's last decision is DECLINE/TRASH
+      takes event_ref = its txn id IF no earlier ACCEPT of the click (recorded
+      or refused) carried that txn id. The nightly replay of the original
+      ACCEPT carries the original id (or none) and stays a duplicate — a
+      chargeback is never undone by a replay. Without a new txn id a
+      re-approval stays a duplicate (the recoverable side, as for REDEP).
+      A DECLINE/TRASH carrying the txn id a re-approval was keyed by takes
+      that event_ref too, so the re-approval can be reversed; a replay of the
+      first decline stays a duplicate. Decided under the click's lock.
+
 WINDOW: dedup key held in Redis with a LONG TTL (partners re-send deposits with
   hours-to-days delay). Persist a durable unique constraint in ClickHouse/PG as
   the backstop; Redis is the fast path.

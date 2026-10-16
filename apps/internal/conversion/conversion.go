@@ -244,6 +244,9 @@ type Recorded struct {
 	ID      string
 	Kind    ResultKind
 	Message string
+	// EventRef is the key Store recorded under when it differs from the
+	// entry's: a re-approval or its reversal (redecisionFor).
+	EventRef string
 }
 
 // Store is the durable ledger — Postgres today (postgres.go), read through
@@ -617,7 +620,11 @@ func (r recorder) commit(ctx context.Context, p Postback, entry Entry, attr attr
 		return Result{}, fmt.Errorf("conversion: recording: %w", err)
 	}
 	message := committedMessage(p, entry, rec)
-	r.s.logAttempt(ctx, p, entry.ClickID, entry.Status, entry.EventRef, rec.Kind, message)
+	eventRef := entry.EventRef
+	if rec.EventRef != "" {
+		eventRef = rec.EventRef // a re-approval's (Store, under the lock)
+	}
+	r.s.logAttempt(ctx, p, entry.ClickID, entry.Status, eventRef, rec.Kind, message)
 	return Result{ID: rec.ID, Kind: rec.Kind, Status: entry.Status, Attribution: attr, Message: message}, nil
 }
 
@@ -942,7 +949,10 @@ func newEvent(in eventInput, attr attribution.Attribution) event.Event {
 // Every other status is non-repeatable: event_ref is ALWAYS "", even when
 // the network sends a transaction id, because networks commonly retry with
 // a fresh txn id per attempt and including it here would turn every retry
-// into a new conversion.
+// into a new conversion. The one exception, a re-approval after a
+// reversal and the reversal of that re-approval, needs the click's history
+// and is decided by Store under the click's lock (redecisionFor, §45
+// RE-APPROVAL).
 func eventRefFor(status event.Type, networkTxnID string) string {
 	if status != event.CpaRedep {
 		return ""

@@ -194,31 +194,37 @@ never cause a false "already seen." REDIS_URL unset or unreachable at
 startup is not fatal — the tracker falls back to `PostgresStore` directly,
 still fully correct, just without the fast path (see `apps/tracker/main.go`).
 
-## Known gap: repeated non-REDEP statuses share one dedup key
+## Re-approval after a decline (audit 2026-10-15, DATA-3; §45 amended)
 
-§45 designates CPA_REDEP as the only "repeatable" status; every other status
-gets `event_ref = ""` unconditionally, by design (see `eventRefFor` in
-`conversion.go`) — including on a legitimate second occurrence.
+Every non-REDEP status has `event_ref = ""`, so a conversion accepted,
+declined and approved again after a dispute used to compute the first
+accept's key `(click_id, CPA_ACCEPT, "")` and was recorded as a duplicate,
+with no revenue. A local sequence number is no fix (§45: every re-send
+would look new), and neither is "any accept after a decline": partners
+replay their whole history nightly, and the replayed original accept would
+undo a real chargeback.
 
-This collides with the STATUS PROGRESSION rule's own example: "reversals
-really are undone (CPA_ACCEPT after CPA_DECLINE)" is explicitly *allowed* by
-progression (it's not a return to CPA_HOLD), but if that reinstated
-CPA_ACCEPT is a **second, distinct** deposit event rather than a re-send of
-the original, it computes the identical dedup key `(click_id, CPA_ACCEPT,
-"")` as the first ACCEPT and is recorded as a duplicate — no new event, no
-new revenue.
+The key component is the network's own txn_id, decided by the store under
+the click's lock (`redecisionFor` in `postgres.go`):
 
-This is not a bug in the implementation; it's what §45's dedup and
-progression rules literally compose to. §45 explicitly forbids the obvious
-fix ("Do NOT substitute a locally generated sequence number — a fresh number
-per delivery makes every re-send look distinct and disables deduplication
-entirely"), so this package does not invent one. If a real network's
-reinstatement flow needs to be distinguishable from a re-send of the
-original ACCEPT, that needs its own spec amendment (a network-supplied
-identifier for reversals, the way CPA_REDEP has one) — not a decision this
-phase makes unilaterally. See `TestProgressionAllowsEverythingElse` in
-`conversion_test.go` for the exact scenario and boundary this leaves in
-place.
+- **Re-approval.** An ACCEPT while the click's last decision is
+  DECLINE/TRASH is keyed by its txn_id when no earlier ACCEPT of the click,
+  recorded or refused, came with that txn_id. A network that retries with a
+  fresh id per attempt had those retries refused as duplicates, so their
+  replays stay duplicates too. Without a txn_id, or with an old one, it is
+  a duplicate whose message says why. Index `postbacks_accept_txn_idx`
+  (00089) serves the lookup.
+- **Reversal of a re-approval.** A DECLINE/TRASH carrying the txn_id a
+  re-approval was keyed by takes that key and reverses the re-approval's
+  payout (`acceptToReverse` picks the latest accept). A replay of the first
+  decline (no txn_id, or the first accept's) stays a duplicate. A network
+  that declines a re-approval without its txn_id loses that reversal: the
+  same recoverable-side trade as REDEP without txn_id.
+- **Reports** count events: a re-approved conversion shows two accepts and
+  one decline, and revenue nets to one payout.
+
+`TestReapprovalAfterDeclineNeedsANewTxnID` (`reapproval_test.go`) walks the
+whole sequence on Postgres, including the replays.
 
 ## Attribution window
 

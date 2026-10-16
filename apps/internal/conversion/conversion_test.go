@@ -427,13 +427,10 @@ func TestProgressionRuleIsIndependentOfAcceptDuplicates(t *testing.T) {
 }
 
 // TestProgressionAllowsEverythingElse: a reversal (ACCEPT -> DECLINE) is not
-// refused by the progression rule — only a return to CPA_HOLD is. This does
-// NOT extend to "and therefore gets its own dedup-distinct event": whether an
-// undone reversal (DECLINE -> ACCEPT again) produces a second recorded event
-// depends on the dedup key too, and CPA_ACCEPT's event_ref is fixed empty by
-// §45, so that combination is a real spec gap this package does not attempt
-// to resolve by inventing a key component (§45 explicitly forbids
-// substituting a locally generated sequence number for exactly this reason).
+// refused by the progression rule — only a return to CPA_HOLD is. Whether
+// an undone reversal (DECLINE -> ACCEPT again) gets its own event is the
+// dedup key's business: a re-approval with a new txn_id does (§45
+// RE-APPROVAL, decided by the store — reapproval_test.go).
 func TestProgressionAllowsEverythingElse(t *testing.T) {
 	svc, mapper, _, events, _ := newHarness()
 	mapper.set("net-1", "sale", event.CpaAccept)

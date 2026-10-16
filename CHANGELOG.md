@@ -5,6 +5,24 @@ per-phase, matching `CLAUDE.md`'s phase protocol. The one exception is
 [Between phases], below: spec amendments and the code changes that follow from
 them land between phases and would otherwise be invisible here.
 
+## [Phase 30.49] — Re-approval after a decline (audit DATA-3)
+
+A conversion approved, declined, then approved again after a dispute was a duplicate: every ACCEPT of a click has the
+key `(click_id, CPA_ACCEPT, "")`. You chose option 1: a re-approval counts when it carries a new txn_id. §45 amended
+("RE-APPROVAL AFTER A REVERSAL"), CLAUDE.md invariant #3 updated. `docs/conversion.md` "Re-approval after a decline"
+replaces the old "Known gap" section.
+
+- `conversion.PostgresStore`, under the click's lock (`redecisionFor`): an ACCEPT while the click's last decision is
+  DECLINE/TRASH is keyed by its txn_id when no earlier ACCEPT of the click, recorded or refused, carried it.
+  Replays of the original accept, including retries that had fresh ids, stay duplicates, so a chargeback is never
+  undone by a replay. A DECLINE/TRASH with the re-approval's txn_id reverses it; a replay of the first decline stays a
+  duplicate. Refused re-approvals say why. The attempt log gets the recorded key.
+- Index `postbacks_accept_txn_idx` (migration 00089, concurrently) for the earlier-accept lookup.
+- Tests: `reapproval_test.go` (Postgres, 16 steps: retry before the decline, replays with old/no/fresh ids, a
+  re-approval reversed and re-approved again, TRASH; net revenue one payout). Writing it caught that a retry refused
+  as a duplicate must count as "seen". Full Go suite with full env: only the known gallery-WIP failure; e2e and the
+  cross-tenant route test passed. No live tracker postback: the demo network's secret is not available.
+
 ## [Phase 30.48] — Redeposits without txn_id (audit DATA-2)
 
 A network that sends redeposits without `txn_id` loses every repeat deposit of a click after the first: the dedup key

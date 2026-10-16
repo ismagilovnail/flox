@@ -210,6 +210,21 @@ func (s *PostgresStore) recordSuccess(ctx context.Context, tx pgx.Tx, e Entry) (
 		return Recorded{ID: id, Kind: ResultIgnored, Message: msg}, nil
 	}
 
+	// A re-approval after a reversal, and the reversal of that re-approval,
+	// are keyed by their txn_id (audit 2026-10-15, DATA-3); under the lock,
+	// so the decision reads the click's settled history.
+	rd, err := redecisionFor(ctx, tx, e)
+	if err != nil {
+		return Recorded{}, err
+	}
+	if rd.eventRef != "" {
+		e.EventRef = rd.eventRef
+		if e.Event != nil {
+			e.Event.EventRef = rd.eventRef
+		}
+		e.Message = strings.TrimSpace(e.Message + "; " + rd.note)
+	}
+
 	if reversesAccept(e.Status) {
 		rev, ok, err := acceptToReverse(ctx, tx, e.OrganizationID, e.ClickID)
 		if err != nil {
@@ -254,12 +269,12 @@ func (s *PostgresStore) recordSuccess(ctx context.Context, tx pgx.Tx, e Entry) (
 	).Scan(&returnedID)
 
 	if errors.Is(err, pgx.ErrNoRows) {
-		msg := duplicateMessage(e)
+		msg := duplicateMessage(e, rd)
 		dupID, err := insertEntry(ctx, tx, e, ResultDuplicate, msg)
 		if err != nil {
 			return Recorded{}, fmt.Errorf("conversion: logging duplicate: %w", err)
 		}
-		return Recorded{ID: dupID, Kind: ResultDuplicate, Message: msg}, nil
+		return Recorded{ID: dupID, Kind: ResultDuplicate, Message: msg, EventRef: rd.eventRef}, nil
 	}
 	if err != nil {
 		return Recorded{}, fmt.Errorf("conversion: recording success: %w", err)
@@ -301,18 +316,102 @@ func (s *PostgresStore) recordSuccess(ctx context.Context, tx pgx.Tx, e Entry) (
 			return Recorded{}, fmt.Errorf("conversion: scheduling attribution retry: %w", err)
 		}
 	}
-	return Recorded{ID: returnedID, Kind: ResultSuccess, Message: e.Message}, nil
+	return Recorded{ID: returnedID, Kind: ResultSuccess, Message: e.Message, EventRef: rd.eventRef}, nil
 }
 
 // duplicateMessage says why a postback is a duplicate. A REDEP without a
 // transaction id has an empty event_ref, so every repeat deposit of the
 // click after the first lands here: the message names the parameter that
 // tells them apart (audit 2026-10-15, DATA-2; §45 keeps the key as is).
-func duplicateMessage(e Entry) string {
-	if e.Status == event.CpaRedep && e.EventRef == "" {
-		return "dedup key (click_id, status, event_ref) already recorded — this redeposit came without txn_id, so every repeat deposit of the click counts once; send the network's transaction id as txn_id"
+func duplicateMessage(e Entry, r redecision) string {
+	const base = "dedup key (click_id, status, event_ref) already recorded"
+	switch {
+	case e.Status == event.CpaRedep && e.EventRef == "":
+		return base + " — this redeposit came without txn_id, so every repeat deposit of the click counts once; send the network's transaction id as txn_id"
+	case r.reapprovalRefused:
+		return base + " — the click was declined after its accept; a re-approval counts only with a txn_id no earlier accept of the click carried"
 	}
-	return "dedup key (click_id, status, event_ref) already recorded"
+	return base
+}
+
+// redecision is how a CPA_ACCEPT / CPA_DECLINE / CPA_TRASH relates to the
+// click's earlier decisions (audit 2026-10-15, DATA-3; §45 amended).
+//
+// The dedup key of a non-repeatable status has an empty event_ref, so once
+// a click was accepted and declined a later accept was a duplicate — even
+// a real re-approval after a dispute. A re-approval is now told apart by
+// its txn_id: an accept after a reversal whose txn_id no earlier accept of
+// the click carried — recorded or refused: a retry with a fresh id per
+// attempt was a duplicate, and its replay must stay one — is keyed by that
+// txn_id. The nightly replay of the
+// original accept carries the original txn_id (or none) and stays a
+// duplicate, so a chargeback is never undone by a replay. A reversal of a
+// re-approval is keyed the same way: a decline/trash carrying the txn_id a
+// re-approval was keyed by; a replay of the first decline (its txn_id, or
+// none) stays a duplicate.
+type redecision struct {
+	eventRef string // "" = the usual key
+	note     string
+	// reapprovalRefused: an accept after a reversal that did not qualify
+	// (no txn_id, or one an earlier accept carried) — the duplicate's
+	// message says why.
+	reapprovalRefused bool
+}
+
+func redecisionFor(ctx context.Context, q querier, e Entry) (redecision, error) {
+	if e.EventRef != "" || (e.Status != event.CpaAccept && !reversesAccept(e.Status)) {
+		return redecision{}, nil
+	}
+	txn := strings.TrimSpace(e.NetworkTxnID)
+	if e.Status == event.CpaAccept {
+		var last string
+		err := q.QueryRow(ctx, `
+			SELECT status FROM postbacks
+			WHERE organization_id = $1 AND click_id = $2 AND result = 'success'
+			  AND status IN ('CPA_ACCEPT', 'CPA_DECLINE', 'CPA_TRASH')
+			ORDER BY created_at DESC
+			LIMIT 1`,
+			e.OrganizationID, e.ClickID,
+		).Scan(&last)
+		if errors.Is(err, pgx.ErrNoRows) || (err == nil && !reversesAccept(event.Type(last))) {
+			return redecision{}, nil
+		}
+		if err != nil {
+			return redecision{}, fmt.Errorf("conversion: reading the click's last decision: %w", err)
+		}
+		if txn == "" {
+			return redecision{reapprovalRefused: true}, nil
+		}
+		var seen bool
+		if err := q.QueryRow(ctx, `
+			SELECT EXISTS (SELECT 1 FROM postbacks
+			WHERE organization_id = $1 AND click_id = $2 AND direction = 'incoming'
+			  AND status = 'CPA_ACCEPT' AND network_txn_id <> '' AND network_txn_id = $3)`,
+			e.OrganizationID, e.ClickID, txn,
+		).Scan(&seen); err != nil {
+			return redecision{}, fmt.Errorf("conversion: looking up earlier accepts: %w", err)
+		}
+		if seen {
+			return redecision{reapprovalRefused: true}, nil
+		}
+		return redecision{eventRef: txn, note: "re-approval after " + last + " (txn_id " + txn + ")"}, nil
+	}
+	if txn == "" {
+		return redecision{}, nil
+	}
+	var reapproved bool
+	if err := q.QueryRow(ctx, `
+		SELECT EXISTS (SELECT 1 FROM postbacks
+		WHERE organization_id = $1 AND click_id = $2 AND result = 'success'
+		  AND status = 'CPA_ACCEPT' AND event_ref = $3)`,
+		e.OrganizationID, e.ClickID, txn,
+	).Scan(&reapproved); err != nil {
+		return redecision{}, fmt.Errorf("conversion: looking up the re-approval: %w", err)
+	}
+	if !reapproved {
+		return redecision{}, nil
+	}
+	return redecision{eventRef: txn, note: "reverses the re-approval (txn_id " + txn + ")"}, nil
 }
 
 // insertEntry writes one non-success ledger row (error/ignored/duplicate)

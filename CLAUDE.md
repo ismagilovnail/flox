@@ -19,22 +19,22 @@ referenced below as §N).
 ## CURRENT STATE — UPDATE THIS EVERY PHASE
 
 ```
-CURRENT PHASE : PHASE 30.48 — REDEPOSITS WITHOUT TXN_ID, DATA-2 (closed)
+CURRENT PHASE : PHASE 30.49 — RE-APPROVAL AFTER A DECLINE, DATA-3 (closed)
 STATUS        : Product audit 2026-10-15 (docs/audit-product-2026-10-15.md)
                 is the backlog: items on the local dev panel tools/devpanel
                 (make devpanel → 127.0.0.1:8099; memory: flox-audit-tracker
                 — keep statuses current). Done: SEC-1, SEC-2, DATA-1, DEV-1,
-                UX-1, UX-2, UX-3, DATA-4, DATA-2 (network diagnostic).
+                UX-1, UX-2, UX-3, DATA-4, DATA-2, DATA-3 (re-approval
+                with a new txn_id, §45 amended).
                 P0 left:
                 OPS-1..3 (prod, restore, load) — needs the owner's hosting.
-LAST COMMIT   : feat(networks): redeposits without txn_id.
+LAST COMMIT   : feat(conversion): re-approval after a decline.
 UNCOMMITTED   : the user's gallery-transcoding WIP (00085, processor.go,
                 transcode.go, worker ffmpeg) — not ours, leave it alone.
                 It now accepts MOV, so contentgallery's
                 TestUploadRejectsOversizeWrongContentAndMov fails with it.
-NEXT          : wait for the user — next item from the board (P1: DATA-3 — changes
-                the §45 dedup/progression rule, needs the user's decision
-                first; SEC-5, …). CI (DO1) is the user's own decision — do not set
+NEXT          : wait for the user — next item from the board (P1: SEC-5, GDPR-1,
+                INT-1, …). CI (DO1) is the user's own decision — do not set
                 it up. Run go test with the full env line AND check e2e did
                 not skip (memory: flox-full-test-env); chconn's
                 TestLimitsStopAHeavyQuery flakes under the full parallel run.
@@ -145,7 +145,9 @@ Read the referenced section before touching related code.
 3. **Postback dedup key = (click_id, status, event_ref)** (§45) — NOT click_id
    alone, and NOT (click_id, status). `event_ref` = network txn id for CPA_REDEP
    (the only repeatable status), empty string for every other status even if a
-   txn id was sent. **Status never goes back to CPA_HOLD** — nightly partner
+   txn id was sent — except a re-approval after DECLINE/TRASH carrying a txn
+   id no earlier ACCEPT of the click carried, and the reversal of that
+   re-approval (§45 RE-APPROVAL, DATA-3). **Status never goes back to CPA_HOLD** — nightly partner
    replays re-send it after approval and would take revenue out of a closed
    report (§45 STATUS PROGRESSION). Long Redis TTL + durable DB unique
    constraint. Store original currency + USD value at event time.
