@@ -267,7 +267,7 @@ func run() error {
 			conversion.NewPostgresFX(db),
 			attributionSvc,
 			attemptLog,
-		),
+		).WithSourcePostbacks(conversion.NewPostgresSourcePostbacks(db)),
 		failures: limiter.Failures("postback-failures", postbackFailureLimit, postbackFailureWindow),
 		clientIP: clientIP,
 		logger:   logger,

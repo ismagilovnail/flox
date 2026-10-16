@@ -17,6 +17,7 @@ import (
 
 	"github.com/ClickHouse/clickhouse-go/v2/lib/driver"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -323,6 +324,9 @@ func writeTable(ctx context.Context, zw *zip.Writer, db *pgxpool.Pool, orgID str
 		return err
 	}
 	rows, err := db.Query(ctx, `SELECT (to_jsonb(x) - $2::text[])::text FROM "`+t.name+`" x WHERE organization_id = $1`, orgID, t.excluded)
+	if isDropped(err) {
+		return nil // dropped since it was listed (a test's temporary table)
+	}
 	if err != nil {
 		return fmt.Errorf("orgexport: reading %s: %w", t.name, err)
 	}
@@ -336,7 +340,16 @@ func writeTable(ctx context.Context, zw *zip.Writer, db *pgxpool.Pool, orgID str
 			return err
 		}
 	}
+	if isDropped(rows.Err()) {
+		return nil
+	}
 	return rows.Err()
+}
+
+// isDropped reports a table that no longer exists (undefined_table).
+func isDropped(err error) bool {
+	var pgErr *pgconn.PgError
+	return errors.As(err, &pgErr) && pgErr.Code == "42P01"
 }
 
 func writeTeam(ctx context.Context, zw *zip.Writer, db *pgxpool.Pool, orgID string) error {

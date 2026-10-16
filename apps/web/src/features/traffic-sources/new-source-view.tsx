@@ -21,6 +21,9 @@ export function NewSourceView() {
         name: values.name,
         type: values.type,
         trackingTemplate: values.trackingTemplate,
+        templateKey: values.templateKey,
+        postbackUrl: values.postbackUrl,
+        postbackStatuses: values.postbackStatuses,
         costIntegration: values.costIntegration,
       },
       {

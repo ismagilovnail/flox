@@ -1,15 +1,19 @@
 /**
  * Query parameters a buyer appends to a tracking link, and the ad platforms'
  * own macros they are filled from. The tracker reads exactly these keys
- * (apps/tracker/params.go): utm_*, sub1–sub10, and ttclid/fbclid as external
- * click ids. This file only assembles the URL — routing decisions stay in Go.
+ * (apps/tracker/params.go): utm_*, sub1–sub10, external_click_id (the
+ * traffic source's own click id, echoed back in the postback to the source)
+ * and ttclid/fbclid as external click ids. This file only assembles the URL
+ * — routing decisions stay in Go.
  */
+
+import { SOURCE_TEMPLATES, sourceTemplate } from "@/lib/source-templates";
 
 export const UTM_KEYS = ["utm_source", "utm_medium", "utm_campaign", "utm_content", "utm_term"] as const;
 export const SUB_KEYS = Array.from({ length: 10 }, (_, i) => `sub${i + 1}`);
 
 /** Keys the constructor offers, in the order they are written to the URL. */
-export const PARAM_KEYS: string[] = [...UTM_KEYS, ...SUB_KEYS, "ttclid"];
+export const PARAM_KEYS: string[] = [...UTM_KEYS, ...SUB_KEYS, "external_click_id", "ttclid"];
 
 export type LinkParams = Record<string, string>;
 
@@ -56,7 +60,11 @@ export function platformForSourceType(type: string | undefined): LinkPlatform | 
   return null;
 }
 
-const MACRO = /\{\{[^{}]+\}\}|__[A-Z0-9_]+__/g;
+/** The ad networks' macro syntaxes, which must reach the network literally:
+ * {{campaign.id}} (Facebook, HilltopAds), __AID__ (TikTok), ${SUBID}
+ * (PropellerAds, Clickadu), {zoneid} (most), ##ZONE_ID## (Adsterra),
+ * [:click_id] (Galaksion). */
+const MACRO = /\{\{[^{}]+\}\}|__[A-Z0-9_]+__|\$\{[A-Za-z0-9_]+\}|\{[A-Za-z0-9_.]+\}|##[A-Za-z0-9_()]+##|\[:[a-z_]+\]/g;
 
 /** encodeURIComponent for everything except the platforms' macros. */
 function encodeValue(value: string): string {
@@ -78,4 +86,23 @@ export function buildTrackingUrl(base: string, params: LinkParams): string {
   });
   if (parts.length === 0) return base;
   return `${base}${base.includes("?") ? "&" : "?"}${parts.join("&")}`;
+}
+
+/** A link preset: Facebook, TikTok, or a traffic source template
+ * (lib/source-templates.ts). */
+export type LinkPreset = { key: string; params: LinkParams; label?: string };
+
+/** Every preset; label undefined for the two platforms (translated by the
+ * caller). */
+export const LINK_PRESETS: LinkPreset[] = [
+  { key: "facebook", params: PLATFORM_PRESETS.facebook },
+  { key: "tiktok", params: PLATFORM_PRESETS.tiktok },
+  ...SOURCE_TEMPLATES.map((t) => ({ key: t.key, params: t.link, label: t.name })),
+];
+
+/** Which preset a traffic source's links start from: its template, else its
+ * type's platform. */
+export function presetForSource(source: { type?: string; templateKey?: string } | undefined): string | null {
+  if (source?.templateKey && sourceTemplate(source.templateKey)) return source.templateKey;
+  return platformForSourceType(source?.type);
 }

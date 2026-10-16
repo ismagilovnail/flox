@@ -125,5 +125,23 @@
     "archived": "Source archived",
     "archiveError": "Couldn't archive source",
     "duplicateError": "Couldn't duplicate source"
+  },
+  "postback": {
+    "title": "Network template and postback to the source",
+    "description": "Tell the ad network about conversions so it can optimize: FLOX calls this URL when a conversion of this source's clicks is recorded.",
+    "templateLabel": "Network",
+    "noTemplate": "No template",
+    "linkHint": "In the campaign's tracking link builder, {{name}} fills these parameters with its macros:",
+    "caution": {
+      "postback": "This postback format comes from a tracker's documentation, not the network's own: compare it with the postback in your network account.",
+      "clickId": "The click-id macro comes from a tracker's documentation only: check it in your network account."
+    },
+    "sources": "Sources:",
+    "urlLabel": "Postback URL",
+    "urlHint": "Replace REPLACE_… with the values from your account at the network. {external_click_id} is the network's own click id the click carried, {revenue} the conversion's payout.",
+    "replaceLeft": "Replace the REPLACE_… parts with the values from your network account",
+    "statusesLabel": "Send for statuses",
+    "statusesRequired": "Choose at least one status",
+    "statusesHint": "Usually only the approved conversion: each status sent counts as a conversion at the network."
   }
 }

@@ -314,3 +314,49 @@ func seedSource(t *testing.T, ctx context.Context, pool *pgxpool.Pool, orgID, na
 		t.Fatalf("seeding traffic source: %v", err)
 	}
 }
+
+// The postback to the source (audit 2026-10-15, INT-1): empty is fine; a
+// URL must be public http(s) with no catalog placeholder left; statuses
+// must be CPA statuses; CPA_ACCEPT when none are given.
+func TestPostbackToTheSource(t *testing.T) {
+	pool := mustPool(t)
+	ctx := context.Background()
+	orgID := seedOrg(t, ctx, pool)
+	svc := trafficsource.NewService(trafficsource.NewRepository(pool))
+	base := func() trafficsource.CreateInput {
+		return trafficsource.CreateInput{Name: "PropellerAds", Type: "Push", TrackingTemplate: "https://example.com/t"}
+	}
+
+	in := base()
+	in.PostbackURL = "https://ad.propellerads.com/conversion.php?aid=123&tid=456&visitor_id={external_click_id}&payout={revenue}"
+	in.TemplateKey = "propellerads"
+	src, err := svc.Create(ctx, orgID, in)
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	if len(src.PostbackStatuses) != 1 || src.PostbackStatuses[0] != "CPA_ACCEPT" || src.TemplateKey != "propellerads" {
+		t.Fatalf("created = %+v; want CPA_ACCEPT by default and the template key", src)
+	}
+
+	for name, url := range map[string]string{
+		"placeholder left": "https://ad.propellerads.com/conversion.php?aid=REPLACE_AID&visitor_id={external_click_id}",
+		"private address":  "http://10.0.0.5/pb",
+		"not http":         "ftp://example.com/pb",
+	} {
+		bad := base()
+		bad.PostbackURL = url
+		if _, err := svc.Create(ctx, orgID, bad); err == nil {
+			t.Errorf("%s: Create succeeded", name)
+		}
+	}
+	statuses := []string{"CPA_ACCEPT", "LAND_VIEW"}
+	if _, err := svc.Update(ctx, orgID, src.ID, trafficsource.UpdateInput{PostbackStatuses: &statuses}); err == nil {
+		t.Error("a non-CPA status was accepted")
+	}
+	statuses = []string{"CPA_HOLD", "CPA_ACCEPT"}
+	empty := ""
+	updated, err := svc.Update(ctx, orgID, src.ID, trafficsource.UpdateInput{PostbackStatuses: &statuses, PostbackURL: &empty})
+	if err != nil || len(updated.PostbackStatuses) != 2 || updated.PostbackURL != "" {
+		t.Fatalf("Update = %+v, %v", updated, err)
+	}
+}

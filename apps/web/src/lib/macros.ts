@@ -15,6 +15,7 @@ export type MacroDef = {
 
 export const MACROS: MacroDef[] = [
   { token: "{click_id}", label: "Click ID", example: "8f3a1c9e2b7d4f10" },
+  { token: "{external_click_id}", label: "Traffic source click ID", example: "a1b2c3d4" },
   { token: "{status}", label: "Conversion status", example: "accept" },
   { token: "{revenue}", label: "Revenue (original currency)", example: "12.00" },
   { token: "{currency}", label: "Currency code", example: "USD" },

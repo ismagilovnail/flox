@@ -823,7 +823,7 @@ func buildServer(ctx context.Context, cfg config.Config, logger *slog.Logger, re
 			conversion.NewPostgresFX(db),
 			attributionSvc,
 			attemptLog,
-		).WithPreview(convPostgres)
+		).WithPreview(convPostgres).WithSourcePostbacks(conversion.NewPostgresSourcePostbacks(db))
 
 		postbackLogsHandler := postbacklogs.NewHandler(
 			postbacklogs.NewService(

@@ -57,8 +57,15 @@ type TrafficSource struct {
 	TrackingTemplate string          `json:"trackingTemplate"`
 	CostIntegration  CostIntegration `json:"costIntegration"`
 	Status           Status          `json:"status"`
-	CreatedAt        time.Time       `json:"createdAt"`
-	UpdatedAt        time.Time       `json:"updatedAt"`
+	// PostbackURL is called, macro-resolved, when a conversion attributed
+	// to one of this source's clicks is recorded with a status in
+	// PostbackStatuses (audit 2026-10-15, INT-1). TemplateKey is the
+	// catalog template it was set up from (apps/web lib/source-templates.ts).
+	PostbackURL      string    `json:"postbackUrl"`
+	PostbackStatuses []string  `json:"postbackStatuses"`
+	TemplateKey      string    `json:"templateKey"`
+	CreatedAt        time.Time `json:"createdAt"`
+	UpdatedAt        time.Time `json:"updatedAt"`
 }
 
 type CreateInput struct {
@@ -66,6 +73,10 @@ type CreateInput struct {
 	Type             string
 	TrackingTemplate string
 	CostIntegration  CostIntegration
+	PostbackURL      string
+	// PostbackStatuses empty means CPA_ACCEPT.
+	PostbackStatuses []string
+	TemplateKey      string
 }
 
 // UpdateInput fields are pointers so PATCH can distinguish "not sent"
@@ -76,4 +87,7 @@ type UpdateInput struct {
 	TrackingTemplate *string
 	CostIntegration  *CostIntegration
 	Status           *Status
+	PostbackURL      *string
+	PostbackStatuses *[]string
+	TemplateKey      *string
 }

@@ -44,6 +44,7 @@ func (s *PostgresStore) InsertTx(ctx context.Context, tx pgx.Tx, req conversion.
 	_, err := insertDelivery(ctx, tx, "postback_deliveries", EnqueueInput{
 		OrganizationID:   req.OrganizationID,
 		NetworkID:        req.NetworkID,
+		TrafficSourceID:  req.TrafficSourceID,
 		SourcePostbackID: req.SourcePostbackID,
 		ClickID:          req.ClickID,
 		Status:           req.Status,
@@ -61,9 +62,9 @@ type execer interface {
 func insertDelivery(ctx context.Context, db execer, table string, in EnqueueInput) (string, error) {
 	id := idgen.New()
 	_, err := db.Exec(ctx, `
-		INSERT INTO `+table+` (id, organization_id, network_id, source_postback_id, click_id, status, url)
-		VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-		id, in.OrganizationID, in.NetworkID, in.SourcePostbackID, in.ClickID, string(in.Status), in.URL,
+		INSERT INTO `+table+` (id, organization_id, network_id, traffic_source_id, source_postback_id, click_id, status, url)
+		VALUES ($1, $2, NULLIF($3, ''), NULLIF($4, ''), $5, $6, $7, $8)`,
+		id, in.OrganizationID, in.NetworkID, in.TrafficSourceID, in.SourcePostbackID, in.ClickID, string(in.Status), in.URL,
 	)
 	if err != nil {
 		return "", fmt.Errorf("postback: enqueueing delivery: %w", err)
@@ -76,7 +77,7 @@ func insertDelivery(ctx context.Context, db execer, table string, in EnqueueInpu
 const pendingDelivery = `delivery_status IN ('queued', 'retrying')`
 
 // claimedColumns is what a claim returns of each delivery.
-const claimedColumns = `pd.id, pd.organization_id, pd.network_id, pd.source_postback_id, pd.click_id, pd.status, pd.url, pd.attempt_count`
+const claimedColumns = `pd.id, pd.organization_id, coalesce(pd.network_id, ''), pd.source_postback_id, pd.click_id, pd.status, pd.url, pd.attempt_count`
 
 // ClaimDue is the standard Postgres job-queue pattern: SELECT ... FOR UPDATE
 // SKIP LOCKED picks rows no other transaction currently holds, and the

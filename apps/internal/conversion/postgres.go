@@ -137,7 +137,7 @@ func (s *PostgresStore) Record(ctx context.Context, e Entry) (Recorded, error) {
 		}
 		return Recorded{ID: id, Kind: e.Kind, Message: e.Message}, nil
 	}
-	if e.Delivery != nil && s.deliveries == nil {
+	if (e.Delivery != nil || e.SourceDelivery != nil) && s.deliveries == nil {
 		// A misconfigured store must fail loudly, not record a conversion
 		// whose outgoing postback silently never exists.
 		return Recorded{}, errors.New("conversion: entry carries an outgoing delivery but the store has no DeliveryWriter")
@@ -168,7 +168,7 @@ func (s *PostgresStore) Preview(ctx context.Context, e Entry) (Recorded, error) 
 	if e.Kind != ResultSuccess {
 		return Recorded{Kind: e.Kind, Message: e.Message}, nil
 	}
-	if e.Delivery != nil && s.deliveries == nil {
+	if (e.Delivery != nil || e.SourceDelivery != nil) && s.deliveries == nil {
 		return Recorded{}, errors.New("conversion: entry carries an outgoing delivery but the store has no DeliveryWriter")
 	}
 	tx, err := s.db.Begin(ctx)
@@ -294,8 +294,11 @@ func (s *PostgresStore) recordSuccess(ctx context.Context, tx pgx.Tx, e Entry) (
 			return Recorded{}, fmt.Errorf("conversion: queueing cpa event: %w", err)
 		}
 	}
-	if e.Delivery != nil {
-		req := *e.Delivery
+	for _, d := range []*DeliveryRequest{e.Delivery, e.SourceDelivery} {
+		if d == nil {
+			continue
+		}
+		req := *d
 		req.SourcePostbackID = returnedID
 		if err := s.deliveries.InsertTx(ctx, tx, req); err != nil {
 			return Recorded{}, fmt.Errorf("conversion: queueing outgoing postback: %w", err)
@@ -652,4 +655,31 @@ func (s *PostgresStore) StoredSuccess(ctx context.Context, organizationID, id st
 		return StoredConversion{}, fmt.Errorf("conversion: reading stored success: %w", err)
 	}
 	return c, nil
+}
+
+// PostgresSourcePostbacks reads traffic sources' postbacks
+// (SourcePostbacks), scoped to the organization.
+type PostgresSourcePostbacks struct{ db *pgxpool.Pool }
+
+func NewPostgresSourcePostbacks(db *pgxpool.Pool) *PostgresSourcePostbacks {
+	return &PostgresSourcePostbacks{db: db}
+}
+
+func (p *PostgresSourcePostbacks) PostbackFor(ctx context.Context, organizationID, sourceID string) (SourcePostback, bool, error) {
+	var url string
+	var statuses []string
+	err := p.db.QueryRow(ctx, `
+		SELECT postback_url, postback_statuses FROM traffic_sources
+		WHERE id = $1 AND organization_id = $2`, sourceID, organizationID).Scan(&url, &statuses)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return SourcePostback{}, false, nil
+	}
+	if err != nil {
+		return SourcePostback{}, false, err
+	}
+	sp := SourcePostback{URL: url}
+	for _, st := range statuses {
+		sp.Statuses = append(sp.Statuses, event.Type(st))
+	}
+	return sp, url != "", nil
 }

@@ -28,6 +28,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -210,6 +211,10 @@ type Entry struct {
 	// Delivery.SourcePostbackID is filled in by Store.
 	Event    *event.Event
 	Delivery *DeliveryRequest
+	// SourceDelivery is the postback to the attributed click's traffic
+	// source (audit 2026-10-15, INT-1), nil when the source has none for
+	// this status. Written like Delivery, in the same transaction.
+	SourceDelivery *DeliveryRequest
 	// Pixel is the event for the pixels of the attributed click's stream
 	// set (internal/pixelsend), nil when the conversion is not attributed
 	// to a click that went through one. Written in the same transaction;
@@ -285,7 +290,11 @@ type FXConverter interface {
 // a successfully recorded conversion queues.
 type DeliveryRequest struct {
 	OrganizationID string
-	NetworkID      string
+	// NetworkID is set for the network's outgoing postback,
+	// TrafficSourceID for the postback to the click's traffic source —
+	// exactly one of them.
+	NetworkID       string
+	TrafficSourceID string
 	// SourcePostbackID is the postbacks row this delivery was triggered by
 	// — the FK internal/postback's queue traces every attempt back to.
 	SourcePostbackID string
@@ -350,6 +359,53 @@ type Service struct {
 	attempts    AttemptLogger
 	// preview is the store's dry-run side (WithPreview), for Check.
 	preview Previewer
+	// sources looks up the traffic source's postback (WithSourcePostbacks);
+	// nil: no postbacks to sources.
+	sources SourcePostbacks
+}
+
+// SourcePostback is a traffic source's postback: the URL template and the
+// statuses it is sent for (traffic_sources.postback_url,
+// postback_statuses; audit 2026-10-15, INT-1).
+type SourcePostback struct {
+	URL      string
+	Statuses []event.Type
+}
+
+// SourcePostbacks finds a traffic source's postback; ok false when the
+// source has none (or is not the organization's).
+type SourcePostbacks interface {
+	PostbackFor(ctx context.Context, organizationID, sourceID string) (SourcePostback, bool, error)
+}
+
+// WithSourcePostbacks makes the engine queue the postback to a converting
+// click's traffic source.
+func (s *Service) WithSourcePostbacks(sp SourcePostbacks) *Service {
+	s.sources = sp
+	return s
+}
+
+// sourceDelivery is the postback to the attributed click's traffic source
+// for this status, or nil. Macro-resolved like a network's
+// ({external_click_id} is the source's own click id the click carried).
+func (s *Service) sourceDelivery(ctx context.Context, p Postback, attr attribution.Attribution, status event.Type, revenue *float64) (*DeliveryRequest, error) {
+	if s.sources == nil || !attr.Outcome.Attributed() || attr.Click.TrafficSourceID == "" {
+		return nil, nil
+	}
+	sp, ok, err := s.sources.PostbackFor(ctx, p.OrganizationID, attr.Click.TrafficSourceID)
+	if err != nil {
+		return nil, fmt.Errorf("conversion: looking up the traffic source's postback: %w", err)
+	}
+	if !ok || sp.URL == "" || !slices.Contains(sp.Statuses, status) {
+		return nil, nil
+	}
+	return &DeliveryRequest{
+		OrganizationID:  p.OrganizationID,
+		TrafficSourceID: attr.Click.TrafficSourceID,
+		ClickID:         p.ClickID,
+		Status:          status,
+		URL:             macro.ResolveURL(sp.URL, deliveryMacroValues(p, attr, status, revenue)),
+	}, nil
 }
 
 func NewService(mapper Mapper, store Store, fx FXConverter, attr attribution.AttributionService, attempts AttemptLogger) *Service {
@@ -440,7 +496,11 @@ func (s *Service) run(ctx context.Context, p Postback, out outcome) (Result, err
 	usdValue, revenue := s.convertRevenue(ctx, p)
 	p.unpriced = revenue != nil && usdValue == nil
 
-	return out.commit(ctx, p, newEntry(p, status, eventRef, attr, revenue, usdValue), attr)
+	entry := newEntry(p, status, eventRef, attr, revenue, usdValue)
+	if entry.SourceDelivery, err = s.sourceDelivery(ctx, p, attr, status, revenue); err != nil {
+		return Result{}, err
+	}
+	return out.commit(ctx, p, entry, attr)
 }
 
 // trimmed is p with every network-supplied string trimmed — once, here, so
@@ -810,6 +870,7 @@ func deliveryMacroValues(p Postback, attr attribution.Attribution, status event.
 		v.OfferID = attr.Click.OfferID
 		v.Country = attr.Click.Country
 		v.Device = attr.Click.Device
+		v.ExternalClickID = attr.Click.ExternalClickID
 		v.Subs = attr.Click.Subs
 	}
 	return v

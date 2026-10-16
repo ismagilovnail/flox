@@ -65,6 +65,48 @@ Unlike `cost_entries` (Phase 27-COST), `traffic_sources` has no
 "created by" column — nothing in this migration needed the Phase 28 auth
 workaround `cost_entries.created_by_user_id` required.
 
+## Network templates and the postback to the source (audit 2026-10-15, INT-1; migration 00092)
+
+An ad network optimizes on the conversions it is told about.
+
+- **Postback to the source.** `traffic_sources.postback_url` (empty =
+  none) and `postback_statuses` (default `CPA_ACCEPT`: each status sent
+  counts as a conversion at the network). When a conversion attributed to
+  one of the source's clicks is recorded with one of those statuses, the
+  conversion engine queues the URL, macro-resolved, in the same
+  transaction as the conversion (`conversion.Service.sourceDelivery`,
+  `PostgresSourcePostbacks`, scoped to the organization). It goes through
+  the same queue as a network's outgoing postback (`postback_deliveries`,
+  now with `traffic_source_id`; exactly one of the two targets is set).
+  The worker sends it with the SSRF-safe client and retries.
+- **`{external_click_id}`** (new macro, Go and web) is the network's own
+  click id the click carried: the link puts the network's macro in
+  `external_click_id`, which the tracker already reads.
+- **Validation:** a public http(s) URL (`urlsafety`; checked again at dial
+  time), no template placeholder left (`REPLACE`), CPA statuses only.
+- **Templates** (`apps/web/src/lib/source-templates.ts`): PropellerAds,
+  ExoClick, Adsterra, TrafficStars, Clickadu, HilltopAds, Galaksion,
+  EvaDav — the list on adset.pro. For each:
+  - its click-id macro and other macros for the link (`external_click_id`,
+    `sub1…`);
+  - its postback format, with the account-specific parts as `REPLACE_…`;
+  - the source URLs.
+
+  The networks' own docs are mostly behind login. The macros come from
+  tracker integration guides (FunnelFlux, Stape, CPV Lab, WeCanTrack) and
+  the network pages that are public (HilltopAds tokens, Adsterra's blog).
+  Two templates carry a caution shown in the form: HilltopAds' postback
+  (one tracker's docs) and Galaksion's click-id macro (one tracker's
+  docs, unlabeled).
+- **Form:** picking a template fills the postback (only when it is empty
+  or still another template's). The campaign's tracking-link builder
+  starts from the source's template (`presetForSource`). It keeps every
+  network macro syntax literal — `${SUBID}`, `{zoneid}`, `##ZONE_ID##`,
+  `[:click_id]`, `{{token}}` — where it used to encode all but
+  `{{…}}`/`__…__`.
+- **Not here:** templates for affiliate programs (incoming postback and
+  status mapping by affiliate platform) — devpanel INT-3.
+
 ## Verified
 
 Backend: `go build/vet/gofmt/test ./...` all green, including 7 new

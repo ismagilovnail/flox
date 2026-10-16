@@ -35,7 +35,11 @@ type Values struct {
 	OfferID    string
 	Country    string
 	Device     string
-	Subs       [10]string
+	// ExternalClickID is the traffic source's own click id the click
+	// carried (external_click_id, fbclid, ttclid) — what a postback to
+	// the source echoes back (INT-1).
+	ExternalClickID string
+	Subs            [10]string
 	// NextURL is the signed link a postlanding page sends the visitor on
 	// with (apps/tracker/postlanding.go). Only a postlanding URL is resolved
 	// with it set; anywhere else {next_url} is known-but-empty.
@@ -80,6 +84,8 @@ func resolve(template string, v Values, escape func(string) string) string {
 		"{device}":      v.Device,
 		"{next_url}":    v.NextURL,
 		"{pwa_link}":    v.PwaLink,
+
+		"{external_click_id}": v.ExternalClickID,
 	}
 	for i, s := range v.Subs {
 		fields["{sub"+strconv.Itoa(i+1)+"}"] = s

@@ -68,6 +68,7 @@
     "button": "Macros",
     "hint": "Click to insert",
     "click_id": "Click ID",
+    "external_click_id": "Traffic source's click ID",
     "status": "Conversion status",
     "revenue": "Revenue (original currency)",
     "currency": "Currency code",

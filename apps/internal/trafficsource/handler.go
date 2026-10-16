@@ -69,6 +69,9 @@ type createRequest struct {
 	Type             string          `json:"type"`
 	TrackingTemplate string          `json:"trackingTemplate"`
 	CostIntegration  CostIntegration `json:"costIntegration"`
+	PostbackURL      string          `json:"postbackUrl"`
+	PostbackStatuses []string        `json:"postbackStatuses"`
+	TemplateKey      string          `json:"templateKey"`
 }
 
 func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
@@ -85,6 +88,9 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 		Type:             req.Type,
 		TrackingTemplate: req.TrackingTemplate,
 		CostIntegration:  req.CostIntegration,
+		PostbackURL:      req.PostbackURL,
+		PostbackStatuses: req.PostbackStatuses,
+		TemplateKey:      req.TemplateKey,
 	})
 	if err != nil {
 		apierror.Write(w, h.logger, err)
@@ -99,6 +105,9 @@ type updateRequest struct {
 	TrackingTemplate *string          `json:"trackingTemplate"`
 	CostIntegration  *CostIntegration `json:"costIntegration"`
 	Status           *Status          `json:"status"`
+	PostbackURL      *string          `json:"postbackUrl"`
+	PostbackStatuses *[]string        `json:"postbackStatuses"`
+	TemplateKey      *string          `json:"templateKey"`
 }
 
 func (h *Handler) update(w http.ResponseWriter, r *http.Request) {
@@ -116,6 +125,9 @@ func (h *Handler) update(w http.ResponseWriter, r *http.Request) {
 		TrackingTemplate: req.TrackingTemplate,
 		CostIntegration:  req.CostIntegration,
 		Status:           req.Status,
+		PostbackURL:      req.PostbackURL,
+		PostbackStatuses: req.PostbackStatuses,
+		TemplateKey:      req.TemplateKey,
 	})
 	if err != nil {
 		apierror.Write(w, h.logger, err)

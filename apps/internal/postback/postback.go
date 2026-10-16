@@ -79,10 +79,13 @@ type Delivery struct {
 	AttemptCount int
 }
 
-// EnqueueInput is what Store.Enqueue persists.
+// EnqueueInput is what Store.Enqueue persists. Exactly one of NetworkID
+// (a network's outgoing postback) and TrafficSourceID (the postback to the
+// conversion's traffic source, migration 00092) is set.
 type EnqueueInput struct {
 	OrganizationID   string
 	NetworkID        string
+	TrafficSourceID  string
 	SourcePostbackID string
 	ClickID          string
 	Status           event.Type

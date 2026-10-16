@@ -15,6 +15,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { MacroPicker } from "@/components/shared/macro-picker";
 import { AdAccountConnectionSection } from "@/features/traffic-sources/ad-account-connection-section";
+import { SourcePostbackCard } from "@/features/traffic-sources/source-postback-card";
 import {
   COST_INTEGRATION_I18N_KEY,
   SOURCE_TYPE_I18N_KEY,
@@ -43,6 +44,15 @@ export function buildSourceFormSchema(t: TFunction) {
     trackingTemplate: z.url(t("form.validation.urlInvalid", { ns: "trafficSources" })),
     costIntegration: z.enum(COST_INTEGRATIONS as [CostIntegration, ...CostIntegration[]]),
     status: z.enum(["active", "paused", "archived"] as [SourceStatus, ...SourceStatus[]]).optional(),
+    templateKey: z.string(),
+    // Empty, or a URL with every REPLACE_… part filled in (the API checks
+    // the same, and that the host is public).
+    postbackUrl: z
+      .string()
+      .trim()
+      .refine((v) => v === "" || z.url().safeParse(v).success, t("form.validation.urlInvalid", { ns: "trafficSources" }))
+      .refine((v) => !/REPLACE/i.test(v), t("postback.replaceLeft", { ns: "trafficSources" })),
+    postbackStatuses: z.array(z.string()).min(1, t("postback.statusesRequired", { ns: "trafficSources" })),
   });
 }
 
@@ -88,6 +98,9 @@ export function SourceForm({
       trackingTemplate: "",
       costIntegration: "none",
       status: "active",
+      templateKey: "",
+      postbackUrl: "",
+      postbackStatuses: ["CPA_ACCEPT"],
       ...defaultValues,
     },
   });
@@ -231,6 +244,8 @@ export function SourceForm({
             ))}
         </CardContent>
       </Card>
+
+      <SourcePostbackCard control={control} register={register} setValue={setValue} getValues={getValues} errors={errors} disabled={disabled} />
 
       <div className="flex justify-end gap-2">
         <Button type="button" variant="outline" asChild>

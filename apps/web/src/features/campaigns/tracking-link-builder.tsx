@@ -24,15 +24,10 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import {
-  buildTrackingUrl,
-  PLATFORM_PRESETS,
-  PARAM_KEYS,
-  type LinkParams,
-  type LinkPlatform,
-} from "@/lib/tracking-link-params";
+import { buildTrackingUrl, LINK_PRESETS, PARAM_KEYS, type LinkParams, type LinkPreset } from "@/lib/tracking-link-params";
 
-const PLATFORMS: LinkPlatform[] = ["facebook", "tiktok"];
+/** Facebook and TikTok are always offered; a source template only for its own source. */
+const ALWAYS = ["facebook", "tiktok"];
 
 function copy(text: string, message: string, errorMessage: string) {
   navigator.clipboard.writeText(text).then(
@@ -42,26 +37,28 @@ function copy(text: string, message: string, errorMessage: string) {
 }
 
 /** "Copy with parameters" menu + the parameter constructor for one tracking
- * link. The source type's platform is listed first so the common case is one click. */
+ * link. The source's preset (its template, else its type's platform) is
+ * listed first so the common case is one click. */
 export function TrackingLinkBuilder({
   url,
-  defaultPlatform,
+  defaultPreset,
   disabled = false,
 }: {
   url: string;
-  defaultPlatform: LinkPlatform | null;
+  defaultPreset: string | null;
   disabled?: boolean;
 }) {
   const { t } = useTranslation("campaigns");
   const [open, setOpen] = React.useState(false);
   const [params, setParams] = React.useState<LinkParams>({});
 
-  const platforms = defaultPlatform ? [defaultPlatform, ...PLATFORMS.filter((p) => p !== defaultPlatform)] : PLATFORMS;
-  const platformName = (p: LinkPlatform) => t(`trackingLinks.builder.platform.${p}`);
+  const keys = defaultPreset ? [defaultPreset, ...ALWAYS.filter((k) => k !== defaultPreset)] : ALWAYS;
+  const presets = keys.flatMap((k) => LINK_PRESETS.filter((p) => p.key === k));
+  const presetName = (p: LinkPreset) => p.label ?? t(`trackingLinks.builder.platform.${p.key}`);
   const preview = buildTrackingUrl(url, params);
 
   function openBuilder() {
-    setParams(defaultPlatform ? { ...PLATFORM_PRESETS[defaultPlatform] } : {});
+    setParams(presets[0] && defaultPreset ? { ...presets[0].params } : {});
     setOpen(true);
   }
 
@@ -75,12 +72,12 @@ export function TrackingLinkBuilder({
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="start" className="min-w-56">
-          {platforms.map((p) => (
+          {presets.map((p) => (
             <DropdownMenuItem
-              key={p}
-              onSelect={() => copy(buildTrackingUrl(url, PLATFORM_PRESETS[p]), t("trackingLinks.builder.copiedFor", { platform: platformName(p) }), t("trackingLinks.builder.copyError"))}
+              key={p.key}
+              onSelect={() => copy(buildTrackingUrl(url, p.params), t("trackingLinks.builder.copiedFor", { platform: presetName(p) }), t("trackingLinks.builder.copyError"))}
             >
-              {t("trackingLinks.builder.copyFor", { platform: platformName(p) })}
+              {t("trackingLinks.builder.copyFor", { platform: presetName(p) })}
             </DropdownMenuItem>
           ))}
           <DropdownMenuSeparator />
@@ -95,14 +92,14 @@ export function TrackingLinkBuilder({
         <DialogContent className="sm:max-w-2xl">
           <DialogHeader>
             <DialogTitle>{t("trackingLinks.builder.title")}</DialogTitle>
-            <DialogDescription>{t("trackingLinks.builder.description", { macros: "{{campaign.id}}, __AID__…", interpolation: { escapeValue: false } })}</DialogDescription>
+            <DialogDescription>{t("trackingLinks.builder.description", { macros: "{{campaign.id}}, __AID__, ${SUBID}, {zoneid}…", interpolation: { escapeValue: false } })}</DialogDescription>
           </DialogHeader>
 
           <div className="flex flex-wrap items-center gap-2">
             <span className="text-xs text-muted-foreground">{t("trackingLinks.builder.fillFrom")}</span>
-            {PLATFORMS.map((p) => (
-              <Button key={p} size="sm" variant="outline" onClick={() => setParams({ ...PLATFORM_PRESETS[p] })}>
-                {platformName(p)}
+            {presets.map((p) => (
+              <Button key={p.key} size="sm" variant="outline" onClick={() => setParams({ ...p.params })}>
+                {presetName(p)}
               </Button>
             ))}
             <Button size="sm" variant="ghost" onClick={() => setParams({})}>

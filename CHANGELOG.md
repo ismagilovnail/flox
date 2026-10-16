@@ -5,6 +5,32 @@ per-phase, matching `CLAUDE.md`'s phase protocol. The one exception is
 [Between phases], below: spec amendments and the code changes that follow from
 them land between phases and would otherwise be invisible here.
 
+## [Phase 30.55] — Traffic source templates and the postback to the source (audit INT-1)
+
+You chose the traffic-source direction from the adset.pro list. The networks there are ad networks, not affiliate
+programs. `docs/traffic-sources.md` "Network templates and the postback to the source".
+
+- Postback to the source: `traffic_sources.postback_url`, `postback_statuses` (default CPA_ACCEPT), `template_key`
+  (migration 00092). The conversion engine queues it for a conversion attributed to one of the source's clicks, in
+  the same transaction and through the network postback queue (`postback_deliveries.traffic_source_id`, exactly one
+  target). Validated: public http(s), no `REPLACE` left, CPA statuses.
+- New macro `{external_click_id}` (Go + web): the network's own click id from the link's `external_click_id`.
+- Templates for PropellerAds, ExoClick, Adsterra, TrafficStars, Clickadu, HilltopAds, Galaksion, EvaDav
+  (`lib/source-templates.ts`): link macros, postback format with `REPLACE_…` account parts, source URLs. HilltopAds'
+  postback and Galaksion's click-id macro carry a caution.
+- Source form: a "Network template and postback to the source" card (template, postback with macros, statuses). The
+  tracking-link builder starts from the source's template and no longer percent-encodes the networks' macro
+  syntaxes. EN/RU.
+- Tests: `TestConversionQueuesThePostbackToItsTrafficSource` (Postgres: HOLD not sent, ACCEPT sent with the source's
+  click id and payout, another organization's source never called); `TestPostbackToTheSource` (validation);
+  `source-templates.test.ts` (macros literal in the link, keys the tracker reads, postback macros the Go resolver
+  knows, sources present). The full run also showed a parallel test's temporary table racing the deletion test's
+  schema scan: both the test and the export skip a table dropped since it was listed. Full Go suite: only the known
+  gallery-WIP failure; vitest 187/187; build.
+- Live: a source created from the PropellerAds template in the browser. An unfilled REPLACE was refused in the
+  form; with test values it was saved with the template key, CPA_ACCEPT and the macro URL. Then deleted.
+- Board: the affiliate-program templates INT-1 first meant are INT-3.
+
 ## [Phase 30.54] — Organization data export (audit GDPR-1, part 4)
 
 `docs/organization-export.md`. With this, the technical side of GDPR-1 is done; a DPA is legal work for the owner.

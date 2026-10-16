@@ -14,6 +14,7 @@ import (
 
 	"github.com/ClickHouse/clickhouse-go/v2"
 	"github.com/ClickHouse/clickhouse-go/v2/lib/driver"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"golang.org/x/crypto/bcrypt"
 
@@ -245,7 +246,16 @@ func TestOrganizationDeletion(t *testing.T) {
 		t.Fatalf("RunOnce when due: %v", err)
 	}
 	for _, table := range tablesWithOrganizationID(t, ctx, pool) {
-		if n := pgCount(t, ctx, pool, `SELECT count(*) FROM "`+table+`" WHERE organization_id = $1`, f.orgA); n != 0 {
+		var n int
+		err := pool.QueryRow(ctx, `SELECT count(*) FROM "`+table+`" WHERE organization_id = $1`, f.orgA).Scan(&n)
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == "42P01" {
+			continue // a parallel test's temporary table, dropped since it was listed
+		}
+		if err != nil {
+			t.Fatalf("counting %s: %v", table, err)
+		}
+		if n != 0 {
 			t.Errorf("Postgres %s still has %d rows of the deleted organization", table, n)
 		}
 	}

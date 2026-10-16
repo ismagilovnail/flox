@@ -43,7 +43,7 @@ import {
 import type { TrackingLink, TrackingLinkStatus } from "@/lib/api/tracking-links";
 import { slugify } from "@/lib/utils";
 import { TrackingLinkBuilder } from "@/features/campaigns/tracking-link-builder";
-import { platformForSourceType, type LinkPlatform } from "@/lib/tracking-link-params";
+import { presetForSource } from "@/lib/tracking-link-params";
 import { useTrafficSource } from "@/hooks/use-traffic-sources";
 
 /** Appends -2, -3, ... until the slug isn't already used by one of this
@@ -97,7 +97,7 @@ function columns(
   onToggleStatus: (link: TrackingLink) => void,
   onDeleteRequest: (id: string) => void,
   disabled: boolean,
-  platform: LinkPlatform | null,
+  platform: string | null,
 ): ColumnDef<typeof dataTableFeatures, TrackingLink>[] {
   return [
     {
@@ -128,7 +128,7 @@ function columns(
           >
             <CopyIcon className="size-3.5" />
           </IconButton>
-          <TrackingLinkBuilder url={row.original.url} defaultPlatform={platform} />
+          <TrackingLinkBuilder url={row.original.url} defaultPreset={platform} />
         </div>
       ),
     },
@@ -206,7 +206,7 @@ export function TrackingLinks({
   const canWrite = usePermission("campaign.write");
   const domainsQuery = useDomains();
   const sourceQuery = useTrafficSource(trafficSourceId);
-  const platform = platformForSourceType(sourceQuery.data?.type);
+  const platform = presetForSource(sourceQuery.data);
   const linksQuery = useTrackingLinks(campaignId);
   const create = useCreateTrackingLink(campaignId);
   const updateStatus = useUpdateTrackingLinkStatus(campaignId);

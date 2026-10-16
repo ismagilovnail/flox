@@ -20,11 +20,11 @@ type Repository struct {
 
 func NewRepository(db *pgxpool.Pool) *Repository { return &Repository{db: db} }
 
-const selectColumns = `id, organization_id, name, type, tracking_template, cost_integration, status, created_at, updated_at`
+const selectColumns = `id, organization_id, name, type, tracking_template, cost_integration, status, created_at, updated_at, postback_url, postback_statuses, template_key`
 
 func scanSource(row pgx.Row) (TrafficSource, error) {
 	var s TrafficSource
-	err := row.Scan(&s.ID, &s.OrganizationID, &s.Name, &s.Type, &s.TrackingTemplate, &s.CostIntegration, &s.Status, &s.CreatedAt, &s.UpdatedAt)
+	err := row.Scan(&s.ID, &s.OrganizationID, &s.Name, &s.Type, &s.TrackingTemplate, &s.CostIntegration, &s.Status, &s.CreatedAt, &s.UpdatedAt, &s.PostbackURL, &s.PostbackStatuses, &s.TemplateKey)
 	return s, err
 }
 
@@ -75,10 +75,10 @@ func (r *Repository) GetByID(ctx context.Context, orgID, id string) (TrafficSour
 
 func (r *Repository) Create(ctx context.Context, id, orgID string, in CreateInput) (TrafficSource, error) {
 	row := r.db.QueryRow(ctx, `
-		INSERT INTO traffic_sources (id, organization_id, name, type, tracking_template, cost_integration)
-		VALUES ($1, $2, $3, $4, $5, $6)
+		INSERT INTO traffic_sources (id, organization_id, name, type, tracking_template, cost_integration, postback_url, postback_statuses, template_key)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
 		RETURNING `+selectColumns,
-		id, orgID, in.Name, in.Type, in.TrackingTemplate, in.CostIntegration,
+		id, orgID, in.Name, in.Type, in.TrackingTemplate, in.CostIntegration, in.PostbackURL, in.PostbackStatuses, in.TemplateKey,
 	)
 	return scanSource(row)
 }
@@ -98,6 +98,15 @@ func (r *Repository) Update(ctx context.Context, orgID, id string, in UpdateInpu
 	}
 	if in.Type != nil {
 		sets = append(sets, "type = "+arg(*in.Type))
+	}
+	if in.PostbackURL != nil {
+		sets = append(sets, "postback_url = "+arg(*in.PostbackURL))
+	}
+	if in.PostbackStatuses != nil {
+		sets = append(sets, "postback_statuses = "+arg(*in.PostbackStatuses))
+	}
+	if in.TemplateKey != nil {
+		sets = append(sets, "template_key = "+arg(*in.TemplateKey))
 	}
 	if in.TrackingTemplate != nil {
 		sets = append(sets, "tracking_template = "+arg(*in.TrackingTemplate))

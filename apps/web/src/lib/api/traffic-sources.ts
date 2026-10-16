@@ -65,6 +65,12 @@ export type TrafficSource = {
   status: SourceStatus;
   createdAt: string;
   updatedAt: string;
+  /** Called on a conversion of this source's clicks with a status in
+   * postbackStatuses (audit INT-1); "" = none. templateKey: the catalog
+   * template it was set up from (lib/source-templates.ts). */
+  postbackUrl: string;
+  postbackStatuses: string[];
+  templateKey: string;
 };
 
 export type CreateTrafficSourceInput = {
@@ -72,6 +78,9 @@ export type CreateTrafficSourceInput = {
   type: string;
   trackingTemplate: string;
   costIntegration: CostIntegration;
+  postbackUrl?: string;
+  postbackStatuses?: string[];
+  templateKey?: string;
 };
 
 export type UpdateTrafficSourceInput = Partial<CreateTrafficSourceInput> & { status?: SourceStatus };

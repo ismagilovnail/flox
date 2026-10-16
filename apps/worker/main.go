@@ -519,7 +519,7 @@ func run() error {
 		conversion.NewPostgresFX(db),
 		attribution.NewService(clickResolver),
 		postbacklog.NewConversionAttemptLogger(attemptLogQueue),
-	), logger)
+	).WithSourcePostbacks(conversion.NewPostgresSourcePostbacks(db)), logger)
 	logger.Info("mapping replay starting", "interval", mappingreplay.Interval)
 	start(func() { replayer.RunLoop(ctx, mappingreplay.Interval, mappingReplayBatchSize) })
 

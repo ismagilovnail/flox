@@ -7,8 +7,10 @@ import (
 	"strings"
 
 	"github.com/ismagilovnail/flox/apps/internal/apierror"
+	"github.com/ismagilovnail/flox/apps/internal/event"
 	"github.com/ismagilovnail/flox/apps/internal/idgen"
 	"github.com/ismagilovnail/flox/apps/internal/pagination"
+	"github.com/ismagilovnail/flox/apps/internal/urlsafety"
 )
 
 const (
@@ -47,6 +49,11 @@ func (s *Service) Create(ctx context.Context, orgID string, in CreateInput) (Tra
 	if in.CostIntegration == "" {
 		in.CostIntegration = CostIntegrationNone
 	}
+	in.PostbackURL = strings.TrimSpace(in.PostbackURL)
+	in.TemplateKey = strings.TrimSpace(in.TemplateKey)
+	if len(in.PostbackStatuses) == 0 {
+		in.PostbackStatuses = []string{"CPA_ACCEPT"}
+	}
 	if fields := validateCreate(in); len(fields) > 0 {
 		return TrafficSource{}, apierror.Validation("invalid traffic source", fields)
 	}
@@ -75,6 +82,22 @@ func (s *Service) Update(ctx context.Context, orgID, id string, in UpdateInput) 
 	}
 	if in.CostIntegration != nil && !in.CostIntegration.Valid() {
 		fields["costIntegration"] = "must be one of none, manual, facebook_ads, tiktok_ads, google_ads"
+	}
+	if in.PostbackURL != nil {
+		trimmed := strings.TrimSpace(*in.PostbackURL)
+		in.PostbackURL = &trimmed
+		if msg := validatePostbackURL(trimmed); msg != "" {
+			fields["postbackUrl"] = msg
+		}
+	}
+	if in.PostbackStatuses != nil {
+		if msg := validatePostbackStatuses(*in.PostbackStatuses); msg != "" {
+			fields["postbackStatuses"] = msg
+		}
+	}
+	if in.TemplateKey != nil {
+		trimmed := strings.TrimSpace(*in.TemplateKey)
+		in.TemplateKey = &trimmed
 	}
 	if in.Status != nil && !in.Status.Valid() {
 		fields["status"] = "must be one of active, paused, archived"
@@ -106,6 +129,9 @@ func (s *Service) Duplicate(ctx context.Context, orgID, id string) (TrafficSourc
 		Type:             source.Type,
 		TrackingTemplate: source.TrackingTemplate,
 		CostIntegration:  source.CostIntegration,
+		PostbackURL:      source.PostbackURL,
+		PostbackStatuses: source.PostbackStatuses,
+		TemplateKey:      source.TemplateKey,
 	})
 	if err != nil {
 		return TrafficSource{}, err
@@ -167,7 +193,43 @@ func validateCreate(in CreateInput) map[string]string {
 	if !in.CostIntegration.Valid() {
 		fields["costIntegration"] = "must be one of none, manual, facebook_ads, tiktok_ads, google_ads"
 	}
+	if msg := validatePostbackURL(in.PostbackURL); msg != "" {
+		fields["postbackUrl"] = msg
+	}
+	if msg := validatePostbackStatuses(in.PostbackStatuses); msg != "" {
+		fields["postbackStatuses"] = msg
+	}
 	return fields
+}
+
+// validatePostbackURL: empty (no postback), or an http(s) URL that is no
+// literal private address (urlsafety; the worker checks again at dial
+// time) and has no template placeholder left — a catalog template marks
+// the account-specific parts REPLACE_… for the operator to fill in.
+func validatePostbackURL(raw string) string {
+	if raw == "" {
+		return ""
+	}
+	if err := urlsafety.ValidateURL(raw); err != nil {
+		return "must be a public http(s) URL"
+	}
+	if strings.Contains(strings.ToUpper(raw), "REPLACE") {
+		return "replace the REPLACE_… parts with the values from your account at the network"
+	}
+	return ""
+}
+
+// validatePostbackStatuses: CPA statuses only, at least one.
+func validatePostbackStatuses(statuses []string) string {
+	if len(statuses) == 0 {
+		return "choose at least one status"
+	}
+	for _, st := range statuses {
+		if !event.Type(st).IsCPA() {
+			return "must be CPA statuses (CPA_HOLD, CPA_ACCEPT, CPA_REDEP, CPA_DECLINE, CPA_TRASH)"
+		}
+	}
+	return ""
 }
 
 func isValidURL(raw string) bool {
