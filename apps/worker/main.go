@@ -64,6 +64,7 @@ import (
 	"github.com/ismagilovnail/flox/apps/internal/mappingreplay"
 	"github.com/ismagilovnail/flox/apps/internal/metrics"
 	"github.com/ismagilovnail/flox/apps/internal/offercap"
+	"github.com/ismagilovnail/flox/apps/internal/orgdeletion"
 	"github.com/ismagilovnail/flox/apps/internal/pixel"
 	"github.com/ismagilovnail/flox/apps/internal/pixelsend"
 	"github.com/ismagilovnail/flox/apps/internal/postback"
@@ -75,8 +76,10 @@ import (
 	"github.com/ismagilovnail/flox/apps/internal/queuestats"
 	"github.com/ismagilovnail/flox/apps/internal/reattribute"
 	"github.com/ismagilovnail/flox/apps/internal/reconcile"
+	"github.com/ismagilovnail/flox/apps/internal/rediscache"
 	"github.com/ismagilovnail/flox/apps/internal/retention"
 	"github.com/ismagilovnail/flox/apps/internal/sslcheck"
+	"github.com/ismagilovnail/flox/apps/internal/storage"
 	"github.com/ismagilovnail/flox/apps/internal/telegram"
 	"github.com/ismagilovnail/flox/apps/internal/telemetry"
 	"github.com/ismagilovnail/flox/apps/internal/urlsafety"
@@ -517,6 +520,30 @@ func run() error {
 	), logger)
 	logger.Info("mapping replay starting", "interval", mappingreplay.Interval)
 	start(func() { replayer.RunLoop(ctx, mappingreplay.Interval, mappingReplayBatchSize) })
+
+	// Organizations whose owners scheduled their deletion
+	// (internal/orgdeletion, audit 2026-10-15 GDPR-1): Postgres when due,
+	// ClickHouse, object storage and Redis an hour later. A store not
+	// configured here is skipped and noted on the tombstone.
+	deleter := &orgdeletion.Runner{DB: db, CH: ch, Logger: logger}
+	if objects, err := storage.NewClient(cfg.S3); err != nil {
+		logger.Warn("object storage not configured: deleted organizations' files are not purged", "error", err)
+	} else {
+		deleter.Storage = objects
+	}
+	if cfg.RedisURL != "" {
+		redisCtx, cancelRedis := context.WithTimeout(ctx, 5*time.Second)
+		rdb, err := rediscache.NewClient(redisCtx, cfg.RedisURL)
+		cancelRedis()
+		if err != nil {
+			logger.Warn("redis unavailable: deleted organizations' keys are left to expire", "error", err)
+		} else {
+			defer rdb.Close()
+			deleter.Redis = rdb
+		}
+	}
+	logger.Info("organization deletion starting", "interval", orgdeletion.Interval)
+	start(func() { deleter.RunLoop(ctx, orgdeletion.Interval) })
 
 	// Postbacks that were not recorded (duplicate/error/ignored) expire
 	// (internal/retention, tech audit DB2).

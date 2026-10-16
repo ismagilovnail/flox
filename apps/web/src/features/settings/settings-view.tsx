@@ -6,6 +6,7 @@ import { useTranslation } from "react-i18next";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { usePermission } from "@/hooks/use-auth";
 import { OrganizationPanel } from "@/features/settings/organization-panel";
+import { OrganizationDeletionCard } from "@/features/settings/organization-deletion-card";
 import { ApiKeysPanel } from "@/features/settings/api-keys-panel";
 import { IntegrationsPanel } from "@/features/settings/integrations-panel";
 import { TelegramBotsPanel } from "@/features/settings/telegram-bots-panel";
@@ -48,8 +49,9 @@ export function SettingsView() {
           <TabsTrigger value="custom-metrics">{t("tabs.customMetrics")}</TabsTrigger>
         </TabsList>
 
-        <TabsContent value="organization">
+        <TabsContent value="organization" className="flex flex-col gap-4">
           <OrganizationPanel />
+          <OrganizationDeletionCard />
         </TabsContent>
         {canManage && (
           <>

@@ -5,6 +5,34 @@ per-phase, matching `CLAUDE.md`'s phase protocol. The one exception is
 [Between phases], below: spec amendments and the code changes that follow from
 them land between phases and would otherwise be invisible here.
 
+## [Phase 30.52] — Organization deletion (audit GDPR-1, part 2)
+
+An owner can delete their organization and all its data. `docs/organization-deletion.md`.
+
+- `POST /organization/deletion` (owner only; the organization's exact name and the owner's password; not with an API
+  key): scheduled 7 days ahead, owners emailed. `DELETE` cancels, `GET` reads. Migration 00090: columns on
+  `organizations` and the tombstone table `organization_deletions`.
+- `apps/worker`, `internal/orgdeletion`, every 5 minutes:
+  - when due, one transaction: tombstone, the `organizations` row (55 tenant tables cascade), and the users who
+    belong to no other organization;
+  - an hour later: lightweight DELETE in every ClickHouse MergeTree table with `organization_id` (read from the
+    schema), the S3 prefixes `landings/{org}/` and `{org}/`, the Redis last-status keys. Failures are kept in
+    `last_error` and retried.
+- UI: a "Delete organization" card in Settings → Organization (owners only: a dialog with the name and password,
+  submit disabled until both are filled); a banner on every page while scheduled, with cancel for owners. EN/RU.
+- Tests: `orgdeletion_test.go` (Postgres + ClickHouse + MinIO + Redis: permissions, validation, conflict, cancel;
+  nothing before the date; when due no Postgres table with `organization_id` keeps a row; users kept or deleted
+  correctly; purge after the delay; a second organization untouched). Mutation-checked (no ClickHouse purge / no
+  other-membership check → fails). `organization-deletion-card.test.tsx`.
+- Live: a throwaway organization signed up through the API. Wrong password / wrong name 422, foreign Origin 403,
+  scheduled 200, the email in mailhog. Card, dialog (opened on the demo org, not submitted) and banner checked in the
+  browser. Then the dev worker deleted it and its user, and an hour (backdated) later purged its ClickHouse row and
+  S3 object.
+- The guard tests caught two things, both fixed: schedule/cancel had no permission middleware (now `settings.write`,
+  then the owner check; viewer 403 live), and the shell banner imported from `features` (the date helper moved to
+  `lib/format`). Full Go suite: only the known gallery-WIP failure; vitest 176/176; build.
+- Not covered: backups keep data for their window; connected providers' tokens are deleted, not revoked; data export.
+
 ## [Phase 30.51] — Visitors' IP and user agent expire (audit GDPR-1, part 1)
 
 IP and User-Agent sat in ClickHouse forever. You chose this slice and 90 days. `docs/retention.md` "Visitors' IP and

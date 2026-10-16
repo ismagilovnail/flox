@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 import { AuthGuard } from "@/components/shell/auth-guard";
 import { Sidebar } from "@/components/shell/sidebar";
 import { Topbar } from "@/components/shell/topbar";
+import { DeletionBanner } from "@/components/shell/deletion-banner";
 
 export default function AppLayout({ children }: { children: ReactNode }) {
   return (
@@ -11,6 +12,7 @@ export default function AppLayout({ children }: { children: ReactNode }) {
         <Sidebar />
         <div className="flex min-w-0 flex-1 flex-col">
           <Topbar />
+          <DeletionBanner />
           <main className="flex-1 p-6">{children}</main>
         </div>
       </div>

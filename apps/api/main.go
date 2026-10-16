@@ -60,6 +60,7 @@ import (
 	"github.com/ismagilovnail/flox/apps/internal/offer"
 	"github.com/ismagilovnail/flox/apps/internal/offercap"
 	"github.com/ismagilovnail/flox/apps/internal/onboarding"
+	"github.com/ismagilovnail/flox/apps/internal/orgdeletion"
 	"github.com/ismagilovnail/flox/apps/internal/pixel"
 	"github.com/ismagilovnail/flox/apps/internal/pixelsend"
 	"github.com/ismagilovnail/flox/apps/internal/postback"
@@ -300,6 +301,10 @@ func buildServer(ctx context.Context, cfg config.Config, logger *slog.Logger, re
 	authHandler := auth.NewHandler(authSvc, logger, cfg.Env != "development", clientIP)
 	teamHandler := auth.NewTeamHandler(authSvc, logger)
 	organizationHandler := auth.NewOrganizationHandler(authSvc, logger)
+	// Scheduling and cancelling an organization's deletion
+	// (internal/orgdeletion, audit GDPR-1); apps/worker carries it out.
+	deletionHandler := orgdeletion.NewHandler(orgdeletion.NewService(db, mail, cfg.AppURL, logger),
+		authSvc.RequirePermission("settings.write", logger), logger)
 	securityHandler := auth.NewSecurityHandler(authSvc, logger, clientIP)
 	totpHandler := auth.NewTOTPHandler(authSvc, logger, cfg.Env != "development")
 
@@ -435,6 +440,7 @@ func buildServer(ctx context.Context, cfg config.Config, logger *slog.Logger, re
 		authHandler.RegisterAuthenticated(r)
 		teamHandler.Register(r)
 		organizationHandler.Register(r)
+		deletionHandler.Register(r)
 		securityHandler.Register(r)
 		totpHandler.RegisterAuthenticated(r)
 	})

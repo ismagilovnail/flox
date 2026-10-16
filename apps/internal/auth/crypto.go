@@ -58,3 +58,8 @@ func hashToken(token string) string {
 	sum := sha256.Sum256([]byte(token))
 	return hex.EncodeToString(sum[:])
 }
+
+// PasswordMatches is checkPassword for other packages that re-confirm a
+// signed-in user's password before an irreversible action
+// (internal/orgdeletion).
+func PasswordMatches(hash, password string) bool { return checkPassword(hash, password) }

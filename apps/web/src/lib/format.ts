@@ -36,3 +36,9 @@ export function formatPercent(n: number, locale: Locale = "en", maximumFractionD
     maximumFractionDigits,
   });
 }
+
+/** When a scheduled organization deletion happens, in the viewer's
+ * language and timezone. */
+export function formatDeletionDate(iso: string, language: string): string {
+  return new Date(iso).toLocaleString(language, { dateStyle: "long", timeStyle: "short" });
+}

@@ -223,5 +223,26 @@
     "tokenChanged": "Token changed",
     "tokenChangeError": "Couldn't change the token",
     "joins30d": "Joins, 30 days:"
+  },
+  "deletion": {
+    "title": "Delete organization",
+    "description": "Deletes the organization and all its data for good: campaigns, flows, offers, clicks, conversions, reports, files, team. Members who belong to no other organization lose their accounts. You have 7 days to cancel.",
+    "open": "Delete organization…",
+    "ownerOnly": "Only an owner can delete the organization.",
+    "confirmTitle": "Delete {{name}}?",
+    "confirmDescription": "In 7 days the organization and everything in it will be deleted, and it cannot be restored. Until then any owner can cancel. Owners get an email now.",
+    "typeName": "Type {{name}} to confirm",
+    "password": "Your password",
+    "confirm": "Delete in 7 days",
+    "wrongName": "The name does not match",
+    "wrongPassword": "Wrong password",
+    "scheduledToast": "Deletion scheduled in 7 days",
+    "scheduleError": "Could not schedule the deletion",
+    "scheduledFor": "Scheduled for deletion on {{date}} (requested by {{by}}).",
+    "cancel": "Cancel deletion",
+    "cancelledToast": "Deletion cancelled",
+    "cancelError": "Could not cancel the deletion",
+    "banner": "This organization will be deleted on {{date}} with all its data.",
+    "details": "Details"
   }
 }
