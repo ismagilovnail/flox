@@ -222,6 +222,7 @@ services:
       # against this literally, so it must never be the in-network "web"
       # hostname. Same reasoning as docker-compose.test.yml's api service.
       APP_URL: http://localhost:3000
+      API_PUBLIC_URL: http://localhost:8080
     volumes:
       - ../apps:/src
       - api_go_mod_cache:/go/pkg/mod

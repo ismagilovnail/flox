@@ -94,8 +94,21 @@ func serve(t *testing.T, cert tls.Certificate) string {
 }
 
 func probe(roots *x509.CertPool, addr string) tlsprobe.Result {
-	p := &tlsprobe.Prober{Roots: roots, Addr: func(string) string { return addr }, Timeout: 3 * time.Second}
+	var d net.Dialer
+	p := &tlsprobe.Prober{Roots: roots, Addr: func(string) string { return addr }, Dial: d.DialContext, Timeout: 3 * time.Second}
 	return p.Probe(context.Background(), "track.example.com")
+}
+
+// The probe does not reach internal addresses: a domain pointed at one is
+// "nothing answers", not a report of what does (audit 2026-10-15, SEC-5).
+func TestProbeRefusesInternalAddresses(t *testing.T) {
+	ca := newAuthority(t)
+	addr := serve(t, ca.leaf(t, "track.example.com", time.Now().Add(time.Hour)))
+	p := &tlsprobe.Prober{Roots: ca.pool, Addr: func(string) string { return addr }, Timeout: 3 * time.Second}
+	got := p.Probe(context.Background(), "track.example.com")
+	if got.Outcome != tlsprobe.None || !strings.Contains(got.Err, "forbidden") {
+		t.Fatalf("probe of a loopback server = %+v, want none: forbidden address", got)
+	}
 }
 
 func TestProbe(t *testing.T) {

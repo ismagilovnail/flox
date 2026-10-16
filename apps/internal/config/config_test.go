@@ -67,3 +67,34 @@ func TestNATSStreamMaxMB(t *testing.T) {
 		t.Error("a non-number was accepted")
 	}
 }
+
+// User content must not be served from the panel's or the API's origin
+// (audit 2026-10-15, SEC-5): a landing's scripts would act as the
+// signed-in user. Another port is another origin.
+func TestUserContentOriginsMustDifferFromThePanel(t *testing.T) {
+	for _, c := range []struct {
+		name                  string
+		app, api, s3, tracker string
+		wantErr               bool
+	}{
+		{"dev layout", "http://localhost:3000", "http://localhost:8080", "http://localhost:9000", "http://localhost:8081", false},
+		{"separate hosts", "https://app.flox.example", "https://api.flox.example", "https://cdn.flox.example", "https://t.flox.example", false},
+		{"storage on the panel's origin", "https://app.flox.example", "", "https://app.flox.example/s3", "", true},
+		{"default port spelled out", "https://app.flox.example", "", "https://APP.flox.example:443", "", true},
+		{"storage on the API's origin", "https://app.flox.example", "https://api.flox.example", "https://api.flox.example/media", "", true},
+		{"tracker on the panel's origin", "http://localhost:3000", "", "", "http://localhost:3000", true},
+		{"same host, another port", "http://localhost:3000", "", "http://localhost:3001", "", false},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			t.Setenv("APP_URL", c.app)
+			t.Setenv("API_PUBLIC_URL", c.api)
+			t.Setenv("S3_PUBLIC_ENDPOINT", c.s3)
+			t.Setenv("S3_ENDPOINT", "")
+			t.Setenv("TRACKER_PUBLIC_URL", c.tracker)
+			_, err := Load()
+			if (err != nil) != c.wantErr {
+				t.Fatalf("Load() error = %v, wantErr %v", err, c.wantErr)
+			}
+		})
+	}
+}

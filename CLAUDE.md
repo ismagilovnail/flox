@@ -19,22 +19,21 @@ referenced below as §N).
 ## CURRENT STATE — UPDATE THIS EVERY PHASE
 
 ```
-CURRENT PHASE : PHASE 30.49 — RE-APPROVAL AFTER A DECLINE, DATA-3 (closed)
+CURRENT PHASE : PHASE 30.50 — USER CONTENT ISOLATION + SSRF, SEC-5 (closed)
 STATUS        : Product audit 2026-10-15 (docs/audit-product-2026-10-15.md)
                 is the backlog: items on the local dev panel tools/devpanel
                 (make devpanel → 127.0.0.1:8099; memory: flox-audit-tracker
                 — keep statuses current). Done: SEC-1, SEC-2, DATA-1, DEV-1,
-                UX-1, UX-2, UX-3, DATA-4, DATA-2, DATA-3 (re-approval
-                with a new txn_id, §45 amended).
+                UX-1, UX-2, UX-3, DATA-4, DATA-2, DATA-3, SEC-5.
                 P0 left:
                 OPS-1..3 (prod, restore, load) — needs the owner's hosting.
-LAST COMMIT   : feat(conversion): re-approval after a decline.
+LAST COMMIT   : fix(security): user content origins, SSRF ranges.
 UNCOMMITTED   : the user's gallery-transcoding WIP (00085, processor.go,
                 transcode.go, worker ffmpeg) — not ours, leave it alone.
                 It now accepts MOV, so contentgallery's
                 TestUploadRejectsOversizeWrongContentAndMov fails with it.
-NEXT          : wait for the user — next item from the board (P1: SEC-5, GDPR-1,
-                INT-1, …). CI (DO1) is the user's own decision — do not set
+NEXT          : wait for the user — next item from the board (P1: GDPR-1, INT-1,
+                INT-2, API-1, …). CI (DO1) is the user's own decision — do not set
                 it up. Run go test with the full env line AND check e2e did
                 not skip (memory: flox-full-test-env); chconn's
                 TestLimitsStopAHeavyQuery flakes under the full parallel run.

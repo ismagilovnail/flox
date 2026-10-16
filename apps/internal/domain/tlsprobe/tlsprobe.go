@@ -16,6 +16,8 @@ import (
 	"errors"
 	"net"
 	"time"
+
+	"github.com/ismagilovnail/flox/apps/internal/urlsafety"
 )
 
 // Outcome is what the probe concluded. It maps one-to-one onto
@@ -55,7 +57,12 @@ type Prober struct {
 	Roots *x509.CertPool
 	// Addr maps a hostname to the address to dial; nil means host:443.
 	// Tests point it at a local server.
-	Addr    func(host string) string
+	Addr func(host string) string
+	// Dial opens the TCP connection; nil means urlsafety.SafeDialContext.
+	// The domain is the operator's: pointed at an internal address, an
+	// unguarded probe would report back what answers on 443 inside the
+	// network (audit 2026-10-15, SEC-5). Tests dial a local server.
+	Dial    func(ctx context.Context, network, addr string) (net.Conn, error)
 	Timeout time.Duration
 }
 
@@ -74,8 +81,11 @@ func (p *Prober) Probe(ctx context.Context, host string) Result {
 		addr = p.Addr(host)
 	}
 
-	var d net.Dialer
-	raw, err := d.DialContext(ctx, "tcp", addr)
+	dial := p.Dial
+	if dial == nil {
+		dial = urlsafety.SafeDialContext
+	}
+	raw, err := dial(ctx, "tcp", addr)
 	if err != nil {
 		return Result{Outcome: None, Err: err.Error()}
 	}

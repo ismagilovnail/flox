@@ -27,6 +27,7 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"net/netip"
 	"net/url"
 )
 
@@ -92,11 +93,47 @@ func SafeDialContext(ctx context.Context, network, addr string) (net.Conn, error
 // private ranges (net.IP.IsPrivate, Go's own stdlib classification),
 // link-local unicast/multicast (169.254.0.0/16 — which includes the
 // 169.254.169.254 cloud-metadata address every major cloud provider
-// uses — and fe80::/10), and the unspecified address (0.0.0.0/::).
+// uses — and fe80::/10), the unspecified address (0.0.0.0/::), every
+// multicast address, and the other ranges in forbiddenPrefixes. An
+// IPv4-mapped IPv6 address (::ffff:10.0.0.1) is judged as its IPv4 address
+// (net.IP's methods unmap it).
 func isForbidden(ip net.IP) bool {
-	return ip.IsLoopback() ||
+	if ip.IsLoopback() ||
 		ip.IsPrivate() ||
 		ip.IsLinkLocalUnicast() ||
 		ip.IsLinkLocalMulticast() ||
-		ip.IsUnspecified()
+		ip.IsMulticast() ||
+		ip.IsUnspecified() {
+		return true
+	}
+	addr, ok := netip.AddrFromSlice(ip)
+	if !ok {
+		return true
+	}
+	addr = addr.Unmap()
+	for _, p := range forbiddenPrefixes {
+		if p.Contains(addr) {
+			return true
+		}
+	}
+	return false
+}
+
+// forbiddenPrefixes are the non-public ranges net.IP has no method for
+// (audit 2026-10-15, SEC-5): addresses that reach a private network in
+// common cloud and Kubernetes setups, and IPv6 prefixes that carry an
+// IPv4 address inside, which would otherwise smuggle 10.0.0.1 past the
+// IPv4 checks.
+var forbiddenPrefixes = []netip.Prefix{
+	netip.MustParsePrefix("0.0.0.0/8"),      // "this network"
+	netip.MustParsePrefix("100.64.0.0/10"),  // carrier-grade NAT, also cloud VPCs and Tailscale
+	netip.MustParsePrefix("192.0.0.0/24"),   // IETF protocol assignments
+	netip.MustParsePrefix("198.18.0.0/15"),  // benchmarking, used inside some clouds
+	netip.MustParsePrefix("240.0.0.0/4"),    // reserved, incl. 255.255.255.255
+	netip.MustParsePrefix("64:ff9b::/96"),   // NAT64, embeds an IPv4 address
+	netip.MustParsePrefix("64:ff9b:1::/48"), // local-use NAT64
+	netip.MustParsePrefix("2002::/16"),      // 6to4, embeds an IPv4 address
+	netip.MustParsePrefix("2001::/32"),      // Teredo, embeds an IPv4 address
+	netip.MustParsePrefix("fec0::/10"),      // deprecated site-local
+	netip.MustParsePrefix("100::/64"),       // discard-only
 }

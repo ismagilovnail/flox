@@ -128,9 +128,10 @@ brute-force protection.
 
 ## 4. SSRF: `apps/internal/urlsafety`
 
-The one outbound call in this codebase to an operator-supplied host:
+The first outbound call to an operator-supplied host was
 `apps/internal/postback.Deliverer`'s delivery request to a network's
-`postback_url` (macro-substituted, `apps/internal/macro`). Two layers:
+`postback_url` (macro-substituted, `apps/internal/macro`); the full list
+is at the end of this section. Two layers:
 
 - `ValidateURL` — a cheap, save-time check in `network.Service`
   (create/update): scheme must be `http`/`https`, host must not be a
@@ -151,6 +152,21 @@ The one outbound call in this codebase to an operator-supplied host:
 - `apps/internal/adaccount/facebookads` and `.../tiktokads` never take an
   operator-supplied host (only a hardcoded API hostname), so they aren't an
   SSRF vector and don't use this package.
+
+Every outbound request to an operator-supplied host, as of 2026-10-16
+(audit SEC-5): postback delivery, live pixel sends incl. the Generic URL
+template, web push (the worker's `postbackClient`), the pixel test event
+from the API (`pixelsend.NewSafeClient`), the Slack webhook
+(`httpclient.NewSafe`), and the domain TLS probe (`tlsprobe`, which
+reported the dial error back, so a domain pointed at an internal address
+could map what answers on 443 inside the network). Redirects are covered:
+each hop is a new dial. The forbidden ranges also cover `0.0.0.0/8`,
+CGNAT `100.64.0.0/10` (cloud VPCs, Tailscale), `192.0.0.0/24`,
+`198.18.0.0/15`, `240.0.0.0/4`, all multicast, and the IPv6 prefixes that
+carry an IPv4 address (NAT64, 6to4, Teredo) or are site-local; an
+IPv4-mapped address is judged as its IPv4 one. Fixed-host APIs (ad
+networks, registrars, Telegram, ECB) and operator env URLs (SMS webhook,
+SMTP) are not operator-of-an-organization input.
 
 ## 5. Trusted-proxy IP resolution & pending-login lockout (audit findings #2, #3)
 
@@ -312,3 +328,32 @@ write end to end. The insert is best-effort and runs after the response
 has been written: a failed write is logged, never turned into an error.
 One gap remains: a change whose request then fails, such as a service error
 after the commit, leaves no row.
+
+## 9. User content runs on its own origin (audit 2026-10-15, SEC-5)
+
+Operators upload pages with their own scripts: ZIP landings, template
+edits, gallery media (SVG included). None of it may act as the signed-in
+user in the panel.
+
+- **Where it runs.** Visitors get landings from `apps/tracker` on tracking
+  domains; bundle files and gallery media come from object storage
+  (`S3_PUBLIC_ENDPOINT`). The panel previews a landing (template editor,
+  system gallery) in `<iframe srcDoc sandbox="allow-scripts">`, without
+  `allow-same-origin`: the scripts run on an opaque origin. The API returns
+  preview HTML as JSON, never `text/html`, so nothing user-made renders on
+  the API's origin; responses carry `nosniff` and `default-src 'none'`.
+- **What another origin can do.** The session cookie is host-only on the
+  API, `HttpOnly`, `SameSite=Lax`. CORS allows only `APP_URL`, so a script
+  on a tracking or storage origin cannot read an API response, even on a
+  same-site sibling host that the cookie reaches. `RequireSameOrigin`
+  rejects every mutating request whose `Origin` is not `APP_URL`. Verified
+  live 2026-10-16 from the tracker (`:8081`) and storage (`:9000`) origins:
+  GET without `Access-Control-Allow-Origin`, POST 403. From `APP_URL`
+  everything works as normal.
+- **The configuration that would break it** is serving storage or the
+  tracker from the panel's or the API's origin (a path under the same
+  host). `config.checkUntrustedOrigins` refuses to start then
+  (`S3_PUBLIC_ENDPOINT` / `TRACKER_PUBLIC_URL` vs `APP_URL` /
+  `API_PUBLIC_URL`). A customer tracking domain cannot be the panel's host:
+  it needs DNS ownership proof.
+- **Not done:** a script CSP for the panel (see §7).

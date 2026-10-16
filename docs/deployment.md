@@ -88,6 +88,15 @@ header will show (§54 CSRF check, `apps/internal/tenant.
 RequireSameOrigin`) — `https://app.yourdomain.example`, not an internal
 hostname.
 
+**User content gets its own host.** Object storage (`S3_PUBLIC_ENDPOINT`)
+serves uploaded landing files and gallery media as they are, HTML and SVG
+included, and the tracker serves landings with the operator's scripts.
+Give both their own hosts (`cdn.`, `t.` — never a path under the panel's or
+the API's host): on their own origin those scripts can neither read the
+API (CORS allows only `APP_URL`) nor change anything (the `Origin` check).
+Set `API_PUBLIC_URL` to the API's public origin and the binaries refuse a
+configuration that breaks this (`docs/security.md` §9).
+
 ## HTTPS for tracking domains
 
 Organizations add their own tracking domains, so the tracker's certificates

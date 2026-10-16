@@ -5,6 +5,7 @@ package config
 
 import (
 	"fmt"
+	"net/url"
 	"os"
 	"strconv"
 	"strings"
@@ -20,6 +21,10 @@ type Config struct {
 	// origin — the browser calls the API directly, from another origin in
 	// dev (localhost:3000 vs :8080).
 	AppURL string
+	// APIPublicURL is apps/api's public origin as a browser reaches it
+	// (API_PUBLIC_URL, the web build's NEXT_PUBLIC_API_URL). Optional:
+	// only checkUntrustedOrigins reads it.
+	APIPublicURL string
 
 	// --- SMTP / email ---
 	// SMTPURL: apps/internal/mailer.New's input (e.g.
@@ -291,11 +296,12 @@ func load(portVar, portDefault, defaultServiceName string, ch chLimits) (Config,
 		return Config{}, err
 	}
 
-	return Config{
-		Env:      getEnv("NODE_ENV", "development"),
-		HTTPAddr: fmt.Sprintf(":%d", port),
-		LogLevel: getEnv("LOG_LEVEL", "info"),
-		AppURL:   getEnv("APP_URL", "http://localhost:3000"),
+	cfg := Config{
+		Env:          getEnv("NODE_ENV", "development"),
+		HTTPAddr:     fmt.Sprintf(":%d", port),
+		LogLevel:     getEnv("LOG_LEVEL", "info"),
+		AppURL:       getEnv("APP_URL", "http://localhost:3000"),
+		APIPublicURL: getEnv("API_PUBLIC_URL", ""),
 
 		SMTPURL:  getEnv("SMTP_URL", "smtp://localhost:1025"),
 		MailFrom: getEnv("MAIL_FROM", "FLOX <no-reply@floxlink.io>"),
@@ -355,7 +361,48 @@ func load(portVar, portDefault, defaultServiceName string, ch chLimits) (Config,
 			SecretAccessKey: getEnv("S3_SECRET_ACCESS_KEY", ""),
 			PublicEndpoint:  getEnv("S3_PUBLIC_ENDPOINT", getEnv("S3_ENDPOINT", "")),
 		},
-	}, nil
+	}
+	if err := checkUntrustedOrigins(cfg); err != nil {
+		return Config{}, err
+	}
+	return cfg, nil
+}
+
+// checkUntrustedOrigins refuses a configuration that serves user content
+// from the panel's origin (audit 2026-10-15, SEC-5). Object storage serves
+// uploaded landing files and gallery media as they are — HTML and SVG
+// included — and the tracker serves landing pages with the operator's
+// scripts. On their own origins those scripts cannot read the API (CORS
+// allows only APP_URL) or change anything (tenant.RequireSameOrigin); on
+// APP_URL's or the API's origin they would act as the signed-in user.
+// Same host on another port is a different origin and passes.
+func checkUntrustedOrigins(cfg Config) error {
+	trusted := map[string]string{}
+	for name, raw := range map[string]string{"APP_URL": cfg.AppURL, "API_PUBLIC_URL": cfg.APIPublicURL} {
+		if o := origin(raw); o != "" {
+			trusted[o] = name
+		}
+	}
+	for name, raw := range map[string]string{"S3_PUBLIC_ENDPOINT": cfg.S3.PublicEndpoint, "TRACKER_PUBLIC_URL": cfg.TrackerPublicURL} {
+		if t, ok := trusted[origin(raw)]; ok && origin(raw) != "" {
+			return fmt.Errorf("%s (%s) has the same origin as %s: user-uploaded pages would run with the panel's rights — serve it from its own host", name, raw, t)
+		}
+	}
+	return nil
+}
+
+// origin is raw's scheme://host:port, lowercase, with the scheme's default
+// port spelled out; "" when raw is empty or not an absolute URL.
+func origin(raw string) string {
+	u, err := url.Parse(strings.TrimSpace(raw))
+	if err != nil || u.Scheme == "" || u.Host == "" {
+		return ""
+	}
+	scheme, port := strings.ToLower(u.Scheme), u.Port()
+	if port == "" {
+		port = map[string]string{"http": "80", "https": "443"}[scheme]
+	}
+	return scheme + "://" + strings.ToLower(u.Hostname()) + ":" + port
 }
 
 // parseNonNegative reads a whole number ≥ 0, fallback when unset.

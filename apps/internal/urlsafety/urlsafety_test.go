@@ -24,6 +24,10 @@ func TestValidateURL(t *testing.T) {
 		{"literal private IP", "http://10.0.0.5/postback", true},
 		{"literal metadata IP", "http://169.254.169.254/latest/meta-data", true},
 		{"literal public IP is allowed (save-time only catches literals)", "http://8.8.8.8/postback", false},
+		{"literal public IPv6 is allowed", "http://[2606:4700:4700::1111]/postback", false},
+		{"public address next to CGNAT is allowed", "http://100.128.0.1/postback", false},
+		{"literal CGNAT IP", "http://100.64.0.1/postback", true},
+		{"literal NAT64 of metadata", "http://[64:ff9b::a9fe:a9fe]/latest/meta-data", true},
 		{"empty", "", true},
 	}
 	for _, tc := range cases {
@@ -45,6 +49,23 @@ func TestSafeDialContextBlocksForbiddenAddresses(t *testing.T) {
 		{"metadata", "169.254.169.254:80"},
 		{"private", "10.0.0.5:443"},
 		{"unspecified", "0.0.0.0:80"},
+		// Audit 2026-10-15, SEC-5: ranges net.IP has no method for.
+		{"this network", "0.1.2.3:80"},
+		{"carrier-grade NAT", "100.100.1.1:80"},
+		{"IETF assignments", "192.0.0.10:80"},
+		{"benchmarking", "198.18.0.1:80"},
+		{"reserved", "240.0.0.1:80"},
+		{"broadcast", "255.255.255.255:80"},
+		{"multicast", "224.0.0.1:80"},
+		{"IPv4-mapped private", "[::ffff:10.0.0.1]:80"},
+		{"IPv4-mapped loopback", "[::ffff:127.0.0.1]:80"},
+		{"NAT64 of a private address", "[64:ff9b::a00:1]:80"},
+		{"6to4 of a private address", "[2002:a00:1::1]:80"},
+		{"Teredo", "[2001::1]:80"},
+		{"IPv6 loopback", "[::1]:80"},
+		{"IPv6 unique local", "[fd00::1]:80"},
+		{"IPv6 link-local", "[fe80::1]:80"},
+		{"IPv6 site-local", "[fec0::1]:80"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

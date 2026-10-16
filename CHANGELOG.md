@@ -5,6 +5,28 @@ per-phase, matching `CLAUDE.md`'s phase protocol. The one exception is
 [Between phases], below: spec amendments and the code changes that follow from
 them land between phases and would otherwise be invisible here.
 
+## [Phase 30.50] — User content isolation and SSRF (audit SEC-5)
+
+The audit had not checked whether uploaded landings can attack the panel, nor SSRF beyond postbacks.
+`docs/security.md` §4 (full list of outbound calls) and §9 "User content runs on its own origin".
+
+- Checked, holds: landings run on tracking domains and storage, the panel previews them in an iframe sandboxed without
+  `allow-same-origin`, the API returns preview HTML as JSON. CORS (`APP_URL` only) and `RequireSameOrigin` keep a
+  script on another origin from reading or changing anything. Live from the tracker and storage origins: no
+  `Access-Control-Allow-Origin`, POST 403.
+- `config.checkUntrustedOrigins`: every binary refuses to start when `S3_PUBLIC_ENDPOINT` or `TRACKER_PUBLIC_URL` has the
+  panel's or the API's origin. New optional `API_PUBLIC_URL` (in `.env.example`, dev compose, `docs/environment.md`,
+  `docs/deployment.md`).
+- `tlsprobe` dials through `urlsafety.SafeDialContext`. It returned the dial error, so a domain pointed at an internal
+  address could map what answers on 443 inside the network. A dev `*.localhost` domain's SSL now reads "none:
+  forbidden address".
+- `urlsafety` also refuses `0.0.0.0/8`, CGNAT `100.64.0.0/10`, `192.0.0.0/24`, `198.18.0.0/15`, `240.0.0.0/4`, all
+  multicast, NAT64 / 6to4 / Teredo (IPv6 that embeds IPv4) and site-local; an IPv4-mapped address is judged as IPv4.
+  Every outbound call to an operator's URL was already guarded: postbacks, pixels incl. Generic, web push, the pixel
+  test event, Slack.
+- Tests: `urlsafety` (17 new forbidden addresses, public IPv4/IPv6 still allowed), `TestProbeRefusesInternalAddresses`,
+  `TestUserContentOriginsMustDifferFromThePanel`.
+
 ## [Phase 30.49] — Re-approval after a decline (audit DATA-3)
 
 A conversion approved, declined, then approved again after a dispute was a duplicate: every ACCEPT of a click has the
