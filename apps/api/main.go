@@ -61,6 +61,7 @@ import (
 	"github.com/ismagilovnail/flox/apps/internal/offercap"
 	"github.com/ismagilovnail/flox/apps/internal/onboarding"
 	"github.com/ismagilovnail/flox/apps/internal/orgdeletion"
+	"github.com/ismagilovnail/flox/apps/internal/orgexport"
 	"github.com/ismagilovnail/flox/apps/internal/pixel"
 	"github.com/ismagilovnail/flox/apps/internal/pixelsend"
 	"github.com/ismagilovnail/flox/apps/internal/postback"
@@ -310,6 +311,14 @@ func buildServer(ctx context.Context, cfg config.Config, logger *slog.Logger, re
 	// audit GDPR-1).
 	visitorDataHandler := visitordata.NewHandler(visitordata.NewService(db, ch),
 		authSvc.RequirePermission("settings.write", logger), logger)
+	// The organization's data export (internal/orgexport, audit GDPR-1):
+	// requested and downloaded here, built by apps/worker.
+	var exportObjects orgexport.Opener
+	if storageClient != nil {
+		exportObjects = storageClient
+	}
+	exportHandler := orgexport.NewHandler(orgexport.NewService(db, exportObjects),
+		authSvc.RequirePermission("settings.write", logger), logger)
 	securityHandler := auth.NewSecurityHandler(authSvc, logger, clientIP)
 	totpHandler := auth.NewTOTPHandler(authSvc, logger, cfg.Env != "development")
 
@@ -447,6 +456,7 @@ func buildServer(ctx context.Context, cfg config.Config, logger *slog.Logger, re
 		organizationHandler.Register(r)
 		deletionHandler.Register(r)
 		visitorDataHandler.Register(r)
+		exportHandler.Register(r)
 		securityHandler.Register(r)
 		totpHandler.RegisterAuthenticated(r)
 	})

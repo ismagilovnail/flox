@@ -61,10 +61,12 @@ import (
 	"github.com/ismagilovnail/flox/apps/internal/fx/ecb"
 	"github.com/ismagilovnail/flox/apps/internal/integrations"
 	"github.com/ismagilovnail/flox/apps/internal/logging"
+	"github.com/ismagilovnail/flox/apps/internal/mailer"
 	"github.com/ismagilovnail/flox/apps/internal/mappingreplay"
 	"github.com/ismagilovnail/flox/apps/internal/metrics"
 	"github.com/ismagilovnail/flox/apps/internal/offercap"
 	"github.com/ismagilovnail/flox/apps/internal/orgdeletion"
+	"github.com/ismagilovnail/flox/apps/internal/orgexport"
 	"github.com/ismagilovnail/flox/apps/internal/pixel"
 	"github.com/ismagilovnail/flox/apps/internal/pixelsend"
 	"github.com/ismagilovnail/flox/apps/internal/postback"
@@ -544,6 +546,22 @@ func run() error {
 	}
 	logger.Info("organization deletion starting", "interval", orgdeletion.Interval)
 	start(func() { deleter.RunLoop(ctx, orgdeletion.Interval) })
+
+	// Organization data exports (internal/orgexport, audit GDPR-1): built
+	// into object storage, deleted after orgexport.Retention.
+	exporter := &orgexport.Runner{DB: db, CH: ch, AppURL: cfg.AppURL, Logger: logger}
+	if mail, err := mailer.New(cfg.SMTPURL, cfg.MailFrom); err != nil {
+		logger.Warn("mail not configured: export requesters are not emailed", "error", err)
+	} else {
+		exporter.Mail = mail
+	}
+	if objects, err := storage.NewClient(cfg.S3); err != nil {
+		logger.Warn("object storage not configured: organization exports fail until it is", "error", err)
+	} else {
+		exporter.Objects = objects
+	}
+	logger.Info("organization export starting", "interval", orgexport.Interval)
+	start(func() { exporter.RunLoop(ctx, orgexport.Interval) })
 
 	// Postbacks that were not recorded (duplicate/error/ignored) expire
 	// (internal/retention, tech audit DB2).

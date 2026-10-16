@@ -275,5 +275,24 @@
     "confirm": "Erase",
     "erasedToast": "Visitor data erased",
     "eraseError": "Could not erase the visitor data"
+  },
+  "export": {
+    "title": "Export data",
+    "description": "Everything of the organization as a ZIP: every record as JSON (campaigns, flows, offers, networks, conversions, postbacks…), the team, and the clicks, visits, conversions and costs of a period as CSV. Credentials and tokens are left out.",
+    "from": "Events from",
+    "to": "to",
+    "request": "Prepare export",
+    "hint": "The archive is built in the background; you get an email when it is ready. It can be downloaded for 7 days. Up to a year of events per export.",
+    "requestedToast": "Export requested — you will get an email when it is ready",
+    "requestError": "Could not request the export",
+    "download": "Download",
+    "until": "until {{date}}",
+    "status": {
+      "pending": "Queued",
+      "running": "Building",
+      "done": "Ready",
+      "failed": "Failed",
+      "expired": "Expired"
+    }
   }
 }

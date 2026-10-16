@@ -87,6 +87,7 @@ var segmentKinds = map[string]string{
 	"members":         "member",
 	"broadcasts":      "broadcast",
 	"traffic-sources": "trafficSource",
+	"exports":         "export",
 }
 
 // notTenantResources are path parameters that do not name another
@@ -641,6 +642,15 @@ func seedEveryKind(t *testing.T, ctx context.Context, pool *pgxpool.Pool, orgID,
 	})
 	must("api key", err)
 	ids["apiKey"] = key.ApiKey.ID
+
+	// A finished data export (internal/orgexport): another organization
+	// downloading it must get what an unknown id gets.
+	exportID := idgen.New()
+	_, err = pool.Exec(ctx, `INSERT INTO organization_exports (id, organization_id, requested_by, status, from_date, to_date, object_key, size_bytes, finished_at, expires_at)
+		VALUES ($1, $2, $3, 'done', current_date - 7, current_date, $4, 1, now(), now() + interval '1 day')`,
+		exportID, orgID, userID, "exports/"+orgID+"/"+exportID+"-isolation.zip")
+	must("export", err)
+	ids["export"] = exportID
 
 	authSvc := auth.NewService(auth.NewRepository(pool), "http://localhost:3000", noMail{})
 	_, err = authSvc.Invite(ctx, orgID, userID, auth.InviteInput{

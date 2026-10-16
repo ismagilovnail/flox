@@ -5,6 +5,32 @@ per-phase, matching `CLAUDE.md`'s phase protocol. The one exception is
 [Between phases], below: spec amendments and the code changes that follow from
 them land between phases and would otherwise be invisible here.
 
+## [Phase 30.54] — Organization data export (audit GDPR-1, part 4)
+
+`docs/organization-export.md`. With this, the technical side of GDPR-1 is done; a DPA is legal work for the owner.
+
+- `apps/internal/orgexport` (`settings.write`): `POST /organization/exports {from, to}` (period ≤ 366 days, one at a
+  time), `GET` list, `GET …/{id}/download` streamed through the API. Migration 00091.
+- `apps/worker` builds the ZIP:
+  - `postgres/<table>.jsonl` for every tenant table read from the schema, minus secret columns (`SecretColumn`) and
+    internal tables (`ExcludedTables`);
+  - `team.jsonl`, the period's ClickHouse events as CSV, `README.txt`.
+
+  Stored under `exports/{org}/{id}-{32 random bytes}.zip` (the bucket serves known keys, so the key never leaves the
+  server), the requester emailed, deleted after 7 days. Stuck builds fail after 2 h. Organization deletion purges
+  `exports/{org}/`. The worker gets `SMTP_URL`/`MAIL_FROM` in the dev compose; `storage.Client.Open` added.
+- Settings → Organization → Export data: period, request, list with status, size, expiry and download; refreshes
+  while building. EN/RU.
+- Tests: `orgexport_test.go` (Postgres, ClickHouse, MinIO: planted secrets — network secret hash, API key hash,
+  pixel token, password hash — appear nowhere in the archive, no exported column matches `SecretColumn`, nothing of
+  another organization, period respected, expiry deletes). Mutation-checked: without the column exclusion it fails.
+  `TestSecretColumnCoversKnownSecrets`; the organization-deletion test covers the exports prefix. The cross-tenant
+  route test caught the download's `{id}` without a seeded kind: an export is now seeded and downloaded with
+  another organization's id (404). `organization-export-card.test.tsx`. Full Go suite: only the known gallery-WIP
+  failure; vitest 182/182; build.
+- Live: demo org export requested in the browser, built by the dev worker (19 KB), email in mailhog, owner download
+  200 (46 tables, events CSVs, no secret columns), viewer 403, another organization 404.
+
 ## [Phase 30.53] — A visitor's data request; referrer expires (audit GDPR-1, part 3)
 
 `docs/visitor-data.md`.

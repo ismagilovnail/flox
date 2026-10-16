@@ -200,8 +200,8 @@ func TestOrganizationDeletion(t *testing.T) {
 	if err := objects.EnsureBucket(ctx, os.Getenv("S3_REGION")); err != nil {
 		t.Skipf("object storage unreachable: %v", err)
 	}
-	f.objectsA = []string{"landings/" + f.orgA + "/l1/v1/style.css", f.orgA + "/g1.png"}
-	f.objectsB = []string{"landings/" + f.orgB + "/l1/v1/style.css", f.orgB + "/g1.png"}
+	f.objectsA = []string{"landings/" + f.orgA + "/l1/v1/style.css", "exports/" + f.orgA + "/e1-x.zip", f.orgA + "/g1.png"}
+	f.objectsB = []string{"landings/" + f.orgB + "/l1/v1/style.css", "exports/" + f.orgB + "/e1-x.zip", f.orgB + "/g1.png"}
 	for _, key := range append(append([]string{}, f.objectsA...), f.objectsB...) {
 		if err := objects.PutObject(ctx, key, strings.NewReader("x"), 1, "text/plain"); err != nil {
 			t.Fatalf("PutObject %s: %v", key, err)
@@ -209,6 +209,7 @@ func TestOrganizationDeletion(t *testing.T) {
 	}
 	t.Cleanup(func() {
 		_ = objects.DeletePrefix(context.Background(), "landings/"+f.orgB+"/")
+		_ = objects.DeletePrefix(context.Background(), "exports/"+f.orgB+"/")
 		_ = objects.DeletePrefix(context.Background(), f.orgB+"/")
 	})
 

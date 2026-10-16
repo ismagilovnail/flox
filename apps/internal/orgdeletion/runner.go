@@ -208,10 +208,11 @@ func (r *Runner) purge(ctx context.Context, orgID string) (notes []string, err e
 	if r.Storage == nil {
 		notes = append(notes, "object storage not configured")
 	} else {
-		// Landing bundles (internal/landing) and gallery files
-		// (internal/contentgallery). An organization id is a ULID, so
-		// "<id>/" is no other organization's prefix.
-		for _, prefix := range []string{"landings/" + orgID + "/", orgID + "/"} {
+		// Landing bundles (internal/landing), data exports
+		// (internal/orgexport) and gallery files (internal/contentgallery).
+		// An organization id is a ULID, so "<id>/" is no other
+		// organization's prefix.
+		for _, prefix := range []string{"landings/" + orgID + "/", "exports/" + orgID + "/", orgID + "/"} {
 			if err := r.Storage.DeletePrefix(ctx, prefix); err != nil {
 				return nil, fmt.Errorf("orgdeletion: deleting objects under %s: %w", prefix, err)
 			}

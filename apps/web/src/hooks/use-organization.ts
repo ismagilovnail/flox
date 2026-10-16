@@ -6,6 +6,8 @@ import {
   cancelOrganizationDeletion,
   getOrganization,
   getOrganizationDeletion,
+  listOrganizationExports,
+  requestOrganizationExport,
   scheduleOrganizationDeletion,
   updateOrganization,
 } from "@/lib/api/organization";
@@ -53,5 +55,26 @@ export function useCancelOrganizationDeletion() {
   return useMutation({
     mutationFn: cancelOrganizationDeletion,
     onSuccess: (data) => qc.setQueryData(deletionKey, data),
+  });
+}
+
+const exportsKey = ["organization", "exports"] as const;
+
+/** The organization's exports; refetched every 5 s while one is being
+ * built, so the list turns "ready" without a reload. */
+export function useOrganizationExports(enabled: boolean) {
+  return useQuery({
+    queryKey: exportsKey,
+    queryFn: listOrganizationExports,
+    enabled,
+    refetchInterval: (q) => (q.state.data?.exports.some((e) => e.status === "pending" || e.status === "running") ? 5000 : false),
+  });
+}
+
+export function useRequestOrganizationExport() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: requestOrganizationExport,
+    onSuccess: () => qc.invalidateQueries({ queryKey: exportsKey }),
   });
 }

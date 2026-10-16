@@ -40,7 +40,8 @@ An owner can delete their organization and everything in it.
    - **ClickHouse:** lightweight `DELETE` from every MergeTree table with
      an `organization_id` column, read from `system.columns`, so a new table
      is covered without a code change;
-   - **object storage:** `landings/{org}/` and `{org}/` (gallery);
+   - **object storage:** `landings/{org}/`, `exports/{org}/` and `{org}/`
+     (gallery);
    - **Redis:** `flox:conversion:last-status:{org}:*` (rate-limit counters
      expire in minutes on their own).
 
@@ -59,7 +60,8 @@ users deleted — no name, no data.
 - **External accounts** the organization connected (ad accounts,
   registrar, Cloudflare, Telegram bots): their stored tokens are deleted
   with the rows, but nothing is revoked at the provider.
-- **Data export / DSAR** is the rest of GDPR-1.
+- Data export: `docs/organization-export.md`; a visitor's request:
+  `docs/visitor-data.md`.
 
 ## Tests
 

@@ -19,23 +19,23 @@ referenced below as §N).
 ## CURRENT STATE — UPDATE THIS EVERY PHASE
 
 ```
-CURRENT PHASE : PHASE 30.53 — VISITOR DATA REQUEST, GDPR-1 part 3 (closed)
+CURRENT PHASE : PHASE 30.54 — ORGANIZATION DATA EXPORT, GDPR-1 part 4 (closed)
 STATUS        : Product audit 2026-10-15 (docs/audit-product-2026-10-15.md)
                 is the backlog: items on the local dev panel tools/devpanel
                 (make devpanel → 127.0.0.1:8099; memory: flox-audit-tracker
                 — keep statuses current). Done: SEC-1, SEC-2, DATA-1, DEV-1,
-                UX-1, UX-2, UX-3, DATA-4, DATA-2, DATA-3, SEC-5; GDPR-1
-                parts 1-3 (IP/UA/referrer TTL + pseudonym; org deletion;
-                visitor DSAR). Open in GDPR-1: org data export, DPA.
+                UX-1, UX-2, UX-3, DATA-4, DATA-2, DATA-3, SEC-5, GDPR-1
+                (retention, org deletion, visitor DSAR, org export; a DPA
+                is legal work for the owner).
                 P0 left:
                 OPS-1..3 (prod, restore, load) — needs the owner's hosting.
-LAST COMMIT   : feat(privacy): a visitor's data request.
+LAST COMMIT   : feat(privacy): organization data export.
 UNCOMMITTED   : the user's gallery-transcoding WIP (00085, processor.go,
                 transcode.go, worker ffmpeg) — not ours, leave it alone.
                 It now accepts MOV, so contentgallery's
                 TestUploadRejectsOversizeWrongContentAndMov fails with it.
-NEXT          : wait for the user — next item from the board (P1: GDPR-1 org data
-                export — agreed as the next phase; INT-1, INT-2, API-1). CI (DO1) is the user's own decision — do not set
+NEXT          : wait for the user — next item from the board (P1: INT-1, INT-2,
+                API-1, BIZ-*; P2: BUG-7, CH-1, …). CI (DO1) is the user's own decision — do not set
                 it up. Run go test with the full env line AND check e2e did
                 not skip (memory: flox-full-test-env); chconn's
                 TestLimitsStopAHeavyQuery flakes under the full parallel run.

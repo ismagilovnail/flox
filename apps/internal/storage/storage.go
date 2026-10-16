@@ -133,6 +133,21 @@ func (c *Client) PutObject(ctx context.Context, key string, r io.Reader, size in
 	return nil
 }
 
+// Open streams key's object — for a file only the API may hand out, such
+// as an organization's data export (internal/orgexport). The caller
+// closes it.
+func (c *Client) Open(ctx context.Context, key string) (io.ReadCloser, error) {
+	obj, err := c.mc.GetObject(ctx, c.bucket, key, minio.GetObjectOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("storage: opening %s: %w", key, err)
+	}
+	if _, err := obj.Stat(); err != nil {
+		_ = obj.Close()
+		return nil, fmt.Errorf("storage: opening %s: %w", key, err)
+	}
+	return obj, nil
+}
+
 // DeleteObject is best-effort cleanup only — callers that fail to remove
 // an object after e.g. a since-rolled-back DB write log and move on
 // (an orphaned object costs storage, not correctness; a dangling DB row
