@@ -5,8 +5,8 @@ import (
 	"errors"
 	"io"
 	"log/slog"
+	"net/http"
 	"os"
-	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
@@ -283,15 +283,25 @@ func TestOrganizationDeletion(t *testing.T) {
 			t.Errorf("ClickHouse %s lost the other organization's rows", table)
 		}
 	}
-	dir := t.TempDir()
+	// The bucket is public-read (storage.publicReadPolicy): an object is
+	// there when its public URL answers 200.
+	exists := func(key string) bool {
+		t.Helper()
+		resp, err := http.Get(objects.PublicURL(key))
+		if err != nil {
+			t.Fatalf("GET %s: %v", key, err)
+		}
+		resp.Body.Close()
+		return resp.StatusCode == http.StatusOK
+	}
 	for _, key := range f.objectsA {
-		if err := objects.DownloadToFile(ctx, key, filepath.Join(dir, "a")); err == nil {
+		if exists(key) {
 			t.Errorf("object %s survived", key)
 		}
 	}
 	for _, key := range f.objectsB {
-		if err := objects.DownloadToFile(ctx, key, filepath.Join(dir, "b")); err != nil {
-			t.Errorf("the other organization's object %s: %v", key, err)
+		if !exists(key) {
+			t.Errorf("the other organization's object %s is gone", key)
 		}
 	}
 	if n, _ := rdb.Exists(ctx, f.redisKeyA).Result(); n != 0 {
