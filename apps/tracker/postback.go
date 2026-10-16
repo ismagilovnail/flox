@@ -2,9 +2,6 @@ package main
 
 import (
 	"context"
-	"crypto/sha256"
-	"crypto/subtle"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"log/slog"
@@ -117,45 +114,17 @@ func (h *PostbackHandler) handle(w http.ResponseWriter, r *http.Request) {
 	// network.Service.Create/RegeneratePostbackSecret). An empty stored
 	// hash can never match any hashed input, so it rejects every postback
 	// without a separate check.
-	if !validPostbackSecret(r.FormValue("secret"), network.PostbackSecretHash) {
+	if !conversion.ValidSecret(r.FormValue("secret"), network.PostbackSecretHash) {
 		writeJSON(w, http.StatusUnauthorized, postbackResponse{Result: "error", Message: "invalid or missing secret"})
 		return
 	}
 
-	p := conversion.Postback{
-		OrganizationID:   network.OrganizationID,
-		NetworkID:        network.ID,
-		AcceptDuplicates: network.AcceptDuplicates,
-		ClickID:          r.FormValue("click_id"),
-		ExternalClickID:  r.FormValue("external_click_id"),
-		RawStatus:        r.FormValue("status"),
-		Currency:         r.FormValue("currency"),
-		NetworkCurrency:  network.Currency,
-		NetworkTxnID:     firstNonEmpty(r.FormValue("txn_id"), r.FormValue("transaction_id")),
-		PostbackURL:      network.PostbackURL,
-		OccurredAt:       time.Now().UTC(),
-	}
-
-	// When the conversion happened at the network (tech audit T3); without
-	// it, the moment the postback arrived.
-	if raw := firstNonEmpty(r.FormValue("event_time"), r.FormValue("ts")); raw != "" {
-		at, err := conversion.ParseEventTime(raw, p.OccurredAt)
-		if err != nil {
-			writeJSON(w, http.StatusBadRequest, postbackResponse{Result: "error", Message: strings.TrimPrefix(err.Error(), "conversion: ")})
-			return
-		}
-		p.OccurredAt = at
-	}
-
-	if raw := r.FormValue("revenue"); raw != "" {
-		v, err := conversion.ParseRevenue(raw)
-		if err != nil {
-			// 400, not 500: the same request will never become valid, so
-			// the network must not retry it.
-			writeJSON(w, http.StatusBadRequest, postbackResponse{Result: "error", Message: strings.TrimPrefix(err.Error(), "conversion: ")})
-			return
-		}
-		p.Revenue = &v
+	p, err := conversion.ParseParams(r.Form, network, time.Now())
+	if err != nil {
+		// 400, not 500: the same request will never become valid, so the
+		// network must not retry it.
+		writeJSON(w, http.StatusBadRequest, postbackResponse{Result: "error", Message: strings.TrimPrefix(err.Error(), "conversion: ")})
+		return
 	}
 
 	result, err := h.service.Record(ctx, p)
@@ -174,20 +143,6 @@ func (h *PostbackHandler) handle(w http.ResponseWriter, r *http.Request) {
 		Status:  string(result.Status),
 		Message: result.Message,
 	})
-}
-
-// validPostbackSecret hashes the incoming request's secret and compares
-// it against the network's stored hash using a constant-time comparison
-// (subtle.ConstantTimeCompare) — an early-exit == comparison here would
-// leak how many leading bytes matched through response timing, letting an
-// attacker recover the secret byte-by-byte.
-func validPostbackSecret(provided, storedHash string) bool {
-	if provided == "" || storedHash == "" {
-		return false
-	}
-	sum := sha256.Sum256([]byte(provided))
-	providedHash := hex.EncodeToString(sum[:])
-	return subtle.ConstantTimeCompare([]byte(providedHash), []byte(storedHash)) == 1
 }
 
 // postbackResultWriter remembers the result label of the response written,

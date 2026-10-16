@@ -5,6 +5,26 @@ per-phase, matching `CLAUDE.md`'s phase protocol. The one exception is
 [Between phases], below: spec amendments and the code changes that follow from
 them land between phases and would otherwise be invisible here.
 
+## [Phase 30.46] — Check a postback (audit UX-3, part 2)
+
+An operator could only find out whether a network's postback URL works by waiting for a real conversion — or for one
+to go missing. `docs/onboarding.md` "Check a postback".
+
+- `POST /postback-logs/check {url}` (`apps/internal/postbackcheck`, `offer.read`): what FLOX would do with the URL —
+  the tracker's HTTP answer (401 secret, 400 amount/time, 200), success/duplicate/ignored/error with the mapped
+  status and message, the click and campaign, revenue in USD with "currency assumed", the outgoing postback it would
+  queue, a note when the host is not the tracker's. The network comes from the URL and must be the organization's.
+- One engine: `conversion.Service.Check` shares `Record`'s decision path (`Service.run`); only the last step
+  differs — `PostgresStore.Preview` runs the real success write and always rolls it back. Nothing is recorded,
+  logged, cached or sent. Postback parameter parsing and the secret check moved from apps/tracker to
+  `conversion.ParseParams` / `conversion.ValidSecret`, so the dry run reads a URL exactly as the tracker does.
+- Network page: a "Check a postback" card under the incoming URL, starting from the network's URL and first mapped
+  status; the answer with a plain-language explanation, a link to the campaign. EN/RU.
+- Tests: `conversion/check_test.go` (Postgres: five outcomes, rows counted around each; mutation-checked),
+  `postbackcheck_test.go`, `postback-check-card.test.tsx`, the route in the cross-tenant reference test and the RBAC
+  list. Live: 401/400/unmapped/duplicate/success on a temporary network (deleted after), nothing written; another
+  organization 404, viewer 403, no session 401; the card in the browser.
+
 ## [Phase 30.45] — First steps on the Overview (audit UX-3, part 1)
 
 A new organization had nothing on the Overview telling it what to do. `docs/onboarding.md`.

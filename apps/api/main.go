@@ -62,6 +62,7 @@ import (
 	"github.com/ismagilovnail/flox/apps/internal/pixel"
 	"github.com/ismagilovnail/flox/apps/internal/pixelsend"
 	"github.com/ismagilovnail/flox/apps/internal/postback"
+	"github.com/ismagilovnail/flox/apps/internal/postbackcheck"
 	"github.com/ismagilovnail/flox/apps/internal/postbacklog"
 	"github.com/ismagilovnail/flox/apps/internal/postbacklogs"
 	"github.com/ismagilovnail/flox/apps/internal/postgres"
@@ -779,7 +780,8 @@ func buildServer(ctx context.Context, cfg config.Config, logger *slog.Logger, re
 		// depend on it. The block runs only with ClickHouse connected, so
 		// attribution needs no fallback. rdb is the client from above.
 		postbackStore := postback.NewPostgresStore(db)
-		var convStore conversion.Store = conversion.NewPostgresStore(db).WithDeliveries(postbackStore).WithPixels(pixelsend.NewPostgresStore(db))
+		convPostgres := conversion.NewPostgresStore(db).WithDeliveries(postbackStore).WithPixels(pixelsend.NewPostgresStore(db))
+		var convStore conversion.Store = convPostgres
 		if rdb != nil {
 			convStore = conversion.NewRedisStore(convStore, rdb, logger)
 		} else {
@@ -795,7 +797,7 @@ func buildServer(ctx context.Context, cfg config.Config, logger *slog.Logger, re
 			conversion.NewPostgresFX(db),
 			attributionSvc,
 			attemptLog,
-		)
+		).WithPreview(convPostgres)
 
 		postbackLogsHandler := postbacklogs.NewHandler(
 			postbacklogs.NewService(
@@ -808,10 +810,17 @@ func buildServer(ctx context.Context, cfg config.Config, logger *slog.Logger, re
 			requireOfferWrite,
 			logger,
 		)
+		// The dry run of an incoming postback (docs/onboarding.md "Check a
+		// postback") writes nothing, so the read gate is enough.
+		postbackCheckHandler := postbackcheck.NewHandler(
+			postbackcheck.NewService(conversion.NewPostgresNetworkLookup(db), convSvc, cfg.TrackerPublicURL),
+			logger,
+		)
 		srv.Mux().Route("/postback-logs", func(r chi.Router) {
 			r.Use(tenantMiddleware)
 			r.Use(readGate("offer.read"))
 			postbackLogsHandler.Register(r)
+			postbackCheckHandler.Register(r)
 		})
 	}
 

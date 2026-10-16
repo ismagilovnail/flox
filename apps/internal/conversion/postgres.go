@@ -47,7 +47,10 @@ func (s *PostgresStore) WithPixels(w PixelWriter) *PostgresStore {
 	return &PostgresStore{db: s.db, deliveries: s.deliveries, pixels: w}
 }
 
-var _ Store = (*PostgresStore)(nil)
+var (
+	_ Store     = (*PostgresStore)(nil)
+	_ Previewer = (*PostgresStore)(nil)
+)
 
 // LastStatus reads the most recent ResultSuccess row for this click.
 //
@@ -153,6 +156,32 @@ func (s *PostgresStore) Record(ctx context.Context, e Entry) (Recorded, error) {
 	if err := tx.Commit(ctx); err != nil {
 		return Recorded{}, fmt.Errorf("conversion: committing record tx: %w", err)
 	}
+	return rec, nil
+}
+
+// Preview is Record's success path run in a transaction that is always
+// rolled back (Previewer): the click lock, the progression re-check, the
+// reversal of an accept, the dedup constraint and the outbox all run as
+// they would, and none of it stays. A NOTIFY or a sequence step inside it
+// is undone or harmless.
+func (s *PostgresStore) Preview(ctx context.Context, e Entry) (Recorded, error) {
+	if e.Kind != ResultSuccess {
+		return Recorded{Kind: e.Kind, Message: e.Message}, nil
+	}
+	if e.Delivery != nil && s.deliveries == nil {
+		return Recorded{}, errors.New("conversion: entry carries an outgoing delivery but the store has no DeliveryWriter")
+	}
+	tx, err := s.db.Begin(ctx)
+	if err != nil {
+		return Recorded{}, fmt.Errorf("conversion: beginning preview tx: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	rec, err := s.recordSuccess(ctx, tx, e)
+	if err != nil {
+		return Recorded{}, err
+	}
+	rec.ID = ""
 	return rec, nil
 }
 

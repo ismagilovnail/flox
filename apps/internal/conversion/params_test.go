@@ -1,4 +1,4 @@
-package main
+package conversion
 
 import (
 	"crypto/sha256"
@@ -11,7 +11,7 @@ func hashFor(secret string) string {
 	return hex.EncodeToString(sum[:])
 }
 
-func TestValidPostbackSecret(t *testing.T) {
+func TestValidSecret(t *testing.T) {
 	storedHash := hashFor("correct-secret")
 
 	cases := []struct {
@@ -29,8 +29,8 @@ func TestValidPostbackSecret(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			if got := validPostbackSecret(tc.provided, tc.storedHas); got != tc.want {
-				t.Fatalf("validPostbackSecret(%q, %q) = %v, want %v", tc.provided, tc.storedHas, got, tc.want)
+			if got := ValidSecret(tc.provided, tc.storedHas); got != tc.want {
+				t.Fatalf("ValidSecret(%q, %q) = %v, want %v", tc.provided, tc.storedHas, got, tc.want)
 			}
 		})
 	}

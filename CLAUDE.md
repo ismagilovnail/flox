@@ -19,22 +19,23 @@ referenced below as §N).
 ## CURRENT STATE — UPDATE THIS EVERY PHASE
 
 ```
-CURRENT PHASE : PHASE 30.45 — FIRST STEPS ON THE OVERVIEW, UX-3 part 1 (closed)
+CURRENT PHASE : PHASE 30.46 — CHECK A POSTBACK, UX-3 part 2 (closed)
 STATUS        : Product audit 2026-10-15 (docs/audit-product-2026-10-15.md)
                 is the backlog: items on the local dev panel tools/devpanel
                 (make devpanel → 127.0.0.1:8099; memory: flox-audit-tracker
                 — keep statuses current). Done: SEC-1, SEC-2, DATA-1, DEV-1,
-                UX-1, UX-2; UX-3 part 1 (part 2: postback dry run). P0 left:
+                UX-1, UX-2, UX-3 (checklist + postback dry run). P0 left:
                 OPS-1..3 (prod, restore, load) — needs the owner's hosting.
-LAST COMMIT   : feat(onboarding): first steps on the overview.
+LAST COMMIT   : feat(onboarding): check a postback.
 UNCOMMITTED   : the user's gallery-transcoding WIP (00085, processor.go,
                 transcode.go, worker ffmpeg) — not ours, leave it alone.
-                Dev DB wiped 2026-10-15 (dev-fresh), at migration 00086.
-NEXT          : wait for the user — next P0 from the board. CI (DO1) is
-                the user's own decision — do not set it up. Run go test with
-                the full env line AND check e2e did not skip (memory:
-                flox-full-test-env); chconn's TestLimitsStopAHeavyQuery
-                flakes under the full parallel run.
+                It now accepts MOV, so contentgallery's
+                TestUploadRejectsOversizeWrongContentAndMov fails with it.
+NEXT          : wait for the user — next item from the board (P1: DATA-2..4,
+                SEC-5, …). CI (DO1) is the user's own decision — do not set
+                it up. Run go test with the full env line AND check e2e did
+                not skip (memory: flox-full-test-env); chconn's
+                TestLimitsStopAHeavyQuery flakes under the full parallel run.
 ```
 
 > At the end of every phase: update the four lines above, add a CHANGELOG entry,

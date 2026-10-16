@@ -116,3 +116,36 @@ export type ReplayIncomingPostbackResult = {
 export function replayIncomingPostback(input: ReplayIncomingPostbackInput): Promise<ReplayIncomingPostbackResult> {
   return apiFetch("/postback-logs/replay-incoming", { method: "POST", body: input });
 }
+
+export type CheckPostbackResult = {
+  networkId: string;
+  /** What apps/tracker would answer the network: 200 for a postback it
+   * handled (whatever the result), 400 for a bad amount or event time, 401
+   * for a wrong or missing secret. */
+  httpStatus: number;
+  result: "success" | "duplicate" | "ignored" | "error";
+  status?: CpaStatus;
+  message?: string;
+  attribution?: {
+    outcome: string;
+    method?: string;
+    clickId?: string;
+    campaignId?: string;
+    reason?: string;
+  };
+  revenue?: number;
+  currency?: string;
+  currencyAssumed?: boolean;
+  usdValue?: number;
+  /** The postback that would be queued to the network's outgoing URL. */
+  outgoingUrl?: string;
+  /** About the URL itself, e.g. a host that is not the tracker's. */
+  notes: string[];
+};
+
+/** Dry run of an incoming postback (docs/onboarding.md "Check a
+ * postback"): what FLOX would do with this URL, through the same engine a
+ * real network hit goes through — nothing is recorded. */
+export function checkPostback(url: string): Promise<CheckPostbackResult> {
+  return apiFetch("/postback-logs/check", { method: "POST", body: { url } });
+}

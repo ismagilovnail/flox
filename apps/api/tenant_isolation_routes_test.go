@@ -786,6 +786,10 @@ func referenceCases(env *isolationEnv) []refCase {
 			func(ref func(string) string) any {
 				return map[string]any{"networkId": ref("networkId"), "clickId": idgen.New(), "rawStatus": "ftd"}
 			}},
+		{http.MethodPost, "/postback-logs/check", map[string]string{"networkId": "network"}, false,
+			func(ref func(string) string) any {
+				return map[string]any{"url": "https://t.example/postback/" + ref("networkId") + "?click_id=x&status=ftd"}
+			}},
 		{http.MethodPost, "/postback-logs/replay-outgoing", map[string]string{"networkId": "network"}, false,
 			func(ref func(string) string) any {
 				return map[string]any{"networkId": ref("networkId"), "clickId": isoReplayClick, "status": "CPA_ACCEPT",

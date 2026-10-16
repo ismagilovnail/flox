@@ -3,6 +3,7 @@
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import {
+  checkPostback,
   listPostbackLogs,
   replayIncomingPostback,
   replayOutgoingPostback,
@@ -35,4 +36,9 @@ export function useReplayIncomingPostback() {
     mutationFn: replayIncomingPostback,
     onSuccess: () => qc.invalidateQueries({ queryKey: ["postback-logs"] }),
   });
+}
+
+/** A dry run records nothing, so nothing is invalidated. */
+export function useCheckPostback() {
+  return useMutation({ mutationFn: checkPostback });
 }

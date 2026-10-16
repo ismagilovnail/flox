@@ -109,5 +109,44 @@
     "noStatusesTitle": "No statuses set up",
     "noStatusesDescription": "No network status is mapped to a FLOX status — every postback from this network will be refused.",
     "openMapping": "Set up the status mapping"
+  },
+  "check": {
+    "title": "Check a postback",
+    "description": "Paste the URL as the network will call it — FLOX answers what it would do with it. Nothing is recorded.",
+    "urlLabel": "Postback URL",
+    "hint": "Fill in the secret and a real click_id — take one from a test click in the click log. A made-up click_id is checked too, it just matches no click.",
+    "clickLogLink": "Open the click log",
+    "submit": "Check",
+    "running": "Checking…",
+    "failed": "Could not check the postback",
+    "outcomeAria": "Check result",
+    "result": {
+      "success": "Would be recorded",
+      "duplicate": "Duplicate",
+      "ignored": "Ignored",
+      "error": "Refused"
+    },
+    "explain": {
+      "unauthorized": "The tracker would answer 401: the secret is missing or wrong. Paste the secret you got when the network was created, or get a new one above.",
+      "badRequest": "The tracker would answer 400: the amount or the event time cannot be read. The network will not retry this request.",
+      "success": "The conversion would be recorded and attributed to the click.",
+      "successUnattributed": "The conversion would be recorded, but no click matched — it would count without a campaign until its click is found.",
+      "duplicate": "This conversion is already recorded for the click: a repeat would not be counted again.",
+      "ignored": "The postback would be understood but not applied — the click already has a later status.",
+      "error": "The postback would be refused. The reason is below."
+    },
+    "attribution": "Click",
+    "attributionOutcome": {
+      "attributed": "found",
+      "unknown_click": "no such click",
+      "no_identifier": "no click_id sent",
+      "ambiguous_external_click_id": "several clicks match"
+    },
+    "openCampaign": "open the campaign",
+    "revenue": "Revenue",
+    "currencyAssumed": "currency not sent, the network's assumed",
+    "noRate": "no exchange rate for the day — left out of revenue reports",
+    "outgoing": "Outgoing postback",
+    "nothingRecorded": "Dry run: nothing was recorded, nothing was sent to the network."
   }
 }

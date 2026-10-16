@@ -333,6 +333,8 @@ type Service struct {
 	fx          FXConverter
 	attribution attribution.AttributionService
 	attempts    AttemptLogger
+	// preview is the store's dry-run side (WithPreview), for Check.
+	preview Previewer
 }
 
 func NewService(mapper Mapper, store Store, fx FXConverter, attr attribution.AttributionService, attempts AttemptLogger) *Service {
@@ -340,7 +342,7 @@ func NewService(mapper Mapper, store Store, fx FXConverter, attr attribution.Att
 }
 
 // logAttempt reports one outcome to the postback attempt audit log. Called
-// from every exit point of Record (commit, recordRefusal)
+// from every exit point of Record (recorder.commit, recorder.refuse)
 // with whatever fields are known at that point — an error path before
 // mapping has no Status yet, and that's fine, an empty Status is itself
 // informative (§48's postback_events schema allows it, same as the
@@ -370,6 +372,21 @@ func (s *Service) logAttempt(ctx context.Context, p Postback, clickID string, st
 // infrastructure failure, where the honest answer is "retry me," not a
 // fabricated result.
 func (s *Service) Record(ctx context.Context, p Postback) (Result, error) {
+	return s.run(ctx, p, recorder{s})
+}
+
+// outcome is the last step of run: what happens to a postback once it is
+// decided. recorder writes it (Record); previewer only says what would be
+// written (Check).
+type outcome interface {
+	refuse(ctx context.Context, p Postback, clickID string, status event.Type, eventRef string, kind ResultKind, message string) (Result, error)
+	commit(ctx context.Context, p Postback, entry Entry, attr attribution.Attribution) (Result, error)
+}
+
+// run is the one decision path of a postback, for Record and Check alike:
+// validation, status mapping, the progression fast path, attribution and
+// FX normalization, then out.
+func (s *Service) run(ctx context.Context, p Postback, out outcome) (Result, error) {
 	p = p.trimmed().withNetworkCurrency()
 
 	if refusal := validate(p); refusal != "" {
@@ -378,12 +395,12 @@ func (s *Service) Record(ctx context.Context, p Postback) (Result, error) {
 		if p.RawStatus == "" {
 			clickID = ""
 		}
-		return s.recordRefusal(ctx, p, clickID, "", "", ResultError, refusal)
+		return out.refuse(ctx, p, clickID, "", "", ResultError, refusal)
 	}
 
 	status, err := s.mapper.MapStatus(ctx, p.OrganizationID, p.NetworkID, p.RawStatus)
 	if errors.Is(err, ErrUnmapped) {
-		return s.recordRefusal(ctx, p, p.ClickID, "", "", ResultError,
+		return out.refuse(ctx, p, p.ClickID, "", "", ResultError,
 			fmt.Sprintf("no event mapping configured for network status %q", p.RawStatus))
 	}
 	if err != nil {
@@ -396,7 +413,7 @@ func (s *Service) Record(ctx context.Context, p Postback) (Result, error) {
 		return Result{}, err
 	}
 	if refusal != "" {
-		return s.recordRefusal(ctx, p, p.ClickID, status, eventRef, ResultIgnored, refusal)
+		return out.refuse(ctx, p, p.ClickID, status, eventRef, ResultIgnored, refusal)
 	}
 
 	attr, err := s.attribute(ctx, p, status)
@@ -406,7 +423,7 @@ func (s *Service) Record(ctx context.Context, p Postback) (Result, error) {
 	usdValue, revenue := s.convertRevenue(ctx, p)
 	p.unpriced = revenue != nil && usdValue == nil
 
-	return s.commit(ctx, p, newEntry(p, status, eventRef, attr, revenue, usdValue), attr)
+	return out.commit(ctx, p, newEntry(p, status, eventRef, attr, revenue, usdValue), attr)
 }
 
 // trimmed is p with every network-supplied string trimmed — once, here, so
@@ -517,7 +534,6 @@ func (s *Service) attribute(ctx context.Context, p Postback, status event.Type) 
 			Reason:  fmt.Sprintf("click lookup failed, retried later: %v", err),
 		}
 	}
-	metrics.AttributionOutcomesTotal.WithLabelValues(string(attr.Outcome)).Inc()
 	return attr, nil
 }
 
@@ -564,28 +580,39 @@ func newEntry(p Postback, status event.Type, eventRef string, attr attribution.A
 	return entry
 }
 
+// recorder is Record's outcome: the ledger, the outbox and the attempt log.
+type recorder struct{ s *Service }
+
 // commit writes an accepted postback. Store may still refuse it under the
 // click's lock, or note that a decline reversed an accept's payout; its
 // message is then the one reported.
-func (s *Service) commit(ctx context.Context, p Postback, entry Entry, attr attribution.Attribution) (Result, error) {
-	rec, err := s.store.Record(ctx, entry)
+func (r recorder) commit(ctx context.Context, p Postback, entry Entry, attr attribution.Attribution) (Result, error) {
+	metrics.AttributionOutcomesTotal.WithLabelValues(string(attr.Outcome)).Inc()
+	rec, err := r.s.store.Record(ctx, entry)
 	if err != nil {
 		return Result{}, fmt.Errorf("conversion: recording: %w", err)
 	}
+	message := committedMessage(p, entry, rec)
+	r.s.logAttempt(ctx, p, entry.ClickID, entry.Status, entry.EventRef, rec.Kind, message)
+	return Result{ID: rec.ID, Kind: rec.Kind, Status: entry.Status, Attribution: attr, Message: message}, nil
+}
+
+// committedMessage is what an accepted postback's outcome says: the
+// store's message when it applied or refused it, the attribution reason
+// otherwise, with the currency notes.
+func committedMessage(p Postback, entry Entry, rec Recorded) string {
 	message := entry.Message
 	if rec.Kind == ResultIgnored || rec.Kind == ResultSuccess {
 		message = rec.Message
 	}
-	message = p.annotate(message)
-	s.logAttempt(ctx, p, entry.ClickID, entry.Status, entry.EventRef, rec.Kind, message)
-	return Result{ID: rec.ID, Kind: rec.Kind, Status: entry.Status, Attribution: attr, Message: message}, nil
+	return p.annotate(message)
 }
 
-// recordRefusal writes a postback refused before attribution — kind is
+// refuse writes a postback refused before attribution — kind is
 // ResultError (unusable input) or ResultIgnored (progression) — to the
 // ledger and the attempt log.
-func (s *Service) recordRefusal(ctx context.Context, p Postback, clickID string, status event.Type, eventRef string, kind ResultKind, message string) (Result, error) {
-	rec, err := s.store.Record(ctx, Entry{
+func (r recorder) refuse(ctx context.Context, p Postback, clickID string, status event.Type, eventRef string, kind ResultKind, message string) (Result, error) {
+	rec, err := r.s.store.Record(ctx, Entry{
 		OrganizationID:   p.OrganizationID,
 		NetworkID:        p.NetworkID,
 		AcceptDuplicates: p.AcceptDuplicates,
@@ -602,13 +629,19 @@ func (s *Service) recordRefusal(ctx context.Context, p Postback, clickID string,
 	if err != nil {
 		return Result{}, fmt.Errorf("conversion: logging %s: %w", kind, err)
 	}
-	// A postback refused as unusable records no money, so how its money
-	// would have been priced is beside the point.
+	message = refusalMessage(p, kind, message)
+	r.s.logAttempt(ctx, p, clickID, status, eventRef, kind, message)
+	return Result{ID: rec.ID, Kind: kind, Status: status, Message: message}, nil
+}
+
+// refusalMessage is what a refusal says. A postback refused as unusable
+// records no money, so how its money would have been priced is beside the
+// point.
+func refusalMessage(p Postback, kind ResultKind, message string) string {
 	if kind != ResultError {
 		message = p.annotate(message)
 	}
-	s.logAttempt(ctx, p, clickID, status, eventRef, kind, message)
-	return Result{ID: rec.ID, Kind: kind, Status: status, Message: message}, nil
+	return message
 }
 
 // AttributionRetryDelays is when an unknown_click conversion's click is
