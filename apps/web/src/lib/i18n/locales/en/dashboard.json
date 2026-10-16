@@ -110,5 +110,11 @@
         "action": "Campaigns"
       }
     }
+  },
+  "unmapped": {
+    "title_one": "{{count}} postback is waiting for its status to be mapped",
+    "title_other": "{{count}} postbacks are waiting for their status to be mapped",
+    "description": "A network sent statuses no event mapping knows: {{statuses}}. These conversions are not in the reports yet — map the statuses and they are recorded with their own date.",
+    "link": "Map the statuses"
   }
 }

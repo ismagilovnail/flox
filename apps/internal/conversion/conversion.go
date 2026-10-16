@@ -77,6 +77,9 @@ type Postback struct {
 	// file). The outcome's message then says so (annotate).
 	currencyAssumed bool
 	unpriced        bool
+	// awaitingMapping is set when the status has no event mapping yet: the
+	// refusal is kept for internal/mappingreplay to record once it has one.
+	awaitingMapping bool
 
 	// NetworkTxnID is the network's own transaction/order id, when sent.
 	// Stored regardless of whether this status's dedup key uses it (§45).
@@ -176,6 +179,15 @@ type Entry struct {
 	AttributedClickID  string
 	AttributionMethod  string
 	TimeToConversionMS *int64
+
+	// ExternalClickID and EventAt are what the network sent and when the
+	// conversion happened; written on every row, so a postback kept for its
+	// mapping (AwaitingMapping) can be recorded later as it arrived.
+	ExternalClickID string
+	EventAt         time.Time
+	// AwaitingMapping marks a ResultError row refused only because its
+	// status has no event mapping yet (internal/mappingreplay).
+	AwaitingMapping bool
 
 	// RetryAttribution schedules the click to be looked up again
 	// (AttributionRetryDelays), in the transaction that records a success:
@@ -400,8 +412,10 @@ func (s *Service) run(ctx context.Context, p Postback, out outcome) (Result, err
 
 	status, err := s.mapper.MapStatus(ctx, p.OrganizationID, p.NetworkID, p.RawStatus)
 	if errors.Is(err, ErrUnmapped) {
-		return out.refuse(ctx, p, p.ClickID, "", "", ResultError,
-			fmt.Sprintf("no event mapping configured for network status %q", p.RawStatus))
+		// Kept, not lost: the network takes the 200 as delivered and will
+		// not send it again (audit 2026-10-15, DATA-4).
+		p.awaitingMapping = true
+		return out.refuse(ctx, p, p.ClickID, "", "", ResultError, unmappedMessage(p.RawStatus))
 	}
 	if err != nil {
 		return Result{}, fmt.Errorf("conversion: mapping status: %w", err)
@@ -450,6 +464,16 @@ func (p Postback) withNetworkCurrency() Postback {
 		p.currencyAssumed = true
 	}
 	return p
+}
+
+// ledgerCurrency is the currency a refused postback's row keeps. One kept
+// for its mapping keeps what the network sent, so its replay assumes the
+// network's currency afresh — and says so.
+func (p Postback) ledgerCurrency() string {
+	if p.awaitingMapping && p.currencyAssumed {
+		return ""
+	}
+	return p.Currency
 }
 
 // annotate adds to an outcome's message that the currency was assumed, or
@@ -621,8 +645,11 @@ func (r recorder) refuse(ctx context.Context, p Postback, clickID string, status
 		EventRef:         eventRef,
 		RawStatus:        p.RawStatus,
 		Revenue:          p.Revenue,
-		Currency:         p.Currency,
+		Currency:         p.ledgerCurrency(),
 		NetworkTxnID:     p.NetworkTxnID,
+		ExternalClickID:  p.ExternalClickID,
+		EventAt:          p.OccurredAt,
+		AwaitingMapping:  p.awaitingMapping,
 		Kind:             kind,
 		Message:          message,
 	})
@@ -650,6 +677,17 @@ func refusalMessage(p Postback, kind ResultKind, message string) string {
 // the last miss unknown_click is final (internal/reattribute).
 var AttributionRetryDelays = []time.Duration{
 	30 * time.Second, 2 * time.Minute, 10 * time.Minute, time.Hour, 6 * time.Hour,
+}
+
+// MappingReplayWindow is how long a postback whose status has no event
+// mapping waits for one (internal/mappingreplay); older ones stay refused.
+const MappingReplayWindow = 30 * 24 * time.Hour
+
+// unmappedMessage is what a postback refused for its unmapped status says:
+// that it waits, and for how long.
+func unmappedMessage(rawStatus string) string {
+	return fmt.Sprintf("no event mapping configured for network status %q — kept: recorded once the status is mapped (within %d days)",
+		rawStatus, int(MappingReplayWindow.Hours()/24))
 }
 
 // MaxRevenue bounds one conversion's payout. postbacks.revenue is

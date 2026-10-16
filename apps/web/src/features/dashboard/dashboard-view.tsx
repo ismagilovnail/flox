@@ -16,6 +16,7 @@ import { useDimensionValueLabel } from "@/features/analytics/use-dimension-value
 import { useDashboardReport } from "@/hooks/use-analytics-report";
 import { CostTimezoneNotice } from "@/features/analytics/cost-timezone-notice";
 import { UnpricedRevenueNotice } from "@/features/dashboard/unpriced-revenue-notice";
+import { UnmappedPostbacksNotice } from "@/features/dashboard/unmapped-postbacks-notice";
 import { FirstSteps } from "@/features/dashboard/first-steps";
 import { DateBasisNotice, DateBasisSelect } from "@/features/analytics/date-basis";
 import type { DateBasis } from "@/lib/api/analytics";
@@ -102,6 +103,7 @@ function DashboardContent({ timezone }: { timezone: string }) {
       <CostTimezoneNotice from={from} to={to} timezone={timezone} />
       <DateBasisNotice dateBasis={dateBasis} datedByConversion={data.datedByConversion} />
       <UnpricedRevenueNotice count={data.unpricedConversions} />
+      <UnmappedPostbacksNotice />
 
       <div className="flex flex-col gap-1.5">
         <KpiGrid current={currentMetrics} previous={previousMetrics} />

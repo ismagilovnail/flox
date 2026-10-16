@@ -6,12 +6,16 @@
       "incoming": "Входящие",
       "mapping": "Маппинг событий",
       "logs": "Логи"
-    }
+    },
+    "waitingBadgeAria_one": "{{count}} статус ждёт маппинга",
+    "waitingBadgeAria_few": "{{count}} статуса ждут маппинга",
+    "waitingBadgeAria_many": "{{count}} статусов ждут маппинга",
+    "waitingBadgeAria_other": "{{count}} статуса ждут маппинга"
   },
   "eventMapping": {
     "description": "Переводит собственные строки статусов сети в статусы FLOX: CPA_HOLD / CPA_ACCEPT / CPA_REDEP / CPA_DECLINE / CPA_TRASH.",
     "cardDescription": "Строка статуса, которую отправляет эта сеть → статус FLOX.",
-    "emptyMappings": "Пока нет маппингов — непривязанные статусы проходят как нераспознанные.",
+    "emptyMappings": "Пока нет маппингов — постбэки с непривязанным статусом ждут, пока его привяжут.",
     "statusPlaceholder": "например, ftd",
     "removeAria": "Удалить маппинг {{status}}",
     "addButton": "Добавить",
@@ -23,7 +27,19 @@
       "added": "Маппинг добавлен",
       "addedDescription": "{{status}} → {{floxStatus}}",
       "addError": "Не удалось добавить маппинг",
-      "removeError": "Не удалось удалить маппинг"
+      "removeError": "Не удалось удалить маппинг",
+      "addedWaiting": "{{status}} → {{floxStatus}}. Ждавшие постбэки запишутся в течение минуты."
+    },
+    "waiting": {
+      "title": "Ждут маппинга",
+      "row_one": "{{count}} постбэк",
+      "row_few": "{{count}} постбэка",
+      "row_many": "{{count}} постбэков",
+      "row_other": "{{count}} постбэка",
+      "mapButton": "Привязать",
+      "mapAria": "Привязать статус {{status}}",
+      "hint": "Привяжите эти статусы — постбэки запишутся своей датой (в течение минуты). Старше {{days}} дней — уже нет.",
+      "loadError": "Не удалось загрузить статусы, ждущие маппинга"
     }
   },
   "incoming": {

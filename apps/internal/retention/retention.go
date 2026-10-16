@@ -35,6 +35,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/ismagilovnail/flox/apps/internal/conversion"
 	"github.com/ismagilovnail/flox/apps/internal/metrics"
 )
 
@@ -54,6 +55,9 @@ type FailedPostbacks struct {
 	Age    time.Duration
 	Batch  int // 0: DefaultBatch
 	Logger *slog.Logger
+	// Organization limits the job to one organization — for tests, which
+	// share the database with the dev stack. Empty: every organization.
+	Organization string
 }
 
 // RunOnce deletes every expired row, batch by batch, and returns how many.
@@ -68,8 +72,12 @@ func (f *FailedPostbacks) RunOnce(ctx context.Context) (int64, error) {
 			DELETE FROM postbacks WHERE id IN (
 				SELECT id FROM postbacks
 				WHERE result <> 'success' AND created_at < now() - make_interval(secs => $1)
+				  -- a postback waiting for its status mapping stays while it
+				  -- can still be recorded (internal/mappingreplay)
+				  AND NOT (awaiting_mapping AND created_at > now() - make_interval(secs => $3))
+				  AND ($4 = '' OR organization_id = $4)
 				LIMIT $2)`,
-			f.Age.Seconds(), batch)
+			f.Age.Seconds(), batch, conversion.MappingReplayWindow.Seconds(), f.Organization)
 		if err != nil {
 			return total, fmt.Errorf("retention: deleting failed postbacks: %w", err)
 		}

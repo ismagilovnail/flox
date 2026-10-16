@@ -3,6 +3,7 @@ package conversion_test
 import (
 	"context"
 	"errors"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -238,6 +239,27 @@ func TestUnmappedStatusIsIgnoredAsError(t *testing.T) {
 	}
 	if len(store.records) != 1 || store.records[0].Kind != conversion.ResultError {
 		t.Fatal("the attempt must still be logged (§45: log every postback)")
+	}
+	// Kept for internal/mappingreplay, with the conversion's own time
+	// (audit 2026-10-15, DATA-4).
+	if e := store.records[0]; !e.AwaitingMapping || !e.EventAt.Equal(postback("", "", "").OccurredAt) {
+		t.Fatalf("AwaitingMapping = %v, EventAt = %v; want kept with the postback's time", e.AwaitingMapping, e.EventAt)
+	}
+	if !strings.Contains(result.Message, "kept") {
+		t.Fatalf("message %q does not say the postback is kept", result.Message)
+	}
+}
+
+// Only an unmapped status waits: any other refusal is final.
+func TestOtherRefusalsDoNotWaitForAMapping(t *testing.T) {
+	svc, mapper, store, _, _ := newHarness()
+	mapper.set("net-1", "approved", event.CpaAccept)
+
+	if _, err := svc.Record(ctx(), postback("net-1", "", "approved")); err != nil {
+		t.Fatalf("Record: %v", err)
+	}
+	if len(store.records) != 1 || store.records[0].Kind != conversion.ResultError || store.records[0].AwaitingMapping {
+		t.Fatalf("records = %+v, want one error not awaiting a mapping", store.records)
 	}
 }
 

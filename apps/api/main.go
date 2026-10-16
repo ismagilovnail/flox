@@ -54,6 +54,7 @@ import (
 	"github.com/ismagilovnail/flox/apps/internal/logging"
 	"github.com/ismagilovnail/flox/apps/internal/ltv"
 	"github.com/ismagilovnail/flox/apps/internal/mailer"
+	"github.com/ismagilovnail/flox/apps/internal/mappingreplay"
 	"github.com/ismagilovnail/flox/apps/internal/metrics"
 	"github.com/ismagilovnail/flox/apps/internal/network"
 	"github.com/ismagilovnail/flox/apps/internal/offer"
@@ -671,11 +672,14 @@ func buildServer(ctx context.Context, cfg config.Config, logger *slog.Logger, re
 	// offers list's "cap reached" badge.
 	srv.Mux().With(tenantMiddleware, readGate("offer.read")).Get("/offer-caps", offercap.Handler(offerCaps))
 
+	waitingHandler := mappingreplay.NewHandler(db, logger)
 	eventMappingHandler := eventmapping.NewHandler(eventmapping.NewService(eventmapping.NewRepository(db)), requireOfferWrite, logger)
 	srv.Mux().Route("/event-mappings", func(r chi.Router) {
 		r.Use(tenantMiddleware)
 		r.Use(readGate("offer.read"))
 		eventMappingHandler.Register(r)
+		// Postbacks waiting for their status to be mapped (internal/mappingreplay).
+		waitingHandler.Register(r)
 	})
 
 	costSvc := cost.NewService(cost.NewRepository(db), conversion.NewPostgresFX(db))

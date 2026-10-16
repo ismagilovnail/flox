@@ -43,6 +43,7 @@ import (
 	"github.com/ismagilovnail/flox/apps/internal/adaccount/tiktokads"
 	"github.com/ismagilovnail/flox/apps/internal/alert"
 	"github.com/ismagilovnail/flox/apps/internal/analytics"
+	"github.com/ismagilovnail/flox/apps/internal/attribution"
 	"github.com/ismagilovnail/flox/apps/internal/auth"
 	"github.com/ismagilovnail/flox/apps/internal/campaign"
 	"github.com/ismagilovnail/flox/apps/internal/chconn"
@@ -60,6 +61,7 @@ import (
 	"github.com/ismagilovnail/flox/apps/internal/fx/ecb"
 	"github.com/ismagilovnail/flox/apps/internal/integrations"
 	"github.com/ismagilovnail/flox/apps/internal/logging"
+	"github.com/ismagilovnail/flox/apps/internal/mappingreplay"
 	"github.com/ismagilovnail/flox/apps/internal/metrics"
 	"github.com/ismagilovnail/flox/apps/internal/offercap"
 	"github.com/ismagilovnail/flox/apps/internal/pixel"
@@ -146,6 +148,9 @@ const reconcileInterval = time.Hour
 const (
 	reattributeInterval  = 15 * time.Second
 	reattributeBatchSize = 100
+	// mappingReplayBatchSize: postbacks recorded per mapping replay run
+	// (internal/mappingreplay).
+	mappingReplayBatchSize = 200
 )
 
 // fxSyncInterval: reference rates are published once per working day, so a
@@ -475,6 +480,21 @@ func run() error {
 	retrier := reattribute.New(db, conversion.NewPostgresStore(db), clickResolver, chEvents, logger).WithPixels(pixelStore)
 	logger.Info("attribution retry starting", "interval", reattributeInterval)
 	start(func() { retrier.RunLoop(ctx, reattributeInterval, reattributeBatchSize) })
+
+	// Postbacks that arrived before their network status was mapped are
+	// recorded once it is (internal/mappingreplay, audit 2026-10-15
+	// DATA-4), through the engine apps/tracker uses. No Redis cache in
+	// front of the store: the progression check reads Postgres, which is
+	// correct alone.
+	replayer := mappingreplay.New(db, conversion.NewService(
+		conversion.NewPostgresMapper(db),
+		conversion.NewPostgresStore(db).WithDeliveries(deliveryStore).WithPixels(pixelStore),
+		conversion.NewPostgresFX(db),
+		attribution.NewService(clickResolver),
+		postbacklog.NewConversionAttemptLogger(attemptLogQueue),
+	), logger)
+	logger.Info("mapping replay starting", "interval", mappingreplay.Interval)
+	start(func() { replayer.RunLoop(ctx, mappingreplay.Interval, mappingReplayBatchSize) })
 
 	// Postbacks that were not recorded (duplicate/error/ignored) expire
 	// (internal/retention, tech audit DB2).

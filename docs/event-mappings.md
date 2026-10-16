@@ -100,6 +100,36 @@ removed via the real `DELETE` endpoint afterward (their one event mapping
 had already been removed through the UI, and would have cascaded
 regardless — `event_mappings.network_id` is `ON DELETE CASCADE`).
 
+## Postbacks waiting for a mapping (audit 2026-10-15, DATA-4; migration 00087)
+
+A postback whose status no mapping knows is answered 200 `error`: the
+request itself was fine, and a network retries only what failed. It used
+to be lost for good, however soon the operator added the mapping.
+
+- **Kept.** `conversion.Service` marks the ledger row `awaiting_mapping`
+  and writes what a replay needs on it: `external_click_id`, `event_at`
+  (the conversion's own time — FX and the report day), the currency as
+  sent (an assumed network currency is assumed afresh at replay). Only an
+  unmapped status waits; every other refusal stays final.
+- **Replayed.** `apps/worker` runs `internal/mappingreplay` every 30 s:
+  rows whose status is mapped now, within `conversion.MappingReplayWindow`
+  (30 days), oldest *event* first (a HOLD before the ACCEPT that followed
+  it), locked `FOR UPDATE SKIP LOCKED`. Each goes through the same
+  `conversion.Service.Record` a live postback does — dedup key,
+  progression, attribution, FX, outgoing postback, pixels — with the
+  network's settings as they are now. The new outcome is a new ledger row;
+  the old one gets `awaiting_mapping = false, replayed_at`. A worker that
+  dies between recording and clearing replays the row again and the dedup
+  key answers `duplicate`.
+- **Retention** keeps a waiting row for the window even when
+  `RETENTION_FAILED_POSTBACKS_DAYS` is shorter.
+- **Shown.** `GET /event-mappings/waiting` (`offer.read`) — per network,
+  each waiting status with its count and last arrival, organization-scoped.
+  The Overview shows "N postbacks are waiting for their status to be
+  mapped" with the statuses and a link to `/postbacks?tab=mapping`; the
+  mapping tab carries a count badge, and each network card lists its
+  waiting statuses with a "Map" button that fills the form.
+
 ## Deliberately deferred
 
 Postback Logs (incoming/outgoing delivery log, ClickHouse

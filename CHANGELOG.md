@@ -5,6 +5,29 @@ per-phase, matching `CLAUDE.md`'s phase protocol. The one exception is
 [Between phases], below: spec amendments and the code changes that follow from
 them land between phases and would otherwise be invisible here.
 
+## [Phase 30.47] — Postbacks waiting for a status mapping (audit DATA-4)
+
+A postback whose network status had no event mapping was answered 200 `error`, so the network never re-sent it, and
+the conversion was lost even after the operator added the mapping. `docs/event-mappings.md` "Postbacks waiting for a
+mapping".
+
+- Kept: `conversion.Service` marks such a ledger row `awaiting_mapping` (migration 00087) and every row now stores
+  `external_click_id` and `event_at`, plus the currency as sent. Only an unmapped status waits; other refusals stay final.
+- Replayed: `apps/worker` runs `internal/mappingreplay` every 30 s. Postbacks whose status is now mapped, within 30
+  days (`conversion.MappingReplayWindow`), go through the same `Service.Record`, oldest event first and
+  `FOR UPDATE SKIP LOCKED`. The conversion keeps its own date. The old row gets `replayed_at`. Retention keeps waiting
+  rows for the window.
+- Shown: `GET /event-mappings/waiting` (`offer.read`, org-scoped). Overview notice "N postbacks are waiting for their
+  status to be mapped" → `/postbacks?tab=mapping`. A count badge on the mapping tab. Each network card lists its
+  waiting statuses with "Map", which fills the form. EN/RU.
+- Tests: `mappingreplay_test.go` (Postgres: kept → nothing before mapping → HOLD then ACCEPT with their own dates →
+  cleared, no second replay; another org sees none; past the window not replayed). `retention_test.go`, engine unit
+  tests, `waiting-statuses.test.tsx`. Full Go suite with full env, including e2e and the cross-tenant route test: only
+  the known gallery-WIP failure (`TestUploadRejectsOversizeWrongContentAndMov`). tsc, eslint, vitest 169/169,
+  build. Live: a parked row in the demo org → listed (other org: empty) → mapping saved → the dev worker recorded it
+  as CPA_ACCEPT dated the day before. Test rows removed from Postgres and ClickHouse. Notice, badge and "Map" checked
+  in the browser.
+
 ## [Phase 30.46] — Check a postback (audit UX-3, part 2)
 
 An operator could only find out whether a network's postback URL works by waiting for a real conversion — or for one

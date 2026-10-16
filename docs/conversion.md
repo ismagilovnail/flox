@@ -15,7 +15,9 @@ raw click_id/status/revenue/currency/txn_id/event_time │
                                     Mapper.MapStatus (per-network
                                     event_mappings table)
                                               │
-                                   unmapped → ResultError, logged, stop
+                                   unmapped → ResultError, kept as
+                                   awaiting_mapping, stop (replayed by
+                                   internal/mappingreplay once mapped)
                                               ▼
                                     eventRefFor(status, txnID)
                                               │

@@ -37,3 +37,17 @@ export function createEventMapping(input: CreateEventMappingInput): Promise<Even
 export function deleteEventMapping(id: string): Promise<void> {
   return apiFetch(`/event-mappings/${id}`, { method: "DELETE" });
 }
+
+/** A network status postbacks arrived with before it was mapped. They are
+ * kept and recorded once a mapping for the status exists (apps/worker,
+ * internal/mappingreplay — audit 2026-10-15, DATA-4). */
+export type WaitingStatus = {
+  networkId: string;
+  rawStatus: string;
+  count: number;
+  lastAt: string;
+};
+
+export function listWaitingStatuses(): Promise<{ statuses: WaitingStatus[] }> {
+  return apiFetch("/event-mappings/waiting");
+}

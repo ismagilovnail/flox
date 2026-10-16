@@ -308,12 +308,17 @@ func (s *PostgresStore) recordSuccess(ctx context.Context, tx pgx.Tx, e Entry) (
 // with the given result and message.
 func insertEntry(ctx context.Context, q querier, e Entry, kind ResultKind, message string) (string, error) {
 	id := idgen.New()
-	_, err := q.Exec(ctx, `INSERT INTO postbacks (`+insertColumns+`)
-		VALUES ($1,$2,$3,$4,$5,'incoming',$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)`,
+	var eventAt *time.Time
+	if !e.EventAt.IsZero() {
+		eventAt = &e.EventAt
+	}
+	_, err := q.Exec(ctx, `INSERT INTO postbacks (`+insertColumns+`, external_click_id, awaiting_mapping, event_at)
+		VALUES ($1,$2,$3,$4,$5,'incoming',$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20, COALESCE($21, now()))`,
 		id, e.OrganizationID, e.NetworkID, e.ClickID, string(e.Status), string(kind),
 		e.AcceptDuplicates, e.EventRef, e.NetworkTxnID, e.RawStatus,
 		e.Revenue, e.Currency, e.USDValue, e.AttributionOutcome,
 		e.AttributedClickID, e.AttributionMethod, e.TimeToConversionMS, message,
+		e.ExternalClickID, e.AwaitingMapping && kind == ResultError, eventAt,
 	)
 	return id, err
 }

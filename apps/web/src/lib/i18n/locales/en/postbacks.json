@@ -6,12 +6,14 @@
       "incoming": "Incoming",
       "mapping": "Event Mapping",
       "logs": "Logs"
-    }
+    },
+    "waitingBadgeAria_one": "{{count}} status waiting for a mapping",
+    "waitingBadgeAria_other": "{{count}} statuses waiting for a mapping"
   },
   "eventMapping": {
     "description": "Translates each network's own status strings into FLOX statuses: CPA_HOLD / CPA_ACCEPT / CPA_REDEP / CPA_DECLINE / CPA_TRASH.",
     "cardDescription": "Raw status string this network sends → FLOX status.",
-    "emptyMappings": "No mappings yet — unmapped statuses fall through unrecognized.",
+    "emptyMappings": "No mappings yet — postbacks with a status that is not mapped wait until it is.",
     "statusPlaceholder": "e.g. ftd",
     "removeAria": "Remove mapping {{status}}",
     "addButton": "Add",
@@ -23,7 +25,17 @@
       "added": "Mapping added",
       "addedDescription": "{{status}} → {{floxStatus}}",
       "addError": "Couldn't add mapping",
-      "removeError": "Couldn't remove mapping"
+      "removeError": "Couldn't remove mapping",
+      "addedWaiting": "{{status}} → {{floxStatus}}. The waiting postbacks are recorded within a minute."
+    },
+    "waiting": {
+      "title": "Waiting for a mapping",
+      "row_one": "{{count}} postback",
+      "row_other": "{{count}} postbacks",
+      "mapButton": "Map",
+      "mapAria": "Map status {{status}}",
+      "hint": "Map these statuses: the postbacks are then recorded with their own date (within a minute). Ones older than {{days}} days are not.",
+      "loadError": "Couldn't load the statuses waiting for a mapping"
     }
   },
   "incoming": {
