@@ -159,6 +159,29 @@ Verified live: a network created without an outgoing URL; the URL copied
 from the dialog accepted (secret, then "no event mapping" until one was
 added, then `success`).
 
+## Redeposits without txn_id (audit 2026-10-15, DATA-2; migration 00088)
+
+A REDEP's dedup key is `(click_id, CPA_REDEP, txn_id)` (§45, CLAUDE.md #3).
+A network that does not send `txn_id` gives every redeposit of a click the
+same empty `event_ref`, so each repeat after the first is refused as a
+duplicate and is missing from revenue and LTV. The key stays as it is: two
+replays of one deposit and two deposits are indistinguishable without the
+id, and counting replays would be worse. The fix is on the network's side,
+so FLOX now says so:
+
+- `GET /networks/{id}/diagnostics` (`offer.read`, org-scoped, 404 for
+  another organization's network): over 30 days, REDEPs with an empty
+  `event_ref` received (success + duplicate), how many were duplicates,
+  the last one. A partial index (00088) keeps it off the rest of the
+  network's postbacks.
+- The network page shows "N repeat deposits lost: redeposits come without
+  txn_id" when any were refused, and a softer note when REDEPs arrive
+  without the id but none was lost yet; both say to add
+  `txn_id={transaction_id}` with the network's macro.
+- The duplicate's message (ledger, the tracker's answer, the postback
+  check) says the redeposit came without `txn_id`. A duplicate's outcome
+  now carries the store's message rather than the attribution note.
+
 ## Reports by network (2026-10-13)
 
 A click routed to an offer carries that offer's network (`network_id`,

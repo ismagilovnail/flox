@@ -72,6 +72,11 @@ func (s *Service) Get(ctx context.Context, orgID, id string) (Network, error) {
 	return s.withURL(s.repo.GetByID(ctx, orgID, id))
 }
 
+// Diagnostics is what the network's postbacks say about its setup.
+func (s *Service) Diagnostics(ctx context.Context, orgID, id string) (Diagnostics, error) {
+	return s.repo.Diagnostics(ctx, orgID, id)
+}
+
 func (s *Service) Create(ctx context.Context, orgID string, in CreateInput) (CreateResult, error) {
 	in.Name = strings.TrimSpace(in.Name)
 	in.PostbackURL = strings.TrimSpace(in.PostbackURL)

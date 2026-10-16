@@ -9,6 +9,7 @@ import {
   createNetwork,
   duplicateNetwork,
   getNetwork,
+  getNetworkDiagnostics,
   listNetworks,
   pauseNetwork,
   regeneratePostbackSecret,
@@ -29,6 +30,15 @@ export function useNetworks() {
 export function useNetwork(id: string) {
   const canRead = usePermission("offer.read");
   return useQuery({ queryKey: networkKey(id), queryFn: () => getNetwork(id), enabled: !!id && canRead });
+}
+
+export function useNetworkDiagnostics(id: string) {
+  const canRead = usePermission("offer.read");
+  return useQuery({
+    queryKey: [...networkKey(id), "diagnostics"],
+    queryFn: () => getNetworkDiagnostics(id),
+    enabled: !!id && canRead,
+  });
 }
 
 export function useCreateNetwork() {

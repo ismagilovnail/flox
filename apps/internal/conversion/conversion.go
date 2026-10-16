@@ -622,11 +622,12 @@ func (r recorder) commit(ctx context.Context, p Postback, entry Entry, attr attr
 }
 
 // committedMessage is what an accepted postback's outcome says: the
-// store's message when it applied or refused it, the attribution reason
-// otherwise, with the currency notes.
+// store's message when it applied or refused it (a duplicate's says why —
+// for a REDEP without txn_id, which parameter was missing), the
+// attribution reason otherwise, with the currency notes.
 func committedMessage(p Postback, entry Entry, rec Recorded) string {
 	message := entry.Message
-	if rec.Kind == ResultIgnored || rec.Kind == ResultSuccess {
+	if rec.Kind == ResultIgnored || rec.Kind == ResultSuccess || rec.Kind == ResultDuplicate {
 		message = rec.Message
 	}
 	return p.annotate(message)

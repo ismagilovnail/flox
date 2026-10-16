@@ -254,7 +254,7 @@ func (s *PostgresStore) recordSuccess(ctx context.Context, tx pgx.Tx, e Entry) (
 	).Scan(&returnedID)
 
 	if errors.Is(err, pgx.ErrNoRows) {
-		const msg = "dedup key (click_id, status, event_ref) already recorded"
+		msg := duplicateMessage(e)
 		dupID, err := insertEntry(ctx, tx, e, ResultDuplicate, msg)
 		if err != nil {
 			return Recorded{}, fmt.Errorf("conversion: logging duplicate: %w", err)
@@ -302,6 +302,17 @@ func (s *PostgresStore) recordSuccess(ctx context.Context, tx pgx.Tx, e Entry) (
 		}
 	}
 	return Recorded{ID: returnedID, Kind: ResultSuccess, Message: e.Message}, nil
+}
+
+// duplicateMessage says why a postback is a duplicate. A REDEP without a
+// transaction id has an empty event_ref, so every repeat deposit of the
+// click after the first lands here: the message names the parameter that
+// tells them apart (audit 2026-10-15, DATA-2; §45 keeps the key as is).
+func duplicateMessage(e Entry) string {
+	if e.Status == event.CpaRedep && e.EventRef == "" {
+		return "dedup key (click_id, status, event_ref) already recorded — this redeposit came without txn_id, so every repeat deposit of the click counts once; send the network's transaction id as txn_id"
+	}
+	return "dedup key (click_id, status, event_ref) already recorded"
 }
 
 // insertEntry writes one non-success ledger row (error/ignored/duplicate)

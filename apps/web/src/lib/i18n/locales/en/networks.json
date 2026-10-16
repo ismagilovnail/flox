@@ -148,5 +148,15 @@
     "noRate": "no exchange rate for the day — left out of revenue reports",
     "outgoing": "Outgoing postback",
     "nothingRecorded": "Dry run: nothing was recorded, nothing was sent to the network."
+  },
+  "diagnostics": {
+    "redepWithoutTxn": {
+      "lostTitle_one": "{{count}} repeat deposit lost: redeposits come without txn_id",
+      "lostTitle_other": "{{count}} repeat deposits lost: redeposits come without txn_id",
+      "lostDescription": "Redeposits without the network's transaction id over {{days}} days: {{received}}. Without it FLOX cannot tell one deposit from the next on the same click, so every repeat after the first was refused as a duplicate and is missing from revenue and LTV.",
+      "riskTitle": "Redeposits come without txn_id",
+      "riskDescription": "Redeposits without the network's transaction id over {{days}} days: {{received}}. None was lost yet, but a second deposit on the same click would be refused as a duplicate.",
+      "fix": "Add txn_id to the postback URL in the network's dashboard, with the network's transaction-id macro — for example txn_id={transaction_id}. Deposits already refused are not recovered."
+    }
   }
 }

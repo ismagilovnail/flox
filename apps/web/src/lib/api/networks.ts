@@ -79,3 +79,17 @@ export function activateNetwork(id: string): Promise<Network> {
 export function archiveNetwork(id: string): Promise<Network> {
   return apiFetch(`/networks/${id}`, { method: "PATCH", body: { status: "archived" } });
 }
+
+/** What a network's own postbacks of the last `windowDays` say about its
+ * setup (GET /networks/{id}/diagnostics). */
+export type NetworkDiagnostics = {
+  windowDays: number;
+  /** Redeposits that came without txn_id. Their dedup key has no
+   * transaction id, so each repeat deposit of a click after the first is a
+   * duplicate: `duplicates` is what was lost (audit 2026-10-15, DATA-2). */
+  redepWithoutTxn: { received: number; duplicates: number; lastAt: string | null };
+};
+
+export function getNetworkDiagnostics(id: string): Promise<NetworkDiagnostics> {
+  return apiFetch(`/networks/${id}/diagnostics`);
+}

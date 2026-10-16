@@ -71,3 +71,22 @@ type CreateResult struct {
 	Network        Network
 	PostbackSecret string
 }
+
+// DiagnosticsWindow is how far back Diagnostics looks.
+const DiagnosticsWindow = 30 * 24 * time.Hour
+
+// Diagnostics is what a network's own postbacks say about its setup.
+type Diagnostics struct {
+	WindowDays      int             `json:"windowDays"`
+	RedepWithoutTxn RedepWithoutTxn `json:"redepWithoutTxn"`
+}
+
+// RedepWithoutTxn counts redeposits that came without txn_id. The dedup
+// key of a REDEP is (click_id, CPA_REDEP, txn_id), so without the id every
+// repeat deposit of a click after the first is refused as a duplicate
+// (§45; audit 2026-10-15, DATA-2). Duplicates is what was lost.
+type RedepWithoutTxn struct {
+	Received   int        `json:"received"`
+	Duplicates int        `json:"duplicates"`
+	LastAt     *time.Time `json:"lastAt"`
+}

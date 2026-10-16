@@ -67,6 +67,30 @@ func (r *Repository) GetByID(ctx context.Context, orgID, id string) (Network, er
 	return n, err
 }
 
+// Diagnostics reads the network's postbacks of the last DiagnosticsWindow.
+// Scoped to orgID (CLAUDE.md #5): another organization's network is not
+// found.
+func (r *Repository) Diagnostics(ctx context.Context, orgID, id string) (Diagnostics, error) {
+	if _, err := r.GetByID(ctx, orgID, id); err != nil {
+		return Diagnostics{}, err
+	}
+	d := Diagnostics{WindowDays: int(DiagnosticsWindow.Hours() / 24)}
+	err := r.db.QueryRow(ctx, `
+		SELECT count(*) FILTER (WHERE result IN ('success', 'duplicate')),
+		       count(*) FILTER (WHERE result = 'duplicate'),
+		       max(created_at)
+		FROM postbacks
+		WHERE organization_id = $1 AND network_id = $2
+		  AND status = 'CPA_REDEP' AND event_ref = '' AND direction = 'incoming'
+		  AND created_at > now() - make_interval(secs => $3)`,
+		orgID, id, DiagnosticsWindow.Seconds(),
+	).Scan(&d.RedepWithoutTxn.Received, &d.RedepWithoutTxn.Duplicates, &d.RedepWithoutTxn.LastAt)
+	if err != nil {
+		return Diagnostics{}, fmt.Errorf("network: reading diagnostics: %w", err)
+	}
+	return d, nil
+}
+
 func (r *Repository) Create(ctx context.Context, id, orgID string, in CreateInput, postbackSecretHash string) (Network, error) {
 	row := r.db.QueryRow(ctx, `
 		INSERT INTO networks (id, organization_id, name, postback_url, accept_duplicates, currency, postback_secret_hash)

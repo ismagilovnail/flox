@@ -137,6 +137,10 @@ func TestEveryRouteRefusesAnotherOrganizationsIDs(t *testing.T) {
 
 	tried := 0
 	for _, rt := range routes {
+		// A fresh address per route: the calls of every route together
+		// outgrow the general per-IP limit (httpserver, 300/min), and a 429
+		// would read as B's id being answered differently. Same session.
+		c.ip = randomTestIP()
 		params := paramRE.FindAllStringSubmatchIndex(rt.path, -1)
 		if len(params) == 0 {
 			if rt.method == http.MethodGet {

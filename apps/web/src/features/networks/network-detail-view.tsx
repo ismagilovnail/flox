@@ -10,6 +10,7 @@ import { usePermission } from "@/hooks/use-auth";
 import { NetworkForm, type NetworkFormValues } from "@/features/networks/network-form";
 import { IncomingPostbackCard } from "@/features/networks/incoming-postback-card";
 import { PostbackCheckCard } from "@/features/networks/postback-check-card";
+import { NetworkDiagnostics } from "@/features/networks/network-diagnostics";
 
 export function NetworkDetailView({ id }: { id: string }) {
   const { t } = useTranslation("networks");
@@ -45,6 +46,7 @@ export function NetworkDetailView({ id }: { id: string }) {
 
   return (
     <div className="flex flex-col gap-4">
+      <NetworkDiagnostics networkId={network.id} />
       <IncomingPostbackCard network={network} canWrite={canWrite} />
       <PostbackCheckCard network={network} />
       <NetworkForm

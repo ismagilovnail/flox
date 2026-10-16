@@ -33,6 +33,7 @@ func (h *Handler) Register(r chi.Router) {
 	r.Get("/", h.list)
 	r.With(h.requireWrite).Post("/", h.create)
 	r.Get("/{id}", h.get)
+	r.Get("/{id}/diagnostics", h.diagnostics)
 	r.With(h.requireWrite).Patch("/{id}", h.update)
 	r.With(h.requireWrite).Delete("/{id}", h.delete)
 	r.With(h.requireWrite).Post("/{id}/duplicate", h.duplicate)
@@ -54,6 +55,16 @@ func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"networks": networks, "total": total})
+}
+
+func (h *Handler) diagnostics(w http.ResponseWriter, r *http.Request) {
+	orgID, _ := tenant.OrgID(r.Context())
+	d, err := h.svc.Diagnostics(r.Context(), orgID, chi.URLParam(r, "id"))
+	if err != nil {
+		apierror.Write(w, h.logger, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, d)
 }
 
 func (h *Handler) get(w http.ResponseWriter, r *http.Request) {

@@ -5,6 +5,26 @@ per-phase, matching `CLAUDE.md`'s phase protocol. The one exception is
 [Between phases], below: spec amendments and the code changes that follow from
 them land between phases and would otherwise be invisible here.
 
+## [Phase 30.48] — Redeposits without txn_id (audit DATA-2)
+
+A network that sends redeposits without `txn_id` loses every repeat deposit of a click after the first: the dedup key
+(§45) has an empty `event_ref`, so they are duplicates. The key stays; FLOX now says so. `docs/networks-offers.md`
+"Redeposits without txn_id".
+
+- `GET /networks/{id}/diagnostics` (`apps/internal/network`, `offer.read`, org-scoped): 30-day count of REDEPs
+  without txn_id, of them duplicates, the last one. Partial index `postbacks_redep_without_txn_idx` (migration 00088,
+  concurrently).
+- Network page: "N repeat deposits lost: redeposits come without txn_id" with the fix (`txn_id={transaction_id}`),
+  or a note before anything is lost. EN/RU.
+- Such a duplicate's message names the missing `txn_id`; a duplicate's outcome now carries the store's message (the
+  tracker's answer, the postback check).
+- Tests: `network/diagnostics_test.go` (through the real conversion engine on Postgres: success, duplicate naming
+  txn_id, REDEP with txn_id not counted; another org 404), `network-diagnostics.test.tsx`. The cross-tenant route
+  test now gives each route its own client address: its calls together outgrew the general 300/min per-IP limit and a
+  429 read as a difference. Full Go suite with full env: only the known gallery-WIP failure; e2e passed. tsc, eslint,
+  vitest 172/172, build. Live: own org counts, other org 404, no session 401; the notice on the network page (rows
+  removed after).
+
 ## [Phase 30.47] — Postbacks waiting for a status mapping (audit DATA-4)
 
 A postback whose network status had no event mapping was answered 200 `error`, so the network never re-sent it, and
