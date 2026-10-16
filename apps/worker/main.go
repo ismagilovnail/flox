@@ -80,6 +80,7 @@ import (
 	"github.com/ismagilovnail/flox/apps/internal/telegram"
 	"github.com/ismagilovnail/flox/apps/internal/telemetry"
 	"github.com/ismagilovnail/flox/apps/internal/urlsafety"
+	"github.com/ismagilovnail/flox/apps/internal/visitorkey"
 )
 
 // postbackPollBatchSize/postbackPollIdle: how many due postback deliveries
@@ -262,7 +263,28 @@ func run() error {
 			}
 			return
 		}
+		// Visitor pseudonyms for clicks from before schema/020, then the
+		// TTL on raw IPs and user agents — in this order: a click whose IP
+		// was wiped before it got its pseudonym would count as its own
+		// unique visitor (audit 2026-10-15, GDPR-1).
+		var keyOf func(ip, userAgent string) string
+		if key, err := visitorkey.ParseKey(cfg.VisitorKey); err != nil {
+			logger.Warn("no visitor pseudonyms: older clicks keep raw IP + user agent for unique clicks until the TTL wipes them", "error", err)
+		} else {
+			keyOf = func(ip, userAgent string) string { return visitorkey.Of(key, ip, userAgent) }
+		}
+		if err := chstore.BackfillVisitorKeys(ctx, ch, keyOf); err != nil {
+			if ctx.Err() == nil {
+				logger.Error("clickhouse visitor key backfill failed, will retry on next start; IP retention not applied", "error", err)
+			}
+			return
+		}
 		logger.Info("clickhouse backfills done", "took", time.Since(start))
+		if changed, err := chstore.SetPersonalDataTTL(ctx, ch, cfg.RetentionIPDays); err != nil {
+			logger.Warn("IP and user agent retention not applied", "error", err)
+		} else if len(changed) > 0 {
+			logger.Info("IP and user agent retention set", "days", cfg.RetentionIPDays, "columns", changed)
+		}
 	}()
 
 	// Same "fail loudly at boot" bar as apps/api's own required-secret

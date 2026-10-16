@@ -5,6 +5,30 @@ per-phase, matching `CLAUDE.md`'s phase protocol. The one exception is
 [Between phases], below: spec amendments and the code changes that follow from
 them land between phases and would otherwise be invisible here.
 
+## [Phase 30.51] — Visitors' IP and user agent expire (audit GDPR-1, part 1)
+
+IP and User-Agent sat in ClickHouse forever. You chose this slice and 90 days. `docs/retention.md` "Visitors' IP and
+user agent".
+
+- `internal/visitorkey`: keyed pseudonym (HMAC-SHA256 with `VISITOR_KEY`) of IP + UA. `apps/tracker` puts it on every
+  click (`visitor_key`, ClickHouse schema/020). Unique clicks count it (`chstore.uniqueVisitorExpr`), falling back to
+  raw IP + UA for a click without one.
+- `chstore.BackfillVisitorKeys` (worker, once): existing clicks get their pseudonym from their IP + UA (`transform()`
+  mutations, keys computed in Go). Then `chstore.SetPersonalDataTTL` sets a column TTL on `ip` / `user_agent` in
+  `click_events`, `tracking_events`, `click_lookup`, from `RETENTION_IP_DAYS` (default 90; 0 = keep). The order
+  matters, so an IP is never wiped before its pseudonym exists.
+- Click log: an empty IP or UA says it was not recorded or was deleted after the retention period. EN/RU.
+- Config: `VISITOR_KEY`, `RETENTION_IP_DAYS` (`.env.example`, dev and test compose, `docs/environment.md`).
+- Tests: `visitorkey`; `TestUniqueClicksSurviveTheIPWipe` (ClickHouse: the backfilled pseudonym equals the tracker's,
+  unique clicks are the same after IP/UA are wiped; scoped to its own organization); `TestSetPersonalDataTTL`. Live:
+  the dev backfill keyed all 802 clicks that had an IP or UA; a click through the dev tracker stored the pseudonym
+  Go computes from the dev key. The full suite caught `click_log_test`'s positional insert missing the new column
+  (fixed). Then only the known gallery-WIP failure; vitest 172/172.
+- Note: the dev worker briefly ran this code without `VISITOR_KEY` (air reload) and set the TTL before any pseudonym
+  existed. The 24 dev clicks older than 90 days show no IP; they look like fixture clicks that never had one (as do
+  1233 recent ones).
+- Not in this part: organization deletion, data export/DSAR, `referrer`, DPA.
+
 ## [Phase 30.50] — User content isolation and SSRF (audit SEC-5)
 
 The audit had not checked whether uploaded landings can attack the panel, nor SSRF beyond postbacks.

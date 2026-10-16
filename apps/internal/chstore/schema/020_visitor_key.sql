@@ -1,0 +1,12 @@
+-- visitor_key on click_events (audit 2026-10-15, GDPR-1): the keyed
+-- pseudonym of the visitor's IP + user agent (internal/visitorkey) that
+-- unique clicks count by. Raw ip and user_agent expire after
+-- RETENTION_IP_DAYS (chstore.SetPersonalDataTTL, a column TTL set by
+-- apps/worker); the pseudonym stays, so an old period's unique clicks read
+-- the same after the wipe. Set by apps/tracker on SOURCE_CLICK and
+-- SOURCE_FILTER; clicks from before this file get it from the one-time
+-- backfill (chstore.BackfillVisitorKeys).
+--
+-- Appended last, after 019's tg_channel_id — chstore.EventStore appends
+-- positionally; keep the order in sync.
+ALTER TABLE click_events ADD COLUMN IF NOT EXISTS visitor_key String;

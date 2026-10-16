@@ -59,6 +59,7 @@ func TestListAndCountClickLog(t *testing.T) {
 			"", // postlanding_id (schema/016)
 			"", // network_id (schema/017)
 			"", // tg_channel_id (schema/019)
+			"", // visitor_key (schema/020)
 		); err != nil {
 			t.Fatalf("batch.Append: %v", err)
 		}

@@ -279,6 +279,7 @@ services:
       # points at their assets. No storage credentials: the tracker only
       # builds public URLs, it never reads or writes objects.
       LANDING_LINK_KEY: "19RzlC3SBPwVig37KNN84MG90P84kvYsr8dVA+jnXn8="
+      VISITOR_KEY: "KDNQTkfDdvMJWY6IhSXHoFwxfSF4PZN2d/O+im52274="  # internal/visitorkey: the same on tracker and worker
       # Signs sticky cookies (apps/tracker/sticky.go). Dev-only value;
       # a real deployment sets its own and keeps it: changing it re-buckets
       # every returning visitor.
@@ -319,6 +320,7 @@ services:
       PUSH_VAPID_PRIVATE_KEY: "6nSzoSNsEJGtd3kQGYD-2T8PoWZcjhTStFS3415XtFc"
       PUSH_VAPID_SUBJECT: "mailto:dev@flox.local"
       DATABASE_URL: postgres://flox:flox@postgres:5432/flox?sslmode=disable
+      VISITOR_KEY: "KDNQTkfDdvMJWY6IhSXHoFwxfSF4PZN2d/O+im52274="  # internal/visitorkey: the same on tracker and worker
       CLICKHOUSE_URL: http://clickhouse:8123
       CLICKHOUSE_DATABASE: flox
       CLICKHOUSE_USER: flox

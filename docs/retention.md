@@ -1,7 +1,9 @@
 # Data retention (tech audit 2026-10-06, CH3/DB2/DB5)
 
 Decided 2026-10-09: **only logs expire.** Everything a report, a
-conversion or an invoice rests on is kept.
+conversion or an invoice rests on is kept. Since 2026-10-16 one exception
+inside the kept tables: visitors' **IP address and user agent** are
+personal data and expire (audit GDPR-1, below); the rows stay.
 
 | Data | Where | Kept | Why |
 |---|---|---|---|
@@ -10,6 +12,7 @@ conversion or an invoice rests on is kept.
 | Pixel deliveries, sent or dead-lettered | Postgres `pixel_deliveries` | `RETENTION_PIXEL_DELIVERIES_DAYS`, default 30 | A send log carrying the visitor's IP and user agent the platform matched on (§54); the pixel page shows the last 100 |
 | Postback attempt log (in and out) | ClickHouse `postback_events` | `RETENTION_POSTBACK_LOG_MONTHS`, default 13 | What the Postback Logs screen shows; a year plus a month covers a yearly dispute |
 | Clicks, landing/PWA events, conversions, LTV, click lookup, costs | ClickHouse `click_events`, `tracking_events`, `conversion_events`, `ltv_events`, `click_lookup`, `cost_events` | forever | Every report reads them for any period; a TTL would empty old reports without a word, and a conversion on a click older than the TTL would become `unknown_click` |
+| Visitors' IP address and user agent (columns, not rows) | ClickHouse `click_events`, `tracking_events`, `click_lookup` | `RETENTION_IP_DAYS`, default 90 | Personal data (GDPR-1). Unique clicks count `visitor_key`, a keyed pseudonym that stays, so reports do not change. Pixels match a conversion to its ad click by IP + user agent: a conversion more than 90 days after its click goes to the ad platform without them (the platforms take events of the last 7 days anyway) |
 | Daily aggregates | ClickHouse `*_daily_*` | forever | Small |
 | Expired sign-in state: sessions, pending second-factor logins | Postgres `sessions`, `pending_totp_logins` | until `expires_at` | Unusable once expired — every lookup requires `expires_at > now()` (DB5) |
 | Expired invite and email-verification tokens | Postgres `memberships.invite_token_*`, `users.email_verification_token_*` | until expiry; then the token is cleared, the row kept | The invite still shows on the Team page and can be resent; the user is still the account |
@@ -52,3 +55,31 @@ merges (ClickHouse) — irreversibly, except from backups.
 Expiring the report tables is a separate decision: reports older than
 the TTL would need to come from the daily aggregates, which today only
 the campaign screen reads.
+
+## Visitors' IP and user agent (audit 2026-10-15, GDPR-1)
+
+- **Pseudonym.** `apps/tracker` puts `visitor_key` on every click
+  (schema/020): HMAC-SHA256 of IP + user agent with `VISITOR_KEY`
+  (`internal/visitorkey`), 16 bytes in hex. Unique clicks count
+  `campaign|visitor_key` (`chstore.uniqueVisitorExpr`); a click without one
+  falls back to raw IP + user agent, and one with neither counts as its own
+  visitor. Keyed, because the IPv4 space times the common user agents is
+  small enough to reverse a plain hash. The key is the same on every
+  tracker replica and in the worker, and is never rotated: a new key makes
+  every returning visitor a new one.
+- **Backfill.** Clicks from before schema/020 get their pseudonym once,
+  from `apps/worker` (`chstore.BackfillVisitorKeys`): distinct IP + user
+  agent pairs, keyed in Go, written by `transform()` mutations of 2000 pairs.
+  Without `VISITOR_KEY` it is skipped and not recorded, so it runs once a
+  key is set.
+- **TTL.** After the backfill, the worker sets a column TTL on `ip` and
+  `user_agent` in the three tables (`chstore.SetPersonalDataTTL`): an
+  expired value becomes `''` when ClickHouse merges the part, so it can
+  outlive its day by hours. The order matters: a click whose IP went
+  before it got its pseudonym would count as its own unique visitor.
+  `0` removes the TTL.
+- **Not covered here:** `referrer` (it can carry query strings), the
+  operator audit trail's IPs, organization deletion and data export — the
+  rest of GDPR-1. Pixel deliveries already expire
+  (`RETENTION_PIXEL_DELIVERIES_DAYS`).
+

@@ -50,7 +50,7 @@ func TestReapprovalAfterDeclineNeedsANewTxnID(t *testing.T) {
 	step("approved", "T1b", conversion.ResultDuplicate, "") // not declined: a fresh txn id is a retry, not a re-approval
 	step("chargeback", "", conversion.ResultSuccess, "reverses the CPA_ACCEPT payout")
 	step("approved", "T1", conversion.ResultDuplicate, "re-approval counts only with a txn_id") // the replay
-	step("approved", "T1b", conversion.ResultDuplicate, "re-approval counts only")             // also seen on an accept row
+	step("approved", "T1b", conversion.ResultDuplicate, "re-approval counts only")              // also seen on an accept row
 	step("approved", "", conversion.ResultDuplicate, "re-approval counts only")
 	step("approved", "T2", conversion.ResultSuccess, "re-approval after CPA_DECLINE")
 	step("approved", "T2", conversion.ResultDuplicate, "")   // replay of the re-approval

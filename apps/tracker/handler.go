@@ -22,6 +22,7 @@ import (
 	"github.com/ismagilovnail/flox/apps/internal/routingcache"
 	"github.com/ismagilovnail/flox/apps/internal/routingstore"
 	"github.com/ismagilovnail/flox/apps/internal/storage"
+	"github.com/ismagilovnail/flox/apps/internal/visitorkey"
 )
 
 // Handler owns the §41 critical path:
@@ -45,6 +46,9 @@ type Handler struct {
 	// links signs internal landings' click links; nil (LANDING_LINK_KEY
 	// unset/invalid) means internal landing stages are skipped.
 	links *landinglink.Signer
+	// visitorKey derives click events' VisitorKey (internal/visitorkey);
+	// nil (VISITOR_KEY unset/invalid) leaves it empty.
+	visitorKey []byte
 	// assets builds a served landing's <base href>; nil means no object
 	// storage configured, pages are served without one.
 	assets *storage.Client
@@ -163,6 +167,7 @@ func (h *Handler) track(w http.ResponseWriter, r *http.Request) {
 	clickID := clickIDFor(sticky, result, loaded.StickyFlowKeepClickID)
 
 	ev := buildEvent(link, result, attrs, params, clickID, ip, r)
+	ev.VisitorKey = visitorkey.Of(h.visitorKey, ev.IP, ev.UserAgent)
 	// The network of the offer the click was routed to, as it is now — an
 	// offer moved to another network later keeps this click on this one.
 	if result.OfferID != "" {

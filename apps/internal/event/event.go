@@ -182,6 +182,10 @@ type Event struct {
 	IP             string `json:"ip,omitempty"`
 	UserAgent      string `json:"userAgent,omitempty"`
 	Referrer       string `json:"referrer,omitempty"`
+	// VisitorKey is the keyed pseudonym of IP + user agent unique clicks
+	// count by (internal/visitorkey); click events only. It outlives the
+	// raw IP and user agent, which expire (RETENTION_IP_DAYS).
+	VisitorKey string `json:"visitorKey,omitempty"`
 
 	// Pass-through attribution parameters (§42). Persisted exactly as
 	// they arrived — missing means empty, never a fabricated placeholder.

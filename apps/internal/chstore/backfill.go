@@ -172,3 +172,68 @@ func backfillLTVAttribution(ctx context.Context, conn driver.Conn, name string) 
 	}
 	return nil
 }
+
+const visitorKeyBackfill = "visitor_key_v1"
+
+// visitorKeyBatch is how many distinct IP + user agent pairs one mutation
+// carries.
+const visitorKeyBatch = 2000
+
+// BackfillVisitorKeys gives clicks from before schema/020 their visitor
+// pseudonym (internal/visitorkey), from their IP and user agent while they
+// are still kept: once RETENTION_IP_DAYS wipes those, a click without a
+// pseudonym would count as its own unique visitor. keyOf is
+// visitorkey.Of with the key; nil (VISITOR_KEY unset) skips the backfill
+// without recording it, so it runs once a key is configured. Runs once,
+// from apps/worker; it waits for each mutation, so an interrupted run is
+// picked up where it stopped (rows that have a key are left alone).
+func BackfillVisitorKeys(ctx context.Context, conn driver.Conn, keyOf func(ip, userAgent string) string) error {
+	return backfillVisitorKeys(ctx, conn, visitorKeyBackfill, keyOf, "")
+}
+
+// backfillVisitorKeys with orgID limits the run to one organization — for
+// tests, which share the tables with the dev stack; "" is every one.
+func backfillVisitorKeys(ctx context.Context, conn driver.Conn, name string, keyOf func(ip, userAgent string) string, orgID string) error {
+	if keyOf == nil {
+		return nil
+	}
+	done, err := backfillDone(ctx, conn, name)
+	if err != nil || done {
+		return err
+	}
+	rows, err := conn.Query(ctx, `
+		SELECT DISTINCT ip, user_agent FROM click_events
+		WHERE visitor_key = '' AND (ip != '' OR user_agent != '') AND (? = '' OR organization_id = ?)`, orgID, orgID)
+	if err != nil {
+		return fmt.Errorf("chstore: backfill %s: reading visitors: %w", name, err)
+	}
+	var visitors, keys []string
+	for rows.Next() {
+		var ip, ua string
+		if err := rows.Scan(&ip, &ua); err != nil {
+			rows.Close()
+			return fmt.Errorf("chstore: backfill %s: reading visitors: %w", name, err)
+		}
+		visitors = append(visitors, ip+"\x00"+ua)
+		keys = append(keys, keyOf(ip, ua))
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return fmt.Errorf("chstore: backfill %s: reading visitors: %w", name, err)
+	}
+	wait := clickhouse.Context(ctx, clickhouse.WithSettings(clickhouse.Settings{"mutations_sync": 2}))
+	for start := 0; start < len(visitors); start += visitorKeyBatch {
+		end := min(start+visitorKeyBatch, len(visitors))
+		batch, batchKeys := visitors[start:end], keys[start:end]
+		if err := conn.Exec(wait, `ALTER TABLE click_events
+			UPDATE visitor_key = transform(concat(ip, char(0), user_agent), ?, ?, '')
+			WHERE visitor_key = '' AND concat(ip, char(0), user_agent) IN ? AND (? = '' OR organization_id = ?)`,
+			batch, batchKeys, batch, orgID, orgID); err != nil {
+			return fmt.Errorf("chstore: backfill %s: %w", name, err)
+		}
+	}
+	if err := conn.Exec(ctx, `INSERT INTO chstore_backfills (name) VALUES (?)`, name); err != nil {
+		return fmt.Errorf("chstore: recording backfill %s: %w", name, err)
+	}
+	return nil
+}

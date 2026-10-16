@@ -121,6 +121,18 @@ type Config struct {
 	// deleted after this many days (a broadcast keeps its own counts); 0
 	// keeps them.
 	RetentionPushDeliveriesDays int
+	// RetentionIPDays: visitors' IP addresses and user agents in
+	// ClickHouse's click_events, tracking_events and click_lookup are
+	// wiped after this many days (column TTL, chstore.SetPersonalDataTTL;
+	// audit 2026-10-15, GDPR-1); 0 keeps them. Unique clicks count the
+	// keyed pseudonym (VisitorKey), which stays.
+	RetentionIPDays int
+	// VisitorKey is the HMAC key (32+ raw bytes, base64) apps/tracker
+	// derives a visitor's pseudonym from (internal/visitorkey), and
+	// apps/worker backfills older clicks with. The same on every replica,
+	// never rotated. Unset: no pseudonym — unique clicks fall back to raw
+	// IP + user agent, which the TTL wipes.
+	VisitorKey string
 
 	// LandingLinkKey is the HMAC key (32+ raw bytes, base64-encoded)
 	// apps/tracker signs internal landings' click links with
@@ -283,6 +295,10 @@ func load(portVar, portDefault, defaultServiceName string, ch chLimits) (Config,
 	if err != nil {
 		return Config{}, err
 	}
+	ipDays, err := parseNonNegative("RETENTION_IP_DAYS", 90)
+	if err != nil {
+		return Config{}, err
+	}
 	pushDays, err := parseNonNegative("RETENTION_PUSH_DELIVERIES_DAYS", 30)
 	if err != nil {
 		return Config{}, err
@@ -323,6 +339,8 @@ func load(portVar, portDefault, defaultServiceName string, ch chLimits) (Config,
 
 		RetentionFailedPostbacksDays: failedDays,
 		RetentionPostbackLogMonths:   logMonths,
+		RetentionIPDays:              ipDays,
+		VisitorKey:                   getEnv("VISITOR_KEY", ""),
 		RetentionPixelDeliveriesDays: pixelDays,
 		RetentionPushDeliveriesDays:  pushDays,
 		SentryDSN:                    getEnv("SENTRY_DSN", ""),

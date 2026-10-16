@@ -48,5 +48,6 @@
     "SOURCE_CLICK": "Click",
     "SOURCE_FILTER": "Filtered"
   },
-  "yes": "Yes"
+  "yes": "Yes",
+  "personalDataGone": "Not recorded, or deleted: visitors' IP addresses and user agents are kept for 90 days by default"
 }

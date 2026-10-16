@@ -32,3 +32,9 @@ func RunNetworkBackfill(ctx context.Context, conn driver.Conn, name string, offe
 func RunLTVAttributionBackfill(ctx context.Context, conn driver.Conn, name string) error {
 	return backfillLTVAttribution(ctx, conn, name)
 }
+
+// RunVisitorKeyBackfill runs BackfillVisitorKeys under its own name, on
+// one organization's clicks.
+func RunVisitorKeyBackfill(ctx context.Context, conn driver.Conn, name string, keyOf func(ip, userAgent string) string, orgID string) error {
+	return backfillVisitorKeys(ctx, conn, name, keyOf, orgID)
+}

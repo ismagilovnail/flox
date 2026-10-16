@@ -425,10 +425,21 @@ func scanKey(dims []ReportDimension, values []string, day *time.Time) ReportKey 
 const emptySubsCondition = "sub1 = '' AND sub2 = '' AND sub3 = '' AND sub4 = '' AND sub5 = '' AND " +
 	"sub6 = '' AND sub7 = '' AND sub8 = '' AND sub9 = '' AND sub10 = ''"
 
+// uniqueVisitorExpr is who a click is, for unique clicks: the visitor's
+// keyed pseudonym (schema/020, internal/visitorkey) per campaign. A click
+// without one — from before the pseudonym, or a tracker without
+// VISITOR_KEY — falls back to raw IP + user agent while they are kept
+// (RETENTION_IP_DAYS), and a click with neither counts as its own visitor
+// (audit 2026-10-15, GDPR-1).
+const uniqueVisitorExpr = `multiIf(visitor_key != '', concat(campaign_id, '|', visitor_key),
+		ip = '' AND user_agent = '', click_id,
+		concat(campaign_id, '|', ip, '|', user_agent))`
+
 // ReportClicks answers "how many SOURCE_CLICK rows, and how many distinct
 // visitors among them" for q's date range/dims/filters, plus how many
 // SOURCE_FILTER rows (Blocked) and is_bot rows (Bots) fall in the same slice. A visitor is the
-// campaign + IP + user agent triple — the same fingerprint the tracker hashes
+// campaign + IP + user agent triple, counted by its keyed pseudonym
+// (uniqueVisitorExpr) — the same fingerprint the tracker hashes
 // to pick a flow (apps/tracker visitKey) — NOT the click_id: a click_id is
 // minted per click (it is the postback attribution key) and is only reused by
 // stickyFlowKeepClickId, so counting it made every click "unique" by default.
@@ -453,7 +464,7 @@ func (s *EventStore) ReportClicks(ctx context.Context, q ReportQuery) ([]ClickAg
 
 	query := fmt.Sprintf(`
 		SELECT %scountIf(type = 'SOURCE_CLICK') AS clicks,
-		       uniqExactIf(if(ip = '' AND user_agent = '', click_id, concat(campaign_id, '|', ip, '|', user_agent)), type = 'SOURCE_CLICK') AS unique_clicks,
+		       uniqExactIf(`+uniqueVisitorExpr+`, type = 'SOURCE_CLICK') AS unique_clicks,
 		       countIf(type = 'SOURCE_FILTER') AS blocked,
 		       countIf(is_bot = 1) AS bots,
 		       countIf(type = 'SOURCE_CLICK' AND `+emptySubsCondition+`) AS empty_subs

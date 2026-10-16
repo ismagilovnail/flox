@@ -48,6 +48,7 @@ import (
 	"github.com/ismagilovnail/flox/apps/internal/telegram"
 	"github.com/ismagilovnail/flox/apps/internal/telemetry"
 	"github.com/ismagilovnail/flox/apps/internal/tlsask"
+	"github.com/ismagilovnail/flox/apps/internal/visitorkey"
 )
 
 func main() {
@@ -190,6 +191,13 @@ func run() error {
 	// dependencies are optional: without a signing key internal landing
 	// stages are skipped (straight to the destination), without
 	// storage pages are served with no <base href>.
+	// Visitor pseudonyms for unique clicks (internal/visitorkey, audit
+	// GDPR-1): raw IPs expire, the pseudonym stays.
+	if key, err := visitorkey.ParseKey(cfg.VisitorKey); err != nil {
+		logger.Warn("no visitor pseudonyms: unique clicks fall back to IP + user agent, which expire", "error", err)
+	} else {
+		handler.visitorKey = key
+	}
 	if key, err := landinglink.ParseKey(cfg.LandingLinkKey); err != nil {
 		logger.Warn("internal landings disabled: flows with one redirect straight to their destination", "error", err)
 	} else {

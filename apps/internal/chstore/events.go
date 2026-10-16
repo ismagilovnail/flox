@@ -76,6 +76,7 @@ func (s *EventStore) insertClickEvents(ctx context.Context, events []event.Event
 			e.PostlandingID,     // schema/016, after event_id
 			e.NetworkID,         // schema/017, after postlanding_id (click/tracking only; conversions have it from 003)
 			e.TelegramChannelID, // schema/019, after network_id (click/tracking only)
+			e.VisitorKey,        // schema/020, after tg_channel_id (click_events only)
 		); err != nil {
 			return fmt.Errorf("chstore: appending to click_events batch: %w", err)
 		}

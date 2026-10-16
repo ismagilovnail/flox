@@ -41,8 +41,14 @@ export const CLICK_LOG_INITIAL_COLUMN_VISIBILITY: Record<string, boolean> = {
   filterReason: false,
 };
 
-function Mut({ value }: { value?: string }) {
-  return value ? <span className="text-xs">{value}</span> : <span className="text-xs text-muted-foreground">—</span>;
+function Mut({ value, title }: { value?: string; title?: string }) {
+  return value ? (
+    <span className="text-xs">{value}</span>
+  ) : (
+    <span className="text-xs text-muted-foreground" title={title}>
+      —
+    </span>
+  );
 }
 
 export function clickLogColumns(
@@ -120,7 +126,14 @@ export function clickLogColumns(
     {
       accessorKey: "ip",
       header: t("columns.ip", { ns: "clickLog" }),
-      cell: ({ getValue }) => <Mono className="text-xs">{(getValue() as string | undefined) || "—"}</Mono>,
+      // Visitors' IP and user agent are wiped after the retention period
+      // (audit 2026-10-15, GDPR-1); the cell says so instead of a bare dash.
+      cell: ({ getValue }) =>
+        (getValue() as string | undefined) ? (
+          <Mono className="text-xs">{getValue() as string}</Mono>
+        ) : (
+          <Mut title={t("personalDataGone", { ns: "clickLog" })} />
+        ),
     },
     {
       accessorKey: "region",
@@ -170,7 +183,12 @@ export function clickLogColumns(
     {
       accessorKey: "userAgent",
       header: t("columns.userAgent", { ns: "clickLog" }),
-      cell: ({ getValue }) => <Caption className="block max-w-xs truncate">{(getValue() as string) || "—"}</Caption>,
+      cell: ({ getValue }) =>
+        (getValue() as string) ? (
+          <Caption className="block max-w-xs truncate">{getValue() as string}</Caption>
+        ) : (
+          <Mut title={t("personalDataGone", { ns: "clickLog" })} />
+        ),
     },
     {
       accessorKey: "referrer",
