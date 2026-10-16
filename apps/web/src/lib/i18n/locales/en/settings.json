@@ -104,7 +104,8 @@
     "rotateDescription": "A new key with the same name and scope is created and shown once. The current key keeps working for 24 hours, then stops — switch your integrations to the new key before then.",
     "rotated": "API key rotated",
     "rotateError": "Couldn't rotate API key",
-    "replacedStops": "Replaced · stops working"
+    "replacedStops": "Replaced · stops working",
+    "reference": "API reference"
   },
   "integrations": {
     "loading": "Loading integrations…",
@@ -293,6 +294,33 @@
       "done": "Ready",
       "failed": "Failed",
       "expired": "Expired"
+    }
+  },
+  "apiReference": {
+    "title": "API reference",
+    "version": "Version {{version}}",
+    "manageKeys": "Manage API keys",
+    "loading": "Loading the API reference…",
+    "loadError": "Couldn't load the API reference",
+    "navLabel": "API operations",
+    "search": "Search operations",
+    "noMatch": "No operations match",
+    "noMatchHint": "Try a path, a resource or an action, e.g. \"offers\" or \"simulate\".",
+    "scope": "Scope: {{scope}}",
+    "parameters": "Parameters",
+    "body": "Request body",
+    "response": "Response {{status}}",
+    "noBody": "No body.",
+    "copyCurl": "Copy the curl example",
+    "copyError": "Couldn't copy",
+    "required": "required",
+    "readOnly": "set by the server",
+    "recursive": "{{name}} again, as above",
+    "oneOf": "one of",
+    "anyKey": "{any key}",
+    "in": {
+      "path": "path",
+      "query": "query"
     }
   }
 }

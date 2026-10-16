@@ -19,22 +19,24 @@ referenced below as §N).
 ## CURRENT STATE — UPDATE THIS EVERY PHASE
 
 ```
-CURRENT PHASE : PHASE 30.56 — AFFILIATE-PLATFORM TEMPLATES, INT-3 (closed)
+CURRENT PHASE : PHASE 30.57 — PUBLIC API REFERENCE, API-1 (closed)
 STATUS        : Product audit 2026-10-15 (docs/audit-product-2026-10-15.md)
                 is the backlog: items on the local dev panel tools/devpanel
                 (make devpanel → 127.0.0.1:8099; memory: flox-audit-tracker
                 — keep statuses current). Done: SEC-1, SEC-2, DATA-1, DEV-1,
                 UX-1, UX-2, UX-3, DATA-4, DATA-2, DATA-3, SEC-5, GDPR-1, INT-1,
                 INT-3 (Affise, Scaleo; other platforms' macros are behind
-                login — one catalog entry each once known).
+                login — one catalog entry each once known), API-1
+                (OpenAPI at /v1/openapi.json + /api-reference;
+                docs/public-api.md — new route ⇒ spec or notInPublicSpec).
                 P0 left:
                 OPS-1..3 (prod, restore, load) — needs the owner's hosting.
-LAST COMMIT   : feat(networks): affiliate-platform templates.
+LAST COMMIT   : feat(api): public OpenAPI reference.
 UNCOMMITTED   : the user's gallery-transcoding WIP (00085, processor.go,
                 transcode.go, worker ffmpeg) — not ours, leave it alone.
                 It now accepts MOV, so contentgallery's
                 TestUploadRejectsOversizeWrongContentAndMov fails with it.
-NEXT          : wait for the user — next item from the board (P1: INT-2, API-1,
+NEXT          : wait for the user — next item from the board (P1: INT-2,
                 BIZ-*; P2: BUG-7, CH-1, …). CI (DO1) is the user's own decision — do not set
                 it up. Run go test with the full env line AND check e2e did
                 not skip (memory: flox-full-test-env); chconn's

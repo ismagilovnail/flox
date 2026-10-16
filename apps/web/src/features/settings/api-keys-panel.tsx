@@ -1,10 +1,11 @@
 "use client";
 
 import * as React from "react";
+import Link from "next/link";
 import { Controller, useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { toast } from "sonner";
-import { CopyIcon, PlusIcon, RotateCwIcon, Trash2Icon } from "lucide-react";
+import { BookOpenIcon, CopyIcon, PlusIcon, RotateCwIcon, Trash2Icon } from "lucide-react";
 import { z } from "zod";
 import { useTranslation } from "react-i18next";
 import type { TFunction } from "i18next";
@@ -108,7 +109,12 @@ export function ApiKeysPanel() {
       <CardHeader>
         <CardTitle>{t("apiKeys.title")}</CardTitle>
         <CardDescription>{t("apiKeys.description")}</CardDescription>
-        <CardAction>
+        <CardAction className="flex gap-2">
+          <Button asChild size="sm" variant="outline">
+            <Link href="/api-reference" target="_blank">
+              <BookOpenIcon className="size-4" /> {t("apiKeys.reference")}
+            </Link>
+          </Button>
           <Button size="sm" onClick={() => setCreating(true)}>
             <PlusIcon className="size-4" /> {t("apiKeys.new")}
           </Button>
@@ -228,7 +234,10 @@ export function ApiKeysPanel() {
           </div>
           <p className="text-xs text-muted-foreground">
             {t("apiKeys.usageBefore")} <Mono className="text-xs">Authorization: Bearer {"<key>"}</Mono>{" "}
-            {t("apiKeys.usageAfter")}
+            {t("apiKeys.usageAfter")}{" "}
+            <Link href="/api-reference" target="_blank" className="text-primary underline-offset-4 hover:underline">
+              {t("apiKeys.reference")}
+            </Link>
           </p>
           <DialogFooter>
             <Button onClick={() => setRevealedKey(null)}>{t("apiKeys.done")}</Button>

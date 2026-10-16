@@ -5,6 +5,26 @@ per-phase, matching `CLAUDE.md`'s phase protocol. The one exception is
 [Between phases], below: spec amendments and the code changes that follow from
 them land between phases and would otherwise be invisible here.
 
+## [Phase 30.57] — Public API reference (audit API-1)
+
+You chose API-1 from the board. `docs/public-api.md`.
+
+- OpenAPI 3.1 spec `apps/internal/openapi/openapi.yaml`, embedded in the API and served without auth at
+  `GET /v1/openapi.json` / `.yaml` (`servers` = `API_PUBLIC_URL` + `/v1`). 61 operations: campaigns, stream sets
+  and flows, routing simulator, tracking links, domains (read), spend, offers, networks, traffic sources,
+  conversions, click log, postback log, reports. Each operation carries the key scope it needs (`x-flox-scope`).
+- Held to the code by tests: `TestSpecIsWellFormed` (ids, scopes, parameters, only schema keywords the validator
+  checks, refs resolve); `TestOpenAPIMatchesTheRouter` (every documented operation is a route, every route is
+  documented or in `notInPublicSpec` with a reason); `TestOpenAPIOperationsAnswerAsDocumented` (every operation
+  called with a real key, requests and answers validated against strict schemas, every write refused to a read
+  key with 403). A mutation check — fields removed or renamed in the spec — failed 15 calls, as it should.
+- `/api-reference` page (public): operations by tag, search, parameters, expandable request/response fields with
+  enums and rules inline, curl example per operation, spec downloads. Linked from Settings › API keys. EN/RU.
+- Tests: Go full suite with full env — only the known gallery-WIP failure, e2e `TestFullFunnel` passed;
+  vitest 208/208 (`lib/openapi.test.ts` new); eslint, tsc, `next build`. Live: spec served by the rebuilt API, a read
+  key listed campaigns and got 403 on a create; the page checked in the browser (stream-set filter tree expands,
+  recursion marked, search). Narrow-screen layout checked in code only — the browser window would not resize.
+
 ## [Phase 30.56] — Affiliate-platform templates (audit INT-3)
 
 You chose the mechanism plus the platforms with public docs. `docs/networks-offers.md` "Affiliate-platform

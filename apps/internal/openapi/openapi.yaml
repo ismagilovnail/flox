@@ -1,0 +1,2073 @@
+openapi: 3.1.0
+info:
+  title: FLOX API
+  version: "1.0"
+  summary: Track. Route. Optimize.
+  description: |
+    The FLOX control-plane API: campaigns and their routing, offers and
+    networks, traffic sources, spend, conversions and reports.
+
+    **Authentication.** Create a key in *Settings › API keys* and send it as
+    `Authorization: Bearer flx_live_…`. A key belongs to one organization;
+    every request sees that organization's data only. The key's scope
+    decides what it may do: `read` calls every operation marked
+    `x-flox-scope: read`, `write` adds the ones marked `write`, `admin` can do
+    everything. A rotated key keeps working until its grace period ends.
+
+    **Errors** share one envelope: `{"code": "...", "message": "...",
+    "fields": {...}}`. `fields` names the invalid request fields on a
+    `422 validation` error.
+
+    **Lists** of entities take `limit` (1–500, default 500) and `offset` and
+    answer with `total` beside the rows. Event lists (conversions, click log,
+    postback log) take `limit` 1–200 (default 50).
+
+    **Dates** are `YYYY-MM-DD`, timestamps RFC 3339 in UTC. Money in
+    reports is in the organization's reporting currency (`currency` in the
+    answer), converted at the rate of the event's day. A metric that cannot
+    be computed — ROI without any spend on file, a rate over zero — is
+    `null`, never 0.
+
+    Rate limits: requests made with a key are counted per organization;
+    over the limit the answer is `429 rate_limited`.
+
+    Networks send conversions to the tracker, not to this API: each
+    network's `incomingPostbackUrl` is the ready URL to give the network.
+servers:
+  - url: https://api.flox.example/v1
+    description: Replaced by this server's own address when served from /v1/openapi.json.
+security:
+  - apiKey: []
+tags:
+  - name: Campaigns
+  - name: Routing
+    description: Stream sets (priority-ordered, first match wins), their filter trees and weighted flows; the simulator answers which flow a visit would get, from the same engine the tracker runs.
+  - name: Tracking links
+  - name: Domains
+  - name: Spend
+    description: Cost entries per campaign, day, country and source. Profit, ROI and ROAS need spend — without it they are null.
+  - name: Offers
+  - name: Networks
+  - name: Traffic sources
+  - name: Conversions
+  - name: Click log
+  - name: Postback log
+  - name: Reports
+
+paths:
+  /campaigns:
+    get:
+      tags: [Campaigns]
+      operationId: listCampaigns
+      summary: List campaigns
+      x-flox-scope: read
+      parameters:
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Offset"
+      responses:
+        "200":
+          description: The organization's campaigns.
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required: [campaigns, total]
+                properties:
+                  campaigns:
+                    type: array
+                    items: { $ref: "#/components/schemas/Campaign" }
+                  total: { type: integer }
+        default: { $ref: "#/components/responses/Error" }
+    post:
+      tags: [Campaigns]
+      operationId: createCampaign
+      summary: Create a campaign
+      x-flox-scope: write
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CampaignCreate" }
+      responses:
+        "201":
+          description: The new campaign, in status `draft`.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Campaign" }
+        default: { $ref: "#/components/responses/Error" }
+  /campaigns/{id}:
+    parameters:
+      - $ref: "#/components/parameters/Id"
+    get:
+      tags: [Campaigns]
+      operationId: getCampaign
+      summary: Get a campaign
+      x-flox-scope: read
+      responses:
+        "200":
+          description: The campaign.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Campaign" }
+        default: { $ref: "#/components/responses/Error" }
+    patch:
+      tags: [Campaigns]
+      operationId: updateCampaign
+      summary: Update a campaign
+      description: Partial update — only the fields sent change.
+      x-flox-scope: write
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CampaignUpdate" }
+      responses:
+        "200":
+          description: The updated campaign.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Campaign" }
+        default: { $ref: "#/components/responses/Error" }
+    delete:
+      tags: [Campaigns]
+      operationId: deleteCampaign
+      summary: Delete a campaign
+      x-flox-scope: write
+      responses:
+        "204": { description: "Deleted." }
+        default: { $ref: "#/components/responses/Error" }
+  /campaigns/{id}/duplicate:
+    parameters:
+      - $ref: "#/components/parameters/Id"
+    post:
+      tags: [Campaigns]
+      operationId: duplicateCampaign
+      summary: Duplicate a campaign
+      x-flox-scope: write
+      responses:
+        "201":
+          description: The copy.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Campaign" }
+        default: { $ref: "#/components/responses/Error" }
+  /campaigns/{id}/pause:
+    parameters:
+      - $ref: "#/components/parameters/Id"
+    post:
+      tags: [Campaigns]
+      operationId: pauseCampaign
+      summary: Pause a campaign
+      description: "`409 conflict` when the campaign's status does not allow it."
+      x-flox-scope: write
+      responses:
+        "200":
+          description: The paused campaign.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Campaign" }
+        default: { $ref: "#/components/responses/Error" }
+  /campaigns/{id}/activate:
+    parameters:
+      - $ref: "#/components/parameters/Id"
+    post:
+      tags: [Campaigns]
+      operationId: activateCampaign
+      summary: Activate a campaign
+      description: "`409 conflict` when the campaign's status does not allow it."
+      x-flox-scope: write
+      responses:
+        "200":
+          description: The active campaign.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Campaign" }
+        default: { $ref: "#/components/responses/Error" }
+
+  /campaigns/{campaignId}/stream-sets:
+    parameters:
+      - $ref: "#/components/parameters/CampaignId"
+    get:
+      tags: [Routing]
+      operationId: listStreamSets
+      summary: List a campaign's stream sets
+      description: In priority order — the order the tracker tries them.
+      x-flox-scope: read
+      responses:
+        "200":
+          description: The stream sets.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/StreamSetList" }
+        default: { $ref: "#/components/responses/Error" }
+    post:
+      tags: [Routing]
+      operationId: createStreamSet
+      summary: Create a stream set
+      description: The new set goes last in priority. Flows get fresh ids.
+      x-flox-scope: write
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/StreamSetCreate" }
+      responses:
+        "201":
+          description: The new stream set.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/StreamSet" }
+        default: { $ref: "#/components/responses/Error" }
+  /campaigns/{campaignId}/stream-sets/reorder:
+    parameters:
+      - $ref: "#/components/parameters/CampaignId"
+    post:
+      tags: [Routing]
+      operationId: reorderStreamSets
+      summary: Reorder stream sets
+      description: "`orderedIds` lists every stream set of the campaign, highest priority first."
+      x-flox-scope: write
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [orderedIds]
+              properties:
+                orderedIds:
+                  type: array
+                  items: { type: string }
+      responses:
+        "200":
+          description: The stream sets in their new order.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/StreamSetList" }
+        default: { $ref: "#/components/responses/Error" }
+  /campaigns/{campaignId}/stream-sets/{id}:
+    parameters:
+      - $ref: "#/components/parameters/CampaignId"
+      - $ref: "#/components/parameters/Id"
+    get:
+      tags: [Routing]
+      operationId: getStreamSet
+      summary: Get a stream set
+      x-flox-scope: read
+      responses:
+        "200":
+          description: The stream set.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/StreamSet" }
+        default: { $ref: "#/components/responses/Error" }
+    patch:
+      tags: [Routing]
+      operationId: updateStreamSet
+      summary: Update a stream set
+      description: |
+        Partial update. `rootFilter`, `flows` and `pixelIds`, when sent,
+        replace the whole tree or list. Sending `flows` mints new flow ids,
+        so per-flow statistics start again from that moment.
+      x-flox-scope: write
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/StreamSetUpdate" }
+      responses:
+        "200":
+          description: The updated stream set.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/StreamSet" }
+        default: { $ref: "#/components/responses/Error" }
+    delete:
+      tags: [Routing]
+      operationId: deleteStreamSet
+      summary: Delete a stream set
+      x-flox-scope: write
+      responses:
+        "204": { description: "Deleted." }
+        default: { $ref: "#/components/responses/Error" }
+  /campaigns/{campaignId}/stream-sets/{id}/duplicate:
+    parameters:
+      - $ref: "#/components/parameters/CampaignId"
+      - $ref: "#/components/parameters/Id"
+    post:
+      tags: [Routing]
+      operationId: duplicateStreamSet
+      summary: Duplicate a stream set
+      x-flox-scope: write
+      responses:
+        "201":
+          description: The copy, with the original's status, last in priority.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/StreamSet" }
+        default: { $ref: "#/components/responses/Error" }
+  /campaigns/{campaignId}/routing/simulate:
+    parameters:
+      - $ref: "#/components/parameters/CampaignId"
+    post:
+      tags: [Routing]
+      operationId: simulateRouting
+      summary: Simulate routing
+      description: |
+        Runs the tracker's own routing engine on a described visit and
+        explains the decision: which stream sets matched and why not, the
+        flow candidates with their weights, the destination. Nothing is
+        recorded.
+      x-flox-scope: read
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [request]
+              properties:
+                request:
+                  type: object
+                  description: The visit's attributes by filter field (`country`, `device`, `sub1`, …); a missing field is empty.
+                  additionalProperties: { type: string }
+                  example: { country: DE, device: mobile, os: Android }
+      responses:
+        "200":
+          description: The decision and its explanation.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SimulateResult" }
+        default: { $ref: "#/components/responses/Error" }
+  /flows:
+    get:
+      tags: [Routing]
+      operationId: listFlows
+      summary: List every flow
+      description: All flows of the organization across campaigns, with their stream set and campaign.
+      x-flox-scope: read
+      responses:
+        "200":
+          description: The flows.
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required: [flows]
+                properties:
+                  flows:
+                    type: array
+                    items: { $ref: "#/components/schemas/FlowSummary" }
+        default: { $ref: "#/components/responses/Error" }
+
+  /campaigns/{campaignId}/tracking-links:
+    parameters:
+      - $ref: "#/components/parameters/CampaignId"
+    get:
+      tags: [Tracking links]
+      operationId: listCampaignTrackingLinks
+      summary: List a campaign's tracking links
+      x-flox-scope: read
+      responses:
+        "200":
+          description: The links.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TrackingLinkList" }
+        default: { $ref: "#/components/responses/Error" }
+    post:
+      tags: [Tracking links]
+      operationId: createTrackingLink
+      summary: Create a tracking link
+      description: "`409 conflict` when the slug is already used on that domain."
+      x-flox-scope: write
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [domainId, slug]
+              properties:
+                domainId: { type: string, description: "One of the organization's domains." }
+                slug: { type: string, pattern: "^[a-z0-9]+(-[a-z0-9]+)*$", maxLength: 64 }
+      responses:
+        "201":
+          description: The new link.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TrackingLink" }
+        default: { $ref: "#/components/responses/Error" }
+  /campaigns/{campaignId}/tracking-links/{id}:
+    parameters:
+      - $ref: "#/components/parameters/CampaignId"
+      - $ref: "#/components/parameters/Id"
+    patch:
+      tags: [Tracking links]
+      operationId: updateTrackingLinkStatus
+      summary: Change a tracking link's status
+      x-flox-scope: write
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [status]
+              properties:
+                status: { $ref: "#/components/schemas/TrackingLinkStatus" }
+      responses:
+        "200":
+          description: The link.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TrackingLink" }
+        default: { $ref: "#/components/responses/Error" }
+    delete:
+      tags: [Tracking links]
+      operationId: deleteTrackingLink
+      summary: Delete a tracking link
+      x-flox-scope: write
+      responses:
+        "204": { description: "Deleted." }
+        default: { $ref: "#/components/responses/Error" }
+  /tracking-links:
+    get:
+      tags: [Tracking links]
+      operationId: listTrackingLinks
+      summary: List every tracking link
+      x-flox-scope: read
+      parameters:
+        - name: status
+          in: query
+          schema: { $ref: "#/components/schemas/TrackingLinkStatus" }
+      responses:
+        "200":
+          description: The links of every campaign.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TrackingLinkList" }
+        default: { $ref: "#/components/responses/Error" }
+
+  /domains:
+    get:
+      tags: [Domains]
+      operationId: listDomains
+      summary: List domains
+      description: The domains tracking links can be created on.
+      x-flox-scope: read
+      parameters:
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Offset"
+      responses:
+        "200":
+          description: The domains.
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required: [domains, total]
+                properties:
+                  domains:
+                    type: array
+                    items: { $ref: "#/components/schemas/Domain" }
+                  total: { type: integer }
+        default: { $ref: "#/components/responses/Error" }
+
+  /campaigns/{campaignId}/cost-entries:
+    parameters:
+      - $ref: "#/components/parameters/CampaignId"
+    get:
+      tags: [Spend]
+      operationId: listCostEntries
+      summary: List a campaign's cost entries
+      x-flox-scope: read
+      parameters:
+        - $ref: "#/components/parameters/From30"
+        - $ref: "#/components/parameters/To"
+      responses:
+        "200":
+          description: The entries in the range.
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required: [entries]
+                properties:
+                  entries:
+                    type: array
+                    items: { $ref: "#/components/schemas/CostEntry" }
+        default: { $ref: "#/components/responses/Error" }
+    post:
+      tags: [Spend]
+      operationId: upsertCostEntry
+      summary: Record spend
+      description: |
+        Upsert: one entry per campaign, day, country and traffic source — sending
+        the same key again replaces the amount. An empty `country` is the
+        day's total. The USD value is fixed at the rate of `entryDate`.
+      x-flox-scope: write
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CostEntryInput" }
+      responses:
+        "200":
+          description: The stored entry.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CostEntry" }
+        default: { $ref: "#/components/responses/Error" }
+  /campaigns/{campaignId}/cost-entries/import:
+    parameters:
+      - $ref: "#/components/parameters/CampaignId"
+    post:
+      tags: [Spend]
+      operationId: importCostEntries
+      summary: Import spend from CSV
+      description: |
+        Columns by header, any order and case: `date` (YYYY-MM-DD),
+        `amount`, `currency` (ISO 4217), optional `country` (ISO 3166-1
+        alpha-2, empty = day total) and `traffic_source_id`. Delimiter `,`,
+        or `;` with a decimal comma. Up to 5000 rows, 2 MB. All or nothing:
+        any bad line rejects the file, with an error per line in `fields`.
+      x-flox-scope: write
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [csv]
+              properties:
+                csv: { type: string, example: "date,amount,currency,country\n2026-10-01,120.50,USD,DE\n" }
+      responses:
+        "200":
+          description: How many entries were written.
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required: [written]
+                properties:
+                  written: { type: integer }
+        default: { $ref: "#/components/responses/Error" }
+  /campaigns/{campaignId}/cost-entries/{id}:
+    parameters:
+      - $ref: "#/components/parameters/CampaignId"
+      - $ref: "#/components/parameters/Id"
+    delete:
+      tags: [Spend]
+      operationId: deleteCostEntry
+      summary: Delete a cost entry
+      x-flox-scope: write
+      responses:
+        "204": { description: "Deleted." }
+        default: { $ref: "#/components/responses/Error" }
+  /campaigns/{campaignId}/cost-entries/daily:
+    parameters:
+      - $ref: "#/components/parameters/CampaignId"
+    get:
+      tags: [Spend]
+      operationId: dailyCampaignSpend
+      summary: A campaign's spend per day
+      x-flox-scope: read
+      parameters:
+        - $ref: "#/components/parameters/From30"
+        - $ref: "#/components/parameters/To"
+      responses:
+        "200":
+          description: Spend in USD per day with entries.
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required: [spend]
+                properties:
+                  spend:
+                    type: array
+                    items:
+                      type: object
+                      additionalProperties: false
+                      required: [day, amountUsd, allConverted]
+                      properties:
+                        day: { type: string, format: date }
+                        amountUsd: { type: number }
+                        allConverted:
+                          type: boolean
+                          description: false when an entry of the day has no USD rate yet and is left out of amountUsd.
+        default: { $ref: "#/components/responses/Error" }
+
+  /offers:
+    get:
+      tags: [Offers]
+      operationId: listOffers
+      summary: List offers
+      x-flox-scope: read
+      parameters:
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Offset"
+      responses:
+        "200":
+          description: The offers.
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required: [offers, total]
+                properties:
+                  offers:
+                    type: array
+                    items: { $ref: "#/components/schemas/Offer" }
+                  total: { type: integer }
+        default: { $ref: "#/components/responses/Error" }
+    post:
+      tags: [Offers]
+      operationId: createOffer
+      summary: Create an offer
+      x-flox-scope: write
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/OfferCreate" }
+      responses:
+        "201":
+          description: The new offer.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Offer" }
+        default: { $ref: "#/components/responses/Error" }
+  /offers/{id}:
+    parameters:
+      - $ref: "#/components/parameters/Id"
+    get:
+      tags: [Offers]
+      operationId: getOffer
+      summary: Get an offer
+      x-flox-scope: read
+      responses:
+        "200":
+          description: The offer.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Offer" }
+        default: { $ref: "#/components/responses/Error" }
+    patch:
+      tags: [Offers]
+      operationId: updateOffer
+      summary: Update an offer
+      description: Partial update. `links`, when sent, replaces every link; `cap` set to null removes the cap.
+      x-flox-scope: write
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/OfferUpdate" }
+      responses:
+        "200":
+          description: The updated offer.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Offer" }
+        default: { $ref: "#/components/responses/Error" }
+    delete:
+      tags: [Offers]
+      operationId: deleteOffer
+      summary: Delete an offer
+      description: "`409 conflict` while other records still reference it."
+      x-flox-scope: write
+      responses:
+        "204": { description: "Deleted." }
+        default: { $ref: "#/components/responses/Error" }
+  /offers/{id}/duplicate:
+    parameters:
+      - $ref: "#/components/parameters/Id"
+    post:
+      tags: [Offers]
+      operationId: duplicateOffer
+      summary: Duplicate an offer
+      x-flox-scope: write
+      responses:
+        "201":
+          description: The copy.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Offer" }
+        default: { $ref: "#/components/responses/Error" }
+  /offers/{id}/pause:
+    parameters:
+      - $ref: "#/components/parameters/Id"
+    post:
+      tags: [Offers]
+      operationId: pauseOffer
+      summary: Pause an offer
+      description: A flow whose offer is paused sends its traffic to the fallback.
+      x-flox-scope: write
+      responses:
+        "200":
+          description: The paused offer.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Offer" }
+        default: { $ref: "#/components/responses/Error" }
+  /offers/{id}/activate:
+    parameters:
+      - $ref: "#/components/parameters/Id"
+    post:
+      tags: [Offers]
+      operationId: activateOffer
+      summary: Activate an offer
+      x-flox-scope: write
+      responses:
+        "200":
+          description: The active offer.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Offer" }
+        default: { $ref: "#/components/responses/Error" }
+
+  /networks:
+    get:
+      tags: [Networks]
+      operationId: listNetworks
+      summary: List networks
+      x-flox-scope: read
+      parameters:
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Offset"
+      responses:
+        "200":
+          description: The networks.
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required: [networks, total]
+                properties:
+                  networks:
+                    type: array
+                    items: { $ref: "#/components/schemas/Network" }
+                  total: { type: integer }
+        default: { $ref: "#/components/responses/Error" }
+    post:
+      tags: [Networks]
+      operationId: createNetwork
+      summary: Create a network
+      description: |
+        The answer carries `postbackSecret` — the only time it is shown.
+        `incomingPostbackUrl` already contains it: give that URL to the
+        network as its postback.
+      x-flox-scope: write
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/NetworkCreate" }
+      responses:
+        "201":
+          description: The new network and its postback secret.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/NetworkCreated" }
+        default: { $ref: "#/components/responses/Error" }
+  /networks/{id}:
+    parameters:
+      - $ref: "#/components/parameters/Id"
+    get:
+      tags: [Networks]
+      operationId: getNetwork
+      summary: Get a network
+      x-flox-scope: read
+      responses:
+        "200":
+          description: The network.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Network" }
+        default: { $ref: "#/components/responses/Error" }
+    patch:
+      tags: [Networks]
+      operationId: updateNetwork
+      summary: Update a network
+      x-flox-scope: write
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/NetworkUpdate" }
+      responses:
+        "200":
+          description: The updated network.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Network" }
+        default: { $ref: "#/components/responses/Error" }
+    delete:
+      tags: [Networks]
+      operationId: deleteNetwork
+      summary: Delete a network
+      description: "`409 conflict` while other records still reference it."
+      x-flox-scope: write
+      responses:
+        "204": { description: "Deleted." }
+        default: { $ref: "#/components/responses/Error" }
+  /networks/{id}/duplicate:
+    parameters:
+      - $ref: "#/components/parameters/Id"
+    post:
+      tags: [Networks]
+      operationId: duplicateNetwork
+      summary: Duplicate a network
+      x-flox-scope: write
+      responses:
+        "201":
+          description: The copy, with its own postback secret.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Network" }
+        default: { $ref: "#/components/responses/Error" }
+  /networks/{id}/pause:
+    parameters:
+      - $ref: "#/components/parameters/Id"
+    post:
+      tags: [Networks]
+      operationId: pauseNetwork
+      summary: Pause a network
+      x-flox-scope: write
+      responses:
+        "200":
+          description: The paused network.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Network" }
+        default: { $ref: "#/components/responses/Error" }
+  /networks/{id}/activate:
+    parameters:
+      - $ref: "#/components/parameters/Id"
+    post:
+      tags: [Networks]
+      operationId: activateNetwork
+      summary: Activate a network
+      x-flox-scope: write
+      responses:
+        "200":
+          description: The active network.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Network" }
+        default: { $ref: "#/components/responses/Error" }
+  /networks/{id}/regenerate-postback-secret:
+    parameters:
+      - $ref: "#/components/parameters/Id"
+    post:
+      tags: [Networks]
+      operationId: regenerateNetworkPostbackSecret
+      summary: Regenerate the postback secret
+      description: The old secret stops working at once — update the postback URL at the network.
+      x-flox-scope: write
+      responses:
+        "200":
+          description: The new secret, shown this once.
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required: [postbackSecret]
+                properties:
+                  postbackSecret: { type: string }
+        default: { $ref: "#/components/responses/Error" }
+  /networks/{id}/diagnostics:
+    parameters:
+      - $ref: "#/components/parameters/Id"
+    get:
+      tags: [Networks]
+      operationId: networkDiagnostics
+      summary: Postback diagnostics
+      description: Signs over the last 30 days that the network's postbacks lose data — today, redeposits sent without a transaction id (each one after the first is a duplicate).
+      x-flox-scope: read
+      responses:
+        "200":
+          description: The diagnostics.
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required: [windowDays, redepWithoutTxn]
+                properties:
+                  windowDays: { type: integer }
+                  redepWithoutTxn:
+                    type: object
+                    additionalProperties: false
+                    required: [received, duplicates, lastAt]
+                    properties:
+                      received: { type: integer }
+                      duplicates: { type: integer }
+                      lastAt: { type: [string, "null"], format: date-time }
+        default: { $ref: "#/components/responses/Error" }
+
+  /traffic-sources:
+    get:
+      tags: [Traffic sources]
+      operationId: listTrafficSources
+      summary: List traffic sources
+      x-flox-scope: read
+      parameters:
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Offset"
+      responses:
+        "200":
+          description: The traffic sources.
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required: [trafficSources, total]
+                properties:
+                  trafficSources:
+                    type: array
+                    items: { $ref: "#/components/schemas/TrafficSource" }
+                  total: { type: integer }
+        default: { $ref: "#/components/responses/Error" }
+    post:
+      tags: [Traffic sources]
+      operationId: createTrafficSource
+      summary: Create a traffic source
+      x-flox-scope: write
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/TrafficSourceCreate" }
+      responses:
+        "201":
+          description: The new traffic source.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TrafficSource" }
+        default: { $ref: "#/components/responses/Error" }
+  /traffic-sources/{id}:
+    parameters:
+      - $ref: "#/components/parameters/Id"
+    get:
+      tags: [Traffic sources]
+      operationId: getTrafficSource
+      summary: Get a traffic source
+      x-flox-scope: read
+      responses:
+        "200":
+          description: The traffic source.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TrafficSource" }
+        default: { $ref: "#/components/responses/Error" }
+    patch:
+      tags: [Traffic sources]
+      operationId: updateTrafficSource
+      summary: Update a traffic source
+      x-flox-scope: write
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/TrafficSourceUpdate" }
+      responses:
+        "200":
+          description: The updated traffic source.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TrafficSource" }
+        default: { $ref: "#/components/responses/Error" }
+    delete:
+      tags: [Traffic sources]
+      operationId: deleteTrafficSource
+      summary: Delete a traffic source
+      description: "`409 conflict` while other records still reference it."
+      x-flox-scope: write
+      responses:
+        "204": { description: "Deleted." }
+        default: { $ref: "#/components/responses/Error" }
+  /traffic-sources/{id}/duplicate:
+    parameters:
+      - $ref: "#/components/parameters/Id"
+    post:
+      tags: [Traffic sources]
+      operationId: duplicateTrafficSource
+      summary: Duplicate a traffic source
+      x-flox-scope: write
+      responses:
+        "201":
+          description: The copy.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TrafficSource" }
+        default: { $ref: "#/components/responses/Error" }
+  /traffic-sources/{id}/pause:
+    parameters:
+      - $ref: "#/components/parameters/Id"
+    post:
+      tags: [Traffic sources]
+      operationId: pauseTrafficSource
+      summary: Pause a traffic source
+      x-flox-scope: write
+      responses:
+        "200":
+          description: The paused traffic source.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TrafficSource" }
+        default: { $ref: "#/components/responses/Error" }
+  /traffic-sources/{id}/activate:
+    parameters:
+      - $ref: "#/components/parameters/Id"
+    post:
+      tags: [Traffic sources]
+      operationId: activateTrafficSource
+      summary: Activate a traffic source
+      x-flox-scope: write
+      responses:
+        "200":
+          description: The active traffic source.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TrafficSource" }
+        default: { $ref: "#/components/responses/Error" }
+
+  /conversions:
+    get:
+      tags: [Conversions]
+      operationId: listConversions
+      summary: List conversions
+      description: Newest first. One row per conversion (click and status), with the click's status history.
+      x-flox-scope: read
+      parameters:
+        - $ref: "#/components/parameters/From7"
+        - $ref: "#/components/parameters/To"
+        - $ref: "#/components/parameters/ClickIdFilter"
+        - $ref: "#/components/parameters/EventLimit"
+        - $ref: "#/components/parameters/Offset"
+      responses:
+        "200":
+          description: The conversions in the range.
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required: [conversions, total]
+                properties:
+                  conversions:
+                    type: array
+                    items: { $ref: "#/components/schemas/Conversion" }
+                  total: { type: integer }
+        default: { $ref: "#/components/responses/Error" }
+  /conversions/{clickId}:
+    parameters:
+      - name: clickId
+        in: path
+        required: true
+        schema: { type: string }
+    get:
+      tags: [Conversions]
+      operationId: getClickTimeline
+      summary: A click's journey
+      description: Every event of one click — the visit, landing and PWA steps, conversions — in time order.
+      x-flox-scope: read
+      responses:
+        "200":
+          description: The timeline.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ClickTimeline" }
+        default: { $ref: "#/components/responses/Error" }
+
+  /click-log:
+    get:
+      tags: [Click log]
+      operationId: listClicks
+      summary: List clicks
+      description: Newest first. Routed clicks (`SOURCE_CLICK`) and clicks blocked by the campaign's filters (`SOURCE_FILTER`, with `filterReason`).
+      x-flox-scope: read
+      parameters:
+        - $ref: "#/components/parameters/From7"
+        - $ref: "#/components/parameters/To"
+        - $ref: "#/components/parameters/ClickIdFilter"
+        - $ref: "#/components/parameters/EventLimit"
+        - $ref: "#/components/parameters/Offset"
+      responses:
+        "200":
+          description: The clicks in the range.
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required: [logs, total]
+                properties:
+                  logs:
+                    type: array
+                    items: { $ref: "#/components/schemas/ClickLog" }
+                  total: { type: integer }
+        default: { $ref: "#/components/responses/Error" }
+
+  /postback-logs:
+    get:
+      tags: [Postback log]
+      operationId: listPostbackAttempts
+      summary: List postback attempts
+      description: Newest first, both directions — postbacks received from networks and postbacks FLOX sent out.
+      x-flox-scope: read
+      parameters:
+        - $ref: "#/components/parameters/From7"
+        - $ref: "#/components/parameters/To"
+        - $ref: "#/components/parameters/ClickIdFilter"
+        - $ref: "#/components/parameters/EventLimit"
+        - $ref: "#/components/parameters/Offset"
+      responses:
+        "200":
+          description: The attempts in the range.
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required: [logs, total]
+                properties:
+                  logs:
+                    type: array
+                    items: { $ref: "#/components/schemas/PostbackAttempt" }
+                  total: { type: integer }
+        default: { $ref: "#/components/responses/Error" }
+
+  /analytics/report:
+    post:
+      tags: [Reports]
+      operationId: report
+      summary: Report
+      description: |
+        Every metric grouped by up to 4 dimensions (`day` included).
+        Without `dims`, one row of totals. Up to 366 days.
+      x-flox-scope: read
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [from, to]
+              properties:
+                dims:
+                  type: array
+                  maxItems: 4
+                  items:
+                    anyOf:
+                      - $ref: "#/components/schemas/Dimension"
+                      - { type: string, enum: [day] }
+                filters: { $ref: "#/components/schemas/ReportFilters" }
+                from: { type: string, format: date }
+                to: { type: string, format: date }
+                sort:
+                  type: object
+                  description: A dimension or a metric name; an unknown key leaves the order as it is.
+                  properties:
+                    key: { type: string, example: revenue }
+                    dir: { type: string, enum: [asc, desc] }
+                timezone: { $ref: "#/components/schemas/Timezone" }
+                dateBasis: { $ref: "#/components/schemas/DateBasis" }
+      responses:
+        "200":
+          description: The rows.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ReportRows" }
+        default: { $ref: "#/components/responses/Error" }
+  /analytics/timeseries:
+    post:
+      tags: [Reports]
+      operationId: timeseries
+      summary: Daily series
+      description: One row per day of the range, every metric.
+      x-flox-scope: read
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [from, to]
+              properties:
+                filters: { $ref: "#/components/schemas/ReportFilters" }
+                from: { type: string, format: date }
+                to: { type: string, format: date }
+                timezone: { $ref: "#/components/schemas/Timezone" }
+                dateBasis: { $ref: "#/components/schemas/DateBasis" }
+      responses:
+        "200":
+          description: The rows, each with `day`.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ReportRows" }
+        default: { $ref: "#/components/responses/Error" }
+  /analytics/breakdown:
+    post:
+      tags: [Reports]
+      operationId: breakdown
+      summary: Top values of a dimension
+      description: One dimension, sorted by one metric descending, the first `limit` rows.
+      x-flox-scope: read
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [dim, metric, from, to]
+              properties:
+                dim: { $ref: "#/components/schemas/Dimension" }
+                metric: { type: string, example: revenue }
+                filters: { $ref: "#/components/schemas/ReportFilters" }
+                from: { type: string, format: date }
+                to: { type: string, format: date }
+                limit: { type: integer, minimum: 1, default: 8 }
+                timezone: { $ref: "#/components/schemas/Timezone" }
+                dateBasis: { $ref: "#/components/schemas/DateBasis" }
+      responses:
+        "200":
+          description: The rows.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ReportRows" }
+        default: { $ref: "#/components/responses/Error" }
+
+components:
+  securitySchemes:
+    apiKey:
+      type: http
+      scheme: bearer
+      description: An API key from Settings › API keys (`flx_live_…`).
+
+  parameters:
+    Id:
+      name: id
+      in: path
+      required: true
+      schema: { type: string }
+    CampaignId:
+      name: campaignId
+      in: path
+      required: true
+      schema: { type: string }
+    Limit:
+      name: limit
+      in: query
+      schema: { type: integer, minimum: 1, maximum: 500, default: 500 }
+    Offset:
+      name: offset
+      in: query
+      schema: { type: integer, minimum: 0, default: 0 }
+    EventLimit:
+      name: limit
+      in: query
+      schema: { type: integer, minimum: 1, maximum: 200, default: 50 }
+    From7:
+      name: from
+      in: query
+      description: First day, YYYY-MM-DD. Default 7 days ago.
+      schema: { type: string, format: date }
+    From30:
+      name: from
+      in: query
+      description: First day, YYYY-MM-DD. Default 29 days ago.
+      schema: { type: string, format: date }
+    To:
+      name: to
+      in: query
+      description: Last day, inclusive, YYYY-MM-DD. Default today (UTC).
+      schema: { type: string, format: date }
+    ClickIdFilter:
+      name: clickId
+      in: query
+      description: Only this click.
+      schema: { type: string }
+
+  responses:
+    Error:
+      description: "An error: 401 no or invalid key, 403 the key's scope does not allow it, 404 not found (or another organization's), 409 conflict, 422 validation, 429 rate limited."
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+
+  schemas:
+    Error:
+      type: object
+      additionalProperties: false
+      required: [code, message]
+      properties:
+        code:
+          type: string
+          enum: [not_found, validation, conflict, unauthorized, forbidden, unavailable, rate_limited, query_too_heavy, internal]
+        message: { type: string }
+        fields:
+          type: object
+          additionalProperties: { type: string }
+
+    Campaign:
+      type: object
+      additionalProperties: false
+      required: [id, organizationId, trafficSourceId, name, status, fallbackUrl, notes, externalCampaignId, createdAt, updatedAt]
+      properties:
+        id: { type: string }
+        organizationId: { type: string }
+        trafficSourceId: { type: string }
+        name: { type: string }
+        status: { type: string, enum: [active, paused, draft, archived] }
+        fallbackUrl: { type: string, description: "Where traffic goes when no stream set matches." }
+        notes: { type: string }
+        externalCampaignId: { type: string, description: "The ad platform's campaign id, for spend sync." }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    CampaignCreate:
+      type: object
+      required: [trafficSourceId, name, fallbackUrl]
+      properties:
+        trafficSourceId: { type: string }
+        name: { type: string, minLength: 2, maxLength: 80 }
+        fallbackUrl: { type: string, format: uri }
+        notes: { type: string, maxLength: 500 }
+        externalCampaignId: { type: string, maxLength: 200 }
+    CampaignUpdate:
+      type: object
+      properties:
+        trafficSourceId: { type: string }
+        name: { type: string, minLength: 2, maxLength: 80 }
+        fallbackUrl: { type: string, format: uri }
+        notes: { type: string, maxLength: 500 }
+        status: { type: string, enum: [active, paused, draft, archived] }
+        externalCampaignId: { type: string, maxLength: 200 }
+
+    FilterField:
+      type: string
+      enum: [country, region, city, device, platform, os, os_version, browser, browser_version, language, bot, proxy, asn, connection_type, referrer, utm_source, utm_medium, utm_campaign, utm_content, utm_term, sub1, sub2, sub3, sub4, sub5, sub6, sub7, sub8, sub9, sub10, external_click_id]
+    FilterOperator:
+      type: string
+      description: "`IN`/`NOT_IN` take a comma-separated list; `MATCHES` an RE2 regular expression; `BETWEEN` both `value` and `valueTo`; `EXISTS`/`NOT_EXISTS` no value."
+      enum: [IS, IS_NOT, IN, NOT_IN, CONTAINS, NOT_CONTAINS, STARTS_WITH, ENDS_WITH, MATCHES, EXISTS, NOT_EXISTS, GT, GTE, LT, LTE, BETWEEN]
+    Joiner:
+      type: string
+      enum: [AND, OR]
+    FilterNode:
+      type: object
+      description: |
+        A group (`type: group`, `joiner`, `children`) or a condition
+        (`type: condition`, `field`, `operator`, `value`). The root is
+        always a group; an empty root group matches all traffic.
+      additionalProperties: false
+      required: [type]
+      properties:
+        type: { type: string, enum: [group, condition] }
+        joiner: { $ref: "#/components/schemas/Joiner" }
+        children:
+          type: [array, "null"]
+          items: { $ref: "#/components/schemas/FilterNode" }
+        field: { $ref: "#/components/schemas/FilterField" }
+        operator: { $ref: "#/components/schemas/FilterOperator" }
+        value: { type: string }
+        valueTo: { type: string }
+    Destination:
+      type: object
+      additionalProperties: false
+      required: [kind]
+      properties:
+        kind: { type: string, enum: [offer, redirect] }
+        offerId: { type: string, description: "offer only." }
+        networkId: { type: string, readOnly: true, description: "offer only: the offer's network, set by the server." }
+        url: { type: string, description: "redirect only." }
+    FlowLanding:
+      type: object
+      additionalProperties: false
+      required: [enabled, landingId, asPwa]
+      properties:
+        enabled: { type: boolean }
+        landingId: { type: string }
+        asPwa: { type: boolean, description: "Show the landing as an installable PWA shell." }
+    FlowPwa:
+      type: object
+      additionalProperties: false
+      required: [enabled, pwaId, pwaType, url]
+      properties:
+        enabled: { type: boolean }
+        pwaId: { type: string }
+        pwaType: { type: string, enum: [internal, external, ios_app, ""] }
+        url: { type: string, description: "external: the PWA's URL; ios_app: the app link." }
+    FlowPostlanding:
+      type: object
+      additionalProperties: false
+      required: [enabled, postlandingId]
+      properties:
+        enabled: { type: boolean }
+        postlandingId: { type: string }
+    Flow:
+      type: object
+      additionalProperties: false
+      required: [id, name, active, weight, landing, pwa, postlanding, destination]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        active: { type: boolean }
+        weight: { type: integer, minimum: 0 }
+        landing: { $ref: "#/components/schemas/FlowLanding" }
+        pwa: { $ref: "#/components/schemas/FlowPwa" }
+        postlanding: { $ref: "#/components/schemas/FlowPostlanding" }
+        destination: { $ref: "#/components/schemas/Destination" }
+    FlowInput:
+      type: object
+      required: [name, weight, destination]
+      properties:
+        name: { type: string }
+        active: { type: boolean }
+        weight: { type: integer, minimum: 0, description: "Relative weight among the set's active flows." }
+        landing: { $ref: "#/components/schemas/FlowLanding" }
+        pwa: { $ref: "#/components/schemas/FlowPwa" }
+        postlanding: { $ref: "#/components/schemas/FlowPostlanding" }
+        destination: { $ref: "#/components/schemas/Destination" }
+    FlowSummary:
+      type: object
+      additionalProperties: false
+      required: [id, name, active, weight, landing, pwa, postlanding, destination, streamSetId, streamSetName, campaignId, campaignName, updatedAt]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        active: { type: boolean }
+        weight: { type: integer }
+        landing: { $ref: "#/components/schemas/FlowLanding" }
+        pwa: { $ref: "#/components/schemas/FlowPwa" }
+        postlanding: { $ref: "#/components/schemas/FlowPostlanding" }
+        destination: { $ref: "#/components/schemas/Destination" }
+        streamSetId: { type: string }
+        streamSetName: { type: string }
+        campaignId: { type: string }
+        campaignName: { type: string }
+        updatedAt: { type: string, format: date-time }
+    StreamSet:
+      type: object
+      additionalProperties: false
+      required: [id, organizationId, campaignId, name, priority, status, fallbackUrl, rootFilter, flows, pixelIds, createdAt, updatedAt]
+      properties:
+        id: { type: string }
+        organizationId: { type: string }
+        campaignId: { type: string }
+        name: { type: string }
+        priority: { type: integer, description: "Lower is tried first." }
+        status: { type: string, enum: [active, paused] }
+        fallbackUrl: { type: string, description: "Where a matched visit goes when no flow can take it; empty = the campaign's fallback." }
+        rootFilter: { $ref: "#/components/schemas/FilterNode" }
+        flows:
+          type: array
+          items: { $ref: "#/components/schemas/Flow" }
+        pixelIds:
+          type: array
+          items: { type: string }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    StreamSetList:
+      type: object
+      additionalProperties: false
+      required: [streamSets]
+      properties:
+        streamSets:
+          type: array
+          items: { $ref: "#/components/schemas/StreamSet" }
+    StreamSetCreate:
+      type: object
+      required: [name, rootFilter, flows]
+      properties:
+        name: { type: string, minLength: 2, maxLength: 80 }
+        fallbackUrl: { type: string }
+        rootFilter: { $ref: "#/components/schemas/FilterNode" }
+        flows:
+          type: array
+          minItems: 1
+          items: { $ref: "#/components/schemas/FlowInput" }
+        pixelIds:
+          type: array
+          items: { type: string }
+    StreamSetUpdate:
+      type: object
+      properties:
+        name: { type: string, minLength: 2, maxLength: 80 }
+        status: { type: string, enum: [active, paused] }
+        fallbackUrl: { type: string }
+        rootFilter: { $ref: "#/components/schemas/FilterNode" }
+        flows:
+          type: array
+          minItems: 1
+          items: { $ref: "#/components/schemas/FlowInput" }
+        pixelIds:
+          type: array
+          items: { type: string }
+
+    Trace:
+      type: object
+      additionalProperties: false
+      required: [kind, passed, children]
+      properties:
+        kind: { type: string, enum: [condition, group] }
+        passed: { type: boolean }
+        field: { $ref: "#/components/schemas/FilterField" }
+        operator: { $ref: "#/components/schemas/FilterOperator" }
+        value: { type: string }
+        valueTo: { type: string }
+        requestValue: { type: string, description: "The visit's value of the field." }
+        joiner: { $ref: "#/components/schemas/Joiner" }
+        children:
+          type: [array, "null"]
+          items: { $ref: "#/components/schemas/Trace" }
+    StreamSetEvaluation:
+      type: object
+      additionalProperties: false
+      required: [streamSetId, name, priority, status, matched, trace]
+      properties:
+        streamSetId: { type: string }
+        name: { type: string }
+        priority: { type: integer }
+        status: { type: string, enum: [active, paused] }
+        matched: { type: boolean }
+        reasonNotMatched: { type: string }
+        trace: { $ref: "#/components/schemas/Trace" }
+    SimulateResult:
+      type: object
+      additionalProperties: false
+      required: [request, streamSetEvaluations, matchedStreamSet, flowCandidates, destination, stickyNote]
+      properties:
+        request:
+          type: object
+          additionalProperties: { type: string }
+        streamSetEvaluations:
+          type: array
+          items: { $ref: "#/components/schemas/StreamSetEvaluation" }
+        matchedStreamSet:
+          anyOf:
+            - $ref: "#/components/schemas/StreamSetEvaluation"
+            - type: "null"
+        flowCandidates:
+          type: [array, "null"]
+          items:
+            type: object
+            additionalProperties: false
+            required: [flowId, name, weight, normalizedPercent, selected]
+            properties:
+              flowId: { type: string }
+              name: { type: string }
+              weight: { type: integer }
+              normalizedPercent: { type: number }
+              selected: { type: boolean }
+              capped: { type: boolean, description: "The flow's offer reached its cap and was left out of the draw." }
+        destination:
+          type: object
+          additionalProperties: false
+          required: [url, label]
+          properties:
+            url: { type: string, description: "Empty when nothing resolved." }
+            label: { type: string }
+        stickyNote: { type: string }
+
+    TrackingLinkStatus:
+      type: string
+      enum: [active, paused, archived]
+    TrackingLink:
+      type: object
+      additionalProperties: false
+      required: [id, organizationId, campaignId, domainId, domain, slug, secure, url, status, createdAt, updatedAt]
+      properties:
+        id: { type: string }
+        organizationId: { type: string }
+        campaignId: { type: string }
+        domainId: { type: string }
+        domain: { type: string }
+        slug: { type: string }
+        secure: { type: boolean, description: "The domain serves a valid certificate, so the URL is https." }
+        url: { type: string, description: "The link to put into the ad." }
+        status: { $ref: "#/components/schemas/TrackingLinkStatus" }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    TrackingLinkList:
+      type: object
+      additionalProperties: false
+      required: [trackingLinks]
+      properties:
+        trackingLinks:
+          type: array
+          items: { $ref: "#/components/schemas/TrackingLink" }
+
+    Domain:
+      type: object
+      additionalProperties: false
+      required: [id, organizationId, domain, status, ssl, purpose, registrar, dnsProvider, expiresAt, verifiedAt, registrarAutoRenew, sslExpiresAt, sslCheckedAt, sslError, ownershipVerifiedAt, ownershipRecord, createdAt, updatedAt]
+      properties:
+        id: { type: string }
+        organizationId: { type: string }
+        domain: { type: string }
+        status: { type: string, enum: [active, pending, error, expired], description: "Only an active domain is tracked." }
+        ssl: { type: string, enum: [issued, pending, none, error] }
+        purpose:
+          type: array
+          items: { type: string, enum: [tracking, pwa, fallback] }
+        registrar: { type: string, enum: [namecheap, godaddy, cloudflare_registrar, unmanaged] }
+        dnsProvider: { type: string, enum: [cloudflare, route53, unmanaged] }
+        expiresAt: { type: [string, "null"], format: date-time }
+        verifiedAt: { type: [string, "null"], format: date-time }
+        registrarAutoRenew: { type: [boolean, "null"] }
+        sslExpiresAt: { type: [string, "null"], format: date-time }
+        sslCheckedAt: { type: [string, "null"], format: date-time }
+        sslError: { type: string }
+        ownershipVerifiedAt: { type: [string, "null"], format: date-time }
+        ownershipRecord:
+          type: object
+          description: The DNS TXT record that proves the organization controls the domain.
+          additionalProperties: false
+          required: [name, value]
+          properties:
+            name: { type: string }
+            value: { type: string }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+
+    CostEntry:
+      type: object
+      additionalProperties: false
+      required: [id, campaignId, trafficSourceId, entryDate, country, amount, currency, amountUsd, source, createdAt, updatedAt]
+      properties:
+        id: { type: string }
+        campaignId: { type: string }
+        trafficSourceId: { type: [string, "null"] }
+        entryDate: { type: string, format: date }
+        country: { type: string, description: "ISO 3166-1 alpha-2; empty = the day's total." }
+        amount: { type: number }
+        currency: { type: string }
+        amountUsd: { type: [number, "null"], description: "null while no USD rate for the day is known." }
+        source: { type: string, enum: [manual, facebook_ads, tiktok_ads, google_ads] }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    CostEntryInput:
+      type: object
+      required: [entryDate, amount, currency]
+      properties:
+        entryDate: { type: string, format: date }
+        amount: { type: number, minimum: 0 }
+        currency: { type: string, pattern: "^[A-Z]{3}$" }
+        country: { type: string, description: "ISO 3166-1 alpha-2; empty or omitted = the day's total." }
+        trafficSourceId: { type: [string, "null"] }
+
+    Offer:
+      type: object
+      additionalProperties: false
+      required: [id, organizationId, networkId, name, countries, payout, currency, cap, status, links, createdAt, updatedAt]
+      properties:
+        id: { type: string }
+        organizationId: { type: string }
+        networkId: { type: string }
+        name: { type: string }
+        countries:
+          type: array
+          items: { type: string }
+        payout: { type: number }
+        currency: { type: string }
+        cap: { type: [integer, "null"], description: "Conversions a day before the offer leaves the draw; null = no cap." }
+        status: { type: string, enum: [active, paused, archived] }
+        links:
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            required: [id, label, url]
+            properties:
+              id: { type: string }
+              label: { type: string }
+              url: { type: string, description: "The offer URL; macros like {click_id} are filled at redirect time." }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    OfferLinkInput:
+      type: object
+      required: [label, url]
+      properties:
+        label: { type: string }
+        url: { type: string, format: uri }
+    OfferCreate:
+      type: object
+      required: [networkId, name, countries, payout, currency, links]
+      properties:
+        networkId: { type: string }
+        name: { type: string, minLength: 2, maxLength: 100 }
+        countries:
+          type: array
+          minItems: 1
+          items: { type: string }
+        payout: { type: number, exclusiveMinimum: 0 }
+        currency: { type: string, pattern: "^[A-Z]{3}$" }
+        cap: { type: [integer, "null"], minimum: 0 }
+        links:
+          type: array
+          minItems: 1
+          items: { $ref: "#/components/schemas/OfferLinkInput" }
+    OfferUpdate:
+      type: object
+      properties:
+        networkId: { type: string }
+        name: { type: string, minLength: 2, maxLength: 100 }
+        countries:
+          type: array
+          minItems: 1
+          items: { type: string }
+        payout: { type: number, exclusiveMinimum: 0 }
+        currency: { type: string, pattern: "^[A-Z]{3}$" }
+        cap: { type: [integer, "null"], minimum: 0 }
+        status: { type: string, enum: [active, paused, archived] }
+        links:
+          type: array
+          minItems: 1
+          items: { $ref: "#/components/schemas/OfferLinkInput" }
+
+    Network:
+      type: object
+      additionalProperties: false
+      required: [id, organizationId, name, postbackUrl, acceptDuplicates, currency, templateKey, incomingPostbackUrl, status, createdAt, updatedAt]
+      properties:
+        id: { type: string }
+        organizationId: { type: string }
+        name: { type: string }
+        postbackUrl: { type: string, description: "Outgoing postback FLOX calls on a conversion; empty = none." }
+        acceptDuplicates: { type: boolean, description: "Record a repeated postback again instead of answering it as a duplicate." }
+        currency: { type: string, description: "Currency of the network's payouts when a postback sends none." }
+        templateKey: { type: string, description: "The affiliate-platform template the network was made from; empty = none." }
+        incomingPostbackUrl: { type: string, description: "The URL the network sends conversions to." }
+        status: { type: string, enum: [active, paused, archived] }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    NetworkCreated:
+      type: object
+      additionalProperties: false
+      required: [id, organizationId, name, postbackUrl, acceptDuplicates, currency, templateKey, incomingPostbackUrl, status, createdAt, updatedAt, postbackSecret]
+      properties:
+        id: { type: string }
+        organizationId: { type: string }
+        name: { type: string }
+        postbackUrl: { type: string }
+        acceptDuplicates: { type: boolean }
+        currency: { type: string }
+        templateKey: { type: string }
+        incomingPostbackUrl: { type: string }
+        status: { type: string, enum: [active, paused, archived] }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+        postbackSecret: { type: string, description: "Shown this once." }
+    NetworkCreate:
+      type: object
+      required: [name, currency]
+      properties:
+        name: { type: string, minLength: 2, maxLength: 80 }
+        postbackUrl: { type: string, description: "A public http(s) URL, or empty." }
+        acceptDuplicates: { type: boolean }
+        currency: { type: string, pattern: "^[A-Z]{3}$" }
+        templateKey: { type: string }
+    NetworkUpdate:
+      type: object
+      properties:
+        name: { type: string, minLength: 2, maxLength: 80 }
+        postbackUrl: { type: string }
+        acceptDuplicates: { type: boolean }
+        currency: { type: string, pattern: "^[A-Z]{3}$" }
+        templateKey: { type: string }
+        status: { type: string, enum: [active, paused, archived] }
+
+    CpaStatus:
+      type: string
+      enum: [CPA_HOLD, CPA_ACCEPT, CPA_REDEP, CPA_DECLINE, CPA_TRASH]
+    TrafficSource:
+      type: object
+      additionalProperties: false
+      required: [id, organizationId, name, type, trackingTemplate, costIntegration, status, postbackUrl, postbackStatuses, templateKey, createdAt, updatedAt]
+      properties:
+        id: { type: string }
+        organizationId: { type: string }
+        name: { type: string }
+        type: { type: string }
+        trackingTemplate: { type: string, description: "The URL template with the source's macros." }
+        costIntegration: { $ref: "#/components/schemas/CostIntegration" }
+        status: { type: string, enum: [active, paused, archived] }
+        postbackUrl: { type: string, description: "Postback to the source on a conversion; empty = none." }
+        postbackStatuses:
+          type: array
+          items: { $ref: "#/components/schemas/CpaStatus" }
+        templateKey: { type: string }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    CostIntegration:
+      type: string
+      enum: [none, manual, facebook_ads, tiktok_ads, google_ads]
+    TrafficSourceCreate:
+      type: object
+      required: [name, type, trackingTemplate, costIntegration]
+      properties:
+        name: { type: string, minLength: 2, maxLength: 80 }
+        type: { type: string }
+        trackingTemplate: { type: string, format: uri }
+        costIntegration: { $ref: "#/components/schemas/CostIntegration" }
+        postbackUrl: { type: string }
+        postbackStatuses:
+          type: array
+          description: Default [CPA_ACCEPT].
+          items: { $ref: "#/components/schemas/CpaStatus" }
+        templateKey: { type: string }
+    TrafficSourceUpdate:
+      type: object
+      properties:
+        name: { type: string, minLength: 2, maxLength: 80 }
+        type: { type: string }
+        trackingTemplate: { type: string, format: uri }
+        costIntegration: { $ref: "#/components/schemas/CostIntegration" }
+        status: { type: string, enum: [active, paused, archived] }
+        postbackUrl: { type: string }
+        postbackStatuses:
+          type: array
+          minItems: 1
+          items: { $ref: "#/components/schemas/CpaStatus" }
+        templateKey: { type: string }
+
+    EventType:
+      type: string
+      enum: [SOURCE_CLICK, SOURCE_FILTER, LAND_VIEW, LAND_CLICK, POSTLANDING_VIEW, POSTLANDING_CLICK, PWA_VIEW, PWA_OPEN, PWA_INSTALL, IOS_INSTALL, NOTIFICATION_REQUEST, NOTIFICATION_SUBSCRIBE, NOTIFICATION_DECLINE, NOTIFICATION_UNSUBSCRIBE, NOTIFICATION_CLICK, TG_JOIN, TG_START, CPA_HOLD, CPA_ACCEPT, CPA_REDEP, CPA_DECLINE, CPA_TRASH]
+    Conversion:
+      type: object
+      additionalProperties: false
+      required: [eventAt, type, campaignId, clickId, networkId, revenue, currency, usdValue, hasUsdValue, history]
+      properties:
+        eventAt: { type: string, format: date-time }
+        type: { $ref: "#/components/schemas/CpaStatus" }
+        campaignId: { type: string }
+        clickId: { type: string }
+        networkId: { type: string }
+        flowId: { type: string }
+        offerId: { type: string }
+        revenue: { type: number, description: "In the currency the network sent." }
+        currency: { type: string }
+        usdValue: { type: number }
+        hasUsdValue: { type: boolean, description: "false when no USD rate was known — usdValue is then not a real 0." }
+        networkTxnId: { type: string }
+        utmSource: { type: string }
+        utmMedium: { type: string }
+        utmCampaign: { type: string }
+        utmContent: { type: string }
+        utmTerm: { type: string }
+        sub1: { type: string }
+        sub2: { type: string }
+        sub3: { type: string }
+        sub4: { type: string }
+        sub5: { type: string }
+        sub6: { type: string }
+        sub7: { type: string }
+        sub8: { type: string }
+        sub9: { type: string }
+        sub10: { type: string }
+        history:
+          type: [array, "null"]
+          description: Every status the click went through, in time order.
+          items:
+            type: object
+            additionalProperties: false
+            required: [type, eventAt]
+            properties:
+              type: { $ref: "#/components/schemas/CpaStatus" }
+              eventAt: { type: string, format: date-time }
+    ClickTimeline:
+      type: object
+      additionalProperties: false
+      required: [clickId, campaignId, events]
+      properties:
+        clickId: { type: string }
+        campaignId: { type: string }
+        networkId: { type: string }
+        events:
+          type: [array, "null"]
+          items:
+            type: object
+            additionalProperties: false
+            required: [eventAt, type, isConversion]
+            properties:
+              eventAt: { type: string, format: date-time }
+              type: { $ref: "#/components/schemas/EventType" }
+              isConversion: { type: boolean }
+              revenue: { type: number }
+              currency: { type: string }
+              usdValue: { type: number }
+              hasUsdValue: { type: boolean }
+    ClickLog:
+      type: object
+      additionalProperties: false
+      required: [eventAt, type, campaignId, clickId]
+      properties:
+        eventAt: { type: string, format: date-time }
+        type: { type: string, enum: [SOURCE_CLICK, SOURCE_FILTER] }
+        campaignId: { type: string }
+        clickId: { type: string }
+        streamSetId: { type: string }
+        flowId: { type: string }
+        destination: { type: string }
+        stickyApplied: { type: boolean }
+        country: { type: string }
+        region: { type: string }
+        city: { type: string }
+        device: { type: string }
+        platform: { type: string }
+        os: { type: string }
+        osVersion: { type: string }
+        browser: { type: string }
+        browserVersion: { type: string }
+        language: { type: string }
+        isBot: { type: boolean }
+        isProxy: { type: boolean }
+        asn: { type: string }
+        connectionType: { type: string }
+        ip: { type: string, description: "Removed after the organization's retention period." }
+        userAgent: { type: string, description: "Removed after the organization's retention period." }
+        referrer: { type: string }
+        utmSource: { type: string }
+        utmMedium: { type: string }
+        utmCampaign: { type: string }
+        utmContent: { type: string }
+        utmTerm: { type: string }
+        sub1: { type: string }
+        sub2: { type: string }
+        sub3: { type: string }
+        sub4: { type: string }
+        sub5: { type: string }
+        sub6: { type: string }
+        sub7: { type: string }
+        sub8: { type: string }
+        sub9: { type: string }
+        sub10: { type: string }
+        externalClickId: { type: string }
+        fbClickId: { type: string }
+        ttClickId: { type: string }
+        filterReason: { type: string, description: "SOURCE_FILTER only — why the click was blocked." }
+    PostbackAttempt:
+      type: object
+      additionalProperties: false
+      required: [eventAt, direction, networkId, clickId, result, message]
+      properties:
+        eventAt: { type: string, format: date-time }
+        direction: { type: string, enum: [incoming, outgoing] }
+        networkId: { type: string }
+        clickId: { type: string }
+        status: { type: string, description: "The FLOX status; empty for an incoming postback rejected before mapping." }
+        rawStatus: { type: string, description: "incoming only — the status as the network sent it." }
+        eventRef: { type: string }
+        result:
+          type: string
+          description: "incoming: success, duplicate, ignored, error; outgoing: queued, processing, success, failed, retrying, dead."
+        message: { type: string }
+        attemptCount: { type: integer }
+        responseStatusCode: { type: integer }
+        url: { type: string, description: "outgoing only." }
+        revenue: { type: number, description: "incoming only." }
+        currency: { type: string }
+
+    Dimension:
+      type: string
+      enum: [campaign, source, country, region, city, device, platform, os, browser, language, flow, stream_set, landing, offer, pwa, postlanding, network, telegram_channel]
+    ReportFilters:
+      type: array
+      description: Every filter must match (AND). The value is the dimension's id or code, as in the rows.
+      items:
+        type: object
+        required: [dimension, value]
+        properties:
+          dimension: { $ref: "#/components/schemas/Dimension" }
+          value: { type: string }
+    Timezone:
+      type: string
+      description: IANA zone the days are cut in; empty = UTC.
+      example: Europe/Berlin
+    DateBasis:
+      type: string
+      enum: [conversion, click]
+      description: "Date conversions by when they happened (default) or by their click's day."
+    Metrics:
+      type: object
+      description: null where a metric cannot be computed — money metrics without spend, rates over zero, conversion metrics for a dimension conversions do not carry.
+      additionalProperties: false
+      required: [clicks, uniqueClicks, conversions, revenue, cost, profit, roi, roas, ctr, cvr, cpc, cpa, epc, pwaInstalls, tgStarts, tgJoins, registrations, purchases, repurchases, declines, trash, clickToInstall, installToReg, regToPurchase, costPerInstall, costPerReg, costPerPurchase, blocked, bots, blockedRate, botRate, emptySubs, emptySubsRate, push_sent, push_delivered, push_opened, push_unsubscribed, push_ctr]
+      properties:
+        clicks: { type: integer }
+        uniqueClicks: { type: integer }
+        conversions: { type: [integer, "null"] }
+        revenue: { type: [number, "null"] }
+        cost: { type: [number, "null"] }
+        profit: { type: [number, "null"] }
+        roi: { type: [number, "null"], description: "Percent." }
+        roas: { type: [number, "null"], description: "Percent." }
+        ctr: { type: number }
+        cvr: { type: number }
+        cpc: { type: [number, "null"] }
+        cpa: { type: [number, "null"] }
+        epc: { type: [number, "null"] }
+        pwaInstalls: { type: integer }
+        tgStarts: { type: integer }
+        tgJoins: { type: integer }
+        registrations: { type: [integer, "null"], description: "CPA_HOLD." }
+        purchases: { type: [integer, "null"], description: "CPA_ACCEPT." }
+        repurchases: { type: [integer, "null"], description: "CPA_REDEP." }
+        declines: { type: [integer, "null"] }
+        trash: { type: [integer, "null"] }
+        clickToInstall: { type: [number, "null"] }
+        installToReg: { type: [number, "null"] }
+        regToPurchase: { type: [number, "null"] }
+        costPerInstall: { type: [number, "null"] }
+        costPerReg: { type: [number, "null"] }
+        costPerPurchase: { type: [number, "null"] }
+        blocked: { type: integer }
+        bots: { type: integer }
+        blockedRate: { type: [number, "null"] }
+        botRate: { type: [number, "null"] }
+        emptySubs: { type: integer }
+        emptySubsRate: { type: [number, "null"] }
+        push_sent: { type: [integer, "null"] }
+        push_delivered: { type: [integer, "null"] }
+        push_opened: { type: [integer, "null"] }
+        push_unsubscribed: { type: [integer, "null"] }
+        push_ctr: { type: [number, "null"] }
+    ReportRow:
+      type: object
+      additionalProperties: false
+      required: [metrics]
+      properties:
+        day: { type: string, format: date }
+        dims:
+          type: object
+          description: The row's value of each requested dimension; "" is a real bucket (no landing, no offer, …).
+          additionalProperties: { type: string }
+        metrics: { $ref: "#/components/schemas/Metrics" }
+        datedByConversion:
+          type: integer
+          description: With dateBasis click — conversions in the row whose click is unknown, dated by the conversion instead.
+    ReportRows:
+      type: object
+      additionalProperties: false
+      required: [rows, currency]
+      properties:
+        rows:
+          type: array
+          items: { $ref: "#/components/schemas/ReportRow" }
+        currency: { type: string, description: "The currency of every money metric." }
+        datedByConversion: { type: integer }

@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 	// Embedded zone database: the alpine runtime image ships none, and report
@@ -60,6 +61,7 @@ import (
 	"github.com/ismagilovnail/flox/apps/internal/offer"
 	"github.com/ismagilovnail/flox/apps/internal/offercap"
 	"github.com/ismagilovnail/flox/apps/internal/onboarding"
+	"github.com/ismagilovnail/flox/apps/internal/openapi"
 	"github.com/ismagilovnail/flox/apps/internal/orgdeletion"
 	"github.com/ismagilovnail/flox/apps/internal/orgexport"
 	"github.com/ismagilovnail/flox/apps/internal/pixel"
@@ -461,6 +463,15 @@ func buildServer(ctx context.Context, cfg config.Config, logger *slog.Logger, re
 		totpHandler.RegisterAuthenticated(r)
 	})
 
+	// The public API reference (API-1): no session or key needed to read
+	// it; its servers entry is this API's public address.
+	openapiHandler, err := openapi.NewHandler(publicV1URL(cfg.APIPublicURL))
+	if err != nil {
+		logger.Error("openapi spec failed to load", "error", err)
+		return nil, nil, err
+	}
+	openapiHandler.Register(srv.Mux())
+
 	campaignRepo := campaign.NewRepository(db)
 	campaignSvc := campaign.NewService(campaignRepo)
 	campaignHandler := campaign.NewHandler(campaignSvc, requireCampaignWrite, logger)
@@ -851,4 +862,13 @@ func buildServer(ctx context.Context, cfg config.Config, logger *slog.Logger, re
 	}
 
 	return srv, closeAll, nil
+}
+
+// publicV1URL is the versioned API's public address, "" when the public
+// origin is not configured.
+func publicV1URL(origin string) string {
+	if origin == "" {
+		return ""
+	}
+	return strings.TrimSuffix(origin, "/") + httpserver.APIPrefix
 }
