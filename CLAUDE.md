@@ -44,11 +44,13 @@ UNCOMMITTED   : the user's gallery-transcoding WIP (00085, processor.go,
                 transcode.go, worker ffmpeg) — not ours, leave it alone.
                 It now accepts MOV, so contentgallery's
                 TestUploadRejectsOversizeWrongContentAndMov fails with it.
-NEXT          : wait for the user — next item from the board (P1: INT-2,
-                BIZ-2..4; P2: BUG-7, CH-1, …). To try payments for real: a
-                YooKassa test shop's YOOKASSA_SHOP_ID/SECRET_KEY in infra/.env.
-                CI (DO1) is the user's own decision — do not set it up. Run go test with the full env line AND check e2e did
-                not skip (memory: flox-full-test-env); chconn's
+NEXT          : wait for the user — next item from the board (P1: BIZ-2..4;
+                P2: BUG-7, CH-1, …). INT-2 is excluded: the owner does it
+                later themselves — do not offer it. To try payments for
+                real: a YooKassa test shop's YOOKASSA_SHOP_ID/SECRET_KEY in
+                infra/.env. CI (DO1) is the user's own decision — do not
+                set it up. Run go test with the full env line AND check e2e
+                did not skip (memory: flox-full-test-env); chconn's
                 TestLimitsStopAHeavyQuery flakes under the full parallel run.
 ```
 
