@@ -5,6 +5,21 @@ per-phase, matching `CLAUDE.md`'s phase protocol. The one exception is
 [Between phases], below: spec amendments and the code changes that follow from
 them land between phases and would otherwise be invisible here.
 
+## [Phase 30.66] — Dev-tool vulnerabilities (audit SEC-6)
+
+docs/security.md §10.
+
+- Production dependencies of apps/web: 0 vulnerabilities (`npm audit --omit=dev`), before and after.
+- `npm audit fix` updated dev tools within their ranges (lockfile only, `package.json` unchanged). That cleared the
+  critical `proxy-addr` and the vite, vitest, undici, hono, qs, js-yaml and `@modelcontextprotocol/sdk` advisories:
+  20 findings → 9. Of the production packages, only browser data changed (`caniuse-lite`,
+  `baseline-browser-mapping`).
+- **Accepted:** the 9 left are one advisory, `braces` ≤ 3.0.3, reached through micromatch → fast-glob in the
+  shadcn CLI, ts-morph and Next's ESLint plugin. No fixed release exists, and `--force` would downgrade shadcn to
+  1.0.0 and eslint-config-next to 14. These tools take only our own glob patterns and are not in the build.
+- New `make audit-web`: fails on any production finding and lists the dev ones.
+- Checks: vitest 220/220, eslint, tsc, `next build`; shadcn CLI 4.22.1 runs. No Go change; no browser pass.
+
 ## [Phase 30.65] — Unique clicks by visitor cookie (audit DATA-5)
 
 The audit's hypothesis held in code: a visitor was campaign + IP + user agent, so phones behind one carrier NAT

@@ -289,6 +289,30 @@ first. `apps/tracker` is unchanged: it serves visitors' landings and PWA
 pages, which set their own headers (`nosniff`), and must stay embeddable
 where a campaign needs it.
 
+## 10. Dependencies of apps/web (audit SEC-6)
+
+`make audit-web` fails on any vulnerability in a production dependency
+(`npm audit --omit=dev`, clean as of 2026-10-23) and then lists the dev-only
+ones for information.
+
+**Status after SEC-6:** `npm audit fix` updated dev tools within their
+ranges. That cleared the critical `proxy-addr` and the vite, vitest, undici,
+hono, qs, js-yaml and `@modelcontextprotocol/sdk` advisories. 20 findings
+went down to 9. Of the production packages, only browser data changed
+(`caniuse-lite`, `baseline-browser-mapping`).
+
+**Accepted:** the 9 left are a single advisory, `braces` ≤ 3.0.3
+(GHSA-vfj7-8cjw-p6xm: stack exhaustion on deeply nested glob patterns). It
+reaches us through `micromatch` → `fast-glob`, used by the shadcn CLI,
+ts-morph and `@next/eslint-plugin-next`. No fixed `braces` exists: 3.0.3
+is the latest release. `npm audit fix --force` would downgrade shadcn to
+1.0.0 and eslint-config-next to 14, so it is not used.
+
+This risk is accepted because these tools run on developer machines and in
+lint, with glob patterns written in this repository, never with
+attacker-controlled input, and they are not part of the built app. Check
+again when a `braces` > 3.0.3 or a fast-glob/micromatch without it ships.
+
 ## Known limitations
 
 - No CAPTCHA/device-fingerprinting on `/auth/login`/`/auth/signup` — rate

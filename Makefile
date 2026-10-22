@@ -36,7 +36,7 @@ DATABASE_URL ?= postgres://flox:flox@localhost:5432/flox?sslmode=disable
         backup-now backup-drill backup-list \
         migrate-up migrate-down migrate-status dev-reset dev-fresh dev-status fixtures reconcile \
         test-stack-up test-stack-down test-stack-restart test-stack-logs \
-        fmt vet test lint check clean devpanel audit-tracker
+        fmt vet test lint check audit-web clean devpanel audit-tracker
 
 help: ## Show this help
 	@echo "FLOX — make targets"
@@ -207,6 +207,10 @@ lint: ## eslint (apps/web) + tsc --noEmit (apps/web)
 	cd $(WEB_DIR) && npx tsc --noEmit
 
 check: fmt vet test lint ## Run the full validation suite (fmt+vet+test+lint)
+
+audit-web: ## npm audit (apps/web): fails on any production dependency; dev tools reported only (docs/security.md)
+	cd $(WEB_DIR) && npm audit --omit=dev
+	-cd $(WEB_DIR) && npm audit
 
 # --- Dev panel (tools/devpanel, its own Go module) --------------------------
 
