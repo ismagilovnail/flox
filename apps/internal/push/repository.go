@@ -629,6 +629,11 @@ func (r *Repository) ReportStats(ctx context.Context, orgID string, q ReportStat
 		if !ok {
 			return nil, fmt.Errorf("push: report stats cannot filter by %q", f.Group)
 		}
+		if f.In != nil {
+			args = append(args, f.In)
+			where += fmt.Sprintf(` AND %s::text = ANY($%d)`, col, len(args))
+			continue
+		}
 		args = append(args, f.Value)
 		where += fmt.Sprintf(` AND %s = $%d`, col, len(args))
 	}

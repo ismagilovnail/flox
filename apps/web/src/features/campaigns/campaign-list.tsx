@@ -12,7 +12,9 @@ import { DataTable } from "@/components/ui/data-table";
 import { DateRangePicker } from "@/components/ui/date-range-picker";
 import { LoadingState } from "@/components/ui/loading-state";
 import { ErrorState } from "@/components/ui/error-state";
-import { usePermission } from "@/hooks/use-auth";
+import { useMe, usePermission } from "@/hooks/use-auth";
+import { useBuyerNames } from "@/hooks/use-buyers";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useCampaigns } from "@/hooks/use-campaigns";
 import { useOrganization, useReportingCurrency } from "@/hooks/use-organization";
 import { useReport } from "@/hooks/use-analytics-report";
@@ -67,6 +69,19 @@ export function CampaignList() {
   const assignments = useTagAssignments("campaign").data?.assignments ?? EMPTY_TAG_ASSIGNMENTS;
 
   const [tagFilter, setTagFilter] = React.useState<string[]>([]);
+  // Whose campaigns (audit TEAM-1): "all", "mine", "none" or a member id.
+  const [ownerFilter, setOwnerFilter] = React.useState("all");
+  const meId = useMe().data?.user.id;
+  const buyers = useBuyerNames().data?.buyers;
+  const ownerLabel = React.useCallback(
+    (owner: string | null) =>
+      owner === null
+        ? t("owner.nobody", { ns: "campaigns" })
+        : owner === meId
+          ? t("owner.you", { ns: "campaigns" })
+          : (buyers?.find((b) => b.id === owner)?.name ?? t("owner.unknown", { ns: "campaigns" })),
+    [t, meId, buyers],
+  );
   const [bulkTarget, setBulkTarget] = React.useState<{ ids: string[]; clear: () => void } | null>(null);
 
   const sourceNameById = React.useMemo(() => {
@@ -79,11 +94,22 @@ export function CampaignList() {
     () => withCampaignMetrics(campaignsQuery.data?.campaigns ?? [], reportQuery.data),
     [campaignsQuery.data, reportQuery.data],
   );
-  const filtered = React.useMemo(() => filterByTags("campaign", rows, tagFilter, assignments), [rows, tagFilter, assignments]);
+  const filtered = React.useMemo(() => {
+    const byOwner = rows.filter((r) =>
+      ownerFilter === "all"
+        ? true
+        : ownerFilter === "mine"
+          ? r.ownerUserId === meId
+          : ownerFilter === "none"
+            ? r.ownerUserId === null
+            : r.ownerUserId === ownerFilter,
+    );
+    return filterByTags("campaign", byOwner, tagFilter, assignments);
+  }, [rows, tagFilter, assignments, ownerFilter, meId]);
 
   const columns = React.useMemo(
-    () => campaignColumns(t, sourceNameById, customMetrics, reportQuery.isPending, currency),
-    [t, sourceNameById, customMetrics, reportQuery.isPending, currency],
+    () => campaignColumns(t, sourceNameById, customMetrics, reportQuery.isPending, currency, ownerLabel),
+    [t, sourceNameById, customMetrics, reportQuery.isPending, currency, ownerLabel],
   );
 
   const header = (
@@ -155,7 +181,28 @@ export function CampaignList() {
         pageSize={10}
         enableColumnReorder
         persistKey="campaigns"
-        filters={<TagFilterControl selected={tagFilter} onChange={setTagFilter} />}
+        filters={
+          <div className="flex flex-wrap items-center gap-2">
+            <Select value={ownerFilter} onValueChange={setOwnerFilter}>
+              <SelectTrigger size="sm" className="w-48" aria-label={t("owner.filter", { ns: "campaigns" })}>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">{t("owner.all", { ns: "campaigns" })}</SelectItem>
+                <SelectItem value="mine">{t("owner.mine", { ns: "campaigns" })}</SelectItem>
+                <SelectItem value="none">{t("owner.nobody", { ns: "campaigns" })}</SelectItem>
+                {(buyers ?? [])
+                  .filter((b) => b.id !== meId)
+                  .map((b) => (
+                    <SelectItem key={b.id} value={b.id}>
+                      {b.name}
+                    </SelectItem>
+                  ))}
+              </SelectContent>
+            </Select>
+            <TagFilterControl selected={tagFilter} onChange={setTagFilter} />
+          </div>
+        }
         enableRowSelection
         getRowId={(row) => row.id}
         bulkActions={({ selectedRows, clearSelection }) => (

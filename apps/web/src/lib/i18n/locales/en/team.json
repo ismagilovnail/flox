@@ -25,7 +25,8 @@
   },
   "permissions": {
     "campaign_read": "View campaigns",
-    "campaign_write": "Edit campaigns, stream sets, flows, tracking links, costs",
+    "campaign_write": "Create campaigns; edit own campaigns, their stream sets, flows, tracking links, costs",
+    "campaign_manage_all": "Edit and reassign every campaign, not only own ones",
     "analytics_read": "View analytics",
     "offer_read": "View offers and networks",
     "offer_write": "Edit offers, networks, event mapping",

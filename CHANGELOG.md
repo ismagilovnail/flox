@@ -5,6 +5,53 @@ per-phase, matching `CLAUDE.md`'s phase protocol. The one exception is
 [Between phases], below: spec amendments and the code changes that follow from
 them land between phases and would otherwise be invisible here.
 
+## [Phase 30.62] — Campaign owners, buyers change only theirs, report by buyer (audit TEAM-1, part 1)
+
+The audit's hypothesis held: campaigns had no owner, and a Buyer could change any campaign. You chose:
+
+- buyers see only their own campaigns (the reads come in part 2);
+- history follows the current owner;
+- Owner, Admin and Manager reassign campaigns. docs/team.md.
+
+Changes:
+
+- Migration 00097:
+  - adds `campaigns.owner_user_id`, filled for existing campaigns from the audit trail's `POST /campaigns`;
+  - adds the permission `campaign.manage_all` for Owner, Admin and Manager.
+- **Ownership:** a creator owns their campaign, and whoever duplicates owns the copy; an API key's campaign is
+  unowned. `PUT /campaigns/{id}/owner` needs `manage_all`, and the target must be an active member of the same
+  organization. `ownerUserId` is now in the API and OpenAPI.
+- **Writes:** `campaign.Access.RequireOwned` sits behind `campaign.write` on every write to one campaign: the
+  campaign itself, its stream sets, tracking links and spend. A member without `manage_all` gets 403 on someone
+  else's campaign or an unowned one. API keys stay organization-wide.
+- **Reports:** a `buyer` dimension and filter in the report builder, timeseries, breakdown and funnel, with no
+  ClickHouse schema change:
+  - grouped by buyer, the query runs by campaign and accumulators add up per owner before CR, ROI and the rest are
+    derived;
+  - a buyer filter becomes `campaign IN` (`ReportFilter.In`, also in push statistics);
+  - spend is narrowed to the same campaigns.
+
+  Found on the way: a report filtered by campaign, with no dimension or by day, counted the spend of every campaign;
+  it now counts only the filtered ones. `GET /analytics/buyers` gives names readable with `analytics.read`.
+- **UI:**
+  - the campaign's owner under its name, with a picker for `manage_all`;
+  - a Buyer column and filter (all / mine / no buyer / a buyer) on the campaign list;
+  - edit controls follow `useCanEditCampaign`;
+  - Buyer in the report builder;
+  - the role matrix shows the new permission. EN/RU.
+- Dev fixtures: the demo campaign belongs to `buyer@flox.local`.
+- **Tests:**
+  - `TestBuyersChangeOnlyTheirCampaigns` walks the router: every mutating route on one campaign gives 403 to
+    another buyer, the owner gets through, and reassigning is checked.
+  - The reference-isolation suite covers `PUT …/owner`'s `userId`.
+  - `TestCampaignOwnership`: owners, reassign rules, isolation.
+  - Analytics: buyer sums with derived metrics recomputed, buyer and campaign rows together, the filter in the
+    queries and in spend, the funnel, values.
+  - ClickHouse `IN` filter, including an empty set; a buyer never reaches SQL.
+  - Web: `useCanEditCampaign`.
+  - Go full suite with the full env: only the known gallery-WIP failure. e2e passed with nothing skipped.
+  - vitest 220/220; eslint, tsc, `next build`. No browser pass.
+
 ## [Phase 30.61] — ClickHouse report limits per organization (audit CH-1)
 
 You chose plan-based limits, and a query that finds its organization's slots taken waits 10 s and then gets 429.

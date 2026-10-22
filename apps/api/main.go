@@ -503,7 +503,16 @@ func buildServer(ctx context.Context, cfg config.Config, logger *slog.Logger, re
 
 	campaignRepo := campaign.NewRepository(db)
 	campaignSvc := campaign.NewService(campaignRepo).WithQuota(billingSvc)
-	campaignHandler := campaign.NewHandler(campaignSvc, requireCampaignWrite, logger)
+	// Buyers change only their own campaigns (audit TEAM-1): every write to
+	// one campaign — and to its stream sets, tracking links and spend —
+	// goes through campaign.write, then campaignAccess.RequireOwned.
+	campaignAccess := campaign.NewAccess(campaignRepo, authSvc.HasPermission, logger)
+	requireOwnCampaign := func(param string) func(http.Handler) http.Handler {
+		owned := campaignAccess.RequireOwned(param)
+		return func(next http.Handler) http.Handler { return requireCampaignWrite(owned(next)) }
+	}
+	campaignHandler := campaign.NewHandler(campaignSvc, requireOwnCampaign("id"),
+		authSvc.RequirePermission(campaign.ManageAllPermission, logger), logger)
 	srv.Mux().Route("/campaigns", func(r chi.Router) {
 		r.Use(tenantMiddleware)
 		r.Use(readGate("campaign.read"))
@@ -517,7 +526,7 @@ func buildServer(ctx context.Context, cfg config.Config, logger *slog.Logger, re
 		trafficSourceHandler.Register(r)
 	})
 
-	trackingLinkHandler := trackinglink.NewHandler(trackinglink.NewService(trackinglink.NewRepository(db)), requireCampaignWrite, logger)
+	trackingLinkHandler := trackinglink.NewHandler(trackinglink.NewService(trackinglink.NewRepository(db)), requireOwnCampaign("campaignId"), logger)
 	srv.Mux().Route("/campaigns/{campaignId}/tracking-links", func(r chi.Router) {
 		r.Use(tenantMiddleware)
 		r.Use(readGate("campaign.read"))
@@ -746,7 +755,7 @@ func buildServer(ctx context.Context, cfg config.Config, logger *slog.Logger, re
 	})
 
 	costSvc := cost.NewService(cost.NewRepository(db), conversion.NewPostgresFX(db))
-	costHandler := cost.NewHandler(costSvc, requireCampaignWrite, logger)
+	costHandler := cost.NewHandler(costSvc, requireOwnCampaign("campaignId"), logger)
 	srv.Mux().Route("/campaigns/{campaignId}/cost-entries", func(r chi.Router) {
 		r.Use(tenantMiddleware)
 		r.Use(readGate("campaign.read"))
@@ -772,7 +781,7 @@ func buildServer(ctx context.Context, cfg config.Config, logger *slog.Logger, re
 		costSyncHandler.Register(r)
 	})
 
-	streamSetHandler := streamset.NewHandler(streamset.NewService(streamset.NewRepository(db)).WithQuota(billingSvc), requireCampaignWrite, logger)
+	streamSetHandler := streamset.NewHandler(streamset.NewService(streamset.NewRepository(db)).WithQuota(billingSvc), requireOwnCampaign("campaignId"), logger)
 	srv.Mux().Route("/campaigns/{campaignId}/stream-sets", func(r chi.Router) {
 		r.Use(tenantMiddleware)
 		r.Use(readGate("campaign.read"))
@@ -822,7 +831,8 @@ func buildServer(ctx context.Context, cfg config.Config, logger *slog.Logger, re
 
 		// Reports in the organization's reporting currency (§50-FX).
 		fxStore := fx.NewStore(db)
-		analyticsSvc := analytics.NewService(events, costSvc).WithMoney(fxStore).WithPush(push.NewRepository(db))
+		analyticsSvc := analytics.NewService(events, costSvc).WithMoney(fxStore).WithPush(push.NewRepository(db)).
+			WithOwners(campaignOwners{campaignRepo})
 		analyticsHandler := analytics.NewHandler(analyticsSvc, logger)
 		srv.Mux().Route("/analytics", func(r chi.Router) {
 			r.Use(tenantMiddleware)
@@ -912,4 +922,20 @@ func publicV1URL(origin string) string {
 		return ""
 	}
 	return strings.TrimSuffix(origin, "/") + httpserver.APIPrefix
+}
+
+// campaignOwners is the buyer dimension's source (analytics.OwnerSource)
+// over the campaigns' own owners.
+type campaignOwners struct{ *campaign.Repository }
+
+func (c campaignOwners) OwnerNames(ctx context.Context, orgID string) ([]analytics.Buyer, error) {
+	names, err := c.Repository.OwnerNames(ctx, orgID)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]analytics.Buyer, len(names))
+	for i, n := range names {
+		out[i] = analytics.Buyer{ID: n.ID, Name: n.Name}
+	}
+	return out, nil
 }

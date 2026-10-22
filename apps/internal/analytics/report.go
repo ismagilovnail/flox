@@ -373,6 +373,9 @@ func (s *Service) DimensionValues(ctx context.Context, organizationID string, in
 		return nil, err
 	}
 	defer observeLatency("dimension_values")()
+	if in.Dim == chstore.DimBuyer {
+		return s.buyerValues(ctx, organizationID)
+	}
 
 	// +24h: In/To is the caller's inclusive last day (a UI date picker's
 	// own "to" selection), but chstore.ReportQuery.To is EXCLUSIVE — the
@@ -393,6 +396,15 @@ func (s *Service) DimensionValues(ctx context.Context, organizationID string, in
 // since only they know what "sorted by" and "top-N" mean for their
 // specific request.
 func (s *Service) groupedReport(ctx context.Context, organizationID string, dims []chstore.ReportDimension, byDay bool, filters []chstore.ReportFilter, from, to time.Time, sc scope, basis chstore.DateBasis, keepUSD bool) ([]ReportRow, error) {
+	// The buyer dimension runs by campaign and is regrouped at the end
+	// (buyer.go).
+	plan, filters, err := s.planBuyer(ctx, organizationID, dims, filters)
+	if err != nil {
+		return nil, err
+	}
+	if plan != nil {
+		dims = plan.query
+	}
 	qFrom, qTo := sc.bounds(from, to)
 	q := chstore.ReportQuery{
 		OrganizationID: organizationID,
@@ -418,7 +430,6 @@ func (s *Service) groupedReport(ctx context.Context, organizationID string, dims
 		if now := time.Now().AddDate(0, 0, 1); now.After(last) {
 			last = now
 		}
-		var err error
 		if conv, err = s.conversion(ctx, organizationID, from.AddDate(0, 0, -1), last); err != nil {
 			return nil, fmt.Errorf("analytics: loading the reporting currency: %w", err)
 		}
@@ -554,6 +565,7 @@ func (s *Service) groupedReport(ctx context.Context, organizationID string, dims
 		}
 	}
 
+	merged, order = plan.regroup(merged, order)
 	rows := make([]ReportRow, 0, len(order))
 	for _, k := range order {
 		acc := merged[k]
@@ -605,7 +617,7 @@ func (s *Service) attachPush(ctx context.Context, organizationID string, dims []
 		q.GroupBy = append(q.GroupBy, pushDimensions[d])
 	}
 	for _, f := range filters {
-		q.Filters = append(q.Filters, push.ReportStatsFilter{Group: pushDimensions[f.Dimension], Value: f.Value})
+		q.Filters = append(q.Filters, push.ReportStatsFilter{Group: pushDimensions[f.Dimension], Value: f.Value, In: f.In})
 	}
 	stats, err := s.push.ReportStats(ctx, organizationID, q)
 	if err != nil {
@@ -658,9 +670,17 @@ func attachCost(ctx context.Context, src CostSource, organizationID string, dims
 	if len(dims) == 1 && dims[0] == chstore.DimCountry {
 		return attachCountryCost(ctx, src, organizationID, byDay, filters, from, to, merged, addRow)
 	}
+	// Spend is kept per campaign: a report narrowed to some campaigns (a
+	// campaign filter, or a buyer's campaigns) counts only theirs. By
+	// source, the narrowed share is unknown — no cost (CLAUDE.md #6).
+	scope := campaignScope(filters)
+	if scope != nil && len(dims) == 1 && dims[0] == chstore.DimSource {
+		return nil
+	}
+	allowed := func(campaignID string) bool { return scope == nil || scope[campaignID] }
 
 	if byDay {
-		return attachDailyCost(ctx, src, organizationID, dims, from, to, merged)
+		return attachDailyCost(ctx, src, organizationID, dims, from, to, merged, scope)
 	}
 
 	if len(dims) == 0 {
@@ -671,12 +691,16 @@ func attachCost(ctx context.Context, src CostSource, organizationID string, dims
 		if err != nil {
 			return fmt.Errorf("analytics: querying spend by campaign: %w", err)
 		}
-		if len(spend) == 0 {
-			return nil // no cost_entries at all — stays nil, not a fabricated 0
-		}
 		var total float64
+		found := false
 		for _, c := range spend {
-			total += c.AmountUSD
+			if allowed(c.CampaignID) {
+				total += c.AmountUSD
+				found = true
+			}
+		}
+		if !found {
+			return nil // no cost_entries at all — stays nil, not a fabricated 0
 		}
 		for _, acc := range merged {
 			v := total
@@ -721,7 +745,9 @@ func attachCost(ctx context.Context, src CostSource, organizationID string, dims
 	}
 	byCampaign := make(map[string]float64, len(spend))
 	for _, c := range spend {
-		byCampaign[c.CampaignID] = c.AmountUSD
+		if allowed(c.CampaignID) {
+			byCampaign[c.CampaignID] = c.AmountUSD
+		}
 	}
 	seen := map[string]bool{}
 	for _, acc := range merged {
@@ -734,7 +760,7 @@ func attachCost(ctx context.Context, src CostSource, organizationID string, dims
 	}
 	if addRow != nil {
 		for _, c := range spend {
-			if !seen[c.CampaignID] {
+			if !seen[c.CampaignID] && allowed(c.CampaignID) {
 				v := c.AmountUSD
 				addRow(map[chstore.ReportDimension]string{chstore.DimCampaign: c.CampaignID}).costUSD = &v
 			}
@@ -754,6 +780,9 @@ func attachCost(ctx context.Context, src CostSource, organizationID string, dims
 func attachCountryCost(ctx context.Context, src CostSource, organizationID string, byDay bool, filters []chstore.ReportFilter, from, to time.Time, merged map[string]*rowAccumulator, addRow func(map[chstore.ReportDimension]string) *rowAccumulator) error {
 	var scope cost.CountryScope
 	for _, f := range filters {
+		if f.In != nil {
+			return nil // a set of campaigns: which country spend is theirs is unknown here
+		}
 		var field *string
 		switch f.Dimension {
 		case chstore.DimCampaign:
@@ -828,7 +857,9 @@ func attachCountryCost(ctx context.Context, src CostSource, organizationID strin
 
 // attachDailyCost fills per-day cost: the org's daily total when there is no
 // other dimension, or per (campaign|source, day) when grouped by one of them.
-func attachDailyCost(ctx context.Context, src CostSource, organizationID string, dims []chstore.ReportDimension, from, to time.Time, merged map[string]*rowAccumulator) error {
+// scope, when not nil, is the campaigns the report is narrowed to (see
+// attachCost): the daily total then sums only their spend.
+func attachDailyCost(ctx context.Context, src CostSource, organizationID string, dims []chstore.ReportDimension, from, to time.Time, merged map[string]*rowAccumulator, scope map[string]bool) error {
 	set := func(acc *rowAccumulator, usd float64) {
 		v := usd
 		acc.costUSD = &v
@@ -836,6 +867,25 @@ func attachDailyCost(ctx context.Context, src CostSource, organizationID string,
 	dayKey := func(t time.Time) string { return t.Format("2006-01-02") }
 
 	switch {
+	case len(dims) == 0 && scope != nil:
+		spend, err := src.CampaignSpendByDay(ctx, organizationID, from, to)
+		if err != nil {
+			return fmt.Errorf("analytics: querying daily spend by campaign: %w", err)
+		}
+		byDayUSD := map[string]float64{}
+		for _, d := range spend {
+			if scope[d.CampaignID] {
+				byDayUSD[dayKey(d.Day)] += d.AmountUSD
+			}
+		}
+		for _, acc := range merged {
+			if acc.day == nil {
+				continue
+			}
+			if usd, ok := byDayUSD[dayKey(*acc.day)]; ok {
+				set(acc, usd)
+			}
+		}
 	case len(dims) == 0:
 		spend, err := src.DailySpendForOrg(ctx, organizationID, from, to)
 		if err != nil {
@@ -1249,6 +1299,9 @@ func (s *Service) Funnel(ctx context.Context, organizationID string, from, to ti
 		return nil, err
 	}
 	defer observeLatency("funnel")()
+	if _, filters, err = s.planBuyer(ctx, organizationID, nil, filters); err != nil {
+		return nil, err
+	}
 
 	qFrom, qTo := sc.bounds(from, to)
 	counts, err := s.repo.FunnelCounts(ctx, organizationID, qFrom, qTo, filters)

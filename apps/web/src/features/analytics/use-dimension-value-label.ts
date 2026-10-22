@@ -12,6 +12,7 @@ import { usePwas } from "@/hooks/use-pwas";
 import { usePostlandings } from "@/hooks/use-postlandings";
 import { useNetworks } from "@/hooks/use-networks";
 import { useTelegramChannelNames } from "@/hooks/use-telegram";
+import { useBuyerNames } from "@/hooks/use-buyers";
 import type { DimensionKey } from "@/types/analytics";
 
 /**
@@ -20,7 +21,7 @@ import type { DimensionKey } from "@/types/analytics";
  * entities can share one. This maps ids to current names for display
  * only; filters, exports of the raw query and the URL keep the id.
  *
- * Resolved: `campaign`, `source`, `flow`, `stream_set`, `landing`, `offer`, `network`, `pwa`, `postlanding` and `telegram_channel` ("Title (@bot)") — all group by ULIDs that read as noise
+ * Resolved: `campaign`, `source`, `flow`, `stream_set`, `landing`, `offer`, `network`, `pwa`, `postlanding`, `buyer` (the member's name) and `telegram_channel` ("Title (@bot)") — all group by ULIDs that read as noise
  * on their own, and both have an empty value that is a real bucket worth
  * naming ("no landing shown", "not routed to an offer"). Every other
  * dimension returns its value unchanged — the same rendering as before
@@ -38,6 +39,7 @@ export function useDimensionValueLabel(): (dimension: DimensionKey, value: strin
   const postlandings = usePostlandings().data?.postlandings;
   const networks = useNetworks().data?.networks;
   const tgChannels = useTelegramChannelNames().data?.channels;
+  const buyers = useBuyerNames().data?.buyers;
 
   const campaignNames = React.useMemo(() => new Map((campaigns ?? []).map((c) => [c.id, c.name])), [campaigns]);
   const sourceNames = React.useMemo(() => new Map((sources ?? []).map((s) => [s.id, s.name])), [sources]);
@@ -65,6 +67,7 @@ export function useDimensionValueLabel(): (dimension: DimensionKey, value: strin
     () => new Map((tgChannels ?? []).map((c) => [c.id, `${c.title || c.id} (@${c.botUsername})`])),
     [tgChannels],
   );
+  const buyerNames = React.useMemo(() => new Map((buyers ?? []).map((b) => [b.id, b.name])), [buyers]);
   const postlandingNames = React.useMemo(
     () => new Map((postlandings ?? []).map((p) => [p.id, p.name])),
     [postlandings],
@@ -93,6 +96,8 @@ export function useDimensionValueLabel(): (dimension: DimensionKey, value: strin
           return value === "" ? t("values.noPostlanding") : (postlandingNames.get(value) ?? value);
         case "telegram_channel":
           return value === "" ? t("values.noTelegramChannel") : (tgChannelNames.get(value) ?? value);
+        case "buyer":
+          return value === "" ? t("values.noBuyer") : (buyerNames.get(value) ?? value);
         case "country":
           return value === "" ? t("values.noCountry") : value;
         default:
@@ -101,6 +106,6 @@ export function useDimensionValueLabel(): (dimension: DimensionKey, value: strin
           return value === "" ? "—" : value;
       }
     },
-    [t, campaignNames, sourceNames, flowNames, streamSetNames, landingNames, offerNames, networkNames, pwaNames, postlandingNames, tgChannelNames],
+    [t, campaignNames, sourceNames, flowNames, streamSetNames, landingNames, offerNames, networkNames, pwaNames, postlandingNames, tgChannelNames, buyerNames],
   );
 }

@@ -38,9 +38,14 @@ type Campaign struct {
 	// to. Empty for the common case (most campaigns aren't funded by a
 	// connected ad account at all, or don't need per-campaign spend
 	// synced yet). See docs/ad-account-connections.md.
-	ExternalCampaignID string    `json:"externalCampaignId"`
-	CreatedAt          time.Time `json:"createdAt"`
-	UpdatedAt          time.Time `json:"updatedAt"`
+	ExternalCampaignID string `json:"externalCampaignId"`
+	// OwnerUserID is the buyer the campaign belongs to (audit TEAM-1): its
+	// creator unless reassigned; nil when nobody owns it (created by an
+	// API key, or its owner was deleted). Without campaign.manage_all a
+	// member changes only campaigns they own.
+	OwnerUserID *string   `json:"ownerUserId"`
+	CreatedAt   time.Time `json:"createdAt"`
+	UpdatedAt   time.Time `json:"updatedAt"`
 }
 
 type CreateInput struct {
@@ -49,6 +54,8 @@ type CreateInput struct {
 	FallbackURL        string
 	Notes              string
 	ExternalCampaignID string
+	// OwnerUserID: the creating member; "" leaves the campaign unowned.
+	OwnerUserID string
 }
 
 // UpdateInput fields are pointers so PATCH can distinguish "not sent" (nil)

@@ -54,6 +54,8 @@ var notInPublicSpec = map[string]string{
 	"/report-presets/*":                  "the app's saved reports",
 	"/referral/*":                        "the referral program, in the app",
 	"/onboarding/*":                      "the app's onboarding checklist",
+	"PUT /campaigns/{id}/owner":          "assigning campaigns to buyers is done in the app",
+	"GET /analytics/buyers":              "the report builder's buyer names",
 	"/billing/payments/*":                "paying for a plan is done in the app, by an owner",
 	"GET /billing/payments":              "paying for a plan is done in the app, by an owner",
 	"POST /billing/checkout":             "paying for a plan is done in the app, by an owner",

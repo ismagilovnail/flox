@@ -47,6 +47,19 @@ func (h *Handler) Register(r chi.Router) {
 	r.Post("/dashboard", h.dashboard)
 	r.Post("/cost-timezones", h.costTimezones)
 	r.Post("/dimension-values", h.dimensionValues)
+	r.Get("/buyers", h.buyers)
+}
+
+// buyers answers GET /analytics/buyers: the members who own campaigns,
+// for the buyer dimension's labels (audit TEAM-1).
+func (h *Handler) buyers(w http.ResponseWriter, r *http.Request) {
+	orgID, _ := tenant.OrgID(r.Context())
+	b, err := h.svc.Buyers(r.Context(), orgID)
+	if err != nil {
+		apierror.Write(w, h.logger, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"buyers": b})
 }
 
 type dailyCountResponse struct {

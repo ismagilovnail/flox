@@ -19,11 +19,13 @@ type Handler struct {
 	// beyond tenantMiddleware — same split custommetrics/reportpresets/
 	// referral already use.
 	requireWrite func(http.Handler) http.Handler
-	logger       *slog.Logger
+	// requireManageAll gates reassigning a campaign (campaign.manage_all).
+	requireManageAll func(http.Handler) http.Handler
+	logger           *slog.Logger
 }
 
-func NewHandler(svc *Service, requireWrite func(http.Handler) http.Handler, logger *slog.Logger) *Handler {
-	return &Handler{svc: svc, requireWrite: requireWrite, logger: logger}
+func NewHandler(svc *Service, requireWrite, requireManageAll func(http.Handler) http.Handler, logger *slog.Logger) *Handler {
+	return &Handler{svc: svc, requireWrite: requireWrite, requireManageAll: requireManageAll, logger: logger}
 }
 
 // Register mounts every /campaigns route onto r. The caller is responsible
@@ -38,6 +40,7 @@ func (h *Handler) Register(r chi.Router) {
 	r.With(h.requireWrite).Post("/{id}/duplicate", h.duplicate)
 	r.With(h.requireWrite).Post("/{id}/pause", h.pause)
 	r.With(h.requireWrite).Post("/{id}/activate", h.activate)
+	r.With(h.requireManageAll).Put("/{id}/owner", h.setOwner)
 }
 
 func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
@@ -91,6 +94,7 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 		FallbackURL:        req.FallbackURL,
 		Notes:              req.Notes,
 		ExternalCampaignID: req.ExternalCampaignID,
+		OwnerUserID:        userIDOf(r),
 	})
 	if err != nil {
 		apierror.Write(w, h.logger, err)
@@ -143,7 +147,7 @@ func (h *Handler) delete(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) duplicate(w http.ResponseWriter, r *http.Request) {
 	orgID, _ := tenant.OrgID(r.Context())
-	c, err := h.svc.Duplicate(r.Context(), orgID, chi.URLParam(r, "id"))
+	c, err := h.svc.Duplicate(r.Context(), orgID, chi.URLParam(r, "id"), userIDOf(r))
 	if err != nil {
 		apierror.Write(w, h.logger, err)
 		return
@@ -175,4 +179,35 @@ func writeJSON(w http.ResponseWriter, status int, body any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(body)
+}
+
+type ownerRequest struct {
+	UserID string `json:"userId"`
+}
+
+// setOwner answers PUT /campaigns/{id}/owner {"userId"}: assign the
+// campaign to a member, or to nobody with "".
+func (h *Handler) setOwner(w http.ResponseWriter, r *http.Request) {
+	orgID, _ := tenant.OrgID(r.Context())
+	var req ownerRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		apierror.Write(w, h.logger, apierror.Validation("invalid JSON body", nil))
+		return
+	}
+	c, err := h.svc.SetOwner(r.Context(), orgID, chi.URLParam(r, "id"), req.UserID)
+	if err != nil {
+		apierror.Write(w, h.logger, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, c)
+}
+
+// userIDOf is the signed-in member; "" for an API key, whose campaigns
+// nobody owns.
+func userIDOf(r *http.Request) string {
+	if _, isKey := tenant.APIKeyScope(r.Context()); isKey {
+		return ""
+	}
+	id, _ := tenant.UserID(r.Context())
+	return id
 }

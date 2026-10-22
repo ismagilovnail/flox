@@ -41,6 +41,8 @@ export function campaignColumns(
   customMetrics: CustomMetric[] = [],
   metricsLoading = false,
   currency = "USD",
+  /** The owner's display name (audit TEAM-1); without it no owner column. */
+  ownerLabel?: (ownerUserId: string | null) => string,
 ): ColumnDef<typeof dataTableFeatures, CampaignRow>[] {
   const metricColumns: ColumnDef<typeof dataTableFeatures, CampaignRow>[] = [
     ...CAMPAIGN_TABLE_METRICS.map((key): ColumnDef<typeof dataTableFeatures, CampaignRow> => {
@@ -98,6 +100,16 @@ export function campaignColumns(
       // on every render, so it always reflects the current sourceNameById.
       cell: ({ row }) => sourceNameById[row.original.trafficSourceId] ?? row.original.trafficSourceId,
     },
+    ...(ownerLabel
+      ? [
+          {
+            id: "owner",
+            header: t("columns.owner", { ns: "campaigns" }),
+            // A `cell`, not an accessorFn — names load separately (see "source").
+            cell: ({ row }) => ownerLabel(row.original.ownerUserId),
+          } satisfies ColumnDef<typeof dataTableFeatures, CampaignRow>,
+        ]
+      : []),
     ...metricColumns,
     {
       id: "tags",

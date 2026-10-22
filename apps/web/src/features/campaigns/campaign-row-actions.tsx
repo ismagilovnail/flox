@@ -18,8 +18,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { useActivateCampaign, useArchiveCampaign, useDuplicateCampaign, usePauseCampaign } from "@/hooks/use-campaigns";
-import { usePermission } from "@/hooks/use-auth";
+import { useActivateCampaign, useArchiveCampaign, useCanEditCampaign, useDuplicateCampaign, usePauseCampaign } from "@/hooks/use-campaigns";
 import { CopyTrackingUrlButton } from "@/features/campaigns/copy-tracking-url-button";
 import { viewStatisticsHref } from "@/features/analytics/view-statistics-link";
 import type { Campaign } from "@/lib/api/campaigns";
@@ -41,7 +40,8 @@ export function CampaignRowActions({
 }) {
   const { t } = useTranslation(["campaigns", "common"]);
   const router = useRouter();
-  const canWrite = usePermission("campaign.write");
+  // Only its owner, or a member with campaign.manage_all (audit TEAM-1).
+  const canWrite = useCanEditCampaign(campaign);
   const pause = usePauseCampaign();
   const activate = useActivateCampaign();
   const duplicate = useDuplicateCampaign();

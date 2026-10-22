@@ -81,6 +81,11 @@ const (
 	// conversion report cannot answer it (a click may join several
 	// channels).
 	DimTelegramChannel ReportDimension = "telegram_channel"
+	// DimBuyer groups by the member a campaign belongs to (audit TEAM-1).
+	// Virtual: events carry no buyer, so internal/analytics answers it by
+	// campaign and adds campaigns up per their current owner — it never
+	// reaches a query here (no column maps it, so every method refuses it).
+	DimBuyer ReportDimension = "buyer"
 )
 
 // reportClickColumns is the whitelist for click_events and tracking_events,
@@ -146,7 +151,7 @@ var reportConversionViaClickColumns = map[ReportDimension]string{
 // always answer, since reportClickColumns is the wider of the two whitelists.
 func ValidDimension(d ReportDimension) bool {
 	_, ok := reportClickColumns[d]
-	return ok
+	return ok || d == DimBuyer
 }
 
 // SupportedByConversions reports whether the conversion report can answer
@@ -201,6 +206,22 @@ func needsClickJoin(q ReportQuery) bool {
 type ReportFilter struct {
 	Dimension ReportDimension
 	Value     string
+	// In, when not nil, makes the condition "dimension IN In" (Value is
+	// ignored); an empty In matches nothing. internal/analytics builds it
+	// for a buyer: the campaigns that member owns.
+	In []string
+}
+
+// condition is f as SQL on col, with its argument (none for an empty In).
+func (f ReportFilter) condition(col string) (string, []any) {
+	switch {
+	case f.In == nil:
+		return fmt.Sprintf(" AND %s = ?", col), []any{f.Value}
+	case len(f.In) == 0:
+		return " AND 0", nil
+	default:
+		return fmt.Sprintf(" AND %s IN ?", col), []any{f.In}
+	}
 }
 
 // ReportQuery is the shared shape every method below takes. ByDay and
@@ -401,8 +422,9 @@ func buildFilterClause(cols map[ReportDimension]string, filters []ReportFilter, 
 		if !present {
 			return "", nil, false
 		}
-		fmt.Fprintf(&b, " AND %s = ?", col)
-		args = append(args, f.Value)
+		cond, condArgs := f.condition(col)
+		b.WriteString(cond)
+		args = append(args, condArgs...)
 	}
 	return b.String(), args, true
 }
@@ -703,8 +725,9 @@ func (s *EventStore) reportConversionsJoined(ctx context.Context, q ReportQuery)
 		if !ok {
 			return nil, fmt.Errorf("chstore: unsupported filter dimension in conversion report")
 		}
-		fmt.Fprintf(&filterClause, " AND %s = ?", col)
-		args = append(args, f.Value)
+		cond, condArgs := f.condition(col)
+		filterClause.WriteString(cond)
+		args = append(args, condArgs...)
 	}
 
 	all := make([]string, 0, len(selectCols)+1)

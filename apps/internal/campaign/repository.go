@@ -20,22 +20,64 @@ func NewRepository(db *pgxpool.Pool) *Repository {
 	return &Repository{db: db}
 }
 
-const selectColumns = `id, organization_id, traffic_source_id, name, status, fallback_url, notes, external_campaign_id, created_at, updated_at`
+const selectColumns = `id, organization_id, traffic_source_id, name, status, fallback_url, notes, external_campaign_id, owner_user_id, created_at, updated_at`
 
 func scanCampaign(row pgx.Row) (Campaign, error) {
 	var c Campaign
-	err := row.Scan(&c.ID, &c.OrganizationID, &c.TrafficSourceID, &c.Name, &c.Status, &c.FallbackURL, &c.Notes, &c.ExternalCampaignID, &c.CreatedAt, &c.UpdatedAt)
+	err := row.Scan(&c.ID, &c.OrganizationID, &c.TrafficSourceID, &c.Name, &c.Status, &c.FallbackURL, &c.Notes, &c.ExternalCampaignID, &c.OwnerUserID, &c.CreatedAt, &c.UpdatedAt)
 	return c, err
 }
 
 func (r *Repository) Create(ctx context.Context, id, orgID string, in CreateInput) (Campaign, error) {
 	row := r.db.QueryRow(ctx, `
-		INSERT INTO campaigns (id, organization_id, traffic_source_id, name, fallback_url, notes, external_campaign_id)
-		VALUES ($1, $2, $3, $4, $5, $6, $7)
+		INSERT INTO campaigns (id, organization_id, traffic_source_id, name, fallback_url, notes, external_campaign_id, owner_user_id)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, NULLIF($8, '')::ulid)
 		RETURNING `+selectColumns,
-		id, orgID, in.TrafficSourceID, in.Name, in.FallbackURL, in.Notes, in.ExternalCampaignID,
+		id, orgID, in.TrafficSourceID, in.Name, in.FallbackURL, in.Notes, in.ExternalCampaignID, in.OwnerUserID,
 	)
 	return scanCampaign(row)
+}
+
+// IsActiveMember reports whether userID is an active member of orgID —
+// the only people a campaign can be assigned to.
+func (r *Repository) IsActiveMember(ctx context.Context, orgID, userID string) (bool, error) {
+	var ok bool
+	err := r.db.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM memberships WHERE organization_id = $1 AND user_id::text = $2 AND status = 'active')`,
+		orgID, userID).Scan(&ok)
+	if err != nil {
+		return false, fmt.Errorf("checking membership: %w", err)
+	}
+	return ok, nil
+}
+
+// SetOwner assigns the campaign to userID ("" leaves it unowned).
+func (r *Repository) SetOwner(ctx context.Context, orgID, id, userID string) (Campaign, error) {
+	row := r.db.QueryRow(ctx, `
+		UPDATE campaigns SET owner_user_id = NULLIF($3, '')::ulid
+		WHERE id = $1 AND organization_id = $2
+		RETURNING `+selectColumns, id, orgID, userID)
+	c, err := scanCampaign(row)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return Campaign{}, apierror.NotFound("campaign not found")
+	}
+	return c, err
+}
+
+// OwnerOf is the campaign's owner ("" when unowned); found false when the
+// organization has no such campaign.
+func (r *Repository) OwnerOf(ctx context.Context, orgID, id string) (owner string, found bool, err error) {
+	var o *string
+	err = r.db.QueryRow(ctx, `SELECT owner_user_id FROM campaigns WHERE id = $1 AND organization_id = $2`, id, orgID).Scan(&o)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return "", false, nil
+	}
+	if err != nil {
+		return "", false, fmt.Errorf("reading the campaign's owner: %w", err)
+	}
+	if o != nil {
+		owner = *o
+	}
+	return owner, true, nil
 }
 
 func (r *Repository) GetByID(ctx context.Context, orgID, id string) (Campaign, error) {
@@ -192,4 +234,52 @@ func (r *Repository) TrafficSourceBelongsToOrg(ctx context.Context, orgID, traff
 		trafficSourceID, orgID,
 	).Scan(&exists)
 	return exists, err
+}
+
+// Owners is every campaign of the organization, archived ones included,
+// with its owner ("" when unowned) — the buyer dimension of reports
+// (internal/analytics).
+func (r *Repository) Owners(ctx context.Context, orgID string) (map[string]string, error) {
+	rows, err := r.db.Query(ctx, `SELECT id, coalesce(owner_user_id, '') FROM campaigns WHERE organization_id = $1`, orgID)
+	if err != nil {
+		return nil, fmt.Errorf("listing campaign owners: %w", err)
+	}
+	defer rows.Close()
+	out := map[string]string{}
+	for rows.Next() {
+		var id, owner string
+		if err := rows.Scan(&id, &owner); err != nil {
+			return nil, fmt.Errorf("reading a campaign owner: %w", err)
+		}
+		out[id] = owner
+	}
+	return out, rows.Err()
+}
+
+// OwnerName is a member who owns campaigns.
+type OwnerName struct {
+	ID, Name string
+}
+
+// OwnerNames is every member who owns one of the organization's campaigns,
+// with their name — the buyer dimension's labels.
+func (r *Repository) OwnerNames(ctx context.Context, orgID string) ([]OwnerName, error) {
+	rows, err := r.db.Query(ctx, `
+		SELECT DISTINCT u.id, u.name FROM campaigns c
+		JOIN users u ON u.id = c.owner_user_id
+		WHERE c.organization_id = $1
+		ORDER BY u.name, u.id`, orgID)
+	if err != nil {
+		return nil, fmt.Errorf("listing campaign owners' names: %w", err)
+	}
+	defer rows.Close()
+	out := []OwnerName{}
+	for rows.Next() {
+		var b OwnerName
+		if err := rows.Scan(&b.ID, &b.Name); err != nil {
+			return nil, fmt.Errorf("reading an owner's name: %w", err)
+		}
+		out = append(out, b)
+	}
+	return out, rows.Err()
 }

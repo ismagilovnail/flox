@@ -196,3 +196,12 @@ export function getFlowSummary(flowIds: string[], from: Date, to: Date, timezone
     body: { flowIds, from: formatDate(from), to: formatDate(to), timezone },
   }).then((res) => Object.fromEntries(res.flows.map((f) => [f.flowId, f.counts])));
 }
+
+/** A member who owns campaigns — the buyer dimension's labels. */
+export type Buyer = { id: string; name: string };
+
+/** Who the buyers are, readable by every role that reads reports (the
+ * team list needs team.read). */
+export function listBuyers(): Promise<{ buyers: Buyer[] }> {
+  return apiFetch("/analytics/buyers");
+}

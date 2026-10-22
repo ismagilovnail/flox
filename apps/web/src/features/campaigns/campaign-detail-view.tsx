@@ -10,9 +10,9 @@ import { LoadingState } from "@/components/ui/loading-state";
 import { ErrorState } from "@/components/ui/error-state";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import type { CampaignStatus } from "@/lib/api/campaigns";
-import { useCampaign, useUpdateCampaign } from "@/hooks/use-campaigns";
-import { usePermission } from "@/hooks/use-auth";
+import { useCampaign, useCanEditCampaign, useUpdateCampaign } from "@/hooks/use-campaigns";
 import { CampaignRowActions } from "@/features/campaigns/campaign-row-actions";
+import { CampaignOwner } from "@/features/campaigns/campaign-owner";
 import { CampaignForm, type CampaignFormValues } from "@/features/campaigns/campaign-form";
 import { CampaignCostEntries } from "@/features/campaigns/campaign-cost-entries";
 import { TrackingLinks } from "@/features/campaigns/tracking-links";
@@ -30,8 +30,9 @@ const SETTINGS_FORM_ID = "campaign-settings-form";
 
 export function CampaignDetailView({ id }: { id: string }) {
   const { t } = useTranslation(["campaigns", "common"]);
-  const canWrite = usePermission("campaign.write");
   const campaignQuery = useCampaign(id);
+  // Only its owner, or a member with campaign.manage_all (audit TEAM-1).
+  const canWrite = useCanEditCampaign(campaignQuery.data);
   const updateCampaign = useUpdateCampaign(id);
 
   if (campaignQuery.isPending) {
@@ -77,6 +78,7 @@ export function CampaignDetailView({ id }: { id: string }) {
             <h1 className="text-2xl font-semibold tracking-tight">{campaign.name}</h1>
             <Badge variant={STATUS_VARIANT[campaign.status]}>{t(`status.${campaign.status}`, { ns: "common" })}</Badge>
           </div>
+          <CampaignOwner campaign={campaign} />
         </div>
         <div className="flex items-center gap-2">
           <Button type="submit" form={SETTINGS_FORM_ID} disabled={readOnly}>
@@ -99,6 +101,7 @@ export function CampaignDetailView({ id }: { id: string }) {
             campaignName={campaign.name}
             trafficSourceId={campaign.trafficSourceId}
             disabled={isArchived}
+            canEdit={canWrite}
           />
           <div className="grid grid-cols-1 gap-6 lg:grid-cols-[360px_1fr] lg:items-start">
             <CampaignForm
@@ -120,7 +123,7 @@ export function CampaignDetailView({ id }: { id: string }) {
         </TabsContent>
 
         <TabsContent value="cost" className="flex flex-col gap-6">
-          <CampaignCostEntries campaignId={campaign.id} />
+          <CampaignCostEntries campaignId={campaign.id} canEdit={canWrite} />
         </TabsContent>
 
         <TabsContent value="simulator" className="flex flex-col gap-6">

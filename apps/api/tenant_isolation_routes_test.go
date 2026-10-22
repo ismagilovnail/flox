@@ -744,6 +744,10 @@ func referenceCases(env *isolationEnv) []refCase {
 			}},
 		{http.MethodPatch, "/campaigns/{campaign}", map[string]string{"trafficSourceId": "trafficSource"}, false,
 			func(ref func(string) string) any { return map[string]any{"trafficSourceId": ref("trafficSourceId")} }},
+		// Audit TEAM-1: a campaign is assigned only to a member of its own
+		// organization.
+		{http.MethodPut, "/campaigns/{campaign}/owner", map[string]string{"userId": "user"}, false,
+			func(ref func(string) string) any { return map[string]any{"userId": ref("userId")} }},
 		{http.MethodPost, "/campaigns/{campaign}/tracking-links", map[string]string{"domainId": "domain"}, false,
 			func(ref func(string) string) any {
 				return map[string]any{"domainId": ref("domainId"), "slug": strings.ToLower("r" + idgen.New()[16:])}
@@ -866,7 +870,8 @@ var notReferences = map[string]string{
 	"parentId":                     "response only: the worker sets it on a recurring broadcast's sends (TestRecurringBroadcast)",
 	"ruleId":                       "response only",
 	"tagId":                        "response only; assignments take tagIds, covered",
-	"userId":                       "response only (team members, auth/me)",
+	"userId":                       "team members and auth/me in answers; PUT /campaigns/{id}/owner's request field is covered",
+	"ownerUserId":                  "response only: set through PUT /campaigns/{id}/owner's userId, covered",
 	"streamSetId":                  "response only (routing trace, events)",
 	"flowId":                       "response only (routing trace, events)",
 	"flowIds":                      "flow-summary filter: ClickHouse reads filter on the session's org, another org's flow is zeros like a made-up id (chstore TestFlowStageCountsPerFlowAndTenant)",

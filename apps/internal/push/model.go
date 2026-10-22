@@ -258,6 +258,9 @@ type ReportStatsQuery struct {
 type ReportStatsFilter struct {
 	Group StatsGroup
 	Value string
+	// In, when not nil, matches any of these values instead of Value; an
+	// empty In matches nothing (a buyer's campaigns, internal/analytics).
+	In []string
 }
 
 // ReportStatsRow is one group: Day (YYYY-MM-DD) when ByDay, Keys the value

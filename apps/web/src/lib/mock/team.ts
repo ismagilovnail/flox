@@ -33,6 +33,7 @@ export const ROLES: Role[] = ["Owner", "Admin", "Manager", "Buyer", "Analyst", "
 export type Permission =
   | "campaign.read"
   | "campaign.write"
+  | "campaign.manage_all"
   | "analytics.read"
   | "offer.read"
   | "offer.write"
@@ -55,6 +56,7 @@ export type Permission =
 export const PERMISSIONS: Permission[] = [
   "campaign.read",
   "campaign.write",
+  "campaign.manage_all",
   "analytics.read",
   "offer.read",
   "offer.write",
@@ -94,6 +96,7 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
   Manager: [
     ...UNIVERSAL_READS,
     "campaign.write",
+    "campaign.manage_all",
     "offer.read",
     "offer.write",
     "source.read",

@@ -16,7 +16,8 @@
     "source": "Source",
     "tags": "Tags",
     "updated": "Updated",
-    "spend": "Spend"
+    "spend": "Spend",
+    "owner": "Buyer"
   },
   "detail": {
     "loading": "Loading campaign…",
@@ -149,5 +150,16 @@
     "duplicateError": "Couldn't duplicate campaign",
     "archived": "Campaign archived",
     "archiveError": "Couldn't archive campaign"
+  },
+  "owner": {
+    "label": "Buyer",
+    "you": "You",
+    "nobody": "No buyer",
+    "unknown": "Another buyer",
+    "filter": "Buyer",
+    "all": "All buyers",
+    "mine": "My campaigns",
+    "changed": "Buyer changed",
+    "changeError": "Couldn't change the buyer"
   }
 }

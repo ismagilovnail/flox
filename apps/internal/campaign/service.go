@@ -141,7 +141,10 @@ func (s *Service) Delete(ctx context.Context, orgID, id string) error {
 // an unrelated draft the moment the operator later activates it — a
 // mapping like that has to be a deliberate, separate choice, never an
 // implicit side effect of Duplicate.
-func (s *Service) Duplicate(ctx context.Context, orgID, id string) (Campaign, error) {
+//
+// The copy belongs to ownerUserID — the member who made it ("" for an API
+// key), not to the source campaign's owner.
+func (s *Service) Duplicate(ctx context.Context, orgID, id, ownerUserID string) (Campaign, error) {
 	source, err := s.repo.GetByID(ctx, orgID, id)
 	if err != nil {
 		return Campaign{}, err
@@ -155,7 +158,24 @@ func (s *Service) Duplicate(ctx context.Context, orgID, id string) (Campaign, er
 		Name:            source.Name + " (Copy)",
 		FallbackURL:     source.FallbackURL,
 		Notes:           source.Notes,
+		OwnerUserID:     ownerUserID,
 	})
+}
+
+// SetOwner assigns the campaign to userID, an active member of the
+// organization, or to nobody (""). The caller holds campaign.manage_all.
+func (s *Service) SetOwner(ctx context.Context, orgID, id, userID string) (Campaign, error) {
+	userID = strings.TrimSpace(userID)
+	if userID != "" {
+		ok, err := s.repo.IsActiveMember(ctx, orgID, userID)
+		if err != nil {
+			return Campaign{}, err
+		}
+		if !ok {
+			return Campaign{}, apierror.Validation("not an active member of this organization", map[string]string{"userId": "not a member"})
+		}
+	}
+	return s.repo.SetOwner(ctx, orgID, id, userID)
 }
 
 // Pause/Activate are deliberately not bare status setters — §37 asks for

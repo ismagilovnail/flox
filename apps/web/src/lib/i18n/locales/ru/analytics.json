@@ -83,7 +83,8 @@
     "offer": "Оффер",
     "network": "Сеть",
     "telegram_channel": "Telegram-канал",
-    "day": "День"
+    "day": "День",
+    "buyer": "Байер"
   },
   "metrics": {
     "clicks": "Клики",
@@ -185,7 +186,8 @@
     "noSource": "Без источника",
     "noFlow": "Без потока",
     "noStreamSet": "Без набора",
-    "noCountry": "Не определена"
+    "noCountry": "Не определена",
+    "noBuyer": "Без байера"
   },
   "timezones": {
     "groups": {

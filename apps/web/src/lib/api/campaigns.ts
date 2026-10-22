@@ -23,6 +23,9 @@ export type Campaign = {
   fallbackUrl: string;
   notes: string;
   externalCampaignId: string;
+  /** The member the campaign belongs to (audit TEAM-1); null when nobody
+   * owns it. Without campaign.manage_all only the owner can change it. */
+  ownerUserId: string | null;
   createdAt: string;
   updatedAt: string;
 };
@@ -71,4 +74,10 @@ export function activateCampaign(id: string): Promise<Campaign> {
 
 export function archiveCampaign(id: string): Promise<Campaign> {
   return apiFetch(`/campaigns/${id}`, { method: "PATCH", body: { status: "archived" } });
+}
+
+/** Assigns the campaign to a member, or to nobody with "" (needs
+ * campaign.manage_all). */
+export function setCampaignOwner(id: string, userId: string): Promise<Campaign> {
+  return apiFetch(`/campaigns/${id}/owner`, { method: "PUT", body: { userId } });
 }

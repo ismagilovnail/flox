@@ -506,6 +506,13 @@ func (s *Service) Me(ctx context.Context, userID, orgID string) (WhoAmI, error) 
 // all: a key has no membership row of its own to check (see
 // apikey.Service.Authenticate's own comment on why), so permission is
 // decided purely by apiKeyScopeAllows's scope-tier rule instead.
+// HasPermission reports whether userID's role in orgID grants
+// permissionKey — for checks that depend on more than the route
+// (campaign.Access: campaign.manage_all).
+func (s *Service) HasPermission(ctx context.Context, userID, orgID, permissionKey string) (bool, error) {
+	return s.repo.HasPermission(ctx, userID, orgID, permissionKey)
+}
+
 func (s *Service) RequirePermission(permissionKey string, logger *slog.Logger) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

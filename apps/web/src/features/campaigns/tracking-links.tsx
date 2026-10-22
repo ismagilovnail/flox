@@ -192,6 +192,7 @@ export function TrackingLinks({
   campaignName,
   trafficSourceId,
   disabled = false,
+  canEdit = true,
 }: {
   campaignId: string;
   campaignName: string;
@@ -201,9 +202,11 @@ export function TrackingLinks({
    * to nothing — locked instead of letting the operator create one that
    * silently does nothing. */
   disabled?: boolean;
+  /** false: someone else's campaign (audit TEAM-1) — read-only. */
+  canEdit?: boolean;
 }) {
   const { t } = useTranslation(["campaigns", "common"]);
-  const canWrite = usePermission("campaign.write");
+  const canWrite = usePermission("campaign.write") && canEdit;
   const domainsQuery = useDomains();
   const sourceQuery = useTrafficSource(trafficSourceId);
   const platform = presetForSource(sourceQuery.data);

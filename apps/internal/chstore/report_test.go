@@ -1318,3 +1318,56 @@ func TestInstallsIncludeIosInstalls(t *testing.T) {
 		t.Fatalf("flow stages = %v, want PWA_INSTALL = 3 visits", got)
 	}
 }
+
+// Audit TEAM-1: a campaign IN filter (a buyer's campaigns) narrows every
+// report query; an empty set matches nothing; a buyer never reaches SQL.
+func TestReportCampaignInFilter(t *testing.T) {
+	conn := mustConn(t)
+	store := chstore.NewEventStore(conn)
+	ctx := context.Background()
+	orgID, campA, campB, campC := idgen.New(), idgen.New(), idgen.New(), idgen.New()
+	day := time.Date(2026, 8, 22, 0, 0, 0, 0, time.UTC)
+	for _, c := range []string{campA, campB, campC} {
+		seedReportFixture(t, ctx, store, orgID, c, day)
+	}
+	q := func(in []string) chstore.ReportQuery {
+		return chstore.ReportQuery{OrganizationID: orgID, From: day, To: day.Add(24 * time.Hour),
+			Dims: []chstore.ReportDimension{chstore.DimCampaign}, Filters: []chstore.ReportFilter{{Dimension: chstore.DimCampaign, In: in}}}
+	}
+
+	clicks, err := store.ReportClicks(ctx, q([]string{campA, campC}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	conv, err := store.ReportConversions(ctx, q([]string{campA, campC}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := map[string]bool{}
+	for _, a := range clicks {
+		got[a.Key.DimValues[chstore.DimCampaign]] = true
+	}
+	for _, a := range conv {
+		if c := a.Key.DimValues[chstore.DimCampaign]; c != campA && c != campC {
+			t.Errorf("conversions of %s outside the set", c)
+		}
+	}
+	if len(got) != 2 || !got[campA] || !got[campC] {
+		t.Errorf("click campaigns = %v, want A and C only", got)
+	}
+
+	empty, err := store.ReportClicks(ctx, q([]string{}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(empty) != 0 {
+		t.Errorf("an empty set = %d rows, want none", len(empty))
+	}
+	if _, err := store.FunnelCounts(ctx, orgID, day, day.Add(24*time.Hour), []chstore.ReportFilter{{Dimension: chstore.DimCampaign, In: []string{campB}}}); err != nil {
+		t.Errorf("funnel with a campaign set: %v", err)
+	}
+	if _, err := store.ReportClicks(ctx, chstore.ReportQuery{OrganizationID: orgID, From: day, To: day.Add(24 * time.Hour),
+		Dims: []chstore.ReportDimension{chstore.DimBuyer}}); err == nil {
+		t.Error("a buyer dimension reached ClickHouse")
+	}
+}

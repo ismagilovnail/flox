@@ -128,6 +128,12 @@ func run() error {
 	if err != nil {
 		return err
 	}
+	// The demo campaign is the buyer's (audit TEAM-1): signed in as
+	// buyer@flox.local it can be changed; another buyer's would not be.
+	if _, err := db.Exec(ctx, `UPDATE campaigns SET owner_user_id = (SELECT id FROM users WHERE email = 'buyer@flox.local')
+		WHERE organization_id = $1`, demoOrgID); err != nil {
+		return fmt.Errorf("demo campaign owner: %w", err)
+	}
 
 	fmt.Printf(`
 Фикстуры созданы.

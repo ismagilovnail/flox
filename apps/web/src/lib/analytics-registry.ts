@@ -33,6 +33,7 @@ export const DIMENSIONS: { key: DimensionKey; label: string }[] = [
   { key: "offer", label: "Offer" },
   { key: "network", label: "Network" },
   { key: "telegram_channel", label: "Telegram channel" },
+  { key: "buyer", label: "Buyer" },
   { key: "day", label: "Day" },
 ];
 

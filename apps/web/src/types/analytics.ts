@@ -25,6 +25,7 @@ export type DimensionKey =
   | "offer"
   | "network"
   | "telegram_channel"
+  | "buyer"
   | "day";
 
 /** Push metrics — a separate data source (§30.5): one formula never mixes

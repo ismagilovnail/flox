@@ -1409,7 +1409,7 @@ components:
     Campaign:
       type: object
       additionalProperties: false
-      required: [id, organizationId, trafficSourceId, name, status, fallbackUrl, notes, externalCampaignId, createdAt, updatedAt]
+      required: [id, organizationId, trafficSourceId, name, status, fallbackUrl, notes, externalCampaignId, ownerUserId, createdAt, updatedAt]
       properties:
         id: { type: string }
         organizationId: { type: string }
@@ -1419,6 +1419,7 @@ components:
         fallbackUrl: { type: string, description: "Where traffic goes when no stream set matches." }
         notes: { type: string }
         externalCampaignId: { type: string, description: "The ad platform's campaign id, for spend sync." }
+        ownerUserId: { type: [string, "null"], description: "The member the campaign belongs to; null when created with an API key or its owner left. Set in the app." }
         createdAt: { type: string, format: date-time }
         updatedAt: { type: string, format: date-time }
     CampaignCreate:
@@ -2068,7 +2069,8 @@ components:
 
     Dimension:
       type: string
-      enum: [campaign, source, country, region, city, device, platform, os, browser, language, flow, stream_set, landing, offer, pwa, postlanding, network, telegram_channel]
+      enum: [campaign, source, country, region, city, device, platform, os, browser, language, flow, stream_set, landing, offer, pwa, postlanding, network, telegram_channel, buyer]
+      description: "buyer is the member a campaign belongs to now (a user id, empty for an unowned campaign): a campaign's whole history counts for its current owner."
     ReportFilters:
       type: array
       description: Every filter must match (AND). The value is the dimension's id or code, as in the rows.

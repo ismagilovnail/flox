@@ -83,7 +83,8 @@
     "offer": "Offer",
     "network": "Network",
     "telegram_channel": "Telegram channel",
-    "day": "Day"
+    "day": "Day",
+    "buyer": "Buyer"
   },
   "metrics": {
     "clicks": "Clicks",
@@ -185,7 +186,8 @@
     "noSource": "No source",
     "noFlow": "No flow",
     "noStreamSet": "No stream set",
-    "noCountry": "Unknown"
+    "noCountry": "Unknown",
+    "noBuyer": "No buyer"
   },
   "timezones": {
     "groups": {

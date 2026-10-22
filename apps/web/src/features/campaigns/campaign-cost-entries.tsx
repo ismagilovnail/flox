@@ -123,10 +123,11 @@ function costEntryColumns(
  * CSV import. Re-submitting the same (source, date, country) updates that
  * entry in place — the backend upserts, it never stacks
  * (apps/internal/cost). */
-export function CampaignCostEntries({ campaignId }: { campaignId: string }) {
+/** canEdit false: someone else's campaign (audit TEAM-1) — read-only. */
+export function CampaignCostEntries({ campaignId, canEdit = true }: { campaignId: string; canEdit?: boolean }) {
   const { t, i18n } = useTranslation("cost");
   const countries = React.useMemo(() => countryOptions(i18n.language), [i18n.language]);
-  const canWrite = usePermission("campaign.write");
+  const canWrite = usePermission("campaign.write") && canEdit;
   const entriesQuery = useCostEntries(campaignId);
   const sourcesQuery = useTrafficSources();
   const upsert = useUpsertCostEntry(campaignId);

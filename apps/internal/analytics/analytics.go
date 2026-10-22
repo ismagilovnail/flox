@@ -68,6 +68,8 @@ type Service struct {
 	cost  CostSource
 	money MoneySource
 	push  PushSource
+	// owners answers the buyer dimension (buyer.go); nil refuses it.
+	owners OwnerSource
 }
 
 // PushSource is push metrics by campaign/country/PWA and day

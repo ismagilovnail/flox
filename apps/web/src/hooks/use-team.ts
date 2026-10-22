@@ -16,8 +16,10 @@ import {
 const membersKey = ["team", "members"] as const;
 const activityKey = ["team", "activity"] as const;
 
-export function useTeamMembers() {
-  return useQuery({ queryKey: membersKey, queryFn: listMembers });
+/** enabled false skips the request — for screens where the member may
+ * lack team.read. */
+export function useTeamMembers(options?: { enabled?: boolean }) {
+  return useQuery({ queryKey: membersKey, queryFn: listMembers, enabled: options?.enabled });
 }
 
 export function useTeamActivity() {

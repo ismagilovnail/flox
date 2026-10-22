@@ -119,7 +119,7 @@ func TestReportPushMetricsByDayAndCountry(t *testing.T) {
 		t.Fatalf("Report: %v", err)
 	}
 	if !src.last.ByDay || src.last.Timezone != "Europe/Berlin" || len(src.last.Filters) != 1 ||
-		src.last.Filters[0] != (push.ReportStatsFilter{Group: push.StatsByCampaign, Value: "camp-a"}) {
+		src.last.Filters[0].Group != push.StatsByCampaign || src.last.Filters[0].Value != "camp-a" || src.last.Filters[0].In != nil {
 		t.Fatalf("push query = %+v, want by day in Berlin, filtered by the campaign", src.last)
 	}
 	if len(rows) != 2 || rows[0].Metrics.Clicks != 9 || *rows[0].Metrics.PushSent != 5 ||

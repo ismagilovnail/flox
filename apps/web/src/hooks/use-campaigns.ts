@@ -2,6 +2,8 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
+import { useMe } from "@/hooks/use-auth";
+
 import {
   activateCampaign,
   archiveCampaign,
@@ -10,7 +12,9 @@ import {
   getCampaign,
   listCampaigns,
   pauseCampaign,
+  setCampaignOwner,
   updateCampaign,
+  type Campaign,
   type CreateCampaignInput,
   type UpdateCampaignInput,
 } from "@/lib/api/campaigns";
@@ -88,4 +92,26 @@ export function useArchiveCampaign() {
       qc.invalidateQueries({ queryKey: campaignKey(id) });
     },
   });
+}
+
+export function useSetCampaignOwner(id: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (userId: string) => setCampaignOwner(id, userId),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: campaignsKey });
+      qc.invalidateQueries({ queryKey: ["analytics", "buyers"] });
+    },
+  });
+}
+
+/** Whether the signed-in member may change this campaign (audit TEAM-1):
+ * campaign.write, and either campaign.manage_all or owning it. UX only —
+ * the API checks the same (campaign.Access). */
+export function useCanEditCampaign(campaign: Pick<Campaign, "ownerUserId"> | undefined): boolean {
+  const me = useMe().data;
+  const permissions = me?.permissions ?? [];
+  if (!permissions.includes("campaign.write")) return false;
+  if (permissions.includes("campaign.manage_all")) return true;
+  return !!campaign && !!me && campaign.ownerUserId === me.user.id;
 }
