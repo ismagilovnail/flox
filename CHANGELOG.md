@@ -5,6 +5,44 @@ per-phase, matching `CLAUDE.md`'s phase protocol. The one exception is
 [Between phases], below: spec amendments and the code changes that follow from
 them land between phases and would otherwise be invisible here.
 
+## [Phase 30.63] — A Buyer reads only their campaigns (audit TEAM-1b)
+
+Agreed earlier: a buyer sees only their own campaigns. Push and alerts stay team-wide, which you chose. docs/team.md
+"Reading".
+
+- Migration 00098 adds `campaign.read_all` for Owner, Admin, Manager, Analyst and Viewer; a Buyer does not have it.
+- **The scope.** `internal/campaignscope` is the request's read scope: a resolver set by apps/api's tenant
+  middleware, resolved on first use, once per request. It reads everything for an API key or `read_all`, and
+  otherwise the campaigns the member owns. Unowned campaigns, and conversions or postbacks with no campaign, are
+  outside a Buyer's scope.
+- **Where it applies:**
+  - campaign list/get (another campaign is 404);
+  - `RequireVisible("campaignId")` on tracking links, stream sets, spend and the simulator;
+  - `/tracking-links` and `/flows` are filtered;
+  - every report through `campaign IN scope` (report, timeseries, breakdown, funnel, Overview, with spend
+    following);
+  - dimension values and flow summary through a ClickHouse campaign set;
+  - campaign daily, which is 404 outside the scope;
+  - buyer values and names, so a Buyer does not learn the other buyers;
+  - LTV cohorts;
+  - `/conversions` and `/click-log` (`campaign_id IN` in list and count);
+  - `/postback-logs` through `click_lookup`;
+  - a click's timeline, which is 404;
+  - the postback dry run, where another buyer's click reads as an unknown click without its outgoing URL.
+- Writes to an invisible campaign are now 404, like reads; 403 is left for a campaign the member sees but does not
+  own.
+- The role matrix and the policy test include `campaign.read_all`.
+- **Tests:**
+  - `TestBuyersReadOnlyTheirCampaigns` (real router and ClickHouse): Ann owns a campaign with a click, a
+    conversion and a postback. On every scoped read, Bob's answers never name her campaign or click, and those
+    naming them in the path are 404; Ann's answers do name them, and a Viewer sees everything.
+  - Every route under the campaign-data prefixes must be listed or explained, and every other parameterless read
+    is swept for her ids, outside push and alerts.
+  - With scoping turned off, the test failed on 17 reads.
+  - `campaignscope` unit tests; the TEAM-1a test now expects 404.
+  - Go full suite with the full env: only the known gallery-WIP failure. e2e passed with nothing skipped.
+  - vitest 220/220; eslint, tsc, `next build`. No browser pass.
+
 ## [Phase 30.62] — Campaign owners, buyers change only theirs, report by buyer (audit TEAM-1, part 1)
 
 The audit's hypothesis held: campaigns had no owner, and a Buyer could change any campaign. You chose:

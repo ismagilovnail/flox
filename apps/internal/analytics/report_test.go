@@ -66,7 +66,7 @@ func (r *reportFakeRepo) FunnelCounts(_ context.Context, _ string, from, to time
 	r.lastFunnelArgs.from, r.lastFunnelArgs.to, r.lastFunnelArgs.filters = from, to, filters
 	return r.funnel, nil
 }
-func (r *reportFakeRepo) DistinctValues(_ context.Context, _ string, dim chstore.ReportDimension, _, to time.Time, limit int) ([]string, error) {
+func (r *reportFakeRepo) DistinctValues(_ context.Context, _ string, dim chstore.ReportDimension, _, to time.Time, limit int, _ []string) ([]string, error) {
 	r.lastValuesDim = dim
 	r.lastValuesTo = to
 	r.lastValuesLimit = limit
@@ -1039,7 +1039,7 @@ func TestReportInReportingCurrency(t *testing.T) {
 	})
 }
 
-func (r *reportFakeRepo) FlowStageCounts(_ context.Context, orgID string, _, _ time.Time, flowIDs []string) (map[string]map[string]uint64, error) {
+func (r *reportFakeRepo) FlowStageCounts(_ context.Context, orgID string, _, _ time.Time, flowIDs []string, _ []string) (map[string]map[string]uint64, error) {
 	r.lastFlowOrg, r.lastFlowIDs = orgID, flowIDs
 	return r.flowStages, nil
 }

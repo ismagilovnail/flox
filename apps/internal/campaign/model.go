@@ -72,6 +72,9 @@ type UpdateInput struct {
 type ListFilter struct {
 	Limit  int
 	Offset int
+	// Only, when not nil, limits the list to these campaigns — a Buyer's
+	// own (campaignscope, audit TEAM-1b). Service.List sets it.
+	Only []string
 }
 
 type ListResult struct {

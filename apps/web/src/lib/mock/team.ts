@@ -34,6 +34,7 @@ export type Permission =
   | "campaign.read"
   | "campaign.write"
   | "campaign.manage_all"
+  | "campaign.read_all"
   | "analytics.read"
   | "offer.read"
   | "offer.write"
@@ -57,6 +58,7 @@ export const PERMISSIONS: Permission[] = [
   "campaign.read",
   "campaign.write",
   "campaign.manage_all",
+  "campaign.read_all",
   "analytics.read",
   "offer.read",
   "offer.write",
@@ -97,6 +99,7 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     ...UNIVERSAL_READS,
     "campaign.write",
     "campaign.manage_all",
+    "campaign.read_all",
     "offer.read",
     "offer.write",
     "source.read",
@@ -108,8 +111,8 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     "team.read",
   ],
   Buyer: [...UNIVERSAL_READS, "campaign.write", "offer.read", "source.read", "source.write"],
-  Analyst: [...UNIVERSAL_READS, "offer.read", "source.read"],
-  Viewer: [...UNIVERSAL_READS],
+  Analyst: [...UNIVERSAL_READS, "campaign.read_all", "offer.read", "source.read"],
+  Viewer: [...UNIVERSAL_READS, "campaign.read_all"],
 };
 
 export type MemberStatus = "active" | "invited" | "suspended";

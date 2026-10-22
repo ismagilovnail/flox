@@ -47,8 +47,8 @@ func scanPostbackAttempt(r driver.Rows) (PostbackAttempt, error) {
 // [from, to], newest first, both directions mixed — the Postback Logs
 // page's single table shows incoming and outgoing attempts together,
 // discriminated by the Direction column, not as separate queries.
-func (s *EventStore) ListPostbackAttempts(ctx context.Context, organizationID string, from, to time.Time, clickID string, limit, offset int) ([]PostbackAttempt, error) {
-	where, args := logWindow(organizationID, from, to, clickID)
+func (s *EventStore) ListPostbackAttempts(ctx context.Context, organizationID string, from, to time.Time, clickID string, limit, offset int, campaigns []string) ([]PostbackAttempt, error) {
+	where, args := logWindow(organizationID, from, to, clickID, campaigns, true)
 	rows, err := s.conn.Query(ctx, `
 		SELECT `+postbackAttemptColumns+`
 		FROM postback_events
@@ -78,8 +78,8 @@ func (s *EventStore) ListPostbackAttempts(ctx context.Context, organizationID st
 
 // CountPostbackAttempts is ListPostbackAttempts' companion for the list
 // page's total count (pagination), over the same [from, to] window.
-func (s *EventStore) CountPostbackAttempts(ctx context.Context, organizationID string, from, to time.Time, clickID string) (int, error) {
-	where, args := logWindow(organizationID, from, to, clickID)
+func (s *EventStore) CountPostbackAttempts(ctx context.Context, organizationID string, from, to time.Time, clickID string, campaigns []string) (int, error) {
+	where, args := logWindow(organizationID, from, to, clickID, campaigns, true)
 	row := s.conn.QueryRow(ctx, `
 		SELECT count()
 		FROM postback_events

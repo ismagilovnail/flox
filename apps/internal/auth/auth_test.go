@@ -1385,7 +1385,7 @@ func TestPermissionGrantsMatchTheSeededPolicy(t *testing.T) {
 		"custom_metric.read", "report_preset.read", "referral.read", "push.read",
 	}
 	all := append(append([]string{}, universalReads...),
-		"campaign.write", "campaign.manage_all", "offer.read", "offer.write", "source.read", "source.write",
+		"campaign.write", "campaign.manage_all", "campaign.read_all", "offer.read", "offer.write", "source.read", "source.write",
 		"content.write", "custom_metric.write", "report_preset.write", "referral.write",
 		"team.read", "team.write", "settings.write", "push.write",
 	)
@@ -1394,11 +1394,11 @@ func TestPermissionGrantsMatchTheSeededPolicy(t *testing.T) {
 		"Owner": all,
 		"Admin": all,
 		"Manager": append(append([]string{}, universalReads...),
-			"campaign.write", "campaign.manage_all", "offer.read", "offer.write", "source.read", "source.write",
+			"campaign.write", "campaign.manage_all", "campaign.read_all", "offer.read", "offer.write", "source.read", "source.write",
 			"content.write", "custom_metric.write", "report_preset.write", "team.read", "push.write"),
 		"Buyer":   append(append([]string{}, universalReads...), "campaign.write", "offer.read", "source.read", "source.write"),
-		"Analyst": append(append([]string{}, universalReads...), "offer.read", "source.read"),
-		"Viewer":  universalReads,
+		"Analyst": append(append([]string{}, universalReads...), "campaign.read_all", "offer.read", "source.read"),
+		"Viewer":  append(append([]string{}, universalReads...), "campaign.read_all"),
 	}
 
 	for role, expected := range want {

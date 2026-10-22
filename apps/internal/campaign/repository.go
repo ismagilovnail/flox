@@ -95,13 +95,14 @@ func (r *Repository) GetByID(ctx context.Context, orgID, id string) (Campaign, e
 }
 
 func (r *Repository) List(ctx context.Context, orgID string, filter ListFilter) (ListResult, error) {
+	scoped := filter.Only != nil
 	rows, err := r.db.Query(ctx, `
 		SELECT `+selectColumns+`
 		FROM campaigns
-		WHERE organization_id = $1
+		WHERE organization_id = $1 AND (NOT $4 OR id::text = ANY($5::text[]))
 		ORDER BY created_at DESC, id DESC
 		LIMIT $2 OFFSET $3`,
-		orgID, filter.Limit, filter.Offset,
+		orgID, filter.Limit, filter.Offset, scoped, nonNilIDs(filter.Only),
 	)
 	if err != nil {
 		return ListResult{}, fmt.Errorf("querying campaigns: %w", err)
@@ -121,7 +122,8 @@ func (r *Repository) List(ctx context.Context, orgID string, filter ListFilter) 
 	}
 
 	var total int
-	if err := r.db.QueryRow(ctx, `SELECT count(*) FROM campaigns WHERE organization_id = $1`, orgID).Scan(&total); err != nil {
+	if err := r.db.QueryRow(ctx, `SELECT count(*) FROM campaigns WHERE organization_id = $1 AND (NOT $2 OR id::text = ANY($3::text[]))`,
+		orgID, scoped, nonNilIDs(filter.Only)).Scan(&total); err != nil {
 		return ListResult{}, fmt.Errorf("counting campaigns: %w", err)
 	}
 
@@ -282,4 +284,31 @@ func (r *Repository) OwnerNames(ctx context.Context, orgID string) ([]OwnerName,
 		out = append(out, b)
 	}
 	return out, rows.Err()
+}
+
+// OwnedIDs is every campaign of the organization userID owns, archived
+// ones included — a Buyer's read scope (campaign.Access.ScopeResolver).
+func (r *Repository) OwnedIDs(ctx context.Context, orgID, userID string) ([]string, error) {
+	rows, err := r.db.Query(ctx, `SELECT id FROM campaigns WHERE organization_id = $1 AND owner_user_id::text = $2`, orgID, userID)
+	if err != nil {
+		return nil, fmt.Errorf("listing owned campaigns: %w", err)
+	}
+	defer rows.Close()
+	ids := []string{}
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, fmt.Errorf("reading an owned campaign: %w", err)
+		}
+		ids = append(ids, id)
+	}
+	return ids, rows.Err()
+}
+
+// nonNilIDs keeps a nil slice from becoming SQL NULL in "= ANY($n)".
+func nonNilIDs(ids []string) []string {
+	if ids == nil {
+		return []string{}
+	}
+	return ids
 }

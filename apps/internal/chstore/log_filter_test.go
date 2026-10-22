@@ -44,28 +44,28 @@ func TestLogsFilterByClickID(t *testing.T) {
 	}
 
 	for clickID, want := range map[string]int{wanted: 1, idgen.New(): 0, theirs: 0} {
-		rows, err := store.ListClickLog(ctx, org, from, to, clickID, 50, 0)
-		n, cerr := store.CountClickLog(ctx, org, from, to, clickID)
+		rows, err := store.ListClickLog(ctx, org, from, to, clickID, 50, 0, nil)
+		n, cerr := store.CountClickLog(ctx, org, from, to, clickID, nil)
 		if err != nil || cerr != nil || len(rows) != want || n != want || (want == 1 && rows[0].ClickID != wanted) {
 			t.Fatalf("click log for %s = %d rows, count %d (%v, %v); want %d", clickID, len(rows), n, err, cerr, want)
 		}
 	}
 	for clickID, want := range map[string]int{wanted: 2, idgen.New(): 0, theirs: 0} {
-		rows, err := store.ListConversions(ctx, org, from, to, clickID, 50, 0)
-		n, cerr := store.CountConversions(ctx, org, from, to, clickID)
+		rows, err := store.ListConversions(ctx, org, from, to, clickID, 50, 0, nil)
+		n, cerr := store.CountConversions(ctx, org, from, to, clickID, nil)
 		if err != nil || cerr != nil || len(rows) != want || n != want {
 			t.Fatalf("conversions for %s = %d rows, count %d (%v, %v); want %d", clickID, len(rows), n, err, cerr, want)
 		}
 	}
 	for clickID, want := range map[string]int{wanted: 1, idgen.New(): 0, theirs: 0} {
-		rows, err := store.ListPostbackAttempts(ctx, org, from, to, clickID, 50, 0)
-		n, cerr := store.CountPostbackAttempts(ctx, org, from, to, clickID)
+		rows, err := store.ListPostbackAttempts(ctx, org, from, to, clickID, 50, 0, nil)
+		n, cerr := store.CountPostbackAttempts(ctx, org, from, to, clickID, nil)
 		if err != nil || cerr != nil || len(rows) != want || n != want {
 			t.Fatalf("postback attempts for %s = %d rows, count %d (%v, %v); want %d", clickID, len(rows), n, err, cerr, want)
 		}
 	}
 	// No click id: the whole window, as before.
-	if n, err := store.CountClickLog(ctx, org, from, to, ""); err != nil || n != 2 {
+	if n, err := store.CountClickLog(ctx, org, from, to, "", nil); err != nil || n != 2 {
 		t.Fatalf("click log without a click id = %d, %v; want 2", n, err)
 	}
 }

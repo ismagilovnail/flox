@@ -1,9 +1,8 @@
 # Buyers and their campaigns (TEAM-1)
 
-Audit 2026-10-15, item TEAM-1. Part 1 (this document): campaign
-ownership, writes limited to one's own campaigns, and the buyer
-dimension in reports. Part 2 (TEAM-1b) will limit what a buyer can *read*
-to their own campaigns.
+Audit 2026-10-15, item TEAM-1. Part 1 covers campaign ownership, writes
+limited to one's own campaigns, and the buyer dimension in reports. Part
+2 (TEAM-1b) limits what a Buyer *reads* to their own campaigns.
 
 ## Ownership
 
@@ -48,13 +47,16 @@ The check passes in three cases:
 - the member has `campaign.manage_all`;
 - the member owns the campaign.
 
-Otherwise the answer is `403 "this campaign belongs to another buyer"`, and
-that includes an unowned campaign. An unknown campaign falls through to the
-handler's 404.
+Since TEAM-1b, a campaign outside the member's read scope answers 404, the
+same as on reads. For a Buyer that means another buyer's campaign and an
+unowned one. `403 "this campaign belongs to another buyer"` is left for a
+campaign the member can see but does not own. An unknown campaign falls
+through to the handler's 404.
 
 `TestBuyersChangeOnlyTheirCampaigns` walks the router. Every mutating route
-under `/campaigns/{id}` or `/campaigns/{campaignId}` must answer 403 to
-another buyer, unless it is listed in `notOwnerGated` with a reason. A route
+under `/campaigns/{id}` or `/campaigns/{campaignId}` must answer another
+buyer 404 (403 before TEAM-1b scoped reads), unless it is listed in
+`notOwnerGated` with a reason. A route
 added later is therefore covered automatically.
 
 In the app, `useCanEditCampaign` hides the same controls. That is for UX
@@ -88,10 +90,56 @@ timeseries, breakdown and funnel. Its value is the owner's user id, with
   members who own campaigns. The team list needs `team.read`, which Buyers,
   Analysts and Viewers lack.
 
-## Not yet (TEAM-1b)
+## Reading: a Buyer sees only their campaigns (TEAM-1b)
 
-A Buyer still reads every campaign and every report of the organization.
-TEAM-1b scopes the reads: the campaign list, reports (through the same
-`ReportFilter.In`), conversions, the click log, postback logs, LTV and the
-simulator. It will also add a route-walk test like the tenant-isolation
-one.
+A second permission, `campaign.read_all` (migration 00098), lets a member read
+every campaign and its data. Owner, Admin, Manager, Analyst and Viewer have
+it; a Buyer does not. Without it, `campaign.read` covers only the campaigns
+the member owns. Unowned campaigns are not theirs, and neither are
+conversions or postbacks with no campaign. API keys read the whole
+organization.
+
+**How it works:** `internal/campaignscope` holds the request's scope.
+apps/api's tenant middleware puts a resolver in every request's context, and
+the scope is worked out on first use, once per request
+(`campaign.Access.ScopeResolver`: a permission check, plus the owned ids for
+a Buyer). A route that never asks costs nothing. Background work and
+packages tested alone read everything.
+
+| Read | How it is limited |
+|---|---|
+| `GET /campaigns`, `GET /campaigns/{id}` | the list holds only the scope; another campaign is 404 |
+| `/campaigns/{campaignId}/…`: tracking links, stream sets, spend, simulator | `RequireVisible("campaignId")` on the group: 404 |
+| `/tracking-links`, `/flows` | filtered to the scope |
+| report, timeseries, breakdown, funnel, Overview | `campaign IN scope` added to the filters (`analytics.scopeFilters`); spend follows it |
+| dimension values, flow summary | the ClickHouse query takes the campaign set: another buyer's flow reads as zeros |
+| `analytics/campaigns/{id}/daily…` | 404 outside the scope |
+| buyer values, `/analytics/buyers` | only owners of the scope's campaigns: a Buyer does not learn who the other buyers are |
+| LTV cohorts | `LTVFilter.Campaigns` |
+| `/conversions`, `/click-log` | `campaign_id IN` in list and count |
+| `/postback-logs` | through the click: `click_id IN (click_lookup of the scope)`; a postback for an unknown click is hidden |
+| `/conversions/{clickId}` | another buyer's click is 404, like an unknown one |
+| `/postback-logs/check` | another buyer's click reads as `unknown_click`, without its outgoing URL |
+
+The postback replays need `offer.write`, which a Buyer lacks.
+
+**Not limited:** the team's shared assets stay readable — offers, networks,
+traffic sources, landings, PWAs, domains, the content gallery, ad-account
+spend settings, onboarding and the plan. Push (subscribers, broadcasts, stats
+by campaign) and alerts and notifications stay team-wide as well, by
+decision; a later item can scope them.
+
+**The test.** `TestBuyersReadOnlyTheirCampaigns`: Ann owns a campaign with
+a click, a conversion and a postback; Bob owns nothing.
+
+- **Bob reads nothing of Ann's:** none of his answers to the reads above names
+  Ann's campaign or click, and a read naming Ann's campaign or click in its
+  path answers 404.
+- **The check is not vacuous:** Ann's own answers do name them.
+- **A Viewer still sees everything.**
+- **No read under the campaign-data prefixes is forgotten:** each route there
+  is either listed or explained, so a new one fails until decided.
+- **Nothing leaks elsewhere:** every other parameterless read is swept for
+  Ann's ids, except what the team shares on purpose.
+
+With scoping turned off, 17 of the reads leaked and the test failed.

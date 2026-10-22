@@ -31,28 +31,8 @@ var notOwnerGated = map[string]string{
 func TestBuyersChangeOnlyTheirCampaigns(t *testing.T) {
 	env := newIsolationEnv(t)
 	ctx, pool := env.ctx, env.pool
-	authSvc := auth.NewService(auth.NewRepository(pool), "http://localhost:3000", noMail{})
-
-	addBuyer := func(name string) (userID string, c *isoClient) {
-		t.Helper()
-		email := "buyer-" + strings.ToLower(idgen.New()) + "@example.test"
-		link, err := authSvc.Invite(ctx, env.orgA, env.userA, auth.InviteInput{Email: email, Name: name, RoleKey: "Buyer"})
-		if err != nil {
-			t.Fatalf("inviting %s: %v", name, err)
-		}
-		u, _ := url.Parse(link)
-		if _, err := authSvc.AcceptInvite(ctx, auth.AcceptInviteInput{Token: u.Query().Get("token"), Name: name, Password: isoPassword, ClientIP: "127.0.0.1"}); err != nil {
-			t.Fatalf("accepting %s's invite: %v", name, err)
-		}
-		if err := pool.QueryRow(ctx, `SELECT id FROM users WHERE lower(email) = lower($1)`, email).Scan(&userID); err != nil {
-			t.Fatal(err)
-		}
-		c = &isoClient{t: t, h: env.srv.Handler(), origin: env.c.origin, ip: randomTestIP(), email: map[string]string{env.orgA: email}}
-		c.signIn(env.orgA)
-		return userID, c
-	}
-	annID, ann := addBuyer("Ann")
-	_, bob := addBuyer("Bob")
+	annID, ann := addTeamMember(t, env, "Buyer", "Ann")
+	_, bob := addTeamMember(t, env, "Buyer", "Bob")
 
 	campaigns := campaign.NewRepository(pool)
 	camp := env.idsA["campaign"]
@@ -72,9 +52,10 @@ func TestBuyersChangeOnlyTheirCampaigns(t *testing.T) {
 		}
 		path := campaignWriteRoute.ReplaceAllString(rk.path, "/campaigns/"+camp)
 		path = param.ReplaceAllStringFunc(path, func(string) string { return idgen.New() })
+		// 404 since TEAM-1b: another buyer's campaign is not even visible.
 		status, body, _ := bob.request(rk.method, path, map[string]any{})
-		if status != http.StatusForbidden || !strings.Contains(body, "another buyer") {
-			t.Errorf("%s %s as another buyer = %d %s, want 403", rk.method, rk.path, status, body)
+		if status != http.StatusNotFound || !strings.Contains(body, "campaign not found") {
+			t.Errorf("%s %s as another buyer = %d %s, want 404", rk.method, rk.path, status, body)
 		}
 		checked++
 	}
@@ -110,8 +91,8 @@ func TestBuyersChangeOnlyTheirCampaigns(t *testing.T) {
 		t.Errorf("unassigning = %d %s", status, body)
 	}
 	// An unowned campaign is not a buyer's to change either.
-	if status, _, _ := ann.request(http.MethodPatch, "/campaigns/"+camp, map[string]string{"name": "Ann again"}); status != http.StatusForbidden {
-		t.Errorf("buyer on an unowned campaign = %d, want 403", status)
+	if status, _, _ := ann.request(http.MethodPatch, "/campaigns/"+camp, map[string]string{"name": "Ann again"}); status != http.StatusNotFound {
+		t.Errorf("buyer on an unowned campaign = %d, want 404 (not hers to see)", status)
 	}
 	// The organization's owner (campaign.manage_all) changes any campaign.
 	if status, body, _ := env.c.request(http.MethodPatch, "/campaigns/"+camp, map[string]string{"name": "Renamed by the owner"}); status != http.StatusOK {
@@ -121,4 +102,27 @@ func TestBuyersChangeOnlyTheirCampaigns(t *testing.T) {
 	if status, _, _ := env.c.request(http.MethodPut, "/campaigns/"+env.idsB["campaign"]+"/owner", map[string]string{"userId": annID}); status != http.StatusNotFound {
 		t.Errorf("reassigning another organization's campaign = %d, want 404", status)
 	}
+}
+
+// addTeamMember invites a member with role into organization A, accepts
+// the invite and returns their id and a signed-in client.
+func addTeamMember(t *testing.T, env *isolationEnv, role, name string) (userID string, c *isoClient) {
+	t.Helper()
+	ctx, pool := env.ctx, env.pool
+	authSvc := auth.NewService(auth.NewRepository(pool), "http://localhost:3000", noMail{})
+	email := strings.ToLower(role) + "-" + strings.ToLower(idgen.New()) + "@example.test"
+	link, err := authSvc.Invite(ctx, env.orgA, env.userA, auth.InviteInput{Email: email, Name: name, RoleKey: role})
+	if err != nil {
+		t.Fatalf("inviting %s: %v", name, err)
+	}
+	u, _ := url.Parse(link)
+	if _, err := authSvc.AcceptInvite(ctx, auth.AcceptInviteInput{Token: u.Query().Get("token"), Name: name, Password: isoPassword, ClientIP: "127.0.0.1"}); err != nil {
+		t.Fatalf("accepting %s's invite: %v", name, err)
+	}
+	if err := pool.QueryRow(ctx, `SELECT id FROM users WHERE lower(email) = lower($1)`, email).Scan(&userID); err != nil {
+		t.Fatal(err)
+	}
+	c = &isoClient{t: t, h: env.srv.Handler(), origin: env.c.origin, ip: randomTestIP(), email: map[string]string{env.orgA: email}}
+	c.signIn(env.orgA)
+	return userID, c
 }

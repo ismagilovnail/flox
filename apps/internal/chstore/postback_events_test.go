@@ -40,7 +40,7 @@ func TestListAndCountPostbackAttempts(t *testing.T) {
 		t.Fatalf("InsertPostbackAttempts: %v", err)
 	}
 
-	total, err := store.CountPostbackAttempts(ctx, orgID, day, day.Add(24*time.Hour), "")
+	total, err := store.CountPostbackAttempts(ctx, orgID, day, day.Add(24*time.Hour), "", nil)
 	if err != nil {
 		t.Fatalf("CountPostbackAttempts: %v", err)
 	}
@@ -48,7 +48,7 @@ func TestListAndCountPostbackAttempts(t *testing.T) {
 		t.Fatalf("CountPostbackAttempts = %d, want 3", total)
 	}
 
-	rows, err := store.ListPostbackAttempts(ctx, orgID, day, day.Add(24*time.Hour), "", 2, 0)
+	rows, err := store.ListPostbackAttempts(ctx, orgID, day, day.Add(24*time.Hour), "", 2, 0, nil)
 	if err != nil {
 		t.Fatalf("ListPostbackAttempts: %v", err)
 	}
@@ -62,7 +62,7 @@ func TestListAndCountPostbackAttempts(t *testing.T) {
 		t.Fatalf("ListPostbackAttempts[0].Result = %q, want error (the newest attempt)", rows[0].Result)
 	}
 
-	page2, err := store.ListPostbackAttempts(ctx, orgID, day, day.Add(24*time.Hour), "", 2, 2)
+	page2, err := store.ListPostbackAttempts(ctx, orgID, day, day.Add(24*time.Hour), "", 2, 2, nil)
 	if err != nil {
 		t.Fatalf("ListPostbackAttempts page 2: %v", err)
 	}

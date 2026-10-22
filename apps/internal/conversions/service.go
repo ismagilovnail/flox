@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/ismagilovnail/flox/apps/internal/apierror"
+	"github.com/ismagilovnail/flox/apps/internal/campaignscope"
 	"github.com/ismagilovnail/flox/apps/internal/chstore"
 )
 
@@ -24,8 +25,8 @@ const (
 // — satisfied structurally, the same decoupling pattern internal/analytics
 // already uses.
 type Repository interface {
-	ListConversions(ctx context.Context, organizationID string, from, to time.Time, clickID string, limit, offset int) ([]chstore.ConversionEvent, error)
-	CountConversions(ctx context.Context, organizationID string, from, to time.Time, clickID string) (int, error)
+	ListConversions(ctx context.Context, organizationID string, from, to time.Time, clickID string, limit, offset int, campaigns []string) ([]chstore.ConversionEvent, error)
+	CountConversions(ctx context.Context, organizationID string, from, to time.Time, clickID string, campaigns []string) (int, error)
 	ConversionsByClickID(ctx context.Context, organizationID, clickID string) ([]chstore.ConversionEvent, error)
 	FunnelByClickID(ctx context.Context, organizationID, clickID string) ([]chstore.FunnelEvent, error)
 	StatusHistoryByClickIDs(ctx context.Context, organizationID string, clickIDs []string) ([]chstore.StatusStep, error)
@@ -67,11 +68,16 @@ func (s *Service) List(ctx context.Context, organizationID string, from, to time
 		offset = 0
 	}
 
-	rows, err := s.repo.ListConversions(ctx, organizationID, from, to, clickID, limit, offset)
+	// Only the campaigns the request may read (campaignscope, audit TEAM-1b).
+	campaigns, err := campaignscope.IDs(ctx)
 	if err != nil {
 		return ListResult{}, err
 	}
-	total, err := s.repo.CountConversions(ctx, organizationID, from, to, clickID)
+	rows, err := s.repo.ListConversions(ctx, organizationID, from, to, clickID, limit, offset, campaigns)
+	if err != nil {
+		return ListResult{}, err
+	}
+	total, err := s.repo.CountConversions(ctx, organizationID, from, to, clickID, campaigns)
 	if err != nil {
 		return ListResult{}, err
 	}
@@ -164,5 +170,14 @@ func (s *Service) Timeline(ctx context.Context, organizationID, clickID string) 
 	}
 	sort.Slice(events, func(i, j int) bool { return events[i].EventAt.Before(events[j].EventAt) })
 
+	// Another buyer's click reads like an unknown one (campaignscope,
+	// audit TEAM-1b).
+	scope, err := campaignscope.From(ctx)
+	if err != nil {
+		return ClickTimeline{}, err
+	}
+	if !scope.Allows(campaignID) {
+		return ClickTimeline{}, apierror.NotFound("no events found for this click id")
+	}
 	return ClickTimeline{ClickID: clickID, CampaignID: campaignID, NetworkID: networkID, Events: events}, nil
 }

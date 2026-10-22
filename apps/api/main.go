@@ -32,6 +32,7 @@ import (
 	"github.com/ismagilovnail/flox/apps/internal/billing"
 	"github.com/ismagilovnail/flox/apps/internal/billing/yookassa"
 	"github.com/ismagilovnail/flox/apps/internal/campaign"
+	"github.com/ismagilovnail/flox/apps/internal/campaignscope"
 	"github.com/ismagilovnail/flox/apps/internal/chconn"
 	"github.com/ismagilovnail/flox/apps/internal/chstore"
 	"github.com/ismagilovnail/flox/apps/internal/clicklogs"
@@ -416,7 +417,18 @@ func buildServer(ctx context.Context, cfg config.Config, logger *slog.Logger, re
 	// — inside sessionCheck, which puts the organization and actor into
 	// the context — except the POST-shaped reads in auditSkip.
 	auditTrail := audit.Middleware(db, auditSkip, httpserver.APIPrefix, logger)
-	tenantMiddleware := func(next http.Handler) http.Handler { return csrfCheck(sessionCheck(auditTrail(next))) }
+	// Which campaigns the request may read (campaignscope, audit TEAM-1b):
+	// resolved on first use — a Buyer reads only the campaigns they own.
+	scopeAccess := campaign.NewAccess(campaign.NewRepository(db), authSvc.HasPermission, logger)
+	withCampaignScope := func(next http.Handler) http.Handler {
+		resolve := scopeAccess.ScopeResolver()
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			next.ServeHTTP(w, r.WithContext(campaignscope.WithResolver(r.Context(), resolve)))
+		})
+	}
+	tenantMiddleware := func(next http.Handler) http.Handler {
+		return csrfCheck(sessionCheck(withCampaignScope(auditTrail(next))))
+	}
 
 	// identify puts the org/API-key identity into context, best-effort,
 	// before the general limiter (§54, tenant.PeekIdentity). The limiter
@@ -530,6 +542,7 @@ func buildServer(ctx context.Context, cfg config.Config, logger *slog.Logger, re
 	srv.Mux().Route("/campaigns/{campaignId}/tracking-links", func(r chi.Router) {
 		r.Use(tenantMiddleware)
 		r.Use(readGate("campaign.read"))
+		r.Use(scopeAccess.RequireVisible("campaignId"))
 		trackingLinkHandler.Register(r)
 	})
 	srv.Mux().Route("/tracking-links", func(r chi.Router) {
@@ -759,6 +772,7 @@ func buildServer(ctx context.Context, cfg config.Config, logger *slog.Logger, re
 	srv.Mux().Route("/campaigns/{campaignId}/cost-entries", func(r chi.Router) {
 		r.Use(tenantMiddleware)
 		r.Use(readGate("campaign.read"))
+		r.Use(scopeAccess.RequireVisible("campaignId"))
 		costHandler.Register(r)
 	})
 
@@ -785,6 +799,7 @@ func buildServer(ctx context.Context, cfg config.Config, logger *slog.Logger, re
 	srv.Mux().Route("/campaigns/{campaignId}/stream-sets", func(r chi.Router) {
 		r.Use(tenantMiddleware)
 		r.Use(readGate("campaign.read"))
+		r.Use(scopeAccess.RequireVisible("campaignId"))
 		streamSetHandler.Register(r)
 	})
 	srv.Mux().Route("/flows", func(r chi.Router) {
@@ -799,6 +814,7 @@ func buildServer(ctx context.Context, cfg config.Config, logger *slog.Logger, re
 	srv.Mux().Route("/campaigns/{campaignId}/routing/simulate", func(r chi.Router) {
 		r.Use(tenantMiddleware)
 		r.Use(readGate("campaign.read"))
+		r.Use(scopeAccess.RequireVisible("campaignId"))
 		routingSimulateHandler.Register(r)
 	})
 

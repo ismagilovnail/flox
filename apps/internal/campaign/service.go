@@ -8,6 +8,7 @@ import (
 
 	"github.com/ismagilovnail/flox/apps/internal/apierror"
 	"github.com/ismagilovnail/flox/apps/internal/billing"
+	"github.com/ismagilovnail/flox/apps/internal/campaignscope"
 	"github.com/ismagilovnail/flox/apps/internal/idgen"
 	"github.com/ismagilovnail/flox/apps/internal/pagination"
 )
@@ -56,10 +57,26 @@ func (s *Service) List(ctx context.Context, orgID string, filter ListFilter) (Li
 	if filter.Offset < 0 {
 		filter.Offset = 0
 	}
+	scope, err := campaignscope.From(ctx)
+	if err != nil {
+		return ListResult{}, err
+	}
+	if !scope.All {
+		filter.Only = scope.IDs
+	}
 	return s.repo.List(ctx, orgID, filter)
 }
 
+// Get answers 404 for a campaign outside the request's read scope
+// (campaignscope, audit TEAM-1b) — as for one that does not exist.
 func (s *Service) Get(ctx context.Context, orgID, id string) (Campaign, error) {
+	scope, err := campaignscope.From(ctx)
+	if err != nil {
+		return Campaign{}, err
+	}
+	if !scope.Allows(id) {
+		return Campaign{}, apierror.NotFound("campaign not found")
+	}
 	return s.repo.GetByID(ctx, orgID, id)
 }
 

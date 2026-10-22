@@ -9,6 +9,7 @@ import (
 
 	"github.com/ismagilovnail/flox/apps/internal/apierror"
 	"github.com/ismagilovnail/flox/apps/internal/billing"
+	"github.com/ismagilovnail/flox/apps/internal/campaignscope"
 	"github.com/ismagilovnail/flox/apps/internal/idgen"
 	"github.com/ismagilovnail/flox/apps/internal/routing"
 )
@@ -83,7 +84,25 @@ func (s *Service) Get(ctx context.Context, orgID, campaignID, id string) (Stream
 // the top-level Flows list's own endpoint, org-wide rather than scoped
 // to one campaign the way List (above) is.
 func (s *Service) ListFlows(ctx context.Context, orgID string) ([]FlowSummary, error) {
-	return s.repo.ListFlows(ctx, orgID)
+	flows, err := s.repo.ListFlows(ctx, orgID)
+	if err != nil {
+		return nil, err
+	}
+	// Only the campaigns the request may read (campaignscope, audit TEAM-1b).
+	scope, err := campaignscope.From(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if scope.All {
+		return flows, nil
+	}
+	out := flows[:0]
+	for _, f := range flows {
+		if scope.Allows(f.CampaignID) {
+			out = append(out, f)
+		}
+	}
+	return out, nil
 }
 
 func (s *Service) Create(ctx context.Context, orgID, campaignID string, in CreateInput) (StreamSet, error) {

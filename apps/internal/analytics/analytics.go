@@ -28,8 +28,8 @@ type Repository interface {
 	ReportPwaInstalls(ctx context.Context, q chstore.ReportQuery) ([]chstore.InstallAgg, error)
 	ReportConversions(ctx context.Context, q chstore.ReportQuery) ([]chstore.ConversionAgg, error)
 	FunnelCounts(ctx context.Context, organizationID string, from, to time.Time, filters []chstore.ReportFilter) (map[string]uint64, error)
-	DistinctValues(ctx context.Context, organizationID string, dim chstore.ReportDimension, from, to time.Time, limit int) ([]string, error)
-	FlowStageCounts(ctx context.Context, organizationID string, from, to time.Time, flowIDs []string) (map[string]map[string]uint64, error)
+	DistinctValues(ctx context.Context, organizationID string, dim chstore.ReportDimension, from, to time.Time, limit int, campaigns []string) ([]string, error)
+	FlowStageCounts(ctx context.Context, organizationID string, from, to time.Time, flowIDs []string, campaigns []string) (map[string]map[string]uint64, error)
 }
 
 // CostSource is the narrow slice of *cost.Service this package needs — same
@@ -144,6 +144,9 @@ func (s *Service) CampaignDaily(ctx context.Context, organizationID, campaignID 
 	if err := s.validateRange(organizationID, campaignID, from, to); err != nil {
 		return nil, err
 	}
+	if err := requireCampaign(ctx, campaignID); err != nil {
+		return nil, err
+	}
 	defer observeLatency("campaign_daily")()
 	return s.repo.DailyCampaignCounts(ctx, organizationID, campaignID, from, to)
 }
@@ -155,6 +158,9 @@ func (s *Service) CampaignDailyRevenue(ctx context.Context, organizationID, camp
 		return nil, err
 	}
 	if err := validateBasis(basis); err != nil {
+		return nil, err
+	}
+	if err := requireCampaign(ctx, campaignID); err != nil {
 		return nil, err
 	}
 	defer observeLatency("campaign_daily_revenue")()

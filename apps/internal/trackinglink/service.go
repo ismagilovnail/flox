@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/ismagilovnail/flox/apps/internal/apierror"
+	"github.com/ismagilovnail/flox/apps/internal/campaignscope"
 	"github.com/ismagilovnail/flox/apps/internal/idgen"
 )
 
@@ -39,7 +40,25 @@ func (s *Service) ListByOrg(ctx context.Context, orgID string, status Status) ([
 	if status != "" && !status.Valid() {
 		return nil, apierror.Validation("invalid status", map[string]string{"status": "active, paused or archived"})
 	}
-	return s.repo.ListByOrg(ctx, orgID, status)
+	links, err := s.repo.ListByOrg(ctx, orgID, status)
+	if err != nil {
+		return nil, err
+	}
+	// Only the campaigns the request may read (campaignscope, audit TEAM-1b).
+	scope, err := campaignscope.From(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if scope.All {
+		return links, nil
+	}
+	out := links[:0]
+	for _, l := range links {
+		if scope.Allows(l.CampaignID) {
+			out = append(out, l)
+		}
+	}
+	return out, nil
 }
 
 func (s *Service) Get(ctx context.Context, orgID, id string) (TrackingLink, error) {

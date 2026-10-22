@@ -15,7 +15,7 @@ type fakeRepo struct {
 	rowsByOrg map[string][]chstore.ClickLogRow
 }
 
-func (f *fakeRepo) ListClickLog(_ context.Context, orgID string, from, to time.Time, clickID string, limit, offset int) ([]chstore.ClickLogRow, error) {
+func (f *fakeRepo) ListClickLog(_ context.Context, orgID string, from, to time.Time, clickID string, limit, offset int, _ []string) ([]chstore.ClickLogRow, error) {
 	rows := f.rowsByOrg[orgID]
 	sorted := make([]chstore.ClickLogRow, len(rows))
 	copy(sorted, rows)
@@ -36,7 +36,7 @@ func (f *fakeRepo) ListClickLog(_ context.Context, orgID string, from, to time.T
 	return sorted[offset:end], nil
 }
 
-func (f *fakeRepo) CountClickLog(_ context.Context, orgID string, from, to time.Time, clickID string) (int, error) {
+func (f *fakeRepo) CountClickLog(_ context.Context, orgID string, from, to time.Time, clickID string, _ []string) (int, error) {
 	return len(f.rowsByOrg[orgID]), nil
 }
 

@@ -78,12 +78,28 @@ func scanClickLogRow(r driver.Rows) (ClickLogRow, error) {
 // logWindow is the WHERE of the raw-event logs (click log, conversions,
 // postback attempts): one organization over [from, to] and, when clickID is
 // set, that click only — the lists' "find a click" (exact match).
-func logWindow(organizationID string, from, to time.Time, clickID string) (string, []any) {
+//
+// campaigns, when not nil, keeps only those campaigns' rows — a Buyer's
+// read scope (audit TEAM-1b); empty matches nothing. A table without a
+// campaign_id (postback_events) is narrowed through the click instead:
+// viaClick reads the click's campaign from click_lookup, so a postback for
+// an unknown click is outside every scope.
+func logWindow(organizationID string, from, to time.Time, clickID string, campaigns []string, viaClick bool) (string, []any) {
 	where := `organization_id = ? AND event_at >= ? AND event_at <= ?`
 	args := []any{organizationID, from, to}
 	if clickID != "" {
 		where += ` AND click_id = ?`
 		args = append(args, clickID)
+	}
+	scope, scopeArgs := campaignsClause(campaigns)
+	switch {
+	case scope == "":
+	case viaClick && len(campaigns) > 0:
+		where += ` AND click_id IN (SELECT click_id FROM click_lookup WHERE organization_id = ?` + scope + `)`
+		args = append(append(args, organizationID), scopeArgs...)
+	default:
+		where += scope
+		args = append(args, scopeArgs...)
 	}
 	return where, args
 }
@@ -91,8 +107,8 @@ func logWindow(organizationID string, from, to time.Time, clickID string) (strin
 // ListClickLog reads click_events for one organization over [from, to],
 // newest first — the Click Log page's raw per-visit table, mirroring
 // ListPostbackAttempts' shape (postback_events.go).
-func (s *EventStore) ListClickLog(ctx context.Context, organizationID string, from, to time.Time, clickID string, limit, offset int) ([]ClickLogRow, error) {
-	where, args := logWindow(organizationID, from, to, clickID)
+func (s *EventStore) ListClickLog(ctx context.Context, organizationID string, from, to time.Time, clickID string, limit, offset int, campaigns []string) ([]ClickLogRow, error) {
+	where, args := logWindow(organizationID, from, to, clickID, campaigns, false)
 	rows, err := s.conn.Query(ctx, `
 		SELECT `+clickLogColumns+`
 		FROM click_events
@@ -122,8 +138,8 @@ func (s *EventStore) ListClickLog(ctx context.Context, organizationID string, fr
 
 // CountClickLog is ListClickLog's companion for the list page's total count
 // (pagination), over the same [from, to] window.
-func (s *EventStore) CountClickLog(ctx context.Context, organizationID string, from, to time.Time, clickID string) (int, error) {
-	where, args := logWindow(organizationID, from, to, clickID)
+func (s *EventStore) CountClickLog(ctx context.Context, organizationID string, from, to time.Time, clickID string, campaigns []string) (int, error) {
+	where, args := logWindow(organizationID, from, to, clickID, campaigns, false)
 	row := s.conn.QueryRow(ctx, `
 		SELECT count()
 		FROM click_events

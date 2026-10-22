@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/ismagilovnail/flox/apps/internal/apierror"
+	"github.com/ismagilovnail/flox/apps/internal/campaignscope"
 	"github.com/ismagilovnail/flox/apps/internal/chstore"
 	"github.com/ismagilovnail/flox/apps/internal/fx"
 )
@@ -121,6 +122,9 @@ func (s *Service) FTDCohorts(ctx context.Context, organizationID string, filter 
 	if err := validateQuery(organizationID, period, filter, groupBy); err != nil {
 		return nil, err
 	}
+	if err := scope(ctx, &filter); err != nil {
+		return nil, err
+	}
 	histories, err := s.repo.ClicksByFTDAnchor(ctx, organizationID, filter)
 	if err != nil {
 		return nil, err
@@ -136,6 +140,9 @@ func (s *Service) RegCohorts(ctx context.Context, organizationID string, filter 
 	if err := validateQuery(organizationID, period, filter, groupBy); err != nil {
 		return nil, err
 	}
+	if err := scope(ctx, &filter); err != nil {
+		return nil, err
+	}
 	histories, err := s.repo.ClicksByRegAnchor(ctx, organizationID, filter)
 	if err != nil {
 		return nil, err
@@ -144,4 +151,18 @@ func (s *Service) RegCohorts(ctx context.Context, organizationID string, filter 
 		return nil, err
 	}
 	return ComputeRegCohorts(histories, period, groupBy, asOf), nil
+}
+
+// scope narrows filter to the campaigns the request may read
+// (campaignscope, audit TEAM-1b): a Buyer's cohorts hold only their
+// campaigns' clicks.
+func scope(ctx context.Context, filter *chstore.LTVFilter) error {
+	s, err := campaignscope.From(ctx)
+	if err != nil {
+		return err
+	}
+	if !s.All {
+		filter.Campaigns = s.IDs
+	}
+	return nil
 }

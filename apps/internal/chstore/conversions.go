@@ -60,8 +60,8 @@ func scanConversionEvent(r driver.Rows) (ConversionEvent, error) {
 
 // ListConversions reads conversion_events for one organization over
 // [from, to], newest first — the Conversions list page's data source.
-func (s *EventStore) ListConversions(ctx context.Context, organizationID string, from, to time.Time, clickID string, limit, offset int) ([]ConversionEvent, error) {
-	where, args := logWindow(organizationID, from, to, clickID)
+func (s *EventStore) ListConversions(ctx context.Context, organizationID string, from, to time.Time, clickID string, limit, offset int, campaigns []string) ([]ConversionEvent, error) {
+	where, args := logWindow(organizationID, from, to, clickID, campaigns, false)
 	rows, err := s.conn.Query(ctx, `
 		SELECT `+conversionEventColumns+`
 		FROM conversion_events
@@ -91,8 +91,8 @@ func (s *EventStore) ListConversions(ctx context.Context, organizationID string,
 
 // CountConversions is ListConversions' companion for the list page's total
 // count (pagination), over the same [from, to] window.
-func (s *EventStore) CountConversions(ctx context.Context, organizationID string, from, to time.Time, clickID string) (int, error) {
-	where, args := logWindow(organizationID, from, to, clickID)
+func (s *EventStore) CountConversions(ctx context.Context, organizationID string, from, to time.Time, clickID string, campaigns []string) (int, error) {
+	where, args := logWindow(organizationID, from, to, clickID, campaigns, false)
 	row := s.conn.QueryRow(ctx, `
 		SELECT count()
 		FROM conversion_events

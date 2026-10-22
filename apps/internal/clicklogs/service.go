@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/ismagilovnail/flox/apps/internal/apierror"
+	"github.com/ismagilovnail/flox/apps/internal/campaignscope"
 	"github.com/ismagilovnail/flox/apps/internal/chstore"
 )
 
@@ -22,8 +23,8 @@ const (
 // the same structural-interface decoupling internal/postbacklogs and
 // internal/conversions already use.
 type Repository interface {
-	ListClickLog(ctx context.Context, organizationID string, from, to time.Time, clickID string, limit, offset int) ([]chstore.ClickLogRow, error)
-	CountClickLog(ctx context.Context, organizationID string, from, to time.Time, clickID string) (int, error)
+	ListClickLog(ctx context.Context, organizationID string, from, to time.Time, clickID string, limit, offset int, campaigns []string) ([]chstore.ClickLogRow, error)
+	CountClickLog(ctx context.Context, organizationID string, from, to time.Time, clickID string, campaigns []string) (int, error)
 }
 
 type Service struct {
@@ -56,11 +57,16 @@ func (s *Service) List(ctx context.Context, organizationID string, from, to time
 		offset = 0
 	}
 
-	rows, err := s.repo.ListClickLog(ctx, organizationID, from, to, clickID, limit, offset)
+	// Only the campaigns the request may read (campaignscope, audit TEAM-1b).
+	campaigns, err := campaignscope.IDs(ctx)
 	if err != nil {
 		return ListResult{}, err
 	}
-	total, err := s.repo.CountClickLog(ctx, organizationID, from, to, clickID)
+	rows, err := s.repo.ListClickLog(ctx, organizationID, from, to, clickID, limit, offset, campaigns)
+	if err != nil {
+		return ListResult{}, err
+	}
+	total, err := s.repo.CountClickLog(ctx, organizationID, from, to, clickID, campaigns)
 	if err != nil {
 		return ListResult{}, err
 	}

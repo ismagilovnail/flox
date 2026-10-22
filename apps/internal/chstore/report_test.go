@@ -636,7 +636,7 @@ func TestDistinctValuesOrdersByFrequencyAndExcludesEmpty(t *testing.T) {
 		t.Fatalf("seeding campaign-fallback click: %v", err)
 	}
 
-	countryValues, err := store.DistinctValues(ctx, orgID, chstore.DimCountry, day, day.Add(24*time.Hour), 10)
+	countryValues, err := store.DistinctValues(ctx, orgID, chstore.DimCountry, day, day.Add(24*time.Hour), 10, nil)
 	if err != nil {
 		t.Fatalf("DistinctValues (country): %v", err)
 	}
@@ -644,7 +644,7 @@ func TestDistinctValuesOrdersByFrequencyAndExcludesEmpty(t *testing.T) {
 		t.Fatalf("country values = %v, want [US DE] ordered by frequency (US=3, DE=1)", countryValues)
 	}
 
-	streamSetValues, err := store.DistinctValues(ctx, orgID, chstore.DimStreamSet, day, day.Add(24*time.Hour), 10)
+	streamSetValues, err := store.DistinctValues(ctx, orgID, chstore.DimStreamSet, day, day.Add(24*time.Hour), 10, nil)
 	if err != nil {
 		t.Fatalf("DistinctValues (stream_set): %v", err)
 	}
@@ -669,7 +669,7 @@ func TestDistinctValuesLimitsResults(t *testing.T) {
 	day := time.Date(2026, 8, 21, 0, 0, 0, 0, time.UTC)
 	seedReportFixture(t, ctx, store, orgID, campaignID, day) // seeds 2 distinct countries: US, DE
 
-	values, err := store.DistinctValues(ctx, orgID, chstore.DimCountry, day, day.Add(24*time.Hour), 1)
+	values, err := store.DistinctValues(ctx, orgID, chstore.DimCountry, day, day.Add(24*time.Hour), 1, nil)
 	if err != nil {
 		t.Fatalf("DistinctValues: %v", err)
 	}
@@ -681,7 +681,7 @@ func TestDistinctValuesLimitsResults(t *testing.T) {
 func TestDistinctValuesRejectsUnsupportedDimension(t *testing.T) {
 	conn := mustConn(t)
 	store := chstore.NewEventStore(conn)
-	_, err := store.DistinctValues(context.Background(), idgen.New(), chstore.ReportDimension("no_such_dimension"), time.Now().Add(-24*time.Hour), time.Now(), 10)
+	_, err := store.DistinctValues(context.Background(), idgen.New(), chstore.ReportDimension("no_such_dimension"), time.Now().Add(-24*time.Hour), time.Now(), 10, nil)
 	if err == nil {
 		t.Fatal(`DistinctValues with an unknown dimension succeeded, want an error`)
 	}
@@ -750,7 +750,7 @@ func TestReportByLanding(t *testing.T) {
 		t.Fatalf("revenue by landing = %v, want landing-b:40 \"\":5", gotRevenue)
 	}
 
-	values, err := store.DistinctValues(ctx, orgID, chstore.DimLanding, day, day.Add(24*time.Hour), 10)
+	values, err := store.DistinctValues(ctx, orgID, chstore.DimLanding, day, day.Add(24*time.Hour), 10, nil)
 	if err != nil {
 		t.Fatalf("DistinctValues(landing): %v", err)
 	}
@@ -1205,7 +1205,7 @@ func TestFlowStageCountsPerFlowAndTenant(t *testing.T) {
 		t.Fatalf("seeding: %v", err)
 	}
 
-	counts, err := store.FlowStageCounts(ctx, orgID, day, day.Add(24*time.Hour), []string{flowA, flowB})
+	counts, err := store.FlowStageCounts(ctx, orgID, day, day.Add(24*time.Hour), []string{flowA, flowB}, nil)
 	if err != nil {
 		t.Fatalf("FlowStageCounts: %v", err)
 	}
@@ -1225,7 +1225,7 @@ func TestFlowStageCountsPerFlowAndTenant(t *testing.T) {
 		t.Errorf("flow C was not asked for but came back: %v", counts[flowC])
 	}
 
-	other, err := store.FlowStageCounts(ctx, otherOrg, day, day.Add(24*time.Hour), []string{flowA})
+	other, err := store.FlowStageCounts(ctx, otherOrg, day, day.Add(24*time.Hour), []string{flowA}, nil)
 	if err != nil {
 		t.Fatalf("FlowStageCounts (other org): %v", err)
 	}
@@ -1310,7 +1310,7 @@ func TestInstallsIncludeIosInstalls(t *testing.T) {
 		t.Fatalf("funnel = %v, want PWA_INSTALL = 3 visits and no IOS_INSTALL stage", funnel)
 	}
 
-	stages, err := store.FlowStageCounts(ctx, orgID, from, to, []string{flowID})
+	stages, err := store.FlowStageCounts(ctx, orgID, from, to, []string{flowID}, nil)
 	if err != nil {
 		t.Fatalf("FlowStageCounts: %v", err)
 	}

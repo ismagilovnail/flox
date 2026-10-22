@@ -21,6 +21,8 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"github.com/ismagilovnail/flox/apps/internal/apierror"
+	"github.com/ismagilovnail/flox/apps/internal/attribution"
+	"github.com/ismagilovnail/flox/apps/internal/campaignscope"
 	"github.com/ismagilovnail/flox/apps/internal/conversion"
 	"github.com/ismagilovnail/flox/apps/internal/idgen"
 	"github.com/ismagilovnail/flox/apps/internal/tenant"
@@ -136,6 +138,20 @@ func (s *Service) Check(ctx context.Context, orgID, rawURL string) (Outcome, err
 	}
 	out.Revenue, out.Currency, out.CurrencyAssumed, out.USDValue = res.Revenue, res.Currency, res.CurrencyAssumed, res.USDValue
 	out.OutgoingURL = res.OutgoingURL
+	// A click of a campaign the member may not read (campaignscope, audit
+	// TEAM-1b) reads as an unknown click: the dry run must not tell a
+	// Buyer whose campaign it is, nor show its outgoing postback.
+	if out.Attribution != nil && out.Attribution.CampaignID != "" {
+		scope, err := campaignscope.From(ctx)
+		if err != nil {
+			return Outcome{}, err
+		}
+		if !scope.Allows(out.Attribution.CampaignID) {
+			out.Attribution = &Attribution{Outcome: string(attribution.OutcomeUnknownClick), ClickID: out.Attribution.ClickID,
+				Reason: "no click with this id in your campaigns"}
+			out.OutgoingURL = ""
+		}
+	}
 	return out, nil
 }
 

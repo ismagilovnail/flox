@@ -25,7 +25,7 @@ type fakeRepo struct {
 	offersByOrg map[string]map[string]string
 }
 
-func (f *fakeRepo) ListConversions(_ context.Context, orgID string, from, to time.Time, clickID string, limit, offset int) ([]chstore.ConversionEvent, error) {
+func (f *fakeRepo) ListConversions(_ context.Context, orgID string, from, to time.Time, clickID string, limit, offset int, _ []string) ([]chstore.ConversionEvent, error) {
 	rows := f.conversionsByOrg[orgID]
 	// newest first, matching the real chstore query's ORDER BY
 	sorted := make([]chstore.ConversionEvent, len(rows))
@@ -47,7 +47,7 @@ func (f *fakeRepo) ListConversions(_ context.Context, orgID string, from, to tim
 	return sorted[offset:end], nil
 }
 
-func (f *fakeRepo) CountConversions(_ context.Context, orgID string, from, to time.Time, clickID string) (int, error) {
+func (f *fakeRepo) CountConversions(_ context.Context, orgID string, from, to time.Time, clickID string, _ []string) (int, error) {
 	return len(f.conversionsByOrg[orgID]), nil
 }
 

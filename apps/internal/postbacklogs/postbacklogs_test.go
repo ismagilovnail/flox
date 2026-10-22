@@ -15,7 +15,7 @@ type fakeRepo struct {
 	attemptsByOrg map[string][]chstore.PostbackAttempt
 }
 
-func (f *fakeRepo) ListPostbackAttempts(_ context.Context, orgID string, from, to time.Time, clickID string, limit, offset int) ([]chstore.PostbackAttempt, error) {
+func (f *fakeRepo) ListPostbackAttempts(_ context.Context, orgID string, from, to time.Time, clickID string, limit, offset int, _ []string) ([]chstore.PostbackAttempt, error) {
 	rows := f.attemptsByOrg[orgID]
 	sorted := make([]chstore.PostbackAttempt, len(rows))
 	copy(sorted, rows)
@@ -36,7 +36,7 @@ func (f *fakeRepo) ListPostbackAttempts(_ context.Context, orgID string, from, t
 	return sorted[offset:end], nil
 }
 
-func (f *fakeRepo) CountPostbackAttempts(_ context.Context, orgID string, from, to time.Time, clickID string) (int, error) {
+func (f *fakeRepo) CountPostbackAttempts(_ context.Context, orgID string, from, to time.Time, clickID string, _ []string) (int, error) {
 	return len(f.attemptsByOrg[orgID]), nil
 }
 

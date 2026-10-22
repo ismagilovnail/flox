@@ -878,23 +878,27 @@ func (s *EventStore) FunnelCounts(ctx context.Context, organizationID string, fr
 // meaningful to filter on, but confusing to suggest as a pickable
 // dropdown value with no visible label — an operator who wants that
 // filter can still type "" into the free-text value field.
-func (s *EventStore) DistinctValues(ctx context.Context, organizationID string, dim ReportDimension, from, to time.Time, limit int) ([]string, error) {
+// campaigns, when not nil, limits the values to those campaigns' clicks (a
+// Buyer's read scope, audit TEAM-1b); empty matches nothing.
+func (s *EventStore) DistinctValues(ctx context.Context, organizationID string, dim ReportDimension, from, to time.Time, limit int, campaigns []string) ([]string, error) {
 	col, ok := reportClickColumns[dim]
 	if !ok {
 		return nil, fmt.Errorf("chstore: unsupported dimension for distinct values: %s", dim)
 	}
 
+	scope, scopeArgs := campaignsClause(campaigns)
 	query := fmt.Sprintf(`
 		SELECT %s AS value
 		FROM click_events
-		WHERE organization_id = ? AND event_at >= ? AND event_at < ? AND type = 'SOURCE_CLICK' AND %s != ''
+		WHERE organization_id = ? AND event_at >= ? AND event_at < ? AND type = 'SOURCE_CLICK' AND %s != ''%s
 		GROUP BY value
 		ORDER BY count() DESC
 		LIMIT ?`,
-		col, col,
+		col, col, scope,
 	)
 
-	rows, err := s.conn.Query(ctx, query, organizationID, from, to, limit)
+	args := append([]any{organizationID, from, to}, scopeArgs...)
+	rows, err := s.conn.Query(ctx, query, append(args, limit)...)
 	if err != nil {
 		return nil, fmt.Errorf("chstore: querying distinct values: %w", err)
 	}
@@ -1016,7 +1020,9 @@ var flowStageTypes = map[string][]string{
 // CPA_ACCEPT/CPA_REDEP, as the report's `conversions` does (a redeposit is
 // a second conversion of the same visit). A flow with nothing is absent;
 // the caller zero-fills.
-func (s *EventStore) FlowStageCounts(ctx context.Context, organizationID string, from, to time.Time, flowIDs []string) (map[string]map[string]uint64, error) {
+// campaigns, when not nil, counts only those campaigns' events (a Buyer's
+// read scope, audit TEAM-1b): another buyer's flow reads as zeros.
+func (s *EventStore) FlowStageCounts(ctx context.Context, organizationID string, from, to time.Time, flowIDs []string, campaigns []string) (map[string]map[string]uint64, error) {
 	out := map[string]map[string]uint64{}
 	if len(flowIDs) == 0 {
 		return out, nil
@@ -1026,12 +1032,14 @@ func (s *EventStore) FlowStageCounts(ctx context.Context, organizationID string,
 		if table == "conversion_events" {
 			count = "count()"
 		}
+		scope, scopeArgs := campaignsClause(campaigns)
+		args := append([]any{organizationID, from, to, flowIDs, flowStageTypes[table]}, scopeArgs...)
 		rows, err := s.conn.Query(ctx, `
 			SELECT flow_id, `+installAs+` AS stage, `+count+`
 			FROM `+table+`
-			WHERE organization_id = ? AND event_at >= ? AND event_at < ? AND flow_id IN ? AND type IN ?
+			WHERE organization_id = ? AND event_at >= ? AND event_at < ? AND flow_id IN ? AND type IN ?`+scope+`
 			GROUP BY flow_id, stage`,
-			organizationID, from, to, flowIDs, flowStageTypes[table])
+			args...)
 		if err != nil {
 			return nil, fmt.Errorf("chstore: querying flow stage counts from %s: %w", table, err)
 		}
@@ -1054,4 +1062,17 @@ func (s *EventStore) FlowStageCounts(ctx context.Context, organizationID string,
 		}
 	}
 	return out, nil
+}
+
+// campaignsClause narrows a query to a set of campaigns: nil is no
+// condition, empty matches nothing.
+func campaignsClause(campaigns []string) (string, []any) {
+	switch {
+	case campaigns == nil:
+		return "", nil
+	case len(campaigns) == 0:
+		return " AND 0", nil
+	default:
+		return " AND campaign_id IN ?", []any{campaigns}
+	}
 }

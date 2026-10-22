@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/ismagilovnail/flox/apps/internal/apierror"
+	"github.com/ismagilovnail/flox/apps/internal/campaignscope"
 	"github.com/ismagilovnail/flox/apps/internal/chstore"
 )
 
@@ -24,8 +25,8 @@ const (
 // — satisfied structurally, the same decoupling pattern
 // internal/analytics/internal/conversions already use.
 type Repository interface {
-	ListPostbackAttempts(ctx context.Context, organizationID string, from, to time.Time, clickID string, limit, offset int) ([]chstore.PostbackAttempt, error)
-	CountPostbackAttempts(ctx context.Context, organizationID string, from, to time.Time, clickID string) (int, error)
+	ListPostbackAttempts(ctx context.Context, organizationID string, from, to time.Time, clickID string, limit, offset int, campaigns []string) ([]chstore.PostbackAttempt, error)
+	CountPostbackAttempts(ctx context.Context, organizationID string, from, to time.Time, clickID string, campaigns []string) (int, error)
 }
 
 // SourcePostbackLookup resolves the Postgres postbacks row a successful
@@ -164,11 +165,16 @@ func (s *Service) List(ctx context.Context, organizationID string, from, to time
 		offset = 0
 	}
 
-	rows, err := s.repo.ListPostbackAttempts(ctx, organizationID, from, to, clickID, limit, offset)
+	// Only the campaigns the request may read (campaignscope, audit TEAM-1b).
+	campaigns, err := campaignscope.IDs(ctx)
 	if err != nil {
 		return ListResult{}, err
 	}
-	total, err := s.repo.CountPostbackAttempts(ctx, organizationID, from, to, clickID)
+	rows, err := s.repo.ListPostbackAttempts(ctx, organizationID, from, to, clickID, limit, offset, campaigns)
+	if err != nil {
+		return ListResult{}, err
+	}
+	total, err := s.repo.CountPostbackAttempts(ctx, organizationID, from, to, clickID, campaigns)
 	if err != nil {
 		return ListResult{}, err
 	}

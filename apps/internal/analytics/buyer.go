@@ -7,6 +7,7 @@ import (
 	"sort"
 
 	"github.com/ismagilovnail/flox/apps/internal/apierror"
+	"github.com/ismagilovnail/flox/apps/internal/campaignscope"
 	"github.com/ismagilovnail/flox/apps/internal/chstore"
 	"github.com/ismagilovnail/flox/apps/internal/push"
 )
@@ -37,7 +38,44 @@ func (s *Service) Buyers(ctx context.Context, organizationID string) ([]Buyer, e
 	if err != nil {
 		return nil, fmt.Errorf("analytics: reading buyer names: %w", err)
 	}
-	return b, nil
+	owners, err := s.visibleOwners(ctx, organizationID)
+	if err != nil {
+		return nil, err
+	}
+	visible := map[string]bool{}
+	for _, o := range owners {
+		visible[o] = true
+	}
+	out := b[:0]
+	for _, x := range b {
+		if visible[x.ID] {
+			out = append(out, x)
+		}
+	}
+	return out, nil
+}
+
+// visibleOwners is Owners narrowed to the campaigns the request may read:
+// a Buyer learns no other buyer's campaigns, nor who the other buyers are.
+func (s *Service) visibleOwners(ctx context.Context, organizationID string) (map[string]string, error) {
+	owners, err := s.owners.Owners(ctx, organizationID)
+	if err != nil {
+		return nil, fmt.Errorf("analytics: reading campaign owners: %w", err)
+	}
+	scope, err := campaignscope.From(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if scope.All {
+		return owners, nil
+	}
+	out := map[string]string{}
+	for id, o := range owners {
+		if scope.Allows(id) {
+			out[id] = o
+		}
+	}
+	return out, nil
 }
 
 // WithOwners makes the buyer dimension answerable (audit TEAM-1). Without
@@ -203,9 +241,9 @@ func (s *Service) buyerValues(ctx context.Context, organizationID string) ([]str
 	if s.owners == nil {
 		return []string{}, nil
 	}
-	owners, err := s.owners.Owners(ctx, organizationID)
+	owners, err := s.visibleOwners(ctx, organizationID)
 	if err != nil {
-		return nil, fmt.Errorf("analytics: reading campaign owners: %w", err)
+		return nil, err
 	}
 	seen := map[string]bool{}
 	out := []string{}

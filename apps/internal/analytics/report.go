@@ -376,6 +376,10 @@ func (s *Service) DimensionValues(ctx context.Context, organizationID string, in
 	if in.Dim == chstore.DimBuyer {
 		return s.buyerValues(ctx, organizationID)
 	}
+	campaigns, err := readCampaigns(ctx)
+	if err != nil {
+		return nil, err
+	}
 
 	// +24h: In/To is the caller's inclusive last day (a UI date picker's
 	// own "to" selection), but chstore.ReportQuery.To is EXCLUSIVE — the
@@ -384,7 +388,7 @@ func (s *Service) DimensionValues(ctx context.Context, organizationID string, in
 	// calls the repository directly rather than through groupedReport.
 	// Missing this would silently exclude "today" itself whenever To is
 	// today's date, exactly the range a fresh page load defaults to.
-	return s.repo.DistinctValues(ctx, organizationID, in.Dim, in.From, in.To.Add(24*time.Hour), maxDimensionValues)
+	return s.repo.DistinctValues(ctx, organizationID, in.Dim, in.From, in.To.Add(24*time.Hour), maxDimensionValues, campaigns)
 }
 
 // groupedReport is the shared core Report/Timeseries/Breakdown/Dashboard
@@ -404,6 +408,9 @@ func (s *Service) groupedReport(ctx context.Context, organizationID string, dims
 	}
 	if plan != nil {
 		dims = plan.query
+	}
+	if filters, err = scopeFilters(ctx, filters); err != nil {
+		return nil, err
 	}
 	qFrom, qTo := sc.bounds(from, to)
 	q := chstore.ReportQuery{
@@ -1302,6 +1309,9 @@ func (s *Service) Funnel(ctx context.Context, organizationID string, from, to ti
 	if _, filters, err = s.planBuyer(ctx, organizationID, nil, filters); err != nil {
 		return nil, err
 	}
+	if filters, err = scopeFilters(ctx, filters); err != nil {
+		return nil, err
+	}
 
 	qFrom, qTo := sc.bounds(from, to)
 	counts, err := s.repo.FunnelCounts(ctx, organizationID, qFrom, qTo, filters)
@@ -1432,7 +1442,11 @@ func (s *Service) FlowSummary(ctx context.Context, organizationID string, flowID
 	defer observeLatency("flow_summary")()
 
 	qFrom, qTo := sc.bounds(from, to)
-	counts, err := s.repo.FlowStageCounts(ctx, organizationID, qFrom, qTo, flowIDs)
+	campaigns, err := readCampaigns(ctx)
+	if err != nil {
+		return nil, err
+	}
+	counts, err := s.repo.FlowStageCounts(ctx, organizationID, qFrom, qTo, flowIDs, campaigns)
 	if err != nil {
 		return nil, fmt.Errorf("analytics: querying flow stage counts: %w", err)
 	}

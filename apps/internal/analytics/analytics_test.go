@@ -47,7 +47,7 @@ func (r *fakeRepo) FunnelCounts(_ context.Context, _ string, _, _ time.Time, _ [
 	return nil, nil
 }
 
-func (r *fakeRepo) DistinctValues(_ context.Context, _ string, _ chstore.ReportDimension, _, _ time.Time, _ int) ([]string, error) {
+func (r *fakeRepo) DistinctValues(_ context.Context, _ string, _ chstore.ReportDimension, _, _ time.Time, _ int, _ []string) ([]string, error) {
 	return nil, nil
 }
 
@@ -131,6 +131,6 @@ func TestCampaignDailyRejectsRangeTooWide(t *testing.T) {
 	}
 }
 
-func (r *fakeRepo) FlowStageCounts(context.Context, string, time.Time, time.Time, []string) (map[string]map[string]uint64, error) {
+func (r *fakeRepo) FlowStageCounts(context.Context, string, time.Time, time.Time, []string, []string) (map[string]map[string]uint64, error) {
 	return nil, nil
 }

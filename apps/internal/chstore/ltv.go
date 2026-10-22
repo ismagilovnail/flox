@@ -43,6 +43,9 @@ type LTVFilter struct {
 	Country         string
 	OfferID         string
 	TrafficSourceID string
+	// Campaigns, when not nil, keeps only these campaigns (a Buyer's read
+	// scope, audit TEAM-1b); empty matches nothing.
+	Campaigns []string
 }
 
 func (f LTVFilter) whereAndArgs(anchorType event.Type) (string, []any) {
@@ -67,6 +70,10 @@ func (f LTVFilter) whereAndArgs(anchorType event.Type) (string, []any) {
 	if f.TrafficSourceID != "" {
 		where += ` AND traffic_source_id = ?`
 		args = append(args, f.TrafficSourceID)
+	}
+	if scope, scopeArgs := campaignsClause(f.Campaigns); scope != "" {
+		where += scope
+		args = append(args, scopeArgs...)
 	}
 	return where, args
 }
