@@ -15,8 +15,8 @@ Campaigns, stream sets and flows, the routing simulator, tracking links,
 domains (read), spend (cost entries, CSV import, daily spend), offers,
 networks (incl. secret rotation and diagnostics), traffic sources,
 conversions and a click's timeline, the click log, the postback log, and
-the reports (`/analytics/report`, `/timeseries`, `/breakdown`) — 61
-operations.
+the reports (`/analytics/report`, `/timeseries`, `/breakdown`), the plan and
+its usage (`/billing`, `/billing/plans`, docs/billing.md) — 63 operations.
 
 Left out on purpose, each with its reason, in `notInPublicSpec`
 (`apps/api/openapi_test.go`): sign-in and account security, team,

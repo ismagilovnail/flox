@@ -491,6 +491,10 @@ func TestOpenAPIOperationsAnswerAsDocumented(t *testing.T) {
 
 	do("deleteCostEntry", costs+"/"+entry.ID, nil, http.StatusNoContent, nil)
 
+	// Billing.
+	do("getBilling", "/billing", nil, http.StatusOK, nil)
+	do("listPlans", "/billing/plans", nil, http.StatusOK, nil)
+
 	// Every operation ran; a read key is refused every write.
 	var notCalled []string
 	for id, op := range ops {

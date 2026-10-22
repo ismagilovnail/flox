@@ -34,6 +34,7 @@ import (
 
 	"github.com/ismagilovnail/flox/apps/internal/apierror"
 	"github.com/ismagilovnail/flox/apps/internal/auth"
+	"github.com/ismagilovnail/flox/apps/internal/billing"
 	"github.com/ismagilovnail/flox/apps/internal/campaign"
 	"github.com/ismagilovnail/flox/apps/internal/domain"
 	"github.com/ismagilovnail/flox/apps/internal/event"
@@ -109,6 +110,11 @@ func run() error {
 	if err != nil {
 		return err
 	}
+	// The demo has six members and room to add more; the other
+	// organization stays on Free, to see the plan limits (BIZ-1).
+	if err := billing.NewRepository(db).SetPlan(ctx, demoOrgID, "business", "dev fixtures"); err != nil {
+		return fmt.Errorf("demo plan: %w", err)
+	}
 	for _, r := range inviteRoles {
 		if err := addMember(ctx, authSvc, demoOrgID, ownerID, r.email, r.name, r.role, password); err != nil {
 			return err
@@ -135,6 +141,8 @@ func run() error {
               analyst@flox.local      Аналитик
               viewer@flox.local       Наблюдатель
   FLOX Other  other-owner@flox.local  Владелец (вторая организация, для проверки изоляции)
+
+Тарифы: FLOX Demo — Business, FLOX Other — Free (видны лимиты).
 
 Трекинговая ссылка:  %s
   (хост %s указывает на 127.0.0.1; трекер узнаёт ссылку по хосту)

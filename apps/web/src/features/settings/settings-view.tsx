@@ -12,11 +12,12 @@ import { ApiKeysPanel } from "@/features/settings/api-keys-panel";
 import { IntegrationsPanel } from "@/features/settings/integrations-panel";
 import { TelegramBotsPanel } from "@/features/settings/telegram-bots-panel";
 import { SecurityPanel } from "@/features/settings/security-panel";
+import { BillingPanel } from "@/features/settings/billing-panel";
 import { CustomMetricsList } from "@/features/custom-metrics/custom-metrics-list";
 import { AlertsPanel } from "@/features/alerts/alerts-panel";
 import { VisitorDataPanel } from "@/features/privacy/visitor-data-panel";
 
-const TABS = ["organization", "api-keys", "integrations", "alerts", "visitor-data", "security", "custom-metrics"];
+const TABS = ["organization", "billing", "api-keys", "integrations", "alerts", "visitor-data", "security", "custom-metrics"];
 /** Tabs whose data the API serves only with settings.write. */
 const SETTINGS_WRITE_TABS = ["api-keys", "integrations", "alerts", "visitor-data"];
 
@@ -44,6 +45,7 @@ export function SettingsView() {
       <Tabs value={tab} onValueChange={selectTab}>
         <TabsList className="h-auto flex-wrap">
           <TabsTrigger value="organization">{t("tabs.organization")}</TabsTrigger>
+          <TabsTrigger value="billing">{t("tabs.billing")}</TabsTrigger>
           {canManage && <TabsTrigger value="api-keys">{t("tabs.apiKeys")}</TabsTrigger>}
           {canManage && <TabsTrigger value="integrations">{t("tabs.integrations")}</TabsTrigger>}
           {canManage && <TabsTrigger value="alerts">{t("alerts:tab")}</TabsTrigger>}
@@ -56,6 +58,9 @@ export function SettingsView() {
           <OrganizationPanel />
           <OrganizationExportCard />
           <OrganizationDeletionCard />
+        </TabsContent>
+        <TabsContent value="billing">
+          <BillingPanel />
         </TabsContent>
         {canManage && (
           <>

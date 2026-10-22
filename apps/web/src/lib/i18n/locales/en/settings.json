@@ -155,7 +155,8 @@
     "integrations": "Integrations",
     "security": "Security",
     "customMetrics": "Custom metrics",
-    "visitorData": "Visitor data"
+    "visitorData": "Visitor data",
+    "billing": "Plan"
   },
   "telegram": {
     "title": "Telegram bots",
@@ -321,6 +322,50 @@
     "in": {
       "path": "path",
       "query": "query"
+    }
+  },
+  "billing": {
+    "loading": "Loading the plan…",
+    "loadError": "Couldn't load the plan",
+    "current": "{{plan}} plan",
+    "description": "Clicks count every visit the tracker takes in — passed and filtered — per calendar month (UTC). Going over the plan never stops tracking.",
+    "clicks": "Clicks, {{from}} – {{to}}",
+    "clicksAria": "Clicks used this month",
+    "unlimited": "unlimited",
+    "free": "Free",
+    "perMonth": "{{price}}/mo",
+    "yours": "your plan",
+    "level": {
+      "ok": "Within the plan",
+      "warning": "Close to the limit",
+      "exceeded": "Over the limit",
+      "blocked": "New campaigns paused",
+      "unknown": "Usage unavailable"
+    },
+    "hint": {
+      "ok": "From 80% you'll see a warning; from 110% new campaigns and stream sets wait for a plan change or the next month.",
+      "warning": "Over 80% of this month's clicks. From 110% new campaigns and stream sets wait for a plan change or the next month.",
+      "exceeded": "This month's clicks are over the plan. Tracking goes on; from 110% new campaigns and stream sets wait.",
+      "blocked": "Over 110% of the plan: tracking goes on, but new campaigns and stream sets wait for a plan change or the next month.",
+      "unknown": "Clicks can't be read right now. Nothing is limited by clicks while they are unknown."
+    },
+    "counts": {
+      "campaigns": "Campaigns",
+      "domains": "Domains",
+      "members": "Members"
+    },
+    "plansTitle": "Plans",
+    "plansDescription": "Prices are per month. To change your plan, write to the FLOX team — online payment is coming. Archived campaigns don't count; pending invites do.",
+    "table": {
+      "plan": "Plan",
+      "price": "Price",
+      "clicks": "Clicks/mo"
+    },
+    "banner": {
+      "warning": "Over 80% of this month's clicks on the {{plan}} plan.",
+      "exceeded": "This month's clicks are over the {{plan}} plan. Tracking goes on.",
+      "blocked": "Over 110% of the {{plan}} plan: tracking goes on, new campaigns and stream sets wait for a plan change.",
+      "details": "Plan and usage"
     }
   }
 }

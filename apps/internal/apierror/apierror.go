@@ -65,6 +65,13 @@ func TooManyRequests(message string) *Error {
 	return &Error{Status: http.StatusTooManyRequests, Code: "rate_limited", Message: message}
 }
 
+// PlanLimit means the organization's plan does not allow the request
+// (internal/billing): a count limit is reached, or this month's clicks are
+// well past the plan's. Only creating things is ever refused this way.
+func PlanLimit(message string) *Error {
+	return &Error{Status: http.StatusPaymentRequired, Code: "plan_limit", Message: message}
+}
+
 // Write renders err as this package's JSON error envelope. Any error not
 // constructed via this package (a repository returning a raw pgx error, a
 // bug) is logged with detail server-side and rendered to the client as an

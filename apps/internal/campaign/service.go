@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/ismagilovnail/flox/apps/internal/apierror"
+	"github.com/ismagilovnail/flox/apps/internal/billing"
 	"github.com/ismagilovnail/flox/apps/internal/idgen"
 	"github.com/ismagilovnail/flox/apps/internal/pagination"
 )
@@ -19,11 +20,26 @@ const (
 )
 
 type Service struct {
-	repo *Repository
+	repo  *Repository
+	quota billing.Gate // nil: no plan limits
 }
 
 func NewService(repo *Repository) *Service {
 	return &Service{repo: repo}
+}
+
+// WithQuota checks the organization's plan before a campaign is created or
+// duplicated (internal/billing).
+func (s *Service) WithQuota(q billing.Gate) *Service {
+	s.quota = q
+	return s
+}
+
+func (s *Service) allow(ctx context.Context, orgID string) error {
+	if s.quota == nil {
+		return nil
+	}
+	return s.quota.Allow(ctx, orgID, billing.ResourceCampaign)
 }
 
 // List returns one page of campaigns and their total (internal/pagination).
@@ -60,6 +76,9 @@ func (s *Service) Create(ctx context.Context, orgID string, in CreateInput) (Cam
 	}
 	if !belongs {
 		return Campaign{}, apierror.Validation("invalid campaign", map[string]string{"trafficSourceId": "no such traffic source in this organization"})
+	}
+	if err := s.allow(ctx, orgID); err != nil {
+		return Campaign{}, err
 	}
 
 	return s.repo.Create(ctx, idgen.New(), orgID, in)
@@ -125,6 +144,9 @@ func (s *Service) Delete(ctx context.Context, orgID, id string) error {
 func (s *Service) Duplicate(ctx context.Context, orgID, id string) (Campaign, error) {
 	source, err := s.repo.GetByID(ctx, orgID, id)
 	if err != nil {
+		return Campaign{}, err
+	}
+	if err := s.allow(ctx, orgID); err != nil {
 		return Campaign{}, err
 	}
 

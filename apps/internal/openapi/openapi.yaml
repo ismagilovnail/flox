@@ -53,6 +53,8 @@ tags:
   - name: Click log
   - name: Postback log
   - name: Reports
+  - name: Billing
+    description: The organization's plan and what it has used of it this month. Clicks count SOURCE_CLICK and SOURCE_FILTER per UTC calendar month. Over the plan the tracker keeps redirecting; from 110% of the monthly clicks, creating campaigns and stream sets answers `402 plan_limit`, as does creating past a count limit.
 
 paths:
   /campaigns:
@@ -1250,6 +1252,39 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/ReportRows" }
         default: { $ref: "#/components/responses/Error" }
+  /billing:
+    get:
+      tags: [Billing]
+      operationId: getBilling
+      summary: The plan and this month's usage
+      x-flox-scope: read
+      responses:
+        "200":
+          description: The current plan, since when, the period and its usage.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/BillingStatus" }
+        default: { $ref: "#/components/responses/Error" }
+  /billing/plans:
+    get:
+      tags: [Billing]
+      operationId: listPlans
+      summary: List the plans
+      x-flox-scope: read
+      responses:
+        "200":
+          description: The public plans, cheapest first.
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required: [plans]
+                properties:
+                  plans:
+                    type: array
+                    items: { $ref: "#/components/schemas/Plan" }
+        default: { $ref: "#/components/responses/Error" }
 
 components:
   securitySchemes:
@@ -1304,12 +1339,55 @@ components:
 
   responses:
     Error:
-      description: "An error: 401 no or invalid key, 403 the key's scope does not allow it, 404 not found (or another organization's), 409 conflict, 422 validation, 429 rate limited."
+      description: "An error: 401 no or invalid key, 402 the plan's limit (plan_limit), 403 the key's scope does not allow it, 404 not found (or another organization's), 409 conflict, 422 validation, 429 rate limited."
       content:
         application/json:
           schema: { $ref: "#/components/schemas/Error" }
 
   schemas:
+    Plan:
+      type: object
+      additionalProperties: false
+      required: [code, name, monthlyClicks, maxCampaigns, maxDomains, maxMembers, priceCents, currency]
+      description: A limit of `null` is unlimited.
+      properties:
+        code: { type: string, example: start }
+        name: { type: string }
+        monthlyClicks: { type: [integer, "null"], description: "SOURCE_CLICK + SOURCE_FILTER per UTC calendar month." }
+        maxCampaigns: { type: [integer, "null"], description: "Campaigns that are not archived." }
+        maxDomains: { type: [integer, "null"] }
+        maxMembers: { type: [integer, "null"], description: "Members and pending invites." }
+        priceCents: { type: integer, description: "Per month." }
+        currency: { type: string }
+
+    BillingStatus:
+      type: object
+      additionalProperties: false
+      required: [plan, since, period, usage, level]
+      properties:
+        plan: { $ref: "#/components/schemas/Plan" }
+        since: { type: string, format: date-time, description: "When the organization moved to this plan." }
+        period:
+          type: object
+          additionalProperties: false
+          required: [from, to]
+          properties:
+            from: { type: string, format: date, description: "First day of this month (UTC)." }
+            to: { type: string, format: date, description: "Last day, inclusive." }
+        usage:
+          type: object
+          additionalProperties: false
+          required: [clicks, campaigns, domains, members]
+          properties:
+            clicks: { type: [integer, "null"], description: "This period's clicks; null when they cannot be read right now." }
+            campaigns: { type: integer }
+            domains: { type: integer }
+            members: { type: integer }
+        level:
+          type: string
+          enum: [ok, warning, exceeded, blocked, unknown]
+          description: "warning from 80% of the monthly clicks, exceeded from 100%, blocked from 110% (no new campaigns or stream sets). unknown: clicks could not be read."
+
     Error:
       type: object
       additionalProperties: false
@@ -1317,7 +1395,7 @@ components:
       properties:
         code:
           type: string
-          enum: [not_found, validation, conflict, unauthorized, forbidden, unavailable, rate_limited, query_too_heavy, internal]
+          enum: [not_found, validation, conflict, unauthorized, forbidden, unavailable, rate_limited, query_too_heavy, plan_limit, internal]
         message: { type: string }
         fields:
           type: object

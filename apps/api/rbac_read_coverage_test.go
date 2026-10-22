@@ -11,6 +11,7 @@ import (
 // role. Anything else must carry its read permission.
 var openToEveryMember = map[string]string{
 	"/notifications": "every role reads its own notifications",
+	"/billing":       "every role is held to the plan's limits and sees them",
 }
 
 // TestEveryTenantRouteGroupIsReadGated is the read-side twin of

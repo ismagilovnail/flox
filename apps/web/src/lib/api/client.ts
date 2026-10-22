@@ -42,7 +42,7 @@ export function apiUrl(path: string): string {
 /** API error codes whose message the app shows in the user's language
  * (common:apiErrors.*) instead of the server's English text — wherever the
  * error ends up (toasts, error states, forms). */
-export const TRANSLATED_ERROR_CODES = new Set(["forbidden", "query_too_heavy"]);
+export const TRANSLATED_ERROR_CODES = new Set(["forbidden", "query_too_heavy", "plan_limit"]);
 
 let translateErrorCode: ((code: string) => string) | undefined;
 

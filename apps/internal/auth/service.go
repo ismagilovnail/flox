@@ -14,6 +14,7 @@ import (
 
 	"github.com/ismagilovnail/flox/apps/internal/apierror"
 	"github.com/ismagilovnail/flox/apps/internal/audit"
+	"github.com/ismagilovnail/flox/apps/internal/billing"
 	"github.com/ismagilovnail/flox/apps/internal/idgen"
 	"github.com/ismagilovnail/flox/apps/internal/tenant"
 	totpengine "github.com/ismagilovnail/flox/apps/internal/totp"
@@ -86,6 +87,9 @@ type Service struct {
 	totpKey []byte
 	// sms sends SMS codes (SetSMSSender); nil: SMS is not offered.
 	sms SMSSender
+	// quota checks the plan's member limit before an invite (SetQuota,
+	// internal/billing); nil: no limit.
+	quota billing.Gate
 }
 
 // appURL is apps/web's own origin (config.AppURL) — an invite link, and
@@ -559,6 +563,9 @@ func (s *Service) ListMembers(ctx context.Context, orgID string) ([]Membership, 
 	return s.repo.ListMemberships(ctx, orgID)
 }
 
+// SetQuota checks the organization's plan before an invite (internal/billing).
+func (s *Service) SetQuota(q billing.Gate) { s.quota = q }
+
 func (s *Service) Invite(ctx context.Context, orgID, actorUserID string, in InviteInput) (inviteURL string, err error) {
 	in.Email = strings.TrimSpace(strings.ToLower(in.Email))
 	in.Name = strings.TrimSpace(in.Name)
@@ -577,6 +584,11 @@ func (s *Service) Invite(ctx context.Context, orgID, actorUserID string, in Invi
 	}
 	if len(fields) > 0 {
 		return "", apierror.Validation("invalid invite", fields)
+	}
+	if s.quota != nil {
+		if err := s.quota.Allow(ctx, orgID, billing.ResourceMember); err != nil {
+			return "", err
+		}
 	}
 
 	shellUserID, err := s.repo.FindOrCreateShellUser(ctx, idgen.New(), in.Email, in.Name)

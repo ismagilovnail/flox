@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/ismagilovnail/flox/apps/internal/apierror"
+	"github.com/ismagilovnail/flox/apps/internal/billing"
 	"github.com/ismagilovnail/flox/apps/internal/domain/tlsprobe"
 	"github.com/ismagilovnail/flox/apps/internal/idgen"
 	"github.com/ismagilovnail/flox/apps/internal/integrations"
@@ -33,6 +34,14 @@ type Service struct {
 	trackerDNSTarget string
 	prober           SSLProber
 	txt              TXTResolver
+	quota            billing.Gate // nil: no plan limits
+}
+
+// WithQuota checks the organization's plan before a domain is added
+// (internal/billing).
+func (s *Service) WithQuota(q billing.Gate) *Service {
+	s.quota = q
+	return s
 }
 
 // TXTResolver looks up a name's TXT records — the system resolver in
@@ -157,6 +166,11 @@ func (s *Service) Create(ctx context.Context, orgID string, in CreateInput) (Dom
 	}
 	if fields := validate(in.Domain, in.Purpose, in.Registrar, in.DNSProvider, in.Status); len(fields) > 0 {
 		return Domain{}, apierror.Validation("invalid domain", fields)
+	}
+	if s.quota != nil {
+		if err := s.quota.Allow(ctx, orgID, billing.ResourceDomain); err != nil {
+			return Domain{}, err
+		}
 	}
 	var verifiedAt *time.Time
 	if reserved {

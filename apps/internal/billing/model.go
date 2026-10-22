@@ -1,0 +1,99 @@
+// Package billing is an organization's plan, what it has used of it this
+// month, and the soft limits that follow (audit 2026-10-15, BIZ-1;
+// docs/billing.md).
+//
+// Usage is clicks — SOURCE_CLICK + SOURCE_FILTER — per UTC calendar month,
+// read from ClickHouse's per-day rollup. Going over a plan never touches
+// the tracker (invariant #9: the redirect stays fast and the client's paid
+// traffic keeps flowing). What it does: a warning from 80%, a banner from
+// 100%, and from 110% no new campaigns or stream sets until the plan
+// changes or the month ends. Count limits (campaigns, domains, members)
+// refuse the create that would go past them.
+//
+// There is no payment provider yet: plans are assigned with
+// apps/cmd/billing. A provider comes later, behind an interface (#11).
+package billing
+
+import "time"
+
+// FreePlan is the plan of an organization with no organization_plans row.
+const FreePlan = "free"
+
+// Plan mirrors a plans row. A nil limit is unlimited.
+type Plan struct {
+	Code          string `json:"code"`
+	Name          string `json:"name"`
+	MonthlyClicks *int64 `json:"monthlyClicks"`
+	MaxCampaigns  *int   `json:"maxCampaigns"`
+	MaxDomains    *int   `json:"maxDomains"`
+	MaxMembers    *int   `json:"maxMembers"`
+	PriceCents    int    `json:"priceCents"`
+	Currency      string `json:"currency"`
+}
+
+// Resource is something a plan limits the creation of.
+type Resource string
+
+const (
+	ResourceCampaign  Resource = "campaign"
+	ResourceStreamSet Resource = "stream_set"
+	ResourceDomain    Resource = "domain"
+	ResourceMember    Resource = "member"
+)
+
+// Level is how far this month's clicks are into the plan.
+type Level string
+
+const (
+	LevelOK       Level = "ok"
+	LevelWarning  Level = "warning"  // from WarnAt
+	LevelExceeded Level = "exceeded" // from 100%
+	LevelBlocked  Level = "blocked"  // from BlockAt: no new campaigns or stream sets
+	LevelUnknown  Level = "unknown"  // clicks could not be read (no ClickHouse)
+)
+
+const (
+	WarnAt  = 0.8
+	BlockAt = 1.1
+)
+
+// Counts are what the count limits are checked against: campaigns that are
+// not archived, every domain, members that are not suspended (invited ones
+// count — they take a seat once they accept).
+type Counts struct {
+	Campaigns int `json:"campaigns"`
+	Domains   int `json:"domains"`
+	Members   int `json:"members"`
+}
+
+// Usage is this period's clicks (nil when unknown) and the counts.
+type Usage struct {
+	Clicks *int64 `json:"clicks"`
+	Counts
+}
+
+// Period is a UTC calendar month: From inclusive, To exclusive.
+type Period struct {
+	From time.Time
+	To   time.Time
+}
+
+// Status is GET /billing: the plan, since when, this period and its usage.
+type Status struct {
+	Plan   Plan      `json:"plan"`
+	Since  time.Time `json:"since"`
+	Period struct {
+		From string `json:"from"` // first day, YYYY-MM-DD
+		To   string `json:"to"`   // last day, inclusive
+	} `json:"period"`
+	Usage Usage `json:"usage"`
+	Level Level `json:"level"`
+}
+
+// Change is one organization_plans row, for apps/cmd/billing's history.
+type Change struct {
+	PlanCode  string
+	StartedAt time.Time
+	EndedAt   *time.Time
+	Note      string
+}

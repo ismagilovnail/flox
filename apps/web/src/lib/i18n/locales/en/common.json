@@ -92,7 +92,8 @@
   },
   "apiErrors": {
     "query_too_heavy": "This report needs more time or memory than allowed. Narrow the date range or remove a breakdown.",
-    "forbidden": "You don't have permission for this action."
+    "forbidden": "You don't have permission for this action.",
+    "plan_limit": "Your plan's limit is reached. See Settings › Plan."
   },
   "dataGrid": {
     "range": "{{first}}–{{last}} of {{total}}",

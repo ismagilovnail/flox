@@ -5,6 +5,51 @@ per-phase, matching `CLAUDE.md`'s phase protocol. The one exception is
 [Between phases], below: spec amendments and the code changes that follow from
 them land between phases and would otherwise be invisible here.
 
+## [Phase 30.58] — Plans, usage, soft limits (audit BIZ-1, first part)
+
+You chose BIZ-1 and decided on: clicks as the unit (SOURCE_CLICK + SOURCE_FILTER), soft limits (Free included),
+no payment provider yet, and draft plans. `docs/billing.md`.
+
+- Migration 00094 adds `plans` (rows, not code; a NULL limit means unlimited). Draft plans:
+  - Free: 100K clicks, 5 campaigns, 1 domain, 2 members;
+  - Start: 1M clicks, 50 campaigns, 5 domains, 5 members, $49;
+  - Pro: 5M clicks, unlimited campaigns, 20 domains, 15 members, $149;
+  - Business: 20M clicks, no other limits, $399.
+
+  It also adds `organization_plans` (one open row per organization; no row means Free since signup; FK cascade, so
+  the rows are covered by deletion and export).
+- `internal/billing` counts clicks per UTC calendar month from the `click_events_daily_campaign` rollup. When
+  ClickHouse is down, clicks are unknown, never zero, and block nothing.
+- Click levels:
+  - warning from 80%;
+  - exceeded from 100%;
+  - blocked from 110%: creating or duplicating a campaign or stream set answers `402 plan_limit`.
+
+  The tracker, postbacks and reports are never limited.
+- Count limits answer `402 plan_limit` on creating or duplicating a campaign, adding a domain, and inviting a member.
+  The check goes through `billing.Gate`, attached in `apps/api` only (`WithQuota`/`SetQuota`).
+- API: `GET /v1/billing` and `GET /v1/billing/plans` are in the OpenAPI reference (tag Billing). `plan_limit` was
+  added to the error enum. Every role can read them.
+- `apps/cmd/billing`: `plans`, `show`, `set-plan` (in a transaction, with an audit row `billing.plan_changed`). Dev
+  fixtures put FLOX Demo on Business; FLOX Other stays on Free.
+- UI:
+  - Settings › Plan: the month's clicks against the plan with a progress bar, the counts against their limits, a
+    table of plans, and the text "write to the FLOX team" (no checkout to link to yet);
+  - a banner on every page from 80%;
+  - `plan_limit` shown as a translated error. EN/RU.
+- Tests:
+  - Go full suite with the full env: only the known gallery-WIP failure. e2e passed with nothing skipped.
+  - New tests: `internal/billing` (levels, UTC period edges, Allow, fail-open, repository with org isolation,
+    ClickHouse month edges and SOURCE_FILTER) and `api/billing_test.go` (402 through the router, plan change lifts
+    it, `/billing` counts only the caller's organization).
+  - vitest 212/212 (`billing-panel.test.tsx`, new); eslint, tsc, `next build`.
+- Checked in the browser:
+  - Demo on Business;
+  - Other on Free at 95%: warning banner;
+  - Other at 120%: red banner, "New campaigns paused", and creating a campaign shows the translated limit error.
+
+  The test clicks and source were removed afterwards.
+
 ## [Phase 30.57] — Public API reference (audit API-1)
 
 You chose API-1 from the board. `docs/public-api.md`.

@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/ismagilovnail/flox/apps/internal/apierror"
+	"github.com/ismagilovnail/flox/apps/internal/billing"
 	"github.com/ismagilovnail/flox/apps/internal/idgen"
 	"github.com/ismagilovnail/flox/apps/internal/routing"
 )
@@ -48,11 +49,26 @@ var operatorsWithoutValue = map[routing.FilterOperator]bool{routing.OpExists: tr
 var isoAlpha2 = regexp.MustCompile(`^[A-Z]{2}$`)
 
 type Service struct {
-	repo *Repository
+	repo  *Repository
+	quota billing.Gate // nil: no plan limits
 }
 
 func NewService(repo *Repository) *Service {
 	return &Service{repo: repo}
+}
+
+// WithQuota checks the organization's plan before a stream set is created
+// or duplicated (internal/billing).
+func (s *Service) WithQuota(q billing.Gate) *Service {
+	s.quota = q
+	return s
+}
+
+func (s *Service) allow(ctx context.Context, orgID string) error {
+	if s.quota == nil {
+		return nil
+	}
+	return s.quota.Allow(ctx, orgID, billing.ResourceStreamSet)
 }
 
 func (s *Service) List(ctx context.Context, orgID, campaignID string) ([]StreamSet, error) {
@@ -96,6 +112,9 @@ func (s *Service) Create(ctx context.Context, orgID, campaignID string, in Creat
 	}
 	if !belongs {
 		return StreamSet{}, apierror.NotFound("campaign not found")
+	}
+	if err := s.allow(ctx, orgID); err != nil {
+		return StreamSet{}, err
 	}
 
 	in.Flows, err = s.resolveFlowNetworks(ctx, orgID, in.Flows)
@@ -183,6 +202,9 @@ func (s *Service) Delete(ctx context.Context, orgID, campaignID, id string) erro
 func (s *Service) Duplicate(ctx context.Context, orgID, campaignID, id string) (StreamSet, error) {
 	source, err := s.repo.GetByID(ctx, orgID, campaignID, id)
 	if err != nil {
+		return StreamSet{}, err
+	}
+	if err := s.allow(ctx, orgID); err != nil {
 		return StreamSet{}, err
 	}
 

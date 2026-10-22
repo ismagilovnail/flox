@@ -29,6 +29,7 @@ import (
 	"github.com/ismagilovnail/flox/apps/internal/attribution"
 	"github.com/ismagilovnail/flox/apps/internal/audit"
 	"github.com/ismagilovnail/flox/apps/internal/auth"
+	"github.com/ismagilovnail/flox/apps/internal/billing"
 	"github.com/ismagilovnail/flox/apps/internal/campaign"
 	"github.com/ismagilovnail/flox/apps/internal/chconn"
 	"github.com/ismagilovnail/flox/apps/internal/chstore"
@@ -302,6 +303,15 @@ func buildServer(ctx context.Context, cfg config.Config, logger *slog.Logger, re
 
 	authRepo := auth.NewRepository(db)
 	authSvc := auth.NewService(authRepo, cfg.AppURL, mail)
+	// The plan and its soft limits (internal/billing, BIZ-1): checked when
+	// campaigns, stream sets, domains and invites are created. Without
+	// ClickHouse clicks are unknown and never refuse anything.
+	var clickUsage billing.UsageReader
+	if ch != nil {
+		clickUsage = billing.NewCHUsage(ch)
+	}
+	billingSvc := billing.NewService(billing.NewRepository(db), clickUsage, logger)
+	authSvc.SetQuota(billingSvc)
 	authHandler := auth.NewHandler(authSvc, logger, cfg.Env != "development", clientIP)
 	teamHandler := auth.NewTeamHandler(authSvc, logger)
 	organizationHandler := auth.NewOrganizationHandler(authSvc, logger)
@@ -473,7 +483,7 @@ func buildServer(ctx context.Context, cfg config.Config, logger *slog.Logger, re
 	openapiHandler.Register(srv.Mux())
 
 	campaignRepo := campaign.NewRepository(db)
-	campaignSvc := campaign.NewService(campaignRepo)
+	campaignSvc := campaign.NewService(campaignRepo).WithQuota(billingSvc)
 	campaignHandler := campaign.NewHandler(campaignSvc, requireCampaignWrite, logger)
 	srv.Mux().Route("/campaigns", func(r chi.Router) {
 		r.Use(tenantMiddleware)
@@ -541,7 +551,8 @@ func buildServer(ctx context.Context, cfg config.Config, logger *slog.Logger, re
 	// operator-declared.
 	domainHandler := domain.NewHandler(
 		domain.NewService(domain.NewRepository(db), integrationsSvc, domainnamecheap.New(), domaincloudflare.New(), cfg.TrackerDNSTarget, &tlsprobe.Prober{}).
-			WithCloudflareRegistrar(domaincloudflare.NewRegistrar()),
+			WithCloudflareRegistrar(domaincloudflare.NewRegistrar()).
+			WithQuota(billingSvc),
 		requireSettingsWrite,
 		logger,
 	)
@@ -742,7 +753,7 @@ func buildServer(ctx context.Context, cfg config.Config, logger *slog.Logger, re
 		costSyncHandler.Register(r)
 	})
 
-	streamSetHandler := streamset.NewHandler(streamset.NewService(streamset.NewRepository(db)), requireCampaignWrite, logger)
+	streamSetHandler := streamset.NewHandler(streamset.NewService(streamset.NewRepository(db)).WithQuota(billingSvc), requireCampaignWrite, logger)
 	srv.Mux().Route("/campaigns/{campaignId}/stream-sets", func(r chi.Router) {
 		r.Use(tenantMiddleware)
 		r.Use(readGate("campaign.read"))
@@ -770,6 +781,14 @@ func buildServer(ctx context.Context, cfg config.Config, logger *slog.Logger, re
 		clickProbe = onboarding.NewCHClickProbe(ch)
 	}
 	onboardingHandler := onboarding.NewHandler(onboarding.NewService(onboarding.NewRepository(db), clickProbe, logger), logger)
+	// Every member reads the plan whose limits they are held to
+	// (rbac_read_coverage_test.go openToEveryMember).
+	billingHandler := billing.NewHandler(billingSvc, logger)
+	srv.Mux().Route("/billing", func(r chi.Router) {
+		r.Use(tenantMiddleware)
+		billingHandler.Register(r)
+	})
+
 	srv.Mux().Route("/onboarding", func(r chi.Router) {
 		r.Use(tenantMiddleware)
 		r.Use(readGate("analytics.read"))
