@@ -87,6 +87,19 @@ groups:
           summary: "apps/tracker cannot write events to Postgres"
           description: "flox_events_queue_write_retries_total has been increasing for 2m — apps/tracker keeps retrying event writes into event_queue. Events wait in its in-memory buffer; once it fills they are dropped (EventLossDetected). Check Postgres reachability from the tracker."
 
+      - alert: EventLossWindowGrowing
+        # What a crash of apps/tracker would lose (audit REL-1): events
+        # only in memory, the oldest waiting this long. Normally under the
+        # 250 ms flush interval; 30 s means the sink has been stuck that
+        # long and a tracker restart now loses every click since.
+        expr: max(flox_events_buffer_oldest_seconds) > 30
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: "apps/tracker holds unwritten events in memory"
+          description: "A tracker has held events for over 30s without writing them (flox_events_buffer_oldest_seconds; flox_events_buffer_pending of them). They are lost if it crashes or is killed now — fix the event sink (Postgres event_queue / NATS) before restarting trackers."
+
       - alert: QueueBatchesDeadLettered
         # pgqueue.Fail: ClickHouse rejected a batch 5 times. The rows are
         # kept in Postgres (status 'dead') but are missing from reports

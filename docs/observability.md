@@ -55,6 +55,7 @@ is what tells them apart on a dashboard).
 | `event_processing_latency` | `flox_event_processing_latency_seconds` | `eventqueue.Flusher.RunOnce` — the ClickHouse `InsertBatch` call only |
 | `event_queue_depth` | `flox_event_queue_depth` | `eventqueue.PollDepth`, a new goroutine in `apps/worker/main.go`, polling `PostgresQueue.Depth` (new method) every 15s |
 | `event_loss` (enqueued vs persisted) | `flox_events_enqueued_total`, `flox_events_buffer_dropped_total`, `flox_events_queue_written_total`, `flox_events_queue_write_failed_total` (all `apps/tracker`, from `eventbuf.Writer.Stats()`) **+** `flox_events_persisted_total`, `flox_events_requeued_total` (`apps/worker`, from `eventqueue.Flusher`) | See "Why event_loss is two counters, not one" below |
+| — (crash loss window, REL-1) | `flox_events_buffer_pending`, `flox_events_buffer_oldest_seconds` (gauges, `apps/tracker`) | What a crash of the tracker would lose now; normally under the 250 ms flush interval. Alert `EventLossWindowGrowing` at 30 s (`docs/analytics-pipeline.md` "What a crash of the tracker loses") |
 | `postback_success` / `postback_failure` | `flox_postback_deliveries_total{outcome}` | `postback.Deliverer.logAttempt` — outcome is `success`/`retrying`/`dead` |
 | — (pixels, §29) | `flox_pixel_deliveries_total{provider,outcome}` | `pixelsend.Deliverer.record` — outcome is `success`/`retrying`/`dead` |
 | — (push) | `flox_push_deliveries_total{outcome}` | `pushsend.Deliverer.record` — outcome is `delivered`/`gone`/`retry`/`failed` (`docs/push.md`) |

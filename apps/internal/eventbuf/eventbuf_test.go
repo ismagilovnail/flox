@@ -325,3 +325,61 @@ func TestEnqueueAssignsEventIDs(t *testing.T) {
 		t.Fatalf("ids = %q, %q; want a generated one and \"kept\"", sink.events[0].ID, sink.events[1].ID)
 	}
 }
+
+// Audit REL-1: what a crash would lose is measured. With a healthy sink,
+// events wait in memory for about the flush interval and no longer.
+func TestLossWindowIsTheFlushIntervalWhenHealthy(t *testing.T) {
+	sink := &collectingSink{}
+	const interval = 40 * time.Millisecond
+	w := eventbuf.New(sink, quietLogger(), eventbuf.Config{BufferSize: 1000, BatchSize: 10_000, FlushInterval: interval})
+	defer w.Close()
+
+	var worst time.Duration
+	deadline := time.Now().Add(300 * time.Millisecond)
+	for time.Now().Before(deadline) {
+		w.Enqueue(event.Event{Type: event.SourceClick})
+		if s := w.Stats(); s.OldestPending > worst {
+			worst = s.OldestPending
+		}
+		time.Sleep(time.Millisecond)
+	}
+	if worst == 0 || worst > 3*interval {
+		t.Errorf("oldest in-memory event waited %s at worst, want about the %s flush interval", worst, interval)
+	}
+	waitFor(t, func() bool { s := w.Stats(); return s.Pending == 0 && s.OldestPending == 0 }, "everything flushed")
+}
+
+// While the sink is stuck, the window grows — visible, so it can alert —
+// and closes once the sink takes the batch.
+func TestLossWindowGrowsWhileTheSinkIsStuck(t *testing.T) {
+	sink := newBlockingSink()
+	w := eventbuf.New(sink, quietLogger(), eventbuf.Config{BufferSize: 100, BatchSize: 1, FlushInterval: time.Hour})
+	for i := 0; i < 5; i++ {
+		w.Enqueue(event.Event{Type: event.SourceClick})
+	}
+	time.Sleep(60 * time.Millisecond)
+	if s := w.Stats(); s.Pending != 5 || s.OldestPending < 50*time.Millisecond {
+		t.Fatalf("stuck sink: %+v, want 5 pending, the oldest waiting ≥ 50ms", s)
+	}
+	sink.unblock()
+	waitFor(t, func() bool { s := w.Stats(); return s.Pending == 0 && s.OldestPending == 0 }, "the window to close")
+	w.Close()
+}
+
+// Events given up on at shutdown leave memory too: Pending counts only
+// what is still at risk.
+func TestPendingExcludesWhatWasGivenUp(t *testing.T) {
+	w := eventbuf.New(failingSink{}, quietLogger(), eventbuf.Config{
+		BufferSize: 10, BatchSize: 1, FlushInterval: time.Hour,
+		RetryMin: time.Millisecond, RetryMax: 5 * time.Millisecond, ShutdownRetryBudget: 30 * time.Millisecond,
+	})
+	w.Enqueue(event.Event{Type: event.SourceClick})
+	waitFor(t, func() bool { return w.Stats().Retried >= 2 }, "retries")
+	if s := w.Stats(); s.Pending != 1 {
+		t.Fatalf("while retrying: pending %d, want 1", s.Pending)
+	}
+	w.Close()
+	if s := w.Stats(); s.Pending != 0 || s.Failed != 1 {
+		t.Errorf("after giving up: %+v, want nothing pending, 1 failed", s)
+	}
+}

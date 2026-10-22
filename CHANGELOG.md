@@ -5,6 +5,28 @@ per-phase, matching `CLAUDE.md`'s phase protocol. The one exception is
 [Between phases], below: spec amendments and the code changes that follow from
 them land between phases and would otherwise be invisible here.
 
+## [Phase 30.64] — The tracker's crash loss window, measured and narrowed (audit REL-1)
+
+You chose metrics plus a shorter flush, without a disk spool. docs/analytics-pipeline.md "What a crash of the
+tracker loses".
+
+- Measured from the code:
+  - normally a hard crash loses up to the flush interval plus the batch in flight;
+  - while the event sink fails, the window grows with the outage, up to about 10 500 events per replica.
+- `eventbuf.Stats` gains `Pending` (events only in memory) and `OldestPending` (how long the oldest has waited),
+  exported as `flox_events_buffer_pending` and `flox_events_buffer_oldest_seconds`. The new alert
+  `EventLossWindowGrowing` fires at 30 s, meaning do not restart trackers before fixing the sink.
+- The default flush interval drops from 1 s to 250 ms: about a quarter of a second of clicks at risk per crashed
+  replica.
+- **Decided against:** a local disk spool. The accepted risk, a sink outage and a crash together, is documented.
+- Tests:
+  - the window stays near the flush interval with a healthy sink, grows and closes with a stuck one, and excludes
+    events given up on (`-race`);
+  - promtool checks the rules (32);
+  - the gauges are live on the dev tracker;
+  - Go full suite with the full env: only the known gallery-WIP failure. e2e passed with nothing skipped. No
+    frontend change; no browser pass.
+
 ## [Phase 30.63] — A Buyer reads only their campaigns (audit TEAM-1b)
 
 Agreed earlier: a buyer sees only their own campaigns. Push and alerts stay team-wide, which you chose. docs/team.md

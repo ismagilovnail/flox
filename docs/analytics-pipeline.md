@@ -238,6 +238,40 @@ final total" would undercount whenever a merge hasn't run yet.
 (`has_usd_value = 0`) contributes exactly zero, not a fabricated value, and
 the multiplication makes that exact rather than approximate.
 
+## What a crash of the tracker loses (audit REL-1)
+
+`apps/tracker` writes events asynchronously (CLAUDE.md #9): a click is
+accepted into `internal/eventbuf`'s memory, and a background loop flushes
+batches to the sink (Postgres `event_queue` or NATS). A graceful stop
+drains the buffer. A hard crash (SIGKILL, OOM, node loss) loses whatever is
+still only in memory.
+
+- **Normally:** up to the flush interval, now **250 ms** (it was 1 s), plus
+  the batch in flight — about a quarter of a second of clicks per crashed
+  replica.
+- **While the sink is failing:** the batch is retried and new events wait
+  in the 10 000-event buffer, so the window grows with the outage. Once the
+  buffer is full, new events are dropped even without a crash
+  (`EventLossDetected`).
+
+The window is measured, not guessed:
+
+- `flox_events_buffer_pending` is how many events are only in memory;
+- `flox_events_buffer_oldest_seconds` is how long the oldest of them has
+  waited;
+- `EventLossWindowGrowing` alerts when that passes 30 s, meaning do not
+  restart trackers until the sink is fixed.
+
+Tests: `TestLossWindowIsTheFlushIntervalWhenHealthy`,
+`TestLossWindowGrowsWhileTheSinkIsStuck`, `TestPendingExcludesWhatWasGivenUp`.
+
+**Decided against, for now:** a local disk spool that would carry events
+through a sink outage and a crash. It needs a disk per tracker replica that
+survives restarts. The accepted risk is a sink outage and a tracker crash at
+the same time, which can lose up to about 10 000 clicks per replica.
+Writing to disk inside the redirect would close even the 250 ms, but it
+would break the redirect budget (#9).
+
 ## The queue: `event_queue` (Postgres) — unchanged since Phase 25
 
 > Since 2026-10-10, with `NATS_URL` set, the tracker's events travel

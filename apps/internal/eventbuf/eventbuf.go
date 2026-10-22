@@ -21,6 +21,13 @@
 // outage outlasts the buffer do they start being dropped. On Close, retries
 // get ShutdownRetryBudget and whatever is still unwritten is counted as
 // failed.
+//
+// What a hard crash loses (audit REL-1, docs/analytics-pipeline.md): the
+// events still only in memory — Stats.Pending, the oldest of them
+// Stats.OldestPending old. Normally that is under FlushInterval (250 ms)
+// of clicks; while the sink is failing it grows until the sink recovers
+// or the buffer fills. apps/tracker exports both as gauges so the window
+// is watched, not guessed.
 package eventbuf
 
 import (
@@ -84,7 +91,10 @@ func (c Config) withDefaults() Config {
 		c.BatchSize = 500
 	}
 	if c.FlushInterval <= 0 {
-		c.FlushInterval = time.Second
+		// Short on purpose: it bounds what a crash of the tracker loses in
+		// normal operation (REL-1). Four writes a second is still a light
+		// load on the sink.
+		c.FlushInterval = 250 * time.Millisecond
 	}
 	if c.RetryMin <= 0 {
 		c.RetryMin = 100 * time.Millisecond
@@ -103,7 +113,7 @@ type Writer struct {
 	sink   Sink
 	logger *slog.Logger
 
-	ch        chan event.Event
+	ch        chan pending
 	done      chan struct{}
 	wg        sync.WaitGroup
 	closeOnce sync.Once
@@ -114,6 +124,17 @@ type Writer struct {
 	written  atomic.Uint64
 	failed   atomic.Uint64
 	retried  atomic.Uint64
+	// inMemory counts events accepted and not yet written or given up on;
+	// oldest is when the oldest of them was accepted (unix nanoseconds, 0
+	// when none) — together, what a crash would lose now.
+	inMemory atomic.Int64
+	oldest   atomic.Int64
+}
+
+// pending is an accepted event with the moment it was accepted.
+type pending struct {
+	e  event.Event
+	at int64
 }
 
 func New(sink Sink, logger *slog.Logger, cfg Config) *Writer {
@@ -122,7 +143,7 @@ func New(sink Sink, logger *slog.Logger, cfg Config) *Writer {
 		cfg:    cfg,
 		sink:   sink,
 		logger: logger,
-		ch:     make(chan event.Event, cfg.BufferSize),
+		ch:     make(chan pending, cfg.BufferSize),
 		done:   make(chan struct{}),
 	}
 	w.wg.Add(1)
@@ -144,8 +165,9 @@ func (w *Writer) Enqueue(e event.Event) bool {
 		return false
 	}
 	select {
-	case w.ch <- e:
+	case w.ch <- pending{e: e, at: time.Now().UnixNano()}:
 		w.enqueued.Add(1)
+		w.inMemory.Add(1)
 		return true
 	default:
 		// Buffer full: drop rather than block the redirect. Counted, and
@@ -166,18 +188,27 @@ func (w *Writer) run() {
 	ticker := time.NewTicker(w.cfg.FlushInterval)
 	defer ticker.Stop()
 
+	// The batch's first event is the oldest in memory: the channel only
+	// holds events accepted after it.
+	add := func(p pending) {
+		if len(batch) == 0 {
+			w.oldest.Store(p.at)
+		}
+		batch = append(batch, p.e)
+	}
 	flush := func() {
 		if len(batch) == 0 {
 			return
 		}
 		w.write(batch)
 		batch = make([]event.Event, 0, w.cfg.BatchSize)
+		w.oldest.Store(0)
 	}
 
 	for {
 		select {
-		case e := <-w.ch:
-			batch = append(batch, e)
+		case p := <-w.ch:
+			add(p)
 			if len(batch) >= w.cfg.BatchSize {
 				flush()
 			}
@@ -188,8 +219,8 @@ func (w *Writer) run() {
 			// shutdown doesn't discard events that were already accepted.
 			for {
 				select {
-				case e := <-w.ch:
-					batch = append(batch, e)
+				case p := <-w.ch:
+					add(p)
 					if len(batch) >= w.cfg.BatchSize {
 						flush()
 					}
@@ -227,6 +258,7 @@ func (w *Writer) write(batch []event.Event) {
 		cancel()
 		if err == nil {
 			w.written.Add(uint64(len(batch)))
+			w.inMemory.Add(-int64(len(batch)))
 			return
 		}
 
@@ -236,6 +268,7 @@ func (w *Writer) write(batch []event.Event) {
 			retry = se.Retry
 			w.failed.Add(uint64(se.Dropped))
 			w.written.Add(uint64(len(batch) - len(se.Retry) - se.Dropped))
+			w.inMemory.Add(-int64(len(batch) - len(se.Retry)))
 			if se.Dropped > 0 {
 				w.logger.Error("event sink refused events for good", "error", err, "dropped", se.Dropped)
 			}
@@ -251,6 +284,7 @@ func (w *Writer) write(batch []event.Event) {
 			}
 			if !time.Now().Before(shutdownDeadline) {
 				w.failed.Add(uint64(len(batch)))
+				w.inMemory.Add(-int64(len(batch)))
 				w.logger.Error("event sink still failing at shutdown, giving up on batch",
 					"error", err, "batch_size", len(batch), "attempts", attempt)
 				return
@@ -291,6 +325,10 @@ type Stats struct {
 	Failed uint64
 	// Retried counts failed write attempts that were retried.
 	Retried uint64
+	// Pending is how many events are only in memory now, OldestPending how
+	// long the oldest of them has waited: what a crash would lose.
+	Pending       int64
+	OldestPending time.Duration
 }
 
 func (w *Writer) Stats() Stats {
@@ -300,5 +338,12 @@ func (w *Writer) Stats() Stats {
 		Written:  w.written.Load(),
 		Failed:   w.failed.Load(),
 		Retried:  w.retried.Load(),
+		Pending:  w.inMemory.Load(),
+		OldestPending: func() time.Duration {
+			if at := w.oldest.Load(); at != 0 {
+				return time.Since(time.Unix(0, at))
+			}
+			return 0
+		}(),
 	}
 }

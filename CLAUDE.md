@@ -19,7 +19,7 @@ referenced below as §N).
 ## CURRENT STATE — UPDATE THIS EVERY PHASE
 
 ```
-CURRENT PHASE : PHASE 30.63 — TEAM-1b, BUYER READ SCOPE (closed)
+CURRENT PHASE : PHASE 30.64 — REL-1, CRASH LOSS WINDOW (closed)
 STATUS        : Product audit 2026-10-15 (docs/audit-product-2026-10-15.md)
                 is the backlog: items on the local dev panel tools/devpanel
                 (make devpanel → 127.0.0.1:8099; memory: flox-audit-tracker
@@ -51,9 +51,11 @@ STATUS        : Product audit 2026-10-15 (docs/audit-product-2026-10-15.md)
                 per request) limits every campaign-data read for Buyers —
                 a new read of campaign data must use it and be listed in
                 api/campaign_scope_test.go. Push/alerts stay team-wide.
+                REL-1: tracker flush 250 ms, loss-window gauges + alert;
+                disk spool declined by the user (risk documented).
                 P0 left (skipped by the user for now):
                 OPS-1..3 (prod, restore, load) — needs the owner's hosting.
-LAST COMMIT   : feat(campaigns): buyers read only their campaigns.
+LAST COMMIT   : feat(tracker): measure and narrow the crash loss window.
 UNCOMMITTED   : the user's gallery-transcoding WIP (00085, processor.go,
                 transcode.go, worker ffmpeg) — not ours, leave it alone.
                 It now accepts MOV, so contentgallery's

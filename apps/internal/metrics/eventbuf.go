@@ -43,6 +43,20 @@ func RegisterEventBufStats(w *eventbuf.Writer) {
 		Help:      "Events lost writing into Postgres event_queue: refused for good (e.g. organization deleted) or still failing when shutdown's retry budget ran out. A failed write is otherwise retried, see events_queue_write_retries_total.",
 	}, func() float64 { return float64(w.Stats().Failed) })
 
+	// The loss window (audit REL-1): what a crash of the tracker would
+	// lose right now — gauges, not counters.
+	promauto.NewGaugeFunc(prometheus.GaugeOpts{
+		Namespace: namespace,
+		Name:      "events_buffer_pending",
+		Help:      "Events accepted by apps/tracker but not yet written to the event sink — lost if the process dies now.",
+	}, func() float64 { return float64(w.Stats().Pending) })
+
+	promauto.NewGaugeFunc(prometheus.GaugeOpts{
+		Namespace: namespace,
+		Name:      "events_buffer_oldest_seconds",
+		Help:      "How long the oldest unwritten event has waited in apps/tracker's memory (0: none). Normally under the flush interval.",
+	}, func() float64 { return w.Stats().OldestPending.Seconds() })
+
 	promauto.NewCounterFunc(prometheus.CounterOpts{
 		Namespace: namespace,
 		Name:      "events_queue_write_retries_total",
