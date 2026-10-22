@@ -185,7 +185,10 @@ func (h *Handler) track(w http.ResponseWriter, r *http.Request) {
 	clickID := clickIDFor(sticky, result, loaded.StickyFlowKeepClickID)
 
 	ev := buildEvent(link, result, attrs, params, clickID, ip, r)
-	ev.VisitorKey = visitorkey.Of(h.visitorKey, ev.IP, ev.UserAgent)
+	// Unique clicks count browsers by their visitor cookie (audit DATA-5);
+	// the IP + user agent pseudonym is kept beside it for comparison.
+	ev.VisitorKey = visitorkey.FromCookie(h.visitorKey, h.visitorID(w, r))
+	ev.IPVisitorKey = visitorkey.Of(h.visitorKey, ev.IP, ev.UserAgent)
 	// The network of the offer the click was routed to, as it is now — an
 	// offer moved to another network later keeps this click on this one.
 	if result.OfferID != "" {
@@ -388,4 +391,28 @@ func hostWithoutPort(host string) string {
 		return h
 	}
 	return host
+}
+
+// visitorID is the browser's visitor cookie (audit DATA-5), set on this
+// click when it has none or a malformed one. "" without VISITOR_KEY: the
+// cookie would identify nobody, and unique clicks fall back to IP + user
+// agent in the report.
+func (h *Handler) visitorID(w http.ResponseWriter, r *http.Request) string {
+	if len(h.visitorKey) == 0 {
+		return ""
+	}
+	if c, err := r.Cookie(visitorkey.CookieName); err == nil && visitorkey.ValidID(c.Value) {
+		return c.Value
+	}
+	id := visitorkey.NewID()
+	http.SetCookie(w, &http.Cookie{
+		Name:     visitorkey.CookieName,
+		Value:    id,
+		Path:     "/",
+		MaxAge:   stickyMaxAge,
+		HttpOnly: true,
+		Secure:   true,
+		SameSite: http.SameSiteLaxMode,
+	})
+	return id
 }

@@ -134,3 +134,7 @@ func TestCampaignDailyRejectsRangeTooWide(t *testing.T) {
 func (r *fakeRepo) FlowStageCounts(context.Context, string, time.Time, time.Time, []string, []string) (map[string]map[string]uint64, error) {
 	return nil, nil
 }
+
+func (r *fakeRepo) UniqueCheck(context.Context, string, time.Time, time.Time, []string) ([]chstore.UniqueCheckRow, error) {
+	return nil, nil
+}

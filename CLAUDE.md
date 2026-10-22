@@ -19,7 +19,7 @@ referenced below as §N).
 ## CURRENT STATE — UPDATE THIS EVERY PHASE
 
 ```
-CURRENT PHASE : PHASE 30.64 — REL-1, CRASH LOSS WINDOW (closed)
+CURRENT PHASE : PHASE 30.65 — DATA-5, UNIQUE CLICKS BY COOKIE (closed)
 STATUS        : Product audit 2026-10-15 (docs/audit-product-2026-10-15.md)
                 is the backlog: items on the local dev panel tools/devpanel
                 (make devpanel → 127.0.0.1:8099; memory: flox-audit-tracker
@@ -53,15 +53,18 @@ STATUS        : Product audit 2026-10-15 (docs/audit-product-2026-10-15.md)
                 api/campaign_scope_test.go. Push/alerts stay team-wide.
                 REL-1: tracker flush 250 ms, loss-window gauges + alert;
                 disk spool declined by the user (risk documented).
+                DATA-5: visitor cookie fv → visitor_key; IP+UA kept in
+                ip_visitor_key (schema/021); /analytics/unique-check.
                 P0 left (skipped by the user for now):
                 OPS-1..3 (prod, restore, load) — needs the owner's hosting.
-LAST COMMIT   : feat(tracker): measure and narrow the crash loss window.
+LAST COMMIT   : feat(tracker): unique clicks by visitor cookie.
 UNCOMMITTED   : the user's gallery-transcoding WIP (00085, processor.go,
                 transcode.go, worker ffmpeg) — not ours, leave it alone.
                 It now accepts MOV, so contentgallery's
                 TestUploadRejectsOversizeWrongContentAndMov fails with it.
 NEXT          : wait for the user — next item from the board (P1: BIZ-2..4;
-                P2: DATA-5, SEC-6, BUG-7, …). INT-2 is
+                P2: SEC-6, GAP-2, BUG-7, …; BUG-1..4: ask the user
+                whose they are). INT-2 is
                 excluded: the owner does it later themselves — do not
                 offer it. No browser checks without the user's OK
                 (memory: flox-no-browser-without-ok). To try payments for

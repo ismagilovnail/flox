@@ -48,6 +48,7 @@ func (h *Handler) Register(r chi.Router) {
 	r.Post("/cost-timezones", h.costTimezones)
 	r.Post("/dimension-values", h.dimensionValues)
 	r.Get("/buyers", h.buyers)
+	r.Get("/unique-check", h.uniqueCheck)
 }
 
 // buyers answers GET /analytics/buyers: the members who own campaigns,
@@ -645,4 +646,33 @@ func (h *Handler) flowSummary(w http.ResponseWriter, r *http.Request) {
 		resp[i] = flowSummaryResponse{FlowID: f.FlowID, Counts: f.Counts}
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"flows": resp})
+}
+
+type uniqueCheckRow struct {
+	Device   string `json:"device"`
+	Clicks   uint64 `json:"clicks"`
+	ByCookie uint64 `json:"uniqueByCookie"`
+	ByIP     uint64 `json:"uniqueByIpUserAgent"`
+}
+
+// uniqueCheck answers GET /analytics/unique-check?from=&to= (audit DATA-5):
+// per device, unique clicks by visitor cookie beside the IP + user agent
+// count.
+func (h *Handler) uniqueCheck(w http.ResponseWriter, r *http.Request) {
+	orgID, _ := tenant.OrgID(r.Context())
+	from, to, err := parseDateRangeBody(r.URL.Query().Get("from"), r.URL.Query().Get("to"))
+	if err != nil {
+		apierror.Write(w, h.logger, err)
+		return
+	}
+	rows, err := h.svc.UniqueCheck(r.Context(), orgID, from, to)
+	if err != nil {
+		apierror.Write(w, h.logger, err)
+		return
+	}
+	out := make([]uniqueCheckRow, len(rows))
+	for i, x := range rows {
+		out[i] = uniqueCheckRow{Device: x.Device, Clicks: x.Clicks, ByCookie: x.ByCookie, ByIP: x.ByIP}
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"devices": out})
 }

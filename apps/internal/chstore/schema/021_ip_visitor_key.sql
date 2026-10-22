@@ -1,0 +1,12 @@
+-- ip_visitor_key on click_events (audit DATA-5). Since this file,
+-- visitor_key — what unique clicks count — is the pseudonym of the
+-- tracker's visitor cookie (visitorkey.FromCookie): phones behind one
+-- carrier IP with the same user agent are different visitors. The old
+-- IP + user agent pseudonym (visitorkey.Of) is kept here, so the two can
+-- be compared on real traffic (chstore.UniqueCheck). Clicks from before
+-- this file have it empty: their visitor_key already is the IP + user
+-- agent one.
+--
+-- Appended last, after 020's visitor_key — chstore.EventStore appends
+-- positionally; keep the order in sync.
+ALTER TABLE click_events ADD COLUMN IF NOT EXISTS ip_visitor_key String;

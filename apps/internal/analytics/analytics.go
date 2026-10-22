@@ -30,6 +30,7 @@ type Repository interface {
 	FunnelCounts(ctx context.Context, organizationID string, from, to time.Time, filters []chstore.ReportFilter) (map[string]uint64, error)
 	DistinctValues(ctx context.Context, organizationID string, dim chstore.ReportDimension, from, to time.Time, limit int, campaigns []string) ([]string, error)
 	FlowStageCounts(ctx context.Context, organizationID string, from, to time.Time, flowIDs []string, campaigns []string) (map[string]map[string]uint64, error)
+	UniqueCheck(ctx context.Context, organizationID string, from, to time.Time, campaigns []string) ([]chstore.UniqueCheckRow, error)
 }
 
 // CostSource is the narrow slice of *cost.Service this package needs — same
@@ -175,4 +176,19 @@ func observeLatency(endpoint string) func() {
 	return func() {
 		metrics.AnalyticsQueryLatencySeconds.WithLabelValues(endpoint).Observe(time.Since(start).Seconds())
 	}
+}
+
+// UniqueCheck compares unique clicks by visitor cookie with the old IP +
+// user agent count, per device, over [from, to] inclusive (audit DATA-5;
+// docs/analytics-pipeline.md "Unique clicks").
+func (s *Service) UniqueCheck(ctx context.Context, organizationID string, from, to time.Time) ([]chstore.UniqueCheckRow, error) {
+	if err := s.validateReportInput(nil, nil, from, to); err != nil {
+		return nil, err
+	}
+	campaigns, err := readCampaigns(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer observeLatency("unique_check")()
+	return s.repo.UniqueCheck(ctx, organizationID, from, to.Add(24*time.Hour), campaigns)
 }

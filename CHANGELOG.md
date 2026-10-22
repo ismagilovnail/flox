@@ -5,6 +5,31 @@ per-phase, matching `CLAUDE.md`'s phase protocol. The one exception is
 [Between phases], below: spec amendments and the code changes that follow from
 them land between phases and would otherwise be invisible here.
 
+## [Phase 30.65] — Unique clicks by visitor cookie (audit DATA-5)
+
+The audit's hypothesis held in code: a visitor was campaign + IP + user agent, so phones behind one carrier NAT
+with one iOS user agent merged. You chose a cookie, falling back to IP + user agent. docs/analytics-pipeline.md
+"Unique clicks".
+
+- **The cookie:** the tracker reads or sets `fv`, a random 32-hex id on each tracking domain (`HttpOnly; Secure;
+  SameSite=Lax`, one year). `visitor_key` is now its keyed pseudonym (`visitorkey.FromCookie`, domain-separated
+  from `Of`; a test caught a collision in the first draft).
+- **The old key is kept:** the IP + user agent pseudonym goes to the new `click_events.ip_visitor_key`
+  (schema/021). Earlier clicks keep their IP + user agent `visitor_key`. Without `VISITOR_KEY` nothing changes.
+- **Diagnostic:** `GET /analytics/unique-check?from=&to=` gives, per device, the unique clicks counted both ways,
+  within the caller's campaign scope, to compare on real traffic.
+- **Docs:** the cookie's limits (Safari about 7 days, cookie-less browsers overcount) and an ePrivacy note in
+  docs/visitor-data.md.
+- **Tests:**
+  - the cookie key (stable, distinct, never an `Of` value);
+  - the tracker: first click sets the cookie, a returning browser keeps its visitor, two phones behind one IP
+    become two visitors, a malformed cookie is replaced, no key means no cookie;
+  - ClickHouse: three phones behind one IP give 3 unique clicks, and the check shows 3 by cookie vs 1 by IP + user
+    agent;
+  - the scope test covers the new read;
+  - Go full suite with the full env: only the known gallery-WIP failure. e2e passed with nothing skipped, and live
+    dev clicks carry both keys. No frontend change; no browser pass.
+
 ## [Phase 30.64] — The tracker's crash loss window, measured and narrowed (audit REL-1)
 
 You chose metrics plus a shorter flush, without a disk spool. docs/analytics-pipeline.md "What a crash of the

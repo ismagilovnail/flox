@@ -15,6 +15,7 @@ package visitorkey
 
 import (
 	"crypto/hmac"
+	"crypto/rand"
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/hex"
@@ -48,5 +49,44 @@ func Of(key []byte, ip, userAgent string) string {
 	mac.Write([]byte(ip))
 	mac.Write([]byte{0})
 	mac.Write([]byte(userAgent))
+	return hex.EncodeToString(mac.Sum(nil)[:16])
+}
+
+// CookieName is the tracker's visitor cookie (audit DATA-5): a random id
+// per browser, on each tracking domain.
+const CookieName = "fv"
+
+// NewID is a fresh visitor id for the cookie: 32 hex characters.
+func NewID() string {
+	b := make([]byte, 16)
+	if _, err := rand.Read(b); err != nil {
+		panic("visitorkey: crypto/rand failed: " + err.Error())
+	}
+	return hex.EncodeToString(b)
+}
+
+// ValidID reports whether id looks like a NewID — anything else in the
+// cookie is ignored and replaced.
+func ValidID(id string) bool {
+	if len(id) != 32 {
+		return false
+	}
+	_, err := hex.DecodeString(id)
+	return err == nil
+}
+
+// FromCookie is the visitor's pseudonym from their cookie id (audit
+// DATA-5): unique clicks count browsers, so phones behind one carrier IP
+// with the same user agent are told apart. Keyed like Of; the leading
+// 0x01 byte, which no IP address starts with, keeps it from ever equalling
+// an Of value. "" without a key or an id.
+func FromCookie(key []byte, id string) string {
+	if len(key) == 0 || id == "" {
+		return ""
+	}
+	mac := hmac.New(sha256.New, key)
+	mac.Write([]byte("\x01cookie"))
+	mac.Write([]byte{0})
+	mac.Write([]byte(id))
 	return hex.EncodeToString(mac.Sum(nil)[:16])
 }

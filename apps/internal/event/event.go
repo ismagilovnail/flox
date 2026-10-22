@@ -186,6 +186,10 @@ type Event struct {
 	// count by (internal/visitorkey); click events only. It outlives the
 	// raw IP and user agent, which expire (RETENTION_IP_DAYS).
 	VisitorKey string `json:"visitorKey,omitempty"`
+	// IPVisitorKey is the pseudonym of IP + user agent (visitorkey.Of),
+	// kept beside the cookie-based VisitorKey so the two ways of counting
+	// unique clicks can be compared on real traffic (audit DATA-5).
+	IPVisitorKey string `json:"ipVisitorKey,omitempty"`
 
 	// Pass-through attribution parameters (§42). Persisted exactly as
 	// they arrived — missing means empty, never a fabricated placeholder.

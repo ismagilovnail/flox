@@ -3,6 +3,7 @@ package visitorkey_test
 import (
 	"bytes"
 	"encoding/base64"
+	"strings"
 	"testing"
 
 	"github.com/ismagilovnail/flox/apps/internal/visitorkey"
@@ -42,5 +43,30 @@ func TestParseKey(t *testing.T) {
 		if _, err := visitorkey.ParseKey(bad); err == nil {
 			t.Errorf("ParseKey(%q) succeeded", bad)
 		}
+	}
+}
+
+// Audit DATA-5: the cookie pseudonym tells browsers apart where IP + user
+// agent cannot, and is never confused with it.
+func TestCookieKey(t *testing.T) {
+	key := make([]byte, 32)
+	a, b := visitorkey.NewID(), visitorkey.NewID()
+	if a == b || !visitorkey.ValidID(a) || !visitorkey.ValidID(b) {
+		t.Fatalf("NewID = %q, %q; want two different valid ids", a, b)
+	}
+	for _, bad := range []string{"", "short", strings.Repeat("z", 32), a + "0"} {
+		if visitorkey.ValidID(bad) {
+			t.Errorf("ValidID(%q) = true", bad)
+		}
+	}
+	ka := visitorkey.FromCookie(key, a)
+	if len(ka) != 32 || ka != visitorkey.FromCookie(key, a) || ka == visitorkey.FromCookie(key, b) {
+		t.Errorf("FromCookie: %q — want stable per id, different across ids", ka)
+	}
+	if ka == visitorkey.Of(key, "cookie", a) {
+		t.Error("a cookie pseudonym equals an IP + user agent one")
+	}
+	if visitorkey.FromCookie(nil, a) != "" || visitorkey.FromCookie(key, "") != "" {
+		t.Error("FromCookie without a key or an id is not empty")
 	}
 }

@@ -42,6 +42,7 @@ var scopedReads = []struct {
 	{"POST", "/analytics/dimension-values", "/analytics/dimension-values", map[string]any{"dim": "campaign", "from": "{from}", "to": "{to}"}},
 	{"POST", "/analytics/flow-summary", "/analytics/flow-summary", map[string]any{"flowIds": []string{"{flow}"}, "from": "{from}", "to": "{to}"}},
 	{"GET", "/analytics/buyers", "/analytics/buyers", nil},
+	{"GET", "/analytics/unique-check", "/analytics/unique-check?from={from}&to={to}", nil},
 	{"GET", "/analytics/ltv/ftd-cohorts", "/analytics/ltv/ftd-cohorts?from={from}&to={to}&groupBy=campaign", nil},
 	{"GET", "/analytics/ltv/reg-cohorts", "/analytics/ltv/reg-cohorts?from={from}&to={to}&groupBy=campaign", nil},
 	{"GET", "/conversions", "/conversions?from={from}&to={to}", nil},

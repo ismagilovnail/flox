@@ -1076,3 +1076,45 @@ func campaignsClause(campaigns []string) (string, []any) {
 		return " AND campaign_id IN ?", []any{campaigns}
 	}
 }
+
+// UniqueCheckRow compares the two ways of counting a device's unique
+// clicks (audit DATA-5): by the visitor cookie (what reports count) and by
+// IP + user agent (what they counted before).
+type UniqueCheckRow struct {
+	Device   string
+	Clicks   uint64
+	ByCookie uint64
+	ByIP     uint64
+}
+
+// UniqueCheck counts, per device, the clicks in [from, to) that carry both
+// keys (from schema/021 on) and their distinct visitors each way. Many
+// more by cookie than by IP + user agent on mobile is visitors a carrier
+// NAT used to merge; many more on every device is browsers that drop the
+// cookie. campaigns, when not nil, limits it to those (a Buyer's scope).
+func (s *EventStore) UniqueCheck(ctx context.Context, organizationID string, from, to time.Time, campaigns []string) ([]UniqueCheckRow, error) {
+	scope, scopeArgs := campaignsClause(campaigns)
+	rows, err := s.conn.Query(ctx, `
+		SELECT device, count(),
+		       uniqExact(concat(campaign_id, '|', visitor_key)),
+		       uniqExact(concat(campaign_id, '|', ip_visitor_key))
+		FROM click_events
+		WHERE organization_id = ? AND type = 'SOURCE_CLICK' AND event_at >= ? AND event_at < ?
+		  AND visitor_key != '' AND ip_visitor_key != ''`+scope+`
+		GROUP BY device
+		ORDER BY count() DESC`,
+		append([]any{organizationID, from, to}, scopeArgs...)...)
+	if err != nil {
+		return nil, fmt.Errorf("chstore: querying the unique check: %w", err)
+	}
+	defer rows.Close()
+	out := []UniqueCheckRow{}
+	for rows.Next() {
+		var r UniqueCheckRow
+		if err := rows.Scan(&r.Device, &r.Clicks, &r.ByCookie, &r.ByIP); err != nil {
+			return nil, fmt.Errorf("chstore: scanning the unique check: %w", err)
+		}
+		out = append(out, r)
+	}
+	return out, rows.Err()
+}

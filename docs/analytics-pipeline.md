@@ -238,6 +238,43 @@ final total" would undercount whenever a merge hasn't run yet.
 (`has_usd_value = 0`) contributes exactly zero, not a fabricated value, and
 the multiplication makes that exact rather than approximate.
 
+## Unique clicks (audit DATA-5)
+
+A unique click is a distinct visitor per campaign, counted from the
+`visitor_key` column of `click_events` (`chstore.uniqueVisitorExpr`).
+
+**Before:** the visitor was IP + user agent (`visitorkey.Of`, a keyed
+pseudonym). Behind a carrier NAT (CGNAT), hundreds of phones share one IP,
+and iPhones on the same iOS share a user agent. They merged into one
+visitor, so unique clicks came out too low and CR per unique too high.
+
+**Now:** on every `/t/` click the tracker reads or sets a visitor cookie,
+`fv`. It is a random 32-hex id, host-only on the tracking domain,
+`HttpOnly; Secure; SameSite=Lax`, and lasts a year. `visitor_key` is its
+keyed pseudonym (`visitorkey.FromCookie`). The IP + user agent pseudonym is
+still written, to `ip_visitor_key` (schema/021). Clicks from before this
+change keep their IP + user agent `visitor_key`, so old periods count as
+they did. Without `VISITOR_KEY`, no cookie is set and the report falls back
+to raw IP + user agent, as before. Flow choice is unchanged: it uses the
+`sf_` sticky cookie and the visit hash.
+
+**Limits of a cookie:**
+
+- Safari's tracking prevention can cap the cookie at about 7 days, so a
+  returning Safari visitor may count again after that.
+- A browser that refuses or drops cookies (private mode, some in-app
+  browsers) makes every click a new visitor. For those, unique clicks come
+  out too high instead of too low.
+
+**Comparing the two on real traffic:** `GET /v1/analytics/unique-check?from=&to=`
+(analytics.read, within the caller's campaign scope) returns, per device,
+the clicks that carry both keys and their unique visitors counted each way.
+
+- Many more by cookie than by IP + user agent on Mobile only: that is the
+  carrier NAT the change was for.
+- Many more on every device: browsers dropping the cookie. Look at which
+  ones before trusting the numbers.
+
 ## What a crash of the tracker loses (audit REL-1)
 
 `apps/tracker` writes events asynchronously (CLAUDE.md #9): a click is

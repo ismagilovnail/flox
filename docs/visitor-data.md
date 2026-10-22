@@ -44,6 +44,18 @@ the audit trail records the request).
 - Reports lose the erased clicks. A conversion that arrives later for an
   erased click is recorded as `unknown_click`.
 
+## The visitor cookie
+
+Since audit DATA-5 the tracker sets a first-party cookie, `fv`, on every
+tracking domain. It holds a random id that unique clicks count by, for a
+year (`docs/analytics-pipeline.md` "Unique clicks"). ClickHouse stores only
+its keyed pseudonym (`visitor_key`), never the id itself. Erasing a
+visitor's clicks (above) removes their rows with it.
+
+For visitors in the EU, a cookie used for analytics may need consent under
+ePrivacy. Whether the operator's landing flow collects that consent is the
+operator's call; FLOX does not show a consent banner on redirects.
+
 ## Referrer
 
 `referrer` expires with IP and user agent (`RETENTION_IP_DAYS`, column

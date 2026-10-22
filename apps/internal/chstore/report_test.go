@@ -1371,3 +1371,43 @@ func TestReportCampaignInFilter(t *testing.T) {
 		t.Error("a buyer dimension reached ClickHouse")
 	}
 }
+
+// Audit DATA-5: three phones behind one carrier IP with one user agent
+// (one IP + user agent pseudonym, three cookie pseudonyms), one of them
+// back twice. Unique clicks count the three phones; the check shows what
+// IP + user agent made of them.
+func TestUniqueClicksByCookieBehindOneIP(t *testing.T) {
+	conn := mustConn(t)
+	store := chstore.NewEventStore(conn)
+	ctx := context.Background()
+	orgID, campaignID := idgen.New(), idgen.New()
+	day := time.Date(2026, 8, 23, 0, 0, 0, 0, time.UTC)
+	click := func(at time.Duration, cookieKey string) event.Event {
+		return event.Event{Type: event.SourceClick, EventAt: day.Add(at), OrganizationID: orgID, CampaignID: campaignID,
+			ClickID: idgen.New(), Device: "Mobile", IP: "100.64.0.1", UserAgent: "iPhone",
+			VisitorKey: cookieKey, IPVisitorKey: "same-ip-and-ua"}
+	}
+	if err := store.InsertBatch(ctx, []event.Event{
+		click(time.Hour, "phone-a"), click(2*time.Hour, "phone-b"), click(3*time.Hour, "phone-c"), click(4*time.Hour, "phone-a"),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	q := chstore.ReportQuery{OrganizationID: orgID, From: day, To: day.Add(24 * time.Hour)}
+	aggs, err := store.ReportClicks(ctx, q)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(aggs) != 1 || aggs[0].Clicks != 4 || aggs[0].UniqueClicks != 3 {
+		t.Fatalf("report = %+v, want 4 clicks, 3 unique (by cookie)", aggs)
+	}
+	rows, err := store.UniqueCheck(ctx, orgID, day, day.Add(24*time.Hour), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rows) != 1 || rows[0].Device != "Mobile" || rows[0].Clicks != 4 || rows[0].ByCookie != 3 || rows[0].ByIP != 1 {
+		t.Errorf("check = %+v, want Mobile: 4 clicks, 3 by cookie, 1 by IP + user agent", rows)
+	}
+	if none, _ := store.UniqueCheck(ctx, orgID, day, day.Add(24*time.Hour), []string{}); len(none) != 0 {
+		t.Errorf("an empty campaign scope = %+v, want nothing", none)
+	}
+}

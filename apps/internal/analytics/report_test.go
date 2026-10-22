@@ -1124,3 +1124,7 @@ func TestDashboardReportsUnpricedConversions(t *testing.T) {
 		t.Fatalf("Unpriced = %d, want 2", result.Unpriced)
 	}
 }
+
+func (r *reportFakeRepo) UniqueCheck(context.Context, string, time.Time, time.Time, []string) ([]chstore.UniqueCheckRow, error) {
+	return nil, nil
+}
