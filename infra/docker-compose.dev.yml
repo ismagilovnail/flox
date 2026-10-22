@@ -193,6 +193,10 @@ services:
       # actually delivering it, same as every other dev credential here.
       SMTP_URL: smtp://mailhog:1025
       MAIL_FROM: "FLOX <no-reply@floxlink.io>"
+      # YooKassa test shop (docs/billing.md "Payments"): from your shell or
+      # infra/.env, never committed. Empty: plans are not sold online.
+      YOOKASSA_SHOP_ID: ${YOOKASSA_SHOP_ID:-}
+      YOOKASSA_SECRET_KEY: ${YOOKASSA_SECRET_KEY:-}
       # Dev-only value, matches .env.example's own dev default exactly —
       # never reuse this in staging/production (see .env.example's comment).
       TOTP_ENCRYPTION_KEY: "IXkldrBTvgfDhIxzUBn3MrRAJq7Gh7z8mQ5UhBC4DRo="
@@ -322,6 +326,10 @@ services:
       DATABASE_URL: postgres://flox:flox@postgres:5432/flox?sslmode=disable
       SMTP_URL: smtp://mailhog:1025  # internal/orgexport mails the requester
       MAIL_FROM: "FLOX <no-reply@floxlink.io>"
+      # YooKassa test shop (docs/billing.md "Payments"): from your shell or
+      # infra/.env, never committed. Empty: plans are not sold online.
+      YOOKASSA_SHOP_ID: ${YOOKASSA_SHOP_ID:-}
+      YOOKASSA_SECRET_KEY: ${YOOKASSA_SECRET_KEY:-}
       VISITOR_KEY: "KDNQTkfDdvMJWY6IhSXHoFwxfSF4PZN2d/O+im52274="  # internal/visitorkey: the same on tracker and worker
       CLICKHOUSE_URL: http://clickhouse:8123
       CLICKHOUSE_DATABASE: flox

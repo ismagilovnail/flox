@@ -88,6 +88,7 @@ var segmentKinds = map[string]string{
 	"broadcasts":      "broadcast",
 	"traffic-sources": "trafficSource",
 	"exports":         "export",
+	"payments":        "payment",
 }
 
 // notTenantResources are path parameters that do not name another
@@ -651,6 +652,14 @@ func seedEveryKind(t *testing.T, ctx context.Context, pool *pgxpool.Pool, orgID,
 		exportID, orgID, userID, "exports/"+orgID+"/"+exportID+"-isolation.zip")
 	must("export", err)
 	ids["export"] = exportID
+
+	// A plan payment (internal/billing): another organization reading it
+	// must get what an unknown id gets.
+	paymentID := idgen.New()
+	_, err = pool.Exec(ctx, `INSERT INTO billing_payments (id, organization_id, plan_code, months, amount, provider_payment_id, status)
+		VALUES ($1, $2, 'pro', 1, 1490000, $3, 'canceled')`, paymentID, orgID, "isolation-"+paymentID)
+	must("payment", err)
+	ids["payment"] = paymentID
 
 	authSvc := auth.NewService(auth.NewRepository(pool), "http://localhost:3000", noMail{})
 	_, err = authSvc.Invite(ctx, orgID, userID, auth.InviteInput{

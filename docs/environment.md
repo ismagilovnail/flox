@@ -189,6 +189,27 @@ characters; setting only one of the two fails startup. Unset: SMS is not
 offered as a second factor (email and the app still are). See
 `docs/auth.md` "Second factor: email and SMS".
 
+### YooKassa (plan payments)
+
+`YOOKASSA_SHOP_ID` / `YOOKASSA_SECRET_KEY` are optional and read by `apps/api` and `apps/worker`. When both are
+set, an owner can pay for a plan in Settings › Plan. When either is missing, plans are not sold online (the page
+says to write to the team).
+
+`YOOKASSA_API_URL` defaults to `https://api.yookassa.ru/v3`; tests point it at a fake server.
+
+Receipts (54-FZ):
+
+- `YOOKASSA_RECEIPT=on` sends a receipt with each payment, for "receipts by YooKassa" or a cash register connected
+  to the shop. The customer is the paying owner's email.
+- `YOOKASSA_VAT_CODE` sets the item's `vat_code` (default 1, no VAT).
+- `YOOKASSA_TAX_SYSTEM_CODE` sets `tax_system_code` (0 = not sent).
+
+In the YooKassa dashboard, set the HTTP notification URL to `<API_PUBLIC_URL>/v1/payment-notifications/yookassa`
+for the `payment.succeeded` and `payment.canceled` events. The notifications are not signed, so FLOX reads each
+payment back through the API before applying it. Without notifications (dev with no public URL), apps/worker reads
+pending payments back every 10 minutes, and the payer's return page reads its own payment at once.
+See `docs/billing.md` "Payments".
+
 ### OpenTelemetry
 
 `OTEL_EXPORTER_OTLP_ENDPOINT` — empty/unset is a valid, intentional value

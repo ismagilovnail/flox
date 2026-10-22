@@ -25,13 +25,14 @@ var quiet = slog.New(slog.NewTextHandler(io.Discard, nil))
 func ptr[T any](v T) *T { return &v }
 
 type fakeStore struct {
-	plan   billing.Plan
-	counts billing.Counts
+	plan      billing.Plan
+	counts    billing.Counts
+	paidUntil *time.Time
 }
 
 func (f fakeStore) Plans(context.Context) ([]billing.Plan, error) { return []billing.Plan{f.plan}, nil }
-func (f fakeStore) Current(context.Context, string) (billing.Plan, time.Time, error) {
-	return f.plan, time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC), nil
+func (f fakeStore) Subscription(context.Context, string) (billing.Subscription, error) {
+	return billing.Subscription{Plan: f.plan, Since: time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC), PaidUntil: f.paidUntil}, nil
 }
 func (f fakeStore) Counts(context.Context, string) (billing.Counts, error) { return f.counts, nil }
 

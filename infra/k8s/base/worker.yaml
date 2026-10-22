@@ -58,6 +58,10 @@ spec:
               valueFrom: {secretKeyRef: {name: flox-secrets, key: CLICKHOUSE_PASSWORD, optional: true}}
             - name: NATS_URL
               valueFrom: {secretKeyRef: {name: flox-secrets, key: NATS_URL, optional: true}}
+            - name: YOOKASSA_SHOP_ID
+              valueFrom: {secretKeyRef: {name: flox-secrets, key: YOOKASSA_SHOP_ID, optional: true}}
+            - name: YOOKASSA_SECRET_KEY
+              valueFrom: {secretKeyRef: {name: flox-secrets, key: YOOKASSA_SECRET_KEY, optional: true}}
             - name: INTEGRATION_ENCRYPTION_KEY
               valueFrom: {secretKeyRef: {name: flox-secrets, key: INTEGRATION_ENCRYPTION_KEY, optional: true}}
             - name: ADACCOUNT_ENCRYPTION_KEY

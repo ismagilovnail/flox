@@ -365,7 +365,45 @@
       "warning": "Over 80% of this month's clicks on the {{plan}} plan.",
       "exceeded": "This month's clicks are over the {{plan}} plan. Tracking goes on.",
       "blocked": "Over 110% of the {{plan}} plan: tracking goes on, new campaigns and stream sets wait for a plan change.",
-      "details": "Plan and usage"
+      "details": "Plan and usage",
+      "renew": "The {{plan}} plan is paid until {{paidUntil}}. Renew it — on {{graceUntil}} the organization moves to Free.",
+      "renewLink": "Renew"
+    },
+    "paidUntil": "Paid until {{date}}",
+    "graceUntil": "renew by {{date}}, or the organization moves to Free",
+    "plansDescriptionPay": "Prices are per month, paid in roubles through YooKassa (card, SBP). Archived campaigns don't count; pending invites do.",
+    "plansDescriptionOwner": "Prices are per month. An owner of the organization can pay for a plan here. Archived campaigns don't count; pending invites do.",
+    "pay": {
+      "renew": "Renew",
+      "choose": "Choose",
+      "title": "Pay for {{plan}}",
+      "extends": "The months are added to the end of your current paid period.",
+      "switches": "The new plan starts as soon as the payment goes through.",
+      "switchesCarry": "The new plan starts as soon as the payment goes through. Unused paid days of {{plan}} are carried over at the two plans' prices.",
+      "months_one": "{{count}} month",
+      "months_other": "{{count}} months",
+      "hint": "You'll be sent to YooKassa to pay. The plan changes once YooKassa confirms the payment.",
+      "cancel": "Cancel",
+      "submit": "Pay {{amount}}",
+      "error": "Couldn't start the payment"
+    },
+    "return": {
+      "pending": "Waiting for YooKassa to confirm the payment…",
+      "succeeded": "Payment received — your plan is updated.",
+      "canceled": "The payment didn't go through. Nothing was charged for the plan.",
+      "error": "Couldn't check the payment.",
+      "continue": "Continue payment",
+      "dismiss": "Dismiss"
+    },
+    "history": {
+      "title": "Payments",
+      "loadError": "Couldn't load payments",
+      "empty": "No payments yet.",
+      "status": {
+        "pending": "Waiting",
+        "succeeded": "Paid",
+        "canceled": "Not paid"
+      }
     }
   }
 }

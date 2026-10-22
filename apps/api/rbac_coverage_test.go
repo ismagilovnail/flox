@@ -47,6 +47,7 @@ var deliberatelyOpen = map[string]string{
 	"auth.disable":            "personal 2FA, re-proves the caller's password",
 	"alert.markRead":          "the caller's own read state; every role reads notifications",
 	"telegram.serve":          "apps/tracker's Telegram webhook: no session, Telegram's secret header authenticates it (TestWebhook)",
+	"billing.notify":          "YooKassa's payment notification: no session; only the payment id is read and the payment is read back from YooKassa (TestNotificationBodyIsNotTrusted)",
 	// POST-shaped reads: a JSON query body, no write.
 	"analytics.report":          "read-only query, POST only for its body",
 	"analytics.timeseries":      "read-only query, POST only for its body",

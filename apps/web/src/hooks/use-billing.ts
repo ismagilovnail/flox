@@ -1,8 +1,8 @@
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
-import { getBilling, listPlans } from "@/lib/api/billing";
+import { checkout, getBilling, getPayment, listPayments, listPlans } from "@/lib/api/billing";
 
 export const billingKey = ["billing"] as const;
 
@@ -15,4 +15,29 @@ export function useBilling({ fresh = false }: { fresh?: boolean } = {}) {
 
 export function usePlans() {
   return useQuery({ queryKey: ["billing", "plans"], queryFn: listPlans, staleTime: 60 * 60_000 });
+}
+
+/** Payment history: owners and admins (settings.write). */
+export function usePayments(enabled: boolean) {
+  return useQuery({ queryKey: ["billing", "payments"], queryFn: listPayments, enabled });
+}
+
+/** The payment the payer came back from: read again every few seconds
+ * while YooKassa has not settled it. */
+export function usePayment(id: string | null) {
+  return useQuery({
+    queryKey: ["billing", "payment", id],
+    queryFn: () => getPayment(id as string),
+    enabled: !!id,
+    refetchInterval: (q) => (q.state.data?.status === "pending" ? 3_000 : false),
+  });
+}
+
+/** Starts a checkout; the caller sends the browser to its payment page. */
+export function useCheckout() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: checkout,
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["billing", "payments"] }),
+  });
 }

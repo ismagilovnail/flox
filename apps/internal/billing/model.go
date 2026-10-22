@@ -10,8 +10,9 @@
 // changes or the month ends. Count limits (campaigns, domains, members)
 // refuse the create that would go past them.
 //
-// There is no payment provider yet: plans are assigned with
-// apps/cmd/billing. A provider comes later, behind an interface (#11).
+// Plans are paid online through a PaymentProvider (YooKassa), a prepaid
+// number of months at a time (payments.go), or assigned by hand with
+// apps/cmd/billing.
 package billing
 
 import "time"
@@ -29,6 +30,17 @@ type Plan struct {
 	MaxMembers    *int   `json:"maxMembers"`
 	PriceCents    int    `json:"priceCents"`
 	Currency      string `json:"currency"`
+	// PriceRub is the monthly price in kopecks the plan is sold for
+	// online (YooKassa); nil: not sold online.
+	PriceRub *int64 `json:"priceRub"`
+}
+
+// Subscription is the organization's current plan. PaidUntil nil: the
+// plan is open-ended (Free, or assigned with apps/cmd/billing).
+type Subscription struct {
+	Plan      Plan
+	Since     time.Time
+	PaidUntil *time.Time
 }
 
 // Resource is something a plan limits the creation of.
@@ -88,6 +100,14 @@ type Status struct {
 	} `json:"period"`
 	Usage Usage `json:"usage"`
 	Level Level `json:"level"`
+	// PaidUntil: the end of the paid period, nil when open-ended.
+	// GraceUntil: when the organization moves to Free if not renewed.
+	// Renew: the period ends within RemindBefore, or has ended.
+	PaidUntil  *time.Time `json:"paidUntil"`
+	GraceUntil *time.Time `json:"graceUntil"`
+	Renew      bool       `json:"renew"`
+	// CanPay: plans can be paid online on this deployment.
+	CanPay bool `json:"canPay"`
 }
 
 // Change is one organization_plans row, for apps/cmd/billing's history.

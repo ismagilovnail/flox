@@ -30,6 +30,7 @@ import (
 	"github.com/ismagilovnail/flox/apps/internal/audit"
 	"github.com/ismagilovnail/flox/apps/internal/auth"
 	"github.com/ismagilovnail/flox/apps/internal/billing"
+	"github.com/ismagilovnail/flox/apps/internal/billing/yookassa"
 	"github.com/ismagilovnail/flox/apps/internal/campaign"
 	"github.com/ismagilovnail/flox/apps/internal/chconn"
 	"github.com/ismagilovnail/flox/apps/internal/chstore"
@@ -310,7 +311,19 @@ func buildServer(ctx context.Context, cfg config.Config, logger *slog.Logger, re
 	if ch != nil {
 		clickUsage = billing.NewCHUsage(ch)
 	}
-	billingSvc := billing.NewService(billing.NewRepository(db), clickUsage, logger)
+	// Plans paid online through YooKassa (docs/billing.md "Payments");
+	// without its keys plans are not sold online.
+	var payProvider billing.PaymentProvider
+	if cfg.YooKassa.Configured() {
+		payProvider = yookassa.New(cfg.YooKassa.APIURL, cfg.YooKassa.ShopID, cfg.YooKassa.SecretKey)
+	} else {
+		logger.Info("YOOKASSA_SHOP_ID/YOOKASSA_SECRET_KEY not set: plans are not sold online")
+	}
+	billingRepo := billing.NewRepository(db)
+	billingPayments := billing.NewPayments(billingRepo, payProvider, cfg.AppURL, billing.ReceiptConfig{
+		Enabled: cfg.YooKassa.Receipt, VATCode: cfg.YooKassa.VATCode, TaxSystemCode: cfg.YooKassa.TaxSystemCode,
+	}, logger)
+	billingSvc := billing.NewService(billingRepo, clickUsage, logger).WithPayments(billingPayments.Available())
 	authSvc.SetQuota(billingSvc)
 	authHandler := auth.NewHandler(authSvc, logger, cfg.Env != "development", clientIP)
 	teamHandler := auth.NewTeamHandler(authSvc, logger)
@@ -783,11 +796,14 @@ func buildServer(ctx context.Context, cfg config.Config, logger *slog.Logger, re
 	onboardingHandler := onboarding.NewHandler(onboarding.NewService(onboarding.NewRepository(db), clickProbe, logger), logger)
 	// Every member reads the plan whose limits they are held to
 	// (rbac_read_coverage_test.go openToEveryMember).
-	billingHandler := billing.NewHandler(billingSvc, logger)
+	billingHandler := billing.NewHandler(billingSvc, billingPayments, requireSettingsWrite, logger)
 	srv.Mux().Route("/billing", func(r chi.Router) {
 		r.Use(tenantMiddleware)
 		billingHandler.Register(r)
 	})
+	// YooKassa's notification URL: no session. Only the payment id is taken
+	// from it; the payment is read back from YooKassa (internal/billing).
+	srv.Mux().Route("/payment-notifications/yookassa", billingHandler.RegisterNotifications)
 
 	srv.Mux().Route("/onboarding", func(r chi.Router) {
 		r.Use(tenantMiddleware)

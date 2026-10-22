@@ -73,6 +73,10 @@ spec:
               valueFrom: {secretKeyRef: {name: flox-secrets, key: ADACCOUNT_ENCRYPTION_KEY, optional: true}}
             - name: PIXEL_ENCRYPTION_KEY
               valueFrom: {secretKeyRef: {name: flox-secrets, key: PIXEL_ENCRYPTION_KEY, optional: true}}
+            - name: YOOKASSA_SHOP_ID
+              valueFrom: {secretKeyRef: {name: flox-secrets, key: YOOKASSA_SHOP_ID, optional: true}}
+            - name: YOOKASSA_SECRET_KEY
+              valueFrom: {secretKeyRef: {name: flox-secrets, key: YOOKASSA_SECRET_KEY, optional: true}}
             - name: LANDING_LINK_KEY
               valueFrom: {secretKeyRef: {name: flox-secrets, key: LANDING_LINK_KEY, optional: true}}
             - name: SENTRY_DSN

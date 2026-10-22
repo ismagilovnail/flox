@@ -5,6 +5,67 @@ per-phase, matching `CLAUDE.md`'s phase protocol. The one exception is
 [Between phases], below: spec amendments and the code changes that follow from
 them land between phases and would otherwise be invisible here.
 
+## [Phase 30.59] — Plan payments through YooKassa (audit BIZ-1, second part)
+
+You chose YooKassa, fixed rouble prices, prepaid periods without automatic charges, a receipt that is configurable
+and off by default, and 3 days of grace before Free. `docs/billing.md` "Payments".
+
+- Migration 00095:
+  - `plans.price_rub`: draft prices Start 4 900 ₽, Pro 14 900 ₽, Business 39 900 ₽;
+  - `organization_plans.paid_until` / `reminded_at`;
+  - the `billing_payments` table: one row per checkout, the provider's id unique, `applied_at`.
+- `billing.PaymentProvider` (invariant #11). The adapter is `internal/billing/yookassa`: API v3, Basic
+  `shopId:secretKey`, `Idempotence-Key`, one-stage payments, redirect confirmation, and a 54-FZ receipt behind
+  `YOOKASSA_RECEIPT=on`.
+- Checkout (`POST /v1/billing/checkout`) needs an Owner and `settings.write`, for 1, 3 or 12 months. The payment row
+  is written first and its id is the idempotence key. When YooKassa is down, the answer is 503 and the row is
+  cancelled.
+- Notification URL: `POST /v1/payment-notifications/yookassa`, public. Only the payment id is taken from it, only
+  for `payment.*` events, and the payment is read back from YooKassa before anything changes.
+- A payment applies once, in one transaction under locks, with an audit row. A wrong amount or currency is not
+  applied.
+- The new end of the paid period:
+  - same plan: added to the paid period's end;
+  - another plan: starts now, and the unused paid days are carried over at the two plans' prices; no refunds.
+- `apps/worker` runs a billing job every 10 minutes:
+  - reads back pending payments in case a notification was lost;
+  - cancels payments abandoned for 48 hours (a late success still applies);
+  - sends one "renew" email 3 days before the end;
+  - after 3 days of grace, moves the organization to Free, audited, and emails the owners.
+- API: `GET /v1/billing` adds `paidUntil`, `graceUntil`, `renew` and `canPay`, and plans carry `priceRub` (OpenAPI
+  updated). Checkout, payments and the notification URL are left out of the public reference with reasons.
+- UI:
+  - Settings › Plan: "Paid until", rouble prices, Choose/Renew (owner only, when YooKassa is set up);
+  - a dialog with 1/3/12 months and totals;
+  - a notice on returning from YooKassa that is read until the payment settles, with "Continue payment";
+  - payment history (owners/admins);
+  - a renew banner on every page. EN/RU with plurals.
+- Env: `YOOKASSA_SHOP_ID`, `YOOKASSA_SECRET_KEY`, `YOOKASSA_API_URL`, `YOOKASSA_RECEIPT`, `YOOKASSA_VAT_CODE`,
+  `YOOKASSA_TAX_SYSTEM_CODE`. They are in `.env.example`, `docs/environment.md`, dev compose (from your shell or
+  `infra/.env`) and the k8s secrets.
+- Tests:
+  - Go full suite with the full env: only the known gallery-WIP failure. e2e passed with nothing skipped.
+  - New tests:
+    - the adapter against a fake server (request shape, receipt, statuses, error kinds);
+    - `Extend`;
+    - checkout rules (owner only, months, plans not sold online, provider down);
+    - apply-once against the provider's word (a mutation that removed the guard failed the test);
+    - mismatch, cancel, paid period and renew flags;
+    - the runner (lost notification, one reminder, grace, expiry, abandoned then paid);
+    - `TestNotificationBodyIsNotTrusted` through the router against a fake YooKassa, including organization
+      isolation of payments.
+  - The isolation suite now covers `/billing/payments/{id}`.
+  - vitest 216/216; eslint, tsc, `next build`.
+- Fixed during the phase: the worker's all-organization billing queries take an organization scope, so tests on
+  the shared dev database do not touch other organizations.
+- Checked in the browser against a local fake YooKassa:
+  - Free → Pro: cancelled, then paid;
+  - the return notice, the history, "Paid until", and the renew banner;
+  - the checkout dialog's wording with and without paid days to carry.
+
+  Two things found there were fixed: the carry-over sentence showed when there was nothing to carry, and the
+  history kept "Waiting" after the payment settled. FLOX Other was put back on Free afterwards.
+
 ## [Phase 30.58] — Plans, usage, soft limits (audit BIZ-1, first part)
 
 You chose BIZ-1 and decided on: clicks as the unit (SOURCE_CLICK + SOURCE_FILTER), soft limits (Free included),

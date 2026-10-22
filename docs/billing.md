@@ -1,12 +1,14 @@
-# Plans, usage and limits (BIZ-1)
+# Plans, usage, limits and payments (BIZ-1)
 
-Audit 2026-10-15, item BIZ-1. Code: `apps/internal/billing`, migration
-`00094_billing_plans.sql`, CLI `apps/cmd/billing`, UI *Settings › Plan* and
-the banner (`components/shell/plan-banner.tsx`).
+Audit 2026-10-15, item BIZ-1.
 
-This phase covers plans, usage counting and soft limits. **There is no payment provider yet.**
-The FLOX team assigns plans by hand after the client pays. A provider comes
-later, behind an interface (invariant #11).
+- Code: `apps/internal/billing` (YooKassa adapter in `billing/yookassa`).
+- Migrations: `00094_billing_plans.sql` and `00095_billing_payments.sql`.
+- CLI: `apps/cmd/billing`.
+- UI: *Settings › Plan* and the banner (`components/shell/plan-banner.tsx`).
+
+Plans are prepaid through YooKassa (see [Payments](#payments)) or assigned by
+hand with the CLI.
 
 ## Plans
 
@@ -81,12 +83,22 @@ slot. That is acceptable for a soft limit.
 
 - `GET /v1/billing`: plan, `since`, `period {from, to}` (days, inclusive),
   `usage {clicks|null, campaigns, domains, members}`, `level`.
-- `GET /v1/billing/plans`: the public plans.
+- `GET /v1/billing/plans`: the public plans, with `priceRub` (kopecks per
+  month, `null` = not sold online).
 
-Both are in the public OpenAPI reference (tag *Billing*). Every member can
-read them, whatever their role (`rbac_read_coverage_test.go`
-`openToEveryMember`), because everyone is held to the limits. The plan cannot
-be changed through the API.
+`GET /v1/billing` also carries `paidUntil`, `graceUntil`, `renew` and `canPay`.
+
+Both are in the public OpenAPI reference (tag *Billing*). The following stay
+out of the reference, because they are the app's or YooKassa's:
+
+- `POST /v1/billing/checkout`;
+- `GET /v1/billing/payments[/{id}]`;
+- the notification URL.
+
+Every member can read `/billing` and `/billing/plans`, whatever their role
+(`rbac_read_coverage_test.go` `openToEveryMember`), because everyone is held
+to the limits. Payments need `settings.write`, and a checkout needs an Owner.
+An API key cannot change the plan.
 
 ## Changing a plan
 
@@ -106,11 +118,86 @@ the period is the calendar month.
 Dev fixtures put *FLOX Demo* on Business and leave *FLOX Other* on Free, so
 both states can be seen.
 
-## Not yet (BIZ-1b and later)
+## Payments
 
-- A payment provider: checkout, webhooks, idempotency, failed payments,
-  cancellation.
-- Invoices and overage charges.
+YooKassa takes one-stage payments in roubles: `capture: true`, confirmed by
+a redirect to YooKassa's page. It sits behind `billing.PaymentProvider`
+(invariant #11).
+
+Payments are prepaid: 1, 3 or 12 months at `plans.price_rub × months`, with no
+discount for longer terms. There are no automatic charges and no saved cards.
+
+**Checkout.** Only an Owner can start one (`POST /v1/billing/checkout`
+`{plan, months}`); the route also needs `settings.write`.
+
+1. A `billing_payments` row is written first, and its id is the
+   `Idempotence-Key`, so a retried create cannot charge twice.
+2. The YooKassa payment carries:
+   - `metadata {payment_id, organization_id}`;
+   - `return_url` = `APP_URL/settings?tab=billing&payment=<id>`;
+   - a receipt, when `YOOKASSA_RECEIPT=on` (docs/environment.md).
+3. The answer's `confirmationUrl` is where the browser goes.
+
+If YooKassa is down, the checkout answers 503 and the row is cancelled.
+
+**The provider's word only.** YooKassa's HTTP notifications are not signed.
+`POST /v1/payment-notifications/yookassa` is public. It takes only
+`object.id` from the body and handles only `payment.*` events (a `refund.*`
+event names a refund and is ignored with 200). It then reads the payment
+back through the API (`GET /payments/{id}`) and applies what YooKassa says.
+
+A forged body therefore changes nothing (`TestNotificationBodyIsNotTrusted`).
+A payment that isn't ours gets 200, so YooKassa stops retrying. A YooKassa
+outage gets 500, so YooKassa retries.
+
+**Applying a payment** (`Repository.ApplyStatus`) happens once, in one
+transaction that locks the payment row and the organization. `applied_at` is
+set there, so a repeated notification, the worker's read-back and the payer's
+return page can all arrive and the plan moves once.
+
+A payment whose amount or currency differs from the checkout is not applied.
+The new end of the paid period (`Extend`) is:
+
+- **same plan, still paid:** the months are added to `paid_until`;
+- **same plan, in grace, or open-ended:** the months start now;
+- **another plan:** the months start now. The unused paid time of the old plan
+  is carried over at the two monthly prices: 10 days of 4 900 ₽ become about
+  3.3 days of 14 900 ₽. Nothing is refunded.
+
+Each applied payment writes a `billing.payment_applied` audit row.
+
+**Paid period and grace.** `organization_plans.paid_until` holds the end of
+the paid period; `NULL` means open-ended (Free, or a plan assigned with the
+CLI). The plan stays on for `GracePeriod` (3 days) after `paid_until`.
+`apps/worker` (`billing.Runner`, every 10 minutes):
+
+- **Reads back lost notifications:** pending payments 5 minutes to 48 hours
+  old are read from YooKassa. In dev without a public notification URL this
+  is what applies payments; the payer's return page also reads its own
+  payment at once. Pending payments older than 48 hours are cancelled as
+  `expired`. If YooKassa later says one succeeded, it still applies, because
+  the money was taken.
+- **Sends one reminder per period:** from 3 days before `paid_until`, the
+  Owners get one "renew" email (`reminded_at`). The UI shows a renew banner
+  and the page offers "Renew".
+- **Moves lapsed plans to Free:** after `paid_until + 3 days`, the plan is
+  closed, a Free row is opened, a `billing.plan_expired` audit row is written
+  and the Owners are emailed. Data and tracking are untouched; Free's soft
+  limits apply.
+
+**Refunds** are made by hand in the YooKassa dashboard; the plan is then
+changed with `apps/cmd/billing set-plan`.
+
+**Dev:** put a YooKassa *test* shop's id and key into your shell or
+`infra/.env` (`YOOKASSA_SHOP_ID`, `YOOKASSA_SECRET_KEY`) and recreate `api`
+and `worker`. Pay with YooKassa's test cards. The automated tests use a fake
+YooKassa server and never need a shop.
+
+## Not yet
+
+- Automatic renewals (saved payment method). YooKassa must enable these for
+  the shop.
+- Discounts for 3 or 12 months; invoices for legal entities; overage charges.
 - A staff admin screen for plans.
-- Billing periods anchored to the subscription date instead of the
-  calendar month.
+- Billing periods anchored to the payment date instead of the calendar month,
+  for click usage.

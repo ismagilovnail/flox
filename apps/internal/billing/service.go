@@ -12,7 +12,7 @@ import (
 // Store is the Postgres side Service reads (*Repository).
 type Store interface {
 	Plans(ctx context.Context) ([]Plan, error)
-	Current(ctx context.Context, orgID string) (Plan, time.Time, error)
+	Subscription(ctx context.Context, orgID string) (Subscription, error)
 	Counts(ctx context.Context, orgID string) (Counts, error)
 }
 
@@ -33,6 +33,13 @@ type Service struct {
 	usage  UsageReader // nil: clicks are unknown and never block
 	now    func() time.Time
 	logger *slog.Logger
+	canPay bool
+}
+
+// WithPayments marks plans as payable online (Status.CanPay).
+func (s *Service) WithPayments(available bool) *Service {
+	s.canPay = available
+	return s
 }
 
 func NewService(store Store, usage UsageReader, logger *slog.Logger) *Service {
@@ -53,18 +60,25 @@ func (s *Service) Status(ctx context.Context, orgID string) (Status, error) {
 	if orgID == "" {
 		return Status{}, apierror.Validation("missing organization", nil)
 	}
-	plan, since, err := s.store.Current(ctx, orgID)
+	sub, err := s.store.Subscription(ctx, orgID)
 	if err != nil {
 		return Status{}, err
 	}
+	plan := sub.Plan
 	counts, err := s.store.Counts(ctx, orgID)
 	if err != nil {
 		return Status{}, err
 	}
-	period := PeriodAt(s.now())
+	now := s.now()
+	period := PeriodAt(now)
 	clicks := s.clicks(ctx, orgID, period)
 
-	st := Status{Plan: plan, Since: since, Usage: Usage{Clicks: clicks, Counts: counts}, Level: LevelFor(plan, clicks)}
+	st := Status{Plan: plan, Since: sub.Since, Usage: Usage{Clicks: clicks, Counts: counts}, Level: LevelFor(plan, clicks), CanPay: s.canPay}
+	if sub.PaidUntil != nil {
+		grace := sub.PaidUntil.Add(GracePeriod)
+		st.PaidUntil, st.GraceUntil = sub.PaidUntil, &grace
+		st.Renew = !now.Before(sub.PaidUntil.Add(-RemindBefore))
+	}
 	st.Period.From = period.From.Format(time.DateOnly)
 	st.Period.To = period.To.AddDate(0, 0, -1).Format(time.DateOnly)
 	return st, nil
@@ -111,10 +125,11 @@ func LevelFor(plan Plan, clicks *int64) Level {
 // the insert, not inside it: two creates at once can both pass at the
 // last free slot. For a soft limit that is accepted.
 func (s *Service) Allow(ctx context.Context, orgID string, r Resource) error {
-	plan, _, err := s.store.Current(ctx, orgID)
+	sub, err := s.store.Subscription(ctx, orgID)
 	if err != nil {
 		return err
 	}
+	plan := sub.Plan
 	counts, err := s.store.Counts(ctx, orgID)
 	if err != nil {
 		return err

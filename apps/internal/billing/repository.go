@@ -20,11 +20,11 @@ type Repository struct {
 
 func NewRepository(db *pgxpool.Pool) *Repository { return &Repository{db: db} }
 
-const planColumns = `p.code, p.name, p.monthly_clicks, p.max_campaigns, p.max_domains, p.max_members, p.price_cents, p.currency`
+const planColumns = `p.code, p.name, p.monthly_clicks, p.max_campaigns, p.max_domains, p.max_members, p.price_cents, p.currency, p.price_rub`
 
 func scanPlan(row pgx.Row, extra ...any) (Plan, error) {
 	var p Plan
-	err := row.Scan(append([]any{&p.Code, &p.Name, &p.MonthlyClicks, &p.MaxCampaigns, &p.MaxDomains, &p.MaxMembers, &p.PriceCents, &p.Currency}, extra...)...)
+	err := row.Scan(append([]any{&p.Code, &p.Name, &p.MonthlyClicks, &p.MaxCampaigns, &p.MaxDomains, &p.MaxMembers, &p.PriceCents, &p.Currency, &p.PriceRub}, extra...)...)
 	return p, err
 }
 
@@ -49,20 +49,27 @@ func (r *Repository) Plans(ctx context.Context) ([]Plan, error) {
 // Current is the organization's plan and since when: its open
 // organization_plans row, or Free since the organization was created.
 func (r *Repository) Current(ctx context.Context, orgID string) (Plan, time.Time, error) {
-	var since time.Time
+	s, err := r.Subscription(ctx, orgID)
+	return s.Plan, s.Since, err
+}
+
+// Subscription is Current with the paid period.
+func (r *Repository) Subscription(ctx context.Context, orgID string) (Subscription, error) {
+	var s Subscription
 	p, err := scanPlan(r.db.QueryRow(ctx, `
-		SELECT `+planColumns+`, coalesce(op.started_at, o.created_at)
+		SELECT `+planColumns+`, coalesce(op.started_at, o.created_at), op.paid_until
 		FROM organizations o
 		LEFT JOIN organization_plans op ON op.organization_id = o.id AND op.ended_at IS NULL
 		JOIN plans p ON p.code = coalesce(op.plan_code, '`+FreePlan+`')
-		WHERE o.id = $1`, orgID), &since)
+		WHERE o.id = $1`, orgID), &s.Since, &s.PaidUntil)
 	if errors.Is(err, pgx.ErrNoRows) {
-		return Plan{}, time.Time{}, apierror.NotFound("organization not found")
+		return Subscription{}, apierror.NotFound("organization not found")
 	}
 	if err != nil {
-		return Plan{}, time.Time{}, fmt.Errorf("billing: reading the plan: %w", err)
+		return Subscription{}, fmt.Errorf("billing: reading the plan: %w", err)
 	}
-	return p, since, nil
+	s.Plan = p
+	return s, nil
 }
 
 // Counts reads what the count limits are checked against.

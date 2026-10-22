@@ -45,6 +45,8 @@ import (
 	"github.com/ismagilovnail/flox/apps/internal/analytics"
 	"github.com/ismagilovnail/flox/apps/internal/attribution"
 	"github.com/ismagilovnail/flox/apps/internal/auth"
+	"github.com/ismagilovnail/flox/apps/internal/billing"
+	"github.com/ismagilovnail/flox/apps/internal/billing/yookassa"
 	"github.com/ismagilovnail/flox/apps/internal/campaign"
 	"github.com/ismagilovnail/flox/apps/internal/chconn"
 	"github.com/ismagilovnail/flox/apps/internal/chstore"
@@ -546,6 +548,23 @@ func run() error {
 	}
 	logger.Info("organization deletion starting", "interval", orgdeletion.Interval)
 	start(func() { deleter.RunLoop(ctx, orgdeletion.Interval) })
+
+	// Plans (internal/billing, docs/billing.md "Payments"): pending
+	// YooKassa payments read back in case a notification was lost, renewal
+	// reminders, lapsed plans moved to Free.
+	billingRepo := billing.NewRepository(db)
+	billingRunner := &billing.Runner{Repo: billingRepo, AppURL: cfg.AppURL, Logger: logger}
+	if cfg.YooKassa.Configured() {
+		billingRunner.Payments = billing.NewPayments(billingRepo,
+			yookassa.New(cfg.YooKassa.APIURL, cfg.YooKassa.ShopID, cfg.YooKassa.SecretKey), cfg.AppURL, billing.ReceiptConfig{}, logger)
+	}
+	if mail, err := mailer.New(cfg.SMTPURL, cfg.MailFrom); err != nil {
+		logger.Warn("mail not configured: plan owners are not reminded to renew", "error", err)
+	} else {
+		billingRunner.Mail = mail
+	}
+	logger.Info("billing job starting", "interval", billing.Interval)
+	start(func() { billingRunner.RunLoop(ctx, billing.Interval) })
 
 	// Organization data exports (internal/orgexport, audit GDPR-1): built
 	// into object storage, deleted after orgexport.Retention.

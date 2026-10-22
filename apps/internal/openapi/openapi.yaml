@@ -1348,7 +1348,7 @@ components:
     Plan:
       type: object
       additionalProperties: false
-      required: [code, name, monthlyClicks, maxCampaigns, maxDomains, maxMembers, priceCents, currency]
+      required: [code, name, monthlyClicks, maxCampaigns, maxDomains, maxMembers, priceCents, currency, priceRub]
       description: A limit of `null` is unlimited.
       properties:
         code: { type: string, example: start }
@@ -1359,11 +1359,12 @@ components:
         maxMembers: { type: [integer, "null"], description: "Members and pending invites." }
         priceCents: { type: integer, description: "Per month." }
         currency: { type: string }
+        priceRub: { type: [integer, "null"], description: "Per month in kopecks, the price it is paid online for; null: not sold online." }
 
     BillingStatus:
       type: object
       additionalProperties: false
-      required: [plan, since, period, usage, level]
+      required: [plan, since, period, usage, level, paidUntil, graceUntil, renew, canPay]
       properties:
         plan: { $ref: "#/components/schemas/Plan" }
         since: { type: string, format: date-time, description: "When the organization moved to this plan." }
@@ -1387,6 +1388,10 @@ components:
           type: string
           enum: [ok, warning, exceeded, blocked, unknown]
           description: "warning from 80% of the monthly clicks, exceeded from 100%, blocked from 110% (no new campaigns or stream sets). unknown: clicks could not be read."
+        paidUntil: { type: [string, "null"], format: date-time, description: "End of the paid period; null when the plan is open-ended." }
+        graceUntil: { type: [string, "null"], format: date-time, description: "When the organization moves to Free unless the plan is renewed." }
+        renew: { type: boolean, description: "The paid period ends within 3 days, or has ended." }
+        canPay: { type: boolean, description: "Plans can be paid online (in the app) on this server." }
 
     Error:
       type: object

@@ -193,7 +193,30 @@ type Config struct {
 	NATSURL            string
 	NATSStreamReplicas int
 	NATSStreamMaxMB    int
+
+	// YooKassa takes plan payments (internal/billing/yookassa,
+	// docs/billing.md). Without a shop id and key, plans are not sold
+	// online.
+	YooKassa YooKassaConfig
 }
+
+type YooKassaConfig struct {
+	ShopID    string
+	SecretKey string
+	// APIURL: https://api.yookassa.ru/v3 unless set (tests point it at a
+	// fake server).
+	APIURL string
+	// Receipt sends a 54-FZ receipt with each payment (the shop's
+	// "receipts by YooKassa" or a connected online cash register). VATCode
+	// is the receipt item's vat_code (1 = no VAT); TaxSystemCode, when not
+	// zero, is sent as tax_system_code.
+	Receipt       bool
+	VATCode       int
+	TaxSystemCode int
+}
+
+// Configured reports whether payments can be taken.
+func (c YooKassaConfig) Configured() bool { return c.ShopID != "" && c.SecretKey != "" }
 
 type ClickHouseConfig struct {
 	URL      string // http:// or https:// (TLS)
@@ -311,6 +334,14 @@ func load(portVar, portDefault, defaultServiceName string, ch chLimits) (Config,
 	if err != nil {
 		return Config{}, err
 	}
+	vatCode, err := parseNonNegative("YOOKASSA_VAT_CODE", 1)
+	if err != nil {
+		return Config{}, err
+	}
+	taxSystem, err := parseNonNegative("YOOKASSA_TAX_SYSTEM_CODE", 0)
+	if err != nil {
+		return Config{}, err
+	}
 
 	cfg := Config{
 		Env:          getEnv("NODE_ENV", "development"),
@@ -371,6 +402,14 @@ func load(portVar, portDefault, defaultServiceName string, ch chLimits) (Config,
 		NATSURL:            getEnv("NATS_URL", ""),
 		NATSStreamReplicas: natsReplicas,
 		NATSStreamMaxMB:    natsMaxMB,
+		YooKassa: YooKassaConfig{
+			ShopID:        getEnv("YOOKASSA_SHOP_ID", ""),
+			SecretKey:     getEnv("YOOKASSA_SECRET_KEY", ""),
+			APIURL:        getEnv("YOOKASSA_API_URL", "https://api.yookassa.ru/v3"),
+			Receipt:       getEnv("YOOKASSA_RECEIPT", "") == "on",
+			VATCode:       vatCode,
+			TaxSystemCode: taxSystem,
+		},
 		S3: S3Config{
 			Endpoint:        getEnv("S3_ENDPOINT", ""),
 			Region:          getEnv("S3_REGION", ""),
