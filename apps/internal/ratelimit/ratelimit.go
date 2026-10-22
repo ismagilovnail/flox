@@ -16,9 +16,9 @@
 // Deliberately not used on apps/tracker's redirect hot path (CLAUDE.md
 // non-negotiable #9: tracking p50 < 20ms/p95 < 50ms) — a synchronous
 // Redis round trip on every click would blow that budget outright.
-// Tracker's own click volume needs infrastructure-level protection (a
-// CDN or load balancer), not an in-process limiter; see docs/security.md.
-// Its postback endpoint uses Failures, which limits refusals only.
+// The tracker limits clicks per IP in process instead (apps/tracker
+// iplimit.go); see docs/security.md. Its postback endpoint uses
+// Failures, which limits refusals only.
 package ratelimit
 
 import (

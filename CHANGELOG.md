@@ -5,6 +5,33 @@ per-phase, matching `CLAUDE.md`'s phase protocol. The one exception is
 [Between phases], below: spec amendments and the code changes that follow from
 them land between phases and would otherwise be invisible here.
 
+## [Phase 30.60] — Postback secret in logs, per-IP click limit (audit SEC-3, SEC-4)
+
+You chose to send a visitor who is over the limit on, unrecorded, rather than refuse them.
+
+- SEC-3, the postback secret in logs:
+  - The tracker logs path only: no per-request line, errtrack reports `URL.Path`, and `postbacks` keeps parsed
+    fields. `TestPostbackSecretNeverLogged` drives every logging branch of the postback handler (lookup failure,
+    write failure, panic), with GET and POST, and checks the log, the error report and the answer. A mutation that
+    made errtrack log the full URL failed it.
+  - Caddy had no access log, but its error log carried the full URI with `?secret=…`. A global log filter in
+    `infra/Caddyfile.tracker` (and its k8s copy) now replaces `secret` with `REDACTED`. Checked with Caddy 2.10: a
+    postback against a down tracker logs `secret=REDACTED`, with 0 leaks.
+  - docs/security.md and docs/deployment.md: CDNs and load balancers must not log the query, or must mask `secret`.
+- SEC-4, the per-IP click limit:
+  - In process: 64 sharded fixed-minute windows, no Redis, about 18 ns per click (benchmark). The key is the
+    client IP (an IPv6 /64), set by `TRACKER_IP_CLICK_LIMIT` (default 600/min, 0 = off).
+  - Over the limit: `/t/` goes to the campaign's fallback without routing; `/lc/` and `/pc/` go to their token's
+    destination, past the PWA and postlanding stages. Nothing is recorded, and the click counts as
+    `flox_tracking_requests_total{outcome="rate_limited"}`.
+  - docs/security.md, environment.md, observability.md and `.env.example` updated.
+- Tests:
+  - Go full suite with the full env: only the known gallery-WIP failure. e2e passed with nothing skipped.
+  - The tracker passes with `-race`.
+  - New tests: limiter units (window, /64, IPv4-mapped, off, concurrency, benchmark) and the handler test (over the
+    limit: fallback and token destinations, no events).
+  - No frontend changes; no browser pass.
+
 ## [Phase 30.59] — Plan payments through YooKassa (audit BIZ-1, second part)
 
 You chose YooKassa, fixed rouble prices, prepaid periods without automatic charges, a receipt that is configurable

@@ -121,7 +121,14 @@ docker run -d -p 80:80 -p 443:443 \
   Caddy storage module), or each will request its own certificates and hit
   the CA's rate limits.
 - Add Caddy's address to `TRUSTED_PROXIES` if it is not on a private
-  network, or the tracker will see Caddy's IP instead of the visitor's.
+  network. Otherwise the tracker sees Caddy's IP instead of the visitor's,
+  and the per-IP click limit (`TRACKER_IP_CLICK_LIMIT`) would count every
+  visitor as one.
+- **Postback secrets in logs (audit SEC-3).** Networks send their secret in
+  the postback's query string. The Caddyfile masks it in Caddy's logs. Any
+  CDN, load balancer or extra proxy in front of the tracker must either not
+  log query strings or mask the `secret` parameter: Cloudflare and cloud
+  load-balancer access logs keep the full URL by default.
 - Behind Cloudflare's proxy (orange cloud) Cloudflare serves the visitor's
   certificate; the check then reports Cloudflare's and that is correct.
 

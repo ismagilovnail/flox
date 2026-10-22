@@ -167,6 +167,14 @@ func (h *Handler) landClick(w http.ResponseWriter, r *http.Request) {
 	}
 
 	ip := h.clientIP.NetIP(r)
+	// Over the per-IP limit (audit SEC-4): straight to the destination the
+	// token carries, past the PWA and postlanding stages, which record
+	// events of their own — nothing is recorded.
+	if !h.clicks.allow(ip, time.Now()) {
+		outcome = outcomeRateLimited
+		http.Redirect(w, r, claims.Destination, http.StatusFound)
+		return
+	}
 	attrs, err := h.classifier.Classify(r.Context(), classifier.Input{
 		IP:             ip,
 		UserAgent:      r.UserAgent(),

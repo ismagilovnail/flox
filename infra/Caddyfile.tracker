@@ -19,6 +19,21 @@
 	on_demand_tls {
 		ask http://{$TRACKER:tracker:8081}/internal/tls-ask
 	}
+	# A network's postback URL carries its secret in the query
+	# (/postback/{networkId}?secret=…). Caddy has no access log here, but
+	# its error log names the request URI — when the tracker is down, for
+	# one — so the secret is masked in every log line (audit SEC-3,
+	# docs/security.md). Add the same filter to any access log enabled later.
+	log default {
+		format filter {
+			wrap json
+			fields {
+				request>uri query {
+					replace secret REDACTED
+				}
+			}
+		}
+	}
 }
 
 https:// {

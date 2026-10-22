@@ -189,6 +189,13 @@ characters; setting only one of the two fails startup. Unset: SMS is not
 offered as a second factor (email and the app still are). See
 `docs/auth.md` "Second factor: email and SMS".
 
+### Tracker click limit
+
+`TRACKER_IP_CLICK_LIMIT` is read by `apps/tracker`: clicks per client IP (an IPv6 /64) per minute, counted per
+replica. The default is 600; 0 turns the limit off. Over it, a visitor is sent on (to the campaign's fallback, or to
+the destination of a landing or postlanding link) and nothing is recorded. The client IP is resolved through
+`TRUSTED_PROXIES`, so without it every visitor behind the proxy shares one IP. See `docs/security.md`.
+
 ### YooKassa (plan payments)
 
 `YOOKASSA_SHOP_ID` / `YOOKASSA_SECRET_KEY` are optional and read by `apps/api` and `apps/worker`. When both are

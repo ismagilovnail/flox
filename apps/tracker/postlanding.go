@@ -109,7 +109,12 @@ func (h *Handler) postClick(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-	h.recordClaimsEvent(r, event.PostlandingClick, c)
-	outcome = outcomePostClick
+	// Over the per-IP limit (audit SEC-4): onward as usual, unrecorded.
+	if h.clicks.allow(h.clientIP.NetIP(r), time.Now()) {
+		h.recordClaimsEvent(r, event.PostlandingClick, c)
+		outcome = outcomePostClick
+	} else {
+		outcome = outcomeRateLimited
+	}
 	http.Redirect(w, r, c.Destination, http.StatusFound)
 }

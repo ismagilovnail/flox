@@ -1,13 +1,33 @@
 # Security hardening (§54, Phase 30)
 
 Four independent defenses, each closing a gap that existed with zero
-authentication/throttling/host-validation before this phase. None of them
-touch `apps/tracker`'s redirect hot path (CLAUDE.md non-negotiable #9:
-tracking p50 < 20ms / p95 < 50ms) except the postback-secret check below,
-which only runs on `apps/tracker`'s separate `/postback/{networkId}`
-handler — a low-volume, non-hot-path endpoint, not the click redirect.
+authentication/throttling/host-validation before this phase. Two of them
+touch `apps/tracker` (CLAUDE.md non-negotiable #9: tracking p50 < 20ms /
+p95 < 50ms):
+
+- the postback-secret check, which only runs on the separate
+  `/postback/{networkId}` handler, a low-volume path that is not the click
+  redirect;
+- the in-process per-IP click limit (section 3, audit SEC-4), about 20 ns
+  per click with no network call.
 
 ## 1. Incoming postback authentication
+
+**The secret in logs (audit SEC-3).** Networks send the secret in the
+query string, so anything that logs request URIs can leak it:
+
+- **apps/tracker** writes no per-request log line. Its error logs and
+  errtrack's panic reports carry `URL.Path` only
+  (`TestPostbackSecretNeverLogged` covers every logging branch of the
+  postback handler). `postbacks` stores the parsed fields, never the raw
+  query.
+- **Caddy** (`infra/Caddyfile.tracker`) keeps no access log. Its error log
+  names the request URI, for example when the tracker is down, so a global
+  log filter replaces `secret` with `REDACTED` in `request>uri` (checked
+  against Caddy 2.10 with a 502).
+- **Any other proxy, CDN or load balancer** in front of the tracker must
+  either not log query strings or mask the `secret` parameter
+  (docs/deployment.md).
 
 Before this phase, `POST /postback/{networkId}` (`apps/tracker/postback.go`)
 trusted the URL path's `{networkId}` alone — any client that observed or
@@ -107,10 +127,28 @@ brute-force protection.
   the right password gets 429. The trade-off: anyone can keep an
   account's sign-in locked by failing on purpose (20 tries per 15 min per
   IP are enough); existing sessions are unaffected.
-- **Not** applied to `apps/tracker`'s redirect hot path — a synchronous
-  Redis round trip on every click would blow the p50/p95 budget outright.
-  Click-volume protection there is an infrastructure concern (CDN/load
-  balancer), not an in-process limiter.
+- `apps/tracker`'s click routes (`/t/`, `/lc/`, `/pc/`) have their own
+  per-IP limit, in process (`apps/tracker/iplimit.go`, audit SEC-4). This
+  limiter has no Redis, because a synchronous Redis round trip on every
+  click would break the p50/p95 budget. It costs about 20 ns per click.
+  - **Limit and key:** `TRACKER_IP_CLICK_LIMIT` clicks per minute (default
+    600, 0 = off) per client IP. An IPv6 address is counted with its whole
+    /64.
+  - **Window:** a fixed minute aligned to the clock, so up to 2× the limit
+    can get through across a window boundary.
+  - **Replicas:** each replica counts on its own, so N replicas allow up to
+    N× the limit.
+  - **Over the limit:** the visitor is still sent on, and nothing is
+    routed or recorded. `/t/` goes to the campaign's fallback; `/lc/` and
+    `/pc/` go to the destination their signed token carries, past the PWA
+    and postlanding stages. This means a flood skews no statistics and
+    loads no pipeline. A real visitor behind a carrier NAT who shares a
+    busy IP still lands somewhere instead of getting an error.
+  - **Metric:** these clicks count as
+    `flox_tracking_requests_total{outcome="rate_limited"}`.
+
+  This limit is a floor. Volume protection at scale stays an edge concern:
+  a CDN or load balancer.
 - `apps/tracker`'s `/postback/{networkId}` limits **refusals**, not
   requests (tech audit P4): 30 postbacks refused as an unknown network or
   a wrong secret within 10 minutes block that IP for the rest of the

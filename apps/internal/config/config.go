@@ -198,6 +198,11 @@ type Config struct {
 	// docs/billing.md). Without a shop id and key, plans are not sold
 	// online.
 	YooKassa YooKassaConfig
+
+	// TrackerIPClickLimit: clicks per client IP (an IPv6 /64) per minute
+	// that apps/tracker records, per replica (audit SEC-4). Over it a
+	// visitor is sent on unrecorded. 0: no limit.
+	TrackerIPClickLimit int
 }
 
 type YooKassaConfig struct {
@@ -342,6 +347,10 @@ func load(portVar, portDefault, defaultServiceName string, ch chLimits) (Config,
 	if err != nil {
 		return Config{}, err
 	}
+	ipClickLimit, err := parseNonNegative("TRACKER_IP_CLICK_LIMIT", 600)
+	if err != nil {
+		return Config{}, err
+	}
 
 	cfg := Config{
 		Env:          getEnv("NODE_ENV", "development"),
@@ -410,6 +419,7 @@ func load(portVar, portDefault, defaultServiceName string, ch chLimits) (Config,
 			VATCode:       vatCode,
 			TaxSystemCode: taxSystem,
 		},
+		TrackerIPClickLimit: ipClickLimit,
 		S3: S3Config{
 			Endpoint:        getEnv("S3_ENDPOINT", ""),
 			Region:          getEnv("S3_REGION", ""),

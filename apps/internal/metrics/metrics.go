@@ -46,7 +46,8 @@ var (
 	// TrackingRequestsTotal / TrackingLatencySeconds: apps/tracker's
 	// redirect handler (§41). outcome is one of "redirected", "blocked"
 	// (SOURCE_FILTER — no destination matched), "not_found" (unknown
-	// tracking link or inactive campaign), or "error".
+	// tracking link or inactive campaign), "rate_limited" (over the
+	// per-IP click limit, sent on unrecorded), or "error".
 	TrackingRequestsTotal = promauto.NewCounterVec(prometheus.CounterOpts{
 		Namespace: namespace,
 		Name:      "tracking_requests_total",

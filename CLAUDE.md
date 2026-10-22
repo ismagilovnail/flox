@@ -19,7 +19,7 @@ referenced below as §N).
 ## CURRENT STATE — UPDATE THIS EVERY PHASE
 
 ```
-CURRENT PHASE : PHASE 30.59 — YOOKASSA PAYMENTS, BIZ-1 part 2 (closed)
+CURRENT PHASE : PHASE 30.60 — SEC-3 + SEC-4 (closed)
 STATUS        : Product audit 2026-10-15 (docs/audit-product-2026-10-15.md)
                 is the backlog: items on the local dev panel tools/devpanel
                 (make devpanel → 127.0.0.1:8099; memory: flox-audit-tracker
@@ -36,17 +36,22 @@ STATUS        : Product audit 2026-10-15 (docs/audit-product-2026-10-15.md)
                 1/3/12 months in ₽, notification = read back from
                 YooKassa, apply once, worker: lost payments, renew
                 email, 3-day grace → Free. BIZ-1 done; not yet:
-                autopay, discounts, invoices, staff admin.
+                autopay, discounts, invoices, staff admin. SEC-3
+                (secret masked in Caddy logs, tracker logs path only),
+                SEC-4 (in-process per-IP click limit, over it: sent on
+                unrecorded; TRACKER_IP_CLICK_LIMIT).
                 P0 left (skipped by the user for now):
                 OPS-1..3 (prod, restore, load) — needs the owner's hosting.
-LAST COMMIT   : feat(billing): plan payments through YooKassa.
+LAST COMMIT   : feat(tracker): per-IP click limit, postback secret out of logs.
 UNCOMMITTED   : the user's gallery-transcoding WIP (00085, processor.go,
                 transcode.go, worker ffmpeg) — not ours, leave it alone.
                 It now accepts MOV, so contentgallery's
                 TestUploadRejectsOversizeWrongContentAndMov fails with it.
 NEXT          : wait for the user — next item from the board (P1: BIZ-2..4;
-                P2: BUG-7, CH-1, …). INT-2 is excluded: the owner does it
-                later themselves — do not offer it. To try payments for
+                P2: CH-1, TEAM-1, DATA-5, SEC-6, BUG-7, …). INT-2 is
+                excluded: the owner does it later themselves — do not
+                offer it. No browser checks without the user's OK
+                (memory: flox-no-browser-without-ok). To try payments for
                 real: a YooKassa test shop's YOOKASSA_SHOP_ID/SECRET_KEY in
                 infra/.env. CI (DO1) is the user's own decision — do not
                 set it up. Run go test with the full env line AND check e2e

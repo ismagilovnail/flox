@@ -60,6 +60,9 @@ type Handler struct {
 	// unset), means no app asks for notifications.
 	push           pushStore
 	vapidPublicKey string
+	// clicks caps clicks per client IP (iplimit.go, audit SEC-4); nil
+	// means no limit.
+	clicks *clickLimiter
 }
 
 func (h *Handler) Register(r chi.Router) {
@@ -83,6 +86,7 @@ const (
 	outcomePostlanding trackOutcome = "postlanding" // redirected to a postlanding
 	outcomePostClick   trackOutcome = "post_click"  // a visitor left a postlanding through its {next_url}
 	outcomeBlocked     trackOutcome = "blocked"
+	outcomeRateLimited trackOutcome = "rate_limited" // over the per-IP click limit: sent on, nothing recorded
 	outcomeNotFound    trackOutcome = "not_found"
 	outcomeError       trackOutcome = "error"
 )
@@ -131,9 +135,23 @@ func (h *Handler) track(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	cfg := loaded.Config
+	ip := h.clientIP.NetIP(r)
+
+	// Over the per-IP limit (audit SEC-4): the visitor still gets
+	// somewhere — the campaign's fallback — but nothing is routed or
+	// recorded, so a flood neither skews the stats nor loads the
+	// pipeline. Behind a carrier NAT a real visitor may share the IP.
+	if !h.clicks.allow(ip, time.Now()) {
+		outcome = outcomeRateLimited
+		if cfg.FallbackURL == "" {
+			http.Error(w, "too many requests", http.StatusTooManyRequests)
+			return
+		}
+		http.Redirect(w, r, cfg.FallbackURL, http.StatusFound)
+		return
+	}
 
 	params := parseParams(r)
-	ip := h.clientIP.NetIP(r)
 
 	attrs, err := h.classifier.Classify(ctx, classifier.Input{
 		IP:             ip,

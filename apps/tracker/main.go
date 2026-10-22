@@ -185,6 +185,11 @@ func run() error {
 		events:     events,
 		logger:     logger,
 		clientIP:   clientIP,
+		// Clicks per client IP per minute (iplimit.go, audit SEC-4).
+		clicks: newClickLimiter(cfg.TrackerIPClickLimit, time.Minute),
+	}
+	if cfg.TrackerIPClickLimit == 0 {
+		logger.Warn("TRACKER_IP_CLICK_LIMIT=0: clicks are not limited per IP")
 	}
 
 	// Internal landings (docs/landings.md, "Serving visitors"). Both
