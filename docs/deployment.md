@@ -163,8 +163,26 @@ for liveness.
   Postgres connection for the listener); sticky truth is the visitor's own
   cookie, CLAUDE.md #4. A new replica starts cold and loads each campaign
   on its first click.
-- **`apps/api`** is stateless per-request (sessions live in Postgres, not
-  in-process) — scales horizontally with no special coordination.
+- **`apps/api`** is stateless per request: sessions live in Postgres, not
+  in process. It scales horizontally with no special coordination.
+
+  One thing is per process: each organization's concurrent report slots
+  (`chconn.TenantConn`, docs/billing.md "Report limits"). N replicas allow
+  up to N× a plan's concurrency.
+
+  To also cap tenants on the ClickHouse server, give apps/api its own
+  ClickHouse user and a quota keyed by the `quota_key` it already sends,
+  which is the organization's id:
+
+  ```sql
+  CREATE QUOTA flox_report_tenants
+    KEYED BY client_key, user_name   -- per organization; queries without one share the user's
+    FOR INTERVAL 1 minute MAX queries = 120, execution_time = 300, read_rows = 2000000000
+    TO flox_api;
+  ```
+
+  The numbers are a starting point. A tenant over the quota gets a
+  ClickHouse error on its reports until the minute ends.
 - **`apps/worker`** runs poll loops that claim batches with `FOR UPDATE
   SKIP LOCKED` (`apps/internal/eventqueue`, `apps/internal/postback`) —
   already safe to run multiple replicas of; they naturally divide the

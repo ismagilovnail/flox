@@ -5,6 +5,41 @@ per-phase, matching `CLAUDE.md`'s phase protocol. The one exception is
 [Between phases], below: spec amendments and the code changes that follow from
 them land between phases and would otherwise be invisible here.
 
+## [Phase 30.61] — ClickHouse report limits per organization (audit CH-1)
+
+You chose plan-based limits, and a query that finds its organization's slots taken waits 10 s and then gets 429.
+docs/billing.md "Report limits".
+
+- Migration 00096 adds `plans.ch_max_concurrent / ch_max_threads / ch_max_execution_seconds / ch_max_memory_mb /
+  ch_priority`. Draft values:
+  - Free: 2 queries at once, 2 threads, 15 s, 1 GiB;
+  - Start: 3, 4, 30 s, 2 GiB;
+  - Pro: 4, 8, 30 s, 4 GiB;
+  - Business: 6, 16, 30 s, 4 GiB.
+- `chconn.TenantConn` wraps apps/api's ClickHouse connection. Every query made with an organization in its context:
+  - takes one of the organization's slots, held until its result is read or closed;
+  - runs with the plan's `max_threads`, `max_execution_time`, `max_memory_usage` and `priority`;
+  - sends `quota_key` = the organization's id.
+
+  When the slots are taken, the query waits 10 s, then answers `429 reports_busy` with `Retry-After`. Queries with no
+  organization run as before. Limits are cached for a minute; if they cannot be read, Free's apply.
+- `chconn.Settings`: the driver's `WithSettings` replaces every earlier setting and cannot be read back, so apps/api
+  code passes query settings this way for TenantConn to merge. `visitordata` switched to it.
+- The app translates `reports_busy` and retries it up to 3 times. The other 4xx are still not retried. OpenAPI
+  error enum updated.
+- New metrics: `flox_clickhouse_tenant_waits_total{plan,outcome}` and `flox_clickhouse_tenant_wait_seconds`.
+  docs/deployment.md has a ClickHouse `CREATE QUOTA … KEYED BY client_key, user_name` for a server-side cap (syntax
+  checked on 24.10).
+- Tests:
+  - TenantConn: wait then busy, the freed slot goes to a waiter, a cancelled wait, never above the plan under 30
+    goroutines, the cache, the fallback, other organizations and no-organization queries unaffected (`-race`).
+  - Against real ClickHouse, `system.query_log` shows the plan's settings, the caller's setting, the connection's
+    setting and `quota_key` = the organization.
+  - Also: `ReportLimits` per plan, apierror 429 envelope, retry policy.
+  - Go full suite with the full env: only the known gallery-WIP failure. The API suites ran through TenantConn on
+    Free. e2e passed with nothing skipped.
+  - vitest 217/217; eslint, tsc, `next build`. No browser pass.
+
 ## [Phase 30.60] — Postback secret in logs, per-IP click limit (audit SEC-3, SEC-4)
 
 You chose to send a visitor who is over the limit on, unrecorded, rather than refuse them.

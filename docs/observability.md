@@ -58,6 +58,7 @@ is what tells them apart on a dashboard).
 | `postback_success` / `postback_failure` | `flox_postback_deliveries_total{outcome}` | `postback.Deliverer.logAttempt` — outcome is `success`/`retrying`/`dead` |
 | — (pixels, §29) | `flox_pixel_deliveries_total{provider,outcome}` | `pixelsend.Deliverer.record` — outcome is `success`/`retrying`/`dead` |
 | — (push) | `flox_push_deliveries_total{outcome}` | `pushsend.Deliverer.record` — outcome is `delivered`/`gone`/`retry`/`failed` (`docs/push.md`) |
+| — (report limits, CH-1) | `flox_clickhouse_tenant_waits_total{plan,outcome}`, `flox_clickhouse_tenant_wait_seconds` | `chconn.TenantConn` (apps/api) — a report query that found its organization's ClickHouse slots taken: `waited` got one, `busy` answered 429 after 10 s. By plan, never by organization (`docs/billing.md` "Report limits") |
 | `analytics_latency` | `flox_analytics_query_latency_seconds{endpoint}` | `analytics.Service.CampaignDaily`/`CampaignDailyRevenue` — the ClickHouse round trip only, `endpoint` is `campaign_daily`/`campaign_daily_revenue` |
 
 ### Why `event_loss` is two counters, not one

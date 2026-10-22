@@ -1339,7 +1339,7 @@ components:
 
   responses:
     Error:
-      description: "An error: 401 no or invalid key, 402 the plan's limit (plan_limit), 403 the key's scope does not allow it, 404 not found (or another organization's), 409 conflict, 422 validation, 429 rate limited."
+      description: "An error: 401 no or invalid key, 402 the plan's limit (plan_limit), 403 the key's scope does not allow it, 404 not found (or another organization's), 409 conflict, 422 validation, 429 rate limited (or reports_busy: the organization already runs its plan's number of reports at once — retry after Retry-After)."
       content:
         application/json:
           schema: { $ref: "#/components/schemas/Error" }
@@ -1400,7 +1400,7 @@ components:
       properties:
         code:
           type: string
-          enum: [not_found, validation, conflict, unauthorized, forbidden, unavailable, rate_limited, query_too_heavy, plan_limit, internal]
+          enum: [not_found, validation, conflict, unauthorized, forbidden, unavailable, rate_limited, reports_busy, query_too_heavy, plan_limit, internal]
         message: { type: string }
         fields:
           type: object

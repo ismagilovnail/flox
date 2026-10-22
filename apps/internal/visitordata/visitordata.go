@@ -28,6 +28,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/ismagilovnail/flox/apps/internal/apierror"
+	"github.com/ismagilovnail/flox/apps/internal/chconn"
 	"github.com/ismagilovnail/flox/apps/internal/tenant"
 )
 
@@ -290,7 +291,9 @@ func (s *Service) Erase(ctx context.Context, orgID string, clickIDs []string) (E
 	if s.ch == nil {
 		return Erased{}, apierror.Unavailable("ClickHouse is not configured")
 	}
-	wait := clickhouse.Context(ctx, clickhouse.WithSettings(clickhouse.Settings{"mutations_sync": 2, "lightweight_deletes_sync": 2}))
+	// chconn.Settings, not clickhouse.WithSettings: apps/api's TenantConn
+	// adds the plan's settings to these instead of replacing them.
+	wait := chconn.Settings(ctx, clickhouse.Settings{"mutations_sync": 2, "lightweight_deletes_sync": 2})
 	for _, table := range []string{"click_events", "tracking_events", "click_lookup"} {
 		if err := s.ch.Exec(wait, "DELETE FROM "+table+" WHERE organization_id = ? AND click_id IN ?", orgID, ids); err != nil {
 			return Erased{}, fmt.Errorf("visitordata: erasing from %s: %w", table, err)

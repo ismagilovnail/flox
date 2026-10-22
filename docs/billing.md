@@ -79,6 +79,62 @@ tools, devfixtures) has no limits. The count is read before the insert, not
 inside it, so two creates at the same moment can both take the last free
 slot. That is acceptable for a soft limit.
 
+## Report limits (CH-1)
+
+An organization's reports share ClickHouse by plan. The limits are in the
+plan's row (`plans.ch_*`, migration 00096), so they change without a deploy:
+
+| Plan | Queries at once | `max_threads` | Time | Memory | `priority` |
+|---|---|---|---|---|---|
+| Free | 2 | 2 | 15 s | 1 GiB | 4 |
+| Start | 3 | 4 | 30 s | 2 GiB | 3 |
+| Pro | 4 | 8 | 30 s | 4 GiB | 2 |
+| Business | 6 | 16 | 30 s | 4 GiB | 1 |
+
+The numbers are a draft, like the prices.
+
+**What enforces them:** `chconn.TenantConn` wraps apps/api's ClickHouse
+connection. Every query made with an organization in its context:
+
+- takes one of the organization's slots and holds it until its result is
+  read or closed;
+- runs with the plan's `max_threads`, `max_execution_time`,
+  `max_memory_usage` and `priority` (a lower value runs first when queries
+  compete);
+- carries `quota_key` = the organization's id.
+
+When all of an organization's slots are taken, a query waits up to 10 s,
+then answers `429 reports_busy` with `Retry-After: 5`. The app translates the
+message and retries such a query up to 3 times (`shouldRetry`), so a busy
+moment rarely shows. Another organization is never held up by it.
+
+Queries with no organization in their context run with the binary's own
+limits (30 s / 4 GiB), as before:
+
+- migrations;
+- the offer-cap monitor;
+- the click count behind `/billing`.
+
+**Plan lookup:** limits are read from Postgres and kept for a minute per
+organization, so a plan change applies within a minute. If they cannot be
+read, Free's limits apply, so isolation never lifts.
+
+**Settings from code:** code that runs in apps/api and needs query
+settings uses `chconn.Settings(ctx, …)`. It does not use
+`clickhouse.WithSettings`: the driver's option replaces every earlier
+setting and cannot be read back, so the two would drop each other's.
+
+**Per process:** slots are counted per API process, so N replicas allow up
+to N× a plan's concurrency. For a server-side cap, see the ClickHouse quota
+in docs/deployment.md "Scaling".
+
+The Overview sends two dashboard requests at once (this period and the one
+before), plus the onboarding click probe. On Free the third waits for a
+fraction of a second.
+
+Metrics: `flox_clickhouse_tenant_waits_total{plan,outcome=waited|busy}`
+and `flox_clickhouse_tenant_wait_seconds`.
+
 ## API
 
 - `GET /v1/billing`: plan, `since`, `period {from, to}` (days, inclusive),

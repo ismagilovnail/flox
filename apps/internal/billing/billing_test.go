@@ -277,6 +277,38 @@ func TestRepository(t *testing.T) {
 	}
 }
 
+// The plan's share of ClickHouse (audit CH-1, migration 00096): Free's
+// for an organization without a plan row, the new plan's after a change.
+func TestReportLimits(t *testing.T) {
+	pool := mustPool(t)
+	ctx := context.Background()
+	repo := billing.NewRepository(pool)
+	org := seedOrg(t, pool)
+
+	free, err := repo.ReportLimits(ctx, org)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if free.Plan != billing.FreePlan || free.MaxConcurrent != 2 || free.MaxThreads != 2 ||
+		free.MaxExecution != 15*time.Second || free.MaxMemory != 1<<30 || free.Priority != 4 {
+		t.Errorf("free limits = %+v", free)
+	}
+	if err := repo.SetPlan(ctx, org, "business", "report limits test"); err != nil {
+		t.Fatal(err)
+	}
+	biz, err := repo.ReportLimits(ctx, org)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if biz.Plan != "business" || biz.MaxConcurrent != 6 || biz.MaxThreads != 16 || biz.MaxExecution != 30*time.Second ||
+		biz.MaxMemory != 4<<30 || biz.Priority != 1 {
+		t.Errorf("business limits = %+v", biz)
+	}
+	if _, err := repo.ReportLimits(ctx, idgen.New()); err == nil {
+		t.Error("limits of a missing organization were read")
+	}
+}
+
 func isStatus(err error, status int) bool {
 	var e *apierror.Error
 	return errors.As(err, &e) && e.Status == status

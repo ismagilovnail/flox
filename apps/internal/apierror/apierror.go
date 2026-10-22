@@ -85,6 +85,17 @@ func Write(w http.ResponseWriter, logger *slog.Logger, err error) {
 		return
 	}
 
+	if chconn.IsBusy(err) {
+		// The organization runs its plan's number of reports at once
+		// (chconn.TenantConn, audit CH-1): retry in a few seconds.
+		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("Retry-After", "5")
+		w.WriteHeader(http.StatusTooManyRequests)
+		_ = json.NewEncoder(w).Encode(&Error{Code: "reports_busy",
+			Message: "Too many reports are running at once for this organization. Try again in a few seconds."})
+		return
+	}
+
 	if chconn.IsQueryTooHeavy(err) {
 		// ClickHouse stopped the query at this binary's limits (tech
 		// audit CH4): the request asks too much, the server is fine.

@@ -320,6 +320,12 @@ func buildServer(ctx context.Context, cfg config.Config, logger *slog.Logger, re
 		logger.Info("YOOKASSA_SHOP_ID/YOOKASSA_SECRET_KEY not set: plans are not sold online")
 	}
 	billingRepo := billing.NewRepository(db)
+	// Each organization's share of ClickHouse for reports, by plan (audit
+	// CH-1; chconn.TenantConn): from here on every query made in a request
+	// runs in its organization's slots, with its plan's settings.
+	if ch != nil {
+		ch = chconn.NewTenantConn(ch, tenant.OrgID, billingRepo.ReportLimits, logger)
+	}
 	billingPayments := billing.NewPayments(billingRepo, payProvider, cfg.AppURL, billing.ReceiptConfig{
 		Enabled: cfg.YooKassa.Receipt, VATCode: cfg.YooKassa.VATCode, TaxSystemCode: cfg.YooKassa.TaxSystemCode,
 	}, logger)

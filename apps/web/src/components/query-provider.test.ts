@@ -10,6 +10,13 @@ describe("shouldRetry", () => {
     expect(shouldRetry(0, new ApiError(404, "not_found", "gone"))).toBe(false);
   });
 
+  it("retries reports_busy: the organization's report slots free up in seconds", () => {
+    expect(shouldRetry(0, new ApiError(429, "reports_busy", "busy"))).toBe(true);
+    expect(shouldRetry(2, new ApiError(429, "reports_busy", "busy"))).toBe(true);
+    expect(shouldRetry(3, new ApiError(429, "reports_busy", "busy"))).toBe(false);
+    expect(shouldRetry(0, new ApiError(429, "rate_limited", "slow down"))).toBe(false);
+  });
+
   it("retries network errors and 5xx up to three times", () => {
     expect(shouldRetry(0, new ApiError(503, "unavailable", "down"))).toBe(true);
     expect(shouldRetry(2, new Error("Failed to fetch"))).toBe(true);

@@ -11,6 +11,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/ismagilovnail/flox/apps/internal/apierror"
+	"github.com/ismagilovnail/flox/apps/internal/chconn"
 	"github.com/ismagilovnail/flox/apps/internal/idgen"
 )
 
@@ -152,4 +153,24 @@ func (r *Repository) History(ctx context.Context, orgID string) ([]Change, error
 		out = append(out, c)
 	}
 	return out, rows.Err()
+}
+
+// ReportLimits is the organization's plan's share of ClickHouse (audit
+// CH-1; migration 00096), for apps/api's chconn.TenantConn.
+func (r *Repository) ReportLimits(ctx context.Context, orgID string) (chconn.TenantLimits, error) {
+	var l chconn.TenantLimits
+	var execSeconds int
+	var memoryMB int64
+	err := r.db.QueryRow(ctx, `
+		SELECT p.code, p.ch_max_concurrent, p.ch_max_threads, p.ch_max_execution_seconds, p.ch_max_memory_mb, p.ch_priority
+		FROM organizations o
+		LEFT JOIN organization_plans op ON op.organization_id = o.id AND op.ended_at IS NULL
+		JOIN plans p ON p.code = coalesce(op.plan_code, '`+FreePlan+`')
+		WHERE o.id = $1`, orgID).Scan(&l.Plan, &l.MaxConcurrent, &l.MaxThreads, &execSeconds, &memoryMB, &l.Priority)
+	if err != nil {
+		return chconn.TenantLimits{}, fmt.Errorf("billing: reading report limits: %w", err)
+	}
+	l.MaxExecution = time.Duration(execSeconds) * time.Second
+	l.MaxMemory = memoryMB << 20
+	return l, nil
 }
