@@ -2,11 +2,15 @@ package network_test
 
 import (
 	"context"
+	"errors"
+	"net/http"
 	"os"
+	"strings"
 	"testing"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/ismagilovnail/flox/apps/internal/apierror"
 	"github.com/ismagilovnail/flox/apps/internal/idgen"
 	"github.com/ismagilovnail/flox/apps/internal/network"
 	"github.com/ismagilovnail/flox/apps/internal/pagination"
@@ -174,6 +178,60 @@ func TestDeleteCascadesToOffers(t *testing.T) {
 	if exists {
 		t.Fatal("offer still exists after its network was deleted, want it cascade-deleted")
 	}
+}
+
+// TestDeleteConflictNamesWhatHoldsIt (audit BUG-1): a network kept by its
+// recorded postbacks said "referenced by flows", and the user went looking
+// for a flow that did not exist. Each reference now answers its own 409.
+func TestDeleteConflictNamesWhatHoldsIt(t *testing.T) {
+	pool := mustPool(t)
+	ctx := context.Background()
+	orgID := seedOrg(t, ctx, pool)
+	svc := network.NewService(network.NewRepository(pool))
+	create := func(name string) string {
+		res, err := svc.Create(ctx, orgID, network.CreateInput{Name: name, PostbackURL: "https://example.com/pb"})
+		if err != nil {
+			t.Fatalf("Create %s: %v", name, err)
+		}
+		return res.Network.ID
+	}
+	conflict := func(id, want, notWant string) {
+		t.Helper()
+		err := svc.Delete(ctx, orgID, id)
+		var apiErr *apierror.Error
+		if !errors.As(err, &apiErr) || apiErr.Status != http.StatusConflict {
+			t.Fatalf("Delete = %v, want 409", err)
+		}
+		if !strings.Contains(apiErr.Message, want) || strings.Contains(apiErr.Message, notWant) {
+			t.Errorf("Delete message = %q, want it to mention %q and not %q", apiErr.Message, want, notWant)
+		}
+	}
+
+	withPostback := create("Postback Network")
+	if _, err := pool.Exec(ctx, `INSERT INTO postbacks (id, organization_id, network_id, click_id, status, direction, result)
+		VALUES ($1, $2, $3, 'c1', 'CPA_ACCEPT', 'incoming', 'success')`, idgen.New(), orgID, withPostback); err != nil {
+		t.Fatalf("seeding postback: %v", err)
+	}
+	conflict(withPostback, "archive", "flows")
+
+	withFlow := create("Flow Network")
+	tsID, campID, setID, offerID := idgen.New(), idgen.New(), idgen.New(), idgen.New()
+	for _, q := range []struct {
+		sql  string
+		args []any
+	}{
+		{`INSERT INTO traffic_sources (id, organization_id, name, type) VALUES ($1, $2, 'TS', 'other')`, []any{tsID, orgID}},
+		{`INSERT INTO campaigns (id, organization_id, traffic_source_id, name) VALUES ($1, $2, $3, 'C')`, []any{campID, orgID, tsID}},
+		{`INSERT INTO stream_sets (id, organization_id, campaign_id, name) VALUES ($1, $2, $3, 'S')`, []any{setID, orgID, campID}},
+		{`INSERT INTO offers (id, organization_id, network_id, name, payout) VALUES ($1, $2, $3, 'O', 1)`, []any{offerID, orgID, withFlow}},
+		{`INSERT INTO flows (id, organization_id, stream_set_id, name, destination_kind, destination_network_id, destination_offer_id)
+			VALUES ($1, $2, $3, 'F', 'offer', $4, $5)`, []any{idgen.New(), orgID, setID, withFlow, offerID}},
+	} {
+		if _, err := pool.Exec(ctx, q.sql, q.args...); err != nil {
+			t.Fatalf("seeding %.40s: %v", q.sql, err)
+		}
+	}
+	conflict(withFlow, "flows", "postbacks")
 }
 
 func TestCrossTenantIsolation(t *testing.T) {

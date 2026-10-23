@@ -163,18 +163,25 @@ func (r *Repository) Update(ctx context.Context, orgID, id string, in UpdateInpu
 	return n, err
 }
 
-// Delete: offers.network_id CASCADEs (00003), so a network's own offers
-// are removed along with it automatically — no conflict from that side.
-// flows.destination_network_id (00006) has no ON DELETE clause (defaults
-// to RESTRICT) — no Flow CRUD exists yet to ever populate that column,
-// but the 23503 catch is here defensively for when it does, same shape
-// as trafficsource.Repository.Delete.
+// Delete: offers, event mappings and outgoing deliveries CASCADE with the
+// network. Two references RESTRICT it, and each answers its own 409
+// (audit BUG-1 — every refusal used to say "flows"):
+//   - flows.destination_network_id (or destination_offer_id, through the
+//     cascaded offers): a flow still sends traffic to it;
+//   - postbacks.network_id: it has recorded conversions, which must keep
+//     their network — archive it instead.
 func (r *Repository) Delete(ctx context.Context, orgID, id string) error {
 	tag, err := r.db.Exec(ctx, `DELETE FROM networks WHERE id = $1 AND organization_id = $2`, id, orgID)
 	if err != nil {
 		var pgErr *pgconn.PgError
 		if errors.As(err, &pgErr) && pgErr.Code == "23503" {
-			return apierror.Conflict("network is still referenced by one or more flows")
+			switch pgErr.ConstraintName {
+			case "postbacks_network_id_fkey":
+				return apierror.Conflict("the network has recorded postbacks: archive it instead, so its conversions keep their network")
+			case "flows_destination_network_id_fkey", "flows_destination_offer_id_fkey":
+				return apierror.Conflict("the network is the destination of one or more flows: change those flows first")
+			}
+			return apierror.Conflict("the network is still in use and cannot be deleted; archive it instead")
 		}
 		return fmt.Errorf("deleting network: %w", err)
 	}

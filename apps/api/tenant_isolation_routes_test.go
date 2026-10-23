@@ -54,6 +54,7 @@ import (
 	"github.com/ismagilovnail/flox/apps/internal/routing"
 	"github.com/ismagilovnail/flox/apps/internal/streamset"
 	"github.com/ismagilovnail/flox/apps/internal/tags"
+	"github.com/ismagilovnail/flox/apps/internal/testpg"
 	"github.com/ismagilovnail/flox/apps/internal/trackinglink"
 	"github.com/ismagilovnail/flox/apps/internal/trafficsource"
 )
@@ -275,6 +276,7 @@ func newIsolationEnv(t *testing.T) *isolationEnv {
 		if _, err := pool.Exec(ctx, `INSERT INTO organizations (id, name) VALUES ($1, 'Referred')`, referred); err != nil {
 			t.Fatalf("seeding a referred organization: %v", err)
 		}
+		dropOrgOnCleanup(t, pool, referred)
 		id := idgen.New()
 		if _, err := pool.Exec(ctx, `INSERT INTO referral_signups (id, organization_id, referred_organization_id, name, email)
 			VALUES ($1, $2, $3, 'Referred', 'referred@example.test')`, id, org, referred); err != nil {
@@ -419,6 +421,7 @@ func (c *isoClient) signUp(pool *pgxpool.Pool) (orgID, userID string) {
 	if err := json.Unmarshal([]byte(body), &resp); err != nil || resp.Organization.ID == "" {
 		c.t.Fatalf("signup response %s: %v", body, err)
 	}
+	dropOrgOnCleanup(c.t, pool, resp.Organization.ID)
 	// Verification is not what this test is about (auth's own tests are).
 	if err := pool.QueryRow(context.Background(),
 		`UPDATE users SET email_verified_at = now() WHERE lower(email) = lower($1) RETURNING id`, email).Scan(&userID); err != nil {
@@ -429,6 +432,19 @@ func (c *isoClient) signUp(pool *pgxpool.Pool) (orgID, userID string) {
 	}
 	c.email[resp.Organization.ID] = email
 	return resp.Organization.ID, userID
+}
+
+// dropOrgOnCleanup deletes an organization the test made, with the users
+// who belong only to it (audit BUG-2: every run left its "Isolation …" and
+// "Referred" organizations in the dev database). It runs before the pool
+// closes, cleanups being last-in first-out.
+func dropOrgOnCleanup(t *testing.T, pool *pgxpool.Pool, orgID string) {
+	t.Helper()
+	t.Cleanup(func() {
+		if err := testpg.DeleteOrganization(context.Background(), pool, orgID); err != nil {
+			t.Errorf("deleting test organization %s: %v", orgID, err)
+		}
+	})
 }
 
 func (c *isoClient) signIn(orgID string) {

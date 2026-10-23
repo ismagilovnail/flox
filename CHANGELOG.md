@@ -5,6 +5,24 @@ per-phase, matching `CLAUDE.md`'s phase protocol. The one exception is
 [Between phases], below: spec amendments and the code changes that follow from
 them land between phases and would otherwise be invisible here.
 
+## [Phase 30.67] — Small audit bugs (BUG-1..4)
+
+- **BUG-1:** deleting a network said "referenced by one or more flows" whatever held it, so a network kept only by
+  its recorded postbacks sent the user looking for a flow that did not exist. The 409 now depends on the reference.
+  For postbacks it says to archive the network, so its conversions keep it. For flows (the destination network,
+  or one of its offers) it says to change those flows. Any other reference gets a general "in use, archive it".
+  The app has no network delete (only archive), so this is the API's answer.
+  Test: `TestDeleteConflictNamesWhatHoldsIt`.
+- **BUG-2:** the tenant-isolation tests left every "Isolation …" and "Referred" organization they made in the dev
+  database. The organizations are now deleted on cleanup, together with users who belong to no other
+  organization (`testpg.DeleteOrganization`). The count stays the same across runs. The 1,212 left by earlier runs
+  are still there.
+- **BUG-3:** already fixed in b0fce6a. The postback-secret dialog names the network (`{{name}}`).
+- **BUG-4:** already fixed. ESLint reports 0 warnings with `--max-warnings=0`.
+- Checks: go build/vet; full-env go test: everything passes except contentgallery's
+  `TestUploadRejectsOversizeWrongContentAndMov` (your uncommitted MOV WIP); e2e ran without skips; eslint. No web
+  code change; no browser pass.
+
 ## [Between phases] — GAP-2 closed as won't do (2026-10-23)
 
 Importing a Google Play listing into a PWA was dropped by your decision. Taking another app's name, developer and
