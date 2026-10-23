@@ -10,20 +10,22 @@ import type { BillingStatus, Payment, Plan } from "@/lib/api/billing";
 // when the server can take payments — paying for one.
 const start: Plan = {
   code: "start", name: "Start", monthlyClicks: 1_000_000, maxCampaigns: 50, maxDomains: 5, maxMembers: 5,
-  priceCents: 4900, currency: "USD", priceRub: 490_000,
+  priceCents: 4900, currency: "USD", priceRub: 490_000, rawRetentionMonths: 6,
 };
 const business: Plan = {
   code: "business", name: "Business", monthlyClicks: 20_000_000, maxCampaigns: null, maxDomains: null, maxMembers: null,
-  priceCents: 39900, currency: "USD", priceRub: 3_990_000,
+  priceCents: 39900, currency: "USD", priceRub: 3_990_000, rawRetentionMonths: 24,
 };
 const free: Plan = {
   code: "free", name: "Free", monthlyClicks: 100_000, maxCampaigns: 5, maxDomains: 1, maxMembers: 2, priceCents: 0, currency: "USD", priceRub: null,
+  rawRetentionMonths: 3,
 };
 function status(level: BillingStatus["level"], clicks: number | null, extra: Partial<BillingStatus> = {}): BillingStatus {
   return {
     plan: start, since: "2026-10-01T00:00:00Z", period: { from: "2026-10-01", to: "2026-10-31" },
     usage: { clicks, campaigns: 50, domains: 2, members: 3 }, level,
-    paidUntil: null, graceUntil: null, renew: false, canPay: false, ...extra,
+    paidUntil: null, graceUntil: null, renew: false, canPay: false,
+    rawRetentionMonths: 6, rawRetentionShortens: null, ...extra,
   };
 }
 let billing: BillingStatus | undefined;
@@ -139,6 +141,23 @@ describe("BillingPanel", () => {
     render(<BillingPanel />);
     fireEvent.click(screen.getByRole("button", { name: "Choose" }));
     expect(screen.getByText(/Unused paid days of Start are carried over/)).toBeTruthy();
+  });
+
+  // DATA-6: how long raw clicks are kept — per plan, now, and a shorter
+  // period a lapsed or downgraded plan brings, with its date.
+  it("shows how long raw clicks are kept, and when that shortens", () => {
+    billing = status("ok", 10);
+    render(<BillingPanel />);
+    expect(screen.getByText(/Raw clicks are kept 6 mo\./)).toBeTruthy();
+    expect(screen.getByText("Click history")).toBeTruthy();
+    expect(screen.getByText("24 mo.")).toBeTruthy();
+    expect(screen.queryByText(/older clicks will be deleted/)).toBeNull();
+    cleanup();
+
+    billing = status("ok", 10, { plan: free, rawRetentionMonths: 24, rawRetentionShortens: { months: 3, at: "2026-11-22T12:00:00Z" } });
+    render(<BillingPanel />);
+    expect(screen.getByText(/Raw clicks are kept 24 mo\./)).toBeTruthy();
+    expect(screen.getByText(/raw clicks are kept 3 mo\. — older clicks will be deleted/)).toBeTruthy();
   });
 
   it("offers no payment to an admin, nor without payments set up", () => {

@@ -127,6 +127,12 @@ type Config struct {
 	// audit 2026-10-15, GDPR-1); 0 keeps them. Unique clicks count the
 	// keyed pseudonym (VisitorKey), which stays.
 	RetentionIPDays int
+	// RetentionShortenAfterDays: when an organization's plan keeps raw
+	// clicks for less time than its rows do (a downgrade, a lapsed
+	// payment), the shorter period applies after this many days on the
+	// plan (internal/retention.Plans, audit DATA-6); a longer one applies
+	// within the hour.
+	RetentionShortenAfterDays int
 	// VisitorKey is the HMAC key (32+ raw bytes, base64) apps/tracker
 	// derives a visitor's pseudonym from (internal/visitorkey), and
 	// apps/worker backfills older clicks with. The same on every replica,
@@ -327,6 +333,10 @@ func load(portVar, portDefault, defaultServiceName string, ch chLimits) (Config,
 	if err != nil {
 		return Config{}, err
 	}
+	shortenDays, err := parseNonNegative("RETENTION_SHORTEN_AFTER_DAYS", 30)
+	if err != nil {
+		return Config{}, err
+	}
 	pushDays, err := parseNonNegative("RETENTION_PUSH_DELIVERIES_DAYS", 30)
 	if err != nil {
 		return Config{}, err
@@ -380,6 +390,7 @@ func load(portVar, portDefault, defaultServiceName string, ch chLimits) (Config,
 		RetentionFailedPostbacksDays: failedDays,
 		RetentionPostbackLogMonths:   logMonths,
 		RetentionIPDays:              ipDays,
+		RetentionShortenAfterDays:    shortenDays,
 		VisitorKey:                   getEnv("VISITOR_KEY", ""),
 		RetentionPixelDeliveriesDays: pixelDays,
 		RetentionPushDeliveriesDays:  pushDays,

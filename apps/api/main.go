@@ -330,7 +330,8 @@ func buildServer(ctx context.Context, cfg config.Config, logger *slog.Logger, re
 	billingPayments := billing.NewPayments(billingRepo, payProvider, cfg.AppURL, billing.ReceiptConfig{
 		Enabled: cfg.YooKassa.Receipt, VATCode: cfg.YooKassa.VATCode, TaxSystemCode: cfg.YooKassa.TaxSystemCode,
 	}, logger)
-	billingSvc := billing.NewService(billingRepo, clickUsage, logger).WithPayments(billingPayments.Available())
+	billingSvc := billing.NewService(billingRepo, clickUsage, logger).WithPayments(billingPayments.Available()).
+		WithRetentionShortenAfter(time.Duration(cfg.RetentionShortenAfterDays) * 24 * time.Hour)
 	authSvc.SetQuota(billingSvc)
 	authHandler := auth.NewHandler(authSvc, logger, cfg.Env != "development", clientIP)
 	teamHandler := auth.NewTeamHandler(authSvc, logger)

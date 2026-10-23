@@ -19,7 +19,7 @@ referenced below as §N).
 ## CURRENT STATE — UPDATE THIS EVERY PHASE
 
 ```
-CURRENT PHASE : PHASE 30.71 — DATA-6 PART 1, HOURLY CLICK ROLLUP (closed)
+CURRENT PHASE : PHASE 30.72 — DATA-6 PART 2, RAW CLICKS EXPIRE BY PLAN (closed)
 STATUS        : Product audit 2026-10-15 (docs/audit-product-2026-10-15.md)
                 is the backlog: items on the local dev panel tools/devpanel
                 (make devpanel → 127.0.0.1:8099; memory: flox-audit-tracker
@@ -73,13 +73,16 @@ STATUS        : Product audit 2026-10-15 (docs/audit-product-2026-10-15.md)
                 a cutover + BackfillRollup) — report builder clicks/
                 stages and filter values read it when dims allow
                 (EventStore.useRollup); funnel/flow summary stay raw.
-                DATA-6 part 2 NEXT (confirmed plan): plans.
-                raw_retention_months 3/6/12/24, retention_months column
-                + row TTL (0 ⇒ 24), click_lookup ≥ 13 months, worker
-                rewrites on plan change, UI notes; docs/retention.md.
+                DATA-6 part 2: plans.raw_retention_months 3/6/12/24;
+                retention_months + row TTL (0 ⇒ 24, schema/024),
+                click_lookup ≥ 13 months; worker writes it
+                (EventStore.WithRetention) and retention.Plans rewrites
+                rows hourly — shorter only after 30 days
+                (RETENTION_SHORTEN_AFTER_DAYS). A new insert path into
+                click_events/tracking_events must append retention_months.
                 P0 left (skipped by the user for now):
                 OPS-1..3 (prod, restore, load) — needs the owner's hosting.
-LAST COMMIT   : feat(analytics): hourly click rollup.
+LAST COMMIT   : feat(retention): raw clicks expire by plan.
 UNCOMMITTED   : the user's gallery-transcoding WIP (00085, processor.go,
                 transcode.go, worker ffmpeg) — not ours, leave it alone.
                 It now accepts MOV, so contentgallery's

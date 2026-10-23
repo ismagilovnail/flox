@@ -3,7 +3,9 @@
 Decided 2026-10-09: **only logs expire.** Everything a report, a
 conversion or an invoice rests on is kept. Since 2026-10-16 one exception
 inside the kept tables: visitors' **IP address and user agent** are
-personal data and expire (audit GDPR-1, below); the rows stay.
+personal data and expire (audit GDPR-1, below); the rows stay. Since
+2026-10-23 **raw clicks expire by plan** (audit DATA-6, below); the reports
+on them are kept in an hourly rollup.
 
 | Data | Where | Kept | Why |
 |---|---|---|---|
@@ -11,7 +13,9 @@ personal data and expire (audit GDPR-1, below); the rows stay.
 | Postbacks not recorded (`duplicate`, `error`, `ignored`) | Postgres `postbacks` | `RETENTION_FAILED_POSTBACKS_DAYS`, default 90 | A log of what a network sent; nothing reads them back. Network replays make them most of the table. One waiting for its status mapping (`awaiting_mapping`) stays for the 30-day replay window whatever the setting (`docs/event-mappings.md`) |
 | Pixel deliveries, sent or dead-lettered | Postgres `pixel_deliveries` | `RETENTION_PIXEL_DELIVERIES_DAYS`, default 30 | A send log carrying the visitor's IP and user agent the platform matched on (§54); the pixel page shows the last 100 |
 | Postback attempt log (in and out) | ClickHouse `postback_events` | `RETENTION_POSTBACK_LOG_MONTHS`, default 13 | What the Postback Logs screen shows; a year plus a month covers a yearly dispute |
-| Clicks, landing/PWA events, conversions, LTV, click lookup, costs | ClickHouse `click_events`, `tracking_events`, `conversion_events`, `ltv_events`, `click_lookup`, `cost_events` | forever | Every report reads them for any period; a TTL would empty old reports without a word, and a conversion on a click older than the TTL would become `unknown_click` |
+| Raw clicks and landing/PWA/Telegram events | ClickHouse `click_events`, `tracking_events` | the plan's `raw_retention_months`: Free 3, Start 6, Pro 12, Business 24 months (below) | Most of the stored bytes (docs/unit-economics.md); reports by the main dimensions outlive them in `event_rollup_hourly` |
+| Click lookup | ClickHouse `click_lookup` | the plan's months, but at least 13 | A late postback (a re-deposit months later) must still find its click, or it becomes `unknown_click` |
+| Conversions, LTV, costs | ClickHouse `conversion_events`, `ltv_events`, `cost_events` | forever | Revenue and cohorts for any period; one row per conversion, small |
 | Visitors' IP address, user agent and referrer (columns, not rows) | ClickHouse `click_events`, `tracking_events`, `click_lookup` | `RETENTION_IP_DAYS`, default 90 | Personal data (GDPR-1). Unique clicks count `visitor_key`, a keyed pseudonym that stays, so reports do not change. Pixels match a conversion to its ad click by IP + user agent: a conversion more than 90 days after its click goes to the ad platform without them (the platforms take events of the last 7 days anyway) |
 | Daily aggregates | ClickHouse `*_daily_*` | forever | Small |
 | Hourly rollup of clicks and tracking events | ClickHouse `event_rollup_hourly` | forever | What the report builder reads for old periods once raw clicks expire (audit DATA-6, below) |
@@ -48,13 +52,54 @@ not tenant data access.
 
 ## Changing it
 
+A plan's raw-click period is a row: `UPDATE plans SET raw_retention_months`,
+then the hourly pass applies it (shorter after the wait).
+
 Raise or lower the variables and restart the worker. Lowering
 `RETENTION_POSTBACK_LOG_MONTHS` or `RETENTION_FAILED_POSTBACKS_DAYS`
 deletes the now-older rows within the hour (Postgres) or at the next
 merges (ClickHouse) — irreversibly, except from backups.
 
-Expiring the raw clicks by plan is audit DATA-6. Part 1 below lets reports
-outlive them; part 2 sets the periods.
+## Raw clicks by plan (audit DATA-6, part 2)
+
+- **Periods.** `plans.raw_retention_months` (migration 00099): Free 3,
+  Start 6, Pro 12, Business 24 months.
+- **The rows carry it.** `click_events`, `tracking_events` and `click_lookup`
+  have `retention_months` (schema/024).
+  - `apps/worker` writes it on every insert from the organization's months
+    (`EventStore.WithRetention`, `retention.Plans.Of`, reloaded every
+    minute).
+  - Each table's row TTL deletes a row `retention_months` after its
+    `event_at`, at the next merges.
+  - `0` counts as 24 months: rows from before schema/024, or an insert path
+    that does not know the plan. No row is kept forever by omission.
+  - `click_lookup` keeps at least 13 months.
+- **A plan change.** `retention.Plans` runs hourly in `apps/worker`
+  (`organization_retention`: the months the rows carry, the plan's target,
+  since when).
+  - **Longer:** applies within the hour.
+  - **Shorter (a downgrade, or a lapsed payment that moved the organization
+    to Free):** waits `RETENTION_SHORTEN_AFTER_DAYS` (30) on the plan first,
+    so a late renewal or a short downgrade deletes nothing.
+  - Then new rows carry the new months, and once every worker's cache has
+    them (5 minutes), the organization's existing rows are rewritten
+    (`chstore.SetRawRetention`, an `ALTER TABLE … UPDATE` per table, waited
+    for).
+  - On the first run every organization starts at 24 months, what its rows
+    meant before; a shorter plan waits the 30 days too.
+- **Irreversible.** Rows past a shortened retention go at the next merges.
+  Only backups bring them back.
+- **What the operator sees.**
+  - The Plan tab: the click history of every plan; the organization's months
+    now; and, while a shorter one waits, the date it applies.
+  - The report builder and the click log: a note when the range starts
+    before the cutoff (`RawRetentionNotice`).
+- **Tests:**
+  - `TestRawRetentionFollowsThePlan`: the wait, the immediate upgrade, the
+    rewrite of all three tables, and new rows carrying the months;
+  - `TestRawRetentionTTLDeletesOldRows`: a 4-month-old click of a 3-month
+    plan is gone after a merge, one without retention stays, and
+    `click_lookup` keeps it.
 
 ## Rollup (audit DATA-6, part 1)
 

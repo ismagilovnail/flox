@@ -5,6 +5,50 @@ per-phase, matching `CLAUDE.md`'s phase protocol. The one exception is
 [Between phases], below: spec amendments and the code changes that follow from
 them land between phases and would otherwise be invisible here.
 
+## [Phase 30.72] — Raw clicks expire by plan (DATA-6, part 2)
+
+docs/retention.md "Raw clicks by plan". The plan you confirmed, plus one safeguard of mine: a shorter period waits 30
+days.
+
+- **Periods:** `plans.raw_retention_months` (migration 00099): Free 3, Start 6, Pro 12, Business 24 months.
+- **schema/024:**
+  - `retention_months` on `click_events`, `tracking_events` and `click_lookup` (the `click_lookup` view now v4 copies
+    it);
+  - row TTLs: `event_at` plus that many months, `0` = 24, so no row is kept forever by omission;
+  - `click_lookup` keeps at least 13 months, for late re-deposits.
+- **Worker:**
+  - new rows carry the organization's months (`EventStore.WithRetention` ← `retention.Plans.Of`, reloaded every
+    minute);
+  - `retention.Plans` runs hourly (`organization_retention`). A longer period applies within the hour. A shorter
+    one — a downgrade, or a lapsed payment that moved the organization to Free — applies after
+    `RETENTION_SHORTEN_AFTER_DAYS` (30), so a late renewal deletes nothing.
+  - Then the organization's existing rows are rewritten (`chstore.SetRawRetention`), once every worker writes the new
+    value.
+  - First run: everyone starts at 24 months (what the rows meant), so nothing is deleted for 30 days.
+- **API:** `/billing` and `/billing/plans` add `rawRetentionMonths`; `/billing` also `rawRetentionShortens`
+  (`{months, at}`). OpenAPI updated.
+- **App:**
+  - the Plan tab shows "Click history" per plan, how long this organization's raw clicks are kept, and the date a
+    shorter period applies, with a renew hint;
+  - the report builder and the click log say when the range reaches past the cutoff, and what is missing for that
+    time.
+- **docs:**
+  - retention.md: table and a new section;
+  - billing.md: the plans table;
+  - unit-economics.md: storage stops growing; ceiling per plan at the placeholder prices — Business 18%, Pro 6.4%,
+    Start 2.8%;
+  - environment.md, `.env.example`.
+- **Tests:**
+  - `TestRawRetentionFollowsThePlan`: the wait, the immediate upgrade, the rewrite of all three tables, new rows;
+  - `TestRawRetentionTTLDeletesOldRows`: the TTL really deletes a 4-month-old click of a 3-month plan;
+    `click_lookup` keeps it; a row without retention stays;
+  - billing `TestRawRetention`;
+  - vitest for the notice and the Plan tab.
+- **Checks:** go build/vet; full-env go test: everything passes except contentgallery's MOV test (your WIP); e2e
+  without skips; vitest 224/224, tsc, eslint, `next build`. No browser pass.
+- **Dev now:** 65 Free organizations wait 24 → 3 months until 2026-11-22; then their clicks older than 3 months go,
+  demo data included.
+
 ## [Phase 30.71] — Hourly click rollup (DATA-6, part 1)
 
 You chose a rollup, so reports outlive raw clicks. Retention periods: 3 / 6 / 12 / 24 months (part 2). docs/retention.md

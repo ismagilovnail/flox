@@ -1348,7 +1348,7 @@ components:
     Plan:
       type: object
       additionalProperties: false
-      required: [code, name, monthlyClicks, maxCampaigns, maxDomains, maxMembers, priceCents, currency, priceRub]
+      required: [code, name, monthlyClicks, maxCampaigns, maxDomains, maxMembers, priceCents, currency, priceRub, rawRetentionMonths]
       description: A limit of `null` is unlimited.
       properties:
         code: { type: string, example: start }
@@ -1360,11 +1360,12 @@ components:
         priceCents: { type: integer, description: "Per month." }
         currency: { type: string }
         priceRub: { type: [integer, "null"], description: "Per month in kopecks, the price it is paid online for; null: not sold online." }
+        rawRetentionMonths: { type: integer, description: "How long the plan keeps raw clicks. Reports by the main dimensions outlive them; the click log, region, city, utm, subs and the funnel do not." }
 
     BillingStatus:
       type: object
       additionalProperties: false
-      required: [plan, since, period, usage, level, paidUntil, graceUntil, renew, canPay]
+      required: [plan, since, period, usage, level, paidUntil, graceUntil, renew, canPay, rawRetentionMonths, rawRetentionShortens]
       properties:
         plan: { $ref: "#/components/schemas/Plan" }
         since: { type: string, format: date-time, description: "When the organization moved to this plan." }
@@ -1392,6 +1393,15 @@ components:
         graceUntil: { type: [string, "null"], format: date-time, description: "When the organization moves to Free unless the plan is renewed." }
         renew: { type: boolean, description: "The paid period ends within 3 days, or has ended." }
         canPay: { type: boolean, description: "Plans can be paid online (in the app) on this server." }
+        rawRetentionMonths: { type: integer, description: "How long this organization's raw clicks are kept now." }
+        rawRetentionShortens:
+          type: [object, "null"]
+          additionalProperties: false
+          required: [months, at]
+          description: "A shorter retention the plan brings, and when it applies; null when none is waiting."
+          properties:
+            months: { type: integer }
+            at: { type: string, format: date-time }
 
     Error:
       type: object

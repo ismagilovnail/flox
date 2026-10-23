@@ -14,6 +14,25 @@ import (
 type EventStore struct {
 	conn   driver.Conn
 	rollup *rollupState
+	// retentionOf: how many months an organization keeps raw clicks and
+	// tracking events (schema/024); nil, or 0 from it, keeps the column's
+	// default — 24 months.
+	retentionOf func(organizationID string) uint8
+}
+
+// WithRetention makes inserted clicks and tracking events carry their
+// organization's raw-event retention (audit DATA-6). apps/worker sets it
+// from internal/retention.Plans.
+func (s *EventStore) WithRetention(of func(organizationID string) uint8) *EventStore {
+	s.retentionOf = of
+	return s
+}
+
+func (s *EventStore) retention(organizationID string) uint8 {
+	if s.retentionOf == nil {
+		return 0
+	}
+	return s.retentionOf(organizationID)
 }
 
 func NewEventStore(conn driver.Conn) *EventStore {
@@ -75,12 +94,13 @@ func (s *EventStore) insertClickEvents(ctx context.Context, events []event.Event
 			e.Subs[0], e.Subs[1], e.Subs[2], e.Subs[3], e.Subs[4], e.Subs[5], e.Subs[6], e.Subs[7], e.Subs[8], e.Subs[9],
 			e.ExternalClickID, e.FBClickID, e.TTClickID, e.FilterReason,
 			e.LandingID, e.OfferID, e.PwaID, e.TrafficSourceID, // schema/008-011: appended last, keep this order
-			e.ID,                // schema/014: event_id, after them
-			e.PostlandingID,     // schema/016, after event_id
-			e.NetworkID,         // schema/017, after postlanding_id (click/tracking only; conversions have it from 003)
-			e.TelegramChannelID, // schema/019, after network_id (click/tracking only)
-			e.VisitorKey,        // schema/020, after tg_channel_id (click_events only)
-			e.IPVisitorKey,      // schema/021, after visitor_key (click_events only)
+			e.ID,                          // schema/014: event_id, after them
+			e.PostlandingID,               // schema/016, after event_id
+			e.NetworkID,                   // schema/017, after postlanding_id (click/tracking only; conversions have it from 003)
+			e.TelegramChannelID,           // schema/019, after network_id (click/tracking only)
+			e.VisitorKey,                  // schema/020, after tg_channel_id (click_events only)
+			e.IPVisitorKey,                // schema/021, after visitor_key (click_events only)
+			s.retention(e.OrganizationID), // schema/024, after ip_visitor_key
 		); err != nil {
 			return fmt.Errorf("chstore: appending to click_events batch: %w", err)
 		}
@@ -109,10 +129,11 @@ func (s *EventStore) insertTrackingEvents(ctx context.Context, events []event.Ev
 			e.Subs[0], e.Subs[1], e.Subs[2], e.Subs[3], e.Subs[4], e.Subs[5], e.Subs[6], e.Subs[7], e.Subs[8], e.Subs[9],
 			e.ExternalClickID,
 			e.LandingID, e.OfferID, e.PwaID, e.TrafficSourceID, // schema/008-011: appended last, keep this order
-			e.ID,                // schema/014: event_id, after them
-			e.PostlandingID,     // schema/016, after event_id
-			e.NetworkID,         // schema/017, after postlanding_id (click/tracking only; conversions have it from 003)
-			e.TelegramChannelID, // schema/019, after network_id (click/tracking only)
+			e.ID,                          // schema/014: event_id, after them
+			e.PostlandingID,               // schema/016, after event_id
+			e.NetworkID,                   // schema/017, after postlanding_id (click/tracking only; conversions have it from 003)
+			e.TelegramChannelID,           // schema/019, after network_id (click/tracking only)
+			s.retention(e.OrganizationID), // schema/024, after tg_channel_id
 		); err != nil {
 			return fmt.Errorf("chstore: appending to tracking_events batch: %w", err)
 		}

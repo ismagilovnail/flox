@@ -34,7 +34,21 @@ type Service struct {
 	now    func() time.Time
 	logger *slog.Logger
 	canPay bool
+	// shortenAfter: RETENTION_SHORTEN_AFTER_DAYS, for the date a shorter
+	// raw-click retention applies (internal/retention.Plans).
+	shortenAfter time.Duration
 }
+
+// WithRetentionShortenAfter sets how long a shorter raw-click retention
+// waits before it applies.
+func (s *Service) WithRetentionShortenAfter(d time.Duration) *Service {
+	s.shortenAfter = d
+	return s
+}
+
+// UnappliedRetentionMonths is what an organization's raw rows mean before
+// internal/retention.Plans first ran for it: the column default.
+const UnappliedRetentionMonths = 24
 
 // WithPayments marks plans as payable online (Status.CanPay).
 func (s *Service) WithPayments(available bool) *Service {
@@ -79,6 +93,7 @@ func (s *Service) Status(ctx context.Context, orgID string) (Status, error) {
 		st.PaidUntil, st.GraceUntil = sub.PaidUntil, &grace
 		st.Renew = !now.Before(sub.PaidUntil.Add(-RemindBefore))
 	}
+	st.RawRetentionMonths, st.RawRetentionShortens = rawRetention(sub, now, s.shortenAfter)
 	st.Period.From = period.From.Format(time.DateOnly)
 	st.Period.To = period.To.AddDate(0, 0, -1).Format(time.DateOnly)
 	return st, nil
@@ -170,4 +185,17 @@ func plural(r Resource) string {
 		return "members"
 	}
 	return string(r) + "s"
+}
+
+// rawRetention: the months the organization's raw clicks are kept now, and
+// the shorter period its plan brings and when, if one is waiting.
+func rawRetention(sub Subscription, now time.Time, shortenAfter time.Duration) (int, *RetentionChange) {
+	months, target, since := UnappliedRetentionMonths, sub.Plan.RawRetentionMonths, now
+	if sub.Retention != nil {
+		months, target, since = sub.Retention.Months, sub.Retention.Target, sub.Retention.TargetSince
+	}
+	if target >= months {
+		return months, nil
+	}
+	return months, &RetentionChange{Months: target, At: since.Add(shortenAfter)}
 }

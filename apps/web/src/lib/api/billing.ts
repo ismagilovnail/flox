@@ -13,6 +13,8 @@ export type Plan = {
   currency: string;
   /** Monthly price in kopecks it is paid online for; null: not sold online. */
   priceRub: number | null;
+  /** How long the plan keeps raw clicks (DATA-6, docs/retention.md). */
+  rawRetentionMonths: number;
 };
 
 /** How far this month's clicks are into the plan: warning from 80%,
@@ -35,6 +37,10 @@ export type BillingStatus = {
   renew: boolean;
   /** Plans can be paid online (YooKassa) on this server. */
   canPay: boolean;
+  /** How long this organization's raw clicks are kept now. */
+  rawRetentionMonths: number;
+  /** A shorter period the plan brings, and when it applies. */
+  rawRetentionShortens: { months: number; at: string } | null;
 };
 
 export type PaymentMonths = 1 | 3 | 12;

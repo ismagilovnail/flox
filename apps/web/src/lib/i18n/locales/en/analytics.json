@@ -229,5 +229,10 @@
       "withoutClick_one": "{{count}} conversion without an attributed click is counted on its own date.",
       "withoutClick_other": "{{count}} conversions without an attributed click are counted on their own date."
     }
+  },
+  "rawRetention": {
+    "title": "Raw clicks are kept {{count}} mo.",
+    "report": "The range starts earlier. For that time, reports by the main dimensions come from the hourly rollup and are whole; region, city, the funnel and conversions by OS, browser and language are empty.",
+    "clickLog": "Single clicks older than that were deleted by the plan. The log is empty for the start of the range; the summary reports are kept."
   }
 }

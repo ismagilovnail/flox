@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/ClickHouse/clickhouse-go/v2"
 	"github.com/ClickHouse/clickhouse-go/v2/lib/driver"
 )
 
@@ -90,4 +91,26 @@ func SetPersonalDataTTL(ctx context.Context, conn driver.Conn, days int) (change
 		}
 	}
 	return changed, nil
+}
+
+// rawRetentionTables carry retention_months (schema/024).
+var rawRetentionTables = []string{"click_events", "tracking_events", "click_lookup"}
+
+// SetRawRetention rewrites retention_months on the organizations' raw
+// clicks and tracking events (audit DATA-6), and waits for it. Each
+// table's TTL then deletes the rows older than that at its next merges —
+// irreversibly; click_lookup keeps a click at least 13 months anyway.
+// internal/retention.Plans decides when.
+func SetRawRetention(ctx context.Context, conn driver.Conn, months uint8, organizationIDs []string) error {
+	if len(organizationIDs) == 0 {
+		return nil
+	}
+	wait := clickhouse.Context(ctx, clickhouse.WithSettings(clickhouse.Settings{"mutations_sync": 2}))
+	for _, table := range rawRetentionTables {
+		if err := conn.Exec(wait, `ALTER TABLE `+table+` UPDATE retention_months = ?
+			WHERE organization_id IN ? AND retention_months != ?`, months, organizationIDs, months); err != nil {
+			return fmt.Errorf("chstore: setting retention on %s: %w", table, err)
+		}
+	}
+	return nil
 }

@@ -21,11 +21,11 @@ type Repository struct {
 
 func NewRepository(db *pgxpool.Pool) *Repository { return &Repository{db: db} }
 
-const planColumns = `p.code, p.name, p.monthly_clicks, p.max_campaigns, p.max_domains, p.max_members, p.price_cents, p.currency, p.price_rub`
+const planColumns = `p.code, p.name, p.monthly_clicks, p.max_campaigns, p.max_domains, p.max_members, p.price_cents, p.currency, p.price_rub, p.raw_retention_months`
 
 func scanPlan(row pgx.Row, extra ...any) (Plan, error) {
 	var p Plan
-	err := row.Scan(append([]any{&p.Code, &p.Name, &p.MonthlyClicks, &p.MaxCampaigns, &p.MaxDomains, &p.MaxMembers, &p.PriceCents, &p.Currency, &p.PriceRub}, extra...)...)
+	err := row.Scan(append([]any{&p.Code, &p.Name, &p.MonthlyClicks, &p.MaxCampaigns, &p.MaxDomains, &p.MaxMembers, &p.PriceCents, &p.Currency, &p.PriceRub, &p.RawRetentionMonths}, extra...)...)
 	return p, err
 }
 
@@ -57,12 +57,15 @@ func (r *Repository) Current(ctx context.Context, orgID string) (Plan, time.Time
 // Subscription is Current with the paid period.
 func (r *Repository) Subscription(ctx context.Context, orgID string) (Subscription, error) {
 	var s Subscription
+	var months, target *int
+	var since *time.Time
 	p, err := scanPlan(r.db.QueryRow(ctx, `
-		SELECT `+planColumns+`, coalesce(op.started_at, o.created_at), op.paid_until
+		SELECT `+planColumns+`, coalesce(op.started_at, o.created_at), op.paid_until, rr.months, rr.target, rr.target_since
 		FROM organizations o
 		LEFT JOIN organization_plans op ON op.organization_id = o.id AND op.ended_at IS NULL
 		JOIN plans p ON p.code = coalesce(op.plan_code, '`+FreePlan+`')
-		WHERE o.id = $1`, orgID), &s.Since, &s.PaidUntil)
+		LEFT JOIN organization_retention rr ON rr.organization_id = o.id
+		WHERE o.id = $1`, orgID), &s.Since, &s.PaidUntil, &months, &target, &since)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return Subscription{}, apierror.NotFound("organization not found")
 	}
@@ -70,6 +73,9 @@ func (r *Repository) Subscription(ctx context.Context, orgID string) (Subscripti
 		return Subscription{}, fmt.Errorf("billing: reading the plan: %w", err)
 	}
 	s.Plan = p
+	if months != nil {
+		s.Retention = &RetentionState{Months: *months, Target: *target, TargetSince: *since}
+	}
 	return s, nil
 }
 

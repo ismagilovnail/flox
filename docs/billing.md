@@ -16,16 +16,21 @@ Plans are rows in `plans`, not code, so a price or a limit changes with an
 `UPDATE` rather than a deploy. A `NULL` limit means unlimited. `public = false`
 is a custom deal: it can be assigned but is not listed.
 
-| Plan | Clicks / month | Campaigns | Domains | Members | Price |
-|---|---|---|---|---|---|
-| Free | 100,000 | 5 | 1 | 2 | $0 |
-| Start | 1,000,000 | 50 | 5 | 5 | $49 |
-| Pro | 5,000,000 | ∞ | 20 | 15 | $149 |
-| Business | 20,000,000 | ∞ | ∞ | ∞ | $399 |
+| Plan | Clicks / month | Campaigns | Domains | Members | Raw clicks kept | Price |
+|---|---|---|---|---|---|---|
+| Free | 100,000 | 5 | 1 | 2 | 3 months | $0 |
+| Start | 1,000,000 | 50 | 5 | 5 | 6 months | $49 |
+| Pro | 5,000,000 | ∞ | 20 | 15 | 12 months | $149 |
+| Business | 20,000,000 | ∞ | ∞ | ∞ | 24 months | $399 |
+
+Raw clicks kept: `plans.raw_retention_months` (audit DATA-6). Reports by the
+main dimensions and conversions stay for good; a shorter period waits 30
+days (docs/retention.md "Raw clicks by plan").
 
 The numbers are a draft. The click tiers follow competitors' entry plans.
 BIZ-2 measured what a client costs (docs/unit-economics.md): compute is
-negligible, while storage grows with every month a client stays. The prices
+negligible, and storage, which grew with every month a client stayed,
+stops at the plan's retention since DATA-6. The prices
 still wait for the market data (BIZ-3, BIZ-4) and the fixed costs (OPS-1).
 
 The current plan is the open `organization_plans` row (`ended_at IS NULL`;

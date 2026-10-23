@@ -33,6 +33,10 @@ type Plan struct {
 	// PriceRub is the monthly price in kopecks the plan is sold for
 	// online (YooKassa); nil: not sold online.
 	PriceRub *int64 `json:"priceRub"`
+	// RawRetentionMonths: how long the plan keeps raw clicks (audit
+	// DATA-6, docs/retention.md); reports outlive them through the hourly
+	// rollup.
+	RawRetentionMonths int `json:"rawRetentionMonths"`
 }
 
 // Subscription is the organization's current plan. PaidUntil nil: the
@@ -41,6 +45,22 @@ type Subscription struct {
 	Plan      Plan
 	Since     time.Time
 	PaidUntil *time.Time
+	// Retention is the organization's organization_retention row (audit
+	// DATA-6), nil before internal/retention.Plans first ran for it.
+	Retention *RetentionState
+}
+
+// RetentionState: the months the organization's raw clicks are kept now,
+// and its plan's target since when.
+type RetentionState struct {
+	Months, Target int
+	TargetSince    time.Time
+}
+
+// RetentionChange is a shorter raw-click retention that applies at At.
+type RetentionChange struct {
+	Months int       `json:"months"`
+	At     time.Time `json:"at"`
 }
 
 // Resource is something a plan limits the creation of.
@@ -108,6 +128,11 @@ type Status struct {
 	Renew      bool       `json:"renew"`
 	// CanPay: plans can be paid online on this deployment.
 	CanPay bool `json:"canPay"`
+	// RawRetentionMonths: how long the organization's raw clicks are kept
+	// now (audit DATA-6) — the plan's, except while a shorter one waits
+	// (RawRetentionShortens) or before the first pass applied the plan.
+	RawRetentionMonths   int              `json:"rawRetentionMonths"`
+	RawRetentionShortens *RetentionChange `json:"rawRetentionShortens"`
 }
 
 // Change is one organization_plans row, for apps/cmd/billing's history.

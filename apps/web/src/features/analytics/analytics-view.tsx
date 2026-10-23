@@ -18,6 +18,7 @@ import type { FilterCondition, DimensionKey } from "@/types/analytics";
 import { useReportingCurrency } from "@/hooks/use-organization";
 import { useReport, useTimeseries, useFunnelReport } from "@/hooks/use-analytics-report";
 import { CostTimezoneNotice } from "@/features/analytics/cost-timezone-notice";
+import { RawRetentionNotice } from "@/features/analytics/raw-retention-notice";
 import { DateBasisNotice } from "@/features/analytics/date-basis";
 import { useOrganization } from "@/hooks/use-organization";
 import { todayInZone } from "@/lib/timezones";
@@ -161,6 +162,7 @@ function AnalyticsContent({ orgTimezone }: { orgTimezone: string }) {
       <ReportPresetBar state={state} onApply={onChange} />
       <ReportControls state={state} onChange={onChange} />
       <CostTimezoneNotice from={from} to={to} timezone={state.timezone} />
+      <RawRetentionNotice from={from} variant="report" />
       <DateBasisNotice
         dateBasis={dateBasis}
         datedByConversion={(tableQuery.data ?? []).reduce((n, r) => n + (r.datedByConversion ?? 0), 0)}

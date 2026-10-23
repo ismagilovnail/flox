@@ -55,12 +55,13 @@ func TestListAndCountClickLog(t *testing.T) {
 			r.Subs[0], r.Subs[1], r.Subs[2], r.Subs[3], r.Subs[4], r.Subs[5], r.Subs[6], r.Subs[7], r.Subs[8], r.Subs[9],
 			"", "", "", r.FilterReason,
 			"", "", "", "", // landing_id, offer_id, pwa_id, traffic_source_id (schema/008-011)
-			"", // event_id (schema/014)
-			"", // postlanding_id (schema/016)
-			"", // network_id (schema/017)
-			"", // tg_channel_id (schema/019)
-			"", // visitor_key (schema/020)
-			"", // ip_visitor_key (schema/021)
+			"",       // event_id (schema/014)
+			"",       // postlanding_id (schema/016)
+			"",       // network_id (schema/017)
+			"",       // tg_channel_id (schema/019)
+			"",       // visitor_key (schema/020)
+			"",       // ip_visitor_key (schema/021)
+			uint8(0), // retention_months (schema/024)
 		); err != nil {
 			t.Fatalf("batch.Append: %v", err)
 		}

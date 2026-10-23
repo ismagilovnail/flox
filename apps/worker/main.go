@@ -240,7 +240,14 @@ func run() error {
 	} else if changed {
 		logger.Info("postback log retention set", "months", cfg.RetentionPostbackLogMonths)
 	}
-	chEvents := chstore.NewEventStore(ch)
+	// Raw clicks and tracking events carry their organization's plan
+	// retention (audit DATA-6, docs/retention.md); Plans keeps the rows in
+	// step with plan changes (started below).
+	rawRetention := &retention.Plans{DB: db, CH: ch, ShortenAfter: time.Duration(cfg.RetentionShortenAfterDays) * 24 * time.Hour, Logger: logger}
+	if err := rawRetention.Load(ctx); err != nil {
+		logger.Warn("raw retention not loaded: new rows keep 24 months until it is", "error", err)
+	}
+	chEvents := chstore.NewEventStore(ch).WithRetention(rawRetention.Of)
 	// One-time copies of existing data into tables added by later schema
 	// files (click_lookup, tech audit CH1). In the background: copying a
 	// large history must not delay event flushing, and until it is done
@@ -621,6 +628,9 @@ func run() error {
 	expiredAuth := &retention.ExpiredAuth{DB: db, LoginFailureWindow: auth.LoginFailureWindow, Logger: logger}
 	logger.Info("expired auth cleanup starting", "interval", retention.Interval)
 	start(func() { expiredAuth.RunLoop(ctx, retention.Interval) })
+	logger.Info("raw click retention by plan starting", "interval", retention.PlansInterval, "shorten_after_days", cfg.RetentionShortenAfterDays)
+	start(func() { rawRetention.RefreshLoop(ctx) })
+	start(func() { rawRetention.RunLoop(ctx) })
 
 	// Every domain's SSL status from a real TLS connection to it
 	// (internal/sslcheck, marketer audit #4).

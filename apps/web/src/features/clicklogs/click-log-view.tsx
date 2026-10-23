@@ -10,6 +10,7 @@ import { useLogGrid } from "@/hooks/use-log-grid";
 import { useApiErrorMessage } from "@/hooks/use-api-error-message";
 import { listClickLogs, type ClickLog, type ListClickLogsParams } from "@/lib/api/click-logs";
 import { CLICK_LOG_INITIAL_COLUMN_VISIBILITY, clickLogColumns } from "@/features/clicklogs/click-log-columns";
+import { RawRetentionNotice } from "@/features/analytics/raw-retention-notice";
 
 const fetchClickLogPage = (filter: ListClickLogsParams, offset: number, limit: number) =>
   listClickLogs({ ...filter, offset, limit }).then((r) => ({ rows: r.logs, total: r.total }));
@@ -34,6 +35,7 @@ export function ClickLogView() {
         <h1 className="text-2xl font-semibold tracking-tight">{t("view.title")}</h1>
         <p className="text-sm text-muted-foreground">{t("view.description")}</p>
       </div>
+      <RawRetentionNotice from={grid.range.from} variant="clickLog" />
 
       <LogGrid<ClickLog>
         grid={grid}

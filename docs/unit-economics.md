@@ -152,6 +152,24 @@ Before DATA-7 the same table read 12%, 19% and 29% at month 24.
 Peaks do not change this. A Business client averages 7.7 clicks/s; at ten
 times that, the pipeline needs 0.02 cores.
 
+**With the retention by plan (DATA-6), storage stops growing.**
+
+- **What is kept:**
+  - `click_events` and `tracking_events` (about 0.30 GB per million clicks
+    once IPs expire) for the plan's months;
+  - `click_lookup` (0.21 GB) for at least 13 months;
+  - the hourly rollup (0.016 GB) forever.
+- **Ceiling per client at the plan's limit:**
+
+| Plan | Raw clicks kept | Stored at the ceiling | Storage per month at the placeholder prices | Share of price |
+|---|---:|---:|---:|---:|
+| Free | 3 months | 0.4 GB | 11 ₽ | — |
+| Start | 6 months | 4.5 GB | 135 ₽ | 2.8% |
+| Pro | 12 months | 32 GB | 951 ₽ | 6.4% |
+| Business | 24 months | 245 GB | 7,350 ₽ | 18% |
+
+The rollup then grows by 0.3 GB a year for a Business client, a few rubles.
+
 ## What it means
 
 - **Per-click compute is negligible.** Even at Business volume it is a few
@@ -163,7 +181,7 @@ times that, the pipeline needs 0.02 cores.
 - **Storage is the only variable cost that matters, and it has no ceiling.**
   Rows are kept forever, so a client's cost grows every month at the same
   price. Two levers:
-  1. **Raw-click retention per plan** (DATA-6, open), for example 3 / 6 / 13 months, with the
+  1. **Raw-click retention per plan** (DATA-6, done: 3 / 6 / 12 / 24), for example 3 / 6 / 13 months, with the
      daily aggregates kept forever. Reports that read raw `click_events` (click
      log, unique clicks, LTV, breakdowns not covered by an aggregate) would end
      at the retention date. The storage cost then stops growing after the

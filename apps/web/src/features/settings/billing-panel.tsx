@@ -138,6 +138,18 @@ export function BillingPanel() {
               </div>
             ))}
           </dl>
+
+          <div className="flex flex-col gap-1 text-xs text-muted-foreground">
+            <p>{t("billing.retention", { count: billing.data.rawRetentionMonths })}</p>
+            {billing.data.rawRetentionShortens && (
+              <p className="text-warning">
+                {t("billing.retentionShortens", {
+                  count: billing.data.rawRetentionShortens.months,
+                  date: formatDeletionDate(billing.data.rawRetentionShortens.at, i18n.language),
+                })}
+              </p>
+            )}
+          </div>
         </CardContent>
       </Card>
 
@@ -164,6 +176,7 @@ export function BillingPanel() {
                     <th className="py-2 pr-4 text-right font-medium">{t("billing.counts.campaigns")}</th>
                     <th className="py-2 pr-4 text-right font-medium">{t("billing.counts.domains")}</th>
                     <th className="py-2 pr-4 text-right font-medium">{t("billing.counts.members")}</th>
+                    <th className="py-2 pr-4 text-right font-medium">{t("billing.table.history")}</th>
                     {canPay && <th className="py-2 font-medium" />}
                   </tr>
                 </thead>
@@ -185,6 +198,7 @@ export function BillingPanel() {
                       <td className="py-2 pr-4 text-right tabular-nums">{limit(p.maxCampaigns)}</td>
                       <td className="py-2 pr-4 text-right tabular-nums">{limit(p.maxDomains)}</td>
                       <td className="py-2 pr-4 text-right tabular-nums">{limit(p.maxMembers)}</td>
+                      <td className="py-2 pr-4 text-right tabular-nums">{t("billing.months", { count: p.rawRetentionMonths })}</td>
                       {canPay && (
                         <td className="py-2 text-right">
                           {p.priceRub !== null && (

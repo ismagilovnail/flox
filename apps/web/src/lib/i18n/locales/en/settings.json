@@ -359,7 +359,8 @@
     "table": {
       "plan": "Plan",
       "price": "Price",
-      "clicks": "Clicks/mo"
+      "clicks": "Clicks/mo",
+      "history": "Click history"
     },
     "banner": {
       "warning": "Over 80% of this month's clicks on the {{plan}} plan.",
@@ -404,6 +405,9 @@
         "succeeded": "Paid",
         "canceled": "Not paid"
       }
-    }
+    },
+    "retention": "Raw clicks are kept {{count}} mo.: the click log, funnel, region, city, utm and subs. Reports by the main dimensions (campaign, flow, landing, offer, country, device, OS, browser) and conversions are kept without limit.",
+    "retentionShortens": "From {{date}} raw clicks are kept {{count}} mo. — older clicks will be deleted. Renew before then to keep them.",
+    "months": "{{count}} mo."
   }
 }
