@@ -5,6 +5,35 @@ per-phase, matching `CLAUDE.md`'s phase protocol. The one exception is
 [Between phases], below: spec amendments and the code changes that follow from
 them land between phases and would otherwise be invisible here.
 
+## [Phase 30.71] — Hourly click rollup (DATA-6, part 1)
+
+You chose a rollup, so reports outlive raw clicks. Retention periods: 3 / 6 / 12 / 24 months (part 2). docs/retention.md
+"Rollup".
+
+- **schema/023 `event_rollup_hourly`** (AggregatingMergeTree):
+  - organization, UTC hour, type and 16 report dimensions (all but region and city);
+  - measures: events, bots, clicks without subs, and the unique-visitor set (`uniqExactState`), so unique clicks
+    stay exact.
+- **How it fills without double counting:**
+  - two materialized views (from `click_events` and `tracking_events`) count events from a cutover, the hour after
+    the file first ran;
+  - `chstore.BackfillRollup` (a worker goroutine) copies everything before the cutover once, an hour after it.
+- **Reads:** the report builder's clicks, unique clicks, blocked, bots, empty subs, landing views, PWA installs, TG,
+  and the filter-value list read the rollup when all the query's dimensions and filters are in it, the range is in
+  whole hours, and the backfill is done; otherwise the raw rows.
+- **Changed from the plan:** the funnel and the flow summary stay on the raw rows. They count distinct click ids per
+  stage, which an hourly rollup cannot reproduce exactly without keeping the ids. Their history will end with the raw
+  rows.
+- **Tests:**
+  - `TestRollupReportsMatchRawRows`: 1,200 mixed events, history through the backfill and live through the views;
+    the rollup answers exactly what the raw rows do, by day in Moscow and New York, with dimensions and filters;
+  - checked against a deliberately broken rollup: 327 groups differ.
+  - Organization deletion's lightweight `DELETE` empties the rollup (checked).
+- **costbench:** +16 bytes per click (544 → 558); ClickHouse CPU on insert ~100 → 192 s per million clicks.
+- **Small:** a comment in `chstore/attribution.go` that gofmt kept rewriting (`''` → a typographic quote) is reworded.
+- **Checks:** go build/vet; full-env go test: everything passes except contentgallery's MOV test (your WIP); e2e
+  without skips.
+
 ## [Phase 30.70] — Click ids stored once (DATA-7)
 
 - **What changed:** when a link carried no `external_click_id`, the tracker used to copy `fbclid` or `ttclid` into

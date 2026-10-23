@@ -55,8 +55,8 @@ var _ attribution.ClickResolver = (*ClickResolver)(nil)
 // older rows hold the copy, and this reads both alike. click_events'
 // bloom filter idx_source_click_id is on exactly this expression, so a
 // WHERE on it must spell it the same — notEmpty() included: the analyzer
-// turns != '' into notEmpty(), and then no longer matches an index
-// spelled with != ''.
+// turns a comparison with the empty string into notEmpty(), and then no
+// longer matches an index spelled with the comparison.
 const SourceClickIDExpr = `if(notEmpty(external_click_id), external_click_id, if(notEmpty(fb_click_id), fb_click_id, tt_click_id))`
 
 const clickColumns = `

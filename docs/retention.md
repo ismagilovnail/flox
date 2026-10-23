@@ -14,6 +14,7 @@ personal data and expire (audit GDPR-1, below); the rows stay.
 | Clicks, landing/PWA events, conversions, LTV, click lookup, costs | ClickHouse `click_events`, `tracking_events`, `conversion_events`, `ltv_events`, `click_lookup`, `cost_events` | forever | Every report reads them for any period; a TTL would empty old reports without a word, and a conversion on a click older than the TTL would become `unknown_click` |
 | Visitors' IP address, user agent and referrer (columns, not rows) | ClickHouse `click_events`, `tracking_events`, `click_lookup` | `RETENTION_IP_DAYS`, default 90 | Personal data (GDPR-1). Unique clicks count `visitor_key`, a keyed pseudonym that stays, so reports do not change. Pixels match a conversion to its ad click by IP + user agent: a conversion more than 90 days after its click goes to the ad platform without them (the platforms take events of the last 7 days anyway) |
 | Daily aggregates | ClickHouse `*_daily_*` | forever | Small |
+| Hourly rollup of clicks and tracking events | ClickHouse `event_rollup_hourly` | forever | What the report builder reads for old periods once raw clicks expire (audit DATA-6, below) |
 | Expired sign-in state: sessions, pending second-factor logins | Postgres `sessions`, `pending_totp_logins` | until `expires_at` | Unusable once expired — every lookup requires `expires_at > now()` (DB5) |
 | Expired invite and email-verification tokens | Postgres `memberships.invite_token_*`, `users.email_verification_token_*` | until expiry; then the token is cleared, the row kept | The invite still shows on the Team page and can be resent; the user is still the account |
 | Failed sign-in counts | Postgres `login_failures` | 15 minutes (one window) | Only the current window counts (`docs/security.md` §3) |
@@ -52,9 +53,50 @@ Raise or lower the variables and restart the worker. Lowering
 deletes the now-older rows within the hour (Postgres) or at the next
 merges (ClickHouse) — irreversibly, except from backups.
 
-Expiring the report tables is a separate decision: reports older than
-the TTL would need to come from the daily aggregates, which today only
-the campaign screen reads.
+Expiring the raw clicks by plan is audit DATA-6. Part 1 below lets reports
+outlive them; part 2 sets the periods.
+
+## Rollup (audit DATA-6, part 1)
+
+`event_rollup_hourly` (schema/023) counts every click (`SOURCE_CLICK`,
+`SOURCE_FILTER`) and every tracking event per organization, UTC hour, type
+and report dimension.
+
+- **Dimensions:** campaign, traffic source, stream set, flow, landing, offer,
+  PWA, postlanding, network, Telegram channel, country, device, platform, OS,
+  browser, language.
+- **Measures:** events, bots, clicks with no subs, and the set of unique
+  visitors (`uniqExactState` of `chstore.uniqueVisitorExpr`, so unique clicks
+  merge exactly across hours).
+- **How it fills.** Two materialized views count events from
+  `event_rollup_cutover` on (the hour after schema/023 first ran).
+  `chstore.BackfillRollup`, in `apps/worker`, copies everything before the
+  cutover once, an hour after it, so nothing is counted twice. It copies
+  only if the rollup has nothing from before the cutover yet, and records
+  itself in `chstore_backfills`. An event dated before the cutover that
+  arrives after the copy is in no rollup.
+- **Who reads it.** The report builder's clicks, unique clicks, blocked,
+  bots, empty subs, landing views, PWA installs and Telegram starts/joins,
+  and the filter-value list. They read it when every dimension and filter of
+  the query is in it, the range starts and ends on a whole UTC hour, and the
+  backfill is done; otherwise they read the raw rows (`EventStore.useRollup`).
+  `TestRollupReportsMatchRawRows` checks the two answer the same, history and
+  live, by day in Moscow and New York time.
+- **Not in it, so these end with the raw rows:**
+  - region and city;
+  - utm and subs as dimensions;
+  - click ids and the click log;
+  - the funnel and the flow summary, which count distinct click ids per
+    stage (a landing reloaded three times is one view there);
+  - conversions by OS, browser or language, which join their click;
+  - a day in a half-hour time zone (India, Nepal), whose bounds are not whole
+    UTC hours.
+- **Deletion.** Organization deletion empties the rollup with every other
+  table that has `organization_id` (`orgdeletion.purgeClickHouse`). A
+  visitor's data request (`docs/visitor-data.md`) removes the visitor's raw
+  rows only. The rollup keeps the counts, and the visitor's keyed pseudonym
+  survives inside the unique-visitor state as a hash, linked to no other
+  data.
 
 ## Visitors' IP and user agent (audit 2026-10-15, GDPR-1)
 

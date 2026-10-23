@@ -12,10 +12,13 @@ import (
 // EventStore writes event.Event rows into §48's three event-derived tables
 // — click_events, tracking_events, conversion_events (schema/001-003.sql).
 type EventStore struct {
-	conn driver.Conn
+	conn   driver.Conn
+	rollup *rollupState
 }
 
-func NewEventStore(conn driver.Conn) *EventStore { return &EventStore{conn: conn} }
+func NewEventStore(conn driver.Conn) *EventStore {
+	return &EventStore{conn: conn, rollup: &rollupState{}}
+}
 
 // InsertBatch routes each event to its table by type — event.Type.IsClick()
 // for click_events, IsCPA() for conversion_events, everything else to

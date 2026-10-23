@@ -38,3 +38,19 @@ func RunLTVAttributionBackfill(ctx context.Context, conn driver.Conn, name strin
 func RunVisitorKeyBackfill(ctx context.Context, conn driver.Conn, name string, keyOf func(ip, userAgent string) string, orgID string) error {
 	return backfillVisitorKeys(ctx, conn, name, keyOf, orgID)
 }
+
+// RunRollupBackfill runs BackfillRollup under its own name on one
+// organization's events, without waiting for the cutover.
+func RunRollupBackfill(ctx context.Context, conn driver.Conn, name, orgID string) error {
+	return backfillRollup(ctx, conn, name, orgID, false)
+}
+
+// ForceRollup makes the store's reports read the rollup (on) or the raw
+// rows (off) whenever their dimensions allow, whatever the backfill's state.
+func (s *EventStore) ForceRollup(on bool) {
+	if on {
+		s.rollup = &rollupState{ready: true}
+	} else {
+		s.rollup = nil
+	}
+}

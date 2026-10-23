@@ -293,6 +293,18 @@ func run() error {
 			logger.Info("IP and user agent retention set", "days", cfg.RetentionIPDays, "columns", changed)
 		}
 	}()
+	// The hourly rollup's history (schema/023, audit DATA-6): copied an
+	// hour after the rollup's cutover, so it waits on its own; reports
+	// read the raw rows until it is done.
+	go func() {
+		if err := chstore.BackfillRollup(ctx, ch); err != nil {
+			if ctx.Err() == nil {
+				logger.Error("clickhouse rollup backfill failed, will retry on next start", "error", err)
+			}
+			return
+		}
+		logger.Info("clickhouse rollup backfill done")
+	}()
 
 	// Same "fail loudly at boot" bar as apps/api's own required-secret
 	// parses — a misconfigured/missing key must never silently run the

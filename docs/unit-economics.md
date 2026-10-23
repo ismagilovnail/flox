@@ -47,6 +47,13 @@ Go services under air. Three runs at 1,000 clicks/s:
 | 15 min | 900,000 | 900,000 | 0.15 / 0.30 ms | 299.7 | 828.6 |
 | 3 min | 180,000 | 180,000 | 0.15 / 0.31 ms | 292.9 | 827.2 |
 | 3 min, after DATA-7 | 180,000 | 180,000 | 0.16 / 0.34 ms | 329.7 | **543.9** |
+| 3 min, with the hourly rollup (DATA-6) | 180,000 | 180,000 | 0.15 / 0.35 ms | 403.0 | 558.2 |
+
+The hourly rollup (DATA-6, docs/retention.md "Rollup") adds 16 bytes per
+click, almost all of it the unique-visitor set. Its two views about double
+ClickHouse's insert CPU, from ~100 to 192 s per million clicks. The test
+traffic has one campaign, so real traffic makes more rollup rows; the
+visitor set, which is most of the bytes, grows with visitors, not rows.
 
 **CPU per million clicks** (15-minute run):
 

@@ -238,6 +238,15 @@ final total" would undercount whenever a merge hasn't run yet.
 (`has_usd_value = 0`) contributes exactly zero, not a fabricated value, and
 the multiplication makes that exact rather than approximate.
 
+## Hourly rollup (audit DATA-6)
+
+`event_rollup_hourly` (schema/023) holds clicks and tracking events per UTC
+hour and report dimension. The report builder's click and stage metrics and
+the filter-value list read it whenever the query allows; otherwise they read
+the raw tables. It is what keeps old reports once raw clicks expire by plan.
+What it holds, how it fills without counting twice, and what still needs the
+raw rows: docs/retention.md "Rollup".
+
 ## Unique clicks (audit DATA-5)
 
 A unique click is a distinct visitor per campaign, counted from the

@@ -484,16 +484,20 @@ func (s *EventStore) ReportClicks(ctx context.Context, q ReportQuery) ([]ClickAg
 
 	selectExpr, groupByExpr := selectAndGroupByExprs(selectCols, q.ByDay, q.Timezone)
 
-	query := fmt.Sprintf(`
-		SELECT %scountIf(type = 'SOURCE_CLICK') AS clicks,
+	table, metrics := "click_events", `countIf(type = 'SOURCE_CLICK') AS clicks,
 		       uniqExactIf(`+uniqueVisitorExpr+`, type = 'SOURCE_CLICK') AS unique_clicks,
 		       countIf(type = 'SOURCE_FILTER') AS blocked,
 		       countIf(is_bot = 1) AS bots,
-		       countIf(type = 'SOURCE_CLICK' AND `+emptySubsCondition+`) AS empty_subs
-		FROM click_events
+		       countIf(type = 'SOURCE_CLICK' AND `+emptySubsCondition+`) AS empty_subs`
+	if s.useRollup(ctx, q.Dims, q.Filters, q.From, q.To) {
+		table, metrics = "event_rollup_hourly", rollupClickMetrics
+	}
+	query := fmt.Sprintf(`
+		SELECT %s%s
+		FROM %s
 		WHERE organization_id = ? AND event_at >= ? AND event_at < ? AND type IN ('SOURCE_CLICK', 'SOURCE_FILTER')%s
 		%s`,
-		selectExpr, filterClause, groupByExpr,
+		selectExpr, metrics, table, filterClause, groupByExpr,
 	)
 
 	rows, err := s.conn.Query(ctx, query, args...)
@@ -531,12 +535,16 @@ func (s *EventStore) ReportLandViews(ctx context.Context, q ReportQuery) ([]Land
 
 	selectExpr, groupByExpr := selectAndGroupByExprs(selectCols, q.ByDay, q.Timezone)
 
+	table, count := "tracking_events", "count()"
+	if s.useRollup(ctx, q.Dims, q.Filters, q.From, q.To) {
+		table, count = "event_rollup_hourly", "sum(events)"
+	}
 	query := fmt.Sprintf(`
-		SELECT %scount() AS land_views
-		FROM tracking_events
+		SELECT %s%s AS land_views
+		FROM %s
 		WHERE organization_id = ? AND event_at >= ? AND event_at < ? AND type = 'LAND_VIEW'%s
 		%s`,
-		selectExpr, filterClause, groupByExpr,
+		selectExpr, count, table, filterClause, groupByExpr,
 	)
 
 	rows, err := s.conn.Query(ctx, query, args...)
@@ -583,14 +591,19 @@ func (s *EventStore) ReportPwaInstalls(ctx context.Context, q ReportQuery) ([]In
 
 	selectExpr, groupByExpr := selectAndGroupByExprs(selectCols, q.ByDay, q.Timezone)
 
+	table, metrics := "tracking_events", `countIf(type IN `+installTypes+`) AS pwa_installs,
+		       countIf(type = 'TG_START') AS tg_starts, countIf(type = 'TG_JOIN') AS tg_joins`
+	if s.useRollup(ctx, q.Dims, q.Filters, q.From, q.To) {
+		table, metrics = "event_rollup_hourly", `sumIf(events, type IN `+installTypes+`) AS pwa_installs,
+		       sumIf(events, type = 'TG_START') AS tg_starts, sumIf(events, type = 'TG_JOIN') AS tg_joins`
+	}
 	query := fmt.Sprintf(`
-		SELECT %scountIf(type IN `+installTypes+`) AS pwa_installs,
-		       countIf(type = 'TG_START') AS tg_starts, countIf(type = 'TG_JOIN') AS tg_joins
-		FROM tracking_events
+		SELECT %s%s
+		FROM %s
 		WHERE organization_id = ? AND event_at >= ? AND event_at < ?
 		  AND (type IN `+installTypes+` OR type IN ('TG_START', 'TG_JOIN'))%s
 		%s`,
-		selectExpr, filterClause, groupByExpr,
+		selectExpr, metrics, table, filterClause, groupByExpr,
 	)
 
 	rows, err := s.conn.Query(ctx, query, args...)
@@ -887,14 +900,18 @@ func (s *EventStore) DistinctValues(ctx context.Context, organizationID string, 
 	}
 
 	scope, scopeArgs := campaignsClause(campaigns)
+	table, count := "click_events", "count()"
+	if s.useRollup(ctx, []ReportDimension{dim}, nil, from, to) {
+		table, count = "event_rollup_hourly", "sum(events)"
+	}
 	query := fmt.Sprintf(`
 		SELECT %s AS value
-		FROM click_events
+		FROM %s
 		WHERE organization_id = ? AND event_at >= ? AND event_at < ? AND type = 'SOURCE_CLICK' AND %s != ''%s
 		GROUP BY value
-		ORDER BY count() DESC
+		ORDER BY %s DESC
 		LIMIT ?`,
-		col, col, scope,
+		col, table, col, scope, count,
 	)
 
 	args := append([]any{organizationID, from, to}, scopeArgs...)
