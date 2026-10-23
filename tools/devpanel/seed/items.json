@@ -736,5 +736,41 @@
   "updatedAt": "2026-10-16T16:00:00+05:00",
   "source": "audit-2026-10-15",
   "id": "INT-3"
+ },
+ {
+  "code": "DATA-6",
+  "priority": "P2",
+  "severity": "medium",
+  "kind": "gap",
+  "area": "data",
+  "title": "Срок хранения сырых кликов по тарифу",
+  "evidence": "BIZ-2 (docs/unit-economics.md): строки click_events/click_lookup не удаляются никогда — TTL 90 дней чистит только ip/user_agent/referrer. ~0,8 ГБ на 1 млн кликов навсегда; у Business к 24-му месяцу хранение ≈29% цены (при 15 ₽/ГБ, 2 копии).",
+  "fix": "Решить сроки (например 3/6/13 мес.) по тарифу, дневные агрегаты — навсегда. Удаление по организации/партиции; показать в UI, где отчёт упирается в срок (журнал кликов, уникальные, LTV, разрезы без агрегата).",
+  "impact": "Себестоимость клиента растёт каждый месяц при той же цене.",
+  "status": "todo",
+  "notes": "",
+  "order": 42,
+  "createdAt": "2026-10-23T12:30:00+05:00",
+  "updatedAt": "2026-10-23T12:30:00+05:00",
+  "source": "session-2026-10-23",
+  "id": "DATA-6"
+ },
+ {
+  "code": "DATA-7",
+  "priority": "P2",
+  "severity": "low",
+  "kind": "tech",
+  "area": "data",
+  "title": "external_click_id дублирует fbclid/ttclid",
+  "evidence": "BIZ-2: tracker/params.go пишет fbclid/ttclid в external_click_id, если партнёр его не передал; в click_events и click_lookup — 286 байт на клик из 827 (35% объёма).",
+  "fix": "Хранить external_click_id только когда он передан, fallback (fb/tt) — при чтении. Затрагивает attribution, conversion, click_log, macro, backfill; старые данные не трогать.",
+  "impact": "Лишние 35% хранения.",
+  "status": "todo",
+  "notes": "",
+  "order": 43,
+  "createdAt": "2026-10-23T12:30:00+05:00",
+  "updatedAt": "2026-10-23T12:30:00+05:00",
+  "source": "session-2026-10-23",
+  "id": "DATA-7"
  }
 ]
