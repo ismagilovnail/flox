@@ -29,37 +29,37 @@
  {
   "name": "Сторно (DECLINE)",
   "status": "PASS",
-  "evidence": "ClickHouse: ACCEPT +100 / DECLINE −100",
-  "limits": "повторный ACCEPT после DECLINE невозможен",
+  "evidence": "ClickHouse: ACCEPT +100 / DECLINE −100; DATA-3: повторное одобрение после DECLINE/TRASH с новым txn_id",
+  "limits": "",
   "order": 3,
-  "updatedAt": "2026-10-15T21:00:00+05:00",
+  "updatedAt": "2026-10-23T18:30:00+05:00",
   "id": "f03"
  },
  {
   "name": "FX по дате события",
-  "status": "PARTIAL",
-  "evidence": "EUR 30 → 33.62 USD; fx_rates заполнены",
-  "limits": "без currency → USD=0",
+  "status": "PASS",
+  "evidence": "EUR 30 → 33.62 USD; fx_rates заполнены; DATA-1: без currency в постбэке — валюта сети (networks.currency)",
+  "limits": "",
   "order": 4,
-  "updatedAt": "2026-10-15T21:00:00+05:00",
+  "updatedAt": "2026-10-23T18:30:00+05:00",
   "id": "f04"
  },
  {
   "name": "Отчёты revenue / profit / ROI",
-  "status": "PARTIAL",
-  "evidence": "ROI = null без расходов; HOLD не входит в выручку",
-  "limits": "дефект с валютой (DATA-1)",
+  "status": "PASS",
+  "evidence": "ROI = null без расходов; HOLD не входит в выручку; DATA-1 исправлен",
+  "limits": "",
   "order": 5,
-  "updatedAt": "2026-10-15T21:00:00+05:00",
+  "updatedAt": "2026-10-23T18:30:00+05:00",
   "id": "f05"
  },
  {
   "name": "Unique clicks",
-  "status": "PARTIAL",
-  "evidence": "chstore/report.go:452 — кампания+IP+UA",
-  "limits": "гипотеза: склейка на CGNAT",
+  "status": "PASS",
+  "evidence": "DATA-5: cookie посетителя fv → visitor_key, IP+UA в ip_visitor_key; сравнение — /analytics/unique-check",
+  "limits": "на реальном трафике не сравнивалось",
   "order": 6,
-  "updatedAt": "2026-10-15T21:00:00+05:00",
+  "updatedAt": "2026-10-23T18:30:00+05:00",
   "id": "f06"
  },
  {
@@ -83,10 +83,10 @@
  {
   "name": "Отсутствие потерь событий под нагрузкой",
   "status": "PASS",
-  "evidence": "vegeta: 36 000 кликов → 36 000 строк, p99 0,24 мс",
-  "limits": "только loopback",
+  "evidence": "vegeta: 36 000 кликов → 36 000 строк; costbench (BIZ-2): 1,5 млн кликов при 1000/с — все в ClickHouse, p99 0,33 мс",
+  "limits": "только loopback (OPS-3)",
   "order": 9,
-  "updatedAt": "2026-10-15T21:00:00+05:00",
+  "updatedAt": "2026-10-23T18:30:00+05:00",
   "id": "f09"
  },
  {
@@ -127,56 +127,92 @@
  },
  {
   "name": "Биллинг, тарифы, квоты",
-  "status": "NOT_IMPLEMENTED",
-  "evidence": "поиск по коду — ничего",
-  "limits": "",
+  "status": "PASS",
+  "evidence": "BIZ-1: тарифы строками, метринг кликов, мягкие лимиты, предоплата YooKassa 1/3/12 мес.; DATA-6: срок хранения по тарифу; docs/billing.md",
+  "limits": "YooKassa не проверена на реальном магазине; нет автоплатежа, скидок, счетов",
   "order": 14,
-  "updatedAt": "2026-10-15T21:00:00+05:00",
+  "updatedAt": "2026-10-23T18:30:00+05:00",
   "id": "f14"
  },
  {
   "name": "Онбординг-визард и тестовая конверсия",
-  "status": "NOT_IMPLEMENTED",
-  "evidence": "только empty-state и replay журнала",
-  "limits": "",
+  "status": "PASS",
+  "evidence": "UX-3: первые шаги на «Обзоре»; проверка постбэка без записи (POST /postback-logs/check)",
+  "limits": "не пошаговый визард — чек-лист",
   "order": 15,
-  "updatedAt": "2026-10-15T21:00:00+05:00",
+  "updatedAt": "2026-10-23T18:30:00+05:00",
   "id": "f15"
  },
  {
   "name": "Публичный API (OpenAPI)",
-  "status": "NOT_IMPLEMENTED",
-  "evidence": "упоминание только в spec",
-  "limits": "API-ключи есть",
+  "status": "PASS",
+  "evidence": "API-1: /v1/openapi.json, /api-reference, docs/public-api.md; API-ключи",
+  "limits": "",
   "order": 16,
-  "updatedAt": "2026-10-15T21:00:00+05:00",
+  "updatedAt": "2026-10-23T18:30:00+05:00",
   "id": "f16"
  },
  {
   "name": "Импорт из Keitaro/Binom, шаблоны партнёрок",
-  "status": "NOT_IMPLEMENTED",
-  "evidence": "—",
-  "limits": "есть пресеты макросов FB/TikTok",
+  "status": "PARTIAL",
+  "evidence": "INT-1: шаблоны источников трафика; INT-3: шаблоны партнёрок Affise, Scaleo",
+  "limits": "импорт из Keitaro/Binom — делает владелец (INT-2); макросы других партнёрок за логином",
   "order": 17,
-  "updatedAt": "2026-10-15T21:00:00+05:00",
+  "updatedAt": "2026-10-23T18:30:00+05:00",
   "id": "f17"
  },
  {
   "name": "GDPR: удаление, экспорт, анонимизация IP",
-  "status": "NOT_IMPLEMENTED",
-  "evidence": "docs/retention.md",
-  "limits": "",
+  "status": "PASS",
+  "evidence": "GDPR-1: псевдоним посетителя, TTL IP/UA/referrer 90 дн., удаление организации, запрос посетителя, экспорт организации",
+  "limits": "DPA и юридическая проверка — за владельцем",
   "order": 18,
-  "updatedAt": "2026-10-15T21:00:00+05:00",
+  "updatedAt": "2026-10-23T18:30:00+05:00",
   "id": "f18"
  },
  {
   "name": "Production, CI, restore-drill",
   "status": "NOT_IMPLEMENTED",
-  "evidence": "ROADMAP.md",
+  "evidence": "OPS-1..3 отложены (нужен хостинг владельца); CI (OPS-4) — решение владельца",
   "limits": "k8s-манифесты есть",
   "order": 19,
-  "updatedAt": "2026-10-15T21:00:00+05:00",
+  "updatedAt": "2026-10-23T18:30:00+05:00",
   "id": "f19"
+ },
+ {
+  "name": "Команда: байер видит и меняет только свои кампании",
+  "status": "PASS",
+  "evidence": "TEAM-1, TEAM-1b: владелец кампании, campaign.manage_all/read_all; api/campaign_scope_test.go",
+  "limits": "push и алерты общие на команду",
+  "order": 20,
+  "updatedAt": "2026-10-23T18:30:00+05:00",
+  "id": "f20"
+ },
+ {
+  "name": "Хранение по тарифу и часовой свод отчётов",
+  "status": "PASS",
+  "evidence": "DATA-6: 3/6/12/24 мес., TTL по строкам, event_rollup_hourly; тест совпадения отчётов со сводом; DATA-7: −34% объёма",
+  "limits": "воронка, регион/город, utm/sub, журнал кликов — только в пределах срока",
+  "order": 21,
+  "updatedAt": "2026-10-23T18:30:00+05:00",
+  "id": "f21"
+ },
+ {
+  "name": "Лимиты ClickHouse на организацию",
+  "status": "PASS",
+  "evidence": "CH-1: chconn.TenantConn — слоты и настройки по тарифу, 429 reports_busy",
+  "limits": "",
+  "order": 22,
+  "updatedAt": "2026-10-23T18:30:00+05:00",
+  "id": "f22"
+ },
+ {
+  "name": "Защита трекера: лимит кликов по IP, секрет постбэка вне логов",
+  "status": "PASS",
+  "evidence": "SEC-3, SEC-4: TRACKER_IP_CLICK_LIMIT; фильтр секрета в Caddy",
+  "limits": "",
+  "order": 23,
+  "updatedAt": "2026-10-23T18:30:00+05:00",
+  "id": "f23"
  }
 ]
