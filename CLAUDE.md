@@ -68,8 +68,7 @@ UNCOMMITTED   : the user's gallery-transcoding WIP (00085, processor.go,
                 It now accepts MOV, so contentgallery's
                 TestUploadRejectsOversizeWrongContentAndMov fails with it.
 NEXT          : wait for the user — next item from the board (P1: BIZ-2..4;
-                P2: BUG-7, …). Ask before purging the 1,212 old
-                "Isolation …"/"Referred" orgs from the dev DB.
+                P2: BUG-7, …).
                 GAP-2 (Google Play import) is won't-do: do not offer it. INT-2 is
                 excluded: the owner does it later themselves — do not
                 offer it. No browser checks without the user's OK

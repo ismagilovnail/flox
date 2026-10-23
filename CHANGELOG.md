@@ -16,7 +16,7 @@ them land between phases and would otherwise be invisible here.
 - **BUG-2:** the tenant-isolation tests left every "Isolation …" and "Referred" organization they made in the dev
   database. The organizations are now deleted on cleanup, together with users who belong to no other
   organization (`testpg.DeleteOrganization`). The count stays the same across runs. The 1,212 left by earlier runs
-  are still there.
+  (with their 1,268 `@example.test` users) were deleted from the dev database at your request.
 - **BUG-3:** already fixed in b0fce6a. The postback-secret dialog names the network (`{{name}}`).
 - **BUG-4:** already fixed. ESLint reports 0 warnings with `--max-warnings=0`.
 - Checks: go build/vet; full-env go test: everything passes except contentgallery's
