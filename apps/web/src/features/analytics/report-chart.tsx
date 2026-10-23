@@ -162,7 +162,7 @@ export function ReportBarChart({
         },
       ],
     };
-  }, [mode, bars, meta]);
+  }, [mode, bars, meta, currency]);
 
   return (
     <ChartCard

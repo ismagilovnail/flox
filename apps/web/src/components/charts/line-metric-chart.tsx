@@ -44,7 +44,9 @@ export function LineMetricChart({
           type: "line",
           data: points.map((p) => [p.date, p.value]),
           smooth: 0.2,
-          symbol: "none",
+          // A single point draws no line: show it as a dot (BUG-7).
+          symbol: points.length > 1 ? "none" : "circle",
+          symbolSize: 6,
           lineStyle: { color: rgba(CHART_RGB[color], 1), width: 2 },
           itemStyle: { color: rgba(CHART_RGB[color], 1) },
           // No hover animation: it re-tints the line and gradient towards a

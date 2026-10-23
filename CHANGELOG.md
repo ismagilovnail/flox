@@ -5,6 +5,20 @@ per-phase, matching `CLAUDE.md`'s phase protocol. The one exception is
 [Between phases], below: spec amendments and the code changes that follow from
 them land between phases and would otherwise be invisible here.
 
+## [Phase 30.68] — Overview revenue chart drew nothing (BUG-7)
+
+- **Cause:** the overview's report returns only the days that have data. Revenue on a single day became one point,
+  and the line chart draws points without markers (`symbol: "none"`), so the chart was empty at $90. With several
+  days, the line also ran straight across the days between them.
+- **Fix:** `fillDays` gives the four overview charts every day of the range, with empty metrics on days with no
+  rows (shown as 0 on the chart, as before). `LineMetricChart` draws a lone point as a dot, for its other users.
+  Test: `features/dashboard/metrics.test.ts`.
+- **BUG-4:** the report bar chart's tooltip kept the old currency after the organization's currency changed.
+  `currency` is now in its `useMemo` dependencies.
+- The fix was written in the 2026-10-16 session, which was cut off before committing. It is validated and committed
+  here.
+- Checks: vitest 220/220, tsc, eslint `--max-warnings=0`, `next build`. No Go change; no browser pass.
+
 ## [Phase 30.67] — Small audit bugs (BUG-1..4)
 
 - **BUG-1:** deleting a network said "referenced by one or more flows" whatever held it, so a network kept only by
@@ -18,7 +32,8 @@ them land between phases and would otherwise be invisible here.
   organization (`testpg.DeleteOrganization`). The count stays the same across runs. The 1,212 left by earlier runs
   (with their 1,268 `@example.test` users) were deleted from the dev database at your request.
 - **BUG-3:** already fixed in b0fce6a. The postback-secret dialog names the network (`{{name}}`).
-- **BUG-4:** already fixed. ESLint reports 0 warnings with `--max-warnings=0`.
+- **BUG-4:** the fix (`currency` in the bar chart's `useMemo` dependencies) sat uncommitted in the working tree
+  from an earlier session, so this entry first called it "already fixed". It is committed with Phase 30.68.
 - Checks: go build/vet; full-env go test: everything passes except contentgallery's
   `TestUploadRejectsOversizeWrongContentAndMov` (your uncommitted MOV WIP); e2e ran without skips; eslint. No web
   code change; no browser pass.

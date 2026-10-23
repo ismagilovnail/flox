@@ -19,7 +19,7 @@ referenced below as §N).
 ## CURRENT STATE — UPDATE THIS EVERY PHASE
 
 ```
-CURRENT PHASE : PHASE 30.67 — BUG-1..4, SMALL AUDIT BUGS (closed)
+CURRENT PHASE : PHASE 30.68 — BUG-7, OVERVIEW REVENUE CHART (closed)
 STATUS        : Product audit 2026-10-15 (docs/audit-product-2026-10-15.md)
                 is the backlog: items on the local dev panel tools/devpanel
                 (make devpanel → 127.0.0.1:8099; memory: flox-audit-tracker
@@ -58,17 +58,18 @@ STATUS        : Product audit 2026-10-15 (docs/audit-product-2026-10-15.md)
                 SEC-6: prod deps 0 vulns (make audit-web gates it); dev
                 braces<=3.0.3 accepted (no fix exists, docs/security.md §10).
                 BUG-1 (network delete 409 per FK: postbacks ⇒ archive),
-                BUG-2 (isolation tests drop their orgs); BUG-3/4 were
-                already fixed.
+                BUG-2 (isolation tests drop their orgs); BUG-3 was
+                already fixed. BUG-7 + BUG-4: overview charts get every
+                day (fillDays), a lone point is a dot; chart currency dep.
                 P0 left (skipped by the user for now):
                 OPS-1..3 (prod, restore, load) — needs the owner's hosting.
-LAST COMMIT   : fix: network delete conflicts, isolation-test cleanup.
+LAST COMMIT   : fix(web): overview charts plot every day of the range.
 UNCOMMITTED   : the user's gallery-transcoding WIP (00085, processor.go,
                 transcode.go, worker ffmpeg) — not ours, leave it alone.
                 It now accepts MOV, so contentgallery's
                 TestUploadRejectsOversizeWrongContentAndMov fails with it.
 NEXT          : wait for the user — next item from the board (P1: BIZ-2..4;
-                P2: BUG-7, …).
+                P2: the rest of the board).
                 GAP-2 (Google Play import) is won't-do: do not offer it. INT-2 is
                 excluded: the owner does it later themselves — do not
                 offer it. No browser checks without the user's OK

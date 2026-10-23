@@ -85,3 +85,22 @@ export function pctDelta(curr: number, prev: number): number | null {
   if (prev === 0) return null;
   return ((curr - prev) / prev) * 100;
 }
+
+/** Every day from `from` to `to` (UTC-midnight Dates holding the
+ * organization's calendar days), with the report's metrics where it has a
+ * row and empty metrics where it has none. The API returns only days with
+ * data: plotted as is, one day was a single point a line chart cannot draw
+ * (BUG-7, an empty "Revenue" chart at $90), and several days were joined
+ * straight across the days between them. */
+export function fillDays<M>(daily: { day: string; metrics: M }[], from: Date, to: Date): { day: string; metrics: Partial<M> }[] {
+  const byDay = new Map(daily.map((d) => [d.day, d.metrics]));
+  const out: { day: string; metrics: Partial<M> }[] = [];
+  const d = new Date(Date.UTC(from.getUTCFullYear(), from.getUTCMonth(), from.getUTCDate()));
+  const end = Date.UTC(to.getUTCFullYear(), to.getUTCMonth(), to.getUTCDate());
+  for (let i = 0; d.getTime() <= end && i < 1000; i++) {
+    const day = d.toISOString().slice(0, 10);
+    out.push({ day, metrics: byDay.get(day) ?? {} });
+    d.setUTCDate(d.getUTCDate() + 1);
+  }
+  return out;
+}

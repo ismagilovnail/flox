@@ -11,7 +11,7 @@ import { ErrorState } from "@/components/ui/error-state";
 import { formatUsd, formatInt } from "@/lib/format";
 import { KpiGrid } from "@/features/dashboard/kpi-grid";
 import { TopTable } from "@/features/dashboard/top-tables";
-import { metricsFromApi, performanceRowFromApi } from "@/features/dashboard/metrics";
+import { fillDays, metricsFromApi, performanceRowFromApi } from "@/features/dashboard/metrics";
 import { useDimensionValueLabel } from "@/features/analytics/use-dimension-value-label";
 import { useDashboardReport } from "@/hooks/use-analytics-report";
 import { CostTimezoneNotice } from "@/features/analytics/cost-timezone-notice";
@@ -83,6 +83,7 @@ function DashboardContent({ timezone }: { timezone: string }) {
   }
 
   const data = currentQuery.data;
+  const days = fillDays(data.daily, from, to);
   const currentMetrics = metricsFromApi(data.totals);
   // Falls back to the current period when the comparison window hasn't
   // resolved yet (still loading, or errored) — renders as "no change"
@@ -115,25 +116,25 @@ function DashboardContent({ timezone }: { timezone: string }) {
       <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
         <LineMetricChart
           title={t("charts.revenue")}
-          points={data.daily.map((p) => ({ date: p.day, value: p.metrics.revenue ?? 0 }))}
+          points={days.map((p) => ({ date: p.day, value: p.metrics.revenue ?? 0 }))}
           color="success"
           valueFormatter={formatUsd}
         />
         <LineMetricChart
           title={t("charts.spend")}
-          points={data.daily.map((p) => ({ date: p.day, value: p.metrics.cost ?? 0 }))}
+          points={days.map((p) => ({ date: p.day, value: p.metrics.cost ?? 0 }))}
           color="danger"
           valueFormatter={formatUsd}
         />
         <LineMetricChart
           title={t("charts.profit")}
-          points={data.daily.map((p) => ({ date: p.day, value: p.metrics.profit ?? 0 }))}
+          points={days.map((p) => ({ date: p.day, value: p.metrics.profit ?? 0 }))}
           color="primary"
           valueFormatter={formatUsd}
         />
         <LineMetricChart
           title={t("charts.conversions")}
-          points={data.daily.map((p) => ({ date: p.day, value: p.metrics.conversions ?? 0 }))}
+          points={days.map((p) => ({ date: p.day, value: p.metrics.conversions ?? 0 }))}
           color="warning"
           valueFormatter={formatInt}
         />
