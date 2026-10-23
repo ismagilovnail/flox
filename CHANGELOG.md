@@ -5,6 +5,25 @@ per-phase, matching `CLAUDE.md`'s phase protocol. The one exception is
 [Between phases], below: spec amendments and the code changes that follow from
 them land between phases and would otherwise be invisible here.
 
+## [Between phases] — Competitors' prices (BIZ-4, part 1, 2026-10-23)
+
+docs/market-pricing-2026-10.md: BeMob, RedTrack, Adset.Pro, Keitaro and Binom from their official pricing pages, next
+to FLOX's draft plans. No code change.
+
+- **Where FLOX's draft prices sit:**
+  - at RedTrack's monthly price: Business $399 for 20M and 24 months equals RedTrack Team;
+  - at BeMob's for 1M ($49);
+  - longer history than BeMob;
+  - PWA, push and Telegram included.
+- **Open decisions:**
+  - no annual discount (competitors 20–30%);
+  - no overage price (competitors $20–100 per million against FLOX's ~$1–3 cost);
+  - PWA installs unmetered (Adset.Pro charges per install).
+- **Unclear on the pages:**
+  - Adset.Pro's event quotas (15k–100k);
+  - Keitaro's billing period and currency.
+- The Adset.Pro test-account comparison remains yours.
+
 ## [Phase 30.72] — Raw clicks expire by plan (DATA-6, part 2)
 
 docs/retention.md "Raw clicks by plan". The plan you confirmed, plus one safeguard of mine: a shorter period waits 30

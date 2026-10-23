@@ -80,9 +80,11 @@ STATUS        : Product audit 2026-10-15 (docs/audit-product-2026-10-15.md)
                 rows hourly — shorter only after 30 days
                 (RETENTION_SHORTEN_AFTER_DAYS). A new insert path into
                 click_events/tracking_events must append retention_months.
+                BIZ-4 part 1: docs/market-pricing-2026-10.md (public
+                prices); part 2 (Adset.Pro test account) is the user's.
                 P0 left (skipped by the user for now):
                 OPS-1..3 (prod, restore, load) — needs the owner's hosting.
-LAST COMMIT   : feat(retention): raw clicks expire by plan.
+LAST COMMIT   : docs: competitors' prices (BIZ-4 part 1).
 UNCOMMITTED   : the user's gallery-transcoding WIP (00085, processor.go,
                 transcode.go, worker ffmpeg) — not ours, leave it alone.
                 It now accepts MOV, so contentgallery's
