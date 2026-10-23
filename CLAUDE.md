@@ -65,8 +65,8 @@ UNCOMMITTED   : the user's gallery-transcoding WIP (00085, processor.go,
                 It now accepts MOV, so contentgallery's
                 TestUploadRejectsOversizeWrongContentAndMov fails with it.
 NEXT          : wait for the user — next item from the board (P1: BIZ-2..4;
-                P2: GAP-2, BUG-7, …; BUG-1..4: ask the user whose
-                they are). INT-2 is
+                P2: BUG-7, …; BUG-1..4: ask the user whose they are).
+                GAP-2 (Google Play import) is won't-do: do not offer it. INT-2 is
                 excluded: the owner does it later themselves — do not
                 offer it. No browser checks without the user's OK
                 (memory: flox-no-browser-without-ok). To try payments for

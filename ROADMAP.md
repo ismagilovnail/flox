@@ -144,7 +144,7 @@ scoped phase; none blocks anything that ships today.
 | CI | the owner's decision (CLAUDE.md) |
 | Renewing a Cloudflare Registrar domain from FLOX (read-only today: expiry and auto-renew) | Cloudflare's API has no renewal yet — `docs/domains-tracking-links.md` "Cloudflare Registrar" |
 | Video transcoding in Content Gallery (MOV and other formats; videos are MP4/WebM as uploaded today) | would need an ffmpeg worker — `docs/content-gallery.md` "Video" |
-| Google Play URL parsing for the PWA listing preview | would need a scraper behind `apps/internal/urlsafety` |
+| Google Play URL parsing for the PWA listing preview | **won't do** (owner's decision 2026-10-23, audit GAP-2): importing another app's Play listing — its name, developer and real ratings — into a store-like install page passes the PWA off as that app, and scraping Google Play breaks its terms. Listings are typed in the constructor. |
 | A sidebar item named "Reports" (§17) | removed on purpose (audit #5): the report builder is Analytics |
 
 Closed since this list was first written (2026-10-11 → 2026-10-15): push

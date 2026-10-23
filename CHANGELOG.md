@@ -5,6 +5,13 @@ per-phase, matching `CLAUDE.md`'s phase protocol. The one exception is
 [Between phases], below: spec amendments and the code changes that follow from
 them land between phases and would otherwise be invisible here.
 
+## [Between phases] — GAP-2 closed as won't do (2026-10-23)
+
+Importing a Google Play listing into a PWA was dropped by your decision. Taking another app's name, developer and
+real ratings into a store-like install page passes the PWA off as that app, and scraping Google Play breaks its
+terms. The alternative offered and not taken was importing from the operator's own Web App Manifest. ROADMAP.md
+"Known open gaps" records it. No code change.
+
 ## [Phase 30.66] — Dev-tool vulnerabilities (audit SEC-6)
 
 docs/security.md §10.
