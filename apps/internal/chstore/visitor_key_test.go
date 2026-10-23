@@ -82,7 +82,10 @@ func TestUniqueClicksSurviveTheIPWipe(t *testing.T) {
 
 // The worker sets the TTL on ip and user_agent in every table that holds
 // them; only a change alters a table. Ends on 90 days, the default the dev
-// worker applies.
+// worker applies. The other period is longer, not shorter: the TTL is the
+// whole table's, and a short one cleared the ip of other packages' test
+// clicks a few weeks old while they ran in parallel
+// (reattribute's TestAttributedOnRetryQueuesPixelEvent).
 func TestSetPersonalDataTTL(t *testing.T) {
 	conn := mustConn(t)
 	ctx := context.Background()
@@ -92,7 +95,7 @@ func TestSetPersonalDataTTL(t *testing.T) {
 		wantChanged int
 	}{
 		// ip + user_agent in three tables, referrer in two.
-		{0, 8}, {0, 0}, {90, 8}, {90, 0}, {9, 8}, {90, 8},
+		{0, 8}, {0, 0}, {90, 8}, {90, 0}, {3650, 8}, {90, 8},
 	} {
 		changed, err := chstore.SetPersonalDataTTL(ctx, conn, step.days)
 		if err != nil {
