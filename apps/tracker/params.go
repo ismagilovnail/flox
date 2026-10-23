@@ -53,10 +53,12 @@ func parseParams(r *http.Request) params {
 		p.subs[i] = q.Get("sub" + strconv.Itoa(i+1))
 	}
 
-	// FLOX's own generic external click id, with the network-specific
-	// parameters as fallbacks so a partner that only sends fbclid/ttclid
-	// still gets an attributable external id rather than nothing.
-	p.externalClickID = firstNonEmpty(q.Get("external_click_id"), p.fbClickID, p.ttClickID)
+	// Only what arrived as external_click_id. fbclid/ttclid already have
+	// columns of their own, and copying them here stored each click id
+	// twice — a third of a click's bytes (audit DATA-7). Readers take
+	// external_click_id, else fbclid, else ttclid: sourceClickID here,
+	// chstore.SourceClickIDExpr in ClickHouse.
+	p.externalClickID = q.Get("external_click_id")
 
 	return p
 }
@@ -72,7 +74,7 @@ func (p params) applyTo(attrs routing.Attributes) {
 	attrs[routing.FieldUTMCampaign] = p.utmCampaign
 	attrs[routing.FieldUTMContent] = p.utmContent
 	attrs[routing.FieldUTMTerm] = p.utmTerm
-	attrs[routing.FieldExternalClickID] = p.externalClickID
+	attrs[routing.FieldExternalClickID] = p.sourceClickID()
 
 	subFields := [10]routing.FilterField{
 		routing.FieldSub1, routing.FieldSub2, routing.FieldSub3, routing.FieldSub4, routing.FieldSub5,
@@ -81,6 +83,12 @@ func (p params) applyTo(attrs routing.Attributes) {
 	for i, f := range subFields {
 		attrs[f] = p.subs[i]
 	}
+}
+
+// sourceClickID: the traffic source's click id as filters and postbacks
+// see it — external_click_id, else fbclid, else ttclid.
+func (p params) sourceClickID() string {
+	return firstNonEmpty(p.externalClickID, p.fbClickID, p.ttClickID)
 }
 
 func firstNonEmpty(values ...string) string {

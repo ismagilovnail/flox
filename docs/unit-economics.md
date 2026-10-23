@@ -46,6 +46,7 @@ Go services under air. Three runs at 1,000 clicks/s:
 | 25 min | 1,500,000 | 1,500,000 | 0.15 / 0.33 ms | (baseline spoiled, below) | 826.9 |
 | 15 min | 900,000 | 900,000 | 0.15 / 0.30 ms | 299.7 | 828.6 |
 | 3 min | 180,000 | 180,000 | 0.15 / 0.31 ms | 292.9 | 827.2 |
+| 3 min, after DATA-7 | 180,000 | 180,000 | 0.16 / 0.34 ms | 329.7 | **543.9** |
 
 **CPU per million clicks** (15-minute run):
 
@@ -62,20 +63,27 @@ A million clicks take about 300 CPU-seconds, or **0.083 vCPU-hours**. One core
 carries about 3,300 clicks/s through the whole pipeline. Postgres does nothing
 per click: clicks go through NATS.
 
-**Storage per click:** 827 bytes compressed, almost all of it in two tables:
+**Storage per click:** 544 bytes compressed since DATA-7, 827 before it.
+Almost all of it is in two tables:
 
-| Table | Bytes / click |
-|---|---:|
-| `click_events` | 461 |
-| `click_lookup` | 366 |
-| daily aggregates | ≈ 0 (one row per campaign × day, country × day) |
+| Table | Before DATA-7 | After |
+|---|---:|---:|
+| `click_events` | 461 | 320 |
+| `click_lookup` | 366 | 224 |
+| daily aggregates | ≈ 0 | ≈ 0 (one row per campaign × day, country × day) |
 
-**Click ids take 572 of the 827 bytes (69%)**, because they are stored twice
-in each table:
+**Before DATA-7, click ids took 572 of the 827 bytes (69%)**, because each
+was stored twice in each table:
 
-- `external_click_id` is `fbclid` or `ttclid` when no `external_click_id` is
-  sent (`tracker/params.go`), so it repeats `fb_click_id` or `tt_click_id`;
-- this happens in both `click_events` and `click_lookup`.
+- when no `external_click_id` was sent, the tracker wrote `fbclid` or `ttclid`
+  into `external_click_id` too, repeating `fb_click_id` or `tt_click_id`;
+- this happened in both `click_events` and `click_lookup`.
+
+DATA-7 keeps only an `external_click_id` that was actually sent. Readers take
+`external_click_id`, else `fbclid`, else `ttclid` (`chstore.SourceClickIDExpr`),
+so attribution, postback macros and the click log see the same value as
+before. That saved 284 bytes per click (34%); `fbclid` (109 bytes per table)
+is now the largest column.
 
 The rest:
 
@@ -87,7 +95,7 @@ The rest:
 
 **The data never leaves.** The 90-day TTL on these tables applies to the
 `ip`, `user_agent` and `referrer` columns (GDPR-1), not to rows. After 90 days
-a click still holds about **792 bytes**. Only `postback_events` has a row TTL
+a click still holds about **509 bytes** (792 before DATA-7). Only `postback_events` has a row TTL
 (13 months).
 
 ### Caveat: the first run's CPU
@@ -104,7 +112,7 @@ two runs agree within 3%.
 For a client with **C million clicks per month**, after **m months**:
 
 ```
-storage_GB  ≈ 0.80 × C × m × r          r = copies kept (replica, backup)
+storage_GB  ≈ 0.51 × C × m × r          r = copies kept (replica, backup)
 cpu_vCPUh   ≈ 0.083 × C                 per month, average
 peak_cores  ≈ 0.30 × peak_rps / 1000    what must be provisioned
 monthly     = storage_GB × price_GB + cpu_vCPUh × price_vCPUh
@@ -116,10 +124,10 @@ growing:
 
 | Plan | Clicks / month | Price | CPU per month | Stored after 12 months |
 |---|---:|---:|---:|---:|
-| Free | 0.1M | 0 ₽ | 0.008 vCPU-h | 1 GB |
-| Start | 1M | 4,900 ₽ | 0.08 vCPU-h | 9.6 GB |
-| Pro | 5M | 14,900 ₽ | 0.4 vCPU-h | 48 GB |
-| Business | 20M | 39,900 ₽ | 1.7 vCPU-h | 192 GB |
+| Free | 0.1M | 0 ₽ | 0.008 vCPU-h | 0.6 GB |
+| Start | 1M | 4,900 ₽ | 0.08 vCPU-h | 6.1 GB |
+| Pro | 5M | 14,900 ₽ | 0.4 vCPU-h | 31 GB |
+| Business | 20M | 39,900 ₽ | 1.7 vCPU-h | 122 GB |
 
 **An example with placeholder prices.** Assume:
 
@@ -128,9 +136,11 @@ growing:
 
 | Plan | CPU | Storage at month 12 | Storage at month 24 | Share of price, month 24 |
 |---|---:|---:|---:|---:|
-| Start | 0.1 ₽ | 288 ₽ | 576 ₽ | 12% |
-| Pro | 0.5 ₽ | 1,440 ₽ | 2,880 ₽ | 19% |
-| Business | 2 ₽ | 5,760 ₽ | 11,520 ₽ | 29% |
+| Start | 0.1 ₽ | 184 ₽ | 367 ₽ | 7.5% |
+| Pro | 0.5 ₽ | 918 ₽ | 1,836 ₽ | 12% |
+| Business | 2 ₽ | 3,672 ₽ | 7,344 ₽ | 18% |
+
+Before DATA-7 the same table read 12%, 19% and 29% at month 24.
 
 Peaks do not change this. A Business client averages 7.7 clicks/s; at ten
 times that, the pipeline needs 0.02 cores.
@@ -145,17 +155,13 @@ times that, the pipeline needs 0.02 cores.
   `fixed / (price − variable)` clients.
 - **Storage is the only variable cost that matters, and it has no ceiling.**
   Rows are kept forever, so a client's cost grows every month at the same
-  price. Two levers, each a separate decision:
-  1. **Raw-click retention per plan**, for example 3 / 6 / 13 months, with the
+  price. Two levers:
+  1. **Raw-click retention per plan** (DATA-6, open), for example 3 / 6 / 13 months, with the
      daily aggregates kept forever. Reports that read raw `click_events` (click
      log, unique clicks, LTV, breakdowns not covered by an aggregate) would end
      at the retention date. The storage cost then stops growing after the
      retention period.
-  2. **Stop storing click ids twice.** `external_click_id` filled from
-     `fbclid`/`ttclid` costs 286 bytes per click, or 35% of storage. Storing
-     it only when a partner sends `external_click_id` and reading the fallback
-     at query time needs care: attribution and postback lookups read that
-     column.
+  2. **Stop storing click ids twice:** done in DATA-7, −34%.
 - **Prices are not limited by cost.** With realistic storage prices the
   variable cost stays well under the price, until accumulated storage
   catches up. Setting the prices needs the market data from BIZ-3 and BIZ-4

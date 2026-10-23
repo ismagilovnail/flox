@@ -3,6 +3,7 @@ package chstore_test
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -149,6 +150,80 @@ func TestClickResolverByExternalClickID(t *testing.T) {
 	}
 	if len(clicks) != 2 {
 		t.Fatalf("clicks = %d, want exactly 2", len(clicks))
+	}
+}
+
+// Audit DATA-7: external_click_id holds only what the link sent as
+// external_click_id; fbclid and ttclid are stored once, in their own
+// columns. The source's click id still reads as before — external, else
+// fbclid, else ttclid — for new rows and for older rows that carry the
+// copy, and attribution's lookup by it still goes through a bloom filter.
+func TestSourceClickIDFallsBackToFbclidAndTtclid(t *testing.T) {
+	conn := mustConn(t)
+	store := chstore.NewEventStore(conn)
+	resolver := chstore.NewClickResolver(conn)
+	ctx := context.Background()
+	orgID := idgen.New()
+	fbOnly, ttOnly, both, legacy := idgen.New(), idgen.New(), idgen.New(), idgen.New()
+	fb, tt, ext, fbOfBoth, legacyFb := "fb."+idgen.New(), "tt."+idgen.New(), "ext."+idgen.New(), "fb."+idgen.New(), "fb."+idgen.New()
+	now := time.Now().UTC()
+	click := func(id string) event.Event {
+		return event.Event{Type: event.SourceClick, EventAt: now, OrganizationID: orgID, ClickID: id}
+	}
+	evs := []event.Event{click(fbOnly), click(ttOnly), click(both), click(legacy)}
+	evs[0].FBClickID = fb
+	evs[1].TTClickID = tt
+	evs[2].ExternalClickID, evs[2].FBClickID = ext, fbOfBoth
+	evs[3].ExternalClickID, evs[3].FBClickID = legacyFb, legacyFb // as stored before DATA-7
+	if err := store.InsertBatch(ctx, evs); err != nil {
+		t.Fatalf("InsertBatch: %v", err)
+	}
+
+	for _, c := range []struct {
+		lookup, want string
+		found        bool
+	}{
+		{fb, fbOnly, true},
+		{tt, ttOnly, true},
+		{ext, both, true},
+		{fbOfBoth, "", false}, // an explicit external_click_id wins, as before
+		{legacyFb, legacy, true},
+	} {
+		clicks, err := resolver.ByExternalClickID(ctx, orgID, c.lookup)
+		if err != nil {
+			t.Fatalf("ByExternalClickID(%s): %v", c.lookup, err)
+		}
+		if !c.found {
+			if len(clicks) != 0 {
+				t.Errorf("ByExternalClickID(%s) = %d clicks, want none", c.lookup, len(clicks))
+			}
+			continue
+		}
+		if len(clicks) != 1 || clicks[0].ClickID != c.want || clicks[0].ExternalClickID != c.lookup {
+			t.Errorf("ByExternalClickID(%s) = %+v, want click %s reading external id %s", c.lookup, clicks, c.want, c.lookup)
+		}
+		got, err := resolver.ByClickID(ctx, orgID, c.want)
+		if err != nil || got.ExternalClickID != c.lookup {
+			t.Errorf("ByClickID(%s).ExternalClickID = %q (%v), want %s", c.want, got.ExternalClickID, err, c.lookup)
+		}
+	}
+
+	rows, err := conn.Query(ctx, `EXPLAIN indexes = 1 SELECT click_id FROM click_events
+		WHERE organization_id = ? AND `+chstore.SourceClickIDExpr+` = ?`, orgID, fb)
+	if err != nil {
+		t.Fatalf("EXPLAIN: %v", err)
+	}
+	defer rows.Close()
+	var plan strings.Builder
+	for rows.Next() {
+		var line string
+		if err := rows.Scan(&line); err != nil {
+			t.Fatal(err)
+		}
+		plan.WriteString(line + "\n")
+	}
+	if !strings.Contains(plan.String(), "idx_source_click_id") {
+		t.Errorf("the lookup by source click id does not use idx_source_click_id:\n%s", plan.String())
 	}
 }
 

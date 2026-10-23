@@ -49,8 +49,18 @@ func NewClickResolver(conn driver.Conn) *ClickResolver {
 
 var _ attribution.ClickResolver = (*ClickResolver)(nil)
 
+// SourceClickIDExpr is the traffic source's own click id of a click:
+// external_click_id when the link carried one, else fbclid, else ttclid.
+// Since schema/022 external_click_id holds only the first (audit DATA-7);
+// older rows hold the copy, and this reads both alike. click_events'
+// bloom filter idx_source_click_id is on exactly this expression, so a
+// WHERE on it must spell it the same — notEmpty() included: the analyzer
+// turns != '' into notEmpty(), and then no longer matches an index
+// spelled with != ''.
+const SourceClickIDExpr = `if(notEmpty(external_click_id), external_click_id, if(notEmpty(fb_click_id), fb_click_id, tt_click_id))`
+
 const clickColumns = `
-	click_id, campaign_id, stream_set_id, flow_id, external_click_id, event_at,
+	click_id, campaign_id, stream_set_id, flow_id, ` + SourceClickIDExpr + `, event_at,
 	country, region, city, device, platform, os,
 	utm_source, utm_medium, utm_campaign, utm_content, utm_term,
 	sub1, sub2, sub3, sub4, sub5, sub6, sub7, sub8, sub9, sub10,
@@ -158,7 +168,7 @@ func (r *ClickResolver) ByExternalClickID(ctx context.Context, organizationID, e
 	res, err := r.conn.Query(ctx, `
 		SELECT `+clickColumns+`
 		FROM click_events
-		WHERE organization_id = ? AND external_click_id = ? AND type = ?
+		WHERE organization_id = ? AND `+SourceClickIDExpr+` = ? AND type = ?
 		ORDER BY event_at ASC
 		LIMIT ?`,
 		organizationID, externalClickID, string(event.SourceClick), maxExternalClickMatches,

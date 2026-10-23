@@ -5,6 +5,34 @@ per-phase, matching `CLAUDE.md`'s phase protocol. The one exception is
 [Between phases], below: spec amendments and the code changes that follow from
 them land between phases and would otherwise be invisible here.
 
+## [Phase 30.70] — Click ids stored once (DATA-7)
+
+- **What changed:** when a link carried no `external_click_id`, the tracker used to copy `fbclid` or `ttclid` into
+  it, so each click id was stored twice, in both `click_events` and `click_lookup`. Now `external_click_id` holds only
+  what was sent as `external_click_id`.
+- **Reads unchanged:** routing filters, attribution, postback macros and the click log still see
+  `external_click_id`, else `fbclid`, else `ttclid`. The tracker computes it in `params.sourceClickID`, ClickHouse in
+  `chstore.SourceClickIDExpr`. Older rows that carry the copy read the same.
+- **schema/022:** the `click_events` bloom filter moves from the column to that expression; it is built for existing
+  parts before the old index is dropped.
+  - The first draft of the expression used `!= ''`. ClickHouse 24.10's analyzer rewrites that into `notEmpty()`,
+    after which the index silently stopped matching. The expression is now spelled with `notEmpty()`, and a test
+    checks with `EXPLAIN` that the lookup uses the index.
+  - That draft had already been applied to the dev database, so its index and record there were removed and the file
+    re-applied.
+- **Result (costbench, 3 min at 1,000/s):** 827 → **544 bytes per click (−34%)**: `click_events` 461 → 320,
+  `click_lookup` 366 → 224. docs/unit-economics.md updated: at the placeholder prices, Business storage at month 24
+  is 18% of the price instead of 29%.
+- **Tests:**
+  - `TestSourceClickIDFallsBackToFbclidAndTtclid`: fbclid-only, ttclid-only, explicit and pre-DATA-7 clicks are
+    found and read as before, an explicit id still wins over fbclid, and the index is used;
+  - tracker params tests updated.
+- **Fixed on the way (separate commit 9e97fbd):** chstore's personal-data TTL test briefly set a 9-day TTL on the
+  whole table. In a parallel run it cleared the ip of reattribute's weeks-old test click, which made
+  `TestAttributedOnRetryQueuesPixelEvent` fail. It now uses 3,650 days.
+- **Checks:** go build/vet; full-env go test: everything passes except contentgallery's MOV test (your WIP); e2e
+  without skips.
+
 ## [Phase 30.69] — What a client costs (audit BIZ-2)
 
 docs/unit-economics.md. Measured locally, as you chose; prices are inputs to the model.

@@ -19,7 +19,7 @@ referenced below as §N).
 ## CURRENT STATE — UPDATE THIS EVERY PHASE
 
 ```
-CURRENT PHASE : PHASE 30.69 — BIZ-2, WHAT A CLIENT COSTS (closed)
+CURRENT PHASE : PHASE 30.70 — DATA-7, CLICK IDS STORED ONCE (closed)
 STATUS        : Product audit 2026-10-15 (docs/audit-product-2026-10-15.md)
                 is the backlog: items on the local dev panel tools/devpanel
                 (make devpanel → 127.0.0.1:8099; memory: flox-audit-tracker
@@ -64,11 +64,15 @@ STATUS        : Product audit 2026-10-15 (docs/audit-product-2026-10-15.md)
                 BIZ-2 (docs/unit-economics.md, make costbench): ~300 CPU-s
                 and 827 B per 1M clicks/click; click rows never expire
                 (TTL only clears ip/ua/referrer); external_click_id
-                duplicates fbclid/ttclid (35% of bytes). Retention and
-                dedup are open decisions for the user.
+                duplicated fbclid/ttclid. DATA-7: external_click_id
+                stores only what was sent; reads use
+                chstore.SourceClickIDExpr (notEmpty() spelling — the
+                analyzer rewrites != '' and the bloom index on it,
+                schema/022, would be skipped); 827 → 544 B/click.
+                Raw-click retention (DATA-6) is open.
                 P0 left (skipped by the user for now):
                 OPS-1..3 (prod, restore, load) — needs the owner's hosting.
-LAST COMMIT   : feat(tools): costbench, what a click costs.
+LAST COMMIT   : feat(tracker): click ids stored once.
 UNCOMMITTED   : the user's gallery-transcoding WIP (00085, processor.go,
                 transcode.go, worker ffmpeg) — not ours, leave it alone.
                 It now accepts MOV, so contentgallery's

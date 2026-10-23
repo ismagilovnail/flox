@@ -16,6 +16,13 @@ is a bad decision made repeatedly, and nothing in any report flags it.
 | `click_id` | FLOX, at redirect time, handed to the network as a `{click_id}` macro | Strong — we issued it |
 | `external_click_id` | the ad network (`fbclid`, `ttclid`, or a partner's own) | Weak — caller-supplied on the click side, and **not reliably unique** |
 
+On the click side, `external_click_id` is the link's `external_click_id`,
+else its `fbclid`, else its `ttclid`. Since DATA-7 only the first is stored
+in that column, and each click id is stored once, in its own column. ClickHouse
+reads compute the fallback (`chstore.SourceClickIDExpr`), and `click_events`
+has its bloom filter on that same expression (schema/022). A new query that
+matches on it must use the constant, or the index is not used.
+
 §42's note applies directly here: a share of Facebook/Instagram clicks arrive
 with empty subs and no network id at all, depending on how the link was opened.
 Missing stays empty; it never becomes a placeholder, and never "unknown

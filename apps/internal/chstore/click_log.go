@@ -59,7 +59,7 @@ const clickLogColumns = `event_at, type, campaign_id, click_id, stream_set_id, f
 	country, region, city, device, platform, os, os_version, browser, browser_version, language, is_bot, is_proxy, asn, connection_type, ip, user_agent, referrer,
 	utm_source, utm_medium, utm_campaign, utm_content, utm_term,
 	sub1, sub2, sub3, sub4, sub5, sub6, sub7, sub8, sub9, sub10,
-	external_click_id, fb_click_id, tt_click_id, filter_reason`
+	` + SourceClickIDExpr + `, fb_click_id, tt_click_id, filter_reason`
 
 func scanClickLogRow(r driver.Rows) (ClickLogRow, error) {
 	var row ClickLogRow

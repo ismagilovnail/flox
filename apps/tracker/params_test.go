@@ -60,10 +60,12 @@ func TestParseParams_EmptyFacebookSubs(t *testing.T) {
 			t.Fatalf("sub%d = %q — missing subs must stay empty, not be filled in", i+1, s)
 		}
 	}
-	// With no external_click_id, fbclid becomes the attributable external
-	// id rather than the click being left unattributable.
-	if p.externalClickID != "IwAR_abc123" {
-		t.Fatalf("externalClickID = %q, want fbclid to be used as a fallback", p.externalClickID)
+	// With no external_click_id, fbclid is the source's click id rather
+	// than the click being left unattributable — but it is stored once,
+	// in fb_click_id, not copied into external_click_id (DATA-7).
+	if p.sourceClickID() != "IwAR_abc123" || p.externalClickID != "" {
+		t.Fatalf("sourceClickID() = %q, externalClickID = %q, want fbclid as the fallback and nothing stored twice",
+			p.sourceClickID(), p.externalClickID)
 	}
 }
 
@@ -81,8 +83,13 @@ func TestParseParams_PartialSubs(t *testing.T) {
 
 func TestParseParams_TTClidFallback(t *testing.T) {
 	p := parseParams(requestWithQuery("ttclid=tt-only"))
-	if p.externalClickID != "tt-only" {
-		t.Fatalf("externalClickID = %q, want ttclid fallback", p.externalClickID)
+	if p.sourceClickID() != "tt-only" || p.externalClickID != "" {
+		t.Fatalf("sourceClickID() = %q, externalClickID = %q, want the ttclid fallback", p.sourceClickID(), p.externalClickID)
+	}
+	attrs := routing.Attributes{}
+	p.applyTo(attrs)
+	if attrs[routing.FieldExternalClickID] != "tt-only" {
+		t.Fatalf("filter attribute external_click_id = %q, want the ttclid fallback", attrs[routing.FieldExternalClickID])
 	}
 }
 
