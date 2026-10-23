@@ -19,7 +19,7 @@ referenced below as §N).
 ## CURRENT STATE — UPDATE THIS EVERY PHASE
 
 ```
-CURRENT PHASE : PHASE 30.68 — BUG-7, OVERVIEW REVENUE CHART (closed)
+CURRENT PHASE : PHASE 30.69 — BIZ-2, WHAT A CLIENT COSTS (closed)
 STATUS        : Product audit 2026-10-15 (docs/audit-product-2026-10-15.md)
                 is the backlog: items on the local dev panel tools/devpanel
                 (make devpanel → 127.0.0.1:8099; memory: flox-audit-tracker
@@ -61,14 +61,19 @@ STATUS        : Product audit 2026-10-15 (docs/audit-product-2026-10-15.md)
                 BUG-2 (isolation tests drop their orgs); BUG-3 was
                 already fixed. BUG-7 + BUG-4: overview charts get every
                 day (fillDays), a lone point is a dot; chart currency dep.
+                BIZ-2 (docs/unit-economics.md, make costbench): ~300 CPU-s
+                and 827 B per 1M clicks/click; click rows never expire
+                (TTL only clears ip/ua/referrer); external_click_id
+                duplicates fbclid/ttclid (35% of bytes). Retention and
+                dedup are open decisions for the user.
                 P0 left (skipped by the user for now):
                 OPS-1..3 (prod, restore, load) — needs the owner's hosting.
-LAST COMMIT   : fix(web): overview charts plot every day of the range.
+LAST COMMIT   : feat(tools): costbench, what a click costs.
 UNCOMMITTED   : the user's gallery-transcoding WIP (00085, processor.go,
                 transcode.go, worker ffmpeg) — not ours, leave it alone.
                 It now accepts MOV, so contentgallery's
                 TestUploadRejectsOversizeWrongContentAndMov fails with it.
-NEXT          : wait for the user — next item from the board (P1: BIZ-2..4;
+NEXT          : wait for the user — next item from the board (P1: BIZ-3..4;
                 P2: the rest of the board).
                 GAP-2 (Google Play import) is won't-do: do not offer it. INT-2 is
                 excluded: the owner does it later themselves — do not

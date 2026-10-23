@@ -5,6 +5,33 @@ per-phase, matching `CLAUDE.md`'s phase protocol. The one exception is
 [Between phases], below: spec amendments and the code changes that follow from
 them land between phases and would otherwise be invisible here.
 
+## [Phase 30.69] — What a client costs (audit BIZ-2)
+
+docs/unit-economics.md. Measured locally, as you chose; prices are inputs to the model.
+
+- **New `make costbench`** (`apps/cmd/costbench`):
+  - seeds a campaign and sends clicks shaped like paid social traffic through the real tracker → NATS → worker →
+    ClickHouse with vegeta;
+  - measures CPU per container from cgroups, minus an idle baseline taken before and after the load (the lower of
+    the two);
+  - measures peak memory, and ClickHouse growth per table and per column after `OPTIMIZE FINAL`;
+  - cleans up after itself. It can be re-run on staging.
+- **Results at 1,000 clicks/s** (900k and 180k clicks; all arrived; p99 0.3 ms):
+  - about 300 CPU-seconds per million clicks (0.083 vCPU-h): tracker 152, ClickHouse 92, worker 45, NATS 11,
+    Postgres ≈ 0;
+  - 827 bytes per click compressed (`click_events` 461, `click_lookup` 366).
+- **Findings for you to decide on:**
+  - click rows are never deleted (the 90-day TTL clears only `ip`, `user_agent`, `referrer`), so a client's storage
+    grows every month;
+  - click ids are 69% of the bytes, half of it because `external_click_id` repeats `fbclid`/`ttclid`;
+  - compute is a few rubles a month even at Business volume. Prices depend on fixed costs (OPS-1), support time and
+    the market (BIZ-3/4), not on per-click compute.
+- **The first 25-minute run's CPU is discarded:** its baseline caught ClickHouse still cleaning up after a trial run
+  and read 0. That is why the two-sided baseline exists.
+- **Not measured:** onboarding support time, report queries, landings, postbacks and push, a real network, replicas.
+- **Checks:** go vet, `go test ./cmd/costbench` (the clicks reach the tracker as distinct public visitors). No change
+  to the services.
+
 ## [Phase 30.68] — Overview revenue chart drew nothing (BUG-7)
 
 - **Cause:** the overview's report returns only the days that have data. Revenue on a single day became one point,

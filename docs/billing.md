@@ -23,8 +23,10 @@ is a custom deal: it can be assigned but is not listed.
 | Pro | 5,000,000 | ∞ | 20 | 15 | $149 |
 | Business | 20,000,000 | ∞ | ∞ | ∞ | $399 |
 
-The numbers are a draft. The click tiers follow competitors' entry plans,
-and the prices are placeholders until BIZ-2 measures what a client costs.
+The numbers are a draft. The click tiers follow competitors' entry plans.
+BIZ-2 measured what a client costs (docs/unit-economics.md): compute is
+negligible, while storage grows with every month a client stays. The prices
+still wait for the market data (BIZ-3, BIZ-4) and the fixed costs (OPS-1).
 
 The current plan is the open `organization_plans` row (`ended_at IS NULL`;
 a partial unique index allows only one). With no row, the organization is on

@@ -36,7 +36,7 @@ DATABASE_URL ?= postgres://flox:flox@localhost:5432/flox?sslmode=disable
         backup-now backup-drill backup-list \
         migrate-up migrate-down migrate-status dev-reset dev-fresh dev-status fixtures reconcile \
         test-stack-up test-stack-down test-stack-restart test-stack-logs \
-        fmt vet test lint check audit-web clean devpanel audit-tracker
+        fmt vet test lint check audit-web costbench clean devpanel audit-tracker
 
 help: ## Show this help
 	@echo "FLOX — make targets"
@@ -211,6 +211,15 @@ check: fmt vet test lint ## Run the full validation suite (fmt+vet+test+lint)
 audit-web: ## npm audit (apps/web): fails on any production dependency; dev tools reported only (docs/security.md)
 	cd $(WEB_DIR) && npm audit --omit=dev
 	-cd $(WEB_DIR) && npm audit
+
+RATE     ?= 1000
+DURATION ?= 25m
+costbench: ## What a click costs: CPU per container + ClickHouse bytes (RATE, DURATION; docs/unit-economics.md)
+	@cd $(GO_DIR) && fix=$$(DATABASE_URL="$(DATABASE_URL)" go run ./cmd/loadtestseed seed) && \
+	org=$$(echo "$$fix" | sed -E 's/.*"orgId":"([^"]+)".*/\1/') && \
+	host=$$(echo "$$fix" | sed -E 's/.*"host":"([^"]+)".*/\1/') && \
+	go run ./cmd/costbench -org "$$org" -host "$$host" -rate $(RATE) -duration $(DURATION); \
+	status=$$?; DATABASE_URL="$(DATABASE_URL)" go run ./cmd/loadtestseed cleanup "$$org"; exit $$status
 
 # --- Dev panel (tools/devpanel, its own Go module) --------------------------
 

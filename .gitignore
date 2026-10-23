@@ -73,3 +73,6 @@ Thumbs.db
 playwright-report/
 test-results/
 .cache/
+
+# make costbench output (vegeta results, report.json)
+apps/costbench-out/
