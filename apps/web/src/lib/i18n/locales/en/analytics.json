@@ -124,7 +124,8 @@
     "push_delivered": "Push delivered",
     "push_opened": "Push opened",
     "push_unsubscribed": "Push unsubscribed",
-    "push_ctr": "Push CTR"
+    "push_ctr": "Push CTR",
+    "avgOrderValue": "Average order value"
   },
   "metricHints": {
     "clicks": "All clicks on the campaign, including repeat clicks from the same visitor.",
@@ -164,7 +165,8 @@
     "push_delivered": "Notifications the push service accepted. Same grouping limits as Push sent.",
     "push_opened": "Notifications opened (first open per notification), counted on the day they were sent.",
     "push_unsubscribed": "Subscriptions found gone when a notification was sent to them (the push service answered 404/410).",
-    "push_ctr": "Push opened ÷ push delivered × 100%. \"—\" when nothing was delivered."
+    "push_ctr": "Push opened ÷ push delivered × 100%. \"—\" when nothing was delivered.",
+    "avgOrderValue": "Average order value = revenue ÷ (purchases + repeat purchases). Revenue is net of refunds."
   },
   "funnelSteps": {
     "SOURCE_CLICK": "Source Click",

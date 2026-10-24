@@ -34,7 +34,7 @@ var reportMetricIDs = []string{
 	"roi", "roas", "ctr", "cvr", "cpc", "cpa", "epc",
 	"pwaInstalls", "tgStarts", "tgJoins", "registrations", "purchases", "repurchases", "declines", "trash",
 	"clickToInstall", "installToReg", "regToPurchase",
-	"costPerInstall", "costPerReg", "costPerPurchase",
+	"costPerInstall", "costPerReg", "costPerPurchase", "avgOrderValue",
 	"blocked", "bots", "blockedRate", "botRate", "emptySubs", "emptySubsRate",
 }
 

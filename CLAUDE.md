@@ -19,7 +19,7 @@ referenced below as §N).
 ## CURRENT STATE — UPDATE THIS EVERY PHASE
 
 ```
-CURRENT PHASE : PHASE 30.81 — UNI-4 PART 1, REFUNDS BY ORDER (closed)
+CURRENT PHASE : PHASE 30.82 — UNI-4 PART 2, AVERAGE ORDER VALUE (closed)
 STATUS        : Product audits 2026-10-15 and 2026-10-24 (docs/audit-
                 product-*.md; the second: universality, SEC-7..UX-4)
                 are the backlog: items on the local dev panel tools/devpanel
@@ -107,11 +107,10 @@ STATUS        : Product audits 2026-10-15 and 2026-10-24 (docs/audit-
                 past events and reads rollup-able reports has the same trap.
                 P0 left (skipped by the user for now):
                 OPS-1..3 (prod, restore, load) — needs the owner's hosting.
-LAST COMMIT   : feat(conversion): refunds by order and partial refunds (UNI-4 part 1).
+LAST COMMIT   : feat(analytics): average order value (UNI-4 part 2).
 UNCOMMITTED   : docs/import-export-plan.md (INT-2, stays uncommitted).
-NEXT          : wait for the user. UNI-4 part 2: average order value metric
-                (agreed, not started). Then P2 UNI-2/UNI-3, DOC-1, UX-4;
-                the full Go run was not repeated after UNI-4 part 1.
+NEXT          : wait for the user. UNI-4 left: Shopify/WooCommerce (after
+                BIZ-3). Then P2 UNI-2/UNI-3, DOC-1, UX-4;
                 BIZ-3/BIZ-4 part 2 are the user's (no interview script),
                 OPS-1..3 need hosting.
                 GAP-2 (Google Play import) is won't-do: do not offer it. INT-2 is

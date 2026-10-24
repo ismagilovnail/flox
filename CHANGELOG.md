@@ -5,6 +5,12 @@ per-phase, matching `CLAUDE.md`'s phase protocol. The one exception is
 [Between phases], below: spec amendments and the code changes that follow from
 them land between phases and would otherwise be invisible here.
 
+## [Phase 30.82] — Average order value (UNI-4, part 2)
+
+`avgOrderValue` = revenue ÷ (purchases + repeat purchases), net of refunds like revenue, null without orders: in the
+report builder, sortable, in custom-metric formulas and presets, in the public OpenAPI. Tests: the value and the null.
+Shopify/WooCommerce connectors stay for after the BIZ-3 interviews.
+
 ## [Phase 30.81] — Refunds by order and partial refunds (UNI-4, part 1)
 
 docs/conversion.md "Refunds by order" (§45 amended, migration 00103). A refund with a repeat purchase's txn_id reverses

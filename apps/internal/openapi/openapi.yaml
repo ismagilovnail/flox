@@ -2136,7 +2136,7 @@ components:
       type: object
       description: null where a metric cannot be computed — money metrics without spend, rates over zero, conversion metrics for a dimension conversions do not carry.
       additionalProperties: false
-      required: [clicks, uniqueClicks, conversions, revenue, cost, profit, roi, roas, ctr, cvr, cpc, cpa, epc, pwaInstalls, tgStarts, tgJoins, registrations, purchases, repurchases, declines, trash, clickToInstall, installToReg, regToPurchase, costPerInstall, costPerReg, costPerPurchase, blocked, bots, blockedRate, botRate, emptySubs, emptySubsRate, push_sent, push_delivered, push_opened, push_unsubscribed, push_ctr]
+      required: [clicks, uniqueClicks, conversions, revenue, cost, profit, roi, roas, ctr, cvr, cpc, cpa, epc, pwaInstalls, tgStarts, tgJoins, registrations, purchases, repurchases, declines, trash, clickToInstall, installToReg, regToPurchase, costPerInstall, costPerReg, costPerPurchase, avgOrderValue, blocked, bots, blockedRate, botRate, emptySubs, emptySubsRate, push_sent, push_delivered, push_opened, push_unsubscribed, push_ctr]
       properties:
         clicks: { type: integer }
         uniqueClicks: { type: integer }
@@ -2165,6 +2165,7 @@ components:
         costPerInstall: { type: [number, "null"] }
         costPerReg: { type: [number, "null"] }
         costPerPurchase: { type: [number, "null"] }
+        avgOrderValue: { type: [number, "null"], description: "Revenue ÷ (purchases + repeat purchases), net of refunds; null without orders." }
         blocked: { type: integer }
         bots: { type: integer }
         blockedRate: { type: [number, "null"] }

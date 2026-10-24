@@ -43,7 +43,7 @@ var validMetrics = map[string]bool{
 	"pwaInstalls": true, "tgStarts": true, "tgJoins": true, "registrations": true, "purchases": true, "repurchases": true,
 	"declines": true, "trash": true,
 	"clickToInstall": true, "installToReg": true, "regToPurchase": true,
-	"costPerInstall": true, "costPerReg": true, "costPerPurchase": true,
+	"costPerInstall": true, "costPerReg": true, "costPerPurchase": true, "avgOrderValue": true,
 	"blocked": true, "bots": true, "blockedRate": true, "botRate": true,
 	"emptySubs": true, "emptySubsRate": true,
 }

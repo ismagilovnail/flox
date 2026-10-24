@@ -209,6 +209,7 @@ func TestReportPwaAndCpaFunnelMetrics(t *testing.T) {
 	eq("CostPerInstall", m.CostPerInstall, 5)
 	eq("CostPerReg", m.CostPerReg, 10)
 	eq("CostPerPurchase", m.CostPerPurchase, 200.0/6)
+	eq("AvgOrderValue", m.AvgOrderValue, 400.0/8) // 6 purchases + 2 repeat ones (audit UNI-4)
 }
 
 // Telegram counts ride with the installs; by telegram_channel the
@@ -257,6 +258,9 @@ func TestReportFunnelMetricsAreNullNotZeroWhenUndefined(t *testing.T) {
 	}
 	if m.CostPerInstall != nil || m.CostPerReg != nil || m.CostPerPurchase != nil {
 		t.Fatal("cost per step without cost on file must be nil")
+	}
+	if m.AvgOrderValue != nil {
+		t.Fatalf("AvgOrderValue without orders = %v, want nil", *m.AvgOrderValue)
 	}
 }
 

@@ -106,6 +106,7 @@ export const METRICS: { key: MetricKey; label: string; format: MetricFormat }[] 
   { key: "costPerInstall", label: "Cost per install", format: "currency" },
   { key: "costPerReg", label: "Cost per registration", format: "currency" },
   { key: "costPerPurchase", label: "Cost per purchase", format: "currency" },
+  { key: "avgOrderValue", label: "Average order value", format: "currency" },
   { key: "blocked", label: "Blocked", format: "int" },
   { key: "bots", label: "Bots", format: "int" },
   { key: "blockedRate", label: "Blocked rate", format: "percent" },

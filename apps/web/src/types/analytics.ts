@@ -62,6 +62,7 @@ export type MetricKey =
   | "costPerInstall"
   | "costPerReg"
   | "costPerPurchase"
+  | "avgOrderValue"
   | "blocked"
   | "bots"
   | "blockedRate"

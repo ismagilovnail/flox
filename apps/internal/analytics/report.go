@@ -118,6 +118,9 @@ type MetricValues struct {
 	CostPerInstall  *float64
 	CostPerReg      *float64
 	CostPerPurchase *float64
+	// AvgOrderValue (audit UNI-4): revenue ÷ (purchases + repeat
+	// purchases), net of refunds like revenue; nil without orders.
+	AvgOrderValue *float64
 
 	// Traffic quality (audit #3). Blocked is SOURCE_FILTER — clicks no
 	// destination took; Bots is every click the classifier flagged is_bot,
@@ -1038,6 +1041,12 @@ func deriveMetrics(acc *rowAccumulator) MetricValues {
 	if acc.revenueUSD != nil {
 		rev := *acc.revenueUSD
 		m.Revenue = &rev
+		if acc.purchases != nil && acc.repurchases != nil {
+			if orders := *acc.purchases + *acc.repurchases; orders > 0 {
+				aov := rev / float64(orders)
+				m.AvgOrderValue = &aov
+			}
+		}
 	}
 
 	if acc.costUSD != nil {
@@ -1233,6 +1242,8 @@ func metricFloat(m MetricValues, key string) (float64, bool) {
 		return ptrOrNegInf(m.CostPerReg), true
 	case "costperpurchase":
 		return ptrOrNegInf(m.CostPerPurchase), true
+	case "avgordervalue":
+		return ptrOrNegInf(m.AvgOrderValue), true
 	case "blocked":
 		return float64(m.Blocked), true
 	case "bots":

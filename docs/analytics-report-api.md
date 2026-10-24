@@ -429,6 +429,9 @@ Every metrics object also carries: `pwaInstalls` (PWA_INSTALL count),
 `costPerInstall`, `costPerReg`, `costPerPurchase` (USD). The CPA counts are
 `null` when the requested dimensions can't be answered from conversion_events;
 rates and costs are `null` when the denominator is 0 or no cost is on file.
+`avgOrderValue` (audit UNI-4) is revenue ÷ (purchases + repurchases) — net
+of refunds like revenue, `null` without orders.
+
 `conversions` counts CPA_ACCEPT + CPA_REDEP. `revenue` is CPA_ACCEPT +
 CPA_REDEP **net of chargebacks**: a CPA_DECLINE/CPA_TRASH that reversed an
 accepted first purchase carries that payout negated and is summed in, on the decline's
