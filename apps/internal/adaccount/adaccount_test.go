@@ -128,6 +128,24 @@ func TestConnectRejectsSourceWithoutAdCostIntegration(t *testing.T) {
 			t.Fatalf("Connect on a source with cost_integration=yandex_direct failed: %v", err)
 		}
 	})
+
+	t.Run("vk_ads needs the API client id and secret, the login is optional", func(t *testing.T) {
+		sourceID := seedTrafficSource(t, ctx, pool, orgID, "vk_ads")
+		if _, err := svc.Connect(ctx, orgID, sourceID, adaccount.ConnectInput{AccessToken: "a-token-1234567890"}); err == nil {
+			t.Fatal("Connect on a vk_ads source with only an access token succeeded")
+		}
+		c, err := svc.Connect(ctx, orgID, sourceID, adaccount.ConnectInput{ClientID: "cid", ClientSecret: "secret-abcd", AccessToken: "ignored-token"})
+		if err != nil {
+			t.Fatalf("Connect on a source with cost_integration=vk_ads failed: %v", err)
+		}
+		if c.TokenPreview != "abcd" {
+			t.Fatalf("preview %q, want the client secret's last 4", c.TokenPreview)
+		}
+		var access *string
+		if err := pool.QueryRow(ctx, `SELECT access_token FROM ad_account_connections WHERE traffic_source_id = $1`, sourceID).Scan(&access); err != nil || access != nil {
+			t.Fatalf("a pasted access token was stored for vk_ads: %v %v", access, err)
+		}
+	})
 }
 
 func TestConnectGoogleAdsRequiresGoogleAdsFields(t *testing.T) {

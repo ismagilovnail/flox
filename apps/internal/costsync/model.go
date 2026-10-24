@@ -19,6 +19,7 @@ type Providers struct {
 	TikTokAds    adaccount.CostProvider
 	GoogleAds    adaccount.CostProvider
 	YandexDirect adaccount.CostProvider
+	VKAds        adaccount.CostProvider
 }
 
 // Result summarizes one sync run for the "Sync now" response — a count,

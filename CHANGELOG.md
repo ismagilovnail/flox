@@ -5,6 +5,23 @@ per-phase, matching `CLAUDE.md`'s phase protocol. The one exception is
 [Between phases], below: spec amendments and the code changes that follow from
 them land between phases and would otherwise be invisible here.
 
+## [Phase 30.88] — VK Ads spend import (UNI-3, part 2)
+
+docs/ad-account-connections.md "VK Ads". A fifth cost integration, `vk_ads` (migration 00107).
+
+- Connection: the API client's id and secret (encrypted); an agency adds its client's username.
+- `internal/adaccount/vkads`: currency from user.json, every ad plan (deleted ones too) from ad_plans.json, daily spend
+  from statistics/ad_plans/day.json in batches of 200. VK's tokens live a day and at most 5 may exist at once, so the
+  sync mints one (client or agency client credentials), keeps it encrypted (`Credentials.SaveTokens`), refreshes it
+  on a 401 and mints again only when the refresh is refused; a 403 on minting says how to free the limit.
+- The connection preview shows the pasted secret, not a token the sync minted later.
+- Web: VK Ads in the cost integration list, the connect form (client id, secret, optional client username), a hint,
+  the Settings › Integrations count.
+- Tests: the adapter against a fake VK (mint and keep, refresh, re-mint, agency grant, paging, 200-id batches, errors);
+  a sync end to end that mints once over two runs and keeps the token encrypted; connect validation and preview; the
+  form (vitest). Live: the real VK token endpoint refused fake client credentials with its own message through "Sync
+  now". Not tried with a real account; the statistics' day time zone and VAT are not documented.
+
 ## [Phase 30.87] — Yandex Direct spend import (UNI-3, part 1)
 
 docs/ad-account-connections.md "Yandex Direct". A fourth cost integration, `yandex_direct` (migration 00106).

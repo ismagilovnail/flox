@@ -37,7 +37,7 @@ const STATUS_VARIANT: Record<IntegrationStatus, "success" | "outline" | "danger"
   error: "danger",
 };
 
-const AD_PLATFORM_ORDER = ["facebook_ads", "tiktok_ads", "google_ads", "yandex_direct"];
+const AD_PLATFORM_ORDER = ["facebook_ads", "tiktok_ads", "google_ads", "yandex_direct", "vk_ads"];
 
 export function IntegrationsPanel() {
   const { t } = useTranslation(["settings", "common"]);

@@ -15,6 +15,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/ismagilovnail/flox/apps/internal/adaccount"
+	"github.com/ismagilovnail/flox/apps/internal/adaccount/vkads"
 	"github.com/ismagilovnail/flox/apps/internal/adaccount/yandexdirect"
 	"github.com/ismagilovnail/flox/apps/internal/apierror"
 	"github.com/ismagilovnail/flox/apps/internal/campaign"
@@ -415,4 +416,70 @@ type failingProvider struct{ err error }
 
 func (f *failingProvider) DailySpendByCampaign(context.Context, adaccount.Credentials, time.Time, time.Time) ([]adaccount.DailyCampaignSpendRecord, error) {
 	return nil, f.err
+}
+
+// Audit UNI-3 part 2: a VK Ads source's spend through the real adapter
+// against a fake VK. The first sync mints a token and keeps it encrypted;
+// the next uses it without minting another (VK allows 5 at once).
+func TestSyncVKAdsKeepsItsToken(t *testing.T) {
+	pool := mustPool(t)
+	ctx := context.Background()
+	orgID := seedOrg(t, ctx, pool)
+	sourceID := seedTrafficSource(t, ctx, pool, orgID, "vk_ads")
+	campaignID := seedCampaign(t, ctx, pool, orgID, sourceID, "4242")
+
+	adAccountRepo := adaccount.NewRepository(pool, testKey)
+	if _, err := adaccount.NewService(adAccountRepo).Connect(ctx, orgID, sourceID, adaccount.ConnectInput{
+		ClientID: "cid", ClientSecret: "csecret",
+	}); err != nil {
+		t.Fatalf("connecting: %v", err)
+	}
+	mints := 0
+	vk := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/api/v2/oauth2/token.json":
+			mints++
+			_, _ = w.Write([]byte(`{"access_token": "vk-access-token", "refresh_token": "vk-refresh-token", "expires_in": "86400"}`))
+			return
+		}
+		if r.Header.Get("Authorization") != "Bearer vk-access-token" {
+			w.WriteHeader(http.StatusUnauthorized)
+			_, _ = w.Write([]byte(`{"error": {"code": "invalid_token", "message": "Unknown access token"}}`))
+			return
+		}
+		switch r.URL.Path {
+		case "/api/v3/user.json":
+			_, _ = w.Write([]byte(`{"currency": "RUB"}`))
+		case "/api/v2/ad_plans.json":
+			_, _ = w.Write([]byte(`{"count": 2, "items": [{"id": 4242}, {"id": 4243}]}`))
+		default:
+			_, _ = w.Write([]byte(`{"items": [{"id": 4242, "rows": [{"date": "2026-10-20", "base": {"spent": "777.70"}}]},
+				{"id": 4243, "rows": [{"date": "2026-10-20", "base": {"spent": "1.00"}}]}]}`))
+		}
+	}))
+	defer vk.Close()
+
+	costSvc := cost.NewService(cost.NewRepository(pool), conversion.NewPostgresFX(pool))
+	svc := costsync.NewService(adAccountRepo, campaign.NewRepository(pool), costSvc, costsync.Providers{VKAds: &vkads.Adapter{BaseURL: vk.URL}})
+	day := time.Date(2026, 10, 20, 0, 0, 0, 0, time.UTC)
+	for i := 0; i < 2; i++ {
+		result, err := svc.Sync(ctx, orgID, sourceID, day, day)
+		if err != nil {
+			t.Fatalf("sync %d: %v", i, err)
+		}
+		if result.EntriesWritten != 1 {
+			t.Fatalf("sync %d: %+v", i, result)
+		}
+	}
+	if mints != 1 {
+		t.Fatalf("minted %d tokens over two syncs, want 1", mints)
+	}
+	var stored string
+	if err := pool.QueryRow(ctx, `SELECT access_token FROM ad_account_connections WHERE traffic_source_id = $1`, sourceID).Scan(&stored); err != nil || stored == "" || strings.Contains(stored, "vk-access-token") {
+		t.Fatalf("stored token %q (%v): want it kept, encrypted", stored, err)
+	}
+	entries, err := costSvc.List(ctx, orgID, campaignID, cost.ListFilter{From: day, To: day})
+	if err != nil || len(entries) != 1 || entries[0].Source != cost.SourceVKAds || entries[0].Amount != 777.7 || entries[0].Currency != "RUB" {
+		t.Fatalf("entries = %+v, %v", entries, err)
+	}
 }

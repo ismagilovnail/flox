@@ -24,7 +24,8 @@
     "facebookAds": "Facebook Ads",
     "tiktokAds": "TikTok Ads",
     "googleAds": "Google Ads",
-    "yandexDirect": "Yandex Direct"
+    "yandexDirect": "Yandex Direct",
+    "vkAds": "VK Ads"
   },
   "sourceType": {
     "facebook": "Facebook",
@@ -104,7 +105,10 @@
     },
     "directLoginLabel": "Direct login (the advertiser's)",
     "directLoginPlaceholder": "my-shop-login",
-    "yandexDirectHint": "An OAuth token from oauth.yandex.ru for an app with access to the Yandex Direct API (direct:api), issued by the advertiser or its agency; the login is the advertiser's Direct login (sent as Client-Login). Spend comes in the account's currency, without VAT, by Direct campaign id — set it as the campaign's external id."
+    "yandexDirectHint": "An OAuth token from oauth.yandex.ru for an app with access to the Yandex Direct API (direct:api), issued by the advertiser or its agency; the login is the advertiser's Direct login (sent as Client-Login). Spend comes in the account's currency, without VAT, by Direct campaign id — set it as the campaign's external id.",
+    "vkClientLabel": "Client username (agencies only)",
+    "vkClientPlaceholder": "leave empty for your own account",
+    "vkAdsHint": "The API client id and secret from VK Ads (Settings › API access). FLOX gets a token with them and keeps renewing it: VK allows 5 tokens per client and account at once. For an agency, enter the client's VK Ads username. Spend comes in the account's currency by VK campaign id (ad plan) — set it as the campaign's external id."
   },
   "rowActions": {
     "actionsAria": "Actions for {{name}}",

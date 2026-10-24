@@ -19,7 +19,7 @@ referenced below as §N).
 ## CURRENT STATE — UPDATE THIS EVERY PHASE
 
 ```
-CURRENT PHASE : PHASE 30.87 — UNI-3 PART 1, YANDEX DIRECT SPEND (closed)
+CURRENT PHASE : PHASE 30.88 — UNI-3 PART 2, VK ADS SPEND (closed)
 STATUS        : Product audits 2026-10-15 and 2026-10-24 (docs/audit-
                 product-*.md; the second: universality, SEC-7..UX-4)
                 are the backlog: items on the local dev panel tools/devpanel
@@ -120,6 +120,10 @@ STATUS        : Product audits 2026-10-15 and 2026-10-24 (docs/audit-
                 adaccount/yandexdirect (Clients.get currency + Reports API
                 v501, offline polling ≤5 min, no VAT); login = Client-Login.
                 Sync errors are 503 with the platform's reason, no URL.
+                UNI-3 part 2: vk_ads (00107); adaccount/vkads — client id/
+                secret, the sync mints a token ONCE and keeps/renews it
+                (Credentials.SaveTokens; VK: 5 tokens max, 1-day life);
+                ad_plans = VK campaigns, stats in batches of 200 ids.
                 BUG-10: googleads.APIVersion = v26 (v17 was sunset); Google
                 sunsets each major ~a year after release — bump it.
                 BUG-9: chstore tests use NewRawEventStore (a store reads
@@ -128,10 +132,10 @@ STATUS        : Product audits 2026-10-15 and 2026-10-24 (docs/audit-
                 past events and reads rollup-able reports has the same trap.
                 P0 left (skipped by the user for now):
                 OPS-1..3 (prod, restore, load) — needs the owner's hosting.
-LAST COMMIT   : feat(adaccount): Yandex Direct spend import (UNI-3 part 1).
+LAST COMMIT   : feat(adaccount): VK Ads spend import (UNI-3 part 2).
 UNCOMMITTED   : docs/import-export-plan.md (INT-2, stays uncommitted).
-NEXT          : wait for the user. UNI-3 part 2: VK Ads spend. UNI-4
-                left: Shopify/WooCommerce (after BIZ-3). Then DOC-1, UX-4;
+NEXT          : wait for the user. UNI-3 done. UNI-4 left: Shopify/
+                WooCommerce (after BIZ-3). Then DOC-1, UX-4;
                 BIZ-3/BIZ-4 part 2 are the user's (no interview script),
                 OPS-1..3 need hosting.
                 GAP-2 (Google Play import) is won't-do: do not offer it. INT-2 is

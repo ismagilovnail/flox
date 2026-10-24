@@ -15,7 +15,8 @@ export type AdAccountConnection = {
 };
 
 /** accessToken is facebook_ads/tiktok_ads/yandex_direct only; developerToken/clientId/
- * clientSecret/refreshToken are google_ads only — apps/internal/
+ * clientSecret/refreshToken are google_ads only, clientId/clientSecret
+ * also vk_ads (adAccountId then optional: an agency's client) — apps/internal/
  * adaccount.Service.Connect validates the right subset is present for
  * whichever cost_integration the traffic source actually has. Google
  * Ads has no long-lived access token to accept instead (its own tokens

@@ -27,3 +27,20 @@ describe("AdAccountConnectionSection for Yandex Direct", () => {
     expect(connect.mock.calls[0][0]).toMatchObject({ adAccountId: "my-shop", accessToken: "y0_token" });
   });
 });
+
+// Audit UNI-3 part 2: VK Ads connects with the API client's id and
+// secret; the client username is for agencies, so it may stay empty.
+describe("AdAccountConnectionSection for VK Ads", () => {
+  it("asks for the client id and secret, the username optional", async () => {
+    connect.mockReset();
+    render(<AdAccountConnectionSection trafficSourceId="ts" provider="vk_ads" />);
+    expect(screen.getByText(/5 tokens/)).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: /Connect/ }));
+    expect(await screen.findByText(/client id/i, { selector: "p.text-danger" })).toBeTruthy();
+    fireEvent.change(screen.getByLabelText("OAuth client ID"), { target: { value: "cid" } });
+    fireEvent.change(screen.getByLabelText("OAuth client secret"), { target: { value: "csecret" } });
+    fireEvent.click(screen.getByRole("button", { name: /Connect/ }));
+    await vi.waitFor(() => expect(connect).toHaveBeenCalledTimes(1));
+    expect(connect.mock.calls[0][0]).toMatchObject({ adAccountId: "", clientId: "cid", clientSecret: "csecret" });
+  });
+});

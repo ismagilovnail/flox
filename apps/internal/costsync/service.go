@@ -26,6 +26,7 @@ var sourceByCostIntegration = map[string]cost.Source{
 	"tiktok_ads":    cost.SourceTikTokAds,
 	"google_ads":    cost.SourceGoogleAds,
 	"yandex_direct": cost.SourceYandexDirect,
+	"vk_ads":        cost.SourceVKAds,
 }
 
 func (p Providers) forCostIntegration(costIntegration string) (adaccount.CostProvider, bool) {
@@ -38,6 +39,8 @@ func (p Providers) forCostIntegration(costIntegration string) (adaccount.CostPro
 		return p.GoogleAds, p.GoogleAds != nil
 	case "yandex_direct":
 		return p.YandexDirect, p.YandexDirect != nil
+	case "vk_ads":
+		return p.VKAds, p.VKAds != nil
 	default:
 		return nil, false
 	}
@@ -88,6 +91,10 @@ func (s *Service) Sync(ctx context.Context, orgID, trafficSourceID string, from,
 	creds, err := s.adAccountRepo.CredentialsByTrafficSourceID(ctx, orgID, trafficSourceID)
 	if err != nil {
 		return Result{}, err
+	}
+	// A token pair the adapter minted or renewed is kept (VK Ads).
+	creds.SaveTokens = func(ctx context.Context, accessToken, refreshToken string) error {
+		return s.adAccountRepo.SetTokens(ctx, orgID, trafficSourceID, accessToken, refreshToken)
 	}
 
 	records, err := provider.DailySpendByCampaign(ctx, creds, from, to)

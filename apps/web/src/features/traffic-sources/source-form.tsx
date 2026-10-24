@@ -27,11 +27,11 @@ import {
 } from "@/lib/api/traffic-sources";
 import { nameField } from "@/schemas/fields";
 
-const COST_INTEGRATIONS: CostIntegration[] = ["none", "manual", "facebook_ads", "tiktok_ads", "google_ads", "yandex_direct"];
+const COST_INTEGRATIONS: CostIntegration[] = ["none", "manual", "facebook_ads", "tiktok_ads", "google_ads", "yandex_direct", "vk_ads"];
 
-type AdAccountCostIntegration = "facebook_ads" | "tiktok_ads" | "google_ads" | "yandex_direct";
+type AdAccountCostIntegration = "facebook_ads" | "tiktok_ads" | "google_ads" | "yandex_direct" | "vk_ads";
 function isAdAccountCostIntegration(value: CostIntegration): value is AdAccountCostIntegration {
-  return value === "facebook_ads" || value === "tiktok_ads" || value === "google_ads" || value === "yandex_direct";
+  return value === "facebook_ads" || value === "tiktok_ads" || value === "google_ads" || value === "yandex_direct" || value === "vk_ads";
 }
 
 /** A factory, not a module-level const: Zod's validation messages are

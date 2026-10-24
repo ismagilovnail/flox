@@ -723,7 +723,7 @@ here the Direct campaign id):
 documented: the account time zone is left unknown (`Timezone` ''), like a
 platform that does not report it. Cost in "у.е." (YND_FIXED) accounts was
 not seen in the docs and is not handled. Not checked against a live
-account. VK Ads is UNI-3 part 2.
+account.
 
 **Errors on "Sync now"** (all platforms, from this phase): a platform's
 refusal is answered 503 with its reason ("the ad platform refused the spend
@@ -731,3 +731,50 @@ request: …"), not a bare 500. A network failure shows only the cause, never
 the request URL — Facebook's carries the access token. Checked live: the
 real Direct API refused a fake token with `error 53: Authorization error.
 Invalid OAuth token` through this path.
+
+# VK Ads (audit UNI-3 part 2)
+
+A fifth `CostProvider`: `internal/adaccount/vkads`, cost integration
+`vk_ads` (migration 00107). Written against VK's documentation
+(ads.vk.ru/doc/api — read as a downloaded copy: the site refuses automated
+page fetches) and tested against a fake server only: there is no VK Ads
+account here.
+
+**Connection.** The API client's id and secret from VK Ads (Settings › API
+access), stored in `client_id` / `client_secret` (encrypted). For an
+agency, `adAccountId` is the client's VK Ads username; for the API
+client's own account it stays empty. The preview shows the secret's last 4.
+
+**Tokens.** VK's access tokens are "действительным в течение суток", and
+"для каждой связки clientId — user одновременно может существовать не
+более 5 токенов"; past that a new one is refused with 403. So a sync does
+not mint one per run:
+
+1. no token kept: mint one — `POST /api/v2/oauth2/token.json`,
+   `grant_type=client_credentials` (own account) or
+   `agency_client_credentials` with `agency_client_name` (an agency's
+   client) — and keep the pair (`access_token`/`refresh_token`, encrypted;
+   `Credentials.SaveTokens` → `Repository.SetTokens`);
+2. a request answered 401: refresh once (`grant_type=refresh_token`); a
+   refused refresh mints a new one; the new pair is kept;
+3. a 403 on minting (the limit) says to delete the old tokens
+   (`oauth2/token/delete.json`) — FLOX does not do it itself: it would
+   also delete tokens other tools use with the same client.
+
+Reconnecting drops the kept pair (the next sync mints).
+
+**One sync** (same `costsync`; matched by the VK campaign — "ad plan" in
+the API — id as the campaign's external id):
+
+1. `GET /api/v3/user.json` — `currency`, the one spend is in;
+2. `GET /api/v2/ad_plans.json?_status__in=active,blocked,deleted` page by
+   page (50) — every ad plan, deleted ones too (their past spend counts);
+3. `GET /api/v2/statistics/ad_plans/day.json?id=…&date_from&date_to&metrics=base`
+   in batches of 200 ids (VK's limit); `items[].rows[].base.spent` per day.
+   VK serves the last 366 days at most; the sync's window is 30.
+
+**Not known / not done.** The time zone of the statistics' `date` and
+whether `spent` includes VAT are not documented: spend is taken as VK
+reports it, the account zone left unknown. Rate limits (VK sends
+`X-RateLimit-*` headers) are not read; a 429 fails the sync, the next run
+tries again. Not checked against a live account.

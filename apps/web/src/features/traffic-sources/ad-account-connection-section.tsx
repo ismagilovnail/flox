@@ -23,7 +23,7 @@ import {
 import { COST_INTEGRATION_I18N_KEY, type CostIntegration } from "@/lib/api/traffic-sources";
 import { OfflineConversionsSection } from "@/features/traffic-sources/offline-conversions-section";
 
-type AdAccountProvider = Extract<CostIntegration, "facebook_ads" | "tiktok_ads" | "google_ads" | "yandex_direct">;
+type AdAccountProvider = Extract<CostIntegration, "facebook_ads" | "tiktok_ads" | "google_ads" | "yandex_direct" | "vk_ads">;
 
 /** One base shape covering every provider's fields (all optional except
  * adAccountId), with the actually-required subset enforced by
@@ -36,7 +36,7 @@ type AdAccountProvider = Extract<CostIntegration, "facebook_ads" | "tiktok_ads" 
 function buildConnectSchema(t: TFunction, provider: AdAccountProvider) {
   return z
     .object({
-      adAccountId: z.string().min(1, t("connection.validation.adAccountIdRequired", { ns: "trafficSources" })).max(100),
+      adAccountId: z.string().max(100),
       accessToken: z.string().max(500).optional(),
       developerToken: z.string().max(200).optional(),
       clientId: z.string().max(200).optional(),
@@ -44,7 +44,18 @@ function buildConnectSchema(t: TFunction, provider: AdAccountProvider) {
       refreshToken: z.string().max(500).optional(),
     })
     .superRefine((values, ctx) => {
-      if (provider === "google_ads") {
+      // VK Ads: the login is an agency's client's, optional.
+      if (provider !== "vk_ads" && !values.adAccountId) {
+        ctx.addIssue({ code: "custom", path: ["adAccountId"], message: t("connection.validation.adAccountIdRequired", { ns: "trafficSources" }) });
+      }
+      if (provider === "vk_ads") {
+        if (!values.clientId) {
+          ctx.addIssue({ code: "custom", path: ["clientId"], message: t("connection.validation.clientIdRequired", { ns: "trafficSources" }) });
+        }
+        if (!values.clientSecret) {
+          ctx.addIssue({ code: "custom", path: ["clientSecret"], message: t("connection.validation.clientSecretRequired", { ns: "trafficSources" }) });
+        }
+      } else if (provider === "google_ads") {
         if (!values.developerToken) {
           ctx.addIssue({ code: "custom", path: ["developerToken"], message: t("connection.validation.developerTokenRequired", { ns: "trafficSources" }) });
         }
@@ -67,7 +78,7 @@ type ConnectFormValues = z.infer<ReturnType<typeof buildConnectSchema>>;
 
 /** Shown inside SourceForm (the traffic source edit page), in edit mode
  * only, whenever the live (not-yet-saved) costIntegration value is
- * facebook_ads/tiktok_ads/google_ads/yandex_direct — connecting/disconnecting is its
+ * facebook_ads/tiktok_ads/google_ads/yandex_direct/vk_ads — connecting/disconnecting is its
  * own action against its own endpoint (/traffic-sources/{id}/
  * connection), independent of the surrounding form's own "Save changes"
  * submit. Facebook/TikTok/Google Ads' own real APIs are called for real
@@ -89,12 +100,21 @@ export function AdAccountConnectionSection({
   const sync = useSyncAdAccount(trafficSourceId);
   const isGoogleAds = provider === "google_ads";
   const isYandexDirect = provider === "yandex_direct";
-  const accountLabelKey = isGoogleAds ? "connection.customerIdLabel" : isYandexDirect ? "connection.directLoginLabel" : "connection.adAccountIdLabel";
+  const isVKAds = provider === "vk_ads";
+  const accountLabelKey = isGoogleAds
+    ? "connection.customerIdLabel"
+    : isYandexDirect
+      ? "connection.directLoginLabel"
+      : isVKAds
+        ? "connection.vkClientLabel"
+        : "connection.adAccountIdLabel";
   const accountPlaceholderKey = isGoogleAds
     ? "connection.customerIdPlaceholder"
     : isYandexDirect
       ? "connection.directLoginPlaceholder"
-      : "connection.adAccountIdPlaceholder";
+      : isVKAds
+        ? "connection.vkClientPlaceholder"
+        : "connection.adAccountIdPlaceholder";
 
   const form = useForm<ConnectFormValues>({
     resolver: zodResolver(buildConnectSchema(t, provider)),
@@ -248,7 +268,37 @@ export function AdAccountConnectionSection({
               )}
             </div>
 
-            {isGoogleAds ? (
+            {isVKAds ? (
+              <>
+                <div className="grid flex-1 gap-1.5 sm:min-w-40">
+                  <Label htmlFor="conn-client-id">{t("connection.clientIdLabel", { ns: "trafficSources" })}</Label>
+                  <Input
+                    id="conn-client-id"
+                    className="font-mono text-xs"
+                    {...form.register("clientId")}
+                    aria-invalid={!!form.formState.errors.clientId}
+                    disabled={!canWrite}
+                  />
+                  {form.formState.errors.clientId && (
+                    <p className="text-xs text-danger">{form.formState.errors.clientId.message}</p>
+                  )}
+                </div>
+                <div className="grid flex-1 gap-1.5 sm:min-w-40">
+                  <Label htmlFor="conn-client-secret">{t("connection.clientSecretLabel", { ns: "trafficSources" })}</Label>
+                  <Input
+                    id="conn-client-secret"
+                    type="password"
+                    className="font-mono text-xs"
+                    {...form.register("clientSecret")}
+                    aria-invalid={!!form.formState.errors.clientSecret}
+                    disabled={!canWrite}
+                  />
+                  {form.formState.errors.clientSecret && (
+                    <p className="text-xs text-danger">{form.formState.errors.clientSecret.message}</p>
+                  )}
+                </div>
+              </>
+            ) : isGoogleAds ? (
               <>
                 <div className="grid flex-1 gap-1.5 sm:min-w-40">
                   <Label htmlFor="conn-dev-token">{t("connection.developerTokenLabel", { ns: "trafficSources" })}</Label>
@@ -334,6 +384,7 @@ export function AdAccountConnectionSection({
           {isYandexDirect && (
             <p className="text-xs text-muted-foreground">{t("connection.yandexDirectHint", { ns: "trafficSources" })}</p>
           )}
+          {isVKAds && <p className="text-xs text-muted-foreground">{t("connection.vkAdsHint", { ns: "trafficSources" })}</p>}
         </div>
       )}
     </div>

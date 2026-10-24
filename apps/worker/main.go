@@ -44,6 +44,7 @@ import (
 	"github.com/ismagilovnail/flox/apps/internal/adaccount/facebookads"
 	"github.com/ismagilovnail/flox/apps/internal/adaccount/googleads"
 	"github.com/ismagilovnail/flox/apps/internal/adaccount/tiktokads"
+	"github.com/ismagilovnail/flox/apps/internal/adaccount/vkads"
 	"github.com/ismagilovnail/flox/apps/internal/adaccount/yandexdirect"
 	"github.com/ismagilovnail/flox/apps/internal/alert"
 	"github.com/ismagilovnail/flox/apps/internal/analytics"
@@ -373,6 +374,7 @@ func run() error {
 		TikTokAds:    tiktokads.New(),
 		GoogleAds:    googleads.New(),
 		YandexDirect: yandexdirect.New(),
+		VKAds:        vkads.New(),
 	})
 	costSyncScheduler := costsync.NewScheduler(costSyncSvc, adAccountRepo, logger)
 

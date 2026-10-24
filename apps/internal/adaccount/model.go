@@ -69,6 +69,10 @@ type Credentials struct {
 	ClientID       string
 	ClientSecret   string
 	RefreshToken   string
+	// SaveTokens keeps a token pair an adapter minted or refreshed — VK
+	// Ads (vkads), whose tokens live a day and are limited in number.
+	// costsync sets it; nil keeps nothing.
+	SaveTokens func(ctx context.Context, accessToken, refreshToken string) error
 }
 
 // CostProvider is the §74 extensibility interface the real Facebook Ads/

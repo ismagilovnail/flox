@@ -19,11 +19,12 @@ const (
 	SourceTikTokAds    Source = "tiktok_ads"
 	SourceGoogleAds    Source = "google_ads"
 	SourceYandexDirect Source = "yandex_direct"
+	SourceVKAds        Source = "vk_ads"
 )
 
 func (s Source) Valid() bool {
 	switch s {
-	case SourceManual, SourceFacebookAds, SourceTikTokAds, SourceGoogleAds, SourceYandexDirect:
+	case SourceManual, SourceFacebookAds, SourceTikTokAds, SourceGoogleAds, SourceYandexDirect, SourceVKAds:
 		return true
 	default:
 		return false

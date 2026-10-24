@@ -23,6 +23,7 @@ import (
 	"github.com/ismagilovnail/flox/apps/internal/adaccount/facebookads"
 	"github.com/ismagilovnail/flox/apps/internal/adaccount/googleads"
 	"github.com/ismagilovnail/flox/apps/internal/adaccount/tiktokads"
+	"github.com/ismagilovnail/flox/apps/internal/adaccount/vkads"
 	"github.com/ismagilovnail/flox/apps/internal/adaccount/yandexdirect"
 	"github.com/ismagilovnail/flox/apps/internal/alert"
 	"github.com/ismagilovnail/flox/apps/internal/analytics"
@@ -802,6 +803,7 @@ func buildServer(ctx context.Context, cfg config.Config, logger *slog.Logger, re
 		TikTokAds:    tiktokads.New(),
 		GoogleAds:    googleads.New(),
 		YandexDirect: yandexdirect.New(),
+		VKAds:        vkads.New(),
 	}), requireSourceWrite, logger)
 	// Offline conversions to Google Ads and Yandex Metrica (audit UNI-2
 	// parts 2–3): the source's export settings and counts; apps/worker

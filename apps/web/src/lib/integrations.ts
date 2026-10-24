@@ -76,4 +76,5 @@ export const AD_PLATFORM_LABELS: Record<string, string> = {
   tiktok_ads: "TikTok Ads",
   google_ads: "Google Ads",
   yandex_direct: "Yandex Direct",
+  vk_ads: "VK Ads",
 };

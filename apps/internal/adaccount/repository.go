@@ -29,18 +29,28 @@ func NewRepository(db *pgxpool.Pool, key []byte) *Repository { return &Repositor
 // whichever one is present (via the repository's own key) purely to
 // compute its own last-4 preview, never returning the decrypted value
 // itself — sliced ciphertext would be meaningless.
-const selectColumns = `id, organization_id, traffic_source_id, ad_account_id, access_token, refresh_token, timezone, created_at, updated_at`
+const selectColumns = `id, organization_id, traffic_source_id, ad_account_id, access_token, refresh_token,
+	client_secret, developer_token IS NOT NULL, timezone, created_at, updated_at`
 
 func (r *Repository) scanConnection(row pgx.Row) (Connection, error) {
 	var c Connection
-	var encryptedAccessToken *string
-	var encryptedRefreshToken *string
-	if err := row.Scan(&c.ID, &c.OrganizationID, &c.TrafficSourceID, &c.AdAccountID, &encryptedAccessToken, &encryptedRefreshToken, &c.Timezone, &c.CreatedAt, &c.UpdatedAt); err != nil {
+	var encryptedAccessToken, encryptedRefreshToken, encryptedClientSecret *string
+	var isGoogleAds bool
+	if err := row.Scan(&c.ID, &c.OrganizationID, &c.TrafficSourceID, &c.AdAccountID, &encryptedAccessToken, &encryptedRefreshToken,
+		&encryptedClientSecret, &isGoogleAds, &c.Timezone, &c.CreatedAt, &c.UpdatedAt); err != nil {
 		return Connection{}, err
 	}
+	// The preview is of the secret the operator pasted: the access token
+	// (Facebook, TikTok, Direct), Google's refresh token, VK's client
+	// secret — never a token VK's sync minted later, which would change it.
 	encryptedSecret := encryptedAccessToken
-	if encryptedSecret == nil {
-		encryptedSecret = encryptedRefreshToken
+	switch {
+	case isGoogleAds || encryptedSecret == nil && encryptedClientSecret == nil:
+		if encryptedSecret == nil {
+			encryptedSecret = encryptedRefreshToken
+		}
+	case encryptedClientSecret != nil:
+		encryptedSecret = encryptedClientSecret
 	}
 	if encryptedSecret != nil {
 		secret, err := decrypt(r.key, *encryptedSecret)
@@ -217,7 +227,7 @@ func (r *Repository) AdPlatformSummary(ctx context.Context, orgID string) ([]Pla
 		SELECT ts.cost_integration, count(aac.id), count(ts.id)
 		FROM traffic_sources ts
 		LEFT JOIN ad_account_connections aac ON aac.traffic_source_id = ts.id
-		WHERE ts.organization_id = $1 AND ts.cost_integration IN ('facebook_ads', 'tiktok_ads', 'google_ads', 'yandex_direct')
+		WHERE ts.organization_id = $1 AND ts.cost_integration IN ('facebook_ads', 'tiktok_ads', 'google_ads', 'yandex_direct', 'vk_ads')
 		GROUP BY ts.cost_integration
 		ORDER BY ts.cost_integration`,
 		orgID,
@@ -259,6 +269,26 @@ func (r *Repository) TrafficSourceCostIntegration(ctx context.Context, orgID, tr
 
 // SetTimezone records the ad account's IANA zone, learned by a sync
 // (tech audit AN4). tz must already be a valid zone name.
+// SetTokens keeps the token pair a sync minted or renewed (VK Ads),
+// encrypted like every other secret here.
+func (r *Repository) SetTokens(ctx context.Context, orgID, trafficSourceID, accessToken, refreshToken string) error {
+	access, err := encryptOptional(r.key, accessToken)
+	if err != nil {
+		return err
+	}
+	refresh, err := encryptOptional(r.key, refreshToken)
+	if err != nil {
+		return err
+	}
+	if _, err := r.db.Exec(ctx, `
+		UPDATE ad_account_connections SET access_token = $3, refresh_token = $4
+		WHERE organization_id = $1 AND traffic_source_id = $2`,
+		orgID, trafficSourceID, access, refresh); err != nil {
+		return fmt.Errorf("adaccount: keeping the minted token: %w", err)
+	}
+	return nil
+}
+
 func (r *Repository) SetTimezone(ctx context.Context, orgID, trafficSourceID, tz string) error {
 	if _, err := r.db.Exec(ctx, `
 		UPDATE ad_account_connections SET timezone = $3

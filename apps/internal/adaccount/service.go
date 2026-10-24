@@ -31,7 +31,7 @@ func (s *Service) Get(ctx context.Context, orgID, trafficSourceID string) (Conne
 
 // Connect validates the traffic source exists in this org AND already
 // has its CostIntegration set to facebook_ads/tiktok_ads/google_ads/
-// yandex_direct —
+// yandex_direct/vk_ads —
 // connecting a credential for a source whose intent is still "none"/
 // "manual" would store a credential nothing is configured to use,
 // silently, which is worse than requiring the operator set the
@@ -40,7 +40,9 @@ func (s *Service) Get(ctx context.Context, orgID, trafficSourceID string) (Conne
 // cost_integration value: facebook_ads/tiktok_ads/yandex_direct need
 // AdAccountID (for Direct, the advertiser's login) + AccessToken; google_ads needs AdAccountID (its customer id) +
 // DeveloperToken + ClientID + ClientSecret + RefreshToken — Google Ads'
-// API has no long-lived access token equivalent to accept instead.
+// API has no long-lived access token equivalent to accept instead;
+// vk_ads needs ClientID + ClientSecret (its tokens live a day, the sync
+// mints and keeps them) and takes AdAccountID only for an agency's client.
 func (s *Service) Connect(ctx context.Context, orgID, trafficSourceID string, in ConnectInput) (Connection, error) {
 	costIntegration, found, err := s.repo.TrafficSourceCostIntegration(ctx, orgID, trafficSourceID)
 	if err != nil {
@@ -49,9 +51,9 @@ func (s *Service) Connect(ctx context.Context, orgID, trafficSourceID string, in
 	if !found {
 		return Connection{}, apierror.NotFound("traffic source not found")
 	}
-	if costIntegration != "facebook_ads" && costIntegration != "tiktok_ads" && costIntegration != "google_ads" && costIntegration != "yandex_direct" {
+	if costIntegration != "facebook_ads" && costIntegration != "tiktok_ads" && costIntegration != "google_ads" && costIntegration != "yandex_direct" && costIntegration != "vk_ads" {
 		return Connection{}, apierror.Validation("invalid ad account connection", map[string]string{
-			"trafficSourceId": "this traffic source's cost integration must be Facebook Ads, TikTok Ads, Google Ads or Yandex Direct before connecting an account",
+			"trafficSourceId": "this traffic source's cost integration must be Facebook Ads, TikTok Ads, Google Ads, Yandex Direct or VK Ads before connecting an account",
 		})
 	}
 
@@ -63,10 +65,20 @@ func (s *Service) Connect(ctx context.Context, orgID, trafficSourceID string, in
 	in.RefreshToken = strings.TrimSpace(in.RefreshToken)
 
 	fields := map[string]string{}
-	if in.AdAccountID == "" || len(in.AdAccountID) > adAccountIDMaxLen {
+	if (in.AdAccountID == "" && costIntegration != "vk_ads") || len(in.AdAccountID) > adAccountIDMaxLen {
 		fields["adAccountId"] = "required, must be at most 100 characters"
 	}
-	if costIntegration == "google_ads" {
+	switch costIntegration {
+	case "vk_ads":
+		if in.ClientID == "" || len(in.ClientID) > clientIDMaxLen {
+			fields["clientId"] = "required, must be at most 200 characters"
+		}
+		if in.ClientSecret == "" || len(in.ClientSecret) > clientSecretMaxLen {
+			fields["clientSecret"] = "required, must be at most 200 characters"
+		}
+		// Tokens are the sync's to mint: a reconnect starts without one.
+		in.AccessToken, in.RefreshToken, in.DeveloperToken = "", "", ""
+	case "google_ads":
 		if in.DeveloperToken == "" || len(in.DeveloperToken) > developerTokenMaxLen {
 			fields["developerToken"] = "required, must be at most 200 characters"
 		}
@@ -79,7 +91,7 @@ func (s *Service) Connect(ctx context.Context, orgID, trafficSourceID string, in
 		if in.RefreshToken == "" || len(in.RefreshToken) > refreshTokenMaxLen {
 			fields["refreshToken"] = "required, must be at most 500 characters"
 		}
-	} else {
+	default:
 		if in.AccessToken == "" || len(in.AccessToken) > accessTokenMaxLen {
 			fields["accessToken"] = "required, must be at most 500 characters"
 		}
