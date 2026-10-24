@@ -118,6 +118,16 @@ func TestConnectRejectsSourceWithoutAdCostIntegration(t *testing.T) {
 			t.Fatalf("Connect on a source with cost_integration=google_ads failed: %v", err)
 		}
 	})
+
+	t.Run("yandex_direct is allowed with a login and a token", func(t *testing.T) {
+		sourceID := seedTrafficSource(t, ctx, pool, orgID, "yandex_direct")
+		if _, err := svc.Connect(ctx, orgID, sourceID, adaccount.ConnectInput{AdAccountID: "shop-client"}); err == nil {
+			t.Fatal("Connect on a yandex_direct source without a token succeeded")
+		}
+		if _, err := svc.Connect(ctx, orgID, sourceID, adaccount.ConnectInput{AdAccountID: "shop-client", AccessToken: "y0_token1234567890"}); err != nil {
+			t.Fatalf("Connect on a source with cost_integration=yandex_direct failed: %v", err)
+		}
+	})
 }
 
 func TestConnectGoogleAdsRequiresGoogleAdsFields(t *testing.T) {

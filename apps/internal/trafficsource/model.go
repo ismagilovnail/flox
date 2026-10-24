@@ -25,7 +25,7 @@ func (s Status) Valid() bool {
 
 // CostIntegration mirrors the frontend's CostIntegration type
 // (lib/api/traffic-sources.ts) and the traffic_sources.cost_integration
-// CHECK constraint (00002, widened by 00034 for google_ads) exactly. It
+// CHECK constraint (00002, widened by 00034 for google_ads and 00106 for yandex_direct) exactly. It
 // records *intent* — which cost data origin this source is meant to use
 // — independent of internal/cost's actual per-day amounts (a source
 // with CostIntegrationManual still needs entries logged through the
@@ -33,16 +33,17 @@ func (s Status) Valid() bool {
 type CostIntegration string
 
 const (
-	CostIntegrationNone        CostIntegration = "none"
-	CostIntegrationManual      CostIntegration = "manual"
-	CostIntegrationFacebookAds CostIntegration = "facebook_ads"
-	CostIntegrationTikTokAds   CostIntegration = "tiktok_ads"
-	CostIntegrationGoogleAds   CostIntegration = "google_ads"
+	CostIntegrationNone         CostIntegration = "none"
+	CostIntegrationManual       CostIntegration = "manual"
+	CostIntegrationFacebookAds  CostIntegration = "facebook_ads"
+	CostIntegrationTikTokAds    CostIntegration = "tiktok_ads"
+	CostIntegrationGoogleAds    CostIntegration = "google_ads"
+	CostIntegrationYandexDirect CostIntegration = "yandex_direct"
 )
 
 func (c CostIntegration) Valid() bool {
 	switch c {
-	case CostIntegrationNone, CostIntegrationManual, CostIntegrationFacebookAds, CostIntegrationTikTokAds, CostIntegrationGoogleAds:
+	case CostIntegrationNone, CostIntegrationManual, CostIntegrationFacebookAds, CostIntegrationTikTokAds, CostIntegrationGoogleAds, CostIntegrationYandexDirect:
 		return true
 	default:
 		return false

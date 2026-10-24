@@ -217,7 +217,7 @@ func (r *Repository) AdPlatformSummary(ctx context.Context, orgID string) ([]Pla
 		SELECT ts.cost_integration, count(aac.id), count(ts.id)
 		FROM traffic_sources ts
 		LEFT JOIN ad_account_connections aac ON aac.traffic_source_id = ts.id
-		WHERE ts.organization_id = $1 AND ts.cost_integration IN ('facebook_ads', 'tiktok_ads', 'google_ads')
+		WHERE ts.organization_id = $1 AND ts.cost_integration IN ('facebook_ads', 'tiktok_ads', 'google_ads', 'yandex_direct')
 		GROUP BY ts.cost_integration
 		ORDER BY ts.cost_integration`,
 		orgID,

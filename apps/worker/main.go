@@ -44,6 +44,7 @@ import (
 	"github.com/ismagilovnail/flox/apps/internal/adaccount/facebookads"
 	"github.com/ismagilovnail/flox/apps/internal/adaccount/googleads"
 	"github.com/ismagilovnail/flox/apps/internal/adaccount/tiktokads"
+	"github.com/ismagilovnail/flox/apps/internal/adaccount/yandexdirect"
 	"github.com/ismagilovnail/flox/apps/internal/alert"
 	"github.com/ismagilovnail/flox/apps/internal/analytics"
 	"github.com/ismagilovnail/flox/apps/internal/attribution"
@@ -368,9 +369,10 @@ func run() error {
 	adAccountRepo := adaccount.NewRepository(db, adAccountKey)
 	costSvc := cost.NewService(cost.NewRepository(db), conversion.NewPostgresFX(db))
 	costSyncSvc := costsync.NewService(adAccountRepo, campaign.NewRepository(db), costSvc, costsync.Providers{
-		FacebookAds: facebookads.New(),
-		TikTokAds:   tiktokads.New(),
-		GoogleAds:   googleads.New(),
+		FacebookAds:  facebookads.New(),
+		TikTokAds:    tiktokads.New(),
+		GoogleAds:    googleads.New(),
+		YandexDirect: yandexdirect.New(),
 	})
 	costSyncScheduler := costsync.NewScheduler(costSyncSvc, adAccountRepo, logger)
 

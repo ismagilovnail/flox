@@ -16,7 +16,7 @@ func TestCostIntegrationValid(t *testing.T) {
 	for _, valid := range []trafficsource.CostIntegration{
 		trafficsource.CostIntegrationNone, trafficsource.CostIntegrationManual,
 		trafficsource.CostIntegrationFacebookAds, trafficsource.CostIntegrationTikTokAds,
-		trafficsource.CostIntegrationGoogleAds,
+		trafficsource.CostIntegrationGoogleAds, trafficsource.CostIntegrationYandexDirect,
 	} {
 		if !valid.Valid() {
 			t.Errorf("%q.Valid() = false, want true", valid)

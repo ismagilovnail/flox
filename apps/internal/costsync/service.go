@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/url"
 	"time"
 	// accountTimezone validates zone names: the zone database must ship
 	// in the binary (the alpine images have none).
@@ -21,9 +22,10 @@ import (
 // this package rather than importing trafficsource for two string
 // constants.
 var sourceByCostIntegration = map[string]cost.Source{
-	"facebook_ads": cost.SourceFacebookAds,
-	"tiktok_ads":   cost.SourceTikTokAds,
-	"google_ads":   cost.SourceGoogleAds,
+	"facebook_ads":  cost.SourceFacebookAds,
+	"tiktok_ads":    cost.SourceTikTokAds,
+	"google_ads":    cost.SourceGoogleAds,
+	"yandex_direct": cost.SourceYandexDirect,
 }
 
 func (p Providers) forCostIntegration(costIntegration string) (adaccount.CostProvider, bool) {
@@ -34,6 +36,8 @@ func (p Providers) forCostIntegration(costIntegration string) (adaccount.CostPro
 		return p.TikTokAds, p.TikTokAds != nil
 	case "google_ads":
 		return p.GoogleAds, p.GoogleAds != nil
+	case "yandex_direct":
+		return p.YandexDirect, p.YandexDirect != nil
 	default:
 		return nil, false
 	}
@@ -88,7 +92,18 @@ func (s *Service) Sync(ctx context.Context, orgID, trafficSourceID string, from,
 
 	records, err := provider.DailySpendByCampaign(ctx, creds, from, to)
 	if err != nil {
-		return Result{}, fmt.Errorf("fetching spend: %w", err)
+		// The ad platform's own reason (a refused token, a report not
+		// ready) is the operator's to read on "Sync now", not a 500 — but
+		// never a request URL: Facebook's carries the access token.
+		if ctx.Err() != nil {
+			return Result{}, fmt.Errorf("fetching spend: %w", err)
+		}
+		msg := err.Error()
+		var urlErr *url.Error
+		if errors.As(err, &urlErr) {
+			msg = "could not reach the ad platform: " + urlErr.Err.Error()
+		}
+		return Result{}, apierror.Unavailable("the ad platform refused the spend request: " + msg)
 	}
 
 	result := Result{RecordsFetched: len(records)}

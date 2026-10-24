@@ -14,15 +14,16 @@ import "time"
 type Source string
 
 const (
-	SourceManual      Source = "manual"
-	SourceFacebookAds Source = "facebook_ads"
-	SourceTikTokAds   Source = "tiktok_ads"
-	SourceGoogleAds   Source = "google_ads"
+	SourceManual       Source = "manual"
+	SourceFacebookAds  Source = "facebook_ads"
+	SourceTikTokAds    Source = "tiktok_ads"
+	SourceGoogleAds    Source = "google_ads"
+	SourceYandexDirect Source = "yandex_direct"
 )
 
 func (s Source) Valid() bool {
 	switch s {
-	case SourceManual, SourceFacebookAds, SourceTikTokAds, SourceGoogleAds:
+	case SourceManual, SourceFacebookAds, SourceTikTokAds, SourceGoogleAds, SourceYandexDirect:
 		return true
 	default:
 		return false

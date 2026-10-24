@@ -5,6 +5,23 @@ per-phase, matching `CLAUDE.md`'s phase protocol. The one exception is
 [Between phases], below: spec amendments and the code changes that follow from
 them land between phases and would otherwise be invisible here.
 
+## [Phase 30.87] — Yandex Direct spend import (UNI-3, part 1)
+
+docs/ad-account-connections.md "Yandex Direct". A fourth cost integration, `yandex_direct` (migration 00106).
+
+- Connection: the advertiser's Direct login (sent as Client-Login) and an OAuth token, encrypted like the others.
+- `internal/adaccount/yandexdirect`: the account's currency from Clients.get, daily spend per campaign from the
+  Reports API (CAMPAIGN_PERFORMANCE_REPORT, TSV, money in units, without VAT); an offline report is asked again after
+  `retryIn` (≤60 s) for up to 5 minutes. Same costsync: matched by the Direct campaign id as the campaign's external id.
+- All platforms: a refused sync now answers 503 with the platform's reason instead of a bare 500, never with the
+  request URL (Facebook's carries the token).
+- Web: Yandex Direct in the cost integration list, the connect form asks for the Direct login, a setup hint; the
+  Settings › Integrations count.
+- Tests: the adapter against a fake Direct (201 → 202 → 200, headers, params, TSV, errors, the 5-minute cap); a sync end
+  to end through the real adapter into cost_entries; the error message and URL redaction; the connect form (vitest).
+  Live: the real Direct API refused a fake token with error 53 through "Sync now". Not tried with a real account; the
+  report's day time zone is not documented and is left unknown.
+
 ## [Phase 30.86] — Offline conversions to Yandex Metrica (UNI-2, part 3)
 
 docs/offline-conversions.md "Yandex Metrica". Any traffic source can connect the Metrica counter on its landing;

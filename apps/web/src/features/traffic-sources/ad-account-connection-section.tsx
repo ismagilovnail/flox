@@ -23,7 +23,7 @@ import {
 import { COST_INTEGRATION_I18N_KEY, type CostIntegration } from "@/lib/api/traffic-sources";
 import { OfflineConversionsSection } from "@/features/traffic-sources/offline-conversions-section";
 
-type AdAccountProvider = Extract<CostIntegration, "facebook_ads" | "tiktok_ads" | "google_ads">;
+type AdAccountProvider = Extract<CostIntegration, "facebook_ads" | "tiktok_ads" | "google_ads" | "yandex_direct">;
 
 /** One base shape covering every provider's fields (all optional except
  * adAccountId), with the actually-required subset enforced by
@@ -67,7 +67,7 @@ type ConnectFormValues = z.infer<ReturnType<typeof buildConnectSchema>>;
 
 /** Shown inside SourceForm (the traffic source edit page), in edit mode
  * only, whenever the live (not-yet-saved) costIntegration value is
- * facebook_ads/tiktok_ads/google_ads — connecting/disconnecting is its
+ * facebook_ads/tiktok_ads/google_ads/yandex_direct — connecting/disconnecting is its
  * own action against its own endpoint (/traffic-sources/{id}/
  * connection), independent of the surrounding form's own "Save changes"
  * submit. Facebook/TikTok/Google Ads' own real APIs are called for real
@@ -88,6 +88,13 @@ export function AdAccountConnectionSection({
   const disconnect = useDisconnectAdAccount(trafficSourceId);
   const sync = useSyncAdAccount(trafficSourceId);
   const isGoogleAds = provider === "google_ads";
+  const isYandexDirect = provider === "yandex_direct";
+  const accountLabelKey = isGoogleAds ? "connection.customerIdLabel" : isYandexDirect ? "connection.directLoginLabel" : "connection.adAccountIdLabel";
+  const accountPlaceholderKey = isGoogleAds
+    ? "connection.customerIdPlaceholder"
+    : isYandexDirect
+      ? "connection.directLoginPlaceholder"
+      : "connection.adAccountIdPlaceholder";
 
   const form = useForm<ConnectFormValues>({
     resolver: zodResolver(buildConnectSchema(t, provider)),
@@ -226,11 +233,11 @@ export function AdAccountConnectionSection({
           <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-end">
             <div className="grid flex-1 gap-1.5 sm:min-w-40">
               <Label htmlFor="conn-account">
-                {t(isGoogleAds ? "connection.customerIdLabel" : "connection.adAccountIdLabel", { ns: "trafficSources" })}
+                {t(accountLabelKey, { ns: "trafficSources" })}
               </Label>
               <Input
                 id="conn-account"
-                placeholder={t(isGoogleAds ? "connection.customerIdPlaceholder" : "connection.adAccountIdPlaceholder", { ns: "trafficSources" })}
+                placeholder={t(accountPlaceholderKey, { ns: "trafficSources" })}
                 className="font-mono text-xs"
                 {...form.register("adAccountId")}
                 aria-invalid={!!form.formState.errors.adAccountId}
@@ -323,6 +330,9 @@ export function AdAccountConnectionSection({
           </div>
           {isGoogleAds && (
             <p className="text-xs text-muted-foreground">{t("connection.googleAdsHint", { ns: "trafficSources" })}</p>
+          )}
+          {isYandexDirect && (
+            <p className="text-xs text-muted-foreground">{t("connection.yandexDirectHint", { ns: "trafficSources" })}</p>
           )}
         </div>
       )}

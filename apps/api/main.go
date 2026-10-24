@@ -23,6 +23,7 @@ import (
 	"github.com/ismagilovnail/flox/apps/internal/adaccount/facebookads"
 	"github.com/ismagilovnail/flox/apps/internal/adaccount/googleads"
 	"github.com/ismagilovnail/flox/apps/internal/adaccount/tiktokads"
+	"github.com/ismagilovnail/flox/apps/internal/adaccount/yandexdirect"
 	"github.com/ismagilovnail/flox/apps/internal/alert"
 	"github.com/ismagilovnail/flox/apps/internal/analytics"
 	"github.com/ismagilovnail/flox/apps/internal/apikey"
@@ -797,9 +798,10 @@ func buildServer(ctx context.Context, cfg config.Config, logger *slog.Logger, re
 	// pattern, so this can't be two Mount points even though the two
 	// handlers are otherwise independent packages.
 	costSyncHandler := costsync.NewHandler(costsync.NewService(adAccountRepo, campaignRepo, costSvc, costsync.Providers{
-		FacebookAds: facebookads.New(),
-		TikTokAds:   tiktokads.New(),
-		GoogleAds:   googleads.New(),
+		FacebookAds:  facebookads.New(),
+		TikTokAds:    tiktokads.New(),
+		GoogleAds:    googleads.New(),
+		YandexDirect: yandexdirect.New(),
 	}), requireSourceWrite, logger)
 	// Offline conversions to Google Ads and Yandex Metrica (audit UNI-2
 	// parts 2–3): the source's export settings and counts; apps/worker

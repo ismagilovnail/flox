@@ -686,3 +686,48 @@ a year later. Move the constant on before then:
 https://developers.google.com/google-ads/api/docs/sunset-dates. A version no
 longer served answers 404 with an HTML page, and the sync error then names
 the version it called.
+
+# Yandex Direct (audit UNI-3 part 1)
+
+A fourth `CostProvider`: `internal/adaccount/yandexdirect`, cost integration
+`yandex_direct` (migration 00106 widens the two CHECK constraints). Written
+against Direct's documented API v5 and tested against a fake server only:
+there is no Direct account here.
+
+**Connection.** The facebook_ads/tiktok_ads shape: `adAccountId` is the
+advertiser's **Direct login**, `accessToken` an OAuth token (oauth.yandex.ru,
+an app with Direct API access, `direct:api`) issued by the advertiser or its
+agency — pasted, for the reason above ("Why manual token paste"). The login
+goes as the `Client-Login` header: required for an agency's token, harmless
+for the advertiser's own.
+
+**One sync** (same `costsync`, same matching by the campaign's external id —
+here the Direct campaign id):
+
+1. `POST /json/v5/clients` `{"method": "get", "params": {"FieldNames":
+   ["Login", "Currency"]}}` — the account's currency, the one report money
+   is in. An error body is read whatever the HTTP status.
+2. `POST /json/v501/reports`: `CAMPAIGN_PERFORMANCE_REPORT`, `CUSTOM_DATE`
+   over the sync's window, fields `Date, CampaignId, Cost`, TSV,
+   `IncludeVAT: NO` (spend net of VAT, as Facebook/TikTok/Google report
+   it); headers `processingMode: auto`, `returnMoneyInMicros: false`,
+   `skipReportHeader`/`skipReportSummary: true` (the column header is kept
+   and read, so the column order is not assumed). `ReportName` =
+   `flox-spend-<from>-<to>`: Direct wants a name unique per parameter set,
+   and these depend only on the dates.
+3. 201/202 (built offline): asked again after `retryIn` seconds (5 when
+   absent, at most 60), for at most 5 minutes; past that the sync fails
+   with "not ready" and the next run asks again (same name, same report).
+
+**Not known / not done.** Which time zone the report's `Date` is in is not
+documented: the account time zone is left unknown (`Timezone` ''), like a
+platform that does not report it. Cost in "у.е." (YND_FIXED) accounts was
+not seen in the docs and is not handled. Not checked against a live
+account. VK Ads is UNI-3 part 2.
+
+**Errors on "Sync now"** (all platforms, from this phase): a platform's
+refusal is answered 503 with its reason ("the ad platform refused the spend
+request: …"), not a bare 500. A network failure shows only the cause, never
+the request URL — Facebook's carries the access token. Checked live: the
+real Direct API refused a fake token with `error 53: Authorization error.
+Invalid OAuth token` through this path.

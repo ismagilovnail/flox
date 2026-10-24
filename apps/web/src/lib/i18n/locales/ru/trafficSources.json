@@ -23,7 +23,8 @@
     "manual": "Ручной ввод",
     "facebookAds": "Facebook Ads",
     "tiktokAds": "TikTok Ads",
-    "googleAds": "Google Ads"
+    "googleAds": "Google Ads",
+    "yandexDirect": "Яндекс Директ"
   },
   "sourceType": {
     "facebook": "Facebook",
@@ -100,7 +101,10 @@
       "unmatchedTitle": "Несопоставленные ID кампаний во внешней системе",
       "unmatchedHint": "Ни одна кампания FLOX ещё не использует этот ID — укажите его на вкладке «Настройки» нужной кампании, чтобы сопоставить.",
       "unmatchedTruncated": "и другие, не показаны"
-    }
+    },
+    "directLoginLabel": "Логин в Директе (рекламодателя)",
+    "directLoginPlaceholder": "my-shop-login",
+    "yandexDirectHint": "OAuth-токен с oauth.yandex.ru для приложения с доступом к API Яндекс Директа (direct:api), выданный рекламодателем или его агентством; логин — логин рекламодателя в Директе (передаётся как Client-Login). Расходы приходят в валюте аккаунта, без НДС, по ID кампании в Директе — укажите его как внешний ID кампании."
   },
   "rowActions": {
     "actionsAria": "Действия для {{name}}",

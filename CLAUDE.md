@@ -19,7 +19,7 @@ referenced below as §N).
 ## CURRENT STATE — UPDATE THIS EVERY PHASE
 
 ```
-CURRENT PHASE : PHASE 30.86 — UNI-2 PART 3, YANDEX METRICA (closed)
+CURRENT PHASE : PHASE 30.87 — UNI-3 PART 1, YANDEX DIRECT SPEND (closed)
 STATUS        : Product audits 2026-10-15 and 2026-10-24 (docs/audit-
                 product-*.md; the second: universality, SEC-7..UX-4)
                 are the backlog: items on the local dev panel tools/devpanel
@@ -116,6 +116,10 @@ STATUS        : Product audits 2026-10-15 and 2026-10-24 (docs/audit-
                 Metrica's metrica_connection_id); counter's currency at event
                 date; NO restating (refund stays); worker re-reads file
                 status (LINKAGE_FAILURE ⇒ failed). Not tried with a counter.
+                UNI-3 part 1: cost integration yandex_direct (00106);
+                adaccount/yandexdirect (Clients.get currency + Reports API
+                v501, offline polling ≤5 min, no VAT); login = Client-Login.
+                Sync errors are 503 with the platform's reason, no URL.
                 BUG-10: googleads.APIVersion = v26 (v17 was sunset); Google
                 sunsets each major ~a year after release — bump it.
                 BUG-9: chstore tests use NewRawEventStore (a store reads
@@ -124,11 +128,10 @@ STATUS        : Product audits 2026-10-15 and 2026-10-24 (docs/audit-
                 past events and reads rollup-able reports has the same trap.
                 P0 left (skipped by the user for now):
                 OPS-1..3 (prod, restore, load) — needs the owner's hosting.
-LAST COMMIT   : feat(offlineconv): offline conversions to Yandex Metrica (UNI-2 part 3).
+LAST COMMIT   : feat(adaccount): Yandex Direct spend import (UNI-3 part 1).
 UNCOMMITTED   : docs/import-export-plan.md (INT-2, stays uncommitted).
-NEXT          : wait for the user. UNI-2 done (Microsoft Ads upload not
-                planned). UNI-4 left: Shopify/
-                WooCommerce (after BIZ-3). Then UNI-3, DOC-1, UX-4;
+NEXT          : wait for the user. UNI-3 part 2: VK Ads spend. UNI-4
+                left: Shopify/WooCommerce (after BIZ-3). Then DOC-1, UX-4;
                 BIZ-3/BIZ-4 part 2 are the user's (no interview script),
                 OPS-1..3 need hosting.
                 GAP-2 (Google Play import) is won't-do: do not offer it. INT-2 is
@@ -142,7 +145,9 @@ NEXT          : wait for the user. UNI-2 done (Microsoft Ads upload not
                 TestRawRetentionFollowsThePlan can flake on a ClickHouse
                 `_row_exists` mutation error under the parallel run; chconn's
                 TestLimitsStopAHeavyQuery flakes under the full parallel run;
-                internal/chstore/retention.go is not gofmt-clean (older).
+                internal/chstore/retention.go is not gofmt-clean (older);
+                contentgallery's TestTranscodeFailures flaked once in the
+                full run (passes alone).
 ```
 
 > At the end of every phase: update the four lines above, add a CHANGELOG entry,

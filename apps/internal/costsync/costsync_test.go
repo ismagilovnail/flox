@@ -2,13 +2,21 @@ package costsync_test
 
 import (
 	"context"
+	"errors"
+	"fmt"
+	"net/http"
+	"net/http/httptest"
+	"net/url"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/ismagilovnail/flox/apps/internal/adaccount"
+	"github.com/ismagilovnail/flox/apps/internal/adaccount/yandexdirect"
+	"github.com/ismagilovnail/flox/apps/internal/apierror"
 	"github.com/ismagilovnail/flox/apps/internal/campaign"
 	"github.com/ismagilovnail/flox/apps/internal/conversion"
 	"github.com/ismagilovnail/flox/apps/internal/cost"
@@ -318,4 +326,93 @@ func TestSyncKeepsADaySplitByCountry(t *testing.T) {
 	if err != nil || len(entries) != 1 || entries[0].Country != "DE" || entries[0].Amount != 8 {
 		t.Fatalf("split day = %+v, %v, want only the manual DE 8", entries, err)
 	}
+}
+
+// Audit UNI-3 part 1: a Yandex Direct source's spend, through the real
+// adapter against a fake Direct (the account's currency, one report),
+// lands as yandex_direct cost entries on the campaign mapped to the Direct
+// campaign id, in roubles with their USD value at the day's rate.
+func TestSyncYandexDirectThroughTheAdapter(t *testing.T) {
+	pool := mustPool(t)
+	ctx := context.Background()
+	orgID := seedOrg(t, ctx, pool)
+	sourceID := seedTrafficSource(t, ctx, pool, orgID, "yandex_direct")
+	campaignID := seedCampaign(t, ctx, pool, orgID, sourceID, "70001")
+
+	adAccountRepo := adaccount.NewRepository(pool, testKey)
+	if _, err := adaccount.NewService(adAccountRepo).Connect(ctx, orgID, sourceID, adaccount.ConnectInput{
+		AdAccountID: "shop-client", AccessToken: "y0_direct_token",
+	}); err != nil {
+		t.Fatalf("connecting: %v", err)
+	}
+	direct := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Authorization") != "Bearer y0_direct_token" || r.Header.Get("Client-Login") != "shop-client" {
+			w.WriteHeader(http.StatusForbidden)
+			return
+		}
+		if r.URL.Path == "/json/v5/clients" {
+			_, _ = w.Write([]byte(`{"result": {"Clients": [{"Currency": "RUB"}]}}`))
+			return
+		}
+		_, _ = w.Write([]byte("Date\tCampaignId\tCost\n2026-10-20\t70001\t5000.00\n2026-10-20\t70002\t10.00\n"))
+	}))
+	defer direct.Close()
+
+	costSvc := cost.NewService(cost.NewRepository(pool), conversion.NewPostgresFX(pool))
+	svc := costsync.NewService(adAccountRepo, campaign.NewRepository(pool), costSvc, costsync.Providers{
+		YandexDirect: &yandexdirect.Adapter{BaseURL: direct.URL},
+	})
+	day := time.Date(2026, 10, 20, 0, 0, 0, 0, time.UTC)
+	result, err := svc.Sync(ctx, orgID, sourceID, day, day)
+	if err != nil {
+		t.Fatalf("Sync: %v", err)
+	}
+	if result.EntriesWritten != 1 || len(result.UnmatchedExternalCampaignIDs) != 1 || result.UnmatchedExternalCampaignIDs[0] != "70002" {
+		t.Fatalf("result = %+v", result)
+	}
+	entries, err := costSvc.List(ctx, orgID, campaignID, cost.ListFilter{From: day, To: day})
+	if err != nil || len(entries) != 1 {
+		t.Fatalf("entries = %+v, %v", entries, err)
+	}
+	e := entries[0]
+	if e.Source != cost.SourceYandexDirect || e.Amount != 5000 || e.Currency != "RUB" {
+		t.Fatalf("entry = %+v", e)
+	}
+}
+
+// A sync the platform refuses tells the operator why (503 with the
+// reason), and a network failure never shows the request URL, which for
+// Facebook carries the access token.
+func TestSyncErrorsShowTheReasonButNoURL(t *testing.T) {
+	pool := mustPool(t)
+	ctx := context.Background()
+	orgID := seedOrg(t, ctx, pool)
+	sourceID := seedTrafficSource(t, ctx, pool, orgID, "facebook_ads")
+	adAccountRepo := adaccount.NewRepository(pool, testKey)
+	if _, err := adaccount.NewService(adAccountRepo).Connect(ctx, orgID, sourceID, adaccount.ConnectInput{
+		AdAccountID: "act_1", AccessToken: "secret-token-1234567890",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	costSvc := cost.NewService(cost.NewRepository(pool), conversion.NewPostgresFX(pool))
+	for _, tc := range []struct {
+		err  error
+		want string
+	}{
+		{errors.New("facebookads: Invalid OAuth access token"), "Invalid OAuth access token"},
+		{fmt.Errorf("calling graph: %w", &url.Error{Op: "Get", URL: "https://graph.example/x?access_token=secret-token-1234567890", Err: errors.New("dial tcp: timeout")}), "dial tcp: timeout"},
+	} {
+		svc := costsync.NewService(adAccountRepo, campaign.NewRepository(pool), costSvc, costsync.Providers{FacebookAds: &failingProvider{err: tc.err}})
+		_, err := svc.Sync(ctx, orgID, sourceID, time.Now(), time.Now())
+		var apiErr *apierror.Error
+		if !errors.As(err, &apiErr) || apiErr.Status != http.StatusServiceUnavailable || !strings.Contains(apiErr.Message, tc.want) || strings.Contains(apiErr.Message, "secret-token") {
+			t.Fatalf("%v: got %v", tc.err, err)
+		}
+	}
+}
+
+type failingProvider struct{ err error }
+
+func (f *failingProvider) DailySpendByCampaign(context.Context, adaccount.Credentials, time.Time, time.Time) ([]adaccount.DailyCampaignSpendRecord, error) {
+	return nil, f.err
 }

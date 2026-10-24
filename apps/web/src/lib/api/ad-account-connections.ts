@@ -14,7 +14,7 @@ export type AdAccountConnection = {
   updatedAt: string;
 };
 
-/** accessToken is facebook_ads/tiktok_ads only; developerToken/clientId/
+/** accessToken is facebook_ads/tiktok_ads/yandex_direct only; developerToken/clientId/
  * clientSecret/refreshToken are google_ads only — apps/internal/
  * adaccount.Service.Connect validates the right subset is present for
  * whichever cost_integration the traffic source actually has. Google

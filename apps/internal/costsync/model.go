@@ -15,9 +15,10 @@ import "github.com/ismagilovnail/flox/apps/internal/adaccount"
 // sync's one vendor-specific wiring point (§74/CLAUDE.md invariant #11:
 // "providers behind interfaces, no vendor lock-in in core logic").
 type Providers struct {
-	FacebookAds adaccount.CostProvider
-	TikTokAds   adaccount.CostProvider
-	GoogleAds   adaccount.CostProvider
+	FacebookAds  adaccount.CostProvider
+	TikTokAds    adaccount.CostProvider
+	GoogleAds    adaccount.CostProvider
+	YandexDirect adaccount.CostProvider
 }
 
 // Result summarizes one sync run for the "Sync now" response — a count,

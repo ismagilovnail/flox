@@ -30,14 +30,15 @@ func (s *Service) Get(ctx context.Context, orgID, trafficSourceID string) (Conne
 }
 
 // Connect validates the traffic source exists in this org AND already
-// has its CostIntegration set to facebook_ads/tiktok_ads/google_ads —
+// has its CostIntegration set to facebook_ads/tiktok_ads/google_ads/
+// yandex_direct —
 // connecting a credential for a source whose intent is still "none"/
 // "manual" would store a credential nothing is configured to use,
 // silently, which is worse than requiring the operator set the
 // integration type first (the existing Traffic Source form already has
 // that field). Which fields are required depends on that same
-// cost_integration value: facebook_ads/tiktok_ads need AdAccountID +
-// AccessToken; google_ads needs AdAccountID (its customer id) +
+// cost_integration value: facebook_ads/tiktok_ads/yandex_direct need
+// AdAccountID (for Direct, the advertiser's login) + AccessToken; google_ads needs AdAccountID (its customer id) +
 // DeveloperToken + ClientID + ClientSecret + RefreshToken — Google Ads'
 // API has no long-lived access token equivalent to accept instead.
 func (s *Service) Connect(ctx context.Context, orgID, trafficSourceID string, in ConnectInput) (Connection, error) {
@@ -48,9 +49,9 @@ func (s *Service) Connect(ctx context.Context, orgID, trafficSourceID string, in
 	if !found {
 		return Connection{}, apierror.NotFound("traffic source not found")
 	}
-	if costIntegration != "facebook_ads" && costIntegration != "tiktok_ads" && costIntegration != "google_ads" {
+	if costIntegration != "facebook_ads" && costIntegration != "tiktok_ads" && costIntegration != "google_ads" && costIntegration != "yandex_direct" {
 		return Connection{}, apierror.Validation("invalid ad account connection", map[string]string{
-			"trafficSourceId": "this traffic source's cost integration must be Facebook Ads, TikTok Ads, or Google Ads before connecting an account",
+			"trafficSourceId": "this traffic source's cost integration must be Facebook Ads, TikTok Ads, Google Ads or Yandex Direct before connecting an account",
 		})
 	}
 

@@ -23,7 +23,8 @@
     "manual": "Manual entry",
     "facebookAds": "Facebook Ads",
     "tiktokAds": "TikTok Ads",
-    "googleAds": "Google Ads"
+    "googleAds": "Google Ads",
+    "yandexDirect": "Yandex Direct"
   },
   "sourceType": {
     "facebook": "Facebook",
@@ -100,7 +101,10 @@
       "unmatchedTitle": "Unmatched external campaign IDs",
       "unmatchedHint": "No FLOX campaign has this External campaign ID yet — set it on a campaign's Settings tab to start matching.",
       "unmatchedTruncated": "and more not shown"
-    }
+    },
+    "directLoginLabel": "Direct login (the advertiser's)",
+    "directLoginPlaceholder": "my-shop-login",
+    "yandexDirectHint": "An OAuth token from oauth.yandex.ru for an app with access to the Yandex Direct API (direct:api), issued by the advertiser or its agency; the login is the advertiser's Direct login (sent as Client-Login). Spend comes in the account's currency, without VAT, by Direct campaign id — set it as the campaign's external id."
   },
   "rowActions": {
     "actionsAria": "Actions for {{name}}",

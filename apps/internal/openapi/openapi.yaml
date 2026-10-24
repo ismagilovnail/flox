@@ -1779,7 +1779,7 @@ components:
         amount: { type: number }
         currency: { type: string }
         amountUsd: { type: [number, "null"], description: "null while no USD rate for the day is known." }
-        source: { type: string, enum: [manual, facebook_ads, tiktok_ads, google_ads] }
+        source: { type: string, enum: [manual, facebook_ads, tiktok_ads, google_ads, yandex_direct] }
         createdAt: { type: string, format: date-time }
         updatedAt: { type: string, format: date-time }
     CostEntryInput:
@@ -1943,7 +1943,7 @@ components:
         updatedAt: { type: string, format: date-time }
     CostIntegration:
       type: string
-      enum: [none, manual, facebook_ads, tiktok_ads, google_ads]
+      enum: [none, manual, facebook_ads, tiktok_ads, google_ads, yandex_direct]
     TrafficSourceCreate:
       type: object
       required: [name, type, trackingTemplate, costIntegration]
