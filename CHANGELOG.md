@@ -5,6 +5,19 @@ per-phase, matching `CLAUDE.md`'s phase protocol. The one exception is
 [Between phases], below: spec amendments and the code changes that follow from
 them land between phases and would otherwise be invisible here.
 
+## [Phase 30.74] — chstore tests read the raw rows (BUG-9)
+
+docs/retention.md "Rollup". Since the dev database's rollup backfill finished, ~15 chstore report tests got 0 rows:
+reports read `event_rollup_hourly`, whose views by design count only events from the cutover on, and the tests seed
+August 2026. Only the tests were wrong, not reports: in production only an event still on its way at the switch can be
+dated before the cutover (the hour's wait covers it), and retention changes rows by mutation, which the views do not
+see.
+
+- chstore's tests build their store with `NewRawEventStore` (export_test.go); `rollup_test.go` keeps checking the
+  rollup against the raw rows.
+- The trap for tests in other packages is written down in docs/retention.md.
+- Full Go run with the full env: 98 packages ok, e2e `TestFullFunnel` passed.
+
 ## [Phase 30.73] — Gallery videos converted to MP4 (GAP-1)
 
 docs/content-gallery.md "Transcoding". Finishes the owner's work in progress: MOV, M4V, 3GP, AVI and MKV up to 200 MB
@@ -21,7 +34,7 @@ using ffmpeg.
   nothing); real ffmpeg on a rotated MOV in the worker container; card states; both mutation-checked. Live through the
   dev API: a 3 s rotated MOV → 1080×1920 H.264/AAC MP4 with a poster in ~2 s; deleting it removed every object.
 - **Known:** the chstore report tests fail on the dev stack since the rollup backfill finished (BUG-9, not from this
-  phase); `TestFFmpegTranscodesAMOV` skips where ffmpeg is not installed.
+  phase; fixed in 30.74); `TestFFmpegTranscodesAMOV` skips where ffmpeg is not installed.
 
 ## [Between phases] — Purchases instead of deposits in the wording (2026-10-24)
 

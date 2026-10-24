@@ -45,6 +45,18 @@ func RunRollupBackfill(ctx context.Context, conn driver.Conn, name, orgID string
 	return backfillRollup(ctx, conn, name, orgID, false)
 }
 
+// NewRawEventStore is NewEventStore whose reports always read the raw
+// rows (BUG-9). Tests seed events at fixed past dates, before the shared
+// dev database's rollup cutover: once its backfill is done, a plain store
+// would read the rollup, which by design never counts such late
+// pre-cutover events (rollupBackfillDelay). rollup_test.go checks the
+// rollup itself.
+func NewRawEventStore(conn driver.Conn) *EventStore {
+	s := NewEventStore(conn)
+	s.ForceRollup(false)
+	return s
+}
+
 // ForceRollup makes the store's reports read the rollup (on) or the raw
 // rows (off) whenever their dimensions allow, whatever the backfill's state.
 func (s *EventStore) ForceRollup(on bool) {

@@ -119,7 +119,18 @@ and report dimension.
   cutover once, an hour after it, so nothing is counted twice. It copies
   only if the rollup has nothing from before the cutover yet, and records
   itself in `chstore_backfills`. An event dated before the cutover that
-  arrives after the copy is in no rollup.
+  arrives after the copy is in no rollup. In production that can only be an
+  event still on its way at the switch (the hour's wait covers it): the
+  tracker dates events when they happen, and retention changes rows with
+  mutations, which the views do not see.
+- **Tests (BUG-9).** Tests seed events at fixed past dates, before the
+  shared dev database's cutover, so once its backfill is done a plain
+  `NewEventStore` would read the rollup and find nothing. chstore's tests
+  use `NewRawEventStore` (export_test.go); only `rollup_test.go` reads the
+  rollup, with `ForceRollup` and its own `RunRollupBackfill`. A test outside
+  chstore that seeds past events and reads a report by rollup dimensions
+  over whole hours has the same trap: date its events after the cutover or
+  give it a raw store.
 - **Who reads it.** The report builder's clicks, unique clicks, blocked,
   bots, empty subs, landing views, PWA installs and Telegram starts/joins,
   and the filter-value list. They read it when every dimension and filter of

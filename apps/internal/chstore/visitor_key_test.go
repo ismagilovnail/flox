@@ -19,7 +19,7 @@ import (
 // does.
 func TestUniqueClicksSurviveTheIPWipe(t *testing.T) {
 	conn := mustConn(t)
-	store := chstore.NewEventStore(conn)
+	store := chstore.NewRawEventStore(conn)
 	ctx := context.Background()
 	key := bytes.Repeat([]byte{3}, 32)
 	keyOf := func(ip, ua string) string { return visitorkey.Of(key, ip, ua) }

@@ -15,7 +15,7 @@ import (
 // Overview can warn instead of showing a quietly lower figure.
 func TestReportCountsUnpricedConversions(t *testing.T) {
 	conn := mustConn(t)
-	store := chstore.NewEventStore(conn)
+	store := chstore.NewRawEventStore(conn)
 	ctx := context.Background()
 	orgID, campaignID := idgen.New(), idgen.New()
 	day := time.Date(2026, 8, 22, 10, 0, 0, 0, time.UTC)

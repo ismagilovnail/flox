@@ -48,7 +48,7 @@ func seedReportFixture(t *testing.T, ctx context.Context, store *chstore.EventSt
 
 func TestReportClicksCountsClicksAndUniqueClicksSeparately(t *testing.T) {
 	conn := mustConn(t)
-	store := chstore.NewEventStore(conn)
+	store := chstore.NewRawEventStore(conn)
 	ctx := context.Background()
 	orgID, campaignID := idgen.New(), idgen.New()
 	day := time.Date(2026, 8, 21, 0, 0, 0, 0, time.UTC)
@@ -77,7 +77,7 @@ func TestReportClicksCountsClicksAndUniqueClicksSeparately(t *testing.T) {
 
 func TestReportClicksGroupsByDimension(t *testing.T) {
 	conn := mustConn(t)
-	store := chstore.NewEventStore(conn)
+	store := chstore.NewRawEventStore(conn)
 	ctx := context.Background()
 	orgID, campaignID := idgen.New(), idgen.New()
 	day := time.Date(2026, 8, 21, 0, 0, 0, 0, time.UTC)
@@ -109,7 +109,7 @@ func TestReportClicksGroupsByDimension(t *testing.T) {
 
 func TestReportClicksGroupsByStreamSet(t *testing.T) {
 	conn := mustConn(t)
-	store := chstore.NewEventStore(conn)
+	store := chstore.NewRawEventStore(conn)
 	ctx := context.Background()
 	orgID, campaignID := idgen.New(), idgen.New()
 	day := time.Date(2026, 8, 21, 0, 0, 0, 0, time.UTC)
@@ -153,7 +153,7 @@ func TestReportClicksGroupsByStreamSet(t *testing.T) {
 
 func TestReportConversionsGroupsByStreamSetPreservesEmptyBucket(t *testing.T) {
 	conn := mustConn(t)
-	store := chstore.NewEventStore(conn)
+	store := chstore.NewRawEventStore(conn)
 	ctx := context.Background()
 	orgID, campaignID := idgen.New(), idgen.New()
 	day := time.Date(2026, 8, 21, 0, 0, 0, 0, time.UTC)
@@ -198,7 +198,7 @@ func TestReportConversionsGroupsByStreamSetPreservesEmptyBucket(t *testing.T) {
 
 func TestReportClicksAppliesFilter(t *testing.T) {
 	conn := mustConn(t)
-	store := chstore.NewEventStore(conn)
+	store := chstore.NewRawEventStore(conn)
 	ctx := context.Background()
 	orgID, campaignID := idgen.New(), idgen.New()
 	day := time.Date(2026, 8, 21, 0, 0, 0, 0, time.UTC)
@@ -220,7 +220,7 @@ func TestReportClicksAppliesFilter(t *testing.T) {
 
 func TestReportConversionsExcludesHoldAndTrash(t *testing.T) {
 	conn := mustConn(t)
-	store := chstore.NewEventStore(conn)
+	store := chstore.NewRawEventStore(conn)
 	ctx := context.Background()
 	orgID, campaignID := idgen.New(), idgen.New()
 	day := time.Date(2026, 8, 21, 0, 0, 0, 0, time.UTC)
@@ -252,7 +252,7 @@ func TestReportConversionsExcludesHoldAndTrash(t *testing.T) {
 
 func TestReportPwaInstallsCountsAndIsTenantScoped(t *testing.T) {
 	conn := mustConn(t)
-	store := chstore.NewEventStore(conn)
+	store := chstore.NewRawEventStore(conn)
 	ctx := context.Background()
 	orgID, otherOrg, campaignID := idgen.New(), idgen.New(), idgen.New()
 	day := time.Date(2026, 8, 21, 0, 0, 0, 0, time.UTC)
@@ -283,7 +283,7 @@ func TestReportPwaInstallsCountsAndIsTenantScoped(t *testing.T) {
 // dimension splits joins by channel, everything else in the empty bucket.
 func TestReportTelegramByChannel(t *testing.T) {
 	conn := mustConn(t)
-	store := chstore.NewEventStore(conn)
+	store := chstore.NewRawEventStore(conn)
 	ctx := context.Background()
 	orgID, otherOrg, campaignID := idgen.New(), idgen.New(), idgen.New()
 	chA, chB := idgen.New(), idgen.New()
@@ -333,7 +333,7 @@ func TestReportTelegramByChannel(t *testing.T) {
 
 func TestReportConversionsCountsRedepsSeparately(t *testing.T) {
 	conn := mustConn(t)
-	store := chstore.NewEventStore(conn)
+	store := chstore.NewRawEventStore(conn)
 	ctx := context.Background()
 	orgID, campaignID, click := idgen.New(), idgen.New(), idgen.New()
 	declined, trashed := idgen.New(), idgen.New()
@@ -388,7 +388,7 @@ func seedOSJoinFixture(t *testing.T, ctx context.Context, store *chstore.EventSt
 
 func TestReportConversionsGroupsByOSViaClickJoin(t *testing.T) {
 	conn := mustConn(t)
-	store := chstore.NewEventStore(conn)
+	store := chstore.NewRawEventStore(conn)
 	ctx := context.Background()
 	orgID, campaignID := idgen.New(), idgen.New()
 	day := time.Date(2026, 8, 22, 0, 0, 0, 0, time.UTC)
@@ -423,7 +423,7 @@ func TestReportConversionsGroupsByOSViaClickJoin(t *testing.T) {
 
 func TestReportConversionsFiltersByBrowserViaClickJoin(t *testing.T) {
 	conn := mustConn(t)
-	store := chstore.NewEventStore(conn)
+	store := chstore.NewRawEventStore(conn)
 	ctx := context.Background()
 	orgID, campaignID := idgen.New(), idgen.New()
 	day := time.Date(2026, 8, 22, 0, 0, 0, 0, time.UTC)
@@ -446,7 +446,7 @@ func TestReportConversionsFiltersByBrowserViaClickJoin(t *testing.T) {
 
 func TestReportConversionsViaClickJoinByDayAndTenantIsolation(t *testing.T) {
 	conn := mustConn(t)
-	store := chstore.NewEventStore(conn)
+	store := chstore.NewRawEventStore(conn)
 	ctx := context.Background()
 	orgA, orgB, campaignID := idgen.New(), idgen.New(), idgen.New()
 	day := time.Date(2026, 8, 22, 0, 0, 0, 0, time.UTC)
@@ -501,7 +501,7 @@ func TestReportConversionsViaClickJoinByDayAndTenantIsolation(t *testing.T) {
 
 func TestReportLandViewsCounts(t *testing.T) {
 	conn := mustConn(t)
-	store := chstore.NewEventStore(conn)
+	store := chstore.NewRawEventStore(conn)
 	ctx := context.Background()
 	orgID, campaignID := idgen.New(), idgen.New()
 	day := time.Date(2026, 8, 21, 0, 0, 0, 0, time.UTC)
@@ -522,7 +522,7 @@ func TestReportLandViewsCounts(t *testing.T) {
 
 func TestReportClicksByDay(t *testing.T) {
 	conn := mustConn(t)
-	store := chstore.NewEventStore(conn)
+	store := chstore.NewRawEventStore(conn)
 	ctx := context.Background()
 	orgID, campaignID := idgen.New(), idgen.New()
 	day := time.Date(2026, 8, 21, 0, 0, 0, 0, time.UTC)
@@ -556,7 +556,7 @@ func TestReportClicksByDay(t *testing.T) {
 
 func TestFunnelCountsZeroFillsAndCountsDistinctClickIDs(t *testing.T) {
 	conn := mustConn(t)
-	store := chstore.NewEventStore(conn)
+	store := chstore.NewRawEventStore(conn)
 	ctx := context.Background()
 	orgID, campaignID := idgen.New(), idgen.New()
 	day := time.Date(2026, 8, 21, 0, 0, 0, 0, time.UTC)
@@ -588,7 +588,7 @@ func TestFunnelCountsZeroFillsAndCountsDistinctClickIDs(t *testing.T) {
 
 func TestCrossTenantIsolationInReports(t *testing.T) {
 	conn := mustConn(t)
-	store := chstore.NewEventStore(conn)
+	store := chstore.NewRawEventStore(conn)
 	ctx := context.Background()
 	orgA, campaignA := idgen.New(), idgen.New()
 	orgB := idgen.New()
@@ -620,7 +620,7 @@ func TestCrossTenantIsolationInReports(t *testing.T) {
 // left out of a value list meant to be clicked, not typed.
 func TestDistinctValuesOrdersByFrequencyAndExcludesEmpty(t *testing.T) {
 	conn := mustConn(t)
-	store := chstore.NewEventStore(conn)
+	store := chstore.NewRawEventStore(conn)
 	ctx := context.Background()
 	orgID, campaignID := idgen.New(), idgen.New()
 	day := time.Date(2026, 8, 21, 0, 0, 0, 0, time.UTC)
@@ -663,7 +663,7 @@ func TestDistinctValuesOrdersByFrequencyAndExcludesEmpty(t *testing.T) {
 // truncates to after the fact.
 func TestDistinctValuesLimitsResults(t *testing.T) {
 	conn := mustConn(t)
-	store := chstore.NewEventStore(conn)
+	store := chstore.NewRawEventStore(conn)
 	ctx := context.Background()
 	orgID, campaignID := idgen.New(), idgen.New()
 	day := time.Date(2026, 8, 21, 0, 0, 0, 0, time.UTC)
@@ -680,7 +680,7 @@ func TestDistinctValuesLimitsResults(t *testing.T) {
 
 func TestDistinctValuesRejectsUnsupportedDimension(t *testing.T) {
 	conn := mustConn(t)
-	store := chstore.NewEventStore(conn)
+	store := chstore.NewRawEventStore(conn)
 	_, err := store.DistinctValues(context.Background(), idgen.New(), chstore.ReportDimension("no_such_dimension"), time.Now().Add(-24*time.Hour), time.Now(), 10, nil)
 	if err == nil {
 		t.Fatal(`DistinctValues with an unknown dimension succeeded, want an error`)
@@ -693,7 +693,7 @@ func TestDistinctValuesRejectsUnsupportedDimension(t *testing.T) {
 // for traffic that was shown no landing.
 func TestReportByLanding(t *testing.T) {
 	conn := mustConn(t)
-	store := chstore.NewEventStore(conn)
+	store := chstore.NewRawEventStore(conn)
 	ctx := context.Background()
 	orgID, campaignID := idgen.New(), idgen.New()
 	day := time.Date(2026, 9, 30, 0, 0, 0, 0, time.UTC)
@@ -767,7 +767,7 @@ func TestReportByLanding(t *testing.T) {
 // with "" as its own bucket (redirect flows / fallbacks).
 func TestReportByOffer(t *testing.T) {
 	conn := mustConn(t)
-	store := chstore.NewEventStore(conn)
+	store := chstore.NewRawEventStore(conn)
 	ctx := context.Background()
 	orgID, campaignID := idgen.New(), idgen.New()
 	day := time.Date(2026, 10, 1, 0, 0, 0, 0, time.UTC)
@@ -808,7 +808,7 @@ func TestReportByOffer(t *testing.T) {
 // and conversions.
 func TestReportByPwa(t *testing.T) {
 	conn := mustConn(t)
-	store := chstore.NewEventStore(conn)
+	store := chstore.NewRawEventStore(conn)
 	ctx := context.Background()
 	orgID, campaignID := idgen.New(), idgen.New()
 	day := time.Date(2026, 10, 2, 0, 0, 0, 0, time.UTC)
@@ -845,7 +845,7 @@ func TestReportByPwa(t *testing.T) {
 // stage's own events and conversions.
 func TestReportByPostlanding(t *testing.T) {
 	conn := mustConn(t)
-	store := chstore.NewEventStore(conn)
+	store := chstore.NewRawEventStore(conn)
 	ctx := context.Background()
 	orgID, campaignID := idgen.New(), idgen.New()
 	day := time.Date(2026, 10, 3, 0, 0, 0, 0, time.UTC)
@@ -884,7 +884,7 @@ func TestReportByPostlanding(t *testing.T) {
 // separate, and rows with no source land in the "" bucket.
 func TestReportBySourceMergesCampaignsOnOneSource(t *testing.T) {
 	conn := mustConn(t)
-	store := chstore.NewEventStore(conn)
+	store := chstore.NewRawEventStore(conn)
 	ctx := context.Background()
 	orgID := idgen.New()
 	campA, campB, campC := idgen.New(), idgen.New(), idgen.New()
@@ -927,7 +927,7 @@ func TestReportBySourceMergesCampaignsOnOneSource(t *testing.T) {
 
 func TestReportClicksByDayCutsDaysInTheRequestedTimezone(t *testing.T) {
 	conn := mustConn(t)
-	store := chstore.NewEventStore(conn)
+	store := chstore.NewRawEventStore(conn)
 	ctx := context.Background()
 	orgID, campaignID := idgen.New(), idgen.New()
 	// 23:30Z and 01:30Z the next UTC day: two UTC days, but both fall on
@@ -967,7 +967,7 @@ func TestReportClicksByDayCutsDaysInTheRequestedTimezone(t *testing.T) {
 
 func TestFunnelCountsAppliesFiltersToEveryStage(t *testing.T) {
 	conn := mustConn(t)
-	store := chstore.NewEventStore(conn)
+	store := chstore.NewRawEventStore(conn)
 	ctx := context.Background()
 	orgID := idgen.New()
 	campA, campB := idgen.New(), idgen.New()
@@ -1027,7 +1027,7 @@ func TestFunnelCountsAppliesFiltersToEveryStage(t *testing.T) {
 // falls back to its own click_id.
 func TestReportClicksUniqueIsPerVisitorNotPerClickID(t *testing.T) {
 	conn := mustConn(t)
-	store := chstore.NewEventStore(conn)
+	store := chstore.NewRawEventStore(conn)
 	ctx := context.Background()
 	orgID, campaignID := idgen.New(), idgen.New()
 	day := time.Date(2026, 8, 21, 0, 0, 0, 0, time.UTC)
@@ -1055,7 +1055,7 @@ func TestReportClicksUniqueIsPerVisitorNotPerClickID(t *testing.T) {
 
 func TestReportClicksCountsBlockedAndBotsWithoutTouchingClicks(t *testing.T) {
 	conn := mustConn(t)
-	store := chstore.NewEventStore(conn)
+	store := chstore.NewRawEventStore(conn)
 	ctx := context.Background()
 	orgID, otherOrg, campaignID := idgen.New(), idgen.New(), idgen.New()
 	day := time.Date(2026, 8, 21, 0, 0, 0, 0, time.UTC)
@@ -1099,7 +1099,7 @@ func TestReportClicksCountsBlockedAndBotsWithoutTouchingClicks(t *testing.T) {
 // postback (schema/003) — one `network` dimension across both.
 func TestReportByNetwork(t *testing.T) {
 	conn := mustConn(t)
-	store := chstore.NewEventStore(conn)
+	store := chstore.NewRawEventStore(conn)
 	ctx := context.Background()
 	orgID, campaignID := idgen.New(), idgen.New()
 	day := time.Date(2026, 10, 4, 0, 0, 0, 0, time.UTC)
@@ -1133,7 +1133,7 @@ func TestReportByNetwork(t *testing.T) {
 
 func TestReportConversionsInReportingCurrency(t *testing.T) {
 	conn := mustConn(t)
-	store := chstore.NewEventStore(conn)
+	store := chstore.NewRawEventStore(conn)
 	ctx := context.Background()
 	orgID, campaignID, click := idgen.New(), idgen.New(), idgen.New()
 	d1 := time.Date(2026, 8, 24, 0, 0, 0, 0, time.UTC)
@@ -1171,7 +1171,7 @@ func TestReportConversionsInReportingCurrency(t *testing.T) {
 // range, or from another organization.
 func TestFlowStageCountsPerFlowAndTenant(t *testing.T) {
 	conn := mustConn(t)
-	store := chstore.NewEventStore(conn)
+	store := chstore.NewRawEventStore(conn)
 	ctx := context.Background()
 	orgID, otherOrg, campaignID := idgen.New(), idgen.New(), idgen.New()
 	flowA, flowB, flowC := idgen.New(), idgen.New(), idgen.New()
@@ -1239,7 +1239,7 @@ func TestFlowStageCountsPerFlowAndTenant(t *testing.T) {
 // enough, whichever slot it is in — and never a blocked click.
 func TestReportClicksCountsEmptySubs(t *testing.T) {
 	conn := mustConn(t)
-	store := chstore.NewEventStore(conn)
+	store := chstore.NewRawEventStore(conn)
 	ctx := context.Background()
 	orgID, campaignID := idgen.New(), idgen.New()
 	day := time.Date(2026, 8, 23, 0, 0, 0, 0, time.UTC)
@@ -1270,7 +1270,7 @@ func TestReportClicksCountsEmptySubs(t *testing.T) {
 // stage of its own.
 func TestInstallsIncludeIosInstalls(t *testing.T) {
 	conn := mustConn(t)
-	store := chstore.NewEventStore(conn)
+	store := chstore.NewRawEventStore(conn)
 	ctx := context.Background()
 	orgID, campaignID, flowID := idgen.New(), idgen.New(), idgen.New()
 	android, iphone, both := idgen.New(), idgen.New(), idgen.New()
@@ -1323,7 +1323,7 @@ func TestInstallsIncludeIosInstalls(t *testing.T) {
 // report query; an empty set matches nothing; a buyer never reaches SQL.
 func TestReportCampaignInFilter(t *testing.T) {
 	conn := mustConn(t)
-	store := chstore.NewEventStore(conn)
+	store := chstore.NewRawEventStore(conn)
 	ctx := context.Background()
 	orgID, campA, campB, campC := idgen.New(), idgen.New(), idgen.New(), idgen.New()
 	day := time.Date(2026, 8, 22, 0, 0, 0, 0, time.UTC)
@@ -1378,7 +1378,7 @@ func TestReportCampaignInFilter(t *testing.T) {
 // IP + user agent made of them.
 func TestUniqueClicksByCookieBehindOneIP(t *testing.T) {
 	conn := mustConn(t)
-	store := chstore.NewEventStore(conn)
+	store := chstore.NewRawEventStore(conn)
 	ctx := context.Background()
 	orgID, campaignID := idgen.New(), idgen.New()
 	day := time.Date(2026, 8, 23, 0, 0, 0, 0, time.UTC)

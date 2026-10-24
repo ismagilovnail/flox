@@ -16,7 +16,7 @@ import (
 // raw tables and in the materialized views built from them.
 func TestRetriedBatchIsNotDuplicated(t *testing.T) {
 	conn := mustConn(t)
-	store := chstore.NewEventStore(conn)
+	store := chstore.NewRawEventStore(conn)
 	ctx := context.Background()
 	orgID, campaignID := idgen.New(), idgen.New()
 	at := time.Now().UTC().Truncate(time.Second)
@@ -65,7 +65,7 @@ func TestRetriedBatchIsNotDuplicated(t *testing.T) {
 
 func TestRetriedPostbackAttemptBatchIsNotDuplicated(t *testing.T) {
 	conn := mustConn(t)
-	store := chstore.NewEventStore(conn)
+	store := chstore.NewRawEventStore(conn)
 	ctx := chstore.WithBatchID(context.Background(), idgen.New())
 	orgID := idgen.New()
 	attempts := []chstore.PostbackAttempt{{OrganizationID: orgID, EventAt: time.Now().UTC(), Direction: "incoming", ClickID: idgen.New(), Result: "success"}}

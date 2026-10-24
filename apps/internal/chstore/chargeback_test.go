@@ -15,7 +15,7 @@ import (
 // conversion counts.
 func TestReportRevenueNetsChargebacks(t *testing.T) {
 	conn := mustConn(t)
-	store := chstore.NewEventStore(conn)
+	store := chstore.NewRawEventStore(conn)
 	ctx := context.Background()
 	orgID, campaignID, clickID := idgen.New(), idgen.New(), idgen.New()
 	ftdDay := time.Date(2026, 8, 21, 10, 0, 0, 0, time.UTC)

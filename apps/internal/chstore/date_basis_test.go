@@ -79,7 +79,7 @@ func assertDays(t *testing.T, what string, got map[string]float64, want map[stri
 // Tech audit AN5: by click, revenue lands on the day of its click; a
 // conversion without one keeps its own day and is counted as such.
 func TestConversionsDatedByClick(t *testing.T) {
-	store := chstore.NewEventStore(mustConn(t))
+	store := chstore.NewRawEventStore(mustConn(t))
 	ctx := context.Background()
 	fx := seedDateBasisFixture(t, ctx, store)
 	week := chstore.ReportQuery{OrganizationID: fx.orgID, From: fx.mon, To: fx.mon.Add(3 * 24 * time.Hour)}
@@ -116,7 +116,7 @@ func TestConversionsDatedByClick(t *testing.T) {
 // Over a range holding every click and conversion, the two bases only move
 // revenue between days, never change the total.
 func TestDateBasesAgreeOnTotals(t *testing.T) {
-	store := chstore.NewEventStore(mustConn(t))
+	store := chstore.NewRawEventStore(mustConn(t))
 	ctx := context.Background()
 	fx := seedDateBasisFixture(t, ctx, store)
 	for _, basis := range []chstore.DateBasis{chstore.DateByConversion, chstore.DateByClick} {
@@ -132,7 +132,7 @@ func TestDateBasesAgreeOnTotals(t *testing.T) {
 
 // The os/browser path joins clicks; by click it dates the same way.
 func TestConversionsDatedByClickViaClickJoin(t *testing.T) {
-	store := chstore.NewEventStore(mustConn(t))
+	store := chstore.NewRawEventStore(mustConn(t))
 	ctx := context.Background()
 	fx := seedDateBasisFixture(t, ctx, store)
 	aggs, err := store.ReportConversions(ctx, chstore.ReportQuery{
@@ -148,7 +148,7 @@ func TestConversionsDatedByClickViaClickJoin(t *testing.T) {
 }
 
 func TestCampaignDailyRevenueDatedByClick(t *testing.T) {
-	store := chstore.NewEventStore(mustConn(t))
+	store := chstore.NewRawEventStore(mustConn(t))
 	ctx := context.Background()
 	fx := seedDateBasisFixture(t, ctx, store)
 	wed := fx.mon.Add(48 * time.Hour)

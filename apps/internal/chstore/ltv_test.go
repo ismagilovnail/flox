@@ -12,7 +12,7 @@ import (
 
 func TestClicksByFTDAnchor(t *testing.T) {
 	conn := mustConn(t)
-	store := chstore.NewEventStore(conn)
+	store := chstore.NewRawEventStore(conn)
 	ctx := context.Background()
 
 	orgID := idgen.New()
@@ -63,7 +63,7 @@ func TestClicksByFTDAnchor(t *testing.T) {
 
 func TestClicksByRegAnchor(t *testing.T) {
 	conn := mustConn(t)
-	store := chstore.NewEventStore(conn)
+	store := chstore.NewRawEventStore(conn)
 	ctx := context.Background()
 
 	orgID := idgen.New()
@@ -90,7 +90,7 @@ func TestClicksByRegAnchor(t *testing.T) {
 
 func TestClicksByFTDAnchorFiltersByDimension(t *testing.T) {
 	conn := mustConn(t)
-	store := chstore.NewEventStore(conn)
+	store := chstore.NewRawEventStore(conn)
 	ctx := context.Background()
 
 	orgID := idgen.New()
@@ -128,7 +128,7 @@ func TestClicksByFTDAnchorFiltersByDimension(t *testing.T) {
 
 func TestClicksByFTDAnchorNoMatches(t *testing.T) {
 	conn := mustConn(t)
-	store := chstore.NewEventStore(conn)
+	store := chstore.NewRawEventStore(conn)
 
 	histories, err := store.ClicksByFTDAnchor(context.Background(), idgen.New(), chstore.LTVFilter{
 		From: time.Now(), To: time.Now().Add(time.Hour),
@@ -143,7 +143,7 @@ func TestClicksByFTDAnchorNoMatches(t *testing.T) {
 
 func TestLTVFilterBySourceAndOffer(t *testing.T) {
 	conn := mustConn(t)
-	store := chstore.NewEventStore(conn)
+	store := chstore.NewRawEventStore(conn)
 	ctx := context.Background()
 	orgID := idgen.New()
 	srcA, srcB, offA, offB := idgen.New(), idgen.New(), idgen.New(), idgen.New()
@@ -182,7 +182,7 @@ func TestLTVFilterBySourceAndOffer(t *testing.T) {
 
 func TestBackfillLTVAttribution(t *testing.T) {
 	conn := mustConn(t)
-	store := chstore.NewEventStore(conn)
+	store := chstore.NewRawEventStore(conn)
 	ctx := context.Background()
 	orgID := idgen.New()
 	name := "ltv_attrs_" + idgen.New()

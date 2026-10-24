@@ -12,7 +12,7 @@ import (
 
 func TestListAndCountConversions(t *testing.T) {
 	conn := mustConn(t)
-	store := chstore.NewEventStore(conn)
+	store := chstore.NewRawEventStore(conn)
 	ctx := context.Background()
 
 	orgID := idgen.New()
@@ -63,7 +63,7 @@ func TestListAndCountConversions(t *testing.T) {
 
 func TestConversionsByClickIDReturnsFullStatusHistory(t *testing.T) {
 	conn := mustConn(t)
-	store := chstore.NewEventStore(conn)
+	store := chstore.NewRawEventStore(conn)
 	ctx := context.Background()
 
 	orgID := idgen.New()
@@ -99,7 +99,7 @@ func TestConversionsByClickIDReturnsFullStatusHistory(t *testing.T) {
 
 func TestFunnelByClickIDMergesClickAndTrackingEvents(t *testing.T) {
 	conn := mustConn(t)
-	store := chstore.NewEventStore(conn)
+	store := chstore.NewRawEventStore(conn)
 	ctx := context.Background()
 
 	orgID := idgen.New()
@@ -132,7 +132,7 @@ func TestFunnelByClickIDMergesClickAndTrackingEvents(t *testing.T) {
 
 func TestStatusHistoryAndOffersByClickIDsAreOrgScoped(t *testing.T) {
 	conn := mustConn(t)
-	store := chstore.NewEventStore(conn)
+	store := chstore.NewRawEventStore(conn)
 	ctx := context.Background()
 
 	orgID, otherOrg := idgen.New(), idgen.New()
@@ -195,7 +195,7 @@ func TestStatusHistoryAndOffersByClickIDsAreOrgScoped(t *testing.T) {
 
 func TestNewConversionsByOfferCountsFirstSeenPerClickAndIsOrgScoped(t *testing.T) {
 	conn := mustConn(t)
-	store := chstore.NewEventStore(conn)
+	store := chstore.NewRawEventStore(conn)
 	ctx := context.Background()
 
 	orgID, otherOrg := idgen.New(), idgen.New()

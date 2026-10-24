@@ -11,7 +11,7 @@ import (
 
 func TestListAndCountPostbackAttempts(t *testing.T) {
 	conn := mustConn(t)
-	store := chstore.NewEventStore(conn)
+	store := chstore.NewRawEventStore(conn)
 	ctx := context.Background()
 
 	orgID := idgen.New()

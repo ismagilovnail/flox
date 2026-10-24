@@ -21,7 +21,7 @@ func TestByClickIDFallsBackOnlyUntilBackfilled(t *testing.T) {
 	conn := mustConn(t)
 	ctx := context.Background()
 	orgID, clickID := idgen.New(), idgen.New()
-	if err := chstore.NewEventStore(conn).InsertBatch(ctx, []event.Event{{
+	if err := chstore.NewRawEventStore(conn).InsertBatch(ctx, []event.Event{{
 		Type: event.SourceClick, EventAt: time.Now().UTC(), OrganizationID: orgID, ClickID: clickID, CampaignID: "camp",
 	}}); err != nil {
 		t.Fatalf("InsertBatch: %v", err)
@@ -79,7 +79,7 @@ func TestBackfillRunsOnce(t *testing.T) {
 // left alone; a second run does nothing.
 func TestBackfillNetworks(t *testing.T) {
 	conn := mustConn(t)
-	store := chstore.NewEventStore(conn)
+	store := chstore.NewRawEventStore(conn)
 	ctx := context.Background()
 	orgID := idgen.New()
 	name := "networks_" + idgen.New()

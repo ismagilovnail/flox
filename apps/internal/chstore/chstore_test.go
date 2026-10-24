@@ -49,7 +49,7 @@ func envOr(key, fallback string) string {
 // its own table, not all in one.
 func TestInsertBatchRoutesByType(t *testing.T) {
 	conn := mustConn(t)
-	store := chstore.NewEventStore(conn)
+	store := chstore.NewRawEventStore(conn)
 	ctx := context.Background()
 
 	orgID := idgen.New()
@@ -137,7 +137,7 @@ func TestInsertBatchRoutesByType(t *testing.T) {
 
 func TestDailyCampaignGeoAggregate(t *testing.T) {
 	conn := mustConn(t)
-	store := chstore.NewEventStore(conn)
+	store := chstore.NewRawEventStore(conn)
 	ctx := context.Background()
 
 	orgID := idgen.New()
@@ -177,7 +177,7 @@ func TestDailyCampaignGeoAggregate(t *testing.T) {
 
 func TestInsertBatchEmptyIsNoop(t *testing.T) {
 	conn := mustConn(t)
-	store := chstore.NewEventStore(conn)
+	store := chstore.NewRawEventStore(conn)
 	if err := store.InsertBatch(context.Background(), nil); err != nil {
 		t.Fatalf("InsertBatch(nil): %v", err)
 	}

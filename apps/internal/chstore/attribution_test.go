@@ -15,7 +15,7 @@ import (
 
 func TestClickResolverByClickID(t *testing.T) {
 	conn := mustConn(t)
-	store := chstore.NewEventStore(conn)
+	store := chstore.NewRawEventStore(conn)
 	resolver := chstore.NewClickResolver(conn)
 	ctx := context.Background()
 
@@ -64,7 +64,7 @@ func TestClickResolverByClickIDNotFound(t *testing.T) {
 // — see attribution.go's comment on clickColumns' type filter.
 func TestClickResolverExcludesFilteredClicks(t *testing.T) {
 	conn := mustConn(t)
-	store := chstore.NewEventStore(conn)
+	store := chstore.NewRawEventStore(conn)
 	resolver := chstore.NewClickResolver(conn)
 	ctx := context.Background()
 
@@ -87,7 +87,7 @@ func TestClickResolverExcludesFilteredClicks(t *testing.T) {
 // resolver must resolve to the ORIGINAL click, not the most recent one.
 func TestClickResolverByClickIDPicksEarliest(t *testing.T) {
 	conn := mustConn(t)
-	store := chstore.NewEventStore(conn)
+	store := chstore.NewRawEventStore(conn)
 	resolver := chstore.NewClickResolver(conn)
 	ctx := context.Background()
 
@@ -115,7 +115,7 @@ func TestClickResolverByClickIDPicksEarliest(t *testing.T) {
 
 func TestClickResolverByExternalClickID(t *testing.T) {
 	conn := mustConn(t)
-	store := chstore.NewEventStore(conn)
+	store := chstore.NewRawEventStore(conn)
 	resolver := chstore.NewClickResolver(conn)
 	ctx := context.Background()
 
@@ -160,7 +160,7 @@ func TestClickResolverByExternalClickID(t *testing.T) {
 // copy, and attribution's lookup by it still goes through a bloom filter.
 func TestSourceClickIDFallsBackToFbclidAndTtclid(t *testing.T) {
 	conn := mustConn(t)
-	store := chstore.NewEventStore(conn)
+	store := chstore.NewRawEventStore(conn)
 	resolver := chstore.NewClickResolver(conn)
 	ctx := context.Background()
 	orgID := idgen.New()
@@ -242,7 +242,7 @@ func TestClickResolverByExternalClickIDNoMatch(t *testing.T) {
 
 func TestClickResolverTenantIsolation(t *testing.T) {
 	conn := mustConn(t)
-	store := chstore.NewEventStore(conn)
+	store := chstore.NewRawEventStore(conn)
 	resolver := chstore.NewClickResolver(conn)
 	ctx := context.Background()
 
