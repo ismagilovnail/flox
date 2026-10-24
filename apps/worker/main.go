@@ -29,6 +29,7 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
+	"os/exec"
 	"os/signal"
 	"sync"
 	"syscall"
@@ -51,6 +52,7 @@ import (
 	"github.com/ismagilovnail/flox/apps/internal/chconn"
 	"github.com/ismagilovnail/flox/apps/internal/chstore"
 	"github.com/ismagilovnail/flox/apps/internal/config"
+	"github.com/ismagilovnail/flox/apps/internal/contentgallery"
 	"github.com/ismagilovnail/flox/apps/internal/conversion"
 	"github.com/ismagilovnail/flox/apps/internal/cost"
 	"github.com/ismagilovnail/flox/apps/internal/costsync"
@@ -667,6 +669,20 @@ func run() error {
 		logger.Info("telegram invite pool starting", "interval", telegram.InvitePoolInterval)
 		start(func() { invitePool.RunLoop(ctx, telegram.InvitePoolInterval) })
 	}
+	// Content Gallery video transcoding (docs/content-gallery.md
+	// "Transcoding"): needs object storage and ffmpeg/ffprobe. Without
+	// either, videos to convert stay "processing" until a worker has them.
+	if storageClient, err := storage.NewClient(cfg.S3); err != nil {
+		logger.Warn("object storage not configured: gallery videos are not transcoded", "error", err)
+	} else if ffmpeg, ffprobe, err := lookPaths(cfg.FFmpegPath, cfg.FFprobePath); err != nil {
+		logger.Warn("ffmpeg/ffprobe not found: gallery videos are not transcoded", "error", err)
+	} else {
+		processor := &contentgallery.Processor{Repo: contentgallery.NewRepository(db), Storage: storageClient,
+			Media: contentgallery.FFmpeg{FFmpegPath: ffmpeg, FFprobePath: ffprobe, Threads: 2}, Logger: logger}
+		logger.Info("gallery video transcoding starting", "ffmpeg", ffmpeg)
+		start(func() { processor.RunLoop(ctx, contentgallery.ProcessorInterval) })
+	}
+
 	logger.Info("alert evaluation starting", "interval", alert.Interval)
 	start(func() { alertEvaluator.RunLoop(ctx, alert.Interval) })
 
@@ -732,4 +748,17 @@ func offerNetworks(ctx context.Context, db *pgxpool.Pool) (map[string]string, er
 		out[id] = network
 	}
 	return out, rows.Err()
+}
+
+// lookPaths resolves the ffmpeg and ffprobe binaries.
+func lookPaths(ffmpeg, ffprobe string) (string, string, error) {
+	a, err := exec.LookPath(ffmpeg)
+	if err != nil {
+		return "", "", err
+	}
+	b, err := exec.LookPath(ffprobe)
+	if err != nil {
+		return "", "", err
+	}
+	return a, b, nil
 }

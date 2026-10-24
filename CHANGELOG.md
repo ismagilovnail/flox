@@ -5,6 +5,24 @@ per-phase, matching `CLAUDE.md`'s phase protocol. The one exception is
 [Between phases], below: spec amendments and the code changes that follow from
 them land between phases and would otherwise be invisible here.
 
+## [Phase 30.73] — Gallery videos converted to MP4 (GAP-1)
+
+docs/content-gallery.md "Transcoding". Finishes the owner's work in progress: MOV, M4V, 3GP, AVI and MKV up to 200 MB
+are accepted and `apps/worker` turns them into MP4 (H.264/AAC, upright, long side ≤ 1920, ≤ 20 MB) with a poster,
+using ffmpeg.
+
+- **Migration 00100**, not 00085: dev databases had applied it as 00085, and every other database is past 00099, so
+  goose would refuse it as missing. `IF NOT EXISTS` lets both apply it.
+- **Worker:** one video at a time, a 20-minute lease, 3 attempts, then failed. What ffmpeg refuses (no video, over
+  10 minutes, MP4 over 20 MB) is failed with the reason, not retried. A file deleted mid-way leaves no MP4 behind.
+- **UI:** the upload cell takes these formats; the card shows "Converting…" / "Couldn't convert" and the reason, with no
+  play button; the list refreshes every 5 s while a file is converting.
+- **Tests:** the queue against Postgres + MinIO with a fake ffmpeg (incl. another organization's processor takes
+  nothing); real ffmpeg on a rotated MOV in the worker container; card states; both mutation-checked. Live through the
+  dev API: a 3 s rotated MOV → 1080×1920 H.264/AAC MP4 with a poster in ~2 s; deleting it removed every object.
+- **Known:** the chstore report tests fail on the dev stack since the rollup backfill finished (BUG-9, not from this
+  phase); `TestFFmpegTranscodesAMOV` skips where ffmpeg is not installed.
+
 ## [Between phases] — Purchases instead of deposits in the wording (2026-10-24)
 
 What users read now says purchase / repeat purchase / first purchase instead of deposit / redeposit / FTD, so the

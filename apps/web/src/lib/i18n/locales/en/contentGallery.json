@@ -27,14 +27,18 @@
     "label": "Upload",
     "pending": "Uploading…",
     "error": "Upload failed",
-    "videoHint": "or MP4/WebM video"
+    "videoHint": "or a video (MOV and others are converted to MP4)",
+    "converting": "Converting the video to MP4",
+    "convertingHint": "It appears in the gallery once it is ready — usually within a minute."
   },
   "card": {
     "select": "Select",
     "deselect": "Deselect",
     "actions": "File actions",
     "moveTo": "Move to",
-    "play": "Play {{name}}"
+    "play": "Play {{name}}",
+    "processing": "Converting…",
+    "failed": "Couldn't convert"
   },
   "actions": {
     "archive": "Archive",

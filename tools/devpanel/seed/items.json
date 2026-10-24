@@ -790,5 +790,23 @@
   "source": "session-2026-10-23",
   "createdAt": "2026-10-23T16:00:00+05:00",
   "updatedAt": "2026-10-23T16:00:00+05:00"
+ },
+ {
+  "id": "BUG-9",
+  "code": "BUG-9",
+  "priority": "P2",
+  "severity": "medium",
+  "kind": "bug",
+  "area": "tests",
+  "title": "Тесты отчётов chstore возвращают 0 строк после backfill rollup",
+  "evidence": "DATA-6 ч.1: MV event_rollup_hourly считают только event_at >= cutover; dev-воркер завершил BackfillRollup, отчёты читают rollup (useRollup), а тесты вставляют события за август 2026 — их в rollup нет. Падают ~15 тестов chstore (TestReportClicks*, TestDistinctValues*, TestUniqueClicks*). Найдено при GAP-1 2026-10-24.",
+  "fix": "Тесты, вставляющие события до cutover, не должны читать rollup (EventStore без rollup или даты после cutover); решить, нужен ли rollup для событий до cutover, вставленных после backfill.",
+  "impact": "Красный chstore в полном прогоне; возможно, отчёты не видят поздно вставленные старые события.",
+  "status": "todo",
+  "notes": "",
+  "order": 45,
+  "source": "session-2026-10-24",
+  "createdAt": "2026-10-24T15:36:45+05:00",
+  "updatedAt": "2026-10-24T15:36:45+05:00"
  }
 ]

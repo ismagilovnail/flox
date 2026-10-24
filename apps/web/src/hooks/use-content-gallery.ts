@@ -18,7 +18,7 @@ import {
   uploadFile,
   type ListFilesParams,
 } from "@/lib/api/content-gallery";
-import { isVideoFile, readVideoInfo } from "@/lib/video-poster";
+import { isVideoFile, needsTranscoding, readVideoInfo } from "@/lib/video-poster";
 
 const foldersKey = ["content-gallery", "folders"] as const;
 const filesKey = (params: ListFilesParams) => ["content-gallery", "files", params] as const;
@@ -27,8 +27,17 @@ export function useGalleryFolders() {
   return useQuery({ queryKey: foldersKey, queryFn: listFolders });
 }
 
+/** While a video on the page is being converted, the list refreshes
+ * itself until it is ready or failed. */
+export const PROCESSING_REFETCH_MS = 5000;
+
 export function useGalleryFiles(params: ListFilesParams) {
-  return useQuery({ queryKey: filesKey(params), queryFn: () => listFiles(params) });
+  return useQuery({
+    queryKey: filesKey(params),
+    queryFn: () => listFiles(params),
+    refetchInterval: (query) =>
+      query.state.data?.files.some((f) => f.processingStatus === "processing") ? PROCESSING_REFETCH_MS : false,
+  });
 }
 
 function invalidateFiles(qc: ReturnType<typeof useQueryClient>) {
@@ -65,10 +74,11 @@ export function useDeleteGalleryFolder() {
 export function useUploadGalleryFile() {
   const qc = useQueryClient();
   return useMutation({
-    // A video's poster, duration and size are read here, in the browser —
-    // FLOX does not transcode (lib/video-poster.ts).
+    // An MP4/WebM's poster, duration and size are read here, in the
+    // browser; a video the server converts gets them there
+    // (lib/video-poster.ts).
     mutationFn: async ({ file, folderId }: { file: File; folderId?: string }) =>
-      uploadFile(file, folderId, isVideoFile(file) ? await readVideoInfo(file) : undefined),
+      uploadFile(file, folderId, isVideoFile(file) && !needsTranscoding(file) ? await readVideoInfo(file) : undefined),
     onSuccess: () => invalidateFiles(qc),
   });
 }

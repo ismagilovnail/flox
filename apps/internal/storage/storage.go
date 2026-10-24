@@ -133,6 +133,15 @@ func (c *Client) PutObject(ctx context.Context, key string, r io.Reader, size in
 	return nil
 }
 
+// DownloadToFile saves key's object to path (created or replaced) — for a
+// file a tool must read from disk (the gallery's video transcoding).
+func (c *Client) DownloadToFile(ctx context.Context, key, path string) error {
+	if err := c.mc.FGetObject(ctx, c.bucket, key, path, minio.GetObjectOptions{}); err != nil {
+		return fmt.Errorf("storage: downloading %s: %w", key, err)
+	}
+	return nil
+}
+
 // Open streams key's object — for a file only the API may hand out, such
 // as an organization's data export (internal/orgexport). The caller
 // closes it.

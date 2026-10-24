@@ -32,6 +32,18 @@ const (
 	FileTypeVideo FileType = "video"
 )
 
+// ProcessingStatus is a video's transcoding state (docs/content-gallery.md
+// "Transcoding"): ready (playable: every image, MP4 and WebM, and a
+// transcoded source once done), processing (a source waiting for or in
+// apps/worker), failed (ProcessingError says why).
+type ProcessingStatus string
+
+const (
+	ProcessingReady      ProcessingStatus = "ready"
+	ProcessingInProgress ProcessingStatus = "processing"
+	ProcessingFailed     ProcessingStatus = "failed"
+)
+
 type FileStatus string
 
 const (
@@ -81,6 +93,12 @@ type File struct {
 	Width           *int   `json:"width,omitempty"`
 	Height          *int   `json:"height,omitempty"`
 	PosterObjectKey string `json:"-"`
+
+	// ProcessingStatus / ProcessingError: see ProcessingStatus. While not
+	// ready, URL and PosterURL are empty — the stored object is the
+	// source, which browsers may not play.
+	ProcessingStatus ProcessingStatus `json:"processingStatus"`
+	ProcessingError  string           `json:"processingError,omitempty"`
 }
 
 // ListFilesParams' FolderID is tri-state, matching the reference's own

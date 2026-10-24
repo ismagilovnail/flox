@@ -36,6 +36,9 @@ FROM golang:1.27.2-alpine AS dev
 
 ENV CGO_ENABLED=0 GOOS=linux
 RUN go install github.com/air-verse/air@v1.61.7
+# ffmpeg/ffprobe: Content Gallery video transcoding (docs/content-gallery.md
+# "Transcoding"), the same package as the runtime image.
+RUN apk add --no-cache ffmpeg
 
 WORKDIR /src
 COPY go.mod go.sum ./
@@ -57,7 +60,9 @@ FROM alpine:3.21 AS worker
 # postback_url (§46, urlsafety-guarded but still a real TLS connection)
 # Facebook/TikTok ad spend sync (§74/§27-COST) and the ECB FX rate sync
 # (internal/fx) all need a working CA bundle, unlike apps/tracker.
-RUN apk add --no-cache ca-certificates && adduser -D -u 10001 -h /app app
+# ffmpeg (with ffprobe): Content Gallery video transcoding — MOV/AVI/MKV…
+# to MP4 (docs/content-gallery.md "Transcoding").
+RUN apk add --no-cache ca-certificates ffmpeg && adduser -D -u 10001 -h /app app
 
 WORKDIR /app
 COPY --from=builder /out/worker /usr/local/bin/worker

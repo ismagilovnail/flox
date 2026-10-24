@@ -1,6 +1,16 @@
 "use client";
 
-import { ArchiveIcon, ArchiveRestoreIcon, FilmIcon, FolderInputIcon, MoreVerticalIcon, PlayIcon, Trash2Icon } from "lucide-react";
+import {
+  ArchiveIcon,
+  ArchiveRestoreIcon,
+  FilmIcon,
+  FolderInputIcon,
+  Loader2Icon,
+  MoreVerticalIcon,
+  PlayIcon,
+  Trash2Icon,
+  TriangleAlertIcon,
+} from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 import { Checkbox } from "@/components/ui/checkbox";
@@ -56,6 +66,10 @@ export function GalleryFileCard({
   onDeletePermanently?: () => void;
 }) {
   const { t } = useTranslation("contentGallery");
+  // A video being converted, or whose conversion failed, has nothing to
+  // show or play yet (docs/content-gallery.md "Transcoding").
+  const pending = file.processingStatus === "processing";
+  const failed = file.processingStatus === "failed";
   return (
     <div
       className={cn(
@@ -64,7 +78,18 @@ export function GalleryFileCard({
       )}
     >
       <button type="button" onClick={onClick} className="absolute inset-0 flex items-center justify-center">
-        {file.fileType === "video" ? (
+        {pending ? (
+          <span className="flex flex-col items-center gap-1.5 px-2 text-center text-xs text-muted-foreground">
+            <Loader2Icon className="size-6 animate-spin motion-reduce:animate-none" aria-hidden />
+            {t("card.processing")}
+          </span>
+        ) : failed ? (
+          <span className="flex flex-col items-center gap-1.5 px-2 text-center text-xs text-destructive" title={file.processingError}>
+            <TriangleAlertIcon className="size-6" aria-hidden />
+            {t("card.failed")}
+            {file.processingError && <span className="line-clamp-3 text-[10px] text-muted-foreground">{file.processingError}</span>}
+          </span>
+        ) : file.fileType === "video" ? (
           file.posterUrl ? (
             // eslint-disable-next-line @next/next/no-img-element -- an object-storage URL, not a Next-optimizable static asset
             <img src={file.posterUrl} alt={file.originalFilename} className="size-full object-cover" loading="lazy" />
@@ -76,7 +101,7 @@ export function GalleryFileCard({
           <img src={file.url} alt={file.originalFilename} className="size-full object-cover" loading="lazy" />
         )}
       </button>
-      {file.fileType === "video" && (
+      {file.fileType === "video" && !pending && !failed && (
         <>
           {onPreview && (
             <button

@@ -140,6 +140,10 @@ bucket on start). The dev/test values (MinIO's
 `flox-minio-admin`/`flox-minio-secret`) are throwaway compose-internal
 credentials; replace both in any real deployment.
 
+| Variable | Default | What it does |
+|---|---|---|
+| `FFMPEG_PATH` / `FFPROBE_PATH` (worker) | `ffmpeg` / `ffprobe` (on `PATH`) | The tools the worker converts gallery videos (MOV, AVI, MKV…) to MP4 with; the worker image ships them. Not found, or no object storage: the worker logs a warning and such videos stay "Converting…". `docs/content-gallery.md` "Transcoding" |
+
 ### Backups
 
 Read by the backup sidecar (`apps/cmd/backup`, `docs/backup.md`).

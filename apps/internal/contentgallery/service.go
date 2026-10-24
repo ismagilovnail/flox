@@ -17,6 +17,9 @@ const (
 	// applied to images too as a sane default since the reference names no
 	// separate image limit.
 	maxUploadBytes = 20 << 20
+	// maxSourceBytes bounds a video to transcode (an iPhone MOV is large);
+	// the MP4 made from it must still fit maxUploadBytes.
+	maxSourceBytes = 200 << 20
 	// maxSelection matches the reference's own bulk-selection limit.
 	maxSelection = 50
 	// folderNameMax matches the reference's own folder-name character cap.
@@ -43,6 +46,42 @@ var allowedImageExt = map[string]string{
 var allowedVideoExt = map[string]string{
 	".mp4":  "video/mp4",
 	".webm": "video/webm",
+}
+
+// transcodeExt are the video formats stored as uploaded and turned into
+// MP4 (H.264/AAC) by apps/worker (docs/content-gallery.md "Transcoding"),
+// with the content type the source is stored under. Their bytes are
+// checked by sniffSource (http.DetectContentType knows none of them
+// reliably).
+var transcodeExt = map[string]string{
+	".mov": "video/quicktime",
+	".m4v": "video/x-m4v",
+	".3gp": "video/3gpp",
+	".avi": "video/x-msvideo",
+	".mkv": "video/x-matroska",
+}
+
+// sniffSource reports whether head (the file's first bytes) is what ext
+// says: an ISO base media file (MOV/M4V/3GP: an ftyp box, or an old
+// QuickTime file's moov/mdat/wide/free first atom), a RIFF AVI, or an EBML
+// (Matroska) header.
+func sniffSource(ext string, head []byte) bool {
+	switch ext {
+	case ".mov", ".m4v", ".3gp":
+		if len(head) < 8 {
+			return false
+		}
+		switch string(head[4:8]) {
+		case "ftyp", "moov", "mdat", "wide", "free", "skip":
+			return true
+		}
+		return false
+	case ".avi":
+		return len(head) >= 12 && string(head[0:4]) == "RIFF" && string(head[8:12]) == "AVI "
+	case ".mkv":
+		return len(head) >= 4 && string(head[0:4]) == "\x1a\x45\xdf\xa3"
+	}
+	return false
 }
 
 // posterTypes are the images a video's poster may be (the uploading
@@ -122,6 +161,9 @@ type UploadInput struct {
 	Meta   VideoMeta
 	Size   int64
 	Reader io.Reader
+	// Head is the file's first bytes (up to 512), for sniffing a source to
+	// transcode.
+	Head []byte
 }
 
 func (s *Service) UploadFile(ctx context.Context, orgID, uploadedByUserID string, in UploadInput) (File, error) {
@@ -131,11 +173,14 @@ func (s *Service) UploadFile(ctx context.Context, orgID, uploadedByUserID string
 	if in.Size <= 0 {
 		return File{}, apierror.Validation("file is empty", nil)
 	}
+	ext := strings.ToLower(filepath.Ext(in.Filename))
+	if sourceType, ok := transcodeExt[ext]; ok {
+		return s.uploadSource(ctx, orgID, uploadedByUserID, in, ext, sourceType)
+	}
 	if in.Size > maxUploadBytes {
 		return File{}, apierror.Validation(fmt.Sprintf("file exceeds the %dMB limit", maxUploadBytes>>20), nil)
 	}
 
-	ext := strings.ToLower(filepath.Ext(in.Filename))
 	fileType := FileTypeImage
 	wantType, ok := allowedImageExt[ext]
 	if !ok {
@@ -144,10 +189,8 @@ func (s *Service) UploadFile(ctx context.Context, orgID, uploadedByUserID string
 		}
 	}
 	switch {
-	case ext == ".mov":
-		return File{}, apierror.Validation("MOV isn't supported — save the video as MP4 (H.264) and upload that", nil)
 	case !ok:
-		return File{}, apierror.Validation("unsupported file type — allowed: webp, jpg, jpeg, png, gif, mp4, webm", nil)
+		return File{}, apierror.Validation("unsupported file type — allowed: webp, jpg, jpeg, png, gif, mp4, webm, and mov, m4v, avi, mkv, 3gp (converted to MP4)", nil)
 	case in.ContentType != wantType:
 		return File{}, apierror.Validation("file content doesn't match its extension", nil)
 	}
@@ -162,12 +205,9 @@ func (s *Service) UploadFile(ctx context.Context, orgID, uploadedByUserID string
 		}
 	}
 
-	var folderID *string
-	if in.FolderID != nil && *in.FolderID != "" {
-		if _, err := s.repo.GetFolder(ctx, orgID, *in.FolderID); err != nil {
-			return File{}, err
-		}
-		folderID = in.FolderID
+	folderID, err := s.folder(ctx, orgID, in.FolderID)
+	if err != nil {
+		return File{}, err
 	}
 
 	id := idgen.New()
@@ -206,6 +246,48 @@ func (s *Service) UploadFile(ctx context.Context, orgID, uploadedByUserID string
 		return File{}, err
 	}
 
+	s.withURLs(&f)
+	return f, nil
+}
+
+// folder resolves an upload's folder: nil or "" is the root.
+func (s *Service) folder(ctx context.Context, orgID string, folderID *string) (*string, error) {
+	if folderID == nil || *folderID == "" {
+		return nil, nil
+	}
+	if _, err := s.repo.GetFolder(ctx, orgID, *folderID); err != nil {
+		return nil, err
+	}
+	return folderID, nil
+}
+
+// uploadSource stores a video to transcode as uploaded, processing: the
+// worker makes the MP4 (and its poster, duration and size — the browser's
+// are not taken, it may not decode the source).
+func (s *Service) uploadSource(ctx context.Context, orgID, userID string, in UploadInput, ext, sourceType string) (File, error) {
+	if in.Size > maxSourceBytes {
+		return File{}, apierror.Validation(fmt.Sprintf("a video to convert may be up to %dMB", maxSourceBytes>>20), nil)
+	}
+	if !sniffSource(ext, in.Head) {
+		return File{}, apierror.Validation("file content doesn't match its extension", nil)
+	}
+	folderID, err := s.folder(ctx, orgID, in.FolderID)
+	if err != nil {
+		return File{}, err
+	}
+	id := idgen.New()
+	objectKey := orgID + "/" + id + "-source" + ext
+	if err := s.storage.PutObject(ctx, objectKey, in.Reader, in.Size, sourceType); err != nil {
+		return File{}, fmt.Errorf("contentgallery: uploading: %w", err)
+	}
+	f, err := s.repo.CreateFile(ctx, id, orgID, CreateFileInput{
+		FolderID: folderID, UploadedByUserID: userID, FileType: FileTypeVideo, ObjectKey: objectKey,
+		OriginalFilename: in.Filename, MimeType: sourceType, SizeBytes: in.Size, Processing: ProcessingInProgress,
+	})
+	if err != nil {
+		_ = s.storage.DeleteObject(ctx, objectKey)
+		return File{}, err
+	}
 	s.withURLs(&f)
 	return f, nil
 }
@@ -301,6 +383,9 @@ func (s *Service) DeleteFiles(ctx context.Context, orgID string, ids []string) (
 
 // withURLs fills a file's public URLs from its storage keys.
 func (s *Service) withURLs(f *File) {
+	if f.ProcessingStatus != ProcessingReady {
+		return // the stored object is the source
+	}
 	f.URL = s.storage.PublicURL(f.ObjectKey)
 	if f.PosterObjectKey != "" {
 		f.PosterURL = s.storage.PublicURL(f.PosterObjectKey)

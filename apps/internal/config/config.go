@@ -91,6 +91,10 @@ type Config struct {
 	// calls (…/tg/{botId}); unset, bots cannot be connected.
 	// TelegramAPIURL is the Bot API (default https://api.telegram.org).
 	TelegramWebhookBaseURL, TelegramAPIURL string
+	// FFmpegPath/FFprobePath: the tools apps/worker transcodes gallery
+	// videos with (docs/content-gallery.md "Transcoding"); default the
+	// names on PATH.
+	FFmpegPath, FFprobePath string
 
 	// SMSWebhookURL/SMSWebhookSecret: the operator's SMS gateway for 2FA
 	// codes (internal/smswebhook). Both set: SMS is offered; else not.
@@ -381,6 +385,8 @@ func load(portVar, portDefault, defaultServiceName string, ch chLimits) (Config,
 		PushVAPIDSubject:         getEnv("PUSH_VAPID_SUBJECT", ""),
 		TelegramWebhookBaseURL:   getEnv("TELEGRAM_WEBHOOK_BASE_URL", ""),
 		TelegramAPIURL:           getEnv("TELEGRAM_API_URL", ""),
+		FFmpegPath:               getEnv("FFMPEG_PATH", "ffmpeg"),
+		FFprobePath:              getEnv("FFPROBE_PATH", "ffprobe"),
 		SMSWebhookURL:            getEnv("SMS_WEBHOOK_URL", ""),
 		SMSWebhookSecret:         getEnv("SMS_WEBHOOK_SECRET", ""),
 		LandingLinkKey:           getEnv("LANDING_LINK_KEY", ""),

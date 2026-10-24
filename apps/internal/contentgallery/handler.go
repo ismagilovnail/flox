@@ -205,14 +205,18 @@ func (h *Handler) listFiles(w http.ResponseWriter, r *http.Request) {
 // maxUploadBytes plus a video's poster (service.go) to leave room for the
 // form's own field overhead, so a file that's actually within the real
 // limit is never rejected by this outer cap first.
-const maxUploadFormBytes = maxUploadBytes + maxPosterBytes + 1<<20
+const maxUploadFormBytes = maxSourceBytes + maxPosterBytes + 1<<20
+
+// uploadFormMemory is how much of a multipart upload is held in memory;
+// the rest (a large video) goes to a temporary file.
+const uploadFormMemory = 32 << 20
 
 func (h *Handler) uploadFile(w http.ResponseWriter, r *http.Request) {
 	orgID, _ := tenant.OrgID(r.Context())
 	userID, _ := tenant.UserID(r.Context())
 
 	r.Body = http.MaxBytesReader(w, r.Body, maxUploadFormBytes)
-	if err := r.ParseMultipartForm(maxUploadFormBytes); err != nil {
+	if err := r.ParseMultipartForm(uploadFormMemory); err != nil {
 		apierror.Write(w, h.logger, apierror.Validation("file exceeds the upload size limit", nil))
 		return
 	}
@@ -244,6 +248,7 @@ func (h *Handler) uploadFile(w http.ResponseWriter, r *http.Request) {
 		ContentType: contentType,
 		Size:        header.Size,
 		Reader:      reader,
+		Head:        peek,
 	}
 	// A video's poster and metadata, made by the uploading browser.
 	if poster, posterHeader, err := r.FormFile("poster"); err == nil {

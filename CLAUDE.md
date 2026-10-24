@@ -19,7 +19,7 @@ referenced below as §N).
 ## CURRENT STATE — UPDATE THIS EVERY PHASE
 
 ```
-CURRENT PHASE : PHASE 30.72 — DATA-6 PART 2, RAW CLICKS EXPIRE BY PLAN (closed)
+CURRENT PHASE : PHASE 30.73 — GAP-1, GALLERY VIDEOS CONVERTED TO MP4 (closed)
 STATUS        : Product audit 2026-10-15 (docs/audit-product-2026-10-15.md)
                 is the backlog: items on the local dev panel tools/devpanel
                 (make devpanel → 127.0.0.1:8099; memory: flox-audit-tracker
@@ -82,16 +82,17 @@ STATUS        : Product audit 2026-10-15 (docs/audit-product-2026-10-15.md)
                 click_events/tracking_events must append retention_months.
                 BIZ-4 part 1: docs/market-pricing-2026-10.md (public
                 prices); part 2 (Adset.Pro test account) is the user's.
+                GAP-1: MOV/M4V/3GP/AVI/MKV ≤ 200 MB → MP4 by apps/worker
+                (contentgallery.Processor, ffmpeg in the worker image,
+                migration 00100); real-ffmpeg test runs in infra-worker-1.
+                BUG-9 open: chstore report tests read the rollup once its
+                backfill is done and miss pre-cutover test events.
                 P0 left (skipped by the user for now):
                 OPS-1..3 (prod, restore, load) — needs the owner's hosting.
-LAST COMMIT   : feat(ui): purchases instead of deposits in the wording
-                (text only; CPA_REDEP and metric ids unchanged).
-UNCOMMITTED   : the user's gallery-transcoding WIP (00085, processor.go,
-                transcode.go, worker ffmpeg) — not ours, leave it alone.
-                It now accepts MOV, so contentgallery's
-                TestUploadRejectsOversizeWrongContentAndMov fails with it.
-NEXT          : wait for the user — next item from the board (P1: BIZ-3..4;
-                P2: the rest of the board).
+LAST COMMIT   : feat(gallery): videos converted to MP4 (GAP-1).
+UNCOMMITTED   : docs/import-export-plan.md (INT-2, stays uncommitted).
+NEXT          : wait for the user — next item from the board (P2: BUG-9;
+                BIZ-3/BIZ-4 part 2 are the user's — no interview script).
                 GAP-2 (Google Play import) is won't-do: do not offer it. INT-2 is
                 excluded: the owner does it later themselves — do not
                 offer it. No browser checks without the user's OK

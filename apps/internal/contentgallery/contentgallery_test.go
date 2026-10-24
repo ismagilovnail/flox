@@ -328,7 +328,7 @@ func TestDeleteFilesOnlyRemovesArchived(t *testing.T) {
 	}
 }
 
-func TestUploadRejectsOversizeWrongContentAndMov(t *testing.T) {
+func TestUploadRejectsOversizeAndWrongContent(t *testing.T) {
 	pool := mustPool(t)
 	ctx := context.Background()
 	orgID := seedOrg(t, ctx, pool)
@@ -343,12 +343,26 @@ func TestUploadRejectsOversizeWrongContentAndMov(t *testing.T) {
 	if !isValidation(err) {
 		t.Fatalf("fake video upload: err = %v, want validation", err)
 	}
-	// MOV is refused with what to do instead.
+	// A video to convert is checked from its own bytes too, and has its
+	// own, larger, limit.
 	_, err = svc.UploadFile(ctx, orgID, userID, contentgallery.UploadInput{
 		Filename: "IMG_0001.MOV", ContentType: "application/octet-stream", Size: 8, Reader: bytes.NewReader([]byte("whatever")),
+		Head: []byte("whatever"),
 	})
-	if !isValidation(err) || !strings.Contains(err.Error(), "MP4") {
-		t.Fatalf("mov upload: err = %v, want a validation error pointing at MP4", err)
+	if !isValidation(err) || !strings.Contains(err.Error(), "doesn't match") {
+		t.Fatalf("fake mov upload: err = %v, want validation", err)
+	}
+	_, err = svc.UploadFile(ctx, orgID, userID, contentgallery.UploadInput{
+		Filename: "long.mov", ContentType: "application/octet-stream", Size: 201 << 20, Reader: bytes.NewReader(minimalMOV), Head: minimalMOV,
+	})
+	if !isValidation(err) || !strings.Contains(err.Error(), "200MB") {
+		t.Fatalf("oversize mov upload: err = %v, want validation naming 200MB", err)
+	}
+	_, err = svc.UploadFile(ctx, orgID, userID, contentgallery.UploadInput{
+		Filename: "clip.flv", ContentType: "application/octet-stream", Size: 8, Reader: bytes.NewReader([]byte("FLV\x01abc")),
+	})
+	if !isValidation(err) || !strings.Contains(err.Error(), "unsupported") {
+		t.Fatalf("flv upload: err = %v, want unsupported", err)
 	}
 
 	_, err = svc.UploadFile(ctx, orgID, userID, contentgallery.UploadInput{
@@ -446,6 +460,10 @@ var (
 	minimalMP4  = append([]byte{0, 0, 0, 0x18, 'f', 't', 'y', 'p', 'm', 'p', '4', '2', 0, 0, 0, 0, 'm', 'p', '4', '2', 'i', 's', 'o', 'm'}, make([]byte, 64)...)
 	minimalWebM = append([]byte{0x1A, 0x45, 0xDF, 0xA3, 0x9F, 0x42, 0x86, 0x81, 0x01, 0x42, 0xF7, 0x81, 0x01, 0x42, 0xF2, 0x81, 0x04, 0x42, 0xF3, 0x81, 0x08, 0x42, 0x82, 0x84, 'w', 'e', 'b', 'm'}, make([]byte, 64)...)
 )
+
+// minimalMOV is a QuickTime file's first box: ftyp with the qt brand —
+// what sniffSource checks.
+var minimalMOV = append([]byte{0x00, 0x00, 0x00, 0x14, 'f', 't', 'y', 'p', 'q', 't', ' ', ' ', 0x00, 0x00, 0x00, 0x00, 'q', 't', ' ', ' '}, make([]byte, 64)...)
 
 func intp(v int) *int { return &v }
 

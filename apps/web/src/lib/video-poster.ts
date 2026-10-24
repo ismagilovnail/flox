@@ -1,8 +1,9 @@
 /**
  * What the browser reads from a video before it is uploaded to the Content
  * Gallery (docs/content-gallery.md "Video"): its first frame as a poster
- * image, its duration and frame size. FLOX stores videos as uploaded — no
- * server-side transcoding — so this is where the poster comes from. Any
+ * image, its duration and frame size. FLOX stores MP4/WebM as uploaded, so
+ * this is where their poster comes from; formats the server converts
+ * (TRANSCODE_EXTENSIONS) get theirs from apps/worker instead. Any
  * failure (a codec this browser cannot decode, a timeout) yields what was
  * read so far: the video still uploads, just without a poster.
  */
@@ -19,6 +20,15 @@ export const POSTER_MAX_SIDE = 640;
 const TIMEOUT_MS = 8000;
 
 export const VIDEO_EXTENSIONS = [".mp4", ".webm"];
+/** Converted to MP4 on the server (docs/content-gallery.md "Transcoding"). */
+export const TRANSCODE_EXTENSIONS = [".mov", ".m4v", ".avi", ".mkv", ".3gp"];
+
+/** A video the server converts: the browser does not read it (it may not
+ * decode it, and the server makes the poster anyway). */
+export function needsTranscoding(file: File): boolean {
+  const name = file.name.toLowerCase();
+  return TRANSCODE_EXTENSIONS.some((ext) => name.endsWith(ext));
+}
 
 export function isVideoFile(file: File): boolean {
   const name = file.name.toLowerCase();

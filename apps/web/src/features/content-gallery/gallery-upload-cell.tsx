@@ -8,9 +8,10 @@ import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { useUploadGalleryFile } from "@/hooks/use-content-gallery";
 import type { GalleryFile } from "@/lib/api/content-gallery";
+import { TRANSCODE_EXTENSIONS } from "@/lib/video-poster";
 
 const ACCEPT_IMAGES = ".webp,.jpg,.jpeg,.png,.gif,image/webp,image/jpeg,image/png,image/gif";
-const ACCEPT_VIDEOS = ".mp4,.webm,video/mp4,video/webm";
+const ACCEPT_VIDEOS = `.mp4,.webm,${TRANSCODE_EXTENSIONS.join(",")},video/mp4,video/webm,video/quicktime`;
 
 /** The upload cell always renders first in the grid (matches the
  * reference's own layout) — click it or drag a file onto it. Uploads go
@@ -26,7 +27,7 @@ export function GalleryUploadCell({
   allowVideo = false,
 }: {
   folderId?: string;
-  /** Accept MP4/WebM too (the gallery page); a field that needs an image
+  /** Accept videos too (the gallery page); a field that needs an image
    * (an icon, a screenshot) leaves it off. */
   allowVideo?: boolean;
   onUploaded?: (file: GalleryFile) => void;
@@ -45,7 +46,10 @@ export function GalleryUploadCell({
     upload.mutate(
       { file, folderId },
       {
-        onSuccess: onUploaded,
+        onSuccess: (uploaded) => {
+          if (uploaded.processingStatus === "processing") toast.info(t("upload.converting"), { description: t("upload.convertingHint") });
+          onUploaded?.(uploaded);
+        },
         onError: (err) => toast.error(t("upload.error"), { description: err.message }),
       },
     );

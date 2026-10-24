@@ -5,9 +5,13 @@ import type { VideoInfo } from "@/lib/video-poster";
  * media library modeled on the reference tracker's own Content Gallery
  * (https://adset.pro/guide_ru/galereya-kontenta), replacing the former
  * lib/mock/content-gallery.ts "template gallery" mock. Images and videos
- * (MP4/WebM, stored as uploaded — docs/content-gallery.md "Video"). */
+ * (MP4/WebM, stored as uploaded — docs/content-gallery.md "Video"; MOV and
+other formats are converted to MP4 by apps/worker — "Transcoding"). */
 export type GalleryFileType = "image" | "video";
 export type GalleryFileStatus = "active" | "archived";
+/** processing: a video waiting to be converted to MP4 (no url yet);
+ * failed: conversion failed, processingError says why. */
+export type GalleryProcessingStatus = "ready" | "processing" | "failed";
 
 export type GalleryFolder = {
   id: string;
@@ -39,6 +43,8 @@ export type GalleryFile = {
   durationMs?: number;
   width?: number;
   height?: number;
+  processingStatus: GalleryProcessingStatus;
+  processingError?: string;
 };
 
 export type ListFilesParams = {

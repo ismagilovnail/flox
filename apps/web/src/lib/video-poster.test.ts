@@ -1,13 +1,20 @@
 import { describe, expect, it } from "vitest";
 
 import { formatDuration } from "@/features/content-gallery/gallery-file-card";
-import { isVideoFile, POSTER_MAX_SIDE, posterSize } from "@/lib/video-poster";
+import { isVideoFile, needsTranscoding, POSTER_MAX_SIDE, posterSize } from "@/lib/video-poster";
 
 describe("gallery video helpers", () => {
   it("recognises MP4/WebM by type or extension", () => {
     expect(isVideoFile(new File([], "clip.MP4"))).toBe(true);
     expect(isVideoFile(new File([], "loop", { type: "video/webm" }))).toBe(true);
     expect(isVideoFile(new File([], "pic.png", { type: "image/png" }))).toBe(false);
+  });
+
+  it("leaves MOV and other converted formats to the server", () => {
+    expect(needsTranscoding(new File([], "IMG_0001.MOV", { type: "video/quicktime" }))).toBe(true);
+    expect(needsTranscoding(new File([], "clip.mkv"))).toBe(true);
+    expect(needsTranscoding(new File([], "clip.mp4", { type: "video/mp4" }))).toBe(false);
+    expect(needsTranscoding(new File([], "loop.webm"))).toBe(false);
   });
 
   it("scales the poster down to its longest side, never up", () => {
