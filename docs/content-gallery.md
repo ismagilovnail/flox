@@ -69,6 +69,17 @@ The owner changed the earlier "no ffmpeg on the server" choice: MOV, M4V,
   file keeps its source until it is deleted.
 - **Deleted mid-way:** the update only applies while the row still points
   at the source, so the MP4 and poster just made are removed instead.
+- **Untrusted input (audit SEC-7):** ffmpeg and ffprobe run with an
+  **empty environment** (the worker's holds the database password and the
+  storage and encryption keys); each file is opened with the one demuxer
+  its extension names, forced and the only one allowed (`-f` +
+  `-format_whitelist`: mov for MOV/M4V/3GP/MP4, avi, matroska, jpeg_pipe
+  for the poster), and only local files (`-protocol_whitelist file`) — a
+  crafted file cannot pull in an HLS or concat playlist that reads local
+  files or the network. ffmpeg 8.1 already refuses the simple playlist
+  disguises (checked); this is defence in depth. Not done: a separate
+  container without secrets and network, CPU/memory limits beyond
+  2 threads.
 - **Config:** `FFMPEG_PATH`/`FFPROBE_PATH` (`docs/environment.md`); the
   worker image installs `ffmpeg`. Without it or without object storage the
   worker logs a warning and files stay processing.

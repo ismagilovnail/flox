@@ -19,7 +19,7 @@ referenced below as §N).
 ## CURRENT STATE — UPDATE THIS EVERY PHASE
 
 ```
-CURRENT PHASE : PHASE 30.74 — BUG-9, CHSTORE TESTS READ THE RAW ROWS (closed)
+CURRENT PHASE : PHASE 30.75 — SEC-7, FFMPEG WITHOUT THE WORKER'S SECRETS (closed)
 STATUS        : Product audits 2026-10-15 and 2026-10-24 (docs/audit-
                 product-*.md; the second: universality, SEC-7..UX-4)
                 are the backlog: items on the local dev panel tools/devpanel
@@ -86,17 +86,18 @@ STATUS        : Product audits 2026-10-15 and 2026-10-24 (docs/audit-
                 GAP-1: MOV/M4V/3GP/AVI/MKV ≤ 200 MB → MP4 by apps/worker
                 (contentgallery.Processor, ffmpeg in the worker image,
                 migration 00100); real-ffmpeg test runs in infra-worker-1.
+                SEC-7: ffmpeg/ffprobe get an empty env and one forced,
+                whitelisted demuxer per extension + protocol file only.
                 BUG-9: chstore tests use NewRawEventStore (a store reads
                 the rollup once the dev backfill is done, and test events
                 are dated before the cutover); a test elsewhere that seeds
                 past events and reads rollup-able reports has the same trap.
                 P0 left (skipped by the user for now):
                 OPS-1..3 (prod, restore, load) — needs the owner's hosting.
-LAST COMMIT   : docs: product audit 2026-10-24 (universality).
+LAST COMMIT   : fix(gallery): ffmpeg without the worker's secrets (SEC-7).
 UNCOMMITTED   : docs/import-export-plan.md (INT-2, stays uncommitted).
-NEXT          : wait for the user — audit 2026-10-24 items: P0 SEC-7
-                (ffmpeg env/whitelists — my GAP-1 code), SEC-8 (Go
-                1.27.3/1.26.10, zod); P1 REL-2, DATA-8 (CBR rates), UNI-1;
+NEXT          : SEC-8 (Go 1.27.3/1.26.10, zod, fast-uri) — asked for
+                together with SEC-7; then wait. Audit 2026-10-24 items: P1 REL-2, DATA-8 (CBR rates), UNI-1;
                 BIZ-3/BIZ-4 part 2 are the user's (no interview script),
                 OPS-1..3 need hosting.
                 GAP-2 (Google Play import) is won't-do: do not offer it. INT-2 is

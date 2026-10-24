@@ -5,6 +5,22 @@ per-phase, matching `CLAUDE.md`'s phase protocol. The one exception is
 [Between phases], below: spec amendments and the code changes that follow from
 them land between phases and would otherwise be invisible here.
 
+## [Phase 30.75] — ffmpeg without the worker's secrets (SEC-7)
+
+docs/security.md §11, docs/content-gallery.md "Transcoding". Audit 2026-10-24: ffmpeg parsed uploaded videos with the
+worker's whole environment (database password, storage and encryption keys) and no limit on what it may open.
+
+- ffmpeg and ffprobe run with an empty environment.
+- Each file is opened with the one demuxer its extension names, forced and the only one allowed (`-f` +
+  `-format_whitelist`), and only local files (`-protocol_whitelist file`), so a crafted file cannot pull in an HLS or
+  concat playlist.
+- Checked first: ffmpeg 8.1 already refuses the simple playlist disguises, and the upload's byte check stops them
+  earlier — this is defence in depth, not a proven exploit.
+- Tests: the empty environment (mutation-checked, runs without ffmpeg), the demuxer per extension; with real ffmpeg in the
+  worker container: MOV, AVI, MKV convert, a playlist named .mov is refused. Live: an MKV uploaded through the dev API
+  became a 1280×720 MP4.
+- Not done: ffmpeg in its own container without secrets or network.
+
 ## [Phase 30.74] — chstore tests read the raw rows (BUG-9)
 
 docs/retention.md "Rollup". Since the dev database's rollup backfill finished, ~15 chstore report tests got 0 rows:

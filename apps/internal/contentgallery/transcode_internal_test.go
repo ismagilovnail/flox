@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -29,6 +30,41 @@ func TestSniffSource(t *testing.T) {
 		if got := sniffSource(tc.ext, tc.head); got != tc.want {
 			t.Errorf("sniffSource(%s, %q) = %v, want %v", tc.ext, tc.head, got, tc.want)
 		}
+	}
+}
+
+// The tools get no environment (audit SEC-7): the worker's holds the
+// database password and the storage and encryption keys.
+func TestToolsRunWithoutTheWorkersEnvironment(t *testing.T) {
+	env, err := exec.LookPath("env")
+	if err != nil {
+		t.Skip("no env binary")
+	}
+	t.Setenv("FLOX_TEST_SECRET", "s3cr3t")
+	out, err := FFmpeg{}.run(context.Background(), env)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(out) != 0 {
+		t.Fatalf("the tool's environment = %q, want empty", out)
+	}
+}
+
+// Each file is read with the one demuxer its extension names, and nothing
+// else is allowed (audit SEC-7).
+func TestInputArgsForceOneDemuxer(t *testing.T) {
+	for path, want := range map[string]string{"/t/source.MOV": "mov", "/t/source.3gp": "mov", "/t/video.mp4": "mov", "/t/source.avi": "avi", "/t/source.mkv": "matroska", "/t/poster.jpg": "jpeg_pipe"} {
+		args, err := inputArgs(path)
+		if err != nil {
+			t.Fatalf("inputArgs(%s): %v", path, err)
+		}
+		if got := strings.Join(args, " "); got != "-protocol_whitelist file -format_whitelist "+want+" -f "+want {
+			t.Errorf("inputArgs(%s) = %q", path, got)
+		}
+	}
+	var mErr *mediaError
+	if _, err := inputArgs("/t/list.m3u8"); !errors.As(err, &mErr) {
+		t.Fatalf("inputArgs(m3u8) = %v, want a mediaError", err)
 	}
 }
 
@@ -82,6 +118,32 @@ func TestFFmpegTranscodesAMOV(t *testing.T) {
 	}
 	if p, err := m.Probe(ctx, poster); err != nil || p.Width != 360 || p.Height != 640 {
 		t.Fatalf("Probe(poster) = %+v, %v; want 360x640", p, err)
+	}
+
+	// AVI and MKV through their own demuxers.
+	for _, ext := range []string{".avi", ".mkv"} {
+		other := filepath.Join(dir, "other"+ext)
+		if out, err := exec.Command(ffmpeg, "-hide_banner", "-loglevel", "error", "-f", "lavfi", "-i", "testsrc=size=320x240:rate=25:duration=1",
+			"-c:v", "mpeg4", other).CombinedOutput(); err != nil {
+			t.Fatalf("making the %s: %v\n%s", ext, err, out)
+		}
+		if err := m.ToMP4(ctx, other, filepath.Join(dir, "other"+ext+".mp4")); err != nil {
+			t.Fatalf("ToMP4(%s): %v", ext, err)
+		}
+	}
+	// A playlist named .mov that points at a local file is read as MOV
+	// only, and refused (audit SEC-7).
+	secret := filepath.Join(dir, "secret.txt")
+	if err := os.WriteFile(secret, []byte("TOPSECRET"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	playlist := filepath.Join(dir, "playlist.mov")
+	if err := os.WriteFile(playlist, []byte("#EXTM3U\n#EXTINF:1.0,\nfile://"+secret+"\n#EXT-X-ENDLIST\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	var plErr *mediaError
+	if err := m.ToMP4(ctx, playlist, filepath.Join(dir, "playlist.mp4")); !errors.As(err, &plErr) {
+		t.Fatalf("ToMP4(playlist) = %v, want a mediaError", err)
 	}
 
 	junk := filepath.Join(dir, "junk.mov")

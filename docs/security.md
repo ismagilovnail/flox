@@ -419,3 +419,14 @@ user in the panel.
   `API_PUBLIC_URL`). A customer tracking domain cannot be the panel's host:
   it needs DNS ownership proof.
 - **Not done:** a script CSP for the panel (see §7).
+
+## 11. Untrusted media in apps/worker (audit SEC-7)
+
+Gallery videos people upload are parsed by ffmpeg/ffprobe
+(`contentgallery/transcode.go`). They run with an empty environment, one
+forced and whitelisted demuxer per extension, and `-protocol_whitelist
+file` — docs/content-gallery.md "Transcoding". Tests:
+`TestToolsRunWithoutTheWorkersEnvironment` (mutation-checked),
+`TestInputArgsForceOneDemuxer`, and in `TestFFmpegTranscodesAMOV` a
+playlist disguised as MOV refused. Remaining: run ffmpeg in its own
+container without secrets or network.
