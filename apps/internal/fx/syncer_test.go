@@ -92,3 +92,22 @@ func TestSyncerProviderFailureChangesNothing(t *testing.T) {
 		t.Fatal("a failed fetch still wrote or repaired")
 	}
 }
+
+// Combine (audit DATA-8): one provider down still stores the others'
+// rates; every provider down is an error.
+func TestCombineKeepsTheRatesOfTheProvidersThatAnswered(t *testing.T) {
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	since := time.Date(2026, 10, 1, 0, 0, 0, 0, time.UTC)
+	ecb, cbr := &fakeProvider{}, &fakeProvider{err: errors.New("cbr down")}
+	rates, err := fx.Combine(logger, map[string]fx.Provider{"ecb": ecb, "cbr": cbr}).Rates(context.Background(), since)
+	if err != nil || len(rates) != 1 || rates[0].Currency != "EUR" {
+		t.Fatalf("one down: rates = %+v, err = %v; want the other's", rates, err)
+	}
+	if !ecb.since.Equal(since) || !cbr.since.Equal(since) {
+		t.Fatalf("since passed = %v / %v", ecb.since, cbr.since)
+	}
+	_, err = fx.Combine(logger, map[string]fx.Provider{"ecb": &fakeProvider{err: errors.New("ecb down")}, "cbr": cbr}).Rates(context.Background(), since)
+	if err == nil {
+		t.Fatal("every provider down: want an error")
+	}
+}

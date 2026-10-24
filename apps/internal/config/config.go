@@ -106,8 +106,9 @@ type Config struct {
 	SentryDSN, SentryEnvironment string
 
 	// FXProvider is where apps/worker pulls reference FX rates from
-	// (internal/fx): "ecb" (default) or "none" — offline dev, or rates
-	// loaded into fx_rates by other means.
+	// (internal/fx): a comma list of "ecb" and "cbr" (default both: the
+	// ECB, and the Bank of Russia for the rouble and CIS currencies), or
+	// "none" — offline dev, or rates loaded into fx_rates by other means.
 	FXProvider string
 
 	// Retention (apps/worker, internal/retention; tech audit CH3/DB2).
@@ -391,7 +392,7 @@ func load(portVar, portDefault, defaultServiceName string, ch chLimits) (Config,
 		SMSWebhookSecret:         getEnv("SMS_WEBHOOK_SECRET", ""),
 		LandingLinkKey:           getEnv("LANDING_LINK_KEY", ""),
 		StickyCookieKey:          getEnv("STICKY_COOKIE_KEY", ""),
-		FXProvider:               getEnv("FX_PROVIDER", "ecb"),
+		FXProvider:               getEnv("FX_PROVIDER", "ecb,cbr"),
 
 		RetentionFailedPostbacksDays: failedDays,
 		RetentionPostbackLogMonths:   logMonths,

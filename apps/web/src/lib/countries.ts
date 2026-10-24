@@ -37,7 +37,16 @@ export const COUNTRIES: CountryOption[] = [
   { code: "KR", name: "South Korea" },
 ];
 
-export const CURRENCIES = ["USD", "EUR", "GBP", "CAD", "AUD", "SEK", "PLN", "BRL"];
+/** Every currency FLOX has reference rates for (docs/fx.md): the ECB's and,
+ * for the rouble and CIS currencies, the Bank of Russia's (audit DATA-8).
+ * The server takes any ISO 4217 code; one outside this list gets no USD
+ * value. */
+export const CURRENCIES = [
+  "USD", "EUR", "RUB", "AED", "AMD", "AUD", "AZN", "BDT", "BHD", "BOB", "BRL", "BYN", "CAD", "CHF", "CNY",
+  "CUP", "CZK", "DKK", "DZD", "EGP", "ETB", "GBP", "GEL", "HKD", "HUF", "IDR", "ILS", "INR", "IRR", "ISK",
+  "JPY", "KGS", "KRW", "KZT", "MDL", "MMK", "MNT", "MXN", "MYR", "NGN", "NOK", "NZD", "OMR", "PHP", "PLN",
+  "QAR", "RON", "RSD", "SAR", "SEK", "SGD", "THB", "TJS", "TMT", "TRY", "UAH", "UZS", "VND", "ZAR",
+];
 
 /** Every ISO-3166-1 alpha-2 code. Names are not stored: `countryOptions` asks the
  * browser (Intl.DisplayNames) for them in the interface language. */

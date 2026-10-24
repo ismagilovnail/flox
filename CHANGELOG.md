@@ -5,6 +5,25 @@ per-phase, matching `CLAUDE.md`'s phase protocol. The one exception is
 [Between phases], below: spec amendments and the code changes that follow from
 them land between phases and would otherwise be invisible here.
 
+## [Phase 30.77] — Rouble and CIS currency rates from the Bank of Russia (DATA-8)
+
+docs/fx.md "internal/fx/cbr". Audit 2026-10-24: the ECB, the only rate source, publishes no RUB, UAH or KZT, so payouts
+and spend in them had no USD value and dropped out of reports — while FLOX's own plans sell in roubles.
+
+- `internal/fx/cbr`: the Bank of Russia's official rates for what the ECB lacks (RUB, UAH, KZT, BYN, UZS, AMD, AZN, GEL,
+  AED and others; 28 currencies + RUB), crossed through the dollar, nominals applied. A rate is written for every day up
+  to the next one: the New Year holidays leave ~13 days without one, longer than the 7-day lookup.
+- `fx.Combine`: each provider the only source of its currencies; one down (logged) does not hold back the other.
+  `FX_PROVIDER` is a comma list, default `ecb,cbr` (also in infra/k8s).
+- The Bank's site answered TLS stalls and 429 to bursts during the live check: requests are 300 ms apart and a network
+  error, 5xx or 429 is tried 3 times.
+- UI: networks, offers and the organization's display currency offer all 59 currencies with rates (RUB third).
+- Tests: cross rates and the holiday carry-over (mutation-checked), only this provider's currencies, retries, failures;
+  `Combine` with one or every provider down; live against cbr.ru (`CBR_LIVE=1`, in the worker container 4 of 4). Live on
+  the dev stack: 5 000 RUB on 24.10 = $62.08 through the postback lookup, Sunday 18.10 carried from Saturday.
+- Known: adding `cbr` to a database that already has ECB rates starts its currencies a week back, not 90 days; events
+  in them are still repaired back to the oldest one missing.
+
 ## [Phase 30.76] — Go 1.27.3, zod 4.6.6 (SEC-8)
 
 Audit 2026-10-24. `crypto/x509` GO-2026-6809 (distrust compromised intermediates) was reachable through the domains' TLS

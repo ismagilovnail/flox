@@ -31,6 +31,7 @@ import (
 	"os"
 	"os/exec"
 	"os/signal"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -62,6 +63,7 @@ import (
 	"github.com/ismagilovnail/flox/apps/internal/eventqueue"
 	"github.com/ismagilovnail/flox/apps/internal/eventstream"
 	"github.com/ismagilovnail/flox/apps/internal/fx"
+	"github.com/ismagilovnail/flox/apps/internal/fx/cbr"
 	"github.com/ismagilovnail/flox/apps/internal/fx/ecb"
 	"github.com/ismagilovnail/flox/apps/internal/integrations"
 	"github.com/ismagilovnail/flox/apps/internal/logging"
@@ -333,16 +335,26 @@ func run() error {
 	// USD value and drops out of Revenue/Cost/ROI (tech audit AN1).
 	// Same "fail loudly at boot" bar as the key above: a typo must not
 	// silently leave every non-USD amount without a USD value.
+	// FX_PROVIDER is a comma list: the ECB for what it publishes, the Bank
+	// of Russia for the rouble and CIS currencies (audit DATA-8).
 	var fxProvider fx.Provider
-	switch cfg.FXProvider {
-	case "ecb":
-		fxProvider = ecb.New()
-	case "none":
+	if cfg.FXProvider == "none" {
 		logger.Warn("FX_PROVIDER=none: fx_rates is not synced, non-USD amounts get a USD value only if rates are loaded by other means")
-	default:
-		err := fmt.Errorf("unknown FX_PROVIDER %q (want ecb or none)", cfg.FXProvider)
-		logger.Error("fx provider configuration failed", "error", err)
-		return err
+	} else {
+		providers := map[string]fx.Provider{}
+		for _, name := range strings.Split(cfg.FXProvider, ",") {
+			switch name = strings.TrimSpace(name); name {
+			case "ecb":
+				providers[name] = ecb.New()
+			case "cbr":
+				providers[name] = cbr.New()
+			default:
+				err := fmt.Errorf("unknown FX_PROVIDER %q (want a comma list of ecb, cbr, or none)", cfg.FXProvider)
+				logger.Error("fx provider configuration failed", "error", err)
+				return err
+			}
+		}
+		fxProvider = fx.Combine(logger, providers)
 	}
 
 	adAccountRepo := adaccount.NewRepository(db, adAccountKey)

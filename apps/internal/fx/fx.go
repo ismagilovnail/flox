@@ -22,6 +22,7 @@ import (
 	"fmt"
 	"log/slog"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -356,4 +357,45 @@ func (s *Syncer) RunLoop(ctx context.Context, interval time.Duration) {
 			tick()
 		}
 	}
+}
+
+// Combine is a Provider over several, each the source of its own
+// currencies (internal/fx/ecb for what the ECB publishes, internal/fx/cbr
+// for the rouble and CIS currencies — audit DATA-8). One failing does not
+// hold back the others' rates: the failure is logged and the next sync
+// fetches its days again; only when every provider fails is it an error.
+func Combine(logger *slog.Logger, providers map[string]Provider) Provider {
+	return &combined{logger: logger, providers: providers}
+}
+
+type combined struct {
+	logger    *slog.Logger
+	providers map[string]Provider
+}
+
+func (c *combined) Rates(ctx context.Context, since time.Time) ([]Rate, error) {
+	names := make([]string, 0, len(c.providers))
+	for name := range c.providers {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	var out []Rate
+	var failed []string
+	var last error
+	for _, name := range names {
+		rates, err := c.providers[name].Rates(ctx, since)
+		if err != nil {
+			if ctx.Err() != nil {
+				return nil, ctx.Err()
+			}
+			c.logger.Warn("fx provider failed; the others' rates are still stored", "provider", name, "error", err)
+			failed, last = append(failed, name), err
+			continue
+		}
+		out = append(out, rates...)
+	}
+	if len(failed) == len(names) {
+		return nil, fmt.Errorf("fx: every provider failed (%s): %w", strings.Join(failed, ", "), last)
+	}
+	return out, nil
 }

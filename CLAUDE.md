@@ -19,7 +19,7 @@ referenced below as §N).
 ## CURRENT STATE — UPDATE THIS EVERY PHASE
 
 ```
-CURRENT PHASE : PHASE 30.76 — SEC-8, GO 1.27.3 AND ZOD 4.6.6 (closed)
+CURRENT PHASE : PHASE 30.77 — DATA-8, BANK OF RUSSIA RATES (closed)
 STATUS        : Product audits 2026-10-15 and 2026-10-24 (docs/audit-
                 product-*.md; the second: universality, SEC-7..UX-4)
                 are the backlog: items on the local dev panel tools/devpanel
@@ -88,16 +88,19 @@ STATUS        : Product audits 2026-10-15 and 2026-10-24 (docs/audit-
                 migration 00100); real-ffmpeg test runs in infra-worker-1.
                 SEC-7: ffmpeg/ffprobe get an empty env and one forced,
                 whitelisted demuxer per extension + protocol file only.
+                DATA-8: FX_PROVIDER=ecb,cbr (fx.Combine; cbr only for what
+                the ECB lacks, carried over gaps, paced, retried). Restarting
+                the dev worker re-runs the sync — cbr.ru answers bursts 429.
                 BUG-9: chstore tests use NewRawEventStore (a store reads
                 the rollup once the dev backfill is done, and test events
                 are dated before the cutover); a test elsewhere that seeds
                 past events and reads rollup-able reports has the same trap.
                 P0 left (skipped by the user for now):
                 OPS-1..3 (prod, restore, load) — needs the owner's hosting.
-LAST COMMIT   : chore(deps): Go 1.27.3, zod 4.6.6 (SEC-8).
+LAST COMMIT   : feat(fx): rouble and CIS currency rates from the Bank of Russia (DATA-8).
 UNCOMMITTED   : docs/import-export-plan.md (INT-2, stays uncommitted).
 NEXT          : wait for the user. Audit 2026-10-24 items: P1 REL-2,
-                DATA-8 (CBR rates), UNI-1;
+                UNI-1;
                 BIZ-3/BIZ-4 part 2 are the user's (no interview script),
                 OPS-1..3 need hosting.
                 GAP-2 (Google Play import) is won't-do: do not offer it. INT-2 is

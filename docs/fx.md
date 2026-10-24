@@ -11,18 +11,46 @@ ROI.
 ## Where rates come from
 
 `apps/worker` runs `internal/fx.Syncer` at startup and every 4 hours
-(`FX_PROVIDER`, `docs/environment.md`). The provider is behind
-`fx.Provider` (CLAUDE.md #11); the default is `internal/fx/ecb`:
+(`FX_PROVIDER`, `docs/environment.md`). Providers are behind `fx.Provider`
+(CLAUDE.md #11); the default is both below, through `fx.Combine`, each the
+only source of its own currencies (one currency never mixes two sources'
+rates). One failing does not hold back the other: it is logged ("fx
+provider failed") and its days are fetched again on the next run.
+
+### `internal/fx/ecb`
 
 - European Central Bank reference rates: free, no key, one fixing per
   TARGET working day around 16:00 CET.
 - ECB quotes against EUR; a USD rate is `r_USD / r_C`, and EUR itself is
   `r_USD`. USD is never stored — it converts 1:1.
-- About 30 currencies. **RUB (suspended since 2022), UAH, KZT and other
-  currencies common in affiliate traffic are not published** — amounts in
-  them stay without a USD value until another provider is added.
+- About 30 currencies. RUB (suspended since 2022), UAH, KZT and other
+  currencies common in affiliate traffic are not published — the Bank of
+  Russia covers them.
 - The 90-day feed (~100 KB) is used normally; the full history (~7.5 MB)
   only when a first sync must reach further back.
+
+### `internal/fx/cbr` (audit DATA-8)
+
+- Bank of Russia official rates (www.cbr.ru/scripts): free, no key, set
+  every working day for the next one.
+- Only what the ECB lacks (`cbr.Currencies`): RUB, UAH, KZT, BYN, UZS, AMD,
+  AZN, GEL, KGS, MDL, TJS, TMT, AED, SAR, QAR, EGP, VND and others; XDR is
+  left out.
+- The Bank quotes in roubles: a USD rate is `(Value_C / Nominal_C) /
+  (Value_USD / Nominal_USD)` (the tenge is quoted per 100), RUB is
+  `1 / (Value_USD / Nominal_USD)`.
+- A rate is in force until the next one is set, so it is **written for
+  every day** up to the next one (and up to today). Needed: the New Year
+  holidays leave no rate for ~13 days (31.12.2025 → 13.01.2026), longer
+  than `MaxStaleDays`.
+- One request for today's list (the Bank's currency ids), then one series
+  per currency from three weeks before `since` (the rate in force on
+  `since`): ~30 requests a run, 300 ms apart; a network error, 5xx or 429
+  is tried 3 times. Responses are windows-1251 XML.
+- Adding the provider to a database that already has ECB rates: its
+  currencies start from a week before the newest stored rate, not 90 days
+  (the run's `since` is one for all providers). Older events in them still
+  get a USD value — the repair reaches back to the oldest one missing.
 
 Each run fetches from a week before the newest stored rate (picking up
 corrections), or further back if an older event still lacks a USD value,

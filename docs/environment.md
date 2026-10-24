@@ -247,10 +247,10 @@ needs no configuration at all.
 
 | Variable | Dev value | Staging/production |
 |---|---|---|
-| `FX_PROVIDER` | `ecb` (default) | `ecb`. `none` only when `fx_rates` is filled by other means — then non-USD amounts get a USD value only from those rows. Anything else fails `apps/worker` at boot. |
+| `FX_PROVIDER` | `ecb,cbr` (default) | A comma list of `ecb` (the ECB) and `cbr` (the Bank of Russia: RUB, UAH, KZT and other currencies the ECB lacks). `none` only when `fx_rates` is filled by other means — then non-USD amounts get a USD value only from those rows. Anything else fails `apps/worker` at boot. |
 
-`ecb` needs no key and outbound HTTPS to `www.ecb.europa.eu` from
-`apps/worker`. See `docs/fx.md`.
+Neither needs a key; `apps/worker` needs outbound HTTPS to
+`www.ecb.europa.eu` and `www.cbr.ru`. See `docs/fx.md`.
 
 ### Error tracking
 
