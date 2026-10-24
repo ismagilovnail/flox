@@ -988,5 +988,23 @@
   "createdAt": "2026-10-24T15:52:21+05:00",
   "updatedAt": "2026-10-24T15:52:21+05:00",
   "source": "audit-2026-10-24"
+ },
+ {
+  "id": "BUG-10",
+  "code": "BUG-10",
+  "priority": "P1",
+  "severity": "high",
+  "kind": "bug",
+  "area": "integrations",
+  "title": "Синхронизация расходов Google Ads вызывает Ads API v17 — скорее всего, уже отключённую версию",
+  "evidence": "apps/internal/adaccount/googleads/googleads.go:39 DefaultAdsBaseURL …/v17. По release notes Google последняя версия — v26 (14.10.2026); старые версии Google отключает по графику. Найдено при UNI-2 ч.2 2026-10-24; с живым API не проверялось.",
+  "fix": "Поднять версию до актуальной (проверить формат ответа googleAds:search в новой версии), вынести версию в одну константу; при возможности проверить на реальном аккаунте.",
+  "impact": "Импорт расходов Google Ads, вероятно, не работает на реальном аккаунте: ROI/ROAS по Google без расходов.",
+  "status": "todo",
+  "notes": "",
+  "order": 46,
+  "source": "session-2026-10-24",
+  "createdAt": "2026-10-24T21:59:17+05:00",
+  "updatedAt": "2026-10-24T21:59:17+05:00"
  }
 ]

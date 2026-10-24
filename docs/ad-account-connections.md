@@ -663,3 +663,16 @@ ClickHouse/Redis/MinIO. No frontend change: `apps/web`'s
 and never reads one back — the wire contract this package's own
 `Connection` doc comment already documented as write-only stays exactly
 that.
+
+## Offline conversions (audit UNI-2 part 2)
+
+A Google Ads connection can also report conversions back to Google:
+docs/offline-conversions.md. It goes through the Data Manager API, not the
+Ads API, and needs the refresh token minted with the
+`https://www.googleapis.com/auth/datamanager` scope as well.
+
+The cost adapter above still calls Ads API `v17`. Google's release notes
+list v26 (October 2026) as the latest, and old versions are sunset on a
+schedule. v17 is most likely no longer served, so the cost sync would fail
+against a real account. Not checked against the live API (audit board
+BUG-10).

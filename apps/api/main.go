@@ -64,6 +64,7 @@ import (
 	"github.com/ismagilovnail/flox/apps/internal/network"
 	"github.com/ismagilovnail/flox/apps/internal/offer"
 	"github.com/ismagilovnail/flox/apps/internal/offercap"
+	"github.com/ismagilovnail/flox/apps/internal/offlineconv"
 	"github.com/ismagilovnail/flox/apps/internal/onboarding"
 	"github.com/ismagilovnail/flox/apps/internal/openapi"
 	"github.com/ismagilovnail/flox/apps/internal/orgdeletion"
@@ -799,11 +800,15 @@ func buildServer(ctx context.Context, cfg config.Config, logger *slog.Logger, re
 		TikTokAds:   tiktokads.New(),
 		GoogleAds:   googleads.New(),
 	}), requireSourceWrite, logger)
+	// Offline conversions to Google Ads (audit UNI-2 part 2): the source's
+	// export settings and counts; apps/worker sends.
+	offlineConvHandler := offlineconv.NewHandler(offlineconv.NewService(offlineconv.NewRepository(db), nil, nil, nil, logger), requireSourceWrite, logger)
 	srv.Mux().Route("/traffic-sources/{id}/connection", func(r chi.Router) {
 		r.Use(tenantMiddleware)
 		r.Use(readGate("source.read"))
 		adAccountHandler.Register(r)
 		costSyncHandler.Register(r)
+		offlineConvHandler.Register(r)
 	})
 
 	streamSetHandler := streamset.NewHandler(streamset.NewService(streamset.NewRepository(db)).WithQuota(billingSvc), requireOwnCampaign("campaignId"), logger)

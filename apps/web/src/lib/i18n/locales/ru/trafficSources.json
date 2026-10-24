@@ -71,7 +71,7 @@
     "clientIdLabel": "OAuth client ID",
     "clientSecretLabel": "OAuth client secret",
     "refreshTokenLabel": "Refresh-токен",
-    "googleAdsHint": "Получите refresh-токен один раз через Google OAuth 2.0 Playground, используя собственный токен разработчика Google Ads и OAuth-клиент — у FLOX нет зарегистрированного публичного callback для собственного OAuth-подтверждения.",
+    "googleAdsHint": "Получите refresh-токен один раз через Google OAuth 2.0 Playground, используя собственный токен разработчика Google Ads и OAuth-клиент — у FLOX нет зарегистрированного публичного callback для собственного OAuth-подтверждения. Для офлайн-конверсий выпустите токен сразу с двумя scope: Google Ads и https://www.googleapis.com/auth/datamanager.",
     "connect": "Подключить",
     "disconnect": "Отключить",
     "syncNow": "Синхронизировать",
@@ -143,5 +143,55 @@
     "statusesLabel": "Отправлять для статусов",
     "statusesRequired": "Выберите хотя бы один статус",
     "statusesHint": "Обычно только одобренная конверсия: каждый отправленный статус сеть посчитает конверсией."
+  },
+  "offline": {
+    "title": "Офлайн-конверсии в Google Ads",
+    "description": "Заявки и покупки по кликам из Google (с gclid) отправляются обратно в Google Ads — тогда Google видит, какая реклама приносит продажи, и может оптимизировать ставки под них. Отправляются только конверсии, полученные после включения, каждые 5 минут.",
+    "enabledAria": "Отправлять конверсии в Google Ads",
+    "loading": "Загрузка настроек офлайн-конверсий…",
+    "fields": {
+      "leadActionId": "Действие для заявок",
+      "purchaseActionId": "Действие для покупок",
+      "repurchaseActionId": "Действие для повторных покупок",
+      "loginAccountId": "Управляющий аккаунт (MCC), если есть"
+    },
+    "actionsHint": "Это ID конверсий-действий в Google Ads с источником «Импорт из кликов» (Цели › Конверсии › действие › ctId в адресе). Пустое поле — этот статус не отправляется. Возврат пересчитывает сумму уже отправленной покупки.",
+    "scopeHint": "Refresh-токен должен быть выпущен со scope https://www.googleapis.com/auth/datamanager (Data Manager API включён в проекте Google Cloud), а ваш Google-аккаунт — иметь доступ к рекламному аккаунту. Иначе Google отклонит отправку — причина появится ниже.",
+    "save": "Сохранить",
+    "saved": "Настройки офлайн-конверсий сохранены",
+    "saveError": "Не удалось сохранить настройки",
+    "lastError": "Последняя ошибка Google:",
+    "counts": {
+      "sent_one": "{{count}} отправлена",
+      "sent_few": "{{count}} отправлены",
+      "sent_many": "{{count}} отправлено",
+      "sent_other": "{{count}} отправлены",
+      "pending_one": "{{count}} в очереди",
+      "pending_few": "{{count}} в очереди",
+      "pending_many": "{{count}} в очереди",
+      "pending_other": "{{count}} в очереди",
+      "failed_one": "{{count}} отклонена",
+      "failed_few": "{{count}} отклонены",
+      "failed_many": "{{count}} отклонено",
+      "failed_other": "{{count}} отклонены"
+    },
+    "skipped": {
+      "no_google_click_one": "{{count}} конверсия — клик без gclid (не из Google или без автопометки)",
+      "no_google_click_few": "{{count}} конверсии — клик без gclid (не из Google или без автопометки)",
+      "no_google_click_many": "{{count}} конверсий — клик без gclid (не из Google или без автопометки)",
+      "no_google_click_other": "{{count}} конверсии — клик без gclid (не из Google или без автопометки)",
+      "no_action_one": "{{count}} конверсия — для её статуса не указано действие",
+      "no_action_few": "{{count}} конверсии — для их статуса не указано действие",
+      "no_action_many": "{{count}} конверсий — для их статуса не указано действие",
+      "no_action_other": "{{count}} конверсии — для их статуса не указано действие",
+      "not_attributed_one": "{{count}} конверсия — без клика",
+      "not_attributed_few": "{{count}} конверсии — без клика",
+      "not_attributed_many": "{{count}} конверсий — без клика",
+      "not_attributed_other": "{{count}} конверсии — без клика",
+      "click_not_found_one": "{{count}} конверсия — клик не найден",
+      "click_not_found_few": "{{count}} конверсии — клик не найден",
+      "click_not_found_many": "{{count}} конверсий — клик не найден",
+      "click_not_found_other": "{{count}} конверсии — клик не найден"
+    }
   }
 }

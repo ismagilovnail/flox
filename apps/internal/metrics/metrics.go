@@ -174,10 +174,6 @@ var (
 		Help:      "Queue rows dead-lettered after ClickHouse repeatedly rejected their batch, by queue.",
 	}, []string{"queue"})
 
-	// PostbackIncomingTotal counts incoming network postbacks (apps/tracker
-	// /postback/{networkId}) by result: the conversion engine's own
-	// (success, duplicate, ignored, error) or a request refused before it
-	// (unknown_network, unauthorized, bad_request, internal_error).
 	// BrowserConversionsTotal counts conversions from a page's script
 	// (apps/tracker /c/{networkId}, audit UNI-1 part 2) by result: the
 	// engine's, unknown_click (fresh, retried) or a refusal before it
@@ -189,6 +185,19 @@ var (
 		Help:      "Conversions reported by a page's script, by result.",
 	}, []string{"result"})
 
+	// OfflineConversionsTotal counts conversions reported to an ad network
+	// (internal/offlineconv, audit UNI-2 part 2) by result: sent, retry
+	// (to be sent again), failed (refused, or out of attempts).
+	OfflineConversionsTotal = promauto.NewCounterVec(prometheus.CounterOpts{
+		Namespace: namespace,
+		Name:      "offline_conversions_total",
+		Help:      "Conversions reported to an ad network, by result.",
+	}, []string{"result"})
+
+	// PostbackIncomingTotal counts incoming network postbacks (apps/tracker
+	// /postback/{networkId}) by result: the conversion engine's own
+	// (success, duplicate, ignored, error) or a request refused before it
+	// (unknown_network, unauthorized, bad_request, internal_error).
 	PostbackIncomingTotal = promauto.NewCounterVec(prometheus.CounterOpts{
 		Namespace: namespace,
 		Name:      "postback_incoming_total",

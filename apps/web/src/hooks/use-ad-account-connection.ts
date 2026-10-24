@@ -6,8 +6,11 @@ import {
   connectAdAccount,
   disconnectAdAccount,
   getAdAccountConnection,
+  getOfflineConversions,
   syncAdAccount,
+  updateOfflineConversions,
   type ConnectAdAccountInput,
+  type OfflineConversionsInput,
 } from "@/lib/api/ad-account-connections";
 import { ApiError } from "@/lib/api/client";
 
@@ -59,5 +62,25 @@ export function useSyncAdAccount(trafficSourceId: string) {
   return useMutation({
     mutationFn: () => syncAdAccount(trafficSourceId),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["cost-entries"] }),
+  });
+}
+
+const offlineKey = (trafficSourceId: string) => ["offline-conversions", trafficSourceId] as const;
+
+/** A Google Ads source's export of conversions to Google (audit UNI-2
+ * part 2); enabled false skips the request (no Google connection). */
+export function useOfflineConversions(trafficSourceId: string, enabled: boolean) {
+  return useQuery({
+    queryKey: offlineKey(trafficSourceId),
+    queryFn: () => getOfflineConversions(trafficSourceId),
+    enabled: !!trafficSourceId && enabled,
+  });
+}
+
+export function useUpdateOfflineConversions(trafficSourceId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: OfflineConversionsInput) => updateOfflineConversions(trafficSourceId, input),
+    onSuccess: (data) => qc.setQueryData(offlineKey(trafficSourceId), data),
   });
 }

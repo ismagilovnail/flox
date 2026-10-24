@@ -58,3 +58,36 @@ export type SyncResult = {
 export function syncAdAccount(trafficSourceId: string): Promise<SyncResult> {
   return apiFetch(`/traffic-sources/${trafficSourceId}/connection/sync`, { method: "POST" });
 }
+
+/** Mirrors apps/internal/offlineconv.Status: a Google Ads source's export
+ * of conversions back to Google (audit UNI-2 part 2). Action ids are
+ * Google Ads conversion action ids; an empty one leaves that status
+ * unsent. counts: per upload status; skipped: per reason. */
+export type OfflineConversions = {
+  enabled: boolean;
+  since: string | null;
+  loginAccountId: string;
+  leadActionId: string;
+  purchaseActionId: string;
+  repurchaseActionId: string;
+  counts: Partial<Record<"pending" | "sent" | "failed" | "skipped", number>>;
+  skipped: Partial<Record<OfflineSkipReason, number>>;
+  lastError: string;
+  lastErrorAt: string | null;
+  lastSentAt: string | null;
+};
+
+export type OfflineSkipReason = "not_attributed" | "click_not_found" | "no_google_click" | "source_off" | "no_action";
+
+export type OfflineConversionsInput = Pick<
+  OfflineConversions,
+  "enabled" | "loginAccountId" | "leadActionId" | "purchaseActionId" | "repurchaseActionId"
+>;
+
+export function getOfflineConversions(trafficSourceId: string): Promise<OfflineConversions> {
+  return apiFetch(`/traffic-sources/${trafficSourceId}/connection/offline-conversions`);
+}
+
+export function updateOfflineConversions(trafficSourceId: string, input: OfflineConversionsInput): Promise<OfflineConversions> {
+  return apiFetch(`/traffic-sources/${trafficSourceId}/connection/offline-conversions`, { method: "PUT", body: input });
+}

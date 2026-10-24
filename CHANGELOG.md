@@ -5,6 +5,23 @@ per-phase, matching `CLAUDE.md`'s phase protocol. The one exception is
 [Between phases], below: spec amendments and the code changes that follow from
 them land between phases and would otherwise be invisible here.
 
+## [Phase 30.84] — Offline conversions to Google Ads (UNI-2, part 2)
+
+docs/offline-conversions.md. A Google Ads source reports its leads, purchases and repeat purchases back to Google by
+the click's gclid/gbraid/wbraid — through the Data Manager API (`events:ingest`): Google closed UploadClickConversions
+to developer tokens new to it from 15 June 2026.
+
+- Settings on the source's connection (migration 00104): on/off (only conversions from then on), a conversion action
+  per status, an optional manager account; `GET/PUT /v1/traffic-sources/{id}/connection/offline-conversions`.
+- apps/worker every 5 minutes (`internal/offlineconv`): one queue row per conversion — pending, or skipped with the
+  reason; a refund restates the purchase under the same transaction id; requests of ≤2000 per action; a refused
+  request is split so only the bad event fails; other errors back off up to 12 tries; rows leased while sent.
+  `flox_offline_conversions_total`.
+- The source page: a section with the settings, sent/queued/refused counts, skip reasons and Google's last error.
+- Tests: the Data Manager request and its errors (fake server); the queue end to end on Postgres with postbacks
+  recorded by the real engine (mutation-checked: restatement, split, the window); the section. Not checked against the
+  live API. Found: the cost sync still calls Ads API v17 (BUG-10 on the board).
+
 ## [Phase 30.83] — Google, Yandex and Microsoft click ids (UNI-2, part 1)
 
 docs/attribution.md "Search and ad networks' click ids". The tracker keeps `gclid` (`gbraid`/`wbraid`), `yclid` or

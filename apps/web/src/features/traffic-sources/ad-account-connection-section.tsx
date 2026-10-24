@@ -21,6 +21,7 @@ import {
   useSyncAdAccount,
 } from "@/hooks/use-ad-account-connection";
 import { COST_INTEGRATION_I18N_KEY, type CostIntegration } from "@/lib/api/traffic-sources";
+import { OfflineConversionsSection } from "@/features/traffic-sources/offline-conversions-section";
 
 type AdAccountProvider = Extract<CostIntegration, "facebook_ads" | "tiktok_ads" | "google_ads">;
 
@@ -199,6 +200,8 @@ export function AdAccountConnectionSection({
               )}
             </div>
           )}
+
+          {isGoogleAds && <OfflineConversionsSection trafficSourceId={trafficSourceId} />}
         </div>
       ) : (
         // A <form> here (rather than this <div>) would nest inside

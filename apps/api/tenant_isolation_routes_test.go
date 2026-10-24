@@ -861,6 +861,14 @@ func referenceCases(env *isolationEnv) []refCase {
 // a referenceCases entry or listed here with a reason.
 var notReferences = map[string]string{
 	"adAccountId":                  "the ad platform's own account id",
+	"accountId":                    "Google's account id, in a request FLOX sends to Google (googleads.DataManager)",
+	"productDestinationId":         "a Google Ads conversion action id, in a request FLOX sends to Google",
+	"transactionId":                "the postback id as Google's transaction id, in a request FLOX sends to Google",
+	"requestId":                    "Google's id of a request FLOX sent it",
+	"loginAccountId":               "a Google Ads manager account id",
+	"leadActionId":                 "a Google Ads conversion action id",
+	"purchaseActionId":             "a Google Ads conversion action id",
+	"repurchaseActionId":           "a Google Ads conversion action id",
 	"tgChatId":                     "response only: Telegram's id of a channel",
 	"telegramChannelId":            "event payload only: set by the tracker's webhook from the bot's own channel, never read from a request",
 	"clientId":                     "the ad platform's OAuth client id",

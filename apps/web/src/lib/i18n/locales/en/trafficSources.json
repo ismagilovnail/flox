@@ -71,7 +71,7 @@
     "clientIdLabel": "OAuth client ID",
     "clientSecretLabel": "OAuth client secret",
     "refreshTokenLabel": "Refresh token",
-    "googleAdsHint": "Mint the refresh token once via Google's OAuth 2.0 Playground using your own Google Ads developer token and OAuth client — FLOX has no registered public callback to run its own OAuth consent flow.",
+    "googleAdsHint": "Mint the refresh token once via Google's OAuth 2.0 Playground using your own Google Ads developer token and OAuth client — FLOX has no registered public callback to run its own OAuth consent flow. For offline conversions, mint it with both scopes: Google Ads and https://www.googleapis.com/auth/datamanager.",
     "connect": "Connect",
     "disconnect": "Disconnect",
     "syncNow": "Sync now",
@@ -143,5 +143,41 @@
     "statusesLabel": "Send for statuses",
     "statusesRequired": "Choose at least one status",
     "statusesHint": "Usually only the approved conversion: each status sent counts as a conversion at the network."
+  },
+  "offline": {
+    "title": "Offline conversions to Google Ads",
+    "description": "Leads and purchases of clicks from Google (with a gclid) are sent back to Google Ads, so Google sees which ads bring sales and can bid for them. Only conversions recorded after turning this on are sent, every 5 minutes.",
+    "enabledAria": "Send conversions to Google Ads",
+    "loading": "Loading offline conversion settings…",
+    "fields": {
+      "leadActionId": "Action for leads",
+      "purchaseActionId": "Action for purchases",
+      "repurchaseActionId": "Action for repeat purchases",
+      "loginAccountId": "Manager account (MCC), if any"
+    },
+    "actionsHint": "Google Ads conversion action ids with the source “Import from clicks” (Goals › Conversions › the action › ctId in its URL). Empty: that status is not sent. A refund restates an already sent purchase's value.",
+    "scopeHint": "The refresh token must be minted with the https://www.googleapis.com/auth/datamanager scope (Data Manager API enabled in the Google Cloud project), and your Google account must have access to the ad account. Otherwise Google refuses the upload — the reason shows below.",
+    "save": "Save",
+    "saved": "Offline conversion settings saved",
+    "saveError": "Could not save the settings",
+    "lastError": "Google's last error:",
+    "counts": {
+      "sent_one": "{{count}} sent",
+      "sent_other": "{{count}} sent",
+      "pending_one": "{{count}} queued",
+      "pending_other": "{{count}} queued",
+      "failed_one": "{{count}} refused",
+      "failed_other": "{{count}} refused"
+    },
+    "skipped": {
+      "no_google_click_one": "{{count}} conversion — its click had no gclid (not from Google, or no auto-tagging)",
+      "no_google_click_other": "{{count}} conversions — their clicks had no gclid (not from Google, or no auto-tagging)",
+      "no_action_one": "{{count}} conversion — no action named for its status",
+      "no_action_other": "{{count}} conversions — no action named for their status",
+      "not_attributed_one": "{{count}} conversion — without a click",
+      "not_attributed_other": "{{count}} conversions — without a click",
+      "click_not_found_one": "{{count}} conversion — its click was not found",
+      "click_not_found_other": "{{count}} conversions — their clicks were not found"
+    }
   }
 }

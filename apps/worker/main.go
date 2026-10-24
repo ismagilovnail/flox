@@ -12,7 +12,8 @@
 //     conversion tables (docs/analytics-pipeline.md, docs/event-stream.md);
 //   - the postback attempt log (internal/postbacklog, §48) into
 //     postback_events;
-//   - scheduled jobs: ad spend sync (internal/costsync), FX rates,
+//   - scheduled jobs: ad spend sync (internal/costsync), offline
+//     conversions to Google Ads (internal/offlineconv), FX rates,
 //     attribution retries, Postgres/ClickHouse reconciliation, retention,
 //     expired auth cleanup, domain SSL checks, alert evaluation;
 //   - a reaper per queue (internal/queuereaper) returning claims a dead
@@ -71,6 +72,7 @@ import (
 	"github.com/ismagilovnail/flox/apps/internal/mappingreplay"
 	"github.com/ismagilovnail/flox/apps/internal/metrics"
 	"github.com/ismagilovnail/flox/apps/internal/offercap"
+	"github.com/ismagilovnail/flox/apps/internal/offlineconv"
 	"github.com/ismagilovnail/flox/apps/internal/orgdeletion"
 	"github.com/ismagilovnail/flox/apps/internal/orgexport"
 	"github.com/ismagilovnail/flox/apps/internal/pixel"
@@ -142,6 +144,11 @@ const (
 // last sync"), so re-running a few times a day catches those revisions
 // without re-fetching so often it risks the ad platforms' own rate limits.
 const costSyncInterval = 6 * time.Hour
+
+// offlineConversionsInterval: how often new conversions are looked at and
+// what is due is sent to Google Ads (internal/offlineconv). Google asks for
+// offline data soon after the conversion; a few minutes is soon.
+const offlineConversionsInterval = 5 * time.Minute
 
 // queueDepthPollInterval: how often §53's event_queue_depth gauge is
 // refreshed. A plain SELECT count(*) — cheap enough to run often, but
@@ -479,6 +486,10 @@ func run() error {
 
 	logger.Info("ad spend sync scheduler starting", "interval", costSyncInterval)
 	start(func() { costSyncScheduler.RunLoop(ctx, costSyncInterval) })
+
+	offlineConv := offlineconv.NewService(offlineconv.NewRepository(db), clickResolver, adAccountRepo, googleads.NewDataManager(), logger)
+	logger.Info("offline conversions loop starting", "interval", offlineConversionsInterval)
+	start(func() { offlineConv.RunLoop(ctx, offlineConversionsInterval) })
 
 	// The JetStream event stream (internal/eventstream), when configured:
 	// tracker events arrive there; event_queue above still carries
