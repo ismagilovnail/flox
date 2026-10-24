@@ -53,7 +53,7 @@ describe("EventMappingPanel waiting statuses", () => {
     render(<EventMappingPanel />);
     expect(screen.getByText("2 postbacks")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: /Map status approved/ }));
-    expect((screen.getByPlaceholderText("e.g. ftd") as HTMLInputElement).value).toBe("approved");
+    expect((screen.getByPlaceholderText("e.g. purchase") as HTMLInputElement).value).toBe("approved");
   });
 
   it("hides a status that has been mapped since", () => {

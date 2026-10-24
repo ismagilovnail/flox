@@ -79,7 +79,7 @@ on the way out (`fx.Store.ReportingConversion` → `fx.Conversion`):
   (`chstore.ReportQuery.Money`, a `transform()` over the inlined day →
   factor lists, by the conversion's UTC day); spend per cost-entry day in
   `analytics.convertedCost` (period sums are rebuilt from the per-day
-  rows); LTV per deposit in `ltv.Service`;
+  rows); LTV per purchase in `ltv.Service`;
 - a day with **no rate** makes the amount unknown — Revenue/Cost (and
   Profit, ROI, ROAS, EPC, CPA…) come out `null` ("—"), never a partial sum
   and never 0 (CLAUDE.md #6/#7). EPC is therefore nullable on the wire now;

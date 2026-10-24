@@ -33,7 +33,7 @@
     "currencyLabel": "Payout currency",
     "currencyHint": "When a postback sends an amount without a currency, FLOX takes it to be in this one. Without it, that revenue would be left out of reports.",
     "acceptDuplicatesLabel": "Accept duplicate postbacks",
-    "acceptDuplicatesHint": "By default FLOX records each status once per click (a redeposit once per transaction id) and drops repeats. Some partners re-send the same status on purpose — turn this on only if this network needs it. A status still never moves back to hold.",
+    "acceptDuplicatesHint": "By default FLOX records each status once per click (a repeat purchase once per transaction id) and drops repeats. Some partners re-send the same status on purpose — turn this on only if this network needs it. A status still never moves back to hold.",
     "acceptDuplicatesAria": "Accept duplicate postbacks",
     "statusLabel": "Status",
     "submitCreate": "Create network",
@@ -81,7 +81,7 @@
   },
   "incoming": {
     "title": "Incoming postback — for the network",
-    "description": "Enter this URL in the network's dashboard: it is how the network tells FLOX about registrations, deposits and rejections.",
+    "description": "Enter this URL in the network's dashboard: it is how the network tells FLOX about registrations, purchases and rejections.",
     "copyAria": "Copy the incoming postback URL",
     "copied": "Incoming postback URL copied",
     "copyFailed": "Could not copy — select the text and copy it yourself",
@@ -101,7 +101,7 @@
       "status": "Required. The status in the network's terms — it has to be in the mapping below.",
       "revenue": "The payout, a number with a dot. Without it the conversion carries no money.",
       "currency": "The amount's currency (USD, EUR…). If it is not sent, FLOX takes this network's payout currency: {{currency}}.",
-      "txn_id": "The network's transaction id. Needed for repeat deposits: without it a second deposit on the same click counts as a duplicate.",
+      "txn_id": "The network's transaction id. Needed for repeat purchases: without it a second purchase on the same click counts as a duplicate.",
       "event_time": "When the conversion happened (unix time or ISO 8601). Without it, when the postback arrived."
     },
     "statusesTitle": "Statuses FLOX understands",
@@ -151,12 +151,12 @@
   },
   "diagnostics": {
     "redepWithoutTxn": {
-      "lostTitle_one": "{{count}} repeat deposit lost: redeposits come without txn_id",
-      "lostTitle_other": "{{count}} repeat deposits lost: redeposits come without txn_id",
-      "lostDescription": "Redeposits without the network's transaction id over {{days}} days: {{received}}. Without it FLOX cannot tell one deposit from the next on the same click, so every repeat after the first was refused as a duplicate and is missing from revenue and LTV.",
-      "riskTitle": "Redeposits come without txn_id",
-      "riskDescription": "Redeposits without the network's transaction id over {{days}} days: {{received}}. None was lost yet, but a second deposit on the same click would be refused as a duplicate.",
-      "fix": "Add txn_id to the postback URL in the network's dashboard, with the network's transaction-id macro — for example txn_id={transaction_id}. Deposits already refused are not recovered."
+      "lostTitle_one": "{{count}} repeat purchase lost: repeat purchases come without txn_id",
+      "lostTitle_other": "{{count}} repeat purchases lost: repeat purchases come without txn_id",
+      "lostDescription": "Repeat purchases without the network's transaction id over {{days}} days: {{received}}. Without it FLOX cannot tell one purchase from the next on the same click, so every repeat after the first was refused as a duplicate and is missing from revenue and LTV.",
+      "riskTitle": "Repeat purchases come without txn_id",
+      "riskDescription": "Repeat purchases without the network's transaction id over {{days}} days: {{received}}. None was lost yet, but a second purchase on the same click would be refused as a duplicate.",
+      "fix": "Add txn_id to the postback URL in the network's dashboard, with the network's transaction-id macro — for example txn_id={transaction_id}. Purchases already refused are not recovered."
     }
   },
   "template": {
@@ -165,7 +165,7 @@
     "hint": "On a known platform the incoming URL comes with its macros, and its statuses are mapped when the network is created.",
     "urlHint": "The URL already carries {{name}}'s macros: paste it into the postback settings there as it is.",
     "offerLink": "In the offer link at {{name}}, pass FLOX's click id as",
-    "perGoal": "This platform sends one postback per goal and has no status macro: create one postback per goal (registration, first deposit…) with the goal's name in place of REPLACE_GOAL, and map those names below.",
+    "perGoal": "This platform sends one postback per goal and has no status macro: create one postback per goal (registration, first purchase…) with the goal's name in place of REPLACE_GOAL, and map those names below.",
     "mappingsCreated": "Its status codes were mapped when the network was created — see the statuses below.",
     "mappingsError": "The network was created, but some of the platform's status mappings were not: add them under Event Mapping.",
     "sources": "Sources:"

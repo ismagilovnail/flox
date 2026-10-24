@@ -14,7 +14,7 @@ describe("flowNodeSummaries", () => {
     );
     expect(s.landing).toBe("1,000 views · 250 clicks · CTR 25%");
     expect(s.pwa).toBe("200 views · 50 installs · CR 25%");
-    expect(s.destination).toBe("1,200 clicks · 7 conversions · 3 redeposits");
+    expect(s.destination).toBe("1,200 clicks · 7 conversions · 3 repeat purchases");
   });
 
   it("shows a rate over zero views as —, never 0%", () => {

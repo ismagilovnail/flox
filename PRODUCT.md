@@ -6,8 +6,9 @@ FLOX is a production-grade SaaS platform for traffic tracking, campaign
 management, traffic classification, configurable routing, conversion
 tracking, attribution, postbacks, cost tracking, analytics, reporting, and
 LTV/cohort analysis — aimed at performance/affiliate marketing teams,
-including iGaming CPA verticals where deposit lifecycle (HOLD → ACCEPT →
-REDEP) and LTV are core to profitability.
+including CPA verticals (e-commerce, subscriptions, apps, iGaming) where the
+purchase lifecycle (HOLD → ACCEPT → REDEP: first and repeat purchases) and
+LTV are core to profitability.
 
 Target functional parity with the documented capabilities of established
 products in this category (e.g. the concepts exposed by Adset.Pro

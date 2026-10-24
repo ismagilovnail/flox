@@ -154,7 +154,7 @@ into the tables that had already accepted it.
 copy. `internal/reconcile` (run by `apps/worker` hourly over the last 3 days,
 leaving out the newest 30 minutes still in flight) compares, per
 (organization, UTC day, status), the number of events and the USD sum the
-way reports count it — an accept/redeposit its `usd_value`, a
+way reports count it — an accept/repeat purchase its `usd_value`, a
 decline/trash its `reversal_usd_value` negated. USD is compared with a
 tolerance of 0.01 + 0.0001 × rows (Postgres keeps 4 decimals, the event the
 unrounded float).

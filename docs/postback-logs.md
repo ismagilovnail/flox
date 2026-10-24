@@ -139,7 +139,7 @@ status, event_ref)`. `event_ref` matters here specifically —
 `postback_events` previously dropped it from the browser-facing
 `PostbackLog` JSON ("the UI never renders it"); it's now kept, because a
 CPA_REDEP click can have more than one successful row, one per
-redeposit, and matching on the wrong one would replay the wrong
+repeat purchase, and matching on the wrong one would replay the wrong
 delivery.
 
 `postback.ReplayEnqueuer` adapts `postbacklogs.ReplayInput` →
@@ -261,7 +261,7 @@ transaction id, but only for `CPA_REDEP` (§45 — every other status's
 `event_ref` is always empty, even when a txn id was sent). A `PostbackLog`
 row's own `eventRef` is exactly that derived value, so passing it back in
 as `NetworkTxnID` on replay reproduces the identical dedup key for every
-status, redeposits included, without this package needing to know or
+status, repeat purchases included, without this package needing to know or
 store the original raw txn id.
 
 ### `POST /postback-logs/replay-incoming`

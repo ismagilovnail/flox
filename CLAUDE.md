@@ -84,7 +84,8 @@ STATUS        : Product audit 2026-10-15 (docs/audit-product-2026-10-15.md)
                 prices); part 2 (Adset.Pro test account) is the user's.
                 P0 left (skipped by the user for now):
                 OPS-1..3 (prod, restore, load) — needs the owner's hosting.
-LAST COMMIT   : docs: competitors' prices (BIZ-4 part 1).
+LAST COMMIT   : feat(ui): purchases instead of deposits in the wording
+                (text only; CPA_REDEP and metric ids unchanged).
 UNCOMMITTED   : the user's gallery-transcoding WIP (00085, processor.go,
                 transcode.go, worker ffmpeg) — not ours, leave it alone.
                 It now accepts MOV, so contentgallery's

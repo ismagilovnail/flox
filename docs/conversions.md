@@ -46,7 +46,7 @@ Notification/Telegram/Conversion) by string-prefix matching on
 `event.Type`, but the label under each icon is the real event type
 (`"PWA Install"`, not a synthesized sentence) — except for CPA_* types,
 which keep the old mock's more editorial labels ("Registration held",
-"First deposit accepted", ...) since those carry real, useful meaning.
+"First purchase accepted", ...) since those carry real, useful meaning.
 
 ## What's dropped, not faked
 

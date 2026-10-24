@@ -69,7 +69,7 @@ Postgres ledger row is the source of truth.
 "ACCEPT then DECLINE → recorded, revenue reversed." A CPA_DECLINE or
 CPA_TRASH recorded while the click stands accepted — its latest decision
 among ACCEPT/DECLINE/TRASH is an ACCEPT — reverses **that accept's payout
-only** (the FTD); redeposits are separate deposits with their own txn ids,
+only** (the first purchase); repeat purchases are separate purchases with their own txn ids,
 and a decline carries none to point at one. The check runs in the record
 transaction under the click's lock, so the decline and the accept it
 reverses are seen consistently.
@@ -86,7 +86,7 @@ reverses are seen consistently.
   same principle as never moving back to CPA_HOLD); the decline's day can
   show negative revenue. Conversion counts do not change.
 - Reports and LTV net it in (`ltv_events_mv_v3` copies declines; LTV adds
-  them to revenue and the window of their date, not to deposit counts).
+  them to revenue and the window of their date, not to purchase counts).
 - A repeated decline is a duplicate (dedup key) and reverses nothing twice.
   DECLINE then ACCEPT records the accept as usual. ACCEPT → DECLINE →
   ACCEPT does **not** restore the revenue: the second ACCEPT has the same
@@ -114,7 +114,7 @@ A postback that carries `revenue` but no `currency` is taken to be in it:
 never from the request — on the live path (`apps/tracker/postback.go`) and
 on replay (`postbacklogs` → `ReplayRecorder`). Before this, such an amount
 was stored with no USD value and silently left out of Revenue, ROI and
-LTV: a $50 FTD reported as $0.
+LTV: a $50 first purchase reported as $0.
 
 - A sent currency always wins; it is upper-cased (`usd` → `USD`).
 - No revenue, no currency: a HOLD ping stays without one.

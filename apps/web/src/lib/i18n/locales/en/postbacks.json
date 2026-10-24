@@ -14,7 +14,7 @@
     "description": "Translates each network's own status strings into FLOX statuses: CPA_HOLD / CPA_ACCEPT / CPA_REDEP / CPA_DECLINE / CPA_TRASH.",
     "cardDescription": "Raw status string this network sends → FLOX status.",
     "emptyMappings": "No mappings yet — postbacks with a status that is not mapped wait until it is.",
-    "statusPlaceholder": "e.g. ftd",
+    "statusPlaceholder": "e.g. purchase",
     "removeAria": "Remove mapping {{status}}",
     "addButton": "Add",
     "noNetworks": "No networks yet — add one on the Networks page first.",
@@ -39,7 +39,7 @@
     }
   },
   "incoming": {
-    "description": "Give each network its URL — with the network's secret, shown once when the network is created. Each status is recorded once per click (a redeposit once per transaction id) unless the network has \"Accept duplicate postbacks\" on. Status strings are translated through Event Mapping.",
+    "description": "Give each network its URL — with the network's secret, shown once when the network is created. Each status is recorded once per click (a repeat purchase once per transaction id) unless the network has \"Accept duplicate postbacks\" on. Status strings are translated through Event Mapping.",
     "mappedCount_one": "{{count}} status mapped",
     "mappedCount_other": "{{count}} statuses mapped",
     "copyAria": "Copy incoming URL for {{name}}",

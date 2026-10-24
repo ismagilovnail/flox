@@ -74,7 +74,7 @@ stay thin; business logic never lives in handlers or in React components.
 - **ClickHouse** — high-volume events: click_events, tracking_events,
   conversion_events, cost_events, postback_events (the real §48 five-table
   design, landed Phase 26), plus `ltv_events` (a materialized view over
-  conversion_events driving the FTD/Reg cohort engine, §26.5, landed Phase
+  conversion_events driving the first-purchase/registration cohort engine, §26.5, landed Phase
   26.5) and further analytical aggregates. Sort keys lead with
   `organization_id`, partitioned by date. `cost_events` stays schema-only
   even after Phase 27-COST: at manual-entry volume, campaign-detail spend

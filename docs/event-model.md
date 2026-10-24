@@ -35,8 +35,8 @@ TELEGRAM
 
 CPA CONVERSIONS (status is an enum, NOT a single "conversion" type)
   CPA_HOLD      registration
-  CPA_ACCEPT    first deposit / FTD (key conversion)
-  CPA_REDEP     re-deposit (drives LTV)
+  CPA_ACCEPT    first purchase (key conversion)
+  CPA_REDEP     repeat purchase (drives LTV)
   CPA_DECLINE   rejected
   CPA_TRASH     junk / duplicate
 ```
@@ -57,12 +57,12 @@ across returns when `stickyFlowKeepClickId` is enabled (see
 `DEDUP KEY = (click_id, status, event_ref)`, not `click_id` alone and not
 `(click_id, status)` alone — the same click legitimately produces
 `CPA_HOLD`, then `CPA_ACCEPT`, then multiple `CPA_REDEP`, and a two-part key
-would drop every redeposit after the first. `event_ref` is the network's
+would drop every repeat purchase after the first. `event_ref` is the network's
 transaction id for `CPA_REDEP` only (the one repeatable status) and empty
 string for every other status, even when the network sent one — a locally
 generated sequence number is NOT substituted when no txn id arrives, since
 that would make every re-send look distinct and disable deduplication
-entirely; instead exactly one redeposit is recorded per click in that case.
+entirely; instead exactly one repeat purchase is recorded per click in that case.
 The durable unique constraint lives in Postgres (`postbacks`, migration
 00013); a Redis-backed fast path exists only for the separate STATUS
 PROGRESSION check (the last-seen status per click_id), never for the dedup

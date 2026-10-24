@@ -213,13 +213,13 @@ the organization's calendar. `counts` has every stage, zero-filled:
 SOURCE_CLICK, LAND_VIEW, LAND_CLICK, PWA_VIEW, PWA_INSTALL,
 POSTLANDING_VIEW, POSTLANDING_CLICK (distinct `click_id` per flow — a
 reload is not a second view) and CPA_ACCEPT, CPA_REDEP (events, like the
-report's `conversions`: a redeposit counts again). Read by `flow_id` from
+report's `conversions`: a repeat purchase counts again). Read by `flow_id` from
 `click_events`, `tracking_events` and `conversion_events`, filtered on the
 session's organization: another organization's flow id comes back as
 zeros, the same as an id that exists nowhere
 (`chstore.TestFlowStageCountsPerFlowAndTenant`). The nodes show views ·
 clicks · CTR (Landing, Postlanding), views · installs · CR (PWA) and
-clicks · conversions · redeposits (Offer/Redirect); a rate over zero
+clicks · conversions · repeat purchases (Offer/Redirect); a rate over zero
 views is "—". A flow added in the form but not yet saved has no summary.
 
 ## `source` is the traffic source, not a campaign proxy
@@ -310,7 +310,7 @@ does not depend on it.
 on `dateBasis`. By conversion, a conversion counts on the day the network
 reported it. By click, it counts on the day of the click it is attributed
 to — the day that click's spend and the click itself are on — so ROI per
-campaign day compares like with like: a Monday registration that deposits
+campaign day compares like with like: a Monday registration that purchases
 on Wednesday is Monday's revenue.
 
 Only conversions move. Clicks, landing views and installs are dated by
@@ -431,7 +431,7 @@ Every metrics object also carries: `pwaInstalls` (PWA_INSTALL count),
 rates and costs are `null` when the denominator is 0 or no cost is on file.
 `conversions` counts CPA_ACCEPT + CPA_REDEP. `revenue` is CPA_ACCEPT +
 CPA_REDEP **net of chargebacks**: a CPA_DECLINE/CPA_TRASH that reversed an
-accepted FTD carries that payout negated and is summed in, on the decline's
+accepted first purchase carries that payout negated and is summed in, on the decline's
 own date (so a past day keeps the revenue it showed; the decline's day can
 be negative). See `docs/conversion.md`, "Chargebacks".
 

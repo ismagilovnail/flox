@@ -46,15 +46,15 @@ const TRAFFIC_PERFORMANCE: RegistryMetric[] = METRICS.filter((m) => !isPushMetri
 
 const CPA_FUNNEL_BASE: { id: string; label: string; format: MetricFormat }[] = [
   { id: "cpa_hold", label: "CPA Hold (registrations)", format: "int" },
-  { id: "cpa_accept", label: "CPA Accept (FTDs)", format: "int" },
-  { id: "cpa_redep", label: "CPA Redeposit", format: "int" },
+  { id: "cpa_accept", label: "CPA Accept (First Purchases)", format: "int" },
+  { id: "cpa_redep", label: "CPA Repeat Purchase", format: "int" },
   { id: "cpa_decline", label: "CPA Decline", format: "int" },
   { id: "cpa_trash", label: "CPA Trash", format: "int" },
-  { id: "reg_to_ftd_rate", label: "Reg → FTD Rate", format: "percent" },
-  { id: "ftd_to_redep_rate", label: "FTD → Redep Rate", format: "percent" },
-  { id: "dep_to_redep", label: "Deposit → Redeposit Rate", format: "percent" },
-  { id: "total_deposits", label: "Total Deposits", format: "int" },
-  { id: "total_deposit_revenue", label: "Total Deposit Revenue", format: "currency" },
+  { id: "reg_to_ftd_rate", label: "Reg → First Purchase Rate", format: "percent" },
+  { id: "ftd_to_redep_rate", label: "First → Repeat Purchase Rate", format: "percent" },
+  { id: "dep_to_redep", label: "Purchase → Repeat Purchase Rate", format: "percent" },
+  { id: "total_deposits", label: "Total Purchases", format: "int" },
+  { id: "total_deposit_revenue", label: "Total Purchase Revenue", format: "currency" },
 ];
 const CPA_FUNNEL: RegistryMetric[] = CPA_FUNNEL_BASE.map((m) => ({
   ...m,
@@ -87,7 +87,7 @@ const LTV: RegistryMetric[] = [
   { id: "ltv_d8_30", label: "LTV Day 8-30" },
   { id: "ltv_d31_90", label: "LTV Day 31-90" },
   { id: "ltv_total", label: "LTV Total" },
-  { id: "ltv_per_ftd", label: "LTV per FTD" },
+  { id: "ltv_per_ftd", label: "LTV per First Purchase" },
   { id: "ltv_per_reg", label: "LTV per Registration" },
   { id: "lifetime_days", label: "Lifetime Days" },
 ].map((m) => ({

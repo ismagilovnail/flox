@@ -896,7 +896,7 @@ paths:
       tags: [Networks]
       operationId: networkDiagnostics
       summary: Postback diagnostics
-      description: Signs over the last 30 days that the network's postbacks lose data — today, redeposits sent without a transaction id (each one after the first is a duplicate).
+      description: Signs over the last 30 days that the network's postbacks lose data — today, repeat purchases sent without a transaction id (each one after the first is a duplicate).
       x-flox-scope: read
       responses:
         "200":

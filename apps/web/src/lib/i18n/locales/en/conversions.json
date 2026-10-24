@@ -23,7 +23,7 @@
   "status": {
     "hold": "HOLD",
     "accept": "ACCEPT",
-    "redep": "REDEP",
+    "redep": "REPEAT",
     "decline": "DECLINE",
     "trash": "TRASH"
   },
@@ -40,8 +40,8 @@
   "timeline": {
     "cpaLabel": {
       "hold": "Registration held",
-      "accept": "First deposit accepted",
-      "redep": "Re-deposit accepted",
+      "accept": "First purchase accepted",
+      "redep": "Repeat purchase accepted",
       "decline": "Conversion declined",
       "trash": "Marked junk/duplicate"
     },

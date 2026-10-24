@@ -259,6 +259,6 @@
     "error": "Node stats unavailable right now",
     "viewsClicks": "{{views}} views · {{clicks}} clicks · CTR {{rate}}",
     "viewsInstalls": "{{views}} views · {{installs}} installs · CR {{rate}}",
-    "clicksConversions": "{{clicks}} clicks · {{conversions}} conversions · {{redeps}} redeposits"
+    "clicksConversions": "{{clicks}} clicks · {{conversions}} conversions · {{redeps}} repeat purchases"
   }
 }

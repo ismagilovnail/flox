@@ -1,7 +1,7 @@
 {
   "title": "LTV / Cohorts",
-  "description": "Revenue of each cohort of first deposits (FTD) or registrations over its first 90 days, optionally broken down by campaign, source, offer, network or country. Cohort days are UTC.",
-  "types": { "ftd": "FTD cohorts", "reg": "Registration cohorts" },
+  "description": "Revenue of each cohort of first purchases or registrations over its first 90 days, optionally broken down by campaign, source, offer, network or country. Cohort days are UTC.",
+  "types": { "ftd": "First-purchase cohorts", "reg": "Registration cohorts" },
   "periods": { "day": "By day", "week": "By week", "month": "By month" },
   "filters": {
     "period": "Cohort period",
@@ -19,7 +19,7 @@
   "dimensions": { "campaign": "Campaign", "source": "Source", "offer": "Offer", "network": "Network", "country": "Country" },
   "windows": { "d0": "Day 0", "d1_7": "Days 1–7", "d8_30": "Days 8–30", "d31_90": "Days 31–90" },
   "windowHints": {
-    "d0": "Revenue on the day of the first deposit/registration",
+    "d0": "Revenue on the day of the first purchase/registration",
     "d1_7": "Revenue 1 to 7 days later",
     "d8_30": "Revenue 8 to 30 days later",
     "d31_90": "Revenue 31 to 90 days later"
@@ -31,23 +31,23 @@
     "offer": "Offer",
     "network": "Network",
     "country": "Country",
-    "ftds": "FTDs",
+    "ftds": "First purchases",
     "regs": "Registrations",
     "ltvTotal": "LTV (90 days)",
-    "ltvPerFtd": "LTV per FTD",
+    "ltvPerFtd": "LTV per first purchase",
     "ltvPerReg": "LTV per registration",
-    "ftdToRedep": "FTD → redeposit",
-    "depToRedep": "Redeposits per FTD",
-    "regToFtd": "Registration → FTD",
+    "ftdToRedep": "First → repeat purchase",
+    "depToRedep": "Repeat purchases per first purchase",
+    "regToFtd": "Registration → first purchase",
     "lifetime": "Avg lifetime, days",
-    "totalDeposits": "Deposits",
-    "totalDepositRevenue": "Deposit revenue"
+    "totalDeposits": "Purchases",
+    "totalDepositRevenue": "Purchase revenue"
   },
   "incomplete": "This window has not fully passed yet — the revenue so far, not final",
-  "legend": "* The window has not fully passed for the cohort's youngest member yet: the number is revenue so far, not final. LTV counts deposits up to day 90; Deposits and Deposit revenue count all of them.",
+  "legend": "* The window has not fully passed for the cohort's youngest member yet: the number is revenue so far, not final. LTV counts purchases up to day 90; Purchases and Purchase revenue count all of them.",
   "loading": "Loading cohorts…",
   "loadError": "Couldn't load cohorts",
   "emptyTitle": "No cohorts in this range",
-  "emptyFtd": "Cohorts appear once clicks reach a first deposit (CPA_ACCEPT postback).",
+  "emptyFtd": "Cohorts appear once clicks reach a first purchase (CPA_ACCEPT postback).",
   "emptyReg": "Cohorts appear once clicks reach a registration (CPA_HOLD postback)."
 }

@@ -330,7 +330,7 @@ func duplicateMessage(e Entry, r redecision) string {
 	const base = "dedup key (click_id, status, event_ref) already recorded"
 	switch {
 	case e.Status == event.CpaRedep && e.EventRef == "":
-		return base + " — this redeposit came without txn_id, so every repeat deposit of the click counts once; send the network's transaction id as txn_id"
+		return base + " — this repeat purchase came without txn_id, so every repeat purchase of the click counts once; send the network's transaction id as txn_id"
 	case r.reapprovalRefused:
 		return base + " — the click was declined after its accept; a re-approval counts only with a txn_id no earlier accept of the click carried"
 	}

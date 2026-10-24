@@ -5,6 +5,19 @@ per-phase, matching `CLAUDE.md`'s phase protocol. The one exception is
 [Between phases], below: spec amendments and the code changes that follow from
 them land between phases and would otherwise be invisible here.
 
+## [Between phases] — Purchases instead of deposits in the wording (2026-10-24)
+
+What users read now says purchase / repeat purchase / first purchase instead of deposit / redeposit / FTD, so the
+tracker reads as fit for any CPA vertical, not only iGaming. Only text changed: `CPA_REDEP`, metric ids
+(`ftd_to_redep_rate`…), API fields and `/ftd-cohorts` stay, so no migration and saved formulas and network mappings
+keep working.
+
+- **UI (ru + en):** statuses, conversion timeline, LTV cohorts, custom-metric names, network diagnostics, postback hints;
+  the example network status `ftd` → `purchase`.
+- **API:** the duplicate-postback message in postback logs and the network-diagnostics description in OpenAPI.
+- **Docs:** the prose of current docs, PRODUCT.md (any CPA vertical). Audits, CHANGELOG and the spec are left as written.
+- Not changed: code identifiers and comments, devpanel seed data.
+
 ## [Between phases] — Competitors' prices (BIZ-4, part 1, 2026-10-23)
 
 docs/market-pricing-2026-10.md: BeMob, RedTrack, Adset.Pro, Keitaro and Binom from their official pricing pages, next

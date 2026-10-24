@@ -20,20 +20,20 @@ afterEach(() => {
 });
 
 describe("NetworkDiagnostics", () => {
-  it("says how many repeat deposits were lost and how to fix it", () => {
+  it("says how many repeat purchases were lost and how to fix it", () => {
     data = diag(5, 3);
     render(<NetworkDiagnostics networkId="n1" />);
-    expect(screen.getByText(/3 repeat deposits lost/)).toBeTruthy();
+    expect(screen.getByText(/3 repeat purchases lost/)).toBeTruthy();
     expect(screen.getByText(/txn_id=\{transaction_id\}/)).toBeTruthy();
   });
 
   it("warns before anything is lost", () => {
     data = diag(2, 0);
     render(<NetworkDiagnostics networkId="n1" />);
-    expect(screen.getByText("Redeposits come without txn_id")).toBeTruthy();
+    expect(screen.getByText("Repeat purchases come without txn_id")).toBeTruthy();
   });
 
-  it("renders nothing when every redeposit carries txn_id or nothing is loaded", () => {
+  it("renders nothing when every repeat purchase carries txn_id or nothing is loaded", () => {
     const { container, rerender } = render(<NetworkDiagnostics networkId="n1" />);
     expect(container.innerHTML).toBe("");
     data = diag(0, 0);

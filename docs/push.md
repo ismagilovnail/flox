@@ -5,7 +5,7 @@ sidebar (§17) and the NOTIFICATION_* events (§43). Scope chosen by the
 owner on 2026-10-13: subscriptions and broadcasts sent now. Added
 2026-10-14: scheduled broadcasts and push metrics (Push → Statistics,
 custom metrics on the `push_stats` surface), then triggered broadcasts
-("N hours after subscribing, if no deposit") and recurring broadcasts
+("N hours after subscribing, if no purchase") and recurring broadcasts
 ("Mon/Wed/Fri at 19:00"), then push metrics as columns of the report
 builder (2026-10-15, `docs/analytics-report-api.md` "Push metrics").
 Not done: multi-step sequences in one trigger, an interval mode ("every
@@ -111,7 +111,7 @@ with different delays.
   statuses, looked up at send time in `postbacks` (`result = 'success'`,
   by `click_id` **or** `attributed_click_id` = the subscription's click,
   same organization). "Without CPA_ACCEPT, CPA_REDEP" reaches who has not
-  deposited yet.
+  purchased yet.
 - **Window:** a subscriber is sent to only within 24 h
   (`push.TriggerWindow`) of their due time. Resuming a trigger paused for
   a week, or a worker outage, does not send week-old "1 hour after"

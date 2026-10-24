@@ -1,7 +1,7 @@
 # LTV & Cohort Engine (Phase 26.5, §26.5)
 
 "A primary reason teams pay for a tracker in this vertical. Do not skip."
-FTD (first-deposit) and Reg (registration) cohort tables with LTV windows,
+First-purchase and Reg (registration) cohort tables with LTV windows,
 implemented in `apps/internal/ltv`, backed by `apps/internal/chstore`'s
 `ltv_events` and exposed at `GET /analytics/ltv/ftd-cohorts` and
 `GET /analytics/ltv/reg-cohorts` on `apps/api`.
@@ -46,7 +46,7 @@ per click IS the first occurrence, always — this is the same invariant
   subtracting. "Day 0" means "the same calendar day as the anchor," which
   is what §26.5's "day 0 / days 1-7" language means in a report, not an
   exact-hours technicality.
-- **`ltv_total` is capped at day 90** by construction: a deposit landing on
+- **`ltv_total` is capped at day 90** by construction: a purchase landing on
   day 91+ relative to its anchor matches no window and is excluded from
   `LTVTotalUSD`, though it still counts toward the uncapped
   `TotalDeposits`/`TotalDepositRevenueUSD` fields (§26.5 gives no window for
@@ -68,23 +68,23 @@ per click IS the first occurrence, always — this is the same invariant
 
 §26.5 lists `ftd_to_redep_rate`/`dep_to_redep` (denominator `cpa_accept`)
 and `reg_to_ftd_rate` (denominator `cpa_hold`) without saying which cohort
-view each belongs to. Since an FTD cohort's own size *is* its `cpa_accept`
+view each belongs to. Since a first-purchase cohort's own size *is* its `cpa_accept`
 count and a Reg cohort's own size *is* its `cpa_hold` count, attaching a
 `cpa_accept`-denominated rate to a Reg cohort (or vice versa) would either
 silently use the wrong denominator or require carrying a second count
 alongside `AnchorCount` for a metric the cohort view doesn't natively
 answer. `FTDCohort` carries `FTDToRedepRate`/`DepToRedepRate`; `RegCohort`
 carries `RegToFTDRate` (the share of a Reg cohort's own registrants who
-ever reached a first deposit, regardless of when). Both cohort types get
+ever reached a first purchase, regardless of when). Both cohort types get
 `TotalDeposits`/`TotalDepositRevenueUSD` — denominator-free sums that apply
 cleanly to either anchor.
 
-## `LifetimeDaysAvg`: averaged over clicks that redeposited, not all of them
+## `LifetimeDaysAvg`: averaged over clicks that made a repeat purchase, not all of them
 
-§26.5 defines `lifetime_days` as "days from FTD to last redeposit" — under
-that definition, a click with no redeposit has no lifetime, not a lifetime
+§26.5 defines `lifetime_days` as "days from first purchase to last repeat purchase" — under
+that definition, a click with no repeat purchase has no lifetime, not a lifetime
 of zero. `HasLifetimeData` is `false` (not `LifetimeDaysAvg: 0`) whenever
-no click in the cohort redeposited at all; when some did and some didn't,
+no click in the cohort made a repeat purchase at all; when some did and some didn't,
 the average is over only the clicks that did — averaging in zeros for the
 rest would understate the metric it's supposed to measure.
 
@@ -115,7 +115,7 @@ any of the above + cohort period". All five are implemented (gap 8 of
   failed mutation is killed so ClickHouse does not retry it forever). A
   click with no offer (redirect flow, fallback) shows "—".
 
-The screen, `/ltv-cohorts` (`features/ltv/ltv-view.tsx`): FTD / registration
+The screen, `/ltv-cohorts` (`features/ltv/ltv-view.tsx`): first purchase / registration
 tabs, period (day/week/month), UTC date range, the five filters, a
 "Breakdown" multi-select (columns appear only for the chosen dimensions, in
 a fixed order), incomplete windows marked `*`. It only displays the API's
@@ -124,20 +124,20 @@ numbers; nothing is re-aggregated in the browser.
 ## Verified end-to-end
 
 A real seed through `chstore.EventStore.InsertBatch` (the same path
-production traffic uses) — two old FTDs in one campaign/network/country
-(one with two redeposits, one with none) plus a registrant who never
-converted and a brand-new FTD five days old — queried through the real
+production traffic uses) — two old first purchases in one campaign/network/country
+(one with two repeat purchases, one with none) plus a registrant who never
+converted and a brand-new first purchase five days old — queried through the real
 compiled `api` binary:
 
 - The old cohort's `d0`/`d1_7`/`d8_30` windows summed exactly to the
   seeded revenue, all four windows `Complete: true`, `ltvPerAnchorUsd`
   correctly averaged over 2 anchors, `ftdToRedepRate = 0.5` (1 of 2
-  redeposited), `depToRedepRate = 1.0` (2 redep events / 2 accepts).
+  made a repeat purchase), `depToRedepRate = 1.0` (2 redep events / 2 accepts).
 - The five-day-old cohort showed `d0` complete with its revenue, and
   `d1_7`/`d8_30`/`d31_90` all `Complete: false` with `0` revenue — correctly
   distinguishing "not yet observed" from "observed as zero."
 - The Reg cohort for the same period showed `anchorCount: 3` (all three
-  registrants) and `regToFtdRate = 0.667` (2 of 3 ever reached a deposit).
+  registrants) and `regToFtdRate = 0.667` (2 of 3 ever reached a purchase).
 - A second organization querying the same date range got `{"cohorts":[]}`
   — tenant isolation holds through the full stack, not just at the
   repository layer.

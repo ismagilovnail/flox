@@ -130,7 +130,7 @@
     "clicks": "All clicks on the campaign, including repeat clicks from the same visitor.",
     "uniqueClicks": "Clicks from unique visitors — repeat visits by the same person are not counted.",
     "conversions": "Number of conversions (target actions) tied to clicks.",
-    "revenue": "Revenue from conversions in USD at the rate on the event date, net of chargebacks: a declined FTD is subtracted on the day of the decline.",
+    "revenue": "Revenue from conversions in USD at the rate on the event date, net of chargebacks: a declined first purchase is subtracted on the day of the decline.",
     "cost": "Traffic spend in USD. Taken from manually entered cost; shown as “—” when there is none.",
     "profit": "Profit = revenue − cost.",
     "roi": "ROI = (revenue − cost) ÷ cost × 100%. How many percent of the spend came back on top of it.",
@@ -144,7 +144,7 @@
     "tgStarts": "Telegram bot starts (TG_START): a visitor opened the organization's bot from a click's link.",
     "tgJoins": "Telegram channel joins (TG_JOIN), once per click and channel. Split by the Telegram channel dimension.",
     "registrations": "Registrations at the network — CPA_HOLD events.",
-    "purchases": "First purchases (FTD) — CPA_ACCEPT events.",
+    "purchases": "First purchases — CPA_ACCEPT events.",
     "repurchases": "Repeat purchases — CPA_REDEP events.",
     "declines": "Rejected by the network — CPA_DECLINE events, chargebacks included.",
     "trash": "Junk or duplicate leads per the network — CPA_TRASH events.",
@@ -174,7 +174,7 @@
     "PWA_INSTALL": "PWA Install",
     "CPA_HOLD": "CPA Hold",
     "CPA_ACCEPT": "CPA Accept",
-    "CPA_REDEP": "CPA Redeposit"
+    "CPA_REDEP": "CPA Repeat purchase"
   },
   "values": {
     "noLanding": "No landing",

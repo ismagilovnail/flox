@@ -259,6 +259,6 @@
     "error": "Статистика узлов сейчас недоступна",
     "viewsClicks": "{{views}} просмотров · {{clicks}} кликов · CTR {{rate}}",
     "viewsInstalls": "{{views}} просмотров · {{installs}} установок · CR {{rate}}",
-    "clicksConversions": "{{clicks}} кликов · {{conversions}} конверсий · {{redeps}} редепозитов"
+    "clicksConversions": "{{clicks}} кликов · {{conversions}} конверсий · {{redeps}} повторных покупок"
   }
 }
