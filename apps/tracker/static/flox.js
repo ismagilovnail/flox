@@ -6,7 +6,12 @@
  * On the thank-you page, add data-event="purchase" (or "lead") and, if
  * known, data-revenue, data-currency, data-order — or call
  *   flox("purchase", { revenue: 1990, currency: "RUB", order: "A-1001" }).
- * A page can report only a lead or a purchase, once per click. */
+ * A page can report only a lead or a purchase, once per click.
+ *
+ * On a Shopify storefront (audit UNI-4; docs/shop-connections.md) it also
+ * puts the click id on the cart as the "flox_click_id" attribute (Cart
+ * AJAX API); the order keeps it, and the store's order webhook brings it
+ * to FLOX — no thank-you-page tag needed there. */
 (function () {
   var s = document.currentScript;
   if (!s) return;
@@ -31,6 +36,26 @@
 
   var id = fromURL();
   if (id) keep(id);
+
+  // Shopify: attach the click to the cart once per click and session.
+  var shop = window.Shopify && window.Shopify.shop;
+  var click = kept();
+  if (shop && click && window.fetch) {
+    var done = "";
+    try { done = window.sessionStorage.getItem(KEY + "_cart") || ""; } catch (e) { /* storage blocked */ }
+    if (done !== click) {
+      var root = (window.Shopify.routes && window.Shopify.routes.root) || "/";
+      window.fetch(root + "cart/update.js", {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ attributes: { flox_click_id: click } }),
+      }).then(function (r) {
+        if (!r.ok) return;
+        try { window.sessionStorage.setItem(KEY + "_cart", click); } catch (e) { /* storage blocked */ }
+      }, function () { /* offline: next page tries again */ });
+    }
+  }
 
   function send(status, o) {
     var click = kept();

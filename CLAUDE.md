@@ -19,7 +19,7 @@ referenced below as §N).
 ## CURRENT STATE — UPDATE THIS EVERY PHASE
 
 ```
-CURRENT PHASE : PHASE 30.89 — UX-4 TIME ZONES + DOC-1 CSP NOTE (closed)
+CURRENT PHASE : PHASE 30.90 — UNI-4 PART 3, SHOPIFY WEBHOOKS (closed)
 STATUS        : Product audits 2026-10-15 and 2026-10-24 (docs/audit-
                 product-*.md; the second: universality, SEC-7..UX-4)
                 are the backlog: items on the local dev panel tools/devpanel
@@ -127,6 +127,10 @@ STATUS        : Product audits 2026-10-15 and 2026-10-24 (docs/audit-
                 UX-4: TimezoneSelect = search over Intl.supportedValuesOf
                 (pinned Russia/CIS/world); org currency searchable. DOC-1:
                 script CSP still blocked by srcdoc previews (security §7).
+                UNI-4 part 3: internal/shopify + tracker /shopify/{id}
+                (HMAC, orders/paid, refunds/create); shop_connections (00108,
+                platform column for Woo), SHOP_WEBHOOK_ENCRYPTION_KEY optional
+                (api + tracker); flox.js sets cart attribute flox_click_id.
                 BUG-10: googleads.APIVersion = v26 (v17 was sunset); Google
                 sunsets each major ~a year after release — bump it.
                 BUG-9: chstore tests use NewRawEventStore (a store reads
@@ -135,10 +139,10 @@ STATUS        : Product audits 2026-10-15 and 2026-10-24 (docs/audit-
                 past events and reads rollup-able reports has the same trap.
                 P0 left (skipped by the user for now):
                 OPS-1..3 (prod, restore, load) — needs the owner's hosting.
-LAST COMMIT   : feat(ui): searchable time zones and currency (UX-4, DOC-1).
+LAST COMMIT   : feat(shopify): orders and refunds by webhook (UNI-4 part 3).
 UNCOMMITTED   : docs/import-export-plan.md (INT-2, stays uncommitted).
-NEXT          : wait for the user. Audit 2026-10-24 backlog left: UNI-4
-                (Shopify/WooCommerce, after BIZ-3);
+NEXT          : wait for the user. UNI-4 part 4: WooCommerce (same
+                shop_connections);
                 BIZ-3/BIZ-4 part 2 are the user's (no interview script),
                 OPS-1..3 need hosting.
                 GAP-2 (Google Play import) is won't-do: do not offer it. INT-2 is

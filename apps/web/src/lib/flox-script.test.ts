@@ -21,6 +21,7 @@ beforeEach(() => {
   Object.defineProperty(navigator, "sendBeacon", { configurable: true, value: beacon });
   document.cookie = "flox_click_id=; max-age=0; path=/";
   localStorage.clear();
+  sessionStorage.clear();
 });
 afterEach(() => {
   beacon.mockClear();
@@ -51,5 +52,28 @@ describe("flox.js", () => {
     window.history.replaceState({}, "", "/?click_id=01CLICK");
     run({ "data-event": "purchase" });
     expect(beacon).not.toHaveBeenCalled();
+  });
+
+  // Audit UNI-4: on a Shopify storefront the click goes on the cart as an
+  // attribute, once per click and session; elsewhere nothing is posted.
+  it("puts the click on a Shopify cart once", async () => {
+    const fetchMock = vi.fn(async () => new Response("{}", { status: 200 }));
+    Object.defineProperty(window, "fetch", { configurable: true, value: fetchMock });
+    window.history.replaceState({}, "", "/?click_id=01SHOP");
+    run({});
+    expect(fetchMock).not.toHaveBeenCalled();
+
+    (window as unknown as { Shopify: unknown }).Shopify = { shop: "my-shop.myshopify.com", routes: { root: "/en/" } };
+    run({});
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+    expect(url).toBe("/en/cart/update.js");
+    expect(JSON.parse(init.body as string)).toEqual({ attributes: { flox_click_id: "01SHOP" } });
+    await vi.waitFor(() => expect(sessionStorage.getItem("flox_click_id_cart")).toBe("01SHOP"));
+
+    window.history.replaceState({}, "", "/products/x");
+    run({});
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    delete (window as unknown as { Shopify?: unknown }).Shopify;
   });
 });

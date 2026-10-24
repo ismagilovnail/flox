@@ -104,3 +104,31 @@ export type NetworkDiagnostics = {
 export function getNetworkDiagnostics(id: string): Promise<NetworkDiagnostics> {
   return apiFetch(`/networks/${id}/diagnostics`);
 }
+
+/** Mirrors apps/internal/shopify.View: an own-site source's Shopify store
+ * (audit UNI-4 part 3). The signing key never comes back, only its last 4
+ * characters. webhookUrl: where the store sends its webhooks ("" without
+ * TRACKER_PUBLIC_URL); available false: the server has no
+ * SHOP_WEBHOOK_ENCRYPTION_KEY, nothing can be connected. */
+export type ShopifyConnection = {
+  connected: boolean;
+  shopDomain: string;
+  secretPreview: string;
+  webhookUrl: string;
+  available: boolean;
+};
+
+/** secret "": keep the stored one. */
+export type ShopifyInput = { shopDomain: string; secret: string };
+
+export function getShopify(networkId: string): Promise<ShopifyConnection> {
+  return apiFetch(`/networks/${networkId}/shopify`);
+}
+
+export function updateShopify(networkId: string, input: ShopifyInput): Promise<ShopifyConnection> {
+  return apiFetch(`/networks/${networkId}/shopify`, { method: "PUT", body: input });
+}
+
+export function deleteShopify(networkId: string): Promise<void> {
+  return apiFetch(`/networks/${networkId}/shopify`, { method: "DELETE" });
+}

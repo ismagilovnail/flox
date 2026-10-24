@@ -70,6 +70,8 @@ spec:
               valueFrom: {secretKeyRef: {name: flox-secrets, key: DATABASE_URL}}
             - name: STICKY_COOKIE_KEY
               valueFrom: {secretKeyRef: {name: flox-secrets, key: STICKY_COOKIE_KEY}}
+            - name: SHOP_WEBHOOK_ENCRYPTION_KEY
+              valueFrom: {secretKeyRef: {name: flox-secrets, key: SHOP_WEBHOOK_ENCRYPTION_KEY, optional: true}}
             - name: CLICKHOUSE_PASSWORD
               valueFrom: {secretKeyRef: {name: flox-secrets, key: CLICKHOUSE_PASSWORD, optional: true}}
             - name: REDIS_URL

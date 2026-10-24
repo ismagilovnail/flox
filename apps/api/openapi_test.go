@@ -38,6 +38,7 @@ var notInPublicSpec = map[string]string{
 	"/telegram-bots/*":                   "connected accounts, set up in the app",
 	"/telegram-channels/*":               "connected accounts, set up in the app",
 	"/traffic-sources/{id}/connection/*": "connected ad accounts, set up in the app",
+	"/networks/{id}/shopify":             "a connected Shopify store, set up in the app",
 	"/landings/*":                        "content — a later version of the reference",
 	"/pwas/*":                            "content — a later version of the reference",
 	"/postlandings/*":                    "content — a later version of the reference",

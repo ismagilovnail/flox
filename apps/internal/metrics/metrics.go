@@ -194,6 +194,16 @@ var (
 		Help:      "Conversions reported to an ad network, by result.",
 	}, []string{"result"})
 
+	// ShopWebhooksTotal counts online stores' order webhooks (apps/tracker
+	// /shopify/{networkId}, audit UNI-4) by platform, topic (orders/paid,
+	// refunds/create, other) and result: the engine's, or why it never got
+	// there (bad_signature, unknown_network, ignored_*, internal_error).
+	ShopWebhooksTotal = promauto.NewCounterVec(prometheus.CounterOpts{
+		Namespace: namespace,
+		Name:      "shop_webhooks_total",
+		Help:      "Online stores' order webhooks, by platform, topic and result.",
+	}, []string{"platform", "topic", "result"})
+
 	// PostbackIncomingTotal counts incoming network postbacks (apps/tracker
 	// /postback/{networkId}) by result: the conversion engine's own
 	// (success, duplicate, ignored, error) or a request refused before it

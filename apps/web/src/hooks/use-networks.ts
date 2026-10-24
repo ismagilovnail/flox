@@ -7,9 +7,13 @@ import {
   activateNetwork,
   archiveNetwork,
   createNetwork,
+  deleteShopify,
   duplicateNetwork,
   getNetwork,
   getNetworkDiagnostics,
+  getShopify,
+  updateShopify,
+  type ShopifyInput,
   listNetworks,
   pauseNetwork,
   regeneratePostbackSecret,
@@ -107,5 +111,28 @@ export function useArchiveNetwork() {
       qc.invalidateQueries({ queryKey: networksKey });
       qc.invalidateQueries({ queryKey: networkKey(id) });
     },
+  });
+}
+
+const shopifyKey = (networkId: string) => ["networks", networkId, "shopify"] as const;
+
+/** An own-site source's Shopify store (audit UNI-4 part 3). */
+export function useShopify(networkId: string) {
+  return useQuery({ queryKey: shopifyKey(networkId), queryFn: () => getShopify(networkId), enabled: !!networkId });
+}
+
+export function useUpdateShopify(networkId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: ShopifyInput) => updateShopify(networkId, input),
+    onSuccess: (data) => qc.setQueryData(shopifyKey(networkId), data),
+  });
+}
+
+export function useDeleteShopify(networkId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => deleteShopify(networkId),
+    onSuccess: () => qc.invalidateQueries({ queryKey: shopifyKey(networkId) }),
   });
 }

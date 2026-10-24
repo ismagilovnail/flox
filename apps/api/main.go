@@ -88,6 +88,7 @@ import (
 	"github.com/ismagilovnail/flox/apps/internal/routing"
 	"github.com/ismagilovnail/flox/apps/internal/routingsimulate"
 	"github.com/ismagilovnail/flox/apps/internal/routingstore"
+	"github.com/ismagilovnail/flox/apps/internal/shopify"
 	"github.com/ismagilovnail/flox/apps/internal/smswebhook"
 	"github.com/ismagilovnail/flox/apps/internal/storage"
 	"github.com/ismagilovnail/flox/apps/internal/streamset"
@@ -402,6 +403,17 @@ func buildServer(ctx context.Context, cfg config.Config, logger *slog.Logger, re
 		return nil, nil, err
 	}
 
+	// Online stores' webhook signing keys (apps/internal/shopify): optional
+	// — without it no store can be connected — but a malformed one fails
+	// startup like the others.
+	var shopWebhookKey []byte
+	if cfg.ShopWebhookEncryptionKey != "" {
+		if shopWebhookKey, err = adaccount.ParseKey(cfg.ShopWebhookEncryptionKey); err != nil {
+			logger.Error("shop webhook encryption key configuration failed", "error", err)
+			return nil, nil, err
+		}
+	}
+
 	// Pixels' access tokens (apps/internal/pixel), the same bar.
 	pixelKey, err := pixel.ParseKey(cfg.PixelEncryptionKey)
 	if err != nil {
@@ -610,10 +622,14 @@ func buildServer(ctx context.Context, cfg config.Config, logger *slog.Logger, re
 	})
 
 	networkHandler := network.NewHandler(network.NewService(network.NewRepository(db)).WithTrackerURL(cfg.TrackerPublicURL), requireOfferWrite, logger)
+	// A Shopify store's order webhooks to an own-site source (audit UNI-4
+	// part 3): its domain and signing key; apps/tracker takes the webhooks.
+	shopifyHandler := shopify.NewHandler(shopify.NewService(shopify.NewStore(db, shopWebhookKey), cfg.TrackerPublicURL), requireOfferWrite, logger)
 	srv.Mux().Route("/networks", func(r chi.Router) {
 		r.Use(tenantMiddleware)
 		r.Use(readGate("offer.read"))
 		networkHandler.Register(r)
+		shopifyHandler.Register(r)
 	})
 
 	landingSvc := landing.NewService(landing.NewRepository(db), storageClient, logger)

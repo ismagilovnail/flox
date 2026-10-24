@@ -78,6 +78,12 @@ type Config struct {
 	// reads them back to send conversion events to the ad platform.
 	PixelEncryptionKey string
 
+	// ShopWebhookEncryptionKey (same shape, its own key) encrypts the keys
+	// online stores sign their order webhooks with (internal/shopify; audit
+	// UNI-4): apps/api writes them, apps/tracker reads them back to check a
+	// webhook. Optional: empty, no store can be connected.
+	ShopWebhookEncryptionKey string
+
 	// Web Push (internal/push, docs/push.md). PushVAPIDPublicKey goes to
 	// the browser when a PWA subscribes (apps/tracker); the worker signs
 	// and encrypts with both keys and identifies itself with
@@ -381,6 +387,7 @@ func load(portVar, portDefault, defaultServiceName string, ch chLimits) (Config,
 		IntegrationEncryptionKey: getEnv("INTEGRATION_ENCRYPTION_KEY", ""),
 		AdAccountEncryptionKey:   getEnv("ADACCOUNT_ENCRYPTION_KEY", ""),
 		PixelEncryptionKey:       getEnv("PIXEL_ENCRYPTION_KEY", ""),
+		ShopWebhookEncryptionKey: getEnv("SHOP_WEBHOOK_ENCRYPTION_KEY", ""),
 		PushVAPIDPublicKey:       getEnv("PUSH_VAPID_PUBLIC_KEY", ""),
 		PushVAPIDPrivateKey:      getEnv("PUSH_VAPID_PRIVATE_KEY", ""),
 		PushVAPIDSubject:         getEnv("PUSH_VAPID_SUBJECT", ""),

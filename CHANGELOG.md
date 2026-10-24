@@ -5,6 +5,28 @@ per-phase, matching `CLAUDE.md`'s phase protocol. The one exception is
 [Between phases], below: spec amendments and the code changes that follow from
 them land between phases and would otherwise be invisible here.
 
+## [Phase 30.90] — Shopify orders by webhook (UNI-4, part 3)
+
+docs/shop-connections.md. An own-site source whose site is a Shopify store connects it (`shop_connections`, migration
+00108): store domain and signing key, the key encrypted under the new optional `SHOP_WEBHOOK_ENCRYPTION_KEY`
+(api writes, tracker reads; compose, k8s, `.env.example`, docs/environment.md).
+
+- apps/tracker `POST /shopify/{networkId}`: HMAC-SHA256 over the raw body checked first, another store refused;
+  `orders/paid` → purchase, or a repeat purchase when the click already bought (`txn_id` = order id); a replayed order
+  is a duplicate before the engine (index 00109); `refunds/create` → a partial refund of that order by the money paid
+  back, keyed by the refund id; test orders, unknown orders and other topics acknowledged. Everything the engine
+  decided is a 200 (Shopify drops subscriptions that keep failing). `flox_shop_webhooks_total`.
+- The click: the cart attribute `flox_click_id`, which flox.js now sets on a Shopify storefront (Cart AJAX API), else
+  `click_id` on the order's landing page.
+- `GET/PUT/DELETE /v1/networks/{id}/shopify`; the own-site page gets a "Shopify store" card (domain, key, webhook URL,
+  theme tag; disconnect confirms).
+- Found while wiring it: a `/{id}` sub-router on /networks took GET/PATCH/DELETE /networks/{id} from the network
+  handler (caught by the OpenAPI router test) — the routes are registered as full paths.
+- Tests: signature, click id, refund amount, domain normalization; the webhooks end to end on Postgres and the real
+  engine (replay guard mutation-checked); flox.js's cart attribute in jsdom; the card. Live on the dev stack: a signed
+  order through the tracker recorded 2490 RUB, its replay a duplicate, a refund 490 RUB partial, a wrong signature 401.
+  Not tried with a real store.
+
 ## [Phase 30.89] — Time zones, currency search, CSP note (UX-4, DOC-1)
 
 - UX-4: the time zone picker (organization settings, report builder) searches every IANA zone the browser knows, by

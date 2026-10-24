@@ -210,6 +210,8 @@ services:
       ADACCOUNT_ENCRYPTION_KEY: "KatbgYl+Kd4KPI5T0hKfwZRYsij/t7g7fVomXdjhW/c="
       # Pixels' access tokens (apps/internal/pixel) — dev-only, as above.
       PIXEL_ENCRYPTION_KEY: "F3TfKSy0V/JjydrKPdIFyN7Xu9s8ScgiQ0kXEBHGd08="
+      # Shopify webhook signing secrets (audit UNI-4): the api encrypts, the tracker checks.
+      SHOP_WEBHOOK_ENCRYPTION_KEY: "vMsT++1QXZDdJ7LK6Y107TbhShXBdjb50QzI32kQwp4="
       # PWA constructor "open test page" links (internal/pwa/testlink.go):
       # same click-link key apps/tracker verifies with, and the tracker's
       # browser-reachable URL.
@@ -288,6 +290,7 @@ services:
       # a real deployment sets its own and keeps it: changing it re-buckets
       # every returning visitor.
       STICKY_COOKIE_KEY: "qTA7h7I11yKvJn3xWZQQHKGN2Jvc6WFgS7qVIWW/qy8="
+      SHOP_WEBHOOK_ENCRYPTION_KEY: "vMsT++1QXZDdJ7LK6Y107TbhShXBdjb50QzI32kQwp4="
       S3_ENDPOINT: http://minio:9000
       S3_PUBLIC_ENDPOINT: http://localhost:9000
       S3_BUCKET: flox
