@@ -5,6 +5,25 @@ per-phase, matching `CLAUDE.md`'s phase protocol. The one exception is
 [Between phases], below: spec amendments and the code changes that follow from
 them land between phases and would otherwise be invisible here.
 
+## [Phase 30.78] — Clicks over the per-IP limit made visible (REL-2)
+
+docs/security.md §3. Audit 2026-10-24: a click over `TRACKER_IP_CLICK_LIMIT` goes to the campaign's fallback and is
+recorded nowhere; no alert and nothing on the customer's side said so — behind a proxy without `TRUSTED_PROXIES` that
+would be all of the traffic.
+
+- `internal/clicklimit`: the tracker counts such clicks in memory per campaign and UTC day (no database call on the
+  redirect) and writes them to `ip_limited_clicks` (migration 00101) every 30 s and on shutdown; a failed write keeps the
+  counts; rows older than 90 days are deleted.
+- Campaign page: "N clicks in 7 days were not recorded", when they were last, and what to check
+  (`GET /campaigns/{id}/diagnostics` — in the public OpenAPI, Buyers limited to their own campaigns).
+- `flox_untrusted_forwarded_requests_total` (`internal/clientip`) and two alerts: `TrackerClicksOverIPLimit` (over 5% of
+  requests for 10 min) and `UntrustedProxyInFront` (most of the tracker's requests carry X-Forwarded-For from an untrusted
+  peer for 15 min). `promtool check rules` passes.
+- Tests: the tracker's over-limit test now checks the counts per campaign through `/t/`, `/lc/`, `/pc/`; flush across
+  days and the 7-day window, a deleted organization, another organization's campaign → 404, a failed write kept
+  (mutation-checked); the counter metric; the warning component; the OpenAPI contract call. Live on the dev stack: 650
+  requests from one IP to the demo link → 50 over the limit of 600, 50 in the table, the API and the metric.
+
 ## [Phase 30.77] — Rouble and CIS currency rates from the Bank of Russia (DATA-8)
 
 docs/fx.md "internal/fx/cbr". Audit 2026-10-24: the ECB, the only rate source, publishes no RUB, UAH or KZT, so payouts

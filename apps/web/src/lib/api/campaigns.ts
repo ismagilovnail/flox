@@ -44,6 +44,17 @@ export function listCampaigns(): Promise<{ campaigns: Campaign[]; total: number 
   return fetchAllPages<"campaigns", Campaign>("/campaigns", "campaigns");
 }
 
+/** GET /campaigns/{id}/diagnostics: clicks of the last `windowDays` UTC
+ * days over the tracker's per-IP limit — sent to the campaign's fallback
+ * and in no report (audit REL-2). `lastDay` is the last UTC day with any. */
+export type CampaignDiagnostics = {
+  ipLimited: { windowDays: number; clicks: number; lastDay: string | null };
+};
+
+export function getCampaignDiagnostics(id: string): Promise<CampaignDiagnostics> {
+  return apiFetch(`/campaigns/${id}/diagnostics`);
+}
+
 export function getCampaign(id: string): Promise<Campaign> {
   return apiFetch(`/campaigns/${id}`);
 }

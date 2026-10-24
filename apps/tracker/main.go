@@ -23,6 +23,7 @@ import (
 	"github.com/ismagilovnail/flox/apps/internal/attribution"
 	"github.com/ismagilovnail/flox/apps/internal/classifier"
 	"github.com/ismagilovnail/flox/apps/internal/classifier/maxmind"
+	"github.com/ismagilovnail/flox/apps/internal/clicklimit"
 	"github.com/ismagilovnail/flox/apps/internal/clientip"
 	"github.com/ismagilovnail/flox/apps/internal/config"
 	"github.com/ismagilovnail/flox/apps/internal/conversion"
@@ -185,9 +186,19 @@ func run() error {
 		events:     events,
 		logger:     logger,
 		clientIP:   clientIP,
-		// Clicks per client IP per minute (iplimit.go, audit SEC-4).
-		clicks: newClickLimiter(cfg.TrackerIPClickLimit, time.Minute),
+		// Clicks per client IP per minute (iplimit.go, audit SEC-4), and
+		// the ones it turns away, counted for the campaign page (REL-2).
+		clicks:  newClickLimiter(cfg.TrackerIPClickLimit, time.Minute),
+		limited: &clicklimit.Counter{DB: db, Logger: logger},
 	}
+	// Flushed until the HTTP server has drained (below), so the last
+	// requests' counts are written too.
+	limitedCtx, stopLimited := context.WithCancel(context.Background())
+	limitedDone := make(chan struct{})
+	go func() {
+		defer close(limitedDone)
+		handler.limited.RunLoop(limitedCtx, clicklimit.FlushInterval)
+	}()
 	if cfg.TrackerIPClickLimit == 0 {
 		logger.Warn("TRACKER_IP_CLICK_LIMIT=0: clicks are not limited per IP")
 	}
@@ -353,8 +364,11 @@ func run() error {
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	if err := httpSrv.Shutdown(shutdownCtx); err != nil {
+		stopLimited()
 		return err
 	}
+	stopLimited()
+	<-limitedDone
 	// Drain buffered events after the server stops accepting requests, so
 	// a clean shutdown doesn't discard clicks it already served.
 	events.Close()

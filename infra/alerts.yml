@@ -57,6 +57,33 @@ groups:
           summary: "apps/tracker is down"
           description: "Prometheus has not scraped a healthy apps/tracker instance for 1m — every tracking link is failing to redirect."
 
+      - alert: TrackerClicksOverIPLimit
+        # Audit REL-2: a click over TRACKER_IP_CLICK_LIMIT is sent to the
+        # campaign's fallback and recorded nowhere (audit SEC-4). A few
+        # are a flood being turned away; a large share is real visitors
+        # lost — usually a proxy or CDN in front with TRUSTED_PROXIES
+        # unset (see UntrustedProxyInFront), or a carrier NAT.
+        expr: sum(rate(flox_tracking_requests_total{outcome="rate_limited"}[10m])) / sum(rate(flox_tracking_requests_total[10m])) > 0.05
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Over 5% of clicks are turned away by the per-IP limit"
+          description: "For 10m more than 5% of tracking requests were over TRACKER_IP_CLICK_LIMIT and went to the campaign fallback unrecorded. The campaign page shows how many per campaign. Check TRUSTED_PROXIES, then whether one source floods the tracker."
+
+      - alert: UntrustedProxyInFront
+        # Audit REL-2: most requests carry X-Forwarded-For from a peer
+        # outside TRUSTED_PROXIES — the tracker sits behind a proxy or CDN
+        # it does not trust, so every visitor gets the proxy's address and
+        # they all share one per-IP click limit.
+        expr: sum(rate(flox_untrusted_forwarded_requests_total{job="flox-tracker"}[15m])) / sum(rate(flox_tracking_requests_total[15m])) > 0.5
+        for: 15m
+        labels:
+          severity: critical
+        annotations:
+          summary: "apps/tracker ignores X-Forwarded-For from its own proxy"
+          description: "For 15m most tracker requests had X-Forwarded-For from a peer outside TRUSTED_PROXIES. Visitors' IPs collapse onto the proxy's: the per-IP click limit turns real traffic away and geo/unique clicks are wrong. Set TRUSTED_PROXIES to the proxy's or CDN's address ranges (docs/environment.md)."
+
   - name: flox.events
     rules:
       - alert: EventLossDetected

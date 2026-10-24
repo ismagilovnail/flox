@@ -479,6 +479,34 @@ paths:
                   total: { type: integer }
         default: { $ref: "#/components/responses/Error" }
 
+  /campaigns/{campaignId}/diagnostics:
+    parameters:
+      - $ref: "#/components/parameters/CampaignId"
+    get:
+      tags: [Campaigns]
+      operationId: campaignDiagnostics
+      summary: Campaign diagnostics
+      description: Clicks of the campaign over the tracker's per-IP limit in the last 7 UTC days, today included. They were sent to the campaign's fallback and are in no report.
+      x-flox-scope: read
+      responses:
+        "200":
+          description: The diagnostics.
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required: [ipLimited]
+                properties:
+                  ipLimited:
+                    type: object
+                    additionalProperties: false
+                    required: [windowDays, clicks, lastDay]
+                    properties:
+                      windowDays: { type: integer }
+                      clicks: { type: integer }
+                      lastDay: { type: [string, "null"], format: date-time, description: "The last UTC day with such clicks." }
+        default: { $ref: "#/components/responses/Error" }
   /campaigns/{campaignId}/cost-entries:
     parameters:
       - $ref: "#/components/parameters/CampaignId"

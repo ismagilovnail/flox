@@ -45,6 +45,8 @@ import (
 	"net/netip"
 	"strings"
 	"sync"
+
+	"github.com/ismagilovnail/flox/apps/internal/metrics"
 )
 
 // DefaultTrustedProxies is used when TRUSTED_PROXIES is unset: loopback
@@ -146,6 +148,9 @@ func (rs *Resolver) Addr(r *http.Request) netip.Addr {
 		// warn once, since a proxied deployment that forgot to configure
 		// TRUSTED_PROXIES lands here on every request and would otherwise
 		// silently collapse every visitor onto the proxy's own address.
+		if r.Header.Get("X-Forwarded-For") != "" {
+			metrics.UntrustedForwardedTotal.Inc()
+		}
 		if r.Header.Get("X-Forwarded-For") != "" && rs.logger != nil {
 			rs.warn.Do(func() {
 				rs.logger.Warn("ignoring X-Forwarded-For from an untrusted peer — if this server sits behind a proxy or CDN, set TRUSTED_PROXIES to its address range, otherwise every client will share one rate-limit bucket",

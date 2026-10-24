@@ -10,6 +10,7 @@ import {
   createCampaign,
   duplicateCampaign,
   getCampaign,
+  getCampaignDiagnostics,
   listCampaigns,
   pauseCampaign,
   setCampaignOwner,
@@ -28,6 +29,10 @@ export function useCampaigns() {
 
 export function useCampaign(id: string) {
   return useQuery({ queryKey: campaignKey(id), queryFn: () => getCampaign(id), enabled: !!id });
+}
+
+export function useCampaignDiagnostics(id: string) {
+  return useQuery({ queryKey: [...campaignKey(id), "diagnostics"], queryFn: () => getCampaignDiagnostics(id), enabled: !!id });
 }
 
 /** Every mutation invalidates both the list and the one detail query it

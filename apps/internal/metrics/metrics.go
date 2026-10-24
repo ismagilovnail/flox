@@ -54,6 +54,19 @@ var (
 		Help:      "Total apps/tracker redirect requests, by outcome.",
 	}, []string{"outcome"})
 
+	// UntrustedForwardedTotal counts requests carrying X-Forwarded-For from
+	// a peer outside TRUSTED_PROXIES (internal/clientip): the header is
+	// ignored and the peer is taken as the client. A few are direct
+	// visitors behind their own proxy; most of a service's traffic means
+	// it sits behind a proxy or CDN that TRUSTED_PROXIES leaves out, and
+	// every visitor shares the proxy's address — one per-IP click limit
+	// for all of them (audit REL-2, alert UntrustedProxyInFront).
+	UntrustedForwardedTotal = promauto.NewCounter(prometheus.CounterOpts{
+		Namespace: namespace,
+		Name:      "untrusted_forwarded_requests_total",
+		Help:      "Requests with X-Forwarded-For from a peer outside TRUSTED_PROXIES (the header was ignored).",
+	})
+
 	TrackingLatencySeconds = promauto.NewHistogram(prometheus.HistogramOpts{
 		Namespace: namespace,
 		Name:      "tracking_latency_seconds",

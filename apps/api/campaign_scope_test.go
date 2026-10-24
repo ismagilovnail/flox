@@ -27,6 +27,7 @@ var scopedReads = []struct {
 	{"GET", "/campaigns/{campaignId}/tracking-links", "/campaigns/{campaign}/tracking-links", nil},
 	{"GET", "/campaigns/{campaignId}/stream-sets", "/campaigns/{campaign}/stream-sets", nil},
 	{"GET", "/campaigns/{campaignId}/stream-sets/{id}", "/campaigns/{campaign}/stream-sets/{streamSet}", nil},
+	{"GET", "/campaigns/{campaignId}/diagnostics", "/campaigns/{campaign}/diagnostics", nil},
 	{"GET", "/campaigns/{campaignId}/cost-entries", "/campaigns/{campaign}/cost-entries", nil},
 	{"GET", "/campaigns/{campaignId}/cost-entries/daily", "/campaigns/{campaign}/cost-entries/daily?from={from}&to={to}", nil},
 	{"POST", "/campaigns/{campaignId}/routing/simulate", "/campaigns/{campaign}/routing/simulate", map[string]any{}},

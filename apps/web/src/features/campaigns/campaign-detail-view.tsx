@@ -15,6 +15,7 @@ import { CampaignRowActions } from "@/features/campaigns/campaign-row-actions";
 import { CampaignOwner } from "@/features/campaigns/campaign-owner";
 import { CampaignForm, type CampaignFormValues } from "@/features/campaigns/campaign-form";
 import { CampaignCostEntries } from "@/features/campaigns/campaign-cost-entries";
+import { CampaignDiagnostics } from "@/features/campaigns/campaign-diagnostics";
 import { TrackingLinks } from "@/features/campaigns/tracking-links";
 import { StreamSetList } from "@/features/stream-sets/stream-set-list";
 import { RoutingSimulatorView } from "@/features/routing-simulator/routing-simulator-view";
@@ -87,6 +88,8 @@ export function CampaignDetailView({ id }: { id: string }) {
           <CampaignRowActions campaign={campaign} variant="inline" />
         </div>
       </div>
+
+      <CampaignDiagnostics campaignId={campaign.id} />
 
       <Tabs defaultValue="overview">
         <TabsList>

@@ -56,6 +56,7 @@ func (s *captureSink) Write(_ context.Context, batch []event.Event) error {
 
 type landingFixture struct {
 	host, slug, orgID, landingID string
+	campaignID                   string
 	pool                         *pgxpool.Pool
 }
 
@@ -137,7 +138,7 @@ func seedFlowFixture(tb testing.TB, pool *pgxpool.Pool, lnd *landing.Landing, mo
 		idgen.New(), orgID, camp.ID, domainID); err != nil {
 		tb.Fatalf("seeding tracking link: %v", err)
 	}
-	return landingFixture{host: host, slug: "go", orgID: orgID, landingID: landingID, pool: pool}
+	return landingFixture{host: host, slug: "go", orgID: orgID, landingID: landingID, campaignID: camp.ID, pool: pool}
 }
 
 func internalLanding(status landing.Status) landing.Landing {

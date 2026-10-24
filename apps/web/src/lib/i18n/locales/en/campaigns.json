@@ -161,5 +161,13 @@
     "mine": "My campaigns",
     "changed": "Buyer changed",
     "changeError": "Couldn't change the buyer"
+  },
+  "diagnostics": {
+    "ipLimited": {
+      "title_one": "{{count}} click in {{days}} days was not recorded",
+      "title_other": "{{count}} clicks in {{days}} days were not recorded",
+      "description": "They came from an IP address that sent more clicks per minute than the tracker accepts from one address. Such visitors went to the campaign's fallback URL and are in no report. Last on {{lastDay}} (UTC).",
+      "fix": "A flood from one source is turned away on purpose. If these are real visitors, the tracker is likely behind a proxy or CDN that is not trusted (TRUSTED_PROXIES), so everyone shares its address — tell the FLOX team."
+    }
   }
 }

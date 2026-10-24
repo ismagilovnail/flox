@@ -10,6 +10,7 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"github.com/ismagilovnail/flox/apps/internal/classifier"
+	"github.com/ismagilovnail/flox/apps/internal/clicklimit"
 	"github.com/ismagilovnail/flox/apps/internal/clientip"
 	"github.com/ismagilovnail/flox/apps/internal/event"
 	"github.com/ismagilovnail/flox/apps/internal/eventbuf"
@@ -63,6 +64,9 @@ type Handler struct {
 	// clicks caps clicks per client IP (iplimit.go, audit SEC-4); nil
 	// means no limit.
 	clicks *clickLimiter
+	// limited counts the clicks clicks turns away, per campaign, for the
+	// campaign page (internal/clicklimit, audit REL-2); nil counts nothing.
+	limited *clicklimit.Counter
 }
 
 func (h *Handler) Register(r chi.Router) {
@@ -141,8 +145,9 @@ func (h *Handler) track(w http.ResponseWriter, r *http.Request) {
 	// somewhere — the campaign's fallback — but nothing is routed or
 	// recorded, so a flood neither skews the stats nor loads the
 	// pipeline. Behind a carrier NAT a real visitor may share the IP.
-	if !h.clicks.allow(ip, time.Now()) {
+	if now := time.Now(); !h.clicks.allow(ip, now) {
 		outcome = outcomeRateLimited
+		h.limited.Add(link.OrganizationID, link.CampaignID, now)
 		if cfg.FallbackURL == "" {
 			http.Error(w, "too many requests", http.StatusTooManyRequests)
 			return

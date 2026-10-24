@@ -1,12 +1,14 @@
 package main
 
 import (
+	"context"
 	"net"
 	"net/http"
 	"sync"
 	"testing"
 	"time"
 
+	"github.com/ismagilovnail/flox/apps/internal/clicklimit"
 	"github.com/ismagilovnail/flox/apps/internal/idgen"
 	"github.com/ismagilovnail/flox/apps/internal/landinglink"
 )
@@ -110,11 +112,16 @@ func BenchmarkClickLimiter(b *testing.B) {
 
 // SEC-4 through the real handlers: over the limit, /t/ sends the visitor
 // to the campaign's fallback and /lc/, /pc/ to the destination their token
-// carries — and nothing is recorded. Under it, nothing changes.
+// carries — and nothing is recorded but a count per campaign for the
+// campaign page (REL-2). Under it, nothing changes.
 func TestOverTheClickLimitNothingIsRecorded(t *testing.T) {
 	pool := testPool(t)
 	fx := seedFlowFixture(t, pool, nil, nil)
-	h, sink, closeEvents := newLandingHandler(t, pool, true, func(h *Handler) { h.clicks = newClickLimiter(1, time.Minute) })
+	limited := &clicklimit.Counter{DB: pool}
+	h, sink, closeEvents := newLandingHandler(t, pool, true, func(h *Handler) {
+		h.clicks = newClickLimiter(1, time.Minute)
+		h.limited = limited
+	})
 
 	first := get(h, fx.host, "/t/"+fx.slug)
 	if first.Code != http.StatusFound || first.Header().Get("Location") != landingTestOffer {
@@ -138,6 +145,27 @@ func TestOverTheClickLimitNothingIsRecorded(t *testing.T) {
 	}
 	if lc.Header().Get("Location") != claims.Destination || pc.Header().Get("Location") != claims.Destination {
 		t.Errorf("over the limit: /lc/ → %q, /pc/ → %q, want the token's destination", lc.Header().Get("Location"), pc.Header().Get("Location"))
+	}
+
+	if err := limited.Flush(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	counts := map[string]int64{}
+	rows, err := pool.Query(context.Background(), `SELECT campaign_id, clicks FROM ip_limited_clicks WHERE organization_id = $1 AND day = (now() AT TIME ZONE 'UTC')::date`, fx.orgID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for rows.Next() {
+		var c string
+		var n int64
+		if err := rows.Scan(&c, &n); err != nil {
+			t.Fatal(err)
+		}
+		counts[c] = n
+	}
+	rows.Close()
+	if len(counts) != 2 || counts[fx.campaignID] != 1 || counts[claims.CampaignID] != 2 {
+		t.Errorf("limited clicks = %v, want 1 for the campaign (/t/) and 2 for the token's (/lc/, /pc/)", counts)
 	}
 
 	closeEvents()

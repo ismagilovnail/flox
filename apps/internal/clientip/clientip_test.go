@@ -5,7 +5,10 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/prometheus/client_golang/prometheus/testutil"
+
 	"github.com/ismagilovnail/flox/apps/internal/clientip"
+	"github.com/ismagilovnail/flox/apps/internal/metrics"
 )
 
 func TestNewRejectsMalformedEntries(t *testing.T) {
@@ -108,5 +111,32 @@ func TestUnmapsIPv4MappedIPv6(t *testing.T) {
 
 	if got := rs.String(req); got != "203.0.113.9" {
 		t.Fatalf("String = %q, want the unmapped IPv4 address", got)
+	}
+}
+
+// X-Forwarded-For from a peer outside TRUSTED_PROXIES is ignored and
+// counted (audit REL-2, alert UntrustedProxyInFront); from a trusted
+// proxy, or without the header, it is not counted.
+func TestUntrustedForwardedIsCounted(t *testing.T) {
+	rs, err := clientip.New(nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	req := func(peer, xff string) *http.Request {
+		r := httptest.NewRequest(http.MethodGet, "/", nil)
+		r.RemoteAddr = peer + ":4000"
+		if xff != "" {
+			r.Header.Set("X-Forwarded-For", xff)
+		}
+		return r
+	}
+	before := testutil.ToFloat64(metrics.UntrustedForwardedTotal)
+	if got := rs.String(req("198.51.100.7", "203.0.113.9")); got != "198.51.100.7" {
+		t.Fatalf("untrusted peer: client = %s, want the peer", got)
+	}
+	rs.String(req("10.0.0.2", "203.0.113.9")) // a trusted proxy
+	rs.String(req("198.51.100.7", ""))        // a direct client without the header
+	if got := testutil.ToFloat64(metrics.UntrustedForwardedTotal) - before; got != 1 {
+		t.Fatalf("counted %v, want 1", got)
 	}
 }

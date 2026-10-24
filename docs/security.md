@@ -145,7 +145,23 @@ brute-force protection.
     loads no pipeline. A real visitor behind a carrier NAT who shares a
     busy IP still lands somewhere instead of getting an error.
   - **Metric:** these clicks count as
-    `flox_tracking_requests_total{outcome="rate_limited"}`.
+    `flox_tracking_requests_total{outcome="rate_limited"}`; the alert
+    `TrackerClicksOverIPLimit` fires when they are over 5% of requests for
+    10 minutes (audit REL-2).
+  - **Visible to the customer (audit REL-2):** the tracker adds them up in
+    memory per campaign and UTC day (`internal/clicklimit.Counter`, no
+    database call on the redirect) and writes the totals to
+    `ip_limited_clicks` every 30 s, and once more on shutdown; a failed
+    write keeps them for the next one; rows older than 90 days are
+    deleted. The campaign page warns "N clicks in 7 days were not
+    recorded" (`GET /campaigns/{id}/diagnostics`, Buyers limited to their
+    own campaigns).
+  - **Misconfigured proxy:** `X-Forwarded-For` from a peer outside
+    `TRUSTED_PROXIES` is ignored and counted
+    (`flox_untrusted_forwarded_requests_total`); the alert
+    `UntrustedProxyInFront` fires when that is most of the tracker's
+    traffic for 15 minutes — every visitor then shares the proxy's address
+    and one per-IP limit.
 
   This limit is a floor. Volume protection at scale stays an edge concern:
   a CDN or load balancer.

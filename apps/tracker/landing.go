@@ -170,8 +170,9 @@ func (h *Handler) landClick(w http.ResponseWriter, r *http.Request) {
 	// Over the per-IP limit (audit SEC-4): straight to the destination the
 	// token carries, past the PWA and postlanding stages, which record
 	// events of their own — nothing is recorded.
-	if !h.clicks.allow(ip, time.Now()) {
+	if now := time.Now(); !h.clicks.allow(ip, now) {
 		outcome = outcomeRateLimited
+		h.limited.Add(claims.OrganizationID, claims.CampaignID, now)
 		http.Redirect(w, r, claims.Destination, http.StatusFound)
 		return
 	}

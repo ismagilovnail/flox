@@ -123,7 +123,8 @@ docker run -d -p 80:80 -p 443:443 \
 - Add Caddy's address to `TRUSTED_PROXIES` if it is not on a private
   network. Otherwise the tracker sees Caddy's IP instead of the visitor's,
   and the per-IP click limit (`TRACKER_IP_CLICK_LIMIT`) would count every
-  visitor as one.
+  visitor as one. The alert `UntrustedProxyInFront` and the campaign
+  page's "clicks not recorded" warning show it (audit REL-2).
 - **Postback secrets in logs (audit SEC-3).** Networks send their secret in
   the postback's query string. The Caddyfile masks it in Caddy's logs. Any
   CDN, load balancer or extra proxy in front of the tracker must either not

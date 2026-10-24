@@ -35,6 +35,7 @@ import (
 	"github.com/ismagilovnail/flox/apps/internal/campaignscope"
 	"github.com/ismagilovnail/flox/apps/internal/chconn"
 	"github.com/ismagilovnail/flox/apps/internal/chstore"
+	"github.com/ismagilovnail/flox/apps/internal/clicklimit"
 	"github.com/ismagilovnail/flox/apps/internal/clicklogs"
 	"github.com/ismagilovnail/flox/apps/internal/clientip"
 	"github.com/ismagilovnail/flox/apps/internal/config"
@@ -766,6 +767,15 @@ func buildServer(ctx context.Context, cfg config.Config, logger *slog.Logger, re
 		eventMappingHandler.Register(r)
 		// Postbacks waiting for their status to be mapped (internal/mappingreplay).
 		waitingHandler.Register(r)
+	})
+
+	// Clicks over the tracker's per-IP limit (internal/clicklimit, audit
+	// REL-2): the campaign page's warning.
+	srv.Mux().Route("/campaigns/{campaignId}/diagnostics", func(r chi.Router) {
+		r.Use(tenantMiddleware)
+		r.Use(readGate("campaign.read"))
+		r.Use(scopeAccess.RequireVisible("campaignId"))
+		clicklimit.NewHandler(db, logger).Register(r)
 	})
 
 	costSvc := cost.NewService(cost.NewRepository(db), conversion.NewPostgresFX(db))

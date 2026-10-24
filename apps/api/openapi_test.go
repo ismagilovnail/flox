@@ -409,6 +409,7 @@ func TestOpenAPIOperationsAnswerAsDocumented(t *testing.T) {
 	// Spend.
 	today := time.Now().UTC().Format(time.DateOnly)
 	weekAgo := time.Now().UTC().AddDate(0, 0, -7).Format(time.DateOnly)
+	do("campaignDiagnostics", "/campaigns/"+camp.ID+"/diagnostics", nil, http.StatusOK, nil)
 	costs := "/campaigns/" + camp.ID + "/cost-entries"
 	var entry withID
 	do("upsertCostEntry", costs, map[string]any{"entryDate": today, "amount": 120.5, "currency": "USD", "country": "DE", "trafficSourceId": src.ID}, http.StatusOK, &entry)

@@ -51,6 +51,7 @@ is what tells them apart on a dashboard).
 |---|---|---|
 | `tracking_requests` | `flox_tracking_requests_total{outcome}` | every tracker route (`/t/`, `/lc/`, `/pwa/`, `/pc/`) — outcome is `redirected`/`landing`/`land_click`/`pwa`/`postlanding`/`post_click`/`blocked`/`rate_limited`/`not_found`/`error` (`apps/tracker/handler.go`) |
 | `tracking_latency` | `flox_tracking_latency_seconds` | same, whole-handler wall time |
+| — | `flox_untrusted_forwarded_requests_total` | `internal/clientip`: a request with `X-Forwarded-For` from a peer outside `TRUSTED_PROXIES` (the header ignored) — api and tracker, each in its own process; alert `UntrustedProxyInFront` (audit REL-2) |
 | `routing_latency` | `flox_routing_latency_seconds` | `internal/routing.Engine.Resolve` — recorded wherever it's called (the hot path, and `apps/api`'s `/routing/simulate`, each in their own process) |
 | `event_processing_latency` | `flox_event_processing_latency_seconds` | `eventqueue.Flusher.RunOnce` — the ClickHouse `InsertBatch` call only |
 | `event_queue_depth` | `flox_event_queue_depth` | `eventqueue.PollDepth`, a new goroutine in `apps/worker/main.go`, polling `PostgresQueue.Depth` (new method) every 15s |
