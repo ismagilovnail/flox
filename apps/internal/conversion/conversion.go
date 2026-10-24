@@ -37,6 +37,7 @@ import (
 
 	"github.com/ismagilovnail/flox/apps/internal/attribution"
 	"github.com/ismagilovnail/flox/apps/internal/event"
+	"github.com/ismagilovnail/flox/apps/internal/idgen"
 	"github.com/ismagilovnail/flox/apps/internal/macro"
 	"github.com/ismagilovnail/flox/apps/internal/metrics"
 	"github.com/ismagilovnail/flox/apps/internal/pixel"
@@ -82,6 +83,12 @@ type Postback struct {
 	// refusal is kept for internal/mappingreplay to record once it has one.
 	awaitingMapping bool
 
+	// Browser: reported by a page's script at apps/tracker's /c/{networkId}
+	// (audit UNI-1 part 2) — no secret, so the engine takes only statuses
+	// that map to CPA_HOLD or CPA_ACCEPT, and a click it does not know only
+	// when the click is fresh enough to still be on its way (BrowserFreshClick).
+	Browser bool
+
 	// NetworkTxnID is the network's own transaction/order id, when sent.
 	// Stored regardless of whether this status's dedup key uses it (§45).
 	NetworkTxnID string
@@ -94,6 +101,11 @@ type Postback struct {
 
 	OccurredAt time.Time
 }
+
+// BrowserFreshClick is how old a click a page's script reports may be
+// while the click lookup does not know it yet: the tracker's click reaches
+// it within seconds, so an older unknown one is made up.
+const BrowserFreshClick = 10 * time.Minute
 
 // ResultKind is the closed set of outcomes a postback can end in — a
 // dashboard filter ("today's ignored postbacks"), not free text.
@@ -135,6 +147,10 @@ type Network struct {
 	// Currency is the payout currency assumed for a postback with revenue
 	// but no currency (Postback.NetworkCurrency).
 	Currency string
+	// BrowserConversions / BrowserDomains: whether a page's script may
+	// report conversions, and from which sites (audit UNI-1 part 2).
+	BrowserConversions bool
+	BrowserDomains     []string
 	// PostbackSecretHash authenticates an incoming postback (§54):
 	// apps/tracker's PostbackHandler hashes the request's secret param and
 	// compares it with this before calling Service.Record. Network has no
@@ -480,6 +496,10 @@ func (s *Service) run(ctx context.Context, p Postback, out outcome) (Result, err
 		return Result{}, fmt.Errorf("conversion: mapping status: %w", err)
 	}
 	eventRef := eventRefFor(status, p.NetworkTxnID)
+	if p.Browser && status != event.CpaHold && status != event.CpaAccept {
+		return out.refuse(ctx, p, p.ClickID, status, eventRef, ResultError,
+			fmt.Sprintf("a page's script can report only a lead or a purchase (CPA_HOLD, CPA_ACCEPT), not %s — send it from the site's server", status))
+	}
 
 	refusal, err := s.checkProgression(ctx, p, status)
 	if err != nil {
@@ -492,6 +512,14 @@ func (s *Service) run(ctx context.Context, p Postback, out outcome) (Result, err
 	attr, err := s.attribute(ctx, p, status)
 	if err != nil {
 		return Result{}, err
+	}
+	if p.Browser && attr.Outcome == attribution.OutcomeUnknownClick {
+		// A fresh click may still be on its way to the click lookup and
+		// is retried like any other; an old unknown one from a page is
+		// made up.
+		if made, ok := idgen.Time(p.ClickID); !ok || p.OccurredAt.Sub(made) > BrowserFreshClick {
+			return out.refuse(ctx, p, p.ClickID, status, eventRef, ResultError, "unknown click: a page's script can report only a click FLOX recorded")
+		}
 	}
 	usdValue, revenue := s.convertRevenue(ctx, p)
 	p.unpriced = revenue != nil && usdValue == nil
@@ -544,6 +572,9 @@ func (p Postback) ledgerCurrency() string {
 // why an amount is (or is not) in the reports.
 func (p Postback) annotate(message string) string {
 	var notes []string
+	if p.Browser {
+		notes = append(notes, "reported by the page's script, not the site's server")
+	}
 	if p.currencyAssumed {
 		notes = append(notes, fmt.Sprintf("currency not sent, the network's %s assumed", p.Currency))
 	}

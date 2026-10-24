@@ -140,6 +140,28 @@ func (s *Service) Update(ctx context.Context, orgID, id string, in UpdateInput) 
 	if in.Status != nil && !in.Status.Valid() {
 		fields["status"] = "must be one of active, paused, archived"
 	}
+	if in.BrowserDomains != nil {
+		domains, bad := normalizeDomains(in.BrowserDomains)
+		in.BrowserDomains = domains
+		if bad != "" {
+			fields["browserDomains"] = bad
+		}
+	}
+	if in.BrowserConversions != nil && *in.BrowserConversions && len(fields) == 0 {
+		// Turning it on needs a domain to accept them from — the one
+		// thing that keeps another site from reporting into this network.
+		domains := in.BrowserDomains
+		if domains == nil {
+			current, err := s.repo.GetByID(ctx, orgID, id)
+			if err != nil {
+				return Network{}, err
+			}
+			domains = current.BrowserDomains
+		}
+		if len(domains) == 0 {
+			fields["browserDomains"] = "add your site's domain before turning browser conversions on"
+		}
+	}
 	if len(fields) > 0 {
 		return Network{}, apierror.Validation("invalid network", fields)
 	}
@@ -231,4 +253,48 @@ func validateCreate(in CreateInput) map[string]string {
 		fields["currency"] = currencyMessage
 	}
 	return fields
+}
+
+// maxBrowserDomains bounds a network's browser domains: a site and its
+// mirrors, not a list of everyone's.
+const maxBrowserDomains = 20
+
+// hostLabel is one DNS label; a browser domain is two or more.
+var hostLabel = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$`)
+
+// normalizeDomains turns what the operator typed — "Shop.example.com",
+// "https://shop.example.com/cart" — into host names, without duplicates;
+// bad names what is wrong, "" when all is well.
+func normalizeDomains(in []string) ([]string, string) {
+	out := []string{}
+	seen := map[string]bool{}
+	for _, raw := range in {
+		d := strings.ToLower(strings.TrimSpace(raw))
+		if d == "" {
+			continue
+		}
+		if i := strings.Index(d, "://"); i >= 0 {
+			d = d[i+3:]
+		}
+		if i := strings.IndexAny(d, "/?#"); i >= 0 {
+			d = d[:i]
+		}
+		d = strings.TrimSuffix(strings.TrimPrefix(d, "www."), ".")
+		labels := strings.Split(d, ".")
+		valid := len(labels) >= 2
+		for _, l := range labels {
+			valid = valid && hostLabel.MatchString(l)
+		}
+		if !valid {
+			return nil, fmt.Sprintf("%q is not a domain name, e.g. shop.example.com", strings.TrimSpace(raw))
+		}
+		if !seen[d] {
+			seen[d] = true
+			out = append(out, d)
+		}
+	}
+	if len(out) > maxBrowserDomains {
+		return nil, fmt.Sprintf("at most %d domains", maxBrowserDomains)
+	}
+	return out, ""
 }

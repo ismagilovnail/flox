@@ -5,6 +5,24 @@ per-phase, matching `CLAUDE.md`'s phase protocol. The one exception is
 [Between phases], below: spec amendments and the code changes that follow from
 them land between phases and would otherwise be invisible here.
 
+## [Phase 30.80] — Own site without a server: flox.js (UNI-1, part 2)
+
+docs/networks-offers.md "Own site without a server", docs/security.md §12. A site built in Tilda or another builder
+cannot call the secret postback URL; it now puts `flox.js` on its pages.
+
+- `GET /flox.js` (apps/tracker): keeps the click id from the URL in a first-party cookie; on the thank-you page
+  `data-event="purchase"` or `flox("purchase", {...})` reports it to `/c/{networkId}`.
+- `/c/{networkId}` has no secret. Instead: off unless the source turns it on with its site's domains (migration 00102;
+  turning it on without a domain is refused); only from those domains (Origin, else Referer); only a lead or a purchase,
+  never as a duplicate; only a click FLOX knows, or one made in the last 10 minutes; refusals limited per IP; marked in
+  the postback log; `flox_browser_conversions_total`.
+- What a page can still fake: one lead and one purchase with any amount per real click — said on the card; repeat
+  purchases, refunds and cancellations stay on the server URL.
+- An own site's page gets a "Site without a server" card: switch, domains, the two tags, the `flox()` call, the limits.
+- Tests: the handler (mutation-checked), the engine's browser rules, domain normalization, the served script itself in
+  jsdom (mutation-checked), the card, the OpenAPI contract. Live on the dev stack: a fresh click's purchase from
+  `www.shop.example` recorded, a second one a duplicate, a refund, a made-up click and another origin refused.
+
 ## [Phase 30.79] — Own site: conversions without a partner (UNI-1, part 1)
 
 docs/networks-offers.md "Own site". Audit 2026-10-24: everything assumed a partner network, so a shop, service or app

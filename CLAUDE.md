@@ -19,7 +19,7 @@ referenced below as §N).
 ## CURRENT STATE — UPDATE THIS EVERY PHASE
 
 ```
-CURRENT PHASE : PHASE 30.79 — UNI-1 PART 1, OWN SITE (closed)
+CURRENT PHASE : PHASE 30.80 — UNI-1 PART 2, FLOX.JS (closed)
 STATUS        : Product audits 2026-10-15 and 2026-10-24 (docs/audit-
                 product-*.md; the second: universality, SEC-7..UX-4)
                 are the backlog: items on the local dev panel tools/devpanel
@@ -97,18 +97,20 @@ STATUS        : Product audits 2026-10-15 and 2026-10-24 (docs/audit-
                 UNI-1 part 1: "Own site" = network with templateKey own_site
                 (plain statuses mapped on create); section renamed
                 "Conversion sources". A refund reverses the FIRST purchase
-                (§45) — per-order refunds are UNI-4. Part 2 (browser
-                script + public endpoint) not done.
+                (§45) — per-order refunds are UNI-4. Part 2: tracker
+                /flox.js + /c/{networkId} (no secret; browser_conversions +
+                browser_domains, 00102; Postback.Browser: HOLD/ACCEPT only,
+                no duplicates, known or ≤10-min-old click).
                 BUG-9: chstore tests use NewRawEventStore (a store reads
                 the rollup once the dev backfill is done, and test events
                 are dated before the cutover); a test elsewhere that seeds
                 past events and reads rollup-able reports has the same trap.
                 P0 left (skipped by the user for now):
                 OPS-1..3 (prod, restore, load) — needs the owner's hosting.
-LAST COMMIT   : feat(networks): own site — conversions without a partner (UNI-1 part 1).
+LAST COMMIT   : feat(tracker): own site without a server — flox.js (UNI-1 part 2).
 UNCOMMITTED   : docs/import-export-plan.md (INT-2, stays uncommitted).
-NEXT          : wait for the user. Audit 2026-10-24 items: UNI-1 part 2
-                (browser script), P2 UNI-2/UNI-3, P3 UNI-4, DOC-1, UX-4;
+NEXT          : wait for the user. Audit 2026-10-24 items: P2 UNI-2/UNI-3,
+                P3 UNI-4, DOC-1, UX-4;
                 BIZ-3/BIZ-4 part 2 are the user's (no interview script),
                 OPS-1..3 need hosting.
                 GAP-2 (Google Play import) is won't-do: do not offer it. INT-2 is

@@ -197,5 +197,25 @@
       "cancel": "an order cancelled — takes the first purchase's revenue out if it was paid",
       "spam": "a junk lead"
     }
+  },
+  "browser": {
+    "title": "Site without a server",
+    "description": "For a site built in Tilda or another builder: a script on its pages keeps the click id and reports a lead or a purchase — no server needed.",
+    "enable": "Take conversions from the site's pages",
+    "domainsLabel": "Your site's domains",
+    "domainsHint": "One per line, e.g. shop.example.com — its subdomains count too. Other sites' pages are refused.",
+    "domainsRequired": "Add your site's domain first.",
+    "save": "Save",
+    "saved": "Saved",
+    "saveError": "Couldn't save",
+    "everyPage": "1. On every page of the site (keeps the click id):",
+    "thankYou": "2. On the thank-you page (reports the purchase; put the order's values in data-revenue, data-currency, data-order, or leave them out):",
+    "copy": {
+      "everyPage": "Copy the tag for every page",
+      "thankYou": "Copy the tag for the thank-you page"
+    },
+    "copied": "Copied",
+    "jsCall": "From your own code: flox(\"lead\") or flox(\"purchase\", { revenue: 1990, currency: \"RUB\", order: \"A-1001\" }). Use \"lead\" for a form, \"purchase\" for a paid order.",
+    "limits": "A page can be faked by anyone who opens it, so a page reports only a lead and a purchase, once per click, for a click FLOX recorded, from your domains. Repeat purchases, refunds and cancellations need the server URL above."
   }
 }

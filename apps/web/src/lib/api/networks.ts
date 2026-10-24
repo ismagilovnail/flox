@@ -23,6 +23,10 @@ export type Network = {
   incomingPostbackUrl: string;
   /** The affiliate-platform template (lib/network-templates.ts); "" = none. */
   templateKey: string;
+  /** A page's script may report a lead or a purchase at the tracker's
+   * /c/{id}, from `browserDomains` only (audit UNI-1 part 2). */
+  browserConversions: boolean;
+  browserDomains: string[];
   status: NetworkStatus;
   createdAt: string;
   updatedAt: string;
@@ -36,7 +40,11 @@ export type CreateNetworkInput = {
   templateKey?: string;
 };
 
-export type UpdateNetworkInput = Partial<CreateNetworkInput> & { status?: NetworkStatus };
+export type UpdateNetworkInput = Partial<CreateNetworkInput> & {
+  status?: NetworkStatus;
+  browserConversions?: boolean;
+  browserDomains?: string[];
+};
 
 export function listNetworks(): Promise<{ networks: Network[]; total: number }> {
   return fetchAllPages<"networks", Network>("/networks", "networks");

@@ -20,11 +20,11 @@ type Repository struct {
 
 func NewRepository(db *pgxpool.Pool) *Repository { return &Repository{db: db} }
 
-const selectColumns = `id, organization_id, name, postback_url, accept_duplicates, currency, status, created_at, updated_at, template_key`
+const selectColumns = `id, organization_id, name, postback_url, accept_duplicates, currency, status, created_at, updated_at, template_key, browser_conversions, browser_domains`
 
 func scanNetwork(row pgx.Row) (Network, error) {
 	var n Network
-	err := row.Scan(&n.ID, &n.OrganizationID, &n.Name, &n.PostbackURL, &n.AcceptDuplicates, &n.Currency, &n.Status, &n.CreatedAt, &n.UpdatedAt, &n.TemplateKey)
+	err := row.Scan(&n.ID, &n.OrganizationID, &n.Name, &n.PostbackURL, &n.AcceptDuplicates, &n.Currency, &n.Status, &n.CreatedAt, &n.UpdatedAt, &n.TemplateKey, &n.BrowserConversions, &n.BrowserDomains)
 	return n, err
 }
 
@@ -144,6 +144,12 @@ func (r *Repository) Update(ctx context.Context, orgID, id string, in UpdateInpu
 	}
 	if in.Status != nil {
 		sets = append(sets, "status = "+arg(*in.Status))
+	}
+	if in.BrowserConversions != nil {
+		sets = append(sets, "browser_conversions = "+arg(*in.BrowserConversions))
+	}
+	if in.BrowserDomains != nil {
+		sets = append(sets, "browser_domains = "+arg(in.BrowserDomains))
 	}
 
 	if len(sets) == 0 {

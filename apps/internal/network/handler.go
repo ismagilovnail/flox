@@ -124,6 +124,9 @@ type updateRequest struct {
 	Currency         *string `json:"currency"`
 	TemplateKey      *string `json:"templateKey"`
 	Status           *Status `json:"status"`
+	// Audit UNI-1 part 2: a page's script may report conversions.
+	BrowserConversions *bool    `json:"browserConversions"`
+	BrowserDomains     []string `json:"browserDomains"`
 }
 
 func (h *Handler) update(w http.ResponseWriter, r *http.Request) {
@@ -136,12 +139,14 @@ func (h *Handler) update(w http.ResponseWriter, r *http.Request) {
 	}
 
 	n, err := h.svc.Update(r.Context(), orgID, chi.URLParam(r, "id"), UpdateInput{
-		Name:             req.Name,
-		PostbackURL:      req.PostbackURL,
-		AcceptDuplicates: req.AcceptDuplicates,
-		Currency:         req.Currency,
-		TemplateKey:      req.TemplateKey,
-		Status:           req.Status,
+		Name:               req.Name,
+		PostbackURL:        req.PostbackURL,
+		AcceptDuplicates:   req.AcceptDuplicates,
+		Currency:           req.Currency,
+		TemplateKey:        req.TemplateKey,
+		Status:             req.Status,
+		BrowserConversions: req.BrowserConversions,
+		BrowserDomains:     req.BrowserDomains,
 	})
 	if err != nil {
 		apierror.Write(w, h.logger, err)

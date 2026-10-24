@@ -1864,7 +1864,7 @@ components:
     Network:
       type: object
       additionalProperties: false
-      required: [id, organizationId, name, postbackUrl, acceptDuplicates, currency, templateKey, incomingPostbackUrl, status, createdAt, updatedAt]
+      required: [id, organizationId, name, postbackUrl, acceptDuplicates, currency, templateKey, browserConversions, browserDomains, incomingPostbackUrl, status, createdAt, updatedAt]
       properties:
         id: { type: string }
         organizationId: { type: string }
@@ -1873,6 +1873,8 @@ components:
         acceptDuplicates: { type: boolean, description: "Record a repeated postback again instead of answering it as a duplicate." }
         currency: { type: string, description: "Currency of the network's payouts when a postback sends none." }
         templateKey: { type: string, description: "The affiliate-platform template the network was made from; empty = none." }
+        browserConversions: { type: boolean, description: "Conversions are also taken from a page's script (the tracker's /c/{id} and /flox.js) — no secret, only from browserDomains, only a lead or a purchase once per click." }
+        browserDomains: { type: array, items: { type: string }, description: "Host names of the site whose pages may report conversions; their subdomains count too." }
         incomingPostbackUrl: { type: string, description: "The URL the network sends conversions to." }
         status: { type: string, enum: [active, paused, archived] }
         createdAt: { type: string, format: date-time }
@@ -1880,7 +1882,7 @@ components:
     NetworkCreated:
       type: object
       additionalProperties: false
-      required: [id, organizationId, name, postbackUrl, acceptDuplicates, currency, templateKey, incomingPostbackUrl, status, createdAt, updatedAt, postbackSecret]
+      required: [id, organizationId, name, postbackUrl, acceptDuplicates, currency, templateKey, browserConversions, browserDomains, incomingPostbackUrl, status, createdAt, updatedAt, postbackSecret]
       properties:
         id: { type: string }
         organizationId: { type: string }
@@ -1889,6 +1891,8 @@ components:
         acceptDuplicates: { type: boolean }
         currency: { type: string }
         templateKey: { type: string }
+        browserConversions: { type: boolean }
+        browserDomains: { type: array, items: { type: string } }
         incomingPostbackUrl: { type: string }
         status: { type: string, enum: [active, paused, archived] }
         createdAt: { type: string, format: date-time }
@@ -1912,6 +1916,8 @@ components:
         currency: { type: string, pattern: "^[A-Z]{3}$" }
         templateKey: { type: string }
         status: { type: string, enum: [active, paused, archived] }
+        browserConversions: { type: boolean, description: "Turning it on needs at least one domain (sent here or stored)." }
+        browserDomains: { type: array, maxItems: 20, items: { type: string }, description: "Replaces the list; a URL is reduced to its host." }
 
     CpaStatus:
       type: string

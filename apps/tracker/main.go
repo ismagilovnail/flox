@@ -331,6 +331,15 @@ func run() error {
 	r.Get(tlsask.Path, tlsask.Handler(db, logger))
 	handler.Register(r)
 	postbackHandler.Register(r)
+	// A page's script reporting a lead or a purchase (audit UNI-1 part 2):
+	// the same engine, its own limits.
+	(&BrowserConversionHandler{
+		networks: postbackHandler.networks,
+		service:  postbackHandler.service,
+		failures: limiter.Failures("browser-conversion-failures", postbackFailureLimit, postbackFailureWindow),
+		clientIP: clientIP,
+		logger:   logger,
+	}).Register(r)
 	// Telegram bots' webhook (docs/telegram.md): TG_START, TG_JOIN.
 	telegram.NewWebhook(telegram.NewRepository(db), clickResolver, events, logger).Register(r)
 	// A channel's per-click invite links, claimed from the worker's pool.

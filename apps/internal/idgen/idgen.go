@@ -7,6 +7,7 @@ package idgen
 
 import (
 	"regexp"
+	"time"
 
 	"github.com/oklog/ulid/v2"
 )
@@ -21,4 +22,16 @@ func New() string {
 
 func IsValid(s string) bool {
 	return pattern.MatchString(s)
+}
+
+// Time is when the ULID s was made; false for anything that is not one.
+func Time(s string) (time.Time, bool) {
+	if !IsValid(s) {
+		return time.Time{}, false
+	}
+	id, err := ulid.ParseStrict(s)
+	if err != nil {
+		return time.Time{}, false
+	}
+	return ulid.Time(id.Time()), true
 }

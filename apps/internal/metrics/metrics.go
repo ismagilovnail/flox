@@ -178,6 +178,17 @@ var (
 	// /postback/{networkId}) by result: the conversion engine's own
 	// (success, duplicate, ignored, error) or a request refused before it
 	// (unknown_network, unauthorized, bad_request, internal_error).
+	// BrowserConversionsTotal counts conversions from a page's script
+	// (apps/tracker /c/{networkId}, audit UNI-1 part 2) by result: the
+	// engine's, unknown_click (fresh, retried) or a refusal before it
+	// (unknown_network, forbidden_origin, bad_request, rate_limited,
+	// internal_error).
+	BrowserConversionsTotal = promauto.NewCounterVec(prometheus.CounterOpts{
+		Namespace: namespace,
+		Name:      "browser_conversions_total",
+		Help:      "Conversions reported by a page's script, by result.",
+	}, []string{"result"})
+
 	PostbackIncomingTotal = promauto.NewCounterVec(prometheus.CounterOpts{
 		Namespace: namespace,
 		Name:      "postback_incoming_total",

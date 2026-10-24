@@ -448,3 +448,11 @@ file` — docs/content-gallery.md "Transcoding". Tests:
 `TestInputArgsForceOneDemuxer`, and in `TestFFmpegTranscodesAMOV` a
 playlist disguised as MOV refused. Remaining: run ffmpeg in its own
 container without secrets or network.
+
+## 12. Conversions from a page (audit UNI-1 part 2)
+
+`apps/tracker` `GET/POST /c/{networkId}` takes a lead or a purchase from a
+page's script with no secret — off unless the source turns it on, only from
+its domains, only CPA_HOLD/CPA_ACCEPT once per click, only a known or fresh
+click, refusals limited per IP. What remains forgeable and why:
+docs/networks-offers.md "Own site without a server".

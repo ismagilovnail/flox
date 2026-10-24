@@ -239,9 +239,7 @@ statuses.
   click's first purchase (§45: DECLINE reverses the CPA_ACCEPT payout). A
   refund of a repeat purchase therefore takes the first purchase's amount
   out — said in the status's explanation; per-order refunds are UNI-4.
-- **Not in part 1:** a script for pages with no server (Tilda and other
-  builders) — the secret cannot be put in a page; it needs its own public
-  endpoint with fraud limits (UNI-1 part 2).
+- **Part 2:** a site with no server — below.
 
 Live (dev stack): an own-site source created through the API with its six
 mappings; on one click `lead` → CPA_HOLD, `purchase` 1 990 RUB → CPA_ACCEPT
@@ -249,6 +247,56 @@ $24.71, `repeat_purchase` 990 RUB (`txn_id` A-1002) → CPA_REDEP $12.29,
 `refund` → CPA_DECLINE −1 990 RUB (the limit above). Tests:
 `network-templates.test.ts` (the mappings cover every status, the URL),
 `network-form.test.tsx` (mutation-checked), `incoming-postback-card.test.tsx`.
+
+## Own site without a server (audit 2026-10-24, UNI-1 part 2; migration 00102)
+
+A site built in Tilda or another builder cannot call the postback URL: the
+secret would be in the page for anyone to read. `apps/tracker` serves a
+script and takes its reports instead.
+
+- **The script** (`apps/tracker/static/flox.js`, `GET /flox.js`, cached an
+  hour): on every page `<script src="{tracker}/flox.js"
+  data-source="{networkId}" async>` keeps `click_id` from the URL (or
+  `data-param`) in a first-party cookie and localStorage for 90 days; on the
+  thank-you page `data-event="purchase"` (with `data-revenue`,
+  `data-currency`, `data-order` when known) or the page's own
+  `flox("purchase", {revenue, currency, order})` reports it with
+  `sendBeacon` (an image request as the fallback) to `/c/{networkId}`.
+- **The endpoint** `GET/POST /c/{networkId}` (`tracker/browserconv.go`), no
+  secret. Stands in for it:
+  - the source must have it on (`networks.browser_conversions`), else 404;
+  - the page must be on one of `networks.browser_domains` or a subdomain —
+    `Origin`, else `Referer` — else 403; turning it on needs a domain, and
+    what the operator types (`https://Shop.example/cart`) is kept as its host;
+  - only `click_id`, `status`, `revenue`, `currency`, `txn_id` are read (no
+    `external_click_id`), and duplicates are never accepted, whatever the
+    source's setting;
+  - the engine (`Postback.Browser`) takes only statuses that map to
+    CPA_HOLD or CPA_ACCEPT — a repeat purchase, refund or cancellation
+    from a page is refused ("send it from the site's server");
+  - a click the lookup does not know is taken only if its id (a ULID) was
+    made in the last 10 minutes (`conversion.BrowserFreshClick` — a click
+    still on its way to the lookup) and then retried as usual; an older or
+    made-up one is refused;
+  - refusals and fresh unknown clicks count toward a per-IP limit (30 per
+    10 minutes, like refused postbacks), then 429;
+  - the answer allows the page's own origin to read it (CORS);
+  - the postback log says "reported by the page's script, not the site's
+    server"; `flox_browser_conversions_total{result}`.
+- **What a page can still fake:** one lead and one purchase, with any
+  amount, per real click, from a browser on the site. The card says so and
+  points repeat purchases, refunds and cancellations to the server URL.
+- **UI:** an own site's page has a "Site without a server" card: the
+  switch, the domains, the two tags to copy, the `flox()` call and the
+  limits.
+
+Live (dev stack): turning it on without a domain refused; a fresh click,
+then from `https://www.shop.example`: purchase 1 990 RUB → success, marked;
+a second purchase → duplicate; refund → refused; a made-up old click →
+refused; from another origin → 403. Tests: `tracker/browserconv_test.go`
+(mutation-checked), `conversion/browser_test.go`,
+`network/domains_internal_test.go`, `lib/flox-script.test.ts` (the served
+file itself, in jsdom; mutation-checked), `browser-conversions-card.test.tsx`.
 
 ## Reports by network (2026-10-13)
 

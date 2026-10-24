@@ -36,6 +36,13 @@ type Network struct {
 	// TemplateKey is the affiliate-platform template the network was set
 	// up from (apps/web lib/network-templates.ts; audit INT-3); "" = none.
 	TemplateKey string `json:"templateKey"`
+	// BrowserConversions: apps/tracker also takes conversions from a page's
+	// script at /c/{id} — no secret, only from BrowserDomains, only
+	// statuses that map to CPA_HOLD or CPA_ACCEPT, once each per click
+	// (audit UNI-1 part 2, docs/networks-offers.md "Own site without a
+	// server"). BrowserDomains are host names; their subdomains count too.
+	BrowserConversions bool     `json:"browserConversions"`
+	BrowserDomains     []string `json:"browserDomains"`
 	// IncomingPostbackURL is where the network sends its postbacks:
 	// TRACKER_PUBLIC_URL + /postback/{id}, without the query (the secret is
 	// shown once and only the client composes it in). Empty when
@@ -65,6 +72,9 @@ type UpdateInput struct {
 	Currency         *string
 	TemplateKey      *string
 	Status           *Status
+	// BrowserDomains nil: unchanged.
+	BrowserConversions *bool
+	BrowserDomains     []string
 }
 
 // CreateResult is Service.Create's return shape — PostbackSecret appears
