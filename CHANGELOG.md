@@ -5,6 +5,15 @@ per-phase, matching `CLAUDE.md`'s phase protocol. The one exception is
 [Between phases], below: spec amendments and the code changes that follow from
 them land between phases and would otherwise be invisible here.
 
+## [Phase 30.85] — Google Ads cost sync on a served API version (BUG-10)
+
+The cost adapter called Ads API v17, which Google lists among its sunset versions: Google spend sync could not have
+worked on a real account. Now `googleads.APIVersion` = v26 (latest, 14.10.2026; v23–v26 release notes change nothing
+the query or response parsing reads). A 404 page (how a sunset version answers) now gives an error naming the version
+instead of a JSON decoding error. docs/ad-account-connections.md "Ads API version": move it on before sunset. Test:
+the 404 message (mutation-checked). Not checked against the live API. Also fixed: a gofmt-mangled comment in
+datamanager.go.
+
 ## [Phase 30.84] — Offline conversions to Google Ads (UNI-2, part 2)
 
 docs/offline-conversions.md. A Google Ads source reports its leads, purchases and repeat purchases back to Google by

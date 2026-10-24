@@ -541,7 +541,7 @@ struct with exported, test-overridable base-URL fields + `HTTPClient`,
 a `New()` constructor, `var _ adaccount.CostProvider = (*Adapter)(nil)`)
 but with two real HTTP hosts instead of one: `oauth2.googleapis.com`
 (the token refresh) and `googleads.googleapis.com` (the actual Ads API,
-REST `v17`, one GAQL `googleAds:search` query per page). Unlike
+REST `googleads.APIVersion` — v26 since BUG-10, one GAQL `googleAds:search` query per page). Unlike
 `tiktokads`' own two-call shape (a separate advertiser-info call for
 currency), Google Ads' GAQL lets `customer.currency_code` be selected
 directly alongside `campaign`/`segments`/`metrics` fields in the same
@@ -671,8 +671,18 @@ docs/offline-conversions.md. It goes through the Data Manager API, not the
 Ads API, and needs the refresh token minted with the
 `https://www.googleapis.com/auth/datamanager` scope as well.
 
-The cost adapter above still calls Ads API `v17`. Google's release notes
-list v26 (October 2026) as the latest, and old versions are sunset on a
-schedule. v17 is most likely no longer served, so the cost sync would fail
-against a real account. Not checked against the live API (audit board
-BUG-10).
+## Ads API version (audit BUG-10)
+
+Until BUG-10 the cost adapter called Ads API `v17`. Google lists v17 among
+its sunset versions, so the cost sync would have failed against any real
+account. It now calls `googleads.APIVersion` = v26, the latest (released
+14 October 2026). The release notes of v23 to v26 change nothing it reads:
+the GAQL fields `campaign.id`, `customer.currency_code`,
+`customer.time_zone`, `segments.date`, `metrics.cost_micros`, plus
+`nextPageToken` and the error shape. Not checked against the live API.
+
+Google ships a major version about every quarter and sunsets each one about
+a year later. Move the constant on before then:
+https://developers.google.com/google-ads/api/docs/sunset-dates. A version no
+longer served answers 404 with an HTML page, and the sync error then names
+the version it called.

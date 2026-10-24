@@ -1,5 +1,5 @@
 // Package googleads implements adaccount.CostProvider against the Google
-// Ads API (REST, v17, searchStream/search over GAQL; §74, §27-COST). It is
+// Ads API (REST, APIVersion, search over GAQL; §74, §27-COST). It is
 // verified against a fake httptest.Server matching the documented
 // request/response shape, not against the real API (no account here; see
 // docs/ad-account-connections.md).
@@ -17,6 +17,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -36,8 +37,17 @@ var defaultClient = httpclient.New(httpclient.AdAPI)
 // test can point them at separate httptest.Servers instead.
 const (
 	DefaultOAuthBaseURL = "https://oauth2.googleapis.com"
-	DefaultAdsBaseURL   = "https://googleads.googleapis.com/v17"
+	DefaultAdsBaseURL   = "https://googleads.googleapis.com/" + APIVersion
 )
+
+// APIVersion is the Google Ads API version the cost sync calls. Google
+// releases a major version about every three months and stops serving each
+// about a year later (https://developers.google.com/google-ads/api/docs/sunset-dates):
+// a version left alone stops working. v17, used until audit BUG-10, is
+// among the sunset ones. v26 (October 2026) is the latest; its release notes
+// and v23–v25's change nothing this package reads (the GAQL fields below,
+// nextPageToken, the error shape). Move it on before it is sunset.
+const APIVersion = "v26"
 
 const dateLayout = "2006-01-02"
 
@@ -148,10 +158,18 @@ func (a *Adapter) DailySpendByCampaign(ctx context.Context, creds adaccount.Cred
 		if err != nil {
 			return nil, fmt.Errorf("googleads: calling search: %w", err)
 		}
-		var parsed searchResponse
-		decodeErr := json.NewDecoder(resp.Body).Decode(&parsed)
+		data, readErr := io.ReadAll(io.LimitReader(resp.Body, 64<<20))
 		resp.Body.Close()
-		if decodeErr != nil {
+		if readErr != nil {
+			return nil, fmt.Errorf("googleads: reading search response (status %d): %w", resp.StatusCode, readErr)
+		}
+		var parsed searchResponse
+		if decodeErr := json.Unmarshal(data, &parsed); decodeErr != nil {
+			// A version Google no longer serves answers 404 with a page, not
+			// the API's JSON error: say which version was called.
+			if resp.StatusCode == http.StatusNotFound {
+				return nil, fmt.Errorf("googleads: search answered 404 with no API error — is Google Ads API %s still served? (%s)", APIVersion, snippet(data))
+			}
 			return nil, fmt.Errorf("googleads: decoding search response (status %d): %w", resp.StatusCode, decodeErr)
 		}
 		if parsed.Error != nil {
@@ -183,6 +201,15 @@ func (a *Adapter) DailySpendByCampaign(ctx context.Context, creds adaccount.Cred
 	}
 
 	return records, nil
+}
+
+// snippet is the start of a response body, for an error message.
+func snippet(b []byte) string {
+	s := strings.TrimSpace(string(b))
+	if len(s) > 200 {
+		s = s[:200] + "…"
+	}
+	return s
 }
 
 // refreshAccessToken performs the real OAuth 2.0 refresh-token grant —

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -178,5 +179,23 @@ func TestDailySpendByCampaignRejectsMalformedCostMicros(t *testing.T) {
 	_, err := adapter.DailySpendByCampaign(context.Background(), testCreds(), time.Now(), time.Now())
 	if err == nil {
 		t.Fatal("DailySpendByCampaign with a malformed costMicros succeeded, want an error")
+	}
+}
+
+// Audit BUG-10: a sunset version answers 404 with a page, not JSON; the
+// error names the version called instead of a bare decoding error.
+func TestDailySpendNamesTheVersionOn404(t *testing.T) {
+	ads := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+		_, _ = w.Write([]byte("<html><body>Error 404 (Not Found)</body></html>"))
+	}))
+	defer ads.Close()
+	a := &googleads.Adapter{OAuthBaseURL: fakeOAuth(t).URL, AdsBaseURL: ads.URL, HTTPClient: ads.Client()}
+	_, err := a.DailySpendByCampaign(context.Background(), testCreds(), time.Now(), time.Now())
+	if err == nil || !strings.Contains(err.Error(), "Google Ads API "+googleads.APIVersion+" still served") {
+		t.Fatalf("err = %v, want it to name the API version", err)
+	}
+	if !strings.HasSuffix(googleads.DefaultAdsBaseURL, "/"+googleads.APIVersion) {
+		t.Fatalf("DefaultAdsBaseURL %q does not call APIVersion", googleads.DefaultAdsBaseURL)
 	}
 }

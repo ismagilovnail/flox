@@ -40,7 +40,7 @@ func NewDataManager() *DataManager {
 
 // Destination is where events go: the Google Ads account that owns the
 // conversion action, the manager account the credentials reach it
-// through ('' for none), and the conversion action's id.
+// through (empty for none), and the conversion action's id.
 type Destination struct {
 	AccountID      string
 	LoginAccountID string
