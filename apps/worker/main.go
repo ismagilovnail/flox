@@ -13,7 +13,7 @@
 //   - the postback attempt log (internal/postbacklog, §48) into
 //     postback_events;
 //   - scheduled jobs: ad spend sync (internal/costsync), offline
-//     conversions to Google Ads (internal/offlineconv), FX rates,
+//     conversions to Google Ads and Yandex Metrica (internal/offlineconv), FX rates,
 //     attribution retries, Postgres/ClickHouse reconciliation, retention,
 //     expired auth cleanup, domain SSL checks, alert evaluation;
 //   - a reaper per queue (internal/queuereaper) returning claims a dead
@@ -94,6 +94,7 @@ import (
 	"github.com/ismagilovnail/flox/apps/internal/telemetry"
 	"github.com/ismagilovnail/flox/apps/internal/urlsafety"
 	"github.com/ismagilovnail/flox/apps/internal/visitorkey"
+	"github.com/ismagilovnail/flox/apps/internal/yandexmetrica"
 )
 
 // postbackPollBatchSize/postbackPollIdle: how many due postback deliveries
@@ -146,7 +147,7 @@ const (
 const costSyncInterval = 6 * time.Hour
 
 // offlineConversionsInterval: how often new conversions are looked at and
-// what is due is sent to Google Ads (internal/offlineconv). Google asks for
+// what is due is sent to Google Ads or Yandex Metrica (internal/offlineconv). Google asks for
 // offline data soon after the conversion; a few minutes is soon.
 const offlineConversionsInterval = 5 * time.Minute
 
@@ -487,7 +488,8 @@ func run() error {
 	logger.Info("ad spend sync scheduler starting", "interval", costSyncInterval)
 	start(func() { costSyncScheduler.RunLoop(ctx, costSyncInterval) })
 
-	offlineConv := offlineconv.NewService(offlineconv.NewRepository(db), clickResolver, adAccountRepo, googleads.NewDataManager(), logger)
+	offlineConv := offlineconv.NewService(offlineconv.NewRepository(db).WithKey(adAccountKey), clickResolver, adAccountRepo, googleads.NewDataManager(), logger).
+		WithMetrica(yandexmetrica.New())
 	logger.Info("offline conversions loop starting", "interval", offlineConversionsInterval)
 	start(func() { offlineConv.RunLoop(ctx, offlineConversionsInterval) })
 

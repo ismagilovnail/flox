@@ -15,6 +15,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { MacroPicker } from "@/components/shared/macro-picker";
 import { AdAccountConnectionSection } from "@/features/traffic-sources/ad-account-connection-section";
+import { MetricaSection } from "@/features/traffic-sources/metrica-section";
 import { SourcePostbackCard } from "@/features/traffic-sources/source-postback-card";
 import {
   COST_INTEGRATION_I18N_KEY,
@@ -242,6 +243,8 @@ export function SourceForm({
                 </p>
               </div>
             ))}
+
+          {sourceId && <MetricaSection trafficSourceId={sourceId} />}
         </CardContent>
       </Card>
 

@@ -1,7 +1,7 @@
 // Package offlineconv reports conversions back to the ad network that
-// bought the click — today Google Ads, by the click's gclid/gbraid/wbraid,
-// through Google's Data Manager API (audit UNI-2 part 2,
-// docs/offline-conversions.md).
+// bought the click: to Google Ads by the click's gclid/gbraid/wbraid,
+// through Google's Data Manager API (audit UNI-2 part 2), and to Yandex
+// Metrica by its yclid (part 3, metrica.go; docs/offline-conversions.md).
 //
 // A traffic source connected to Google Ads (internal/adaccount) turns it
 // on and names the conversion action each status is reported as. From
@@ -19,6 +19,11 @@
 //
 // Google refuses a whole request for one bad event; Send then sends the
 // request's events one by one, and only the bad ones fail.
+//
+// A source's Metrica connection works the same way for clicks with yclid,
+// with what Metrica's API allows: a file per counter, no restating (a
+// refund after the upload stays in Metrica), and Check reading back how
+// each file was matched.
 package offlineconv
 
 import "time"
@@ -36,7 +41,9 @@ const (
 	SkipNotAttributed = "not_attributed"  // the postback has no attributed click
 	SkipClickNotFound = "click_not_found" // the attributed click is not in click_lookup
 	SkipNoGoogleClick = "no_google_click" // the click carried no gclid/gbraid/wbraid
-	SkipNotConnected  = "source_off"      // the click's source has no Google connection, or the export off
+	SkipNoYandexClick = "no_yandex_click" // the click carried no yclid (a source exporting to Metrica only)
+	SkipVisitTooOld   = "visit_too_old"   // the yclid click is older than Metrica attaches offline data to
+	SkipNotConnected  = "source_off"      // the click's source has no connection for its network, or the export off
 	SkipNoAction      = "no_action"       // no conversion action for the status
 )
 
@@ -59,6 +66,43 @@ type Status struct {
 	Settings
 	Counts      map[string]int `json:"counts"`
 	Skipped     map[string]int `json:"skipped"`
+	LastError   string         `json:"lastError"`
+	LastErrorAt *time.Time     `json:"lastErrorAt"`
+	LastSentAt  *time.Time     `json:"lastSentAt"`
+}
+
+// MetricaSettings is a traffic source's export to Yandex Metrica. A goal
+// is the identifier of a JavaScript-event goal of the counter; an empty
+// one leaves that status unsent. Currency is the counter's: Metrica
+// zeroes a price in any other.
+type MetricaSettings struct {
+	Enabled        bool       `json:"enabled"`
+	Since          *time.Time `json:"since"`
+	CounterID      string     `json:"counterId"`
+	Currency       string     `json:"currency"`
+	LeadGoal       string     `json:"leadGoal"`
+	PurchaseGoal   string     `json:"purchaseGoal"`
+	RepurchaseGoal string     `json:"repurchaseGoal"`
+}
+
+// MetricaInput is a write: the settings and, to connect or replace it,
+// the OAuth token (empty keeps the stored one).
+type MetricaInput struct {
+	MetricaSettings
+	Token string `json:"token"`
+}
+
+// MetricaStatus is what the source's page shows. Connected false: no
+// counter yet (the other fields are defaults). The token is never sent
+// back, only its last 4 characters. Processing: uploads Metrica has not
+// finished matching.
+type MetricaStatus struct {
+	Connected    bool   `json:"connected"`
+	TokenPreview string `json:"tokenPreview"`
+	MetricaSettings
+	Counts      map[string]int `json:"counts"`
+	Skipped     map[string]int `json:"skipped"`
+	Processing  int            `json:"processing"`
 	LastError   string         `json:"lastError"`
 	LastErrorAt *time.Time     `json:"lastErrorAt"`
 	LastSentAt  *time.Time     `json:"lastSentAt"`

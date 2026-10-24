@@ -51,14 +51,17 @@ type Service struct {
 	clicks attribution.ClickResolver
 	creds  Credentials
 	ingest Ingester
-	logger *slog.Logger
-	newID  func() string
+	// metrica: WithMetrica (metrica.go).
+	metrica Metrica
+	logger  *slog.Logger
+	newID   func() string
+	now     func() time.Time
 }
 
 // NewService: clicks, creds and ingest are the worker's; the API's
 // settings routes need only repo (the others may be nil there).
 func NewService(repo *Repository, clicks attribution.ClickResolver, creds Credentials, ingest Ingester, logger *slog.Logger) *Service {
-	return &Service{repo: repo, clicks: clicks, creds: creds, ingest: ingest, logger: logger, newID: idgen.New}
+	return &Service{repo: repo, clicks: clicks, creds: creds, ingest: ingest, logger: logger, newID: idgen.New, now: time.Now}
 }
 
 // --- settings (HTTP) ---
@@ -147,8 +150,8 @@ func (s *Service) enqueueOrg(ctx context.Context, o exportingOrg) error {
 	if err != nil {
 		return err
 	}
-	// One campaign's connection is read once per run.
-	byCampaign := map[string]*connection{}
+	// One campaign's connections are read once per run.
+	byCampaign := map[string]*exports{}
 	for _, cand := range cands {
 		u, err := s.consider(ctx, o.OrganizationID, cand, byCampaign)
 		if err != nil {
@@ -167,9 +170,39 @@ func (s *Service) enqueueOrg(ctx context.Context, o exportingOrg) error {
 	return nil
 }
 
-// consider decides what becomes of one conversion: pending for Google, or
-// skipped and why.
-func (s *Service) consider(ctx context.Context, orgID string, cand candidate, byCampaign map[string]*connection) (upload, error) {
+// exports are a campaign's source's connections; nil for none.
+type exports struct {
+	google  *connection
+	metrica *metricaConnection
+}
+
+func (s *Service) campaignExports(ctx context.Context, orgID, campaignID string) (*exports, error) {
+	var e exports
+	c, found, err := s.repo.campaignConnection(ctx, orgID, campaignID)
+	if err != nil {
+		return nil, err
+	}
+	if found {
+		e.google = &c
+	}
+	m, found, err := s.repo.campaignMetrica(ctx, orgID, campaignID)
+	if err != nil {
+		return nil, err
+	}
+	if found {
+		e.metrica = &m
+	}
+	return &e, nil
+}
+
+func exportOn(enabled bool, since *time.Time, cand candidate) bool {
+	return enabled && since != nil && !cand.CreatedAt.Before(*since)
+}
+
+// consider decides what becomes of one conversion: pending for Google or
+// for Metrica (the network the click's own id is from), or skipped and
+// why.
+func (s *Service) consider(ctx context.Context, orgID string, cand candidate, byCampaign map[string]*exports) (upload, error) {
 	u := upload{
 		ID: s.newID(), OrganizationID: orgID, PostbackID: cand.PostbackID, ClickID: cand.ClickID,
 		EventAt: cand.EventAt, Value: cand.Value, Currency: cand.Currency, Status: StatusSkipped,
@@ -186,28 +219,40 @@ func (s *Service) consider(ctx context.Context, orgID string, cand candidate, by
 	if err != nil {
 		return upload{}, err
 	}
-	conn, cached := byCampaign[click.CampaignID]
+	exp, cached := byCampaign[click.CampaignID]
 	if !cached {
-		c, found, err := s.repo.campaignConnection(ctx, orgID, click.CampaignID)
-		if err != nil {
+		if exp, err = s.campaignExports(ctx, orgID, click.CampaignID); err != nil {
 			return upload{}, err
 		}
-		if found {
-			conn = &c
-		}
-		byCampaign[click.CampaignID] = conn
+		byCampaign[click.CampaignID] = exp
 	}
-	if conn == nil {
+	platform := adclick.Platform(click.AdClickParam)
+	g, m := exp.google, exp.metrica
+	switch {
+	case platform == adclick.Google && g != nil:
+		// below
+	case platform == adclick.Yandex && m != nil:
+		return s.considerMetrica(ctx, u, *m, cand, click.OccurredAt, click.AdClickParam, click.AdClickID)
+	case g != nil && exportOn(g.Enabled, g.Since, cand):
+		u.ConnectionID, u.SkipReason = &g.ID, SkipNoGoogleClick
+		return u, nil
+	case m != nil && exportOn(m.Enabled, m.Since, cand):
+		u.MetricaConnectionID, u.SkipReason = &m.ID, SkipNoYandexClick
+		return u, nil
+	case g != nil:
+		u.ConnectionID, u.SkipReason = &g.ID, SkipNotConnected
+		return u, nil
+	case m != nil:
+		u.MetricaConnectionID, u.SkipReason = &m.ID, SkipNotConnected
+		return u, nil
+	default:
 		u.SkipReason = SkipNotConnected
 		return u, nil
 	}
+	conn := g
 	u.ConnectionID = &conn.ID
-	if !conn.Enabled || conn.Since == nil || cand.CreatedAt.Before(*conn.Since) {
+	if !exportOn(conn.Enabled, conn.Since, cand) {
 		u.SkipReason = SkipNotConnected
-		return u, nil
-	}
-	if adclick.Platform(click.AdClickParam) != adclick.Google {
-		u.SkipReason = SkipNoGoogleClick
 		return u, nil
 	}
 	u.AdClickParam, u.AdClickID = click.AdClickParam, click.AdClickID
@@ -225,14 +270,24 @@ func (s *Service) Send(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	type key struct{ org, connection, action string }
+	// Google's requests are per conversion action; a Metrica file holds
+	// every goal of its counter.
+	type key struct {
+		org, connection, action string
+		metrica                 bool
+	}
 	groups := map[key][]upload{}
 	var order []key
 	for _, u := range due {
-		if u.ConnectionID == nil {
+		var k key
+		switch {
+		case u.ConnectionID != nil:
+			k = key{org: u.OrganizationID, connection: *u.ConnectionID, action: u.ActionID}
+		case u.MetricaConnectionID != nil:
+			k = key{org: u.OrganizationID, connection: *u.MetricaConnectionID, metrica: true}
+		default:
 			continue
 		}
-		k := key{u.OrganizationID, *u.ConnectionID, u.ActionID}
 		if _, ok := groups[k]; !ok {
 			order = append(order, k)
 		}
@@ -240,7 +295,11 @@ func (s *Service) Send(ctx context.Context) error {
 	}
 	var errs []error
 	for _, k := range order {
-		if err := s.sendGroup(ctx, k.org, k.connection, k.action, groups[k]); err != nil {
+		send := func() error { return s.sendGroup(ctx, k.org, k.connection, k.action, groups[k]) }
+		if k.metrica {
+			send = func() error { return s.sendMetricaGroup(ctx, k.org, k.connection, groups[k]) }
+		}
+		if err := send(); err != nil {
 			errs = append(errs, err)
 		}
 	}
@@ -294,7 +353,7 @@ func (s *Service) sendBatch(ctx context.Context, creds adaccount.Credentials, de
 	case err == nil:
 		warning := strings.Join(res.Warnings, "; ")
 		for _, u := range batch {
-			if err := s.repo.markSent(ctx, u.ID, u.Value, res.RequestID, warning); err != nil {
+			if err := s.repo.markSent(ctx, u.ID, u.Value, res.RequestID, warning, ""); err != nil {
 				return err
 			}
 			metrics.OfflineConversionsTotal.WithLabelValues("sent").Inc()
@@ -330,7 +389,8 @@ func (s *Service) retryAll(ctx context.Context, uploads []upload, message string
 	return nil
 }
 
-// RunLoop runs Enqueue then Send every interval until ctx ends.
+// RunLoop runs Enqueue, Send, then Check (Metrica's matching) every
+// interval until ctx ends.
 func (s *Service) RunLoop(ctx context.Context, interval time.Duration) {
 	t := time.NewTicker(interval)
 	defer t.Stop()
@@ -340,6 +400,11 @@ func (s *Service) RunLoop(ctx context.Context, interval time.Duration) {
 		}
 		if err := s.Send(ctx); err != nil && ctx.Err() == nil {
 			s.logger.Error("offline conversions: send", "error", err)
+		}
+		if s.metrica != nil {
+			if err := s.Check(ctx); err != nil && ctx.Err() == nil {
+				s.logger.Error("offline conversions: checking Metrica uploads", "error", err)
+			}
 		}
 		select {
 		case <-ctx.Done():

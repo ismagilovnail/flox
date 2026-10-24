@@ -37,7 +37,7 @@ FLOX's `click_id`, and the source's click id keeps meaning what it meant.
 What they are for:
 
 - reporting a conversion back to the network that bought the click
-  (offline conversions — Google Ads, Yandex Metrica: UNI-2 parts 2–3);
+  (offline conversions — Google Ads, Yandex Metrica: UNI-2 parts 2–3, docs/offline-conversions.md);
 - the stream-set filter `ad_platform` — `google`, `yandex`, `microsoft`,
   or empty;
 - the macros `{gclid}`, `{gbraid}`, `{wbraid}`, `{yclid}`, `{msclkid}` in an

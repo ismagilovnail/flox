@@ -97,6 +97,7 @@ import (
 	"github.com/ismagilovnail/flox/apps/internal/trackinglink"
 	"github.com/ismagilovnail/flox/apps/internal/trafficsource"
 	"github.com/ismagilovnail/flox/apps/internal/visitordata"
+	"github.com/ismagilovnail/flox/apps/internal/yandexmetrica"
 )
 
 func main() {
@@ -800,9 +801,11 @@ func buildServer(ctx context.Context, cfg config.Config, logger *slog.Logger, re
 		TikTokAds:   tiktokads.New(),
 		GoogleAds:   googleads.New(),
 	}), requireSourceWrite, logger)
-	// Offline conversions to Google Ads (audit UNI-2 part 2): the source's
-	// export settings and counts; apps/worker sends.
-	offlineConvHandler := offlineconv.NewHandler(offlineconv.NewService(offlineconv.NewRepository(db), nil, nil, nil, logger), requireSourceWrite, logger)
+	// Offline conversions to Google Ads and Yandex Metrica (audit UNI-2
+	// parts 2–3): the source's export settings and counts; apps/worker
+	// sends. A Metrica counter is checked with Metrica when it is saved.
+	offlineConvHandler := offlineconv.NewHandler(offlineconv.NewService(offlineconv.NewRepository(db).WithKey(adAccountKey), nil, nil, nil, logger).
+		WithMetrica(yandexmetrica.New()), requireSourceWrite, logger)
 	srv.Mux().Route("/traffic-sources/{id}/connection", func(r chi.Router) {
 		r.Use(tenantMiddleware)
 		r.Use(readGate("source.read"))

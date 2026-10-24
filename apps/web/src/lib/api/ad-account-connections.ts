@@ -91,3 +91,46 @@ export function getOfflineConversions(trafficSourceId: string): Promise<OfflineC
 export function updateOfflineConversions(trafficSourceId: string, input: OfflineConversionsInput): Promise<OfflineConversions> {
   return apiFetch(`/traffic-sources/${trafficSourceId}/connection/offline-conversions`, { method: "PUT", body: input });
 }
+
+/** Mirrors apps/internal/offlineconv.MetricaStatus: a source's export of
+ * conversions to Yandex Metrica by yclid (audit UNI-2 part 3). Goals are
+ * identifiers of the counter's JavaScript-event goals; an empty one leaves
+ * that status unsent. The token never comes back, only its last 4
+ * characters. processing: rows Metrica has not finished matching. */
+export type MetricaConnection = {
+  connected: boolean;
+  tokenPreview: string;
+  enabled: boolean;
+  since: string | null;
+  counterId: string;
+  currency: string;
+  leadGoal: string;
+  purchaseGoal: string;
+  repurchaseGoal: string;
+  counts: Partial<Record<"pending" | "sent" | "failed" | "skipped", number>>;
+  skipped: Partial<Record<MetricaSkipReason, number>>;
+  processing: number;
+  lastError: string;
+  lastErrorAt: string | null;
+  lastSentAt: string | null;
+};
+
+export type MetricaSkipReason = "no_yandex_click" | "visit_too_old" | "no_action" | "not_attributed" | "click_not_found" | "source_off";
+
+/** token "": keep the stored one. */
+export type MetricaInput = Pick<
+  MetricaConnection,
+  "enabled" | "counterId" | "currency" | "leadGoal" | "purchaseGoal" | "repurchaseGoal"
+> & { token: string };
+
+export function getMetricaConnection(trafficSourceId: string): Promise<MetricaConnection> {
+  return apiFetch(`/traffic-sources/${trafficSourceId}/connection/metrica`);
+}
+
+export function updateMetricaConnection(trafficSourceId: string, input: MetricaInput): Promise<MetricaConnection> {
+  return apiFetch(`/traffic-sources/${trafficSourceId}/connection/metrica`, { method: "PUT", body: input });
+}
+
+export function deleteMetricaConnection(trafficSourceId: string): Promise<void> {
+  return apiFetch(`/traffic-sources/${trafficSourceId}/connection/metrica`, { method: "DELETE" });
+}

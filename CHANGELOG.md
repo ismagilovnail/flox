@@ -5,6 +5,26 @@ per-phase, matching `CLAUDE.md`'s phase protocol. The one exception is
 [Between phases], below: spec amendments and the code changes that follow from
 them land between phases and would otherwise be invisible here.
 
+## [Phase 30.86] — Offline conversions to Yandex Metrica (UNI-2, part 3)
+
+docs/offline-conversions.md "Yandex Metrica". Any traffic source can connect the Metrica counter on its landing;
+conversions of its clicks with a `yclid` are uploaded to it, and Metrica passes them on to Yandex Direct.
+
+- `metrica_connections` (migration 00105): counter, OAuth token (AES-256-GCM under ADACCOUNT_ENCRYPTION_KEY, only the
+  last 4 characters shown), the counter's currency, on/off, a JavaScript-event goal per status;
+  `GET/PUT/DELETE /v1/traffic-sources/{id}/connection/metrica`. A new token or counter is checked with Metrica on save.
+- `internal/yandexmetrica`: CSV upload (`offline_conversions/upload`, yclid), upload status, counter check.
+- `internal/offlineconv`: one queue for both networks — the click's own id picks Google or Metrica; new skip reasons
+  `no_yandex_click`, `visit_too_old` (Metrica's 21-day window). Values go in the counter's currency at the event's
+  date rate (no rate: no price, never 0). No restating: Metrica cannot change an upload, a refund after it stays. A
+  refused file is halved until the bad row fails alone (Metrica's 5000 requests/day). The worker reads back each file's
+  status every 30 min; LINKAGE_FAILURE fails its rows with what to check (counter on the landing, `yclid={yclid}`).
+- The source page: a "Yandex Metrica" section (connect, goals, currency, sent / being matched / queued / refused,
+  skip reasons, last error; disconnect asks to confirm).
+- Tests: the client against a fake server; the queue end to end on Postgres (validation, token never readable,
+  goals, currency conversion, halving, no restating, matching check, outage); the section (vitest). Live: the real
+  Metrica API refused a fake token through the save check, with its own message. Not tried with a real counter.
+
 ## [Phase 30.85] — Google Ads cost sync on a served API version (BUG-10)
 
 The cost adapter called Ads API v17, which Google lists among its sunset versions: Google spend sync could not have

@@ -179,5 +179,55 @@
       "click_not_found_one": "{{count}} conversion — its click was not found",
       "click_not_found_other": "{{count}} conversions — their clicks were not found"
     }
+  },
+  "metrica": {
+    "title": "Offline conversions to Yandex Metrica",
+    "description": "Leads and purchases of clicks from Yandex Direct (with a yclid) are uploaded to the Metrica counter on your landing; Metrica passes them on to Direct, which can then optimize for sales. Only conversions recorded after turning this on are sent, every 5 minutes; Metrica takes up to 3 hours to match them.",
+    "enabledAria": "Send conversions to Yandex Metrica",
+    "loading": "Loading Yandex Metrica settings…",
+    "loadError": "Could not load the Yandex Metrica settings:",
+    "fields": {
+      "counterId": "Counter number",
+      "token": "OAuth token",
+      "currency": "Counter currency",
+      "leadGoal": "Goal for leads",
+      "purchaseGoal": "Goal for purchases",
+      "repurchaseGoal": "Goal for repeat purchases"
+    },
+    "tokenKeep": "stored, ends in {{last4}} — leave empty to keep",
+    "goalsHint": "Identifiers of the counter's “JavaScript event” goals (condition “matches”). Empty: that status is not sent. Values are converted to the counter's currency at the conversion's date. Metrica cannot change an uploaded conversion: a later refund stays in Metrica.",
+    "setupHint": "The token needs the metrika:offline_data (or metrika:write) scope and access to the counter. The counter must be on the landing and the landing's address must carry the yclid — add yclid={yclid} to the offer or landing URL. Only visits of the last 21 days can be matched.",
+    "save": "Save",
+    "connect": "Connect",
+    "saved": "Yandex Metrica settings saved",
+    "saveError": "Could not save the settings",
+    "disconnect": "Disconnect",
+    "confirmDisconnect": "Disconnect the counter",
+    "cancel": "Cancel",
+    "disconnected": "Yandex Metrica counter disconnected",
+    "disconnectError": "Could not disconnect the counter",
+    "lastError": "Metrica's last error:",
+    "counts": {
+      "sent_one": "{{count}} sent",
+      "sent_other": "{{count}} sent",
+      "processing_one": "{{count}} being matched by Metrica",
+      "processing_other": "{{count}} being matched by Metrica",
+      "pending_one": "{{count}} queued",
+      "pending_other": "{{count}} queued",
+      "failed_one": "{{count}} refused or unmatched",
+      "failed_other": "{{count}} refused or unmatched"
+    },
+    "skipped": {
+      "no_yandex_click_one": "{{count}} conversion — its click had no yclid (not from Direct, or no auto-tagging)",
+      "no_yandex_click_other": "{{count}} conversions — their clicks had no yclid (not from Direct, or no auto-tagging)",
+      "visit_too_old_one": "{{count}} conversion — its click is older than 21 days, Metrica no longer matches it",
+      "visit_too_old_other": "{{count}} conversions — their clicks are older than 21 days, Metrica no longer matches them",
+      "no_action_one": "{{count}} conversion — no goal named for its status",
+      "no_action_other": "{{count}} conversions — no goal named for their status",
+      "not_attributed_one": "{{count}} conversion — without a click",
+      "not_attributed_other": "{{count}} conversions — without a click",
+      "click_not_found_one": "{{count}} conversion — its click was not found",
+      "click_not_found_other": "{{count}} conversions — their clicks were not found"
+    }
   }
 }

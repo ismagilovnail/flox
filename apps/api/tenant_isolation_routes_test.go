@@ -869,6 +869,7 @@ var notReferences = map[string]string{
 	"leadActionId":                 "a Google Ads conversion action id",
 	"purchaseActionId":             "a Google Ads conversion action id",
 	"repurchaseActionId":           "a Google Ads conversion action id",
+	"counterId":                    "a Yandex Metrica counter number",
 	"tgChatId":                     "response only: Telegram's id of a channel",
 	"telegramChannelId":            "event payload only: set by the tracker's webhook from the bot's own channel, never read from a request",
 	"clientId":                     "the ad platform's OAuth client id",

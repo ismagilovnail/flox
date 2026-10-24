@@ -19,7 +19,7 @@ referenced below as §N).
 ## CURRENT STATE — UPDATE THIS EVERY PHASE
 
 ```
-CURRENT PHASE : PHASE 30.85 — BUG-10, GOOGLE ADS API VERSION (closed)
+CURRENT PHASE : PHASE 30.86 — UNI-2 PART 3, YANDEX METRICA (closed)
 STATUS        : Product audits 2026-10-15 and 2026-10-24 (docs/audit-
                 product-*.md; the second: universality, SEC-7..UX-4)
                 are the backlog: items on the local dev panel tools/devpanel
@@ -110,6 +110,12 @@ STATUS        : Product audits 2026-10-15 and 2026-10-24 (docs/audit-
                 tokens 15.06.2026); settings on ad_account_connections +
                 offline_conversion_uploads (00104); worker every 5 min;
                 refund ⇒ restate same transactionId. Not tried live.
+                UNI-2 part 3: metrica_connections (00105) per source, any
+                cost integration; yclid clicks → internal/yandexmetrica CSV
+                upload; same queue (row is Google's connection_id or
+                Metrica's metrica_connection_id); counter's currency at event
+                date; NO restating (refund stays); worker re-reads file
+                status (LINKAGE_FAILURE ⇒ failed). Not tried with a counter.
                 BUG-10: googleads.APIVersion = v26 (v17 was sunset); Google
                 sunsets each major ~a year after release — bump it.
                 BUG-9: chstore tests use NewRawEventStore (a store reads
@@ -118,10 +124,10 @@ STATUS        : Product audits 2026-10-15 and 2026-10-24 (docs/audit-
                 past events and reads rollup-able reports has the same trap.
                 P0 left (skipped by the user for now):
                 OPS-1..3 (prod, restore, load) — needs the owner's hosting.
-LAST COMMIT   : fix(googleads): call a served Ads API version (BUG-10).
+LAST COMMIT   : feat(offlineconv): offline conversions to Yandex Metrica (UNI-2 part 3).
 UNCOMMITTED   : docs/import-export-plan.md (INT-2, stays uncommitted).
-NEXT          : wait for the user. UNI-2 left: part 3 Yandex Metrica (OAuth
-                token + counter). UNI-4 left: Shopify/
+NEXT          : wait for the user. UNI-2 done (Microsoft Ads upload not
+                planned). UNI-4 left: Shopify/
                 WooCommerce (after BIZ-3). Then UNI-3, DOC-1, UX-4;
                 BIZ-3/BIZ-4 part 2 are the user's (no interview script),
                 OPS-1..3 need hosting.
@@ -135,7 +141,8 @@ NEXT          : wait for the user. UNI-2 left: part 3 Yandex Metrica (OAuth
                 did not skip (memory: flox-full-test-env); retention's
                 TestRawRetentionFollowsThePlan can flake on a ClickHouse
                 `_row_exists` mutation error under the parallel run; chconn's
-                TestLimitsStopAHeavyQuery flakes under the full parallel run.
+                TestLimitsStopAHeavyQuery flakes under the full parallel run;
+                internal/chstore/retention.go is not gofmt-clean (older).
 ```
 
 > At the end of every phase: update the four lines above, add a CHANGELOG entry,

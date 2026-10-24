@@ -10,10 +10,12 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/ismagilovnail/flox/apps/internal/apierror"
+	"github.com/ismagilovnail/flox/apps/internal/yandexmetrica"
 )
 
-// Repository reads and writes the export settings (on
-// ad_account_connections) and the queue (offline_conversion_uploads).
+// Repository reads and writes the export settings (Google's on
+// ad_account_connections, Metrica's in metrica_connections) and the queue
+// (offline_conversion_uploads).
 // Settings reads/writes are scoped to one organization, from its session.
 // The worker's methods (marked) run across every organization on a timer
 // and are never reachable over HTTP.
@@ -22,9 +24,18 @@ type Repository struct {
 	// onlyOrg, when set, limits the worker's methods to one organization:
 	// tests share the database with the dev worker and other packages.
 	onlyOrg string
+	// key encrypts Metrica tokens (ADACCOUNT_ENCRYPTION_KEY).
+	key []byte
 }
 
 func NewRepository(db *pgxpool.Pool) *Repository { return &Repository{db: db} }
+
+// WithKey sets the key Metrica tokens are encrypted with; without it a
+// Metrica connection can be neither written nor sent through.
+func (r *Repository) WithKey(key []byte) *Repository {
+	r.key = key
+	return r
+}
 
 // connection is a Google Ads connection's id and export settings.
 type connection struct {
@@ -85,43 +96,67 @@ func (r *Repository) setSettings(ctx context.Context, orgID, connectionID string
 
 // status counts the connection's uploads.
 func (r *Repository) status(ctx context.Context, orgID string, c connection) (Status, error) {
-	st := Status{Settings: c.Settings, Counts: map[string]int{}, Skipped: map[string]int{}}
-	rows, err := r.db.Query(ctx, `
-		SELECT status, skip_reason, count(*) FROM offline_conversion_uploads
-		WHERE organization_id = $1 AND connection_id = $2
-		GROUP BY status, skip_reason`, orgID, c.ID)
+	t, err := r.tallyUploads(ctx, orgID, "connection_id", c.ID)
 	if err != nil {
-		return Status{}, fmt.Errorf("offlineconv: counting uploads: %w", err)
+		return Status{}, err
+	}
+	return Status{Settings: c.Settings, Counts: t.Counts, Skipped: t.Skipped,
+		LastError: t.LastError, LastErrorAt: t.LastErrorAt, LastSentAt: t.LastSentAt}, nil
+}
+
+// tally is what came of one connection's uploads.
+type tally struct {
+	Counts      map[string]int
+	Skipped     map[string]int
+	Processing  int
+	LastError   string
+	LastErrorAt *time.Time
+	LastSentAt  *time.Time
+}
+
+// tallyUploads counts the uploads whose column (connection_id or
+// metrica_connection_id — the caller's constant, never input) is id.
+func (r *Repository) tallyUploads(ctx context.Context, orgID, column, id string) (tally, error) {
+	t := tally{Counts: map[string]int{}, Skipped: map[string]int{}}
+	rows, err := r.db.Query(ctx, `
+		SELECT status, skip_reason, remote_status, count(*) FROM offline_conversion_uploads
+		WHERE organization_id = $1 AND `+column+` = $2
+		GROUP BY status, skip_reason, remote_status`, orgID, id)
+	if err != nil {
+		return tally{}, fmt.Errorf("offlineconv: counting uploads: %w", err)
 	}
 	for rows.Next() {
-		var status, reason string
+		var status, reason, remote string
 		var n int
-		if err := rows.Scan(&status, &reason, &n); err != nil {
+		if err := rows.Scan(&status, &reason, &remote, &n); err != nil {
 			rows.Close()
-			return Status{}, err
+			return tally{}, err
 		}
-		st.Counts[status] += n
+		t.Counts[status] += n
 		if status == StatusSkipped {
-			st.Skipped[reason] += n
+			t.Skipped[reason] += n
+		}
+		if status == StatusSent && column == "metrica_connection_id" && !yandexmetrica.Final(remote) {
+			t.Processing += n
 		}
 	}
 	rows.Close()
 	if err := rows.Err(); err != nil {
-		return Status{}, err
+		return tally{}, err
 	}
 	err = r.db.QueryRow(ctx, `
 		SELECT last_error, updated_at FROM offline_conversion_uploads
-		WHERE organization_id = $1 AND connection_id = $2 AND last_error <> '' AND status IN ('pending', 'failed')
-		ORDER BY updated_at DESC LIMIT 1`, orgID, c.ID).Scan(&st.LastError, &st.LastErrorAt)
+		WHERE organization_id = $1 AND `+column+` = $2 AND last_error <> '' AND status IN ('pending', 'failed')
+		ORDER BY updated_at DESC LIMIT 1`, orgID, id).Scan(&t.LastError, &t.LastErrorAt)
 	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
-		return Status{}, fmt.Errorf("offlineconv: reading last error: %w", err)
+		return tally{}, fmt.Errorf("offlineconv: reading last error: %w", err)
 	}
 	if err := r.db.QueryRow(ctx, `
 		SELECT max(sent_at) FROM offline_conversion_uploads
-		WHERE organization_id = $1 AND connection_id = $2`, orgID, c.ID).Scan(&st.LastSentAt); err != nil {
-		return Status{}, fmt.Errorf("offlineconv: reading last send: %w", err)
+		WHERE organization_id = $1 AND `+column+` = $2`, orgID, id).Scan(&t.LastSentAt); err != nil {
+		return tally{}, fmt.Errorf("offlineconv: reading last send: %w", err)
 	}
-	return st, nil
+	return t, nil
 }
 
 // --- the worker's (every organization, never over HTTP) ---
@@ -135,8 +170,14 @@ type exportingOrg struct {
 
 func (r *Repository) exportingOrgs(ctx context.Context) ([]exportingOrg, error) {
 	rows, err := r.db.Query(ctx, `
-		SELECT organization_id, min(offline_since) FROM ad_account_connections
-		WHERE offline_conversions AND offline_since IS NOT NULL AND ($1 = '' OR organization_id = $1)
+		SELECT organization_id, min(since) FROM (
+			SELECT organization_id, offline_since AS since FROM ad_account_connections
+			WHERE offline_conversions AND offline_since IS NOT NULL
+			UNION ALL
+			SELECT organization_id, since FROM metrica_connections
+			WHERE enabled AND since IS NOT NULL
+		) e
+		WHERE $1 = '' OR organization_id = $1
 		GROUP BY organization_id ORDER BY organization_id`, r.onlyOrg)
 	if err != nil {
 		return nil, fmt.Errorf("offlineconv: listing exporting organizations: %w", err)
@@ -203,16 +244,18 @@ type upload struct {
 	OrganizationID string
 	PostbackID     string
 	ConnectionID   *string
-	ClickID        string
-	AdClickParam   string
-	AdClickID      string
-	ActionID       string
-	EventAt        time.Time
-	Value          *float64
-	Currency       string
-	Status         string
-	SkipReason     string
-	Attempts       int
+	// MetricaConnectionID instead of ConnectionID: a row for Metrica.
+	MetricaConnectionID *string
+	ClickID             string
+	AdClickParam        string
+	AdClickID           string
+	ActionID            string
+	EventAt             time.Time
+	Value               *float64
+	Currency            string
+	Status              string
+	SkipReason          string
+	Attempts            int
 }
 
 // insert records u; a postback already recorded (another worker got there
@@ -220,12 +263,12 @@ type upload struct {
 func (r *Repository) insert(ctx context.Context, u upload) error {
 	_, err := r.db.Exec(ctx, `
 		INSERT INTO offline_conversion_uploads
-			(id, organization_id, postback_id, connection_id, click_id, ad_click_param, ad_click_id, action_id,
-			 event_at, value, currency, status, skip_reason)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+			(id, organization_id, postback_id, connection_id, metrica_connection_id, click_id, ad_click_param, ad_click_id,
+			 action_id, event_at, value, currency, status, skip_reason)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
 		ON CONFLICT (postback_id) DO NOTHING`,
-		u.ID, u.OrganizationID, u.PostbackID, u.ConnectionID, u.ClickID, u.AdClickParam, u.AdClickID, u.ActionID,
-		u.EventAt, u.Value, u.Currency, u.Status, u.SkipReason)
+		u.ID, u.OrganizationID, u.PostbackID, u.ConnectionID, u.MetricaConnectionID, u.ClickID, u.AdClickParam, u.AdClickID,
+		u.ActionID, u.EventAt, u.Value, u.Currency, u.Status, u.SkipReason)
 	if err != nil {
 		return fmt.Errorf("offlineconv: recording upload: %w", err)
 	}
@@ -233,8 +276,9 @@ func (r *Repository) insert(ctx context.Context, u upload) error {
 }
 
 // restate puts back to pending, with the new value, every pending or sent
-// upload of orgID whose purchase a refund has changed since. Returns how
-// many.
+// Google upload of orgID whose purchase a refund has changed since.
+// Returns how many. Metrica's rows are left: its API has no restating, and
+// a second row for the same yclid and goal would count a second purchase.
 func (r *Repository) restate(ctx context.Context, orgID string) (int64, error) {
 	tag, err := r.db.Exec(ctx, `
 		WITH refunded AS (
@@ -247,7 +291,7 @@ func (r *Repository) restate(ctx context.Context, orgID string) (int64, error) {
 		UPDATE offline_conversion_uploads u
 		SET value = refunded.remaining, status = 'pending', attempts = 0, next_attempt_at = now(), updated_at = now()
 		FROM refunded
-		WHERE u.organization_id = $1 AND u.postback_id = refunded.id
+		WHERE u.organization_id = $1 AND u.postback_id = refunded.id AND u.connection_id IS NOT NULL
 		  AND u.status IN ('pending', 'sent') AND u.value IS DISTINCT FROM refunded.remaining::numeric(14,4)`, orgID)
 	if err != nil {
 		return 0, fmt.Errorf("offlineconv: restating refunded uploads: %w", err)
@@ -260,20 +304,21 @@ func (r *Repository) restate(ctx context.Context, orgID string) (int64, error) {
 const claimLease = 10 * time.Minute
 
 // claimDue takes up to limit pending uploads due now, of sources with the
-// export on, and leases them.
+// export (to Google or to Metrica) on, and leases them.
 func (r *Repository) claimDue(ctx context.Context, limit int) ([]upload, error) {
 	rows, err := r.db.Query(ctx, `
 		UPDATE offline_conversion_uploads u
 		SET next_attempt_at = now() + make_interval(secs => $2), updated_at = now()
 		WHERE u.id IN (
 			SELECT u2.id FROM offline_conversion_uploads u2
-			JOIN ad_account_connections c ON c.id = u2.connection_id
-			WHERE u2.status = 'pending' AND u2.next_attempt_at <= now() AND c.offline_conversions
+			LEFT JOIN ad_account_connections c ON c.id = u2.connection_id
+			LEFT JOIN metrica_connections m ON m.id = u2.metrica_connection_id
+			WHERE u2.status = 'pending' AND u2.next_attempt_at <= now() AND (c.offline_conversions OR m.enabled)
 			  AND ($3 = '' OR u2.organization_id = $3)
 			ORDER BY u2.next_attempt_at
 			LIMIT $1
 			FOR UPDATE OF u2 SKIP LOCKED)
-		RETURNING u.id, u.organization_id, u.postback_id, u.connection_id, u.click_id, u.ad_click_param, u.ad_click_id,
+		RETURNING u.id, u.organization_id, u.postback_id, u.connection_id, u.metrica_connection_id, u.click_id, u.ad_click_param, u.ad_click_id,
 		          u.action_id, u.event_at, u.value::float8, u.currency, u.status, u.skip_reason, u.attempts`,
 		limit, claimLease.Seconds(), r.onlyOrg)
 	if err != nil {
@@ -292,16 +337,17 @@ func (r *Repository) connectionByID(ctx context.Context, orgID, id string) (conn
 	return c, nil
 }
 
-// markSent records that Google took u with value sent. A refund that
-// changed the value while it was being sent leaves it pending, to go
-// again with the new one.
-func (r *Repository) markSent(ctx context.Context, id string, sent *float64, requestID, warning string) error {
+// markSent records that the network took u with value sent; remote is
+// Metrica's status of the upload (empty for Google). A refund that changed
+// the value while it was being sent leaves it pending, to go again with
+// the new one (Google's rows only: restate never changes Metrica's).
+func (r *Repository) markSent(ctx context.Context, id string, sent *float64, requestID, warning, remote string) error {
 	_, err := r.db.Exec(ctx, `
 		UPDATE offline_conversion_uploads SET
 			status = CASE WHEN value IS DISTINCT FROM $2::numeric(14,4) THEN 'pending' ELSE 'sent' END,
-			sent_value = $2, request_id = $3, last_error = $4, attempts = 0,
+			sent_value = $2, request_id = $3, last_error = $4, remote_status = $5, attempts = 0,
 			sent_at = now(), next_attempt_at = now(), updated_at = now()
-		WHERE id = $1`, id, sent, requestID, warning)
+		WHERE id = $1`, id, sent, requestID, warning, remote)
 	if err != nil {
 		return fmt.Errorf("offlineconv: marking upload sent: %w", err)
 	}

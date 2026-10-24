@@ -4,12 +4,16 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import {
   connectAdAccount,
+  deleteMetricaConnection,
   disconnectAdAccount,
   getAdAccountConnection,
+  getMetricaConnection,
   getOfflineConversions,
   syncAdAccount,
+  updateMetricaConnection,
   updateOfflineConversions,
   type ConnectAdAccountInput,
+  type MetricaInput,
   type OfflineConversionsInput,
 } from "@/lib/api/ad-account-connections";
 import { ApiError } from "@/lib/api/client";
@@ -82,5 +86,33 @@ export function useUpdateOfflineConversions(trafficSourceId: string) {
   return useMutation({
     mutationFn: (input: OfflineConversionsInput) => updateOfflineConversions(trafficSourceId, input),
     onSuccess: (data) => qc.setQueryData(offlineKey(trafficSourceId), data),
+  });
+}
+
+const metricaKey = (trafficSourceId: string) => ["metrica-connection", trafficSourceId] as const;
+
+/** A source's Yandex Metrica counter and export (audit UNI-2 part 3);
+ * connected false when it has none. */
+export function useMetricaConnection(trafficSourceId: string) {
+  return useQuery({
+    queryKey: metricaKey(trafficSourceId),
+    queryFn: () => getMetricaConnection(trafficSourceId),
+    enabled: !!trafficSourceId,
+  });
+}
+
+export function useUpdateMetricaConnection(trafficSourceId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: MetricaInput) => updateMetricaConnection(trafficSourceId, input),
+    onSuccess: (data) => qc.setQueryData(metricaKey(trafficSourceId), data),
+  });
+}
+
+export function useDeleteMetricaConnection(trafficSourceId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => deleteMetricaConnection(trafficSourceId),
+    onSuccess: () => qc.invalidateQueries({ queryKey: metricaKey(trafficSourceId) }),
   });
 }

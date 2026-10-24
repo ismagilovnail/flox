@@ -106,3 +106,10 @@ func decryptOptional(key []byte, encoded *string) (string, error) {
 	}
 	return decrypt(key, *encoded)
 }
+
+// Seal/Open are encrypt/decrypt for another package's ad-platform secret
+// under the same key: the Yandex Metrica token of internal/offlineconv
+// (audit UNI-2 part 3).
+func Seal(key []byte, plaintext string) (string, error) { return encrypt(key, plaintext) }
+
+func Open(key []byte, encoded string) (string, error) { return decrypt(key, encoded) }
