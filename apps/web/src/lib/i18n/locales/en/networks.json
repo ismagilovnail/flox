@@ -102,7 +102,9 @@
       "revenue": "The payout, a number with a dot. Without it the conversion carries no money.",
       "currency": "The amount's currency (USD, EUR…). If it is not sent, FLOX takes this network's payout currency: {{currency}}.",
       "txn_id": "The network's transaction id. Needed for repeat purchases: without it a second purchase on the same click counts as a duplicate.",
-      "event_time": "When the conversion happened (unix time or ISO 8601). Without it, when the postback arrived."
+      "event_time": "When the conversion happened (unix time or ISO 8601). Without it, when the postback arrived.",
+      "refund_amount": "For a refund: how much of the purchase is refunded, in its currency. Without it the refund takes back all that is left of the purchase.",
+      "refund_id": "For a second partial refund of the same order: the refund's own id. Without it a repeated partial refund counts once."
     },
     "statusesTitle": "Statuses FLOX understands",
     "statusesLoading": "Loading the mapping…",
@@ -193,8 +195,8 @@
       "lead": "a lead or sign-up, waiting for payment",
       "purchase": "a paid order — the conversion",
       "repeat_purchase": "the next order of the same customer (with its own txn_id)",
-      "refund": "a refund of the first purchase — takes its revenue out (a repeat purchase's refund takes the first one's out too, for now)",
-      "cancel": "an order cancelled — takes the first purchase's revenue out if it was paid",
+      "refund": "a refund — with the order's txn_id it takes back that order (the first or a repeat one); refund_amount for part of it",
+      "cancel": "an order cancelled — takes its revenue back if it was paid",
       "spam": "a junk lead"
     }
   },

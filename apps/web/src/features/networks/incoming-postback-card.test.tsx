@@ -31,7 +31,7 @@ describe("IncomingPostbackCard", () => {
     expect(screen.getByText(/status=purchase&revenue=\{amount\}/)).toBeTruthy();
     expect(screen.getByText(/Call it from your server only/)).toBeTruthy();
     expect(screen.getByText("a paid order — the conversion")).toBeTruthy();
-    expect(screen.getByText(/a refund of the first purchase/)).toBeTruthy();
+    expect(screen.getByText(/takes back that order/)).toBeTruthy();
     expect(screen.queryByText(/partner/i)).toBeNull();
   });
 

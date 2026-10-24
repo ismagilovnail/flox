@@ -19,7 +19,7 @@ referenced below as §N).
 ## CURRENT STATE — UPDATE THIS EVERY PHASE
 
 ```
-CURRENT PHASE : PHASE 30.80 — UNI-1 PART 2, FLOX.JS (closed)
+CURRENT PHASE : PHASE 30.81 — UNI-4 PART 1, REFUNDS BY ORDER (closed)
 STATUS        : Product audits 2026-10-15 and 2026-10-24 (docs/audit-
                 product-*.md; the second: universality, SEC-7..UX-4)
                 are the backlog: items on the local dev panel tools/devpanel
@@ -97,7 +97,7 @@ STATUS        : Product audits 2026-10-15 and 2026-10-24 (docs/audit-
                 UNI-1 part 1: "Own site" = network with templateKey own_site
                 (plain statuses mapped on create); section renamed
                 "Conversion sources". A refund reverses the FIRST purchase
-                (§45) — per-order refunds are UNI-4. Part 2: tracker
+                (§45) — fixed in UNI-4 part 1 (refund by txn_id). Part 2: tracker
                 /flox.js + /c/{networkId} (no secret; browser_conversions +
                 browser_domains, 00102; Postback.Browser: HOLD/ACCEPT only,
                 no duplicates, known or ≤10-min-old click).
@@ -107,10 +107,11 @@ STATUS        : Product audits 2026-10-15 and 2026-10-24 (docs/audit-
                 past events and reads rollup-able reports has the same trap.
                 P0 left (skipped by the user for now):
                 OPS-1..3 (prod, restore, load) — needs the owner's hosting.
-LAST COMMIT   : feat(tracker): own site without a server — flox.js (UNI-1 part 2).
+LAST COMMIT   : feat(conversion): refunds by order and partial refunds (UNI-4 part 1).
 UNCOMMITTED   : docs/import-export-plan.md (INT-2, stays uncommitted).
-NEXT          : wait for the user. Audit 2026-10-24 items: P2 UNI-2/UNI-3,
-                P3 UNI-4, DOC-1, UX-4;
+NEXT          : wait for the user. UNI-4 part 2: average order value metric
+                (agreed, not started). Then P2 UNI-2/UNI-3, DOC-1, UX-4;
+                the full Go run was not repeated after UNI-4 part 1.
                 BIZ-3/BIZ-4 part 2 are the user's (no interview script),
                 OPS-1..3 need hosting.
                 GAP-2 (Google Play import) is won't-do: do not offer it. INT-2 is
@@ -233,7 +234,8 @@ Read the referenced section before touching related code.
    (the only repeatable status), empty string for every other status even if a
    txn id was sent — except a re-approval after DECLINE/TRASH carrying a txn
    id no earlier ACCEPT of the click carried, and the reversal of that
-   re-approval (§45 RE-APPROVAL, DATA-3). **Status never goes back to CPA_HOLD** — nightly partner
+   re-approval (§45 RE-APPROVAL, DATA-3); a refund with a repeat purchase's
+   txn_id reverses that one, refund_amount part of one (UNI-4). **Status never goes back to CPA_HOLD** — nightly partner
    replays re-send it after approval and would take revenue out of a closed
    report (§45 STATUS PROGRESSION). Long Redis TTL + durable DB unique
    constraint. Store original currency + USD value at event time.

@@ -24,4 +24,4 @@ export function incomingPostbackTemplate(base: string, secret?: string, template
 }
 
 /** The query parameters /postback understands, in the order they appear. */
-export const INCOMING_POSTBACK_PARAMS = ["secret", "click_id", "status", "revenue", "currency", "txn_id", "event_time"] as const;
+export const INCOMING_POSTBACK_PARAMS = ["secret", "click_id", "status", "revenue", "currency", "txn_id", "event_time", "refund_amount", "refund_id"] as const;

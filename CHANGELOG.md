@@ -5,6 +5,13 @@ per-phase, matching `CLAUDE.md`'s phase protocol. The one exception is
 [Between phases], below: spec amendments and the code changes that follow from
 them land between phases and would otherwise be invisible here.
 
+## [Phase 30.81] — Refunds by order and partial refunds (UNI-4, part 1)
+
+docs/conversion.md "Refunds by order" (§45 amended, migration 00103). A refund with a repeat purchase's txn_id reverses
+that repeat purchase instead of the first one; `refund_amount` (+ `refund_id`) reverses part of a purchase, never more
+than is left; replays stay duplicates; refunding one order is not a decision on the click. Tests on Postgres
+(mutation-checked); live through the tracker. Not done: the average order value metric (UNI-4 part 2), Shopify/WooCommerce.
+
 ## [Phase 30.80] — Own site without a server: flox.js (UNI-1, part 2)
 
 docs/networks-offers.md "Own site without a server", docs/security.md §12. A site built in Tilda or another builder

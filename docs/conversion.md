@@ -93,6 +93,25 @@ reverses are seen consistently.
   dedup key `(click_id, CPA_ACCEPT, "")` as the first and is recorded as a
   duplicate (CLAUDE.md #3). Re-approvals after a chargeback stay reversed.
 
+## Refunds by order (audit UNI-4; §45 amended; migration 00103)
+
+- A CPA_DECLINE/CPA_TRASH whose `txn_id` is a recorded repeat purchase's
+  reverses **that repeat purchase**, keyed by that txn_id; otherwise the
+  click's accept, as above.
+- `refund_amount` (in the purchase's currency) reverses part of the
+  purchase, never more than is left; its key adds `#refund` and
+  `refund_id`, so a replay is a duplicate and two partial refunds of one
+  order (different `refund_id`) are not. A later full refund takes what is
+  left. Another currency, or `refund_amount` on a non-refund status: error.
+- `postbacks.reverses_postback_id` links a reversal to its purchase (what is
+  left = revenue − reversals pointing at it); `refund_kind` '' / 'repeat' /
+  'partial' — only '' is a decision on the click, so refunding one order
+  never makes the click look declined. The FX repair takes the same share
+  of the target's USD value.
+- Tests: `refund_test.go` (Postgres, mutation-checked), `TestParseParamsRefund`.
+  Live: repeat purchase 990 RUB refunded by its txn_id → −990; 500 of the
+  1 990 purchase → −500; replay → duplicate.
+
 ## Revenue must be a sane amount
 
 `revenue` must be a finite number in `[0, conversion.MaxRevenue]` (1e9).

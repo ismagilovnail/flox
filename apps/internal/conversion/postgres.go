@@ -225,20 +225,40 @@ func (s *PostgresStore) recordSuccess(ctx context.Context, tx pgx.Tx, e Entry) (
 		e.Message = strings.TrimSpace(e.Message + "; " + rd.note)
 	}
 
+	refundKind := ""
 	if reversesAccept(e.Status) {
-		rev, ok, err := acceptToReverse(ctx, tx, e.OrganizationID, e.ClickID)
+		plan, err := planReversal(ctx, tx, e)
 		if err != nil {
 			return Recorded{}, err
 		}
-		if ok {
-			e.Reversal = &rev
-			e.Message = strings.TrimSpace(e.Message + "; reverses the CPA_ACCEPT payout" + describeAmount(rev.Revenue, rev.Currency))
+		if plan.refusal != "" {
+			id, err := insertEntry(ctx, tx, e, ResultError, plan.refusal)
+			if err != nil {
+				return Recorded{}, fmt.Errorf("conversion: recording a refused refund: %w", err)
+			}
+			return Recorded{ID: id, Kind: ResultError, Message: plan.refusal}, nil
+		}
+		if plan.eventRef != e.EventRef {
+			e.EventRef = plan.eventRef
+			if e.Event != nil {
+				e.Event.EventRef = plan.eventRef
+			}
+			rd.eventRef = plan.eventRef
+		}
+		e.Reversal = plan.reversal
+		refundKind = plan.kind
+		if plan.note != "" {
+			e.Message = strings.TrimSpace(strings.TrimPrefix(e.Message+"; "+plan.note, "; "))
 		}
 	}
 	var revRevenue, revUSD *float64
+	var revTarget *string
 	revCurrency := ""
 	if e.Reversal != nil {
 		revRevenue, revUSD, revCurrency = e.Reversal.Revenue, e.Reversal.USDValue, e.Reversal.Currency
+		if e.Reversal.TargetID != "" {
+			revTarget = &e.Reversal.TargetID
+		}
 	}
 	// event_at is the analytics event's own time, so the reconciliation
 	// (internal/reconcile) buckets this row on the same day ClickHouse does.
@@ -254,9 +274,10 @@ func (s *PostgresStore) recordSuccess(ctx context.Context, tx pgx.Tx, e Entry) (
 	id := idgen.New()
 	var returnedID string
 	err = tx.QueryRow(ctx, `
-		INSERT INTO postbacks (`+insertColumns+`, created_at, reversal_revenue, reversal_currency, reversal_usd_value, event_at)
+		INSERT INTO postbacks (`+insertColumns+`, created_at, reversal_revenue, reversal_currency, reversal_usd_value, event_at,
+		                       reverses_postback_id, refund_kind)
 		VALUES ($1,$2,$3,$4,$5,'incoming','success',$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17, clock_timestamp(), $18, $19, $20,
-		        COALESCE($21, clock_timestamp()))
+		        COALESCE($21, clock_timestamp()), $22, $23)
 		ON CONFLICT (organization_id, click_id, status, event_ref)
 			WHERE NOT network_accepts_duplicates AND result = 'success'
 		DO NOTHING
@@ -266,6 +287,7 @@ func (s *PostgresStore) recordSuccess(ctx context.Context, tx pgx.Tx, e Entry) (
 		e.Revenue, e.Currency, e.USDValue, e.AttributionOutcome,
 		e.AttributedClickID, e.AttributionMethod, e.TimeToConversionMS, e.Message,
 		revRevenue, revCurrency, revUSD, eventAt,
+		revTarget, refundKind,
 	).Scan(&returnedID)
 
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -371,7 +393,7 @@ func redecisionFor(ctx context.Context, q querier, e Entry) (redecision, error) 
 		err := q.QueryRow(ctx, `
 			SELECT status FROM postbacks
 			WHERE organization_id = $1 AND click_id = $2 AND result = 'success'
-			  AND status IN ('CPA_ACCEPT', 'CPA_DECLINE', 'CPA_TRASH')
+			  AND status IN ('CPA_ACCEPT', 'CPA_DECLINE', 'CPA_TRASH') AND refund_kind = ''
 			ORDER BY created_at DESC
 			LIMIT 1`,
 			e.OrganizationID, e.ClickID,
@@ -560,14 +582,16 @@ func acceptToReverse(ctx context.Context, q querier, organizationID, clickID str
 		revenue  *float64
 		usdValue *float64
 	)
+	// The click's last decision: a refund of one order (refund_kind
+	// 'repeat'/'partial') is not one (audit UNI-4).
 	err := q.QueryRow(ctx, `
-		SELECT status, revenue::float8, currency, usd_value::float8 FROM postbacks
+		SELECT id, status, revenue::float8, currency, usd_value::float8 FROM postbacks
 		WHERE organization_id = $1 AND click_id = $2 AND result = 'success'
-		  AND status IN ('CPA_ACCEPT', 'CPA_DECLINE', 'CPA_TRASH')
+		  AND status IN ('CPA_ACCEPT', 'CPA_DECLINE', 'CPA_TRASH') AND refund_kind = ''
 		ORDER BY created_at DESC
 		LIMIT 1`,
 		organizationID, clickID,
-	).Scan(&status, &revenue, &rev.Currency, &usdValue)
+	).Scan(&rev.TargetID, &status, &revenue, &rev.Currency, &usdValue)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return Reversal{}, false, nil
 	}
@@ -579,6 +603,153 @@ func acceptToReverse(ctx context.Context, q querier, organizationID, clickID str
 	}
 	rev.Revenue, rev.USDValue = revenue, usdValue
 	return rev, true, nil
+}
+
+// reversalPlan is what a CPA_DECLINE / CPA_TRASH reverses (audit UNI-4,
+// §45 amended; docs/conversion.md "Refunds by order").
+type reversalPlan struct {
+	reversal *Reversal // nil: nothing to reverse
+	// kind is the row's refund_kind: "" a decision on the click (the
+	// reversal of its accept, or a decline with nothing standing), "repeat"
+	// or "partial" — a refund of one order, even when nothing was left.
+	kind     string
+	eventRef string // the dedup key's event_ref
+	note     string // for the row's message
+	refusal  string // refused, with this reason
+}
+
+// planReversal decides, under the click's lock:
+//
+//   - which purchase: the repeat purchase whose txn_id the refund carries,
+//     else the click's accept while it stands (the reversal of a
+//     re-approval keeps its key and reverses the latest accept, as before);
+//   - how much: refund_amount, at most what is left of it; else all that is
+//     left of it — the whole payout unless partial refunds came first;
+//   - its key: a repeat purchase's refund is keyed by that txn_id, a partial
+//     refund adds "#refund" and its refund_id, so a replay is a duplicate
+//     and two partial refunds of one order are not.
+func planReversal(ctx context.Context, q querier, e Entry) (reversalPlan, error) {
+	plan := reversalPlan{eventRef: e.EventRef}
+	txn := strings.TrimSpace(e.NetworkTxnID)
+	var (
+		target Reversal
+		found  bool
+		err    error
+		what   = "CPA_ACCEPT"
+	)
+	if e.EventRef == "" && txn != "" {
+		target, found, err = redepToReverse(ctx, q, e.OrganizationID, e.ClickID, txn)
+		if err != nil {
+			return plan, err
+		}
+		if found {
+			target.Kind, plan.eventRef, what = "repeat", txn, "CPA_REDEP"
+			plan.kind = "repeat"
+		}
+	}
+	if !found {
+		if target, found, err = acceptToReverse(ctx, q, e.OrganizationID, e.ClickID); err != nil {
+			return plan, err
+		}
+		if e.RefundAmount != nil {
+			target.Kind, plan.kind = "partial", "partial"
+		}
+	}
+	if e.RefundAmount != nil {
+		plan.eventRef += "#refund"
+		if e.RefundID != "" {
+			plan.eventRef += ":" + e.RefundID
+		}
+	}
+	if !found {
+		return plan, nil
+	}
+	if e.RefundAmount != nil && e.Currency != "" && target.Currency != "" && !strings.EqualFold(e.Currency, target.Currency) {
+		plan.refusal = fmt.Sprintf("refund_amount must be in the purchase's currency, %s, not %s", target.Currency, e.Currency)
+		return plan, nil
+	}
+	if target.Revenue == nil {
+		// A purchase recorded without money: there is nothing to take back
+		// but the decision itself (as before).
+		plan.reversal = &target
+		plan.note = "reverses the " + what + " payout" + describeAmount(nil, "")
+		return plan, nil
+	}
+	reversed, err := reversedSoFar(ctx, q, target.TargetID)
+	if err != nil {
+		return plan, err
+	}
+	left := *target.Revenue - reversed
+	if left <= 0 {
+		plan.note = what + " " + describeTxn(txn, what) + "already refunded in full; nothing reversed"
+		return plan, nil
+	}
+	amount := left
+	if e.RefundAmount != nil && *e.RefundAmount < left {
+		amount = *e.RefundAmount
+	}
+	rev := target
+	rev.Revenue = &amount
+	// The whole payout keeps the purchase's own USD value, so the two net
+	// to exactly zero; a part of it takes the same share.
+	if target.USDValue != nil && *target.Revenue > 0 && amount != *target.Revenue {
+		usd := *target.USDValue * amount / *target.Revenue
+		rev.USDValue = &usd
+	}
+	plan.reversal = &rev
+	if amount == *target.Revenue {
+		plan.note = "reverses the " + what + " payout" + describeAmount(target.Revenue, target.Currency)
+	} else {
+		plan.note = "reverses" + describeAmount(&amount, target.Currency) + " of the " + what + " payout" + describeAmount(target.Revenue, target.Currency)
+	}
+	if what == "CPA_REDEP" {
+		plan.note += " (txn_id " + txn + ")"
+	}
+	return plan, nil
+}
+
+func describeTxn(txn, what string) string {
+	if what == "CPA_REDEP" {
+		return "(txn_id " + txn + ") "
+	}
+	return ""
+}
+
+// redepToReverse is the click's recorded repeat purchase with txn_id txn.
+func redepToReverse(ctx context.Context, q querier, organizationID, clickID, txn string) (Reversal, bool, error) {
+	var (
+		rev      Reversal
+		revenue  *float64
+		usdValue *float64
+	)
+	err := q.QueryRow(ctx, `
+		SELECT id, revenue::float8, currency, usd_value::float8 FROM postbacks
+		WHERE organization_id = $1 AND click_id = $2 AND result = 'success'
+		  AND status = 'CPA_REDEP' AND event_ref = $3
+		ORDER BY created_at DESC
+		LIMIT 1`,
+		organizationID, clickID, txn,
+	).Scan(&rev.TargetID, &revenue, &rev.Currency, &usdValue)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return Reversal{}, false, nil
+	}
+	if err != nil {
+		return Reversal{}, false, fmt.Errorf("conversion: finding the repeat purchase to reverse: %w", err)
+	}
+	rev.Revenue, rev.USDValue = revenue, usdValue
+	return rev, true, nil
+}
+
+// reversedSoFar sums what earlier refunds took back from one purchase.
+func reversedSoFar(ctx context.Context, q querier, targetID string) (float64, error) {
+	var sum float64
+	err := q.QueryRow(ctx, `
+		SELECT coalesce(sum(reversal_revenue), 0)::float8 FROM postbacks
+		WHERE reverses_postback_id = $1 AND result = 'success'`, targetID).Scan(&sum)
+	if err != nil {
+		return 0, fmt.Errorf("conversion: summing earlier refunds: %w", err)
+	}
+	return sum, nil
 }
 
 func describeAmount(amount *float64, currency string) string {

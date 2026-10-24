@@ -93,6 +93,13 @@ type Postback struct {
 	// Stored regardless of whether this status's dedup key uses it (§45).
 	NetworkTxnID string
 
+	// RefundAmount / RefundID: a refund (a status that maps to CPA_DECLINE
+	// or CPA_TRASH) of part of the purchase, in the purchase's currency,
+	// and the refund's own id so two partial refunds of one order are told
+	// apart (audit UNI-4, docs/conversion.md "Refunds by order").
+	RefundAmount *float64
+	RefundID     string
+
 	// PostbackURL is the network's outgoing macro template (§46), e.g.
 	// "...?click_id={click_id}&status={status}" — empty when the network
 	// has none. It comes from the handler's NetworkLookup, so Service needs
@@ -190,6 +197,9 @@ type Entry struct {
 	RawStatus    string
 	Revenue      *float64
 	Currency     string
+	// RefundAmount / RefundID: see Postback.
+	RefundAmount *float64
+	RefundID     string
 	USDValue     *float64
 
 	AttributionOutcome string
@@ -251,6 +261,12 @@ type Reversal struct {
 	Revenue  *float64
 	Currency string
 	USDValue *float64
+	// TargetID is the success row reversed (postbacks.reverses_postback_id);
+	// Kind its refund_kind: "" the reversal of the click's accept, a
+	// decision on the click; "repeat" a repeat purchase's refund;
+	// "partial" a partial refund of the accept (audit UNI-4).
+	TargetID string
+	Kind     string
 }
 
 // reversesAccept reports whether a status, recorded after a CPA_ACCEPT,
@@ -496,6 +512,10 @@ func (s *Service) run(ctx context.Context, p Postback, out outcome) (Result, err
 		return Result{}, fmt.Errorf("conversion: mapping status: %w", err)
 	}
 	eventRef := eventRefFor(status, p.NetworkTxnID)
+	if p.RefundAmount != nil && !reversesAccept(status) {
+		return out.refuse(ctx, p, p.ClickID, status, eventRef, ResultError,
+			fmt.Sprintf("refund_amount is for a refund (a status that maps to CPA_DECLINE or CPA_TRASH), not %s", status))
+	}
 	if p.Browser && status != event.CpaHold && status != event.CpaAccept {
 		return out.refuse(ctx, p, p.ClickID, status, eventRef, ResultError,
 			fmt.Sprintf("a page's script can report only a lead or a purchase (CPA_HOLD, CPA_ACCEPT), not %s — send it from the site's server", status))
@@ -610,6 +630,14 @@ func validate(p Postback) string {
 			return err.Error()
 		}
 	}
+	if p.RefundAmount != nil {
+		if err := CheckRevenue(*p.RefundAmount); err != nil {
+			return strings.Replace(err.Error(), "revenue", "refund_amount", 1)
+		}
+		if *p.RefundAmount == 0 {
+			return "refund_amount must be more than 0"
+		}
+	}
 	return ""
 }
 
@@ -670,6 +698,8 @@ func newEntry(p Postback, status event.Type, eventRef string, attr attribution.A
 		ClickID:            p.ClickID,
 		Status:             status,
 		EventRef:           eventRef,
+		RefundAmount:       p.RefundAmount,
+		RefundID:           p.RefundID,
 		NetworkTxnID:       p.NetworkTxnID,
 		RawStatus:          p.RawStatus,
 		Revenue:            revenue,
@@ -725,7 +755,9 @@ func (r recorder) commit(ctx context.Context, p Postback, entry Entry, attr attr
 // attribution reason otherwise, with the currency notes.
 func committedMessage(p Postback, entry Entry, rec Recorded) string {
 	message := entry.Message
-	if rec.Kind == ResultIgnored || rec.Kind == ResultSuccess || rec.Kind == ResultDuplicate {
+	// The store's own word whatever it decided — including a refund it
+	// refused under the lock (audit UNI-4).
+	if rec.Kind == ResultIgnored || rec.Kind == ResultSuccess || rec.Kind == ResultDuplicate || rec.Kind == ResultError {
 		message = rec.Message
 	}
 	return p.annotate(message)

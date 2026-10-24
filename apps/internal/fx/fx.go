@@ -190,16 +190,23 @@ func (s *Store) RepairUSD(ctx context.Context) (Repaired, error) {
 		return out, fmt.Errorf("fx: repairing postbacks usd_value: %w", err)
 	}
 
-	// The accept a decline reversed is the click's recorded CPA_ACCEPT
-	// (one per click: the dedup key) — the value the record path copied.
+	// The purchase a refund reversed: the row it points at
+	// (reverses_postback_id — a repeat purchase, or part of one, audit
+	// UNI-4), the same share of its USD value; a reversal from before that
+	// column, the click's recorded CPA_ACCEPT (one per click: the dedup
+	// key) — the value the record path copied.
 	rows, err = s.db.Query(ctx, `
 		UPDATE postbacks p
-		SET reversal_usd_value = a.usd_value
+		SET reversal_usd_value = CASE
+		      WHEN a.revenue IS NULL OR a.revenue = 0 OR p.reversal_revenue = a.revenue THEN a.usd_value
+		      ELSE round(a.usd_value * p.reversal_revenue / a.revenue, 4) END
 		FROM postbacks a
 		WHERE p.reversal_revenue IS NOT NULL AND p.reversal_usd_value IS NULL
 		  AND p.result = 'success' AND p.status IN ('CPA_DECLINE', 'CPA_TRASH')
 		  AND a.organization_id = p.organization_id AND a.click_id = p.click_id
-		  AND a.status = 'CPA_ACCEPT' AND a.result = 'success' AND a.direction = 'incoming'
+		  AND (a.id = p.reverses_postback_id
+		       OR (p.reverses_postback_id IS NULL AND a.status = 'CPA_ACCEPT'))
+		  AND a.result = 'success' AND a.direction = 'incoming'
 		  AND a.usd_value IS NOT NULL`+returning)
 	if err != nil {
 		return out, fmt.Errorf("fx: repairing postbacks reversal_usd_value: %w", err)

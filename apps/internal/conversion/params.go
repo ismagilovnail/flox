@@ -4,7 +4,9 @@ import (
 	"crypto/sha256"
 	"crypto/subtle"
 	"encoding/hex"
+	"errors"
 	"net/url"
+	"strings"
 	"time"
 )
 
@@ -51,6 +53,16 @@ func ParseParams(form url.Values, n Network, now time.Time) (Postback, error) {
 		}
 		p.Revenue = &v
 	}
+	// A partial refund (audit UNI-4): how much of the purchase, in its
+	// currency, and the refund's own id.
+	if raw := form.Get("refund_amount"); raw != "" {
+		v, err := ParseRevenue(raw)
+		if err != nil {
+			return Postback{}, errors.New(strings.Replace(err.Error(), "revenue", "refund_amount", 1))
+		}
+		p.RefundAmount = &v
+	}
+	p.RefundID = strings.TrimSpace(form.Get("refund_id"))
 	return p, nil
 }
 
