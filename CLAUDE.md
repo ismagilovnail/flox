@@ -20,8 +20,9 @@ referenced below as §N).
 
 ```
 CURRENT PHASE : PHASE 30.74 — BUG-9, CHSTORE TESTS READ THE RAW ROWS (closed)
-STATUS        : Product audit 2026-10-15 (docs/audit-product-2026-10-15.md)
-                is the backlog: items on the local dev panel tools/devpanel
+STATUS        : Product audits 2026-10-15 and 2026-10-24 (docs/audit-
+                product-*.md; the second: universality, SEC-7..UX-4)
+                are the backlog: items on the local dev panel tools/devpanel
                 (make devpanel → 127.0.0.1:8099; memory: flox-audit-tracker
                 — keep statuses current). Done: SEC-1, SEC-2, DATA-1, DEV-1,
                 UX-1, UX-2, UX-3, DATA-4, DATA-2, DATA-3, SEC-5, GDPR-1, INT-1,
@@ -91,11 +92,13 @@ STATUS        : Product audit 2026-10-15 (docs/audit-product-2026-10-15.md)
                 past events and reads rollup-able reports has the same trap.
                 P0 left (skipped by the user for now):
                 OPS-1..3 (prod, restore, load) — needs the owner's hosting.
-LAST COMMIT   : test(chstore): reports in tests read the raw rows (BUG-9).
+LAST COMMIT   : docs: product audit 2026-10-24 (universality).
 UNCOMMITTED   : docs/import-export-plan.md (INT-2, stays uncommitted).
-NEXT          : wait for the user — no code item left on the board; BIZ-3/
-                BIZ-4 part 2 are the user's (no interview script), OPS-1..3
-                need hosting.
+NEXT          : wait for the user — audit 2026-10-24 items: P0 SEC-7
+                (ffmpeg env/whitelists — my GAP-1 code), SEC-8 (Go
+                1.27.3/1.26.10, zod); P1 REL-2, DATA-8 (CBR rates), UNI-1;
+                BIZ-3/BIZ-4 part 2 are the user's (no interview script),
+                OPS-1..3 need hosting.
                 GAP-2 (Google Play import) is won't-do: do not offer it. INT-2 is
                 excluded: the owner does it later themselves — do not
                 offer it. No browser checks without the user's OK
