@@ -1,8 +1,10 @@
-# CLAUDE.md — FLOX
+# CLAUDE.md
 
-> This file is read at the start of every session. Keep it lean.
-> The full spec is `FLOX-master-prompt-v3.md` — read it before implementing any
-> phase. This file is the operating manual + progress tracker, not the spec.
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
+> FLOX's operating manual + progress tracker, read at the start of every
+> session. Keep it lean. The full spec is `docs/FLOX-master-prompt-v3.md` —
+> read it before implementing any phase.
 
 ---
 
@@ -11,8 +13,8 @@
 **FLOX** — production-grade SaaS traffic tracking & routing platform.
 Tagline: **Track. Route. Optimize.**
 
-Full requirements: **`FLOX-master-prompt-v3.md`** (authoritative; sections
-referenced below as §N).
+Full requirements: **`docs/FLOX-master-prompt-v3.md`** (authoritative; sections
+referenced below as §N). What each phase did, in detail: `CHANGELOG.md`.
 
 ---
 
@@ -20,149 +22,76 @@ referenced below as §N).
 
 ```
 CURRENT PHASE : PHASE 30.90 — UNI-4 PART 3, SHOPIFY WEBHOOKS (closed)
-STATUS        : Product audits 2026-10-15 and 2026-10-24 (docs/audit-
-                product-*.md; the second: universality, SEC-7..UX-4)
-                are the backlog: items on the local dev panel tools/devpanel
-                (make devpanel → 127.0.0.1:8099; memory: flox-audit-tracker
-                — keep statuses current). Done: SEC-1, SEC-2, DATA-1, DEV-1,
-                UX-1, UX-2, UX-3, DATA-4, DATA-2, DATA-3, SEC-5, GDPR-1, INT-1,
-                INT-3 (Affise, Scaleo; other platforms' macros are behind
-                login — one catalog entry each once known), API-1
-                (OpenAPI at /v1/openapi.json + /api-reference;
-                docs/public-api.md — new route ⇒ spec or notInPublicSpec).
-                BIZ-1 part 1: plans as rows, clicks/month (CLICK+FILTER,
-                UTC), soft limits (tracker never limited; 110% ⇒ 402 on
-                new campaigns/stream sets), apps/cmd/billing set-plan
-                (docs/billing.md). BIZ-1 part 2: YooKassa prepaid
-                1/3/12 months in ₽, notification = read back from
-                YooKassa, apply once, worker: lost payments, renew
-                email, 3-day grace → Free. BIZ-1 done; not yet:
-                autopay, discounts, invoices, staff admin. SEC-3
-                (secret masked in Caddy logs, tracker logs path only),
-                SEC-4 (in-process per-IP click limit, over it: sent on
-                unrecorded; TRACKER_IP_CLICK_LIMIT). CH-1 (plan-based
-                ClickHouse slots/settings per org in apps/api via
-                chconn.TenantConn; 10 s wait then 429 reports_busy; use
-                chconn.Settings, never clickhouse.WithSettings, in api code).
-                TEAM-1 part 1 (docs/team.md): campaigns.owner_user_id,
-                campaign.manage_all (Owner/Admin/Manager); campaign writes
-                go through campaign.Access.RequireOwned; buyer report
-                dimension (by campaign, regrouped; filter = campaign IN).
-                TEAM-1b: campaign.read_all; internal/campaignscope (lazy,
-                per request) limits every campaign-data read for Buyers —
-                a new read of campaign data must use it and be listed in
-                api/campaign_scope_test.go. Push/alerts stay team-wide.
-                REL-1: tracker flush 250 ms, loss-window gauges + alert;
-                disk spool declined by the user (risk documented).
-                DATA-5: visitor cookie fv → visitor_key; IP+UA kept in
-                ip_visitor_key (schema/021); /analytics/unique-check.
-                SEC-6: prod deps 0 vulns (make audit-web gates it); dev
-                braces<=3.0.3 accepted (no fix exists, docs/security.md §10).
-                BUG-1 (network delete 409 per FK: postbacks ⇒ archive),
-                BUG-2 (isolation tests drop their orgs); BUG-3 was
-                already fixed. BUG-7 + BUG-4: overview charts get every
-                day (fillDays), a lone point is a dot; chart currency dep.
-                BIZ-2 (docs/unit-economics.md, make costbench): ~300 CPU-s
-                and 827 B per 1M clicks/click; click rows never expire
-                (TTL only clears ip/ua/referrer); external_click_id
-                duplicated fbclid/ttclid. DATA-7: external_click_id
-                stores only what was sent; reads use
-                chstore.SourceClickIDExpr (notEmpty() spelling — the
-                analyzer rewrites != '' and the bloom index on it,
-                schema/022, would be skipped); 827 → 544 B/click.
-                DATA-6 part 1: event_rollup_hourly (schema/023, MVs from
-                a cutover + BackfillRollup) — report builder clicks/
-                stages and filter values read it when dims allow
-                (EventStore.useRollup); funnel/flow summary stay raw.
-                DATA-6 part 2: plans.raw_retention_months 3/6/12/24;
-                retention_months + row TTL (0 ⇒ 24, schema/024),
-                click_lookup ≥ 13 months; worker writes it
-                (EventStore.WithRetention) and retention.Plans rewrites
-                rows hourly — shorter only after 30 days
-                (RETENTION_SHORTEN_AFTER_DAYS). A new insert path into
-                click_events/tracking_events must append retention_months.
-                BIZ-4 part 1: docs/market-pricing-2026-10.md (public
-                prices); part 2 (Adset.Pro test account) is the user's.
-                GAP-1: MOV/M4V/3GP/AVI/MKV ≤ 200 MB → MP4 by apps/worker
-                (contentgallery.Processor, ffmpeg in the worker image,
-                migration 00100); real-ffmpeg test runs in infra-worker-1.
-                SEC-7: ffmpeg/ffprobe get an empty env and one forced,
-                whitelisted demuxer per extension + protocol file only.
-                DATA-8: FX_PROVIDER=ecb,cbr (fx.Combine; cbr only for what
-                the ECB lacks, carried over gaps, paced, retried). Restarting
-                the dev worker re-runs the sync — cbr.ru answers bursts 429.
-                REL-2: tracker counts limited clicks (internal/clicklimit →
-                ip_limited_clicks, 00101), campaign page warns; alerts
-                TrackerClicksOverIPLimit, UntrustedProxyInFront.
-                UNI-1 part 1: "Own site" = network with templateKey own_site
-                (plain statuses mapped on create); section renamed
-                "Conversion sources". A refund reverses the FIRST purchase
-                (§45) — fixed in UNI-4 part 1 (refund by txn_id). Part 2: tracker
-                /flox.js + /c/{networkId} (no secret; browser_conversions +
-                browser_domains, 00102; Postback.Browser: HOLD/ACCEPT only,
-                no duplicates, known or ≤10-min-old click).
-                UNI-2 part 1: gclid/gbraid/wbraid/yclid/msclkid → ad_click_param/
-                ad_click_id (internal/adclick, schema/025 — appended after
-                retention_months; click_lookup_mv_v5), filter ad_platform,
-                macros {gclid}…; not part of external_click_id.
-                UNI-2 part 2: internal/offlineconv → Google Data Manager API
-                (events:ingest, not UploadClickConversions — closed to new
-                tokens 15.06.2026); settings on ad_account_connections +
-                offline_conversion_uploads (00104); worker every 5 min;
-                refund ⇒ restate same transactionId. Not tried live.
-                UNI-2 part 3: metrica_connections (00105) per source, any
-                cost integration; yclid clicks → internal/yandexmetrica CSV
-                upload; same queue (row is Google's connection_id or
-                Metrica's metrica_connection_id); counter's currency at event
-                date; NO restating (refund stays); worker re-reads file
-                status (LINKAGE_FAILURE ⇒ failed). Not tried with a counter.
-                UNI-3 part 1: cost integration yandex_direct (00106);
-                adaccount/yandexdirect (Clients.get currency + Reports API
-                v501, offline polling ≤5 min, no VAT); login = Client-Login.
-                Sync errors are 503 with the platform's reason, no URL.
-                UNI-3 part 2: vk_ads (00107); adaccount/vkads — client id/
-                secret, the sync mints a token ONCE and keeps/renews it
-                (Credentials.SaveTokens; VK: 5 tokens max, 1-day life);
-                ad_plans = VK campaigns, stats in batches of 200 ids.
-                UX-4: TimezoneSelect = search over Intl.supportedValuesOf
-                (pinned Russia/CIS/world); org currency searchable. DOC-1:
-                script CSP still blocked by srcdoc previews (security §7).
-                UNI-4 part 3: internal/shopify + tracker /shopify/{id}
-                (HMAC, orders/paid, refunds/create); shop_connections (00108,
-                platform column for Woo), SHOP_WEBHOOK_ENCRYPTION_KEY optional
-                (api + tracker); flox.js sets cart attribute flox_click_id.
-                BUG-10: googleads.APIVersion = v26 (v17 was sunset); Google
-                sunsets each major ~a year after release — bump it.
-                BUG-9: chstore tests use NewRawEventStore (a store reads
-                the rollup once the dev backfill is done, and test events
-                are dated before the cutover); a test elsewhere that seeds
-                past events and reads rollup-able reports has the same trap.
-                P0 left (skipped by the user for now):
-                OPS-1..3 (prod, restore, load) — needs the owner's hosting.
+STATUS        : Backlog = product audits 2026-10-15 and 2026-10-24
+                (docs/audit-product-*.md), tracked on the local dev panel
+                tools/devpanel (make devpanel → 127.0.0.1:8099; memory:
+                flox-audit-tracker — keep statuses current). What each
+                closed item did: CHANGELOG.md.
+                Open: UNI-4 part 4 (WooCommerce, on shop_connections);
+                OPS-1..3 (prod, restore, load — need the owner's hosting,
+                skipped by the user for now); BIZ-3 and BIZ-4 part 2 are the
+                user's. Not built: BIZ-1 autopay/discounts/invoices/staff
+                admin, Microsoft Ads upload, REL-1 disk spool (declined).
+                No third-party integration (Google Ads, Metrica, Direct, VK,
+                Shopify, YooKassa) has run against a live account: fake
+                servers + live error probes only.
 LAST COMMIT   : feat(shopify): orders and refunds by webhook (UNI-4 part 3).
 UNCOMMITTED   : docs/import-export-plan.md (INT-2, stays uncommitted).
-NEXT          : wait for the user. UNI-4 part 4: WooCommerce (same
-                shop_connections);
-                BIZ-3/BIZ-4 part 2 are the user's (no interview script),
-                OPS-1..3 need hosting.
-                GAP-2 (Google Play import) is won't-do: do not offer it. INT-2 is
-                excluded: the owner does it later themselves — do not
-                offer it. No browser checks without the user's OK
-                (memory: flox-no-browser-without-ok). To try payments for
-                real: a YooKassa test shop's YOOKASSA_SHOP_ID/SECRET_KEY in
-                infra/.env. CI (DO1) is the user's own decision — do not
-                set it up. Run go test with the full env line AND check e2e
-                did not skip (memory: flox-full-test-env); retention's
-                TestRawRetentionFollowsThePlan can flake on a ClickHouse
-                `_row_exists` mutation error under the parallel run; chconn's
-                TestLimitsStopAHeavyQuery flakes under the full parallel run;
-                internal/chstore/retention.go is not gofmt-clean (older);
-                contentgallery's TestTranscodeFailures flaked once in the
-                full run (passes alone).
+NEXT          : wait for the user.
+                Do not offer: GAP-2 (Google Play import, won't-do), INT-2
+                (the owner does it later), a BIZ-3 interview script. CI
+                (DO1) is the user's own decision — do not set it up. No
+                browser checks without the user's OK (memory:
+                flox-no-browser-without-ok). To try payments for real: a
+                YooKassa test shop's YOOKASSA_SHOP_ID/SECRET_KEY in
+                infra/.env.
 ```
 
 > At the end of every phase: update the four lines above, add a CHANGELOG entry,
 > commit, then STOP and wait. Do not roll into the next phase automatically.
+> Rules a phase leaves for later code go in CODEBASE RULES below, not here.
+
+---
+
+## COMMANDS
+
+```
+# repo root — the dev stack (infra/docker-compose.dev.yml) and checks
+make up | make status | make help
+make dev-fresh CONFIRM=yes        # DESTRUCTIVE: wipe dev data + demo accounts
+make dev-status                   # what the dev stores hold
+make migrate-up                   # goose, apps/api/migrations
+make check                        # gofmt -l + go vet + go test + vitest + eslint + tsc
+make audit-web                    # npm audit gate (prod deps)
+make devpanel                     # backlog dashboard, 127.0.0.1:8099
+
+# apps/ — Go. Without this env, ClickHouse/e2e/MinIO/Redis/NATS tests
+# t.Skip and the run still says ok. Check with -v that TestFullFunnel PASSed.
+DATABASE_URL='postgres://flox:flox@localhost:5432/flox?sslmode=disable' \
+CLICKHOUSE_URL=http://localhost:8123 CLICKHOUSE_DATABASE=flox CLICKHOUSE_USER=flox \
+REDIS_URL=redis://localhost:6379 NATS_URL=nats://localhost:4222 \
+S3_ENDPOINT=http://localhost:9000 S3_PUBLIC_ENDPOINT=http://localhost:9000 S3_REGION=us-east-1 \
+S3_BUCKET=flox S3_ACCESS_KEY_ID=flox-minio-admin S3_SECRET_ACCESS_KEY=flox-minio-secret \
+go test -count=1 ./...                         # or: -run TestName ./internal/<pkg>/
+# e2e signs up through the real API; after a few runs the auth rate limit
+# makes every e2e test skip — clear it first:
+docker exec infra-redis-1 sh -c 'redis-cli --scan --pattern "ratelimit:*" | xargs -r redis-cli DEL'
+
+# apps/web
+npx vitest run [src/path/file.test.tsx] | npx tsc --noEmit | npx eslint . | npm run build
+```
+
+Dev stack: web :3000, api :8080 (`/v1/...`), tracker :8081, Postgres
+:5432, ClickHouse HTTP :8123 (not 9000 — that is MinIO), Redis :6379, NATS
+:4222, MailHog :8025. Accounts `{owner,admin,manager,buyer,analyst,viewer}@flox.local`
+/ `flox-demo-2026` (`make fixtures`). A scripted POST/PATCH/PUT/DELETE needs
+`Origin: http://localhost:3000` (same-origin check). The api container is a
+baked image — after Go changes: `docker compose -f infra/docker-compose.dev.yml
+up -d --build api`. tracker and worker hot-reload with air: saving their
+code (a mutation test included) changes the live dev binaries, and they run
+half-written code against dev data. A new env var goes into the compose
+file and the container is recreated *before* the code that reads it is
+saved (air does not pick up env).
 
 ---
 
@@ -222,22 +151,41 @@ the Postgres queue — docs/event-stream.md).
 binaries inside the same Go module, sharing `internal/routing` and
 `internal/classifier`. No microservices up front. No unnecessary frameworks.
 
+How the pieces meet (details: `ARCHITECTURE.md`, `docs/event-stream.md`):
+
+- **apps/tracker** is everything public: redirects (`/t/...`), landings and
+  PWAs on tracking domains, postbacks (`/postback/{networkId}`, secret),
+  page conversions (`/flox.js`, `/c/{networkId}`), store webhooks
+  (`/shopify/{networkId}`, HMAC), Telegram webhooks. It publishes click
+  events to NATS JetStream; conversions are decided synchronously by
+  `internal/conversion` (Postgres) and queued for the worker.
+- **apps/worker** drains events into ClickHouse (`internal/chstore`, schema
+  in `internal/chstore/schema`), delivers outgoing postbacks and pixels, and
+  runs the timers: cost sync (`internal/costsync` + `internal/adaccount/*`),
+  offline conversions (`internal/offlineconv`), FX, retention, alerts.
+- **apps/api** is the control plane behind the session/API key; reports read
+  ClickHouse through `chconn.TenantConn` (per-plan limits).
+- Postgres holds every setting and the conversion ledger (`postbacks`);
+  ClickHouse holds clicks/events; Redis is cache and rate limits only.
+
 ---
 
 ## REPO LAYOUT
 
 ```
 apps/
-  web/       Next.js frontend (the only non-Go app)
-  api/       Go control-plane API
-  tracker/   Go hot-path click/redirect service
-  worker/    Go async event/postback processor
-packages/
-  ui/ config/ types/
-docs/        architecture, routing, event-model, ltv, metrics, etc. (§76)
-infra/       docker-compose, deployment
-FLOX-master-prompt-v3.md   ← full spec
-CLAUDE.md                  ← this file
+  go.mod     ONE Go module for everything below except web
+  api/       control-plane API (main + migrations/ + route-level tests)
+  tracker/   public hot path (package main)
+  worker/    async processor (package main)
+  internal/  shared domain packages (routing, conversion, chstore, …)
+  cmd/       one-off binaries (devfixtures, billing, …)
+  e2e/       full-funnel tests against the running dev stack
+  web/       Next.js frontend (the only non-Go app; own package.json)
+packages/    ui/ config/ types/ (barely used)
+docs/        spec (FLOX-master-prompt-v3.md), per-domain docs (§76), audits
+infra/       docker-compose (dev, test), k8s, Caddy, Prometheus alerts
+tools/devpanel/  separate Go module: local backlog dashboard (SQLite)
 ```
 
 Frontend internal structure: `app/ components/ features/ hooks/ lib/ stores/
@@ -313,6 +261,47 @@ Read the referenced section before touching related code.
     reference registry metrics by stable id; division-by-zero yields empty, never
     an error; one formula = one data source (no mixing push with regular); LTV not
     allowed in formulas; team-private.
+
+---
+
+## CODEBASE RULES (tests enforce them, or they bit before)
+
+- A new API route lands in `internal/openapi/openapi.yaml` or in
+  `notInPublicSpec` (`api/openapi_test.go`). An id-named JSON field in a
+  request needs a `referenceCases` entry or a `notReferences` reason
+  (`api/tenant_isolation_routes_test.go`, which also walks every route with
+  another org's ids).
+- Buyers (TEAM-1): a new read of campaign data goes through
+  `internal/campaignscope` and is listed in `api/campaign_scope_test.go`;
+  campaign writes go through `campaign.Access.RequireOwned`.
+- ClickHouse from apps/api: `chconn.Settings`, never
+  `clickhouse.WithSettings`. A new insert path into
+  `click_events`/`tracking_events` appends `retention_months`. Source click
+  ids are read with `chstore.SourceClickIDExpr` (`notEmpty()`, not `!= ''`,
+  or the bloom index is skipped). A test that seeds past events and reads a
+  rollup-able report uses `NewRawEventStore` (the rollup starts at a
+  cutover).
+- chi: never `r.Route("/{id}", …)` beside a handler that owns `/{id}` — it
+  takes `/networks/{id}` itself away; register sub-resources as full paths.
+- Postgres index on a big table: `CREATE INDEX CONCURRENTLY` in its own
+  migration with `-- +goose NO TRANSACTION`.
+- Recoverable secrets: AES-256-GCM, one key per domain
+  (`TOTP_`, `INTEGRATION_`, `ADACCOUNT_`, `PIXEL_`,
+  `SHOP_WEBHOOK_ENCRYPTION_KEY`); responses carry only a last-4 preview. A new
+  key goes into both compose files, k8s, `.env.example` and
+  `docs/environment.md`.
+- Ad platforms: a sync error is a 503 with the platform's reason, never the
+  request URL (Facebook's carries the token). VK tokens are minted once and
+  kept (`Credentials.SaveTokens`; 5 per client at most). Metrica uploads are
+  never restated. `googleads.APIVersion` must move before Google sunsets it
+  (~a year after release).
+- Billing limits never touch the tracker. A network with postbacks cannot be
+  deleted (409) — archive it.
+- Known flakes under the full parallel run (pass alone):
+  `TestRawRetentionFollowsThePlan`, `TestLimitsStopAHeavyQuery`,
+  `TestTranscodeFailures`. `internal/chstore/retention.go` is not
+  gofmt-clean (older). Restarting the dev worker re-runs the FX sync, and
+  cbr.ru answers bursts with 429.
 
 ---
 
@@ -422,6 +411,6 @@ No single giant commit.
 ## SESSION START CHECKLIST
 
 1. Read CURRENT STATE above.
-2. Read the relevant §sections in `FLOX-master-prompt-v3.md` for this phase.
+2. Read the relevant §sections in `docs/FLOX-master-prompt-v3.md` for this phase.
 3. Confirm the phase plan (§2) before writing code.
 4. Implement → validate → document → update CURRENT STATE → commit → STOP.
