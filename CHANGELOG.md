@@ -5,6 +5,19 @@ per-phase, matching `CLAUDE.md`'s phase protocol. The one exception is
 [Between phases], below: spec amendments and the code changes that follow from
 them land between phases and would otherwise be invisible here.
 
+## [Phase 30.89] — Time zones, currency search, CSP note (UX-4, DOC-1)
+
+- UX-4: the time zone picker (organization settings, report builder) searches every IANA zone the browser knows, by
+  city in the interface language, IANA id or UTC offset; pinned first: Russia, then the CIS and Turkey (Kyiv, Minsk,
+  Almaty, Tashkent, Bishkek, Dushanbe, Baku, Yerevan, Tbilisi, Chișinău, Istanbul), then world hubs. A zone without a
+  translation reads "Buenos Aires (America)". The organization currency (already the 59 FX currencies of DATA-8) is
+  searchable by code or name ("RUB — российский рубль"). Go (embedded tzdata) and ClickHouse take the browser's ids,
+  old spellings (Europe/Kiev, Asia/Calcutta) included.
+- DOC-1: docs/security.md no longer says there is no CSP. §7 records the re-check after SEC-5: the previews are still
+  `srcdoc`, which inherits the page's policy even sandboxed, so a nonce `script-src` still needs the preview on its
+  own origin first.
+- Tests: the picker (the full list, CIS cities, search and pick, a value outside the lists, fallback names).
+
 ## [Phase 30.88] — VK Ads spend import (UNI-3, part 2)
 
 docs/ad-account-connections.md "VK Ads". A fifth cost integration, `vk_ads` (migration 00107).

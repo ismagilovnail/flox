@@ -194,7 +194,10 @@
   "timezones": {
     "groups": {
       "russia": "Россия",
-      "world": "Весь мир"
+      "world": "Мир",
+      "cis": "СНГ и Турция",
+      "all": "Все часовые пояса",
+      "current": "Текущий"
     },
     "names": {
       "Europe/Kaliningrad": "Калининград",
@@ -216,8 +219,21 @@
       "Asia/Singapore": "Сингапур",
       "America/New_York": "Нью-Йорк",
       "America/Chicago": "Чикаго",
-      "America/Los_Angeles": "Лос-Анджелес"
-    }
+      "America/Los_Angeles": "Лос-Анджелес",
+      "Europe/Kyiv": "Киев",
+      "Europe/Minsk": "Минск",
+      "Asia/Almaty": "Алматы",
+      "Asia/Tashkent": "Ташкент",
+      "Asia/Bishkek": "Бишкек",
+      "Asia/Dushanbe": "Душанбе",
+      "Asia/Baku": "Баку",
+      "Asia/Yerevan": "Ереван",
+      "Asia/Tbilisi": "Тбилиси",
+      "Europe/Chisinau": "Кишинёв",
+      "Europe/Istanbul": "Стамбул"
+    },
+    "placeholder": "Выберите часовой пояс",
+    "search": "Город, пояс или смещение UTC…"
   },
   "dateBasis": {
     "label": "Даты:",

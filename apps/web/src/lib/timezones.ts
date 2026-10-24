@@ -1,11 +1,12 @@
 /**
- * Timezones offered in the report builder and the organization settings.
- * Curated, not exhaustive: the backend accepts any IANA zone. Russia is its
- * own group (the zones media buyers actually report in); none of these
- * observe DST today, so the offsets are stable.
+ * Timezones offered in the report builder and the organization settings
+ * (audit UX-4). Pinned groups go first — Russia (the zones media buyers
+ * actually report in), the CIS and Turkey, a few world hubs — then every
+ * other IANA zone the browser knows, searchable. The backend accepts any
+ * IANA zone (apps/api embeds tzdata).
  */
 
-export type TimezoneGroup = "russia" | "world";
+export type TimezoneGroup = "russia" | "cis" | "world" | "all";
 
 export const TIMEZONE_GROUPS: { group: TimezoneGroup; ids: string[] }[] = [
   {
@@ -26,6 +27,22 @@ export const TIMEZONE_GROUPS: { group: TimezoneGroup; ids: string[] }[] = [
     ],
   },
   {
+    group: "cis",
+    ids: [
+      "Europe/Kyiv",
+      "Europe/Minsk",
+      "Asia/Almaty",
+      "Asia/Tashkent",
+      "Asia/Bishkek",
+      "Asia/Dushanbe",
+      "Asia/Baku",
+      "Asia/Yerevan",
+      "Asia/Tbilisi",
+      "Europe/Chisinau",
+      "Europe/Istanbul",
+    ],
+  },
+  {
     group: "world",
     ids: [
       "UTC",
@@ -40,7 +57,32 @@ export const TIMEZONE_GROUPS: { group: TimezoneGroup; ids: string[] }[] = [
   },
 ];
 
+/** The pinned zones (TIMEZONE_GROUPS), in order. */
 export const TIMEZONE_IDS = TIMEZONE_GROUPS.flatMap((g) => g.ids);
+
+/** Old spellings the browser may still list next to the pinned one. */
+const ALIASES: Record<string, string> = { "Europe/Kiev": "Europe/Kyiv" };
+
+/** Every other IANA zone the runtime knows (Intl.supportedValuesOf), sorted;
+ * empty where the runtime cannot list them — the pinned ones stay. */
+export function otherTimezoneIds(): string[] {
+  let all: string[] = [];
+  try {
+    all = (Intl as unknown as { supportedValuesOf?: (key: string) => string[] }).supportedValuesOf?.("timeZone") ?? [];
+  } catch {
+    all = [];
+  }
+  const pinned = new Set(TIMEZONE_IDS);
+  return all.filter((tz) => !pinned.has(tz) && !pinned.has(ALIASES[tz] ?? "")).sort();
+}
+
+/** "America/Argentina/Buenos_Aires" → "Buenos Aires (America/Argentina)":
+ * a readable name for a zone without a translation. */
+export function timezoneFallbackName(tz: string): string {
+  const parts = tz.split("/");
+  if (parts.length < 2) return tz;
+  return `${parts[parts.length - 1].replaceAll("_", " ")} (${parts.slice(0, -1).join("/")})`;
+}
 
 /** "UTC+3", "UTC-5", "UTC+5:30" for the zone right now; "" for UTC itself or a zone the runtime doesn't know. */
 export function utcOffsetLabel(timeZone: string, at: Date = new Date()): string {

@@ -295,13 +295,23 @@ The audit's concrete risk was clickjacking — another site framing the
 app over a destructive button; `frame-ancestors 'none'` closes it
 (verified: a page on another origin gets a blocked frame).
 
-**Not done: a script policy.** The landing editor previews a landing in
-an `<iframe srcDoc>`, and a srcdoc document inherits the page's CSP: a
-`script-src`/`base-uri` policy would block the landing's own scripts and
-its `<base href>` to the asset CDN. Verified that the policy above leaves
-such a preview working (script runs, base applies). A nonce-based
-`script-src` (Next.js `proxy.ts`) needs the preview moved to its own URL
-first. `apps/tracker` is unchanged: it serves visitors' landings and PWA
+**Not done: a script policy.** The landing editor and the system gallery
+preview a landing in an `<iframe srcDoc sandbox="allow-scripts">`, and a
+srcdoc document inherits the page's CSP — sandboxing gives it an opaque
+origin (SEC-5, §9) but not a policy of its own: the HTML standard copies
+the parent's policy container into `about:srcdoc` (and into `blob:` and
+`data:` documents too). A `script-src`/`base-uri` policy would therefore
+block the landing's own inline scripts, which carry no nonce, and its
+`<base href>` to the asset CDN. Verified that the policy above leaves such
+a preview working (script runs, base applies).
+
+Re-checked after SEC-5 (audit DOC-1, 2026-10-24): SEC-5 moved where user
+content *runs* for visitors (tracking domains, object storage) and
+sandboxed the previews, but both previews are still srcdoc, so the blocker
+stands. A nonce-based `script-src` (Next.js `proxy.ts`) needs the preview
+served from another origin first — e.g. the tracker rendering a
+short-lived, signed preview URL (`text/html` there, never on the panel's or
+the API's origin) — so the iframe loads a document with its own policy. `apps/tracker` is unchanged: it serves visitors' landings and PWA
 pages, which set their own headers (`nosniff`), and must stay embeddable
 where a campaign needs it.
 
@@ -344,8 +354,8 @@ again when a `braces` > 3.0.3 or a fast-glob/micromatch without it ships.
   IPs) is not throttled by it; that's an infrastructure/WAF concern. One
   account's password is still bounded by the per-account limit (§3);
   spraying one password across many accounts is not.
-- No CSP/security-header hardening (`X-Frame-Options`, `Content-Security-
-  Policy`, ...) — out of scope for this phase, not requested.
+- ~~No CSP/security-header hardening~~ — closed by §7 (tech audit S2);
+  what is still missing is a script policy for the panel, see §7.
 - ~~API keys authenticate nothing (audit finding #4)~~ — closed, see §6
   above.
 - ~~API-key-authenticated requests share the general rate limit's

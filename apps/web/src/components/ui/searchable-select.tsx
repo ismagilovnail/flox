@@ -27,6 +27,7 @@ function SearchableSelect({
   placeholder,
   searchPlaceholder,
   className,
+  id,
 }: {
   options: SearchableSelectOption[];
   value: string;
@@ -34,6 +35,7 @@ function SearchableSelect({
   placeholder: string;
   searchPlaceholder?: string;
   className?: string;
+  id?: string;
 }) {
   const { t } = useTranslation("common");
   const [open, setOpen] = React.useState(false);
@@ -42,7 +44,15 @@ function SearchableSelect({
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
-        <Button variant="outline" size="sm" className={cn("justify-between gap-2 font-normal", className)}>
+        <Button
+          id={id}
+          type="button"
+          variant="outline"
+          size="sm"
+          role="combobox"
+          aria-expanded={open}
+          className={cn("justify-between gap-2 font-normal", className)}
+        >
           <span className={cn("truncate", !selected && "text-muted-foreground")}>{selected?.label ?? (value || placeholder)}</span>
           <ChevronDownIcon className="size-3.5 shrink-0 text-muted-foreground" />
         </Button>

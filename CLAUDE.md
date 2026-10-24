@@ -19,7 +19,7 @@ referenced below as §N).
 ## CURRENT STATE — UPDATE THIS EVERY PHASE
 
 ```
-CURRENT PHASE : PHASE 30.88 — UNI-3 PART 2, VK ADS SPEND (closed)
+CURRENT PHASE : PHASE 30.89 — UX-4 TIME ZONES + DOC-1 CSP NOTE (closed)
 STATUS        : Product audits 2026-10-15 and 2026-10-24 (docs/audit-
                 product-*.md; the second: universality, SEC-7..UX-4)
                 are the backlog: items on the local dev panel tools/devpanel
@@ -124,6 +124,9 @@ STATUS        : Product audits 2026-10-15 and 2026-10-24 (docs/audit-
                 secret, the sync mints a token ONCE and keeps/renews it
                 (Credentials.SaveTokens; VK: 5 tokens max, 1-day life);
                 ad_plans = VK campaigns, stats in batches of 200 ids.
+                UX-4: TimezoneSelect = search over Intl.supportedValuesOf
+                (pinned Russia/CIS/world); org currency searchable. DOC-1:
+                script CSP still blocked by srcdoc previews (security §7).
                 BUG-10: googleads.APIVersion = v26 (v17 was sunset); Google
                 sunsets each major ~a year after release — bump it.
                 BUG-9: chstore tests use NewRawEventStore (a store reads
@@ -132,10 +135,10 @@ STATUS        : Product audits 2026-10-15 and 2026-10-24 (docs/audit-
                 past events and reads rollup-able reports has the same trap.
                 P0 left (skipped by the user for now):
                 OPS-1..3 (prod, restore, load) — needs the owner's hosting.
-LAST COMMIT   : feat(adaccount): VK Ads spend import (UNI-3 part 2).
+LAST COMMIT   : feat(ui): searchable time zones and currency (UX-4, DOC-1).
 UNCOMMITTED   : docs/import-export-plan.md (INT-2, stays uncommitted).
-NEXT          : wait for the user. UNI-3 done. UNI-4 left: Shopify/
-                WooCommerce (after BIZ-3). Then DOC-1, UX-4;
+NEXT          : wait for the user. Audit 2026-10-24 backlog left: UNI-4
+                (Shopify/WooCommerce, after BIZ-3);
                 BIZ-3/BIZ-4 part 2 are the user's (no interview script),
                 OPS-1..3 need hosting.
                 GAP-2 (Google Play import) is won't-do: do not offer it. INT-2 is

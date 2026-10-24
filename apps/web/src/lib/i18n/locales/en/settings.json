@@ -14,7 +14,8 @@
       "name": "Name must be at least 2 characters",
       "timezone": "Pick a timezone",
       "currency": "Pick a currency"
-    }
+    },
+    "currencySearch": "Code or name…"
   },
   "security": {
     "title": "Security",

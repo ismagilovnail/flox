@@ -14,19 +14,34 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { LoadingState } from "@/components/ui/loading-state";
 import { ErrorState } from "@/components/ui/error-state";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useOrganization, useUpdateOrganization } from "@/hooks/use-organization";
 import { TimezoneSelect } from "@/components/ui/timezone-select";
 import { CURRENCIES } from "@/lib/countries";
+import { SearchableSelect, type SearchableSelectOption } from "@/components/ui/searchable-select";
 import { nameField } from "@/schemas/fields";
 
-// Plain non-empty strings, not a z.enum against the curated
+// Plain non-empty strings, not a z.enum against the
 // TIMEZONES/CURRENCIES dropdown lists — the real backend
 // (auth.Service.UpdateOrganizationSettings) validates far more broadly
 // (any IANA timezone via time.LoadLocation, any 3-letter currency code),
 // so an org already set to a value outside these two short lists must
 // still load and save correctly, not get rejected by a stricter
 // frontend-only check the backend itself doesn't share.
+/** "RUB — российский рубль": the code with its name in the interface
+ * language, so either finds it (audit UX-4). */
+function currencyLabels(codes: string[], locale: string): SearchableSelectOption[] {
+  let names: Intl.DisplayNames | null = null;
+  try {
+    names = new Intl.DisplayNames([locale], { type: "currency" });
+  } catch {
+    names = null;
+  }
+  return codes.map((c) => {
+    const name = names?.of(c);
+    return { value: c, label: name && name !== c ? `${c} — ${name}` : c };
+  });
+}
+
 function organizationSchema(t: TFunction<"settings">) {
   return z.object({
     name: nameField(t("organization.errors.name"), { max: 80 }),
@@ -38,7 +53,7 @@ function organizationSchema(t: TFunction<"settings">) {
 type OrganizationValues = z.infer<ReturnType<typeof organizationSchema>>;
 
 function OrganizationForm({ org }: { org: OrganizationValues }) {
-  const { t } = useTranslation("settings");
+  const { t, i18n } = useTranslation("settings");
   const updateOrganization = useUpdateOrganization();
 
   const form = useForm<OrganizationValues>({
@@ -64,7 +79,7 @@ function OrganizationForm({ org }: { org: OrganizationValues }) {
   // (a real org set via some other path, or just a currency/timezone
   // this UI hasn't added to its own dropdown yet) — always keep it
   // selectable rather than silently falling back to nothing.
-  const currencyOptions = CURRENCIES.includes(org.currency) ? CURRENCIES : [org.currency, ...CURRENCIES];
+  const currencyOptions = currencyLabels(CURRENCIES.includes(org.currency) ? CURRENCIES : [org.currency, ...CURRENCIES], i18n.language);
 
   return (
     <form onSubmit={handleSubmit(onSubmit)} className="grid max-w-md gap-4">
@@ -91,18 +106,15 @@ function OrganizationForm({ org }: { org: OrganizationValues }) {
           control={control}
           name="currency"
           render={({ field }) => (
-            <Select value={field.value} onValueChange={field.onChange}>
-              <SelectTrigger id="org-currency" className="w-full">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {currencyOptions.map((c) => (
-                  <SelectItem key={c} value={c}>
-                    {c}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <SearchableSelect
+              id="org-currency"
+              options={currencyOptions}
+              value={field.value}
+              onChange={field.onChange}
+              placeholder={t("organization.currency")}
+              searchPlaceholder={t("organization.currencySearch")}
+              className="w-full"
+            />
           )}
         />
       </div>

@@ -194,7 +194,10 @@
   "timezones": {
     "groups": {
       "russia": "Russia",
-      "world": "World"
+      "world": "World",
+      "cis": "CIS and Turkey",
+      "all": "All time zones",
+      "current": "Current"
     },
     "names": {
       "Europe/Kaliningrad": "Kaliningrad",
@@ -216,8 +219,21 @@
       "Asia/Singapore": "Singapore",
       "America/New_York": "New York",
       "America/Chicago": "Chicago",
-      "America/Los_Angeles": "Los Angeles"
-    }
+      "America/Los_Angeles": "Los Angeles",
+      "Europe/Kyiv": "Kyiv",
+      "Europe/Minsk": "Minsk",
+      "Asia/Almaty": "Almaty",
+      "Asia/Tashkent": "Tashkent",
+      "Asia/Bishkek": "Bishkek",
+      "Asia/Dushanbe": "Dushanbe",
+      "Asia/Baku": "Baku",
+      "Asia/Yerevan": "Yerevan",
+      "Asia/Tbilisi": "Tbilisi",
+      "Europe/Chisinau": "Chișinău",
+      "Europe/Istanbul": "Istanbul"
+    },
+    "placeholder": "Choose a time zone",
+    "search": "City, zone or UTC offset…"
   },
   "dateBasis": {
     "label": "Dates:",
