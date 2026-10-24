@@ -62,6 +62,6 @@ export function NewNetworkView() {
   }
 
   return (
-    <NetworkForm title={t("form.titleNew")} defaultValues={{}} submitLabel={t("form.submitCreate")} onSubmit={handleSubmit} />
+    <NetworkForm title={t("form.titleNew")} defaultValues={{}} submitLabel={t("form.submitCreate")} chooseKind onSubmit={handleSubmit} />
   );
 }

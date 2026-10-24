@@ -209,6 +209,47 @@ Affilka, Cellxpert, MyAffiliates, Income Access, NetRefer and IREV keep
 their docs behind login (checked 2026-10-16). A template is one catalog
 entry once their macros are known.
 
+## Own site — conversions without a partner (audit 2026-10-24, UNI-1 part 1)
+
+A shop, a service or an app that sells itself has no affiliate network; its
+own server reports leads, purchases and refunds. In FLOX it is a network
+with `templateKey = "own_site"` — the same entity, postback endpoint, secret
+and dedup rules, no schema change; what changes is the words and the
+statuses.
+
+- **Creating:** the form first asks "Where conversions come from": a
+  partner network or own site (`NetworkForm` `chooseKind`, only when
+  creating). Own site hides the platform picker; its statuses are mapped
+  with it (`OWN_SITE_TEMPLATE`, `lib/network-templates.ts`): `lead` →
+  CPA_HOLD, `purchase` → CPA_ACCEPT, `repeat_purchase` → CPA_REDEP,
+  `refund` and `cancel` → CPA_DECLINE, `spam` → CPA_TRASH — the site can
+  send `status=purchase` at once.
+- **Its page:** "Conversion URL — for your site", three steps (the site's
+  URL with `click_id={click_id}` in the offer link; keep the click id until
+  the order; the server calls the URL with status, amount, currency and the
+  order number as `txn_id`), "call it from your server only" (the URL holds
+  the secret), and what each status means. The secret dialog speaks to the
+  site's developer. The list marks such sources "Own site".
+- **Every source:** statuses show by name (ACCEPT, HOLD…), the enum in the
+  tooltip, instead of `999 → CPA_ACCEPT`.
+- **Words:** the section is "Conversion sources" (was "Networks"), and the
+  onboarding asks for "a conversion source" — a partner network or your own
+  site.
+- **Known limit, found in the live check:** a refund always reverses the
+  click's first purchase (§45: DECLINE reverses the CPA_ACCEPT payout). A
+  refund of a repeat purchase therefore takes the first purchase's amount
+  out — said in the status's explanation; per-order refunds are UNI-4.
+- **Not in part 1:** a script for pages with no server (Tilda and other
+  builders) — the secret cannot be put in a page; it needs its own public
+  endpoint with fraud limits (UNI-1 part 2).
+
+Live (dev stack): an own-site source created through the API with its six
+mappings; on one click `lead` → CPA_HOLD, `purchase` 1 990 RUB → CPA_ACCEPT
+$24.71, `repeat_purchase` 990 RUB (`txn_id` A-1002) → CPA_REDEP $12.29,
+`refund` → CPA_DECLINE −1 990 RUB (the limit above). Tests:
+`network-templates.test.ts` (the mappings cover every status, the URL),
+`network-form.test.tsx` (mutation-checked), `incoming-postback-card.test.tsx`.
+
 ## Reports by network (2026-10-13)
 
 A click routed to an offer carries that offer's network (`network_id`,

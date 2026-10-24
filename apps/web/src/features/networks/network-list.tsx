@@ -6,7 +6,7 @@ import { toast } from "sonner";
 import { CopyIcon, PlusIcon, TagIcon } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { incomingPostbackTemplate } from "@/lib/postback-url";
-import { networkTemplate } from "@/lib/network-templates";
+import { isOwnSite, networkTemplate } from "@/lib/network-templates";
 
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
@@ -147,6 +147,7 @@ export function PostbackSecretDialog({
   const { t } = useTranslation("networks");
   const url = incomingPostbackUrl ? incomingPostbackTemplate(incomingPostbackUrl, secret, templateKey) : "";
   const template = networkTemplate(templateKey);
+  const ownSite = isOwnSite(templateKey);
 
   function copy(value: string, message: string) {
     navigator.clipboard.writeText(value).then(
@@ -160,11 +161,13 @@ export function PostbackSecretDialog({
       <DialogContent>
         <DialogHeader>
           <DialogTitle>{t("postbackSecret.title")}</DialogTitle>
-          <DialogDescription>{t("postbackSecret.description", { name: networkName })}</DialogDescription>
+          <DialogDescription>
+            {ownSite ? t("ownSite.secretDescription") : t("postbackSecret.description", { name: networkName })}
+          </DialogDescription>
         </DialogHeader>
         {url && (
           <div className="grid gap-1.5">
-            <p className="text-xs font-medium">{t("postbackSecret.urlLabel")}</p>
+            <p className="text-xs font-medium">{ownSite ? t("ownSite.secretUrlLabel") : t("postbackSecret.urlLabel")}</p>
             <div className="flex items-start gap-2 rounded-md border border-border bg-muted px-3 py-2">
               <Mono className="min-w-0 flex-1 text-xs break-all">{url}</Mono>
               <IconButton aria-label={t("incoming.copyAria")} size="icon-sm" onClick={() => copy(url, t("incoming.copied"))}>
@@ -172,7 +175,7 @@ export function PostbackSecretDialog({
               </IconButton>
             </div>
             <p className="text-xs text-muted-foreground">
-              {template ? t("template.urlHint", { name: template.name }) : t("incoming.macrosHint")}
+              {ownSite ? t("ownSite.urlHint") : template ? t("template.urlHint", { name: template.name }) : t("incoming.macrosHint")}
             </p>
           </div>
         )}

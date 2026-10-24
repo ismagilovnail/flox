@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Mono } from "@/components/ui/typography";
 import { RelativeTime } from "@/components/ui/relative-time";
 import type { Network, NetworkStatus } from "@/lib/api/networks";
+import { isOwnSite } from "@/lib/network-templates";
 import { NetworkRowActions } from "@/features/networks/network-row-actions";
 import { TagBadgeList } from "@/features/tags/tag-badge-list";
 
@@ -22,9 +23,12 @@ export function networkColumns(t: TFunction): ColumnDef<typeof dataTableFeatures
       accessorKey: "name",
       header: t("columns.name", { ns: "networks" }),
       cell: ({ row }) => (
-        <Link href={`/networks/${row.original.id}`} className="font-medium text-foreground hover:underline">
-          {row.original.name}
-        </Link>
+        <span className="flex items-center gap-2">
+          <Link href={`/networks/${row.original.id}`} className="font-medium text-foreground hover:underline">
+            {row.original.name}
+          </Link>
+          {isOwnSite(row.original.templateKey) && <Badge variant="outline">{t("kind.ownSite", { ns: "networks" })}</Badge>}
+        </span>
       ),
     },
     {

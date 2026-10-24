@@ -58,6 +58,36 @@ export const NETWORK_TEMPLATES: NetworkTemplate[] = [
   },
 ];
 
+/** "Own site" (audit 2026-10-24, UNI-1): not a platform but a source of
+ * conversions without a partner — a shop, a service, an app reporting its
+ * own leads and sales from its server. Its statuses are plain words, mapped
+ * when the source is created, so the site can send status=purchase at once.
+ * The URL shows what the site's developer fills in: the click id the site
+ * kept from the visit, the order's amount and id (txn_id, which also tells
+ * one repeat purchase from the next). */
+export const OWN_SITE_KEY = "own_site";
+
+export const OWN_SITE_TEMPLATE: NetworkTemplate = {
+  key: OWN_SITE_KEY,
+  name: "Own site",
+  incoming: { click_id: "{click_id}", status: "purchase", revenue: "{amount}", currency: "{currency}", txn_id: "{order_id}" },
+  offerLinkParam: "click_id",
+  statusMappings: [
+    { networkStatus: "lead", floxStatus: "CPA_HOLD" },
+    { networkStatus: "purchase", floxStatus: "CPA_ACCEPT" },
+    { networkStatus: "repeat_purchase", floxStatus: "CPA_REDEP" },
+    { networkStatus: "refund", floxStatus: "CPA_DECLINE" },
+    { networkStatus: "cancel", floxStatus: "CPA_DECLINE" },
+    { networkStatus: "spam", floxStatus: "CPA_TRASH" },
+  ],
+  sources: [],
+};
+
+export function isOwnSite(key: string | undefined): boolean {
+  return key === OWN_SITE_KEY;
+}
+
 export function networkTemplate(key: string | undefined): NetworkTemplate | undefined {
+  if (key === OWN_SITE_KEY) return OWN_SITE_TEMPLATE;
   return NETWORK_TEMPLATES.find((t) => t.key === key);
 }

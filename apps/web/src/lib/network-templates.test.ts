@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { CPA_STATUSES } from "@/lib/api/conversions";
-import { NETWORK_TEMPLATES } from "@/lib/network-templates";
+import { NETWORK_TEMPLATES, OWN_SITE_KEY, networkTemplate } from "@/lib/network-templates";
 import { incomingPostbackTemplate } from "@/lib/postback-url";
 
 // Audit 2026-10-15, INT-3: affiliate-platform templates.
@@ -25,6 +25,29 @@ describe("NETWORK_TEMPLATES", () => {
       "3": "CPA_DECLINE",
       "5": "CPA_HOLD",
     });
+  });
+});
+
+// Audit 2026-10-24, UNI-1: a site reporting its own conversions.
+describe("own site", () => {
+  it("is not offered as a platform and maps plain-word statuses to every FLOX status", () => {
+    expect(NETWORK_TEMPLATES.map((t) => t.key)).not.toContain(OWN_SITE_KEY);
+    const own = networkTemplate(OWN_SITE_KEY)!;
+    expect(Object.fromEntries(own.statusMappings.map((m) => [m.networkStatus, m.floxStatus]))).toEqual({
+      lead: "CPA_HOLD",
+      purchase: "CPA_ACCEPT",
+      repeat_purchase: "CPA_REDEP",
+      refund: "CPA_DECLINE",
+      cancel: "CPA_DECLINE",
+      spam: "CPA_TRASH",
+    });
+    expect(new Set(own.statusMappings.map((m) => m.floxStatus))).toEqual(new Set(CPA_STATUSES));
+  });
+
+  it("shows the site's developer what to fill in", () => {
+    expect(incomingPostbackTemplate("https://t.example/postback/N1", undefined, OWN_SITE_KEY)).toBe(
+      "https://t.example/postback/N1?secret={secret}&click_id={click_id}&status=purchase&revenue={amount}&currency={currency}&txn_id={order_id}",
+    );
   });
 });
 

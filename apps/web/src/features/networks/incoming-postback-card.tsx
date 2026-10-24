@@ -14,9 +14,10 @@ import { IconButton } from "@/components/ui/icon-button";
 import { Mono } from "@/components/ui/typography";
 import { useEventMappings } from "@/hooks/use-event-mappings";
 import { useRegeneratePostbackSecret } from "@/hooks/use-networks";
+import { CPA_STATUS_I18N_KEY } from "@/lib/api/conversions";
 import type { Network } from "@/lib/api/networks";
 import { INCOMING_POSTBACK_PARAMS, incomingPostbackTemplate } from "@/lib/postback-url";
-import { networkTemplate } from "@/lib/network-templates";
+import { isOwnSite, networkTemplate } from "@/lib/network-templates";
 import { PostbackSecretDialog } from "@/features/networks/network-list";
 
 /** What to give the network so its conversions reach FLOX: the URL, what
@@ -32,6 +33,9 @@ export function IncomingPostbackCard({ network, canWrite }: { network: Network; 
   const mappings = (mappingsQuery.data?.eventMappings ?? []).filter((m) => m.networkId === network.id);
   const url = network.incomingPostbackUrl ? incomingPostbackTemplate(network.incomingPostbackUrl, undefined, network.templateKey) : "";
   const template = networkTemplate(network.templateKey);
+  // The advertiser's own site (audit UNI-1): its developer, not a partner,
+  // calls the URL — other words, and what each plain status means.
+  const ownSite = isOwnSite(network.templateKey);
 
   function copy() {
     navigator.clipboard.writeText(url).then(
@@ -53,8 +57,8 @@ export function IncomingPostbackCard({ network, canWrite }: { network: Network; 
   return (
     <Card>
       <CardHeader>
-        <CardTitle>{t("incoming.title")}</CardTitle>
-        <CardDescription>{t("incoming.description")}</CardDescription>
+        <CardTitle>{ownSite ? t("ownSite.title") : t("incoming.title")}</CardTitle>
+        <CardDescription>{ownSite ? t("ownSite.description") : t("incoming.description")}</CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-4">
         {!url ? (
@@ -71,7 +75,18 @@ export function IncomingPostbackCard({ network, canWrite }: { network: Network; 
                 <CopyIcon className="size-3.5" />
               </IconButton>
             </div>
-            {template ? (
+            {ownSite ? (
+              <div className="flex flex-col gap-1.5 rounded-md border border-border p-2.5 text-xs">
+                <ol className="list-decimal space-y-1 pl-4">
+                  <li>
+                    {t("ownSite.stepLink")} <Mono className="text-xs">{"https://your-site.example/?click_id={click_id}"}</Mono>
+                  </li>
+                  <li>{t("ownSite.stepKeep")}</li>
+                  <li>{t("ownSite.stepCall")}</li>
+                </ol>
+                <p className="text-warning">{t("ownSite.serverOnly")}</p>
+              </div>
+            ) : template ? (
               <div className="flex flex-col gap-1 rounded-md border border-border p-2.5 text-xs">
                 <p>{t("template.urlHint", { name: template.name })}</p>
                 <p>
@@ -140,11 +155,27 @@ export function IncomingPostbackCard({ network, canWrite }: { network: Network; 
                 </Link>
               </AlertDescription>
             </Alert>
+          ) : ownSite ? (
+            <table className="w-full text-sm">
+              <tbody>
+                {mappings.map((m) => (
+                  <tr key={m.id} className="border-t border-border align-top first:border-t-0">
+                    <td className="py-1.5 pr-3">
+                      <Mono className="text-xs">{m.networkStatus}</Mono>
+                    </td>
+                    <td className="py-1.5 pr-3 text-xs whitespace-nowrap" title={m.floxStatus}>
+                      {t(CPA_STATUS_I18N_KEY[m.floxStatus], { ns: "conversions" })}
+                    </td>
+                    <td className="py-1.5 text-xs text-muted-foreground">{t(`ownSite.statuses.${m.networkStatus}`, { defaultValue: "" })}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           ) : (
             <ul className="flex flex-wrap gap-2">
               {mappings.map((m) => (
-                <li key={m.id} className="rounded-md border border-border px-2 py-1 text-xs">
-                  <Mono>{m.networkStatus}</Mono> → <Mono>{m.floxStatus}</Mono>
+                <li key={m.id} className="rounded-md border border-border px-2 py-1 text-xs" title={m.floxStatus}>
+                  <Mono>{m.networkStatus}</Mono> → {t(CPA_STATUS_I18N_KEY[m.floxStatus], { ns: "conversions" })}
                 </li>
               ))}
             </ul>

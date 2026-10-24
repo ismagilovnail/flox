@@ -1,12 +1,12 @@
 {
   "list": {
-    "title": "Networks",
-    "newButton": "New Network",
-    "searchPlaceholder": "Search networks...",
-    "emptyTitle": "No networks yet",
-    "emptyDescription": "Add the CPA/CPL networks your offers belong to.",
-    "loading": "Loading networks…",
-    "loadError": "Couldn't load networks",
+    "title": "Conversion sources",
+    "newButton": "Add source",
+    "searchPlaceholder": "Search…",
+    "emptyTitle": "No conversion sources yet",
+    "emptyDescription": "Add a partner network whose offers you send traffic to, or your own site that reports its purchases itself.",
+    "loading": "Loading…",
+    "loadError": "Couldn't load conversion sources",
     "editTagsButton": "Edit Tags"
   },
   "columns": {
@@ -22,9 +22,9 @@
     "dedupOn": "dedup on"
   },
   "form": {
-    "titleNew": "New Network",
+    "titleNew": "New conversion source",
     "titleEdit": "Edit {{name}}",
-    "description": "Networks are the CPA/CPL partners your offers belong to.",
+    "description": "Who tells FLOX about conversions: a partner network or your own site.",
     "nameLabel": "Name",
     "namePlaceholder": "AffTrust CPA",
     "postbackUrlLabel": "Outgoing postback (optional)",
@@ -169,5 +169,33 @@
     "mappingsCreated": "Its status codes were mapped when the network was created — see the statuses below.",
     "mappingsError": "The network was created, but some of the platform's status mappings were not: add them under Event Mapping.",
     "sources": "Sources:"
+  },
+  "kind": {
+    "label": "Where conversions come from",
+    "partner": "A partner network",
+    "ownSite": "Own site",
+    "partnerHint": "A CPA/CPL network whose offers you send traffic to; it reports conversions with a postback.",
+    "ownSiteHint": "Your own site, shop, service or app reports its leads, purchases and refunds itself — no partner. Its statuses (lead, purchase, repeat_purchase, refund, cancel, spam) are set up for you.",
+    "namePlaceholder": "My shop",
+    "currencyLabel": "Currency of amounts"
+  },
+  "ownSite": {
+    "title": "Conversion URL — for your site",
+    "description": "Your site's server calls this URL when a visitor leaves a lead, pays, buys again or gets a refund.",
+    "stepLink": "Make the offer's link your site with FLOX's click id in it:",
+    "stepKeep": "Keep the click_id on your site (a cookie or the session) until the visitor places an order.",
+    "stepCall": "When an order is created, paid or refunded, your server calls the URL: status — one of the statuses below; revenue — the order's amount; currency — its currency; txn_id — the order's number (repeat purchases need it).",
+    "serverOnly": "Call it from your server only: the URL holds the secret, and anyone could read it in the page's code.",
+    "secretDescription": "Save it now: the secret is shown once. Give this URL to your site's developer — the site's server calls it on leads, purchases and refunds.",
+    "secretUrlLabel": "URL for your site, with the secret",
+    "urlHint": "Replace {click_id}, {amount}, {currency} and {order_id} with the order's values, and status with the right status.",
+    "statuses": {
+      "lead": "a lead or sign-up, waiting for payment",
+      "purchase": "a paid order — the conversion",
+      "repeat_purchase": "the next order of the same customer (with its own txn_id)",
+      "refund": "a refund of the first purchase — takes its revenue out (a repeat purchase's refund takes the first one's out too, for now)",
+      "cancel": "an order cancelled — takes the first purchase's revenue out if it was paid",
+      "spam": "a junk lead"
+    }
   }
 }

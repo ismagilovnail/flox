@@ -7,7 +7,7 @@ first conversion shows up, in the order an operator meets it:
 | Step | Done when (all scoped to the organization) | Link |
 |---|---|---|
 | `source` | a traffic source that is not archived | /traffic-sources/new |
-| `network` | a network that is not archived | /networks/new |
+| `network` | a network that is not archived — a partner network or an own site (UNI-1) | /networks/new |
 | `mapping` | at least one event mapping | /postbacks (Event mapping tab) |
 | `offer` | an offer that is not archived | /offers/new |
 | `campaign` | an active tracking link of an active campaign | /campaigns/new |

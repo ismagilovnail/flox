@@ -75,18 +75,18 @@
         "action": "Add"
       },
       "network": {
-        "title": "Add an affiliate network",
-        "hint": "Who owns the offers and sends the postbacks.",
+        "title": "Add a conversion source",
+        "hint": "A partner network whose offers you send traffic to, or your own site that reports its purchases itself.",
         "action": "Add"
       },
       "mapping": {
-        "title": "Map the network's statuses",
-        "hint": "For example reg → CPA_HOLD, purchase → CPA_ACCEPT. Without it postbacks are refused.",
+        "title": "Map the statuses",
+        "hint": "For example reg → CPA_HOLD, purchase → CPA_ACCEPT. Without it postbacks are refused. An own site's statuses are ready at once.",
         "action": "Set up"
       },
       "offer": {
         "title": "Add an offer",
-        "hint": "An offer link with the {click_id} macro — that is how the network returns it in the postback.",
+        "hint": "An offer link, or your site's, with the {click_id} macro — that is how it comes back in the postback.",
         "action": "Add"
       },
       "campaign": {
@@ -101,8 +101,8 @@
       },
       "conversion": {
         "title": "Get a first conversion",
-        "hint": "Give the network the incoming postback URL from its page.",
-        "action": "Networks"
+        "hint": "Give the incoming postback URL to the network or to your site's developer — it is on the source's page.",
+        "action": "Conversion sources"
       },
       "cost": {
         "title": "Enter spend",

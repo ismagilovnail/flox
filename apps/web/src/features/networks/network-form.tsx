@@ -1,9 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { Controller, useForm } from "react-hook-form";
+import { Controller, useForm, useWatch } from "react-hook-form";
 
-import { NETWORK_TEMPLATES } from "@/lib/network-templates";
+import { NETWORK_TEMPLATES, OWN_SITE_KEY, isOwnSite } from "@/lib/network-templates";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { useTranslation } from "react-i18next";
@@ -51,6 +51,7 @@ export function NetworkForm({
   defaultValues,
   submitLabel,
   showStatus = false,
+  chooseKind = false,
   onSubmit,
   disabled = false,
 }: {
@@ -58,6 +59,10 @@ export function NetworkForm({
   defaultValues: Partial<NetworkFormValues>;
   submitLabel: string;
   showStatus?: boolean;
+  /** Ask first where conversions come from — a partner network or the
+   * advertiser's own site (audit UNI-1). Only when creating: the own
+   * site's statuses are mapped then. */
+  chooseKind?: boolean;
   onSubmit: (values: NetworkFormValues) => void;
   /** Locks every field read-only (offer.write) via a native <fieldset
    * disabled>, same technique offer-form.tsx/stream-set-editor.tsx use. */
@@ -81,6 +86,7 @@ export function NetworkForm({
     getValues,
     formState: { errors, isSubmitting },
   } = form;
+  const ownSite = isOwnSite(useWatch({ control, name: "templateKey" }));
 
   return (
     <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-4">
@@ -96,11 +102,35 @@ export function NetworkForm({
               {t("permissionDenied.title", { ns: "common" })}
             </p>
           )}
+          {chooseKind && (
+            <div className="grid gap-1.5 sm:w-1/2">
+              <Label htmlFor="net-kind">{t("kind.label", { ns: "networks" })}</Label>
+              <Controller
+                control={control}
+                name="templateKey"
+                render={({ field }) => (
+                  <Select value={isOwnSite(field.value) ? "own" : "partner"} onValueChange={(v) => field.onChange(v === "own" ? OWN_SITE_KEY : "")}>
+                    <SelectTrigger id="net-kind" className="w-full">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="partner">{t("kind.partner", { ns: "networks" })}</SelectItem>
+                      <SelectItem value="own">{t("kind.ownSite", { ns: "networks" })}</SelectItem>
+                    </SelectContent>
+                  </Select>
+                )}
+              />
+              <p className="text-xs text-muted-foreground">
+                {ownSite ? t("kind.ownSiteHint", { ns: "networks" }) : t("kind.partnerHint", { ns: "networks" })}
+              </p>
+            </div>
+          )}
+
           <div className="grid gap-1.5">
             <Label htmlFor="net-name">{t("form.nameLabel", { ns: "networks" })}</Label>
             <Input
               id="net-name"
-              placeholder={t("form.namePlaceholder", { ns: "networks" })}
+              placeholder={ownSite ? t("kind.namePlaceholder", { ns: "networks" }) : t("form.namePlaceholder", { ns: "networks" })}
               {...register("name")}
               aria-invalid={!!errors.name}
             />
@@ -124,7 +154,7 @@ export function NetworkForm({
           </div>
 
           <div className="grid gap-1.5 sm:w-1/3">
-            <Label htmlFor="net-currency">{t("form.currencyLabel", { ns: "networks" })}</Label>
+            <Label htmlFor="net-currency">{ownSite ? t("kind.currencyLabel", { ns: "networks" }) : t("form.currencyLabel", { ns: "networks" })}</Label>
             <Controller
               control={control}
               name="currency"
@@ -147,29 +177,33 @@ export function NetworkForm({
           </div>
           <p className="-mt-2 text-xs text-muted-foreground">{t("form.currencyHint", { ns: "networks" })}</p>
 
-          <div className="grid gap-1.5 sm:w-1/3">
-            <Label htmlFor="net-template">{t("template.label", { ns: "networks" })}</Label>
-            <Controller
-              control={control}
-              name="templateKey"
-              render={({ field }) => (
-                <Select value={field.value || "none"} onValueChange={(v) => field.onChange(v === "none" ? "" : v)}>
-                  <SelectTrigger id="net-template" className="w-full">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">{t("template.none", { ns: "networks" })}</SelectItem>
-                    {NETWORK_TEMPLATES.map((tpl) => (
-                      <SelectItem key={tpl.key} value={tpl.key}>
-                        {tpl.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              )}
-            />
-          </div>
-          <p className="-mt-2 text-xs text-muted-foreground">{t("template.hint", { ns: "networks" })}</p>
+          {!ownSite && (
+            <>
+            <div className="grid gap-1.5 sm:w-1/3">
+              <Label htmlFor="net-template">{t("template.label", { ns: "networks" })}</Label>
+              <Controller
+                control={control}
+                name="templateKey"
+                render={({ field }) => (
+                  <Select value={field.value || "none"} onValueChange={(v) => field.onChange(v === "none" ? "" : v)}>
+                    <SelectTrigger id="net-template" className="w-full">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">{t("template.none", { ns: "networks" })}</SelectItem>
+                      {NETWORK_TEMPLATES.map((tpl) => (
+                        <SelectItem key={tpl.key} value={tpl.key}>
+                          {tpl.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
+              />
+            </div>
+            <p className="-mt-2 text-xs text-muted-foreground">{t("template.hint", { ns: "networks" })}</p>
+            </>
+          )}
 
           <div className="flex items-center justify-between rounded-md border border-border p-2.5">
             <div>

@@ -5,6 +5,23 @@ per-phase, matching `CLAUDE.md`'s phase protocol. The one exception is
 [Between phases], below: spec amendments and the code changes that follow from
 them land between phases and would otherwise be invisible here.
 
+## [Phase 30.79] — Own site: conversions without a partner (UNI-1, part 1)
+
+docs/networks-offers.md "Own site". Audit 2026-10-24: everything assumed a partner network, so a shop, service or app
+selling itself had nowhere to start. No schema change: an own site is a network with the `own_site` template.
+
+- Creating a source asks first where conversions come from: a partner network or own site. Own site gets its statuses
+  mapped at once — `lead`, `purchase`, `repeat_purchase`, `refund`, `cancel`, `spam` — and no platform picker.
+- Its page talks to the site's developer: the offer link with `click_id={click_id}`, keep it until the order, call the URL
+  from the server (it holds the secret) with the amount and the order number as `txn_id`; what each status means.
+- Every source shows statuses by name instead of `CPA_*`. The section is "Conversion sources", own sites are marked in
+  the list, the onboarding asks for "a conversion source".
+- Found in the live check: a refund always reverses the click's first purchase (§45), so refunding a repeat purchase
+  takes the first one's amount out. Said in the status's explanation; per-order refunds belong to UNI-4.
+- Tests: the template's mappings cover every status, the form's kind (mutation-checked), the own-site card. Live on the dev
+  stack: lead → HOLD, purchase 1 990 RUB → $24.71, repeat_purchase 990 RUB → $12.29, refund → −1 990 RUB.
+- Part 2 (not done): a script for pages without a server, with its own public endpoint.
+
 ## [Phase 30.78] — Clicks over the per-IP limit made visible (REL-2)
 
 docs/security.md §3. Audit 2026-10-24: a click over `TRACKER_IP_CLICK_LIMIT` goes to the campaign's fallback and is
