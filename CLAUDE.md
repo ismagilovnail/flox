@@ -19,7 +19,7 @@ referenced below as §N).
 ## CURRENT STATE — UPDATE THIS EVERY PHASE
 
 ```
-CURRENT PHASE : PHASE 30.75 — SEC-7, FFMPEG WITHOUT THE WORKER'S SECRETS (closed)
+CURRENT PHASE : PHASE 30.76 — SEC-8, GO 1.27.3 AND ZOD 4.6.6 (closed)
 STATUS        : Product audits 2026-10-15 and 2026-10-24 (docs/audit-
                 product-*.md; the second: universality, SEC-7..UX-4)
                 are the backlog: items on the local dev panel tools/devpanel
@@ -94,10 +94,10 @@ STATUS        : Product audits 2026-10-15 and 2026-10-24 (docs/audit-
                 past events and reads rollup-able reports has the same trap.
                 P0 left (skipped by the user for now):
                 OPS-1..3 (prod, restore, load) — needs the owner's hosting.
-LAST COMMIT   : fix(gallery): ffmpeg without the worker's secrets (SEC-7).
+LAST COMMIT   : chore(deps): Go 1.27.3, zod 4.6.6 (SEC-8).
 UNCOMMITTED   : docs/import-export-plan.md (INT-2, stays uncommitted).
-NEXT          : SEC-8 (Go 1.27.3/1.26.10, zod, fast-uri) — asked for
-                together with SEC-7; then wait. Audit 2026-10-24 items: P1 REL-2, DATA-8 (CBR rates), UNI-1;
+NEXT          : wait for the user. Audit 2026-10-24 items: P1 REL-2,
+                DATA-8 (CBR rates), UNI-1;
                 BIZ-3/BIZ-4 part 2 are the user's (no interview script),
                 OPS-1..3 need hosting.
                 GAP-2 (Google Play import) is won't-do: do not offer it. INT-2 is
@@ -107,7 +107,9 @@ NEXT          : SEC-8 (Go 1.27.3/1.26.10, zod, fast-uri) — asked for
                 real: a YooKassa test shop's YOOKASSA_SHOP_ID/SECRET_KEY in
                 infra/.env. CI (DO1) is the user's own decision — do not
                 set it up. Run go test with the full env line AND check e2e
-                did not skip (memory: flox-full-test-env); chconn's
+                did not skip (memory: flox-full-test-env); retention's
+                TestRawRetentionFollowsThePlan can flake on a ClickHouse
+                `_row_exists` mutation error under the parallel run; chconn's
                 TestLimitsStopAHeavyQuery flakes under the full parallel run.
 ```
 

@@ -5,6 +5,20 @@ per-phase, matching `CLAUDE.md`'s phase protocol. The one exception is
 [Between phases], below: spec amendments and the code changes that follow from
 them land between phases and would otherwise be invisible here.
 
+## [Phase 30.76] — Go 1.27.3, zod 4.6.6 (SEC-8)
+
+Audit 2026-10-24. `crypto/x509` GO-2026-6809 (distrust compromised intermediates) was reachable through the domains' TLS
+probe; `npm audit --omit=dev` had zod < 4.6.6 (high: memory on oversized collections) and fast-uri < 3.1.9 (moderate),
+so `make audit-web` was red.
+
+- Images `golang:1.27.3-alpine` (api, tracker, worker, backup); `go 1.26.10` in apps/ and tools/devpanel.
+- zod 4.6.6, fast-uri 3.1.9 (lock file only).
+- Checks: govulncheck with Go 1.26.10 and 1.27.3 — 0; `make audit-web` — 0; tsc, eslint, vitest 228/228; images rebuilt
+  and the full Go run against them: 98 packages, e2e passed. One flake on the first run: a ClickHouse mutation in
+  `TestRawRetentionFollowsThePlan` failed with `_row_exists` under the parallel run, passed 3 times alone, nothing left
+  stuck.
+- The web dev container keeps its own node_modules: `npm ci` inside it after a dependency change.
+
 ## [Phase 30.75] — ffmpeg without the worker's secrets (SEC-7)
 
 docs/security.md §11, docs/content-gallery.md "Transcoding". Audit 2026-10-24: ffmpeg parsed uploaded videos with the
