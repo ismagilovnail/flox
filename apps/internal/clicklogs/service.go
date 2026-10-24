@@ -85,6 +85,7 @@ func (s *Service) List(ctx context.Context, organizationID string, from, to time
 			Sub1: r.Subs[0], Sub2: r.Subs[1], Sub3: r.Subs[2], Sub4: r.Subs[3], Sub5: r.Subs[4],
 			Sub6: r.Subs[5], Sub7: r.Subs[6], Sub8: r.Subs[7], Sub9: r.Subs[8], Sub10: r.Subs[9],
 			ExternalClickID: r.ExternalClickID, FBClickID: r.FBClickID, TTClickID: r.TTClickID, FilterReason: r.FilterReason,
+			AdClickParam: r.AdClickParam, AdClickID: r.AdClickID,
 		}
 	}
 	return ListResult{Logs: logs, Total: total}, nil

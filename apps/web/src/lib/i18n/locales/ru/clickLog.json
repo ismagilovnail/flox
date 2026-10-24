@@ -38,6 +38,7 @@
     "externalClickId": "External Click ID",
     "fbClickId": "FB Click ID",
     "ttClickId": "TT Click ID",
+    "adClickId": "Click ID рекламы (Google, Яндекс, Microsoft)",
     "destination": "Назначение",
     "streamSetId": "Stream Set ID",
     "flowId": "Flow ID",

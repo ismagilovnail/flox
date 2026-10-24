@@ -934,6 +934,7 @@ func deliveryMacroValues(p Postback, attr attribution.Attribution, status event.
 		v.Country = attr.Click.Country
 		v.Device = attr.Click.Device
 		v.ExternalClickID = attr.Click.ExternalClickID
+		v.AdClickParam, v.AdClickID = attr.Click.AdClickParam, attr.Click.AdClickID
 		v.Subs = attr.Click.Subs
 	}
 	return v

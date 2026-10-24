@@ -33,7 +33,8 @@ export type FilterField =
   | "sub8"
   | "sub9"
   | "sub10"
-  | "external_click_id";
+  | "external_click_id"
+  | "ad_platform";
 
 /** Categories and order follow the filter reference documentation
  * (adset.pro's "Справочник фильтров кампаний трекера") so the field
@@ -53,7 +54,7 @@ export const FIELD_GROUPS: { label: string; fields: FilterField[] }[] = [
   {
     label: "Tracking",
     fields: [
-      "utm_source", "utm_medium", "utm_campaign", "utm_content", "utm_term", "external_click_id",
+      "utm_source", "utm_medium", "utm_campaign", "utm_content", "utm_term", "external_click_id", "ad_platform",
       "sub1", "sub2", "sub3", "sub4", "sub5", "sub6", "sub7", "sub8", "sub9", "sub10",
     ],
   },
@@ -165,6 +166,13 @@ export const FIELD_VOCAB: Partial<Record<FilterField, { value: string; label: st
     { value: "duckduckgo", label: "DuckDuckGo" },
     { value: "ie", label: "Internet Explorer" },
     { value: "other", label: "Other" },
+  ],
+  /** The network whose own click id the link carried (gclid/gbraid/wbraid,
+   * yclid, msclkid) — apps/internal/adclick (audit UNI-2). */
+  ad_platform: [
+    { value: "google", label: "Google" },
+    { value: "yandex", label: "Yandex" },
+    { value: "microsoft", label: "Microsoft" },
   ],
   connection_type: [
     { value: "wifi", label: "Wi-Fi" },

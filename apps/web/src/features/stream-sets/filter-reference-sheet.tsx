@@ -147,7 +147,11 @@ export function FilterReferenceSheet({ open, onOpenChange }: { open: boolean; on
             <FieldEntry id="utm_campaign">Название рекламной кампании из URL.</FieldEntry>
             <FieldEntry id="utm_content">Идентификатор объявления/креатива для A/B-тестов.</FieldEntry>
             <FieldEntry id="utm_term">Ключевое слово платного поиска.</FieldEntry>
-            <FieldEntry id="external_click_id">Внешний click id рекламной сети (fbclid, gclid и т.п.).</FieldEntry>
+            <FieldEntry id="external_click_id">Click id источника трафика: параметр external_click_id, иначе fbclid или ttclid.</FieldEntry>
+            <FieldEntry id="ad_platform">
+              Чей собственный click id пришёл в ссылке: google (gclid, gbraid, wbraid), yandex (yclid), microsoft (msclkid).
+              Пусто, если ни одного. Сети добавляют их сами при автоматической разметке.
+            </FieldEntry>
             <FieldEntry id="sub1 – sub10">10 произвольных параметров для собственных данных: площадка, креатив, версия лендинга и т.д.</FieldEntry>
           </Section>
 

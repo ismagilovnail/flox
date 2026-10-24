@@ -1481,7 +1481,7 @@ components:
 
     FilterField:
       type: string
-      enum: [country, region, city, device, platform, os, os_version, browser, browser_version, language, bot, proxy, asn, connection_type, referrer, utm_source, utm_medium, utm_campaign, utm_content, utm_term, sub1, sub2, sub3, sub4, sub5, sub6, sub7, sub8, sub9, sub10, external_click_id]
+      enum: [country, region, city, device, platform, os, os_version, browser, browser_version, language, bot, proxy, asn, connection_type, referrer, utm_source, utm_medium, utm_campaign, utm_content, utm_term, sub1, sub2, sub3, sub4, sub5, sub6, sub7, sub8, sub9, sub10, external_click_id, ad_platform]
     FilterOperator:
       type: string
       description: "`IN`/`NOT_IN` take a comma-separated list; `MATCHES` an RE2 regular expression; `BETWEEN` both `value` and `valueTo`; `EXISTS`/`NOT_EXISTS` no value."
@@ -2088,6 +2088,8 @@ components:
         externalClickId: { type: string }
         fbClickId: { type: string }
         ttClickId: { type: string }
+        adClickParam: { type: string, enum: [gclid, gbraid, wbraid, yclid, msclkid], description: "The search or ad network's own click id parameter the link carried (auto-tagging)." }
+        adClickId: { type: string }
         filterReason: { type: string, description: "SOURCE_FILTER only — why the click was blocked." }
     PostbackAttempt:
       type: object

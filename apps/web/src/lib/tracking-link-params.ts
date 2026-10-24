@@ -3,8 +3,10 @@
  * own macros they are filled from. The tracker reads exactly these keys
  * (apps/tracker/params.go): utm_*, sub1–sub10, external_click_id (the
  * traffic source's own click id, echoed back in the postback to the source)
- * and ttclid/fbclid as external click ids. This file only assembles the URL
- * — routing decisions stay in Go.
+ * and ttclid/fbclid as external click ids. gclid/gbraid/wbraid, yclid and
+ * msclkid are read too (internal/adclick) — the networks append them
+ * themselves when auto-tagging is on, so the constructor does not offer
+ * them. This file only assembles the URL — routing decisions stay in Go.
  */
 
 import { SOURCE_TEMPLATES, sourceTemplate } from "@/lib/source-templates";

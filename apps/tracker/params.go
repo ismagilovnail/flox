@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"strconv"
 
+	"github.com/ismagilovnail/flox/apps/internal/adclick"
 	"github.com/ismagilovnail/flox/apps/internal/event"
 	"github.com/ismagilovnail/flox/apps/internal/routing"
 )
@@ -29,6 +30,10 @@ type params struct {
 	externalClickID string
 	fbClickID       string
 	ttClickID       string
+	// adClickParam/adClickID: gclid, gbraid, wbraid, yclid or msclkid and
+	// its value — the first present (internal/adclick, audit UNI-2).
+	adClickParam string
+	adClickID    string
 
 	referrer string
 }
@@ -59,6 +64,7 @@ func parseParams(r *http.Request) params {
 	// external_click_id, else fbclid, else ttclid: sourceClickID here,
 	// chstore.SourceClickIDExpr in ClickHouse.
 	p.externalClickID = q.Get("external_click_id")
+	p.adClickParam, p.adClickID = adclick.FromQuery(q)
 
 	return p
 }
@@ -75,6 +81,7 @@ func (p params) applyTo(attrs routing.Attributes) {
 	attrs[routing.FieldUTMContent] = p.utmContent
 	attrs[routing.FieldUTMTerm] = p.utmTerm
 	attrs[routing.FieldExternalClickID] = p.sourceClickID()
+	attrs[routing.FieldAdPlatform] = adclick.Platform(p.adClickParam)
 
 	subFields := [10]routing.FilterField{
 		routing.FieldSub1, routing.FieldSub2, routing.FieldSub3, routing.FieldSub4, routing.FieldSub5,

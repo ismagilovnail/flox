@@ -34,6 +34,7 @@ export const CLICK_LOG_INITIAL_COLUMN_VISIBILITY: Record<string, boolean> = {
   externalClickId: false,
   fbClickId: false,
   ttClickId: false,
+  adClickId: false,
   destination: false,
   streamSetId: false,
   flowId: false,
@@ -235,6 +236,19 @@ export function clickLogColumns(
       accessorKey: "ttClickId",
       header: t("columns.ttClickId", { ns: "clickLog" }),
       cell: ({ getValue }) => <Mono className="text-xs">{(getValue() as string) || "—"}</Mono>,
+    },
+    {
+      // gclid/gbraid/wbraid, yclid or msclkid — the parameter shown with its value.
+      accessorKey: "adClickId",
+      header: t("columns.adClickId", { ns: "clickLog" }),
+      cell: ({ row }) =>
+        row.original.adClickId ? (
+          <Mono className="text-xs">
+            {row.original.adClickParam}: {row.original.adClickId}
+          </Mono>
+        ) : (
+          <Mono className="text-xs">—</Mono>
+        ),
     },
     {
       accessorKey: "destination",

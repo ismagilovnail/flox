@@ -870,6 +870,7 @@ var notReferences = map[string]string{
 	"externalClickId":              "the traffic source's click id, a string, not a row",
 	"fbClickId":                    "Facebook's click id",
 	"ttClickId":                    "TikTok's click id",
+	"adClickId":                    "a search or ad network's click id (gclid, yclid, msclkid)",
 	"networkTxnId":                 "the network's transaction id",
 	"clickId":                      "a click id: ClickHouse reads filter on the session's org (chstore TestCrossTenantIsolation)",
 	"clickIds":                     "click ids to erase: every delete filters on the session's org (visitordata TestFindAndEraseAVisitor)",

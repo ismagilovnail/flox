@@ -227,6 +227,33 @@ func TestSourceClickIDFallsBackToFbclidAndTtclid(t *testing.T) {
 	}
 }
 
+// Audit UNI-2: the network's click id is stored on the click and read
+// back with it — by the lookup offline conversions will use, and in the
+// click log.
+func TestAdClickIDIsStoredWithTheClick(t *testing.T) {
+	conn := mustConn(t)
+	store := chstore.NewRawEventStore(conn)
+	resolver := chstore.NewClickResolver(conn)
+	ctx := context.Background()
+	orgID := idgen.New()
+	clickID := idgen.New()
+	now := time.Now().UTC()
+	if err := store.InsertBatch(ctx, []event.Event{{
+		Type: event.SourceClick, EventAt: now, OrganizationID: orgID, ClickID: clickID,
+		AdClickParam: "yclid", AdClickID: "7364217983742390271",
+	}}); err != nil {
+		t.Fatalf("InsertBatch: %v", err)
+	}
+	got, err := resolver.ByClickID(ctx, orgID, clickID)
+	if err != nil || got.AdClickParam != "yclid" || got.AdClickID != "7364217983742390271" {
+		t.Fatalf("ByClickID = %q=%q (%v), want yclid=7364217983742390271", got.AdClickParam, got.AdClickID, err)
+	}
+	rows, err := store.ListClickLog(ctx, orgID, now.Add(-time.Minute), now.Add(time.Minute), clickID, 10, 0, nil)
+	if err != nil || len(rows) != 1 || rows[0].AdClickParam != "yclid" || rows[0].AdClickID != "7364217983742390271" {
+		t.Fatalf("ListClickLog = %+v (%v), want the yclid", rows, err)
+	}
+}
+
 func TestClickResolverByExternalClickIDNoMatch(t *testing.T) {
 	conn := mustConn(t)
 	resolver := chstore.NewClickResolver(conn)

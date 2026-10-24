@@ -65,6 +65,11 @@
         "cellular": "Cellular",
         "ethernet": "Ethernet",
         "unknown": "Unknown"
+      },
+      "ad_platform": {
+        "google": "Google",
+        "yandex": "Yandex",
+        "microsoft": "Microsoft"
       }
     },
     "booleanNo": "No",

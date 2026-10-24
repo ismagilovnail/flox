@@ -65,6 +65,11 @@
         "cellular": "Сотовая связь",
         "ethernet": "Ethernet",
         "unknown": "Неизвестно"
+      },
+      "ad_platform": {
+        "google": "Google",
+        "yandex": "Яндекс",
+        "microsoft": "Microsoft"
       }
     },
     "booleanNo": "Нет",

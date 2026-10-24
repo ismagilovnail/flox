@@ -111,3 +111,26 @@ func TestApplyTo_MakesParamsFilterable(t *testing.T) {
 		t.Fatal("sub10 should be present (as empty), so NOT_EXISTS filters behave correctly")
 	}
 }
+
+// Audit UNI-2: a search or ad network's own click id is kept with the
+// parameter it came in, and stream sets can filter by its network.
+func TestParseParams_AdClickID(t *testing.T) {
+	p := parseParams(requestWithQuery("gclid=Cj0KCQjw&yclid=73&fbclid=fb.1"))
+	if p.adClickParam != "gclid" || p.adClickID != "Cj0KCQjw" {
+		t.Fatalf("ad click = %q=%q, want gclid=Cj0KCQjw", p.adClickParam, p.adClickID)
+	}
+	if p.sourceClickID() != "fb.1" {
+		t.Fatalf("sourceClickID() = %q, want fbclid unchanged", p.sourceClickID())
+	}
+	attrs := routing.Attributes{}
+	p.applyTo(attrs)
+	if attrs[routing.FieldAdPlatform] != "google" {
+		t.Fatalf("ad_platform = %q, want google", attrs[routing.FieldAdPlatform])
+	}
+
+	attrs = routing.Attributes{}
+	parseParams(requestWithQuery("utm_source=x")).applyTo(attrs)
+	if v, ok := attrs[routing.FieldAdPlatform]; !ok || v != "" {
+		t.Fatalf("ad_platform without a network click id = %q (present %v), want empty and present", v, ok)
+	}
+}

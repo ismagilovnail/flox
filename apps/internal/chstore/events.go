@@ -101,6 +101,7 @@ func (s *EventStore) insertClickEvents(ctx context.Context, events []event.Event
 			e.VisitorKey,                  // schema/020, after tg_channel_id (click_events only)
 			e.IPVisitorKey,                // schema/021, after visitor_key (click_events only)
 			s.retention(e.OrganizationID), // schema/024, after ip_visitor_key
+			e.AdClickParam, e.AdClickID,   // schema/025, after retention_months
 		); err != nil {
 			return fmt.Errorf("chstore: appending to click_events batch: %w", err)
 		}

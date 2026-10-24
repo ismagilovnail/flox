@@ -53,13 +53,16 @@ type ClickLogRow struct {
 	FBClickID       string
 	TTClickID       string
 	FilterReason    string
+	AdClickParam    string
+	AdClickID       string
 }
 
 const clickLogColumns = `event_at, type, campaign_id, click_id, stream_set_id, flow_id, destination, sticky_applied, config_version,
 	country, region, city, device, platform, os, os_version, browser, browser_version, language, is_bot, is_proxy, asn, connection_type, ip, user_agent, referrer,
 	utm_source, utm_medium, utm_campaign, utm_content, utm_term,
 	sub1, sub2, sub3, sub4, sub5, sub6, sub7, sub8, sub9, sub10,
-	` + SourceClickIDExpr + `, fb_click_id, tt_click_id, filter_reason`
+	` + SourceClickIDExpr + `, fb_click_id, tt_click_id, filter_reason,
+	ad_click_param, ad_click_id`
 
 func scanClickLogRow(r driver.Rows) (ClickLogRow, error) {
 	var row ClickLogRow
@@ -70,6 +73,7 @@ func scanClickLogRow(r driver.Rows) (ClickLogRow, error) {
 		&row.UTMSource, &row.UTMMedium, &row.UTMCampaign, &row.UTMContent, &row.UTMTerm,
 		&row.Subs[0], &row.Subs[1], &row.Subs[2], &row.Subs[3], &row.Subs[4], &row.Subs[5], &row.Subs[6], &row.Subs[7], &row.Subs[8], &row.Subs[9],
 		&row.ExternalClickID, &row.FBClickID, &row.TTClickID, &row.FilterReason,
+		&row.AdClickParam, &row.AdClickID,
 	)
 	row.StickyApplied, row.IsBot, row.IsProxy = sticky != 0, isBot != 0, isProxy != 0
 	return row, err

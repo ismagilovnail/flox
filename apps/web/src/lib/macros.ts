@@ -16,6 +16,11 @@ export type MacroDef = {
 export const MACROS: MacroDef[] = [
   { token: "{click_id}", label: "Click ID", example: "8f3a1c9e2b7d4f10" },
   { token: "{external_click_id}", label: "Traffic source click ID", example: "a1b2c3d4" },
+  // The search/ad network's own click id, when the link carried that one
+  // (internal/adclick). {gbraid}/{wbraid} resolve too, unlisted.
+  { token: "{gclid}", label: "Google Ads click ID (gclid)", example: "Cj0KCQjw…" },
+  { token: "{yclid}", label: "Yandex Direct click ID (yclid)", example: "7364217983742390271" },
+  { token: "{msclkid}", label: "Microsoft Ads click ID (msclkid)", example: "1c5a2f…" },
   { token: "{status}", label: "Conversion status", example: "accept" },
   { token: "{revenue}", label: "Revenue (original currency)", example: "12.00" },
   { token: "{currency}", label: "Currency code", example: "USD" },

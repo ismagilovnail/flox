@@ -23,6 +23,28 @@ reads compute the fallback (`chstore.SourceClickIDExpr`), and `click_events`
 has its bloom filter on that same expression (schema/022). A new query that
 matches on it must use the constant, or the index is not used.
 
+### Search and ad networks' click ids (audit UNI-2)
+
+Google (`gclid`; `gbraid`/`wbraid` for iOS app-to-web clicks), Yandex
+(`yclid`) and Microsoft (`msclkid`) append their own click id to the link
+when auto-tagging is on. The tracker keeps one per click, the first
+present in that order (`internal/adclick`), as `ad_click_param` (which one)
+and `ad_click_id` (its value) on `click_events` and `click_lookup`
+(schema/025). Clicks from before that file have both empty.
+
+They are not part of `external_click_id`: a postback is still matched by
+FLOX's `click_id`, and the source's click id keeps meaning what it meant.
+What they are for:
+
+- reporting a conversion back to the network that bought the click
+  (offline conversions — Google Ads, Yandex Metrica: UNI-2 parts 2–3);
+- the stream-set filter `ad_platform` — `google`, `yandex`, `microsoft`,
+  or empty;
+- the macros `{gclid}`, `{gbraid}`, `{wbraid}`, `{yclid}`, `{msclkid}` in an
+  offer URL at click time and in an outgoing postback: the one the click
+  came with resolves to its value, the others to an empty string;
+- the click log's "Ad click ID" column.
+
 §42's note applies directly here: a share of Facebook/Instagram clicks arrive
 with empty subs and no network id at all, depending on how the link was opened.
 Missing stays empty; it never becomes a placeholder, and never "unknown

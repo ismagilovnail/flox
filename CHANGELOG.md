@@ -5,6 +5,16 @@ per-phase, matching `CLAUDE.md`'s phase protocol. The one exception is
 [Between phases], below: spec amendments and the code changes that follow from
 them land between phases and would otherwise be invisible here.
 
+## [Phase 30.83] — Google, Yandex and Microsoft click ids (UNI-2, part 1)
+
+docs/attribution.md "Search and ad networks' click ids". The tracker keeps `gclid` (`gbraid`/`wbraid`), `yclid` or
+`msclkid` — one per click, first present — as `ad_click_param`/`ad_click_id` on `click_events` and `click_lookup`
+(ClickHouse schema/025, click_lookup_mv_v5; `internal/adclick`). Stream-set filter `ad_platform` (google/yandex/
+microsoft), macros `{gclid}` `{gbraid}` `{wbraid}` `{yclid}` `{msclkid}` in offer URLs and outgoing postbacks, click
+log column, OpenAPI. `external_click_id` is unchanged. Tests: parsing, macros (mutation-checked), the redirect, the
+ClickHouse round trip, the delivery macros; live: a yclid click through the dev tracker. Not done: offline conversion
+uploads to Google Ads (part 2) and Yandex Metrica (part 3).
+
 ## [Phase 30.82] — Average order value (UNI-4, part 2)
 
 `avgOrderValue` = revenue ÷ (purchases + repeat purchases), net of refunds like revenue, null without orders: in the

@@ -63,6 +63,10 @@ type ClickLog struct {
 	FBClickID       string `json:"fbClickId,omitempty"`
 	TTClickID       string `json:"ttClickId,omitempty"`
 	FilterReason    string `json:"filterReason,omitempty"`
+	// AdClickParam/AdClickID: gclid, gbraid, wbraid, yclid or msclkid and
+	// its value (internal/adclick).
+	AdClickParam string `json:"adClickParam,omitempty"`
+	AdClickID    string `json:"adClickId,omitempty"`
 }
 
 type ListResult struct {

@@ -26,7 +26,8 @@ const clickLookupColumns = `organization_id, click_id, event_at,
 	sub1, sub2, sub3, sub4, sub5, sub6, sub7, sub8, sub9, sub10,
 	landing_id, offer_id, pwa_id, traffic_source_id,
 	ip, user_agent, fb_click_id, tt_click_id,
-	postlanding_id, retention_months`
+	postlanding_id, retention_months,
+	ad_click_param, ad_click_id`
 
 var backfills = []backfill{
 	{

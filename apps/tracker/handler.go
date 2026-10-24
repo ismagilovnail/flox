@@ -301,6 +301,9 @@ func clickMacros(ev event.Event) macro.Values {
 		Country:    ev.Country,
 		Device:     ev.Device,
 		Subs:       ev.Subs,
+
+		AdClickParam: ev.AdClickParam,
+		AdClickID:    ev.AdClickID,
 	}
 }
 
@@ -388,6 +391,8 @@ func buildEvent(
 		ExternalClickID: params.externalClickID,
 		FBClickID:       params.fbClickID,
 		TTClickID:       params.ttClickID,
+		AdClickParam:    params.adClickParam,
+		AdClickID:       params.adClickID,
 	}
 }
 

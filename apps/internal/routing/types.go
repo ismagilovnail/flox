@@ -18,7 +18,7 @@ package routing
 import "context"
 
 // FilterField mirrors apps/web/src/lib/filters.ts's FilterField exactly —
-// the same 31 request attributes a Stream Set's filter tree can reference.
+// the same 32 request attributes a Stream Set's filter tree can reference.
 type FilterField string
 
 const (
@@ -53,6 +53,10 @@ const (
 	FieldSub9            FilterField = "sub9"
 	FieldSub10           FilterField = "sub10"
 	FieldExternalClickID FilterField = "external_click_id"
+	// FieldAdPlatform is the network whose own click id the link carried:
+	// google (gclid/gbraid/wbraid), yandex (yclid), microsoft (msclkid),
+	// empty for none — internal/adclick.Platform (audit UNI-2).
+	FieldAdPlatform FilterField = "ad_platform"
 )
 
 // FilterOperator mirrors lib/filters.ts's FilterOperator exactly.

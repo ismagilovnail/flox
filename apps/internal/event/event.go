@@ -206,6 +206,11 @@ type Event struct {
 	ExternalClickID string `json:"externalClickId,omitempty"`
 	FBClickID       string `json:"fbClickId,omitempty"`
 	TTClickID       string `json:"ttClickId,omitempty"`
+	// AdClickParam/AdClickID: the search or ad network's click id the
+	// link carried — gclid, gbraid, wbraid, yclid or msclkid, and its value
+	// (internal/adclick, audit UNI-2). Click events only.
+	AdClickParam string `json:"adClickParam,omitempty"`
+	AdClickID    string `json:"adClickId,omitempty"`
 
 	// FilterReason is set on SOURCE_FILTER only — why the click was
 	// blocked, so a buyer can tell bot-filtering from geo-filtering.

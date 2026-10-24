@@ -105,6 +105,10 @@ type Click struct {
 	UserAgent string
 	FBClickID string
 	TTClickID string
+	// AdClickParam/AdClickID: the search or ad network's click id
+	// (internal/adclick) — what an offline conversion is reported by.
+	AdClickParam string
+	AdClickID    string
 }
 
 // CopyTo puts the click's context on an event recorded later on the same

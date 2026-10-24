@@ -19,7 +19,7 @@ const (
 	nameMaxLen = 80
 )
 
-// validFields/validOperators mirror lib/filters.ts's FILTER_FIELDS (31)
+// validFields/validOperators mirror lib/filters.ts's FILTER_FIELDS (32)
 // and FILTER_OPERATORS (16) exactly — the same enums internal/routing's
 // FilterField/FilterOperator types already name as constants, just
 // re-expressed as a membership set since routing.go deliberately has no
@@ -36,6 +36,7 @@ var validFields = map[routing.FilterField]bool{
 	routing.FieldSub1: true, routing.FieldSub2: true, routing.FieldSub3: true, routing.FieldSub4: true,
 	routing.FieldSub5: true, routing.FieldSub6: true, routing.FieldSub7: true, routing.FieldSub8: true,
 	routing.FieldSub9: true, routing.FieldSub10: true, routing.FieldExternalClickID: true,
+	routing.FieldAdPlatform: true,
 }
 
 var validOperators = map[routing.FilterOperator]bool{

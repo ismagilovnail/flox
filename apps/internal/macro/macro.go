@@ -19,6 +19,8 @@ import (
 	"net/url"
 	"regexp"
 	"strconv"
+
+	"github.com/ismagilovnail/flox/apps/internal/adclick"
 )
 
 // Values is what a template gets resolved against. Every field here IS
@@ -39,7 +41,13 @@ type Values struct {
 	// carried (external_click_id, fbclid, ttclid) — what a postback to
 	// the source echoes back (INT-1).
 	ExternalClickID string
-	Subs            [10]string
+	// AdClickParam/AdClickID are the search or ad network's click id the
+	// click carried (internal/adclick): {gclid}, {gbraid}, {wbraid},
+	// {yclid} and {msclkid} — the one named by AdClickParam resolves to
+	// AdClickID, the others to "" (audit UNI-2).
+	AdClickParam string
+	AdClickID    string
+	Subs         [10]string
 	// NextURL is the signed link a postlanding page sends the visitor on
 	// with (apps/tracker/postlanding.go). Only a postlanding URL is resolved
 	// with it set; anywhere else {next_url} is known-but-empty.
@@ -86,6 +94,12 @@ func resolve(template string, v Values, escape func(string) string) string {
 		"{pwa_link}":    v.PwaLink,
 
 		"{external_click_id}": v.ExternalClickID,
+	}
+	for _, p := range adclick.Params {
+		fields["{"+p+"}"] = ""
+	}
+	if v.AdClickParam != "" {
+		fields["{"+v.AdClickParam+"}"] = v.AdClickID
 	}
 	for i, s := range v.Subs {
 		fields["{sub"+strconv.Itoa(i+1)+"}"] = s

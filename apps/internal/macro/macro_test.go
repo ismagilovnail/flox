@@ -92,3 +92,16 @@ func TestResolveURLPwaLink(t *testing.T) {
 		t.Fatalf("unset = %q, want empty", got)
 	}
 }
+
+// Audit UNI-2: {gclid}, {yclid}, … resolve to the click's network click id
+// when it came in that parameter, to "" otherwise — never left literal.
+func TestResolveAdClickIDs(t *testing.T) {
+	tmpl := "https://shop.example/?g={gclid}&y={yclid}&m={msclkid}&b={gbraid}&w={wbraid}"
+	got := macro.ResolveURL(tmpl, macro.Values{AdClickParam: "yclid", AdClickID: "73 64"})
+	if want := "https://shop.example/?g=&y=73+64&m=&b=&w="; got != want {
+		t.Fatalf("ResolveURL =\n  %s\nwant\n  %s", got, want)
+	}
+	if got := macro.Resolve(tmpl, macro.Values{}); got != "https://shop.example/?g=&y=&m=&b=&w=" {
+		t.Fatalf("without an ad click id = %q, want every token blank", got)
+	}
+}

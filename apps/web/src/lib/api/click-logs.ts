@@ -61,6 +61,9 @@ export type ClickLog = {
   externalClickId?: string;
   fbClickId?: string;
   ttClickId?: string;
+  /** The search or ad network's own click id (audit UNI-2). */
+  adClickParam?: "gclid" | "gbraid" | "wbraid" | "yclid" | "msclkid";
+  adClickId?: string;
   filterReason?: string;
 };
 

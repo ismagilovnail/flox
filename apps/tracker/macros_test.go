@@ -69,6 +69,23 @@ func TestRedirectResolvesDestinationMacros(t *testing.T) {
 	}
 }
 
+// Audit UNI-2: the network's click id the link carried is recorded on the
+// click and reaches the offer URL through its macro.
+func TestRedirectCarriesAdClickID(t *testing.T) {
+	pool := testPool(t)
+	fx := seedFlowFixture(t, pool, nil, withDestination("https://shop.example/?gclid={gclid}&yclid={yclid}"))
+	h, sink, closeEvents := newLandingHandler(t, pool, true)
+	rec := get(h, fx.host, "/t/go?gclid=Cj0KCQjw-abc")
+	closeEvents()
+	click := sourceClick(t, sink)
+	if click.AdClickParam != "gclid" || click.AdClickID != "Cj0KCQjw-abc" {
+		t.Fatalf("recorded ad click %q=%q, want gclid=Cj0KCQjw-abc", click.AdClickParam, click.AdClickID)
+	}
+	if want := "https://shop.example/?gclid=Cj0KCQjw-abc&yclid="; rec.Header().Get("Location") != want {
+		t.Fatalf("Location = %q, want %q", rec.Header().Get("Location"), want)
+	}
+}
+
 func TestExternalLandingResolvesMacros(t *testing.T) {
 	pool := testPool(t)
 	fx := seedLandingFixture(t, pool, landing.Landing{

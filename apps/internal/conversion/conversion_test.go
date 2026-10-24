@@ -776,6 +776,7 @@ func TestRecordAttachesPixelEventOnlyWhenAttributed(t *testing.T) {
 		ClickID: "click-1", OrganizationID: orgA, StreamSetID: "ss-1", CampaignID: "camp-1",
 		OccurredAt: time.Date(2026, 8, 20, 10, 0, 0, 0, time.UTC),
 		IP:         "203.0.113.9", UserAgent: "UA", FBClickID: "fb-1", TTClickID: "tt-1",
+		AdClickParam: "gclid", AdClickID: "Cj0K",
 	}
 	svc := conversion.NewService(mapper, store, &fakeFX{rates: map[string]float64{"EUR": 1.1}},
 		&fakeAttribution{outcome: attribution.OutcomeAttributed, click: click}, &fakeAttempts{})
@@ -791,7 +792,8 @@ func TestRecordAttachesPixelEventOnlyWhenAttributed(t *testing.T) {
 		t.Fatal("attributed conversion has no pixel event")
 	}
 	if px.StreamSetID != "ss-1" || px.Type != event.CpaAccept || px.IP != click.IP || px.FBClickID != "fb-1" ||
-		!px.ClickAt.Equal(click.OccurredAt) || px.USDValue == nil || *px.USDValue != 11 || px.Macros.CampaignID != "camp-1" {
+		!px.ClickAt.Equal(click.OccurredAt) || px.USDValue == nil || *px.USDValue != 11 || px.Macros.CampaignID != "camp-1" ||
+		px.Macros.AdClickParam != "gclid" || px.Macros.AdClickID != "Cj0K" {
 		t.Fatalf("pixel event = %+v", px)
 	}
 

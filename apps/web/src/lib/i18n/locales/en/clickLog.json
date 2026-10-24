@@ -38,6 +38,7 @@
     "externalClickId": "External Click ID",
     "fbClickId": "FB Click ID",
     "ttClickId": "TT Click ID",
+    "adClickId": "Ad click ID (Google, Yandex, Microsoft)",
     "destination": "Destination",
     "streamSetId": "Stream Set ID",
     "flowId": "Flow ID",
