@@ -5,6 +5,25 @@ per-phase, matching `CLAUDE.md`'s phase protocol. The one exception is
 [Between phases], below: spec amendments and the code changes that follow from
 them land between phases and would otherwise be invisible here.
 
+## [Phase 30.92] — Tilda forms and orders by webhook (UNI-4, part 5)
+
+docs/shop-connections.md "Tilda". An own-site source connects a Tilda site (migration 00111 adds the platform): an API
+key (Tilda does not sign; the card generates one) and an optional site address.
+
+- apps/tracker `POST /tilda/{networkId}`: the connect test (`test=test`) answered 200; the key `floxkey` (header or
+  POST field, constant-time) checked; a submission with a cart order is a purchase or repeat purchase keyed by the order
+  id (replays a duplicate before the engine), any other form a lead keyed by `tranid`. The click: `flox_click_id` in
+  `COOKIES` ("Send cookies"), else a hidden `click_id` field. The payment block is read as `payment[...]` fields, a JSON
+  string or a JSON body — Tilda does not document it.
+- The shared tracker layer now takes a request-level check (a key in the body) and platforms without a topic or a
+  source header; `shopconn.NormalizeSite` / `ValidSite` shared by WooCommerce and Tilda.
+- Web: a third tab, Tilda, with "Generate a key" (the key field in clear, it is copied into Tilda).
+- Tests: key, connect test, payment in three shapes, click; the webhooks end to end on Postgres and the real engine
+  (key check mutation-caught). Live on the dev tracker: test 200, no key and a wrong key 401, a lead and its retry a
+  duplicate, an order 1590 RUB and its retry a duplicate. Not tried with a real site.
+- Dev note: air built the mutation and missed the restore, so the dev tracker ran the mutated key check until it was
+  restarted — CLAUDE.md now says to restart the tracker after a mutation test.
+
 ## [Phase 30.91] — WooCommerce orders by webhook (UNI-4, part 4)
 
 docs/shop-connections.md "WooCommerce". An own-site source connects a WooCommerce store on the same

@@ -4,6 +4,7 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/ismagilovnail/flox/apps/internal/shopconn"
 	"github.com/ismagilovnail/flox/apps/internal/woocommerce"
 )
 
@@ -55,7 +56,7 @@ func TestNormalizeSite(t *testing.T) {
 		" shop.example.com. ":              "shop.example.com",
 		"https://example.com:8443/wp/shop": "example.com:8443/wp/shop",
 	} {
-		got := woocommerce.NormalizeSite(in)
+		got := shopconn.NormalizeSite(in)
 		if got != want {
 			t.Errorf("NormalizeSite(%q) = %q, want %q", in, got, want)
 		}
@@ -64,7 +65,7 @@ func TestNormalizeSite(t *testing.T) {
 		}
 	}
 	for _, bad := range []string{"localhost", "shop", "user@example.com", "example.com/a b", ""} {
-		if woocommerce.Platform.ValidDomain(woocommerce.NormalizeSite(bad)) {
+		if woocommerce.Platform.ValidDomain(shopconn.NormalizeSite(bad)) {
 			t.Errorf("%q accepted", bad)
 		}
 	}

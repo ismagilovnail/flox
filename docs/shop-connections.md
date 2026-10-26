@@ -1,12 +1,12 @@
-# Shop connections: Shopify, WooCommerce (audit UNI-4 parts 3–4)
+# Shop connections: Shopify, WooCommerce, Tilda (audit UNI-4 parts 3–5)
 
 An own-site conversion source (docs/networks-offers.md "Own site") whose
-site is a Shopify or WooCommerce store reports its orders by webhook
+site is a Shopify, WooCommerce or Tilda store reports its orders by webhook
 instead of calling the postback URL: paid orders become purchases and
 repeat purchases, refunds take back what was paid back. One
 `shop_connections` row per source and platform (`internal/shopconn`: the
-settings, the order lookups; `internal/shopify`, `internal/woocommerce`:
-the webhook formats; apps/tracker `shop.go`: what both record). On the
+settings, the order lookups; `internal/shopify`, `internal/woocommerce`,
+`internal/tilda`: the webhook formats; apps/tracker `shop.go`: what both record). On the
 source's page: the "Online store" card, a tab per platform.
 
 ## Shopify
@@ -185,3 +185,64 @@ the next update of the order brings the payment and refunds again.
 - A paid order that is later cancelled without a refund is not reversed
   (a cancellation is not money paid back).
 - Multi-currency plugins: amounts are taken in the order's currency.
+
+## Tilda (audit UNI-4 part 5)
+
+Written against Tilda's help pages (help-ru.tilda.cc/forms/webhook: the
+POST of form fields, `tranid`/`formid`, `COOKIES`, the API key, the test
+request, 5 s and two retries a minute apart). The cart's order fields are
+**not documented** there or on the cart and payment pages: FLOX reads the
+`payment` block in the shapes it is known to arrive in (`payment[orderid]`,
+`payment[amount]` form fields; `payment` as a JSON string; a JSON body)
+and has to be checked with a real order. Tested with keyed payloads on
+the real Postgres and conversion engine and on the dev tracker; **not
+tried with a real site**.
+
+### Setting it up
+
+The "Online store" card, Tilda tab:
+
+1. **API key** — Tilda does not sign webhooks; this key is the check.
+   "Generate a key" makes one (shown in clear: it has to be copied into
+   Tilda). Stored like the others (`SHOP_WEBHOOK_ENCRYPTION_KEY`).
+2. **Site address** — optional, the owner's note: a Tilda webhook does not
+   say which site sent it, so nothing is compared.
+3. **The receiver** — Site settings › Forms › Webhook: the card's URL
+   (`TRACKER_PUBLIC_URL/tilda/{id}`), API Method "POST" (or headers), API
+   Name `floxkey`, API Key the key, **"Send cookies" ticked**; then attach
+   the receiver to the forms and the cart.
+4. **The site tag** — Site settings › More › HTML code for the HEAD:
+   flox.js keeps the click in the `flox_click_id` cookie, which Tilda sends
+   in `COOKIES`.
+5. **The cart** must send to receivers only after a successful payment
+   (check the cart's / payment system's setting): FLOX cannot tell a paid
+   order from an unpaid one.
+
+`GET/PUT/DELETE /v1/networks/{id}/tilda` (migration 00111).
+
+### What is recorded (apps/tracker `POST /tilda/{networkId}`)
+
+- The connect test (`test=test`, with the key or without) → 200, nothing
+  recorded.
+- The key — header or POST field `floxkey`, compared in constant time — is
+  checked first; a missing or wrong one is a 401 and counts toward the
+  per-IP refusal limit.
+- The click: `flox_click_id` in `COOKIES`, else a form field `click_id`
+  (a hidden field; Tilda capitalizes it to `Click_id` unless a variable
+  name is set) or `flox_click_id`.
+- A submission with an order (`payment` with an `orderid`) → `purchase`,
+  or `repeat_purchase` when the click already bought, `txn_id` = the order
+  id, `revenue` = `amount`, the source's currency unless the payment names
+  one; a retry is a duplicate before the engine (as for Shopify).
+- Any other form → `lead` (CPA_HOLD), `txn_id` = `tranid`; a retry or a
+  second form of the click is a duplicate (the engine's key).
+- Everything the engine decided is a 200: Tilda retries twice, a minute
+  apart, a request that does not answer in 5 seconds.
+
+### Not done (Tilda)
+
+- Not tried with a real site: the cart's field names and when the cart
+  sends (before or after payment).
+- No refunds or cancellations: Tilda does not send them.
+- Every form attached to the receiver is a lead — attach it only to the
+  forms that are leads.

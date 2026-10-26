@@ -36,8 +36,8 @@ import (
 var Platform = shopconn.Platform{
 	Name:            "woocommerce",
 	Title:           "WooCommerce",
-	NormalizeDomain: NormalizeSite,
-	ValidDomain:     sitePattern.MatchString,
+	NormalizeDomain: shopconn.NormalizeSite,
+	ValidDomain:     shopconn.ValidSite,
 	DomainHint:      "the store's site address as WordPress has it (Settings › General), e.g. shop.example.com or example.com/shop",
 }
 
@@ -55,25 +55,6 @@ const MetaKey = "flox_click_id"
 // attributionEntry is the order meta WooCommerce's order attribution
 // (8.5+, on by default) keeps the visit's first page in.
 const attributionEntry = "_wc_order_attribution_session_entry"
-
-// A host with a dot, an optional port and an optional path: what
-// home_url() is after NormalizeSite.
-var sitePattern = regexp.MustCompile(`^[a-z0-9-]+(\.[a-z0-9-]+)+(:[0-9]{1,5})?(/[a-z0-9._~%!$&'()*+,;=:@-]+)*$`)
-
-// NormalizeSite takes "https://Shop.example.com/store/" and the like (and
-// X-WC-Webhook-Source, which is home_url("/")) to "shop.example.com/store".
-func NormalizeSite(d string) string {
-	d = strings.ToLower(strings.TrimSpace(d))
-	d = strings.TrimPrefix(strings.TrimPrefix(d, "https://"), "http://")
-	if i := strings.IndexAny(d, "?#"); i >= 0 {
-		d = d[:i]
-	}
-	d = strings.TrimRight(d, "/")
-	if host, path, ok := strings.Cut(d, "/"); ok {
-		return strings.TrimSuffix(host, ".") + "/" + path
-	}
-	return strings.TrimSuffix(d, ".")
-}
 
 // Verify checks a webhook's X-WC-Webhook-Signature: base64 of HMAC-SHA256
 // over the raw body, keyed with the webhook's secret.

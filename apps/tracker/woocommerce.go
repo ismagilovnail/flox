@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"net/http"
 	"strings"
 
@@ -17,18 +16,20 @@ import (
 // X-WC-Webhook-Source (its home_url).
 func (h *ShopWebhookHandler) woocommerce(w http.ResponseWriter, r *http.Request) {
 	h.serve(w, r, shopFormat{
-		platform:        woocommerce.Platform,
-		topicHeader:     "X-WC-Webhook-Topic",
-		signatureHeader: "X-WC-Webhook-Signature",
-		sourceHeader:    "X-WC-Webhook-Source",
-		verify:          woocommerce.Verify,
-		ping:            woocommerce.IsPing,
-		topics:          []string{woocommerce.TopicOrderCreated, woocommerce.TopicOrderUpdated},
-		handle:          h.wooOrder,
+		platform:     woocommerce.Platform,
+		topicHeader:  "X-WC-Webhook-Topic",
+		sourceHeader: "X-WC-Webhook-Source",
+		verify:       headerSignature("X-WC-Webhook-Signature", woocommerce.Verify),
+		ping: func(r *http.Request, body []byte) bool {
+			return woocommerce.IsPing(body, r.Header.Get("X-WC-Webhook-Signature"))
+		},
+		topics: []string{woocommerce.TopicOrderCreated, woocommerce.TopicOrderUpdated},
+		handle: h.wooOrder,
 	})
 }
 
-func (h *ShopWebhookHandler) wooOrder(ctx context.Context, network conversion.Network, _ string, body []byte) (shopAnswer, error) {
+func (h *ShopWebhookHandler) wooOrder(r *http.Request, network conversion.Network, _ string, body []byte) (shopAnswer, error) {
+	ctx := r.Context()
 	o, err := woocommerce.ParseOrder(body)
 	if err != nil {
 		return shopAck("bad_request", ""), nil

@@ -97,6 +97,7 @@ import (
 	"github.com/ismagilovnail/flox/apps/internal/telegram"
 	"github.com/ismagilovnail/flox/apps/internal/telemetry"
 	"github.com/ismagilovnail/flox/apps/internal/tenant"
+	"github.com/ismagilovnail/flox/apps/internal/tilda"
 	totpengine "github.com/ismagilovnail/flox/apps/internal/totp"
 	"github.com/ismagilovnail/flox/apps/internal/trackinglink"
 	"github.com/ismagilovnail/flox/apps/internal/trafficsource"
@@ -624,17 +625,19 @@ func buildServer(ctx context.Context, cfg config.Config, logger *slog.Logger, re
 	})
 
 	networkHandler := network.NewHandler(network.NewService(network.NewRepository(db)).WithTrackerURL(cfg.TrackerPublicURL), requireOfferWrite, logger)
-	// An own-site source's online store — Shopify, WooCommerce (audit
+	// An own-site source's online store — Shopify, WooCommerce, Tilda (audit
 	// UNI-4): its domain and signing key; apps/tracker takes the webhooks.
 	shopStore := shopconn.NewStore(db, shopWebhookKey)
 	shopifyHandler := shopconn.NewHandler(shopconn.NewService(shopStore, shopify.Platform, cfg.TrackerPublicURL), requireOfferWrite, logger)
 	wooHandler := shopconn.NewHandler(shopconn.NewService(shopStore, woocommerce.Platform, cfg.TrackerPublicURL), requireOfferWrite, logger)
+	tildaHandler := shopconn.NewHandler(shopconn.NewService(shopStore, tilda.Platform, cfg.TrackerPublicURL), requireOfferWrite, logger)
 	srv.Mux().Route("/networks", func(r chi.Router) {
 		r.Use(tenantMiddleware)
 		r.Use(readGate("offer.read"))
 		networkHandler.Register(r)
 		shopifyHandler.Register(r)
 		wooHandler.Register(r)
+		tildaHandler.Register(r)
 	})
 
 	landingSvc := landing.NewService(landing.NewRepository(db), storageClient, logger)

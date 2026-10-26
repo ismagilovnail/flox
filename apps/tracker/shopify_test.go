@@ -198,7 +198,7 @@ func newShopFixture(t *testing.T) *shopFixture {
 	t.Cleanup(func() { _, _ = pool.Exec(context.Background(), `DELETE FROM organizations WHERE id = $1`, orgID) })
 	exec(`INSERT INTO networks (id, organization_id, name, template_key, currency) VALUES ($1, $3, 'Shop', 'own_site', 'RUB'), ($2, $3, 'Partner', '', 'USD')`,
 		networkID, partnerID, orgID)
-	for raw, flox := range map[string]string{"purchase": "CPA_ACCEPT", "repeat_purchase": "CPA_REDEP", "refund": "CPA_DECLINE"} {
+	for raw, flox := range map[string]string{"lead": "CPA_HOLD", "purchase": "CPA_ACCEPT", "repeat_purchase": "CPA_REDEP", "refund": "CPA_DECLINE"} {
 		exec(`INSERT INTO event_mappings (id, organization_id, network_id, network_status, flox_status) VALUES ($1, $2, $3, $4, $5)`,
 			idgen.New(), orgID, networkID, raw, flox)
 	}

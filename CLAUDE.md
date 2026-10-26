@@ -21,7 +21,7 @@ referenced below as §N). What each phase did, in detail: `CHANGELOG.md`.
 ## CURRENT STATE — UPDATE THIS EVERY PHASE
 
 ```
-CURRENT PHASE : PHASE 30.91 — UNI-4 PART 4, WOOCOMMERCE WEBHOOKS (closed)
+CURRENT PHASE : PHASE 30.92 — UNI-4 PART 5, TILDA WEBHOOKS (closed)
 STATUS        : Backlog = product audits 2026-10-15 and 2026-10-24
                 (docs/audit-product-*.md), tracked on the local dev panel
                 tools/devpanel (make devpanel → 127.0.0.1:8099; memory:
@@ -32,9 +32,9 @@ STATUS        : Backlog = product audits 2026-10-15 and 2026-10-24
                 user's. Not built: BIZ-1 autopay/discounts/invoices/staff
                 admin, Microsoft Ads upload, REL-1 disk spool (declined).
                 No third-party integration (Google Ads, Metrica, Direct, VK,
-                Shopify, WooCommerce, YooKassa) has run against a live
-                account: fake servers + live error probes only.
-LAST COMMIT   : feat(woocommerce): orders and refunds by webhook (UNI-4 part 4).
+                Shopify, WooCommerce, Tilda, YooKassa) has run against a
+                live account: fake servers + live error probes only.
+LAST COMMIT   : feat(tilda): forms and orders by webhook (UNI-4 part 5).
 UNCOMMITTED   : docs/import-export-plan.md (INT-2, stays uncommitted).
 NEXT          : wait for the user.
                 Do not offer: GAP-2 (Google Play import, won't-do), INT-2
@@ -88,7 +88,9 @@ Dev stack: web :3000, api :8080 (`/v1/...`), tracker :8081, Postgres
 baked image — after Go changes: `docker compose -f infra/docker-compose.dev.yml
 up -d --build api`. tracker and worker hot-reload with air: saving their
 code (a mutation test included) changes the live dev binaries, and they run
-half-written code against dev data. A new env var goes into the compose
+half-written code against dev data — and air can build the mutation and
+miss its restore: restart the tracker/worker after a mutation test
+(`docker compose -f infra/docker-compose.dev.yml restart tracker`). A new env var goes into the compose
 file and the container is recreated *before* the code that reads it is
 saved (air does not pick up env).
 
@@ -155,8 +157,8 @@ How the pieces meet (details: `ARCHITECTURE.md`, `docs/event-stream.md`):
 - **apps/tracker** is everything public: redirects (`/t/...`), landings and
   PWAs on tracking domains, postbacks (`/postback/{networkId}`, secret),
   page conversions (`/flox.js`, `/c/{networkId}`), store webhooks
-  (`/shopify/{networkId}`, `/woocommerce/{networkId}`, HMAC;
-  `internal/shopconn`), Telegram webhooks. It publishes click events to
+  (`/shopify/`, `/woocommerce/` — HMAC — and `/tilda/{networkId}` — an API
+  key; `internal/shopconn`), Telegram webhooks. It publishes click events to
   NATS JetStream; conversions are decided synchronously by
   `internal/conversion` (Postgres) and queued for the worker.
 - **apps/worker** drains events into ClickHouse (`internal/chstore`, schema

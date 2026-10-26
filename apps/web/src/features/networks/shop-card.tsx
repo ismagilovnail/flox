@@ -40,7 +40,15 @@ function flox_click_to_order( $order ) {
 add_action( 'woocommerce_checkout_order_created', 'flox_click_to_order' );
 add_action( 'woocommerce_store_api_checkout_order_processed', 'flox_click_to_order' );`;
 
-const platforms: ShopPlatform[] = ["shopify", "woocommerce"];
+const platforms: ShopPlatform[] = ["shopify", "woocommerce", "tilda"];
+
+/** A Tilda receiver's API key is the owner's to choose: FLOX offers one
+ * (it has to be copied into Tilda, so that field is shown in clear). */
+export function newApiKey(): string {
+  const bytes = new Uint8Array(24);
+  crypto.getRandomValues(bytes);
+  return Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
+}
 
 /** An own site that is an online store reports its orders by webhook
  * (audit UNI-4, docs/shop-connections.md): paid orders become purchases or
@@ -51,9 +59,11 @@ export function ShopCard({ network, canWrite }: { network: Network; canWrite: bo
   const { t } = useTranslation("networks");
   const shopify = useShop(network.id, "shopify");
   const woo = useShop(network.id, "woocommerce");
-  const connected = { shopify: !!shopify.data?.connected, woocommerce: !!woo.data?.connected };
+  const tildaSite = useShop(network.id, "tilda");
+  const queries: Record<ShopPlatform, ShopQuery> = { shopify, woocommerce: woo, tilda: tildaSite };
+  const connected = (p: ShopPlatform) => !!queries[p].data?.connected;
   const [tab, setTab] = React.useState<ShopPlatform | null>(null);
-  const current = tab ?? (connected.woocommerce && !connected.shopify ? "woocommerce" : "shopify");
+  const current = tab ?? platforms.find(connected) ?? "shopify";
 
   return (
     <Card>
@@ -67,7 +77,7 @@ export function ShopCard({ network, canWrite }: { network: Network; canWrite: bo
             {platforms.map((p) => (
               <TabsTrigger key={p} value={p}>
                 {t(`${p}.tab`)}
-                {connected[p] && (
+                {connected(p) && (
                   <Badge variant="success" className="ml-1.5">
                     {t("shop.connected")}
                   </Badge>
@@ -77,7 +87,7 @@ export function ShopCard({ network, canWrite }: { network: Network; canWrite: bo
           </TabsList>
           {platforms.map((p) => (
             <TabsContent key={p} value={p} className="pt-3">
-              <ShopPanel network={network} platform={p} canWrite={canWrite} query={p === "shopify" ? shopify : woo} />
+              <ShopPanel network={network} platform={p} canWrite={canWrite} query={queries[p]} />
             </TabsContent>
           ))}
         </Tabs>
@@ -169,7 +179,7 @@ function ShopPanel({ network, platform, canWrite, query }: { network: Network; p
             <Label htmlFor={id("secret")}>{t(`${platform}.secretLabel`)}</Label>
             <Input
               id={id("secret")}
-              type="password"
+              type={platform === "tilda" ? "text" : "password"}
               autoComplete="off"
               className="font-mono text-xs"
               placeholder={data.connected ? t("shop.secretKeep", { last4: data.secretPreview }) : ""}
@@ -178,6 +188,11 @@ function ShopPanel({ network, platform, canWrite, query }: { network: Network; p
               aria-invalid={!!errors.secret}
             />
             {errors.secret && <p className="text-xs text-danger">{errors.secret}</p>}
+            {platform === "tilda" && canWrite && (
+              <Button type="button" size="sm" variant="outline" className="justify-self-start" onClick={() => setSecret(newApiKey())}>
+                {t("tilda.generate")}
+              </Button>
+            )}
           </div>
         </div>
         <p className="text-xs text-muted-foreground">{t(`${platform}.secretHint`)}</p>

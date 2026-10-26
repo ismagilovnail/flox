@@ -13,24 +13,24 @@ const empty = (platform: ShopPlatform): ShopConnection => ({
   available: true,
 });
 let shops: Record<ShopPlatform, ShopConnection>;
-const mutate = { shopify: vi.fn(), woocommerce: vi.fn() };
-const remove = { shopify: vi.fn(), woocommerce: vi.fn() };
+const mutate = { shopify: vi.fn(), woocommerce: vi.fn(), tilda: vi.fn() };
+const remove = { shopify: vi.fn(), woocommerce: vi.fn(), tilda: vi.fn() };
 vi.mock("@/hooks/use-networks", () => ({
   useShop: (_id: string, p: ShopPlatform) => ({ isLoading: false, isError: false, error: null, data: shops[p] }),
   useUpdateShop: (_id: string, p: ShopPlatform) => ({ mutate: mutate[p], isPending: false }),
   useDeleteShop: (_id: string, p: ShopPlatform) => ({ mutate: remove[p], isPending: false }),
 }));
 
-const { ShopCard, floxScriptTag, wooCheckoutSnippet } = await import("@/features/networks/shop-card");
+const { ShopCard, floxScriptTag, newApiKey, wooCheckoutSnippet } = await import("@/features/networks/shop-card");
 
 const network = { id: "01NET", incomingPostbackUrl: "https://t.example/postback/01NET", templateKey: "own_site" } as Network;
 
-// Audit UNI-4 parts 3-4: one card, a tab per platform. Connecting a store
+// Audit UNI-4 parts 3-5: one card, a tab per platform. Connecting a store
 // needs its signing key; the tab gives the webhook URL, the site tag (and
 // for WooCommerce the checkout snippet); disconnecting asks first.
 describe("ShopCard", () => {
   beforeEach(() => {
-    shops = { shopify: empty("shopify"), woocommerce: empty("woocommerce") };
+    shops = { shopify: empty("shopify"), woocommerce: empty("woocommerce"), tilda: empty("tilda") };
     for (const f of [...Object.values(mutate), ...Object.values(remove)]) f.mockReset();
   });
 
@@ -72,6 +72,19 @@ describe("ShopCard", () => {
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
     expect(mutate.woocommerce.mock.calls[0][0]).toEqual({ shopDomain: "example.com/shop", secret: "" });
     expect(mutate.shopify).not.toHaveBeenCalled();
+  });
+
+  it("connects a Tilda site with a generated API key, the address optional", () => {
+    render(<ShopCard network={network} canWrite />);
+    fireEvent.mouseDown(screen.getByRole("tab", { name: "Tilda" }));
+    expect(screen.getByText("https://t.example/tilda/01NET")).toBeInTheDocument();
+    const key = screen.getByLabelText("API key") as HTMLInputElement;
+    expect(key.type).toBe("text");
+    fireEvent.click(screen.getByRole("button", { name: "Generate a key" }));
+    expect(key.value).toMatch(/^[0-9a-f]{48}$/);
+    fireEvent.click(screen.getByRole("button", { name: "Connect" }));
+    expect(mutate.tilda.mock.calls[0][0]).toEqual({ shopDomain: "", secret: key.value });
+    expect(newApiKey()).not.toBe(key.value);
   });
 
   it("says when the installation cannot connect stores", () => {

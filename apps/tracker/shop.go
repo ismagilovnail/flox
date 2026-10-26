@@ -31,9 +31,11 @@ const maxShopBody = 2 << 20
 //
 //	POST /shopify/{networkId}       shopify.go
 //	POST /woocommerce/{networkId}   woocommerce.go
+//	POST /tilda/{networkId}         tilda.go
 //
-// The store signs each with its key; a webhook that is not signed with the
-// connected store's key, or says it is from another store, is refused.
+// The store signs each with its key (Tilda sends it instead); a webhook
+// that is not signed with the connected store's key, or says it is from
+// another store, is refused.
 // Stores give up on an address that keeps failing (Shopify retries 8 times
 // over 4 hours and may drop the subscription; WooCommerce does not retry
 // and disables the webhook after 5 failures in a row): everything the
@@ -51,20 +53,24 @@ type ShopWebhookHandler struct {
 func (h *ShopWebhookHandler) Register(r chi.Router) {
 	r.Post("/shopify/{networkId}", h.shopify)
 	r.Post("/woocommerce/{networkId}", h.woocommerce)
+	r.Post("/tilda/{networkId}", h.tilda)
 }
 
 // shopFormat is what differs between the platforms' webhooks.
 type shopFormat struct {
 	platform shopconn.Platform
-	// Request headers: the topic, the signature, the store it is from.
-	topicHeader, signatureHeader, sourceHeader string
-	verify                                     func(body []byte, signature, secret string) bool
-	// ping, when set: a delivery check answered 200 before the signature.
-	ping func(body []byte, signature string) bool
+	// Request headers: the topic ("" for a platform without topics: every
+	// webhook is topics[0]) and the store it is from ("" when it does not
+	// say).
+	topicHeader, sourceHeader string
+	// verify checks the request is the connected store's.
+	verify func(r *http.Request, body []byte, secret string) bool
+	// ping, when set: a delivery check answered 200 before verify.
+	ping func(r *http.Request, body []byte) bool
 	// topics are the ones acted on, the metric's topic labels.
 	topics []string
 	// handle reads a verified webhook and records what it says.
-	handle func(ctx context.Context, network conversion.Network, topic string, body []byte) (shopAnswer, error)
+	handle func(r *http.Request, network conversion.Network, topic string, body []byte) (shopAnswer, error)
 }
 
 // shopAnswer is what a webhook came to: the response and the metric's
@@ -86,9 +92,19 @@ func shopRecorded(res conversion.Result) shopAnswer {
 	return shopAnswer{postbackResponse{Result: string(res.Kind), Status: string(res.Status), Message: res.Message}, string(res.Kind)}
 }
 
+// headerSignature checks a signature sent in a header.
+func headerSignature(header string, verify func(body []byte, signature, secret string) bool) func(*http.Request, []byte, string) bool {
+	return func(r *http.Request, body []byte, secret string) bool {
+		return verify(body, r.Header.Get(header), secret)
+	}
+}
+
 func (h *ShopWebhookHandler) serve(w http.ResponseWriter, r *http.Request, f shopFormat) {
 	ctx := r.Context()
-	topic := r.Header.Get(f.topicHeader)
+	topic := f.topics[0]
+	if f.topicHeader != "" {
+		topic = r.Header.Get(f.topicHeader)
+	}
 	result := "error"
 	defer func() {
 		label := "other"
@@ -141,19 +157,22 @@ func (h *ShopWebhookHandler) serve(w http.ResponseWriter, r *http.Request, f sho
 		answer(http.StatusRequestEntityTooLarge, "bad_request", "body too large or unreadable")
 		return
 	}
-	signature := r.Header.Get(f.signatureHeader)
-	if f.ping != nil && f.ping(body, signature) {
+	if f.ping != nil && f.ping(r, body) {
 		result = "ping"
 		writeJSON(w, http.StatusOK, postbackResponse{Result: "ok", Message: "ping"})
 		return
 	}
-	if !f.verify(body, signature, shop.Secret) {
+	if !f.verify(r, body, shop.Secret) {
 		answer(http.StatusUnauthorized, "bad_signature", "the signature does not match the store's key")
 		return
 	}
-	if d := f.platform.NormalizeDomain(r.Header.Get(f.sourceHeader)); d != "" && d != shop.ShopDomain {
-		answer(http.StatusUnauthorized, "bad_signature", "the webhook is from another store")
-		return
+	// A store that does not say which it is (no sourceHeader): the key
+	// alone decides.
+	if f.sourceHeader != "" {
+		if d := f.platform.NormalizeDomain(r.Header.Get(f.sourceHeader)); d != "" && d != shop.ShopDomain {
+			answer(http.StatusUnauthorized, "bad_signature", "the webhook is from another store")
+			return
+		}
 	}
 
 	network, err := h.networks.ByID(ctx, networkID)
@@ -168,7 +187,7 @@ func (h *ShopWebhookHandler) serve(w http.ResponseWriter, r *http.Request, f sho
 		writeJSON(w, http.StatusOK, postbackResponse{Result: "ok", Message: "topic not used: " + topic})
 		return
 	}
-	a, err := f.handle(ctx, network, topic, body)
+	a, err := f.handle(r, network, topic, body)
 	if err != nil {
 		h.logger.Error("recording a store webhook", "error", err, "platform", f.platform.Name, "network_id", networkID, "topic", topic)
 		answer(http.StatusInternalServerError, "internal_error", "internal error")

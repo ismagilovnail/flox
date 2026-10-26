@@ -222,7 +222,7 @@
   },
   "shop": {
     "title": "Online store",
-    "description": "A store on Shopify or WooCommerce reports its orders by webhook: a paid order is a purchase (the click's next orders are repeat purchases), a refund takes back what was paid back. No thank-you-page tag needed.",
+    "description": "A store on Shopify, WooCommerce or Tilda reports its orders by webhook: a paid order is a purchase (the click's next orders are repeat purchases), a refund takes back what was paid back. No thank-you-page tag needed.",
     "connected": "connected",
     "loading": "Loading the store connection…",
     "loadError": "Could not load the store connection:",
@@ -269,5 +269,20 @@
     "copyCheckout": "Copy the checkout snippet",
     "checkoutHint": "Add it with the Code Snippets plugin or to the theme's functions.php: it copies the click from the cookie onto the order (classic and block checkout). Without it only an order whose visit entered the store on a page with click_id is attributed (WooCommerce order attribution, 8.5+).",
     "limits": "WooCommerce does not retry a failed webhook and disables it after 5 failures in a row. An order without a FLOX click shows in the postback log as refused. Refunds are taken in the order's currency."
+  },
+  "tilda": {
+    "tab": "Tilda",
+    "description": "The site's forms send each submission to a Webhook receiver: a cart order is a purchase (the click's next orders are repeat purchases), any other form a lead. Tilda sends no refunds.",
+    "domainLabel": "Site address (optional)",
+    "domainPlaceholder": "example.tilda.ws",
+    "secretLabel": "API key",
+    "secretHint": "Tilda does not sign its webhooks; this key is the check. Generate one, save, and put it into the receiver (Site settings › Forms › Webhook): API Method \"POST\" (or headers), API Name \"floxkey\", API Key — this key. FLOX keeps it encrypted.",
+    "generate": "Generate a key",
+    "saved": "Tilda site saved",
+    "disconnected": "Tilda site disconnected",
+    "webhookHint": "Site settings › Forms › Webhook: this URL, tick \"Send cookies\" (that is where the click comes from), then attach the receiver to the forms and the cart. Tilda checks the URL with a test request; FLOX answers it.",
+    "theme": "Site tag (every page)",
+    "themeHint": "Site settings › More › HTML code for the HEAD. It keeps the click in a first-party cookie, which Tilda sends with each submission. Without it only a form with a hidden click_id field is attributed.",
+    "limits": "Check that the cart sends to receivers only after a successful payment: otherwise an unpaid order is recorded as a purchase. A form without a FLOX click shows in the postback log as refused."
   }
 }

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
+	"regexp"
 	"strings"
 	"unicode"
 
@@ -24,6 +25,7 @@ const OwnSiteTemplate = "own_site"
 
 // Raw statuses the webhooks are recorded as (the own-site mapping).
 const (
+	StatusLead           = "lead" // a form without an order (Tilda)
 	StatusPurchase       = "purchase"
 	StatusRepeatPurchase = "repeat_purchase"
 	StatusRefund         = "refund"
@@ -44,6 +46,29 @@ type Platform struct {
 	ValidDomain func(string) bool
 	DomainHint  string
 }
+
+// A host with a dot, an optional port and an optional path: what
+// home_url() is after NormalizeSite.
+var sitePattern = regexp.MustCompile(`^[a-z0-9-]+(\.[a-z0-9-]+)+(:[0-9]{1,5})?(/[a-z0-9._~%!$&'()*+,;=:@-]+)*$`)
+
+// NormalizeSite takes "https://Shop.example.com/store/" and the like (and
+// WooCommerce's X-WC-Webhook-Source, which is home_url("/")) to
+// "shop.example.com/store".
+func NormalizeSite(d string) string {
+	d = strings.ToLower(strings.TrimSpace(d))
+	d = strings.TrimPrefix(strings.TrimPrefix(d, "https://"), "http://")
+	if i := strings.IndexAny(d, "?#"); i >= 0 {
+		d = d[:i]
+	}
+	d = strings.TrimRight(d, "/")
+	if host, path, ok := strings.Cut(d, "/"); ok {
+		return strings.TrimSuffix(host, ".") + "/" + path
+	}
+	return strings.TrimSuffix(d, ".")
+}
+
+// ValidSite checks a NormalizeSite address.
+func ValidSite(d string) bool { return sitePattern.MatchString(d) }
 
 // View is Settings with where to send the webhooks.
 type View struct {

@@ -107,7 +107,7 @@ export function getNetworkDiagnostics(id: string): Promise<NetworkDiagnostics> {
 
 /** An own-site source's online store platform (audit UNI-4): the path
  * segment of /networks/{id}/{platform} and of the tracker's webhook URL. */
-export type ShopPlatform = "shopify" | "woocommerce";
+export type ShopPlatform = "shopify" | "woocommerce" | "tilda";
 
 /** Mirrors apps/internal/shopconn.View: an own-site source's store on one
  * platform. The signing key never comes back, only its last 4 characters.

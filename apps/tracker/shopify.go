@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"net/http"
 
 	"github.com/ismagilovnail/flox/apps/internal/conversion"
@@ -14,17 +13,17 @@ import (
 // X-Shopify-Shop-Domain.
 func (h *ShopWebhookHandler) shopify(w http.ResponseWriter, r *http.Request) {
 	h.serve(w, r, shopFormat{
-		platform:        shopify.Platform,
-		topicHeader:     "X-Shopify-Topic",
-		signatureHeader: "X-Shopify-Hmac-SHA256",
-		sourceHeader:    "X-Shopify-Shop-Domain",
-		verify:          shopify.Verify,
-		topics:          []string{shopify.TopicOrderPaid, shopify.TopicRefundCreate},
-		handle:          h.shopifyWebhook,
+		platform:     shopify.Platform,
+		topicHeader:  "X-Shopify-Topic",
+		sourceHeader: "X-Shopify-Shop-Domain",
+		verify:       headerSignature("X-Shopify-Hmac-SHA256", shopify.Verify),
+		topics:       []string{shopify.TopicOrderPaid, shopify.TopicRefundCreate},
+		handle:       h.shopifyWebhook,
 	})
 }
 
-func (h *ShopWebhookHandler) shopifyWebhook(ctx context.Context, network conversion.Network, topic string, body []byte) (shopAnswer, error) {
+func (h *ShopWebhookHandler) shopifyWebhook(r *http.Request, network conversion.Network, topic string, body []byte) (shopAnswer, error) {
+	ctx := r.Context()
 	if topic == shopify.TopicRefundCreate {
 		rf, err := shopify.ParseRefund(body)
 		if err != nil {
