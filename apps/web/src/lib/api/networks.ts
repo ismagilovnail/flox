@@ -105,12 +105,16 @@ export function getNetworkDiagnostics(id: string): Promise<NetworkDiagnostics> {
   return apiFetch(`/networks/${id}/diagnostics`);
 }
 
-/** Mirrors apps/internal/shopify.View: an own-site source's Shopify store
- * (audit UNI-4 part 3). The signing key never comes back, only its last 4
- * characters. webhookUrl: where the store sends its webhooks ("" without
+/** An own-site source's online store platform (audit UNI-4): the path
+ * segment of /networks/{id}/{platform} and of the tracker's webhook URL. */
+export type ShopPlatform = "shopify" | "woocommerce";
+
+/** Mirrors apps/internal/shopconn.View: an own-site source's store on one
+ * platform. The signing key never comes back, only its last 4 characters.
+ * webhookUrl: where the store sends its webhooks ("" without
  * TRACKER_PUBLIC_URL); available false: the server has no
  * SHOP_WEBHOOK_ENCRYPTION_KEY, nothing can be connected. */
-export type ShopifyConnection = {
+export type ShopConnection = {
   connected: boolean;
   shopDomain: string;
   secretPreview: string;
@@ -119,16 +123,16 @@ export type ShopifyConnection = {
 };
 
 /** secret "": keep the stored one. */
-export type ShopifyInput = { shopDomain: string; secret: string };
+export type ShopInput = { shopDomain: string; secret: string };
 
-export function getShopify(networkId: string): Promise<ShopifyConnection> {
-  return apiFetch(`/networks/${networkId}/shopify`);
+export function getShop(networkId: string, platform: ShopPlatform): Promise<ShopConnection> {
+  return apiFetch(`/networks/${networkId}/${platform}`);
 }
 
-export function updateShopify(networkId: string, input: ShopifyInput): Promise<ShopifyConnection> {
-  return apiFetch(`/networks/${networkId}/shopify`, { method: "PUT", body: input });
+export function updateShop(networkId: string, platform: ShopPlatform, input: ShopInput): Promise<ShopConnection> {
+  return apiFetch(`/networks/${networkId}/${platform}`, { method: "PUT", body: input });
 }
 
-export function deleteShopify(networkId: string): Promise<void> {
-  return apiFetch(`/networks/${networkId}/shopify`, { method: "DELETE" });
+export function deleteShop(networkId: string, platform: ShopPlatform): Promise<void> {
+  return apiFetch(`/networks/${networkId}/${platform}`, { method: "DELETE" });
 }

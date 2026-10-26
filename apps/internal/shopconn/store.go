@@ -1,4 +1,10 @@
-package shopify
+// Package shopconn is an own-site conversion source's online store
+// (audit UNI-4; docs/shop-connections.md): the shop_connections row — one
+// per source and platform — with the key the store signs its webhooks
+// with, and the order lookups apps/tracker's webhook handlers record by.
+// The webhook formats are the platforms' own packages (shopify,
+// woocommerce).
+package shopconn
 
 import (
 	"context"
@@ -11,15 +17,12 @@ import (
 	"github.com/ismagilovnail/flox/apps/internal/adaccount"
 )
 
-// Platform is shop_connections.platform for a Shopify store.
-const Platform = "shopify"
-
-// ErrNotConnected: the conversion source has no Shopify store.
-var ErrNotConnected = errors.New("shopify: no store connected")
+// ErrNotConnected: the conversion source has no store on that platform.
+var ErrNotConnected = errors.New("shopconn: no store connected")
 
 // ErrNoKey: SHOP_WEBHOOK_ENCRYPTION_KEY is not set, so a signing secret can
 // be neither stored nor checked.
-var ErrNoKey = errors.New("shopify: SHOP_WEBHOOK_ENCRYPTION_KEY is not set")
+var ErrNoKey = errors.New("shopconn: SHOP_WEBHOOK_ENCRYPTION_KEY is not set")
 
 // Store reads and writes shop_connections and looks up the orders a
 // store's webhooks are about. Settings methods are scoped to the session's
@@ -50,21 +53,21 @@ func (s *Store) networkTemplate(ctx context.Context, orgID, networkID string) (s
 		return "", false, nil
 	}
 	if err != nil {
-		return "", false, fmt.Errorf("shopify: reading the conversion source: %w", err)
+		return "", false, fmt.Errorf("shopconn: reading the conversion source: %w", err)
 	}
 	return key, true, nil
 }
 
-func (s *Store) settings(ctx context.Context, orgID, networkID string) (Settings, error) {
+func (s *Store) settings(ctx context.Context, orgID, networkID, platform string) (Settings, error) {
 	var st Settings
 	err := s.db.QueryRow(ctx, `
 		SELECT shop_domain, secret_preview FROM shop_connections
-		WHERE organization_id = $1 AND network_id = $2 AND platform = $3`, orgID, networkID, Platform).Scan(&st.ShopDomain, &st.SecretPreview)
+		WHERE organization_id = $1 AND network_id = $2 AND platform = $3`, orgID, networkID, platform).Scan(&st.ShopDomain, &st.SecretPreview)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return Settings{}, nil
 	}
 	if err != nil {
-		return Settings{}, fmt.Errorf("shopify: reading the store connection: %w", err)
+		return Settings{}, fmt.Errorf("shopconn: reading the store connection: %w", err)
 	}
 	st.Connected = true
 	return st, nil
@@ -73,7 +76,7 @@ func (s *Store) settings(ctx context.Context, orgID, networkID string) (Settings
 // put creates or replaces the connection; secret "" keeps the stored one
 // (the caller has checked there is one: the insert's empty placeholder
 // never lands).
-func (s *Store) put(ctx context.Context, id, orgID, networkID, shopDomain, secret string) error {
+func (s *Store) put(ctx context.Context, id, orgID, networkID, platform, shopDomain, secret string) error {
 	var cipher, preview *string
 	if secret != "" {
 		if s.key == nil {
@@ -94,18 +97,18 @@ func (s *Store) put(ctx context.Context, id, orgID, networkID, shopDomain, secre
 			secret = coalesce($6, shop_connections.secret),
 			secret_preview = coalesce($7, shop_connections.secret_preview)
 		WHERE shop_connections.organization_id = $2`,
-		id, orgID, networkID, Platform, shopDomain, cipher, preview)
+		id, orgID, networkID, platform, shopDomain, cipher, preview)
 	if err != nil {
-		return fmt.Errorf("shopify: writing the store connection: %w", err)
+		return fmt.Errorf("shopconn: writing the store connection: %w", err)
 	}
 	return nil
 }
 
-func (s *Store) remove(ctx context.Context, orgID, networkID string) (bool, error) {
+func (s *Store) remove(ctx context.Context, orgID, networkID, platform string) (bool, error) {
 	tag, err := s.db.Exec(ctx, `DELETE FROM shop_connections WHERE organization_id = $1 AND network_id = $2 AND platform = $3`,
-		orgID, networkID, Platform)
+		orgID, networkID, platform)
 	if err != nil {
-		return false, fmt.Errorf("shopify: removing the store connection: %w", err)
+		return false, fmt.Errorf("shopconn: removing the store connection: %w", err)
 	}
 	return tag.RowsAffected() > 0, nil
 }
@@ -120,19 +123,19 @@ type Connection struct {
 	Secret         string
 }
 
-// Connection is networkID's Shopify store; ErrNotConnected when it has
-// none.
-func (s *Store) Connection(ctx context.Context, networkID string) (Connection, error) {
+// Connection is networkID's store on platform; ErrNotConnected when it
+// has none.
+func (s *Store) Connection(ctx context.Context, networkID, platform string) (Connection, error) {
 	var c Connection
 	var cipher string
 	err := s.db.QueryRow(ctx, `
 		SELECT organization_id, shop_domain, secret FROM shop_connections WHERE network_id = $1 AND platform = $2`,
-		networkID, Platform).Scan(&c.OrganizationID, &c.ShopDomain, &cipher)
+		networkID, platform).Scan(&c.OrganizationID, &c.ShopDomain, &cipher)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return Connection{}, ErrNotConnected
 	}
 	if err != nil {
-		return Connection{}, fmt.Errorf("shopify: reading the store connection: %w", err)
+		return Connection{}, fmt.Errorf("shopconn: reading the store connection: %w", err)
 	}
 	if s.key == nil {
 		return Connection{}, ErrNoKey
@@ -153,7 +156,7 @@ func (s *Store) OrderRecorded(ctx context.Context, orgID, networkID, orderID str
 			  AND result = 'success' AND direction = 'incoming' AND status IN ('CPA_ACCEPT', 'CPA_REDEP'))`,
 		orgID, networkID, orderID).Scan(&ok)
 	if err != nil {
-		return false, fmt.Errorf("shopify: looking up the order: %w", err)
+		return false, fmt.Errorf("shopconn: looking up the order: %w", err)
 	}
 	return ok, nil
 }
@@ -167,7 +170,7 @@ func (s *Store) ClickBought(ctx context.Context, orgID, clickID string) (bool, e
 			WHERE organization_id = $1 AND click_id = $2 AND result = 'success' AND direction = 'incoming' AND status = 'CPA_ACCEPT')`,
 		orgID, clickID).Scan(&ok)
 	if err != nil {
-		return false, fmt.Errorf("shopify: looking up the click's purchases: %w", err)
+		return false, fmt.Errorf("shopconn: looking up the click's purchases: %w", err)
 	}
 	return ok, nil
 }
@@ -185,7 +188,26 @@ func (s *Store) OrderClick(ctx context.Context, orgID, networkID, orderID string
 		return "", false, nil
 	}
 	if err != nil {
-		return "", false, fmt.Errorf("shopify: looking up the refunded order: %w", err)
+		return "", false, fmt.Errorf("shopconn: looking up the refunded order: %w", err)
 	}
 	return clickID, true, nil
+}
+
+// RefundRecorded: the order's refund refundID is already recorded — the
+// conversion engine keys a refund of an amount by its refund id
+// (conversion planReversal: "#refund:" + id), and a platform that sends
+// every refund of an order with each update of it would otherwise log a
+// duplicate per refund per update.
+func (s *Store) RefundRecorded(ctx context.Context, orgID, networkID, orderID, refundID string) (bool, error) {
+	var ok bool
+	err := s.db.QueryRow(ctx, `
+		SELECT EXISTS (SELECT 1 FROM postbacks
+			WHERE organization_id = $1 AND network_id = $2 AND network_txn_id = $3
+			  AND result = 'success' AND direction = 'incoming' AND status = 'CPA_DECLINE'
+			  AND right(event_ref, length($4)) = $4)`,
+		orgID, networkID, orderID, "#refund:"+refundID).Scan(&ok)
+	if err != nil {
+		return false, fmt.Errorf("shopconn: looking up the refund: %w", err)
+	}
+	return ok, nil
 }

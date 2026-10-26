@@ -248,7 +248,7 @@ $24.71, `repeat_purchase` 990 RUB (`txn_id` A-1002) → CPA_REDEP $12.29,
 `network-templates.test.ts` (the mappings cover every status, the URL),
 `network-form.test.tsx` (mutation-checked), `incoming-postback-card.test.tsx`.
 
-A Shopify store reports its orders by webhook instead: docs/shop-connections.md.
+A Shopify or WooCommerce store reports its orders by webhook instead: docs/shop-connections.md.
 
 ## Own site without a server (audit 2026-10-24, UNI-1 part 2; migration 00102)
 

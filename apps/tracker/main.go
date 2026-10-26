@@ -46,7 +46,7 @@ import (
 	"github.com/ismagilovnail/flox/apps/internal/routing"
 	"github.com/ismagilovnail/flox/apps/internal/routingcache"
 	"github.com/ismagilovnail/flox/apps/internal/routingstore"
-	"github.com/ismagilovnail/flox/apps/internal/shopify"
+	"github.com/ismagilovnail/flox/apps/internal/shopconn"
 	"github.com/ismagilovnail/flox/apps/internal/storage"
 	"github.com/ismagilovnail/flox/apps/internal/telegram"
 	"github.com/ismagilovnail/flox/apps/internal/telemetry"
@@ -342,20 +342,20 @@ func run() error {
 		clientIP: clientIP,
 		logger:   logger,
 	}).Register(r)
-	// A Shopify store's order webhooks (docs/shop-connections.md, audit
-	// UNI-4): signed with the store's key, kept encrypted under
-	// SHOP_WEBHOOK_ENCRYPTION_KEY. Without the key every webhook is
-	// answered 503 and logged: a store connected elsewhere is not silently
-	// dropped.
+	// Online stores' order webhooks — Shopify, WooCommerce
+	// (docs/shop-connections.md, audit UNI-4): signed with the store's
+	// key, kept encrypted under SHOP_WEBHOOK_ENCRYPTION_KEY. Without the key
+	// every webhook is answered 503 and logged: a store connected elsewhere
+	// is not silently dropped.
 	var shopKey []byte
 	if cfg.ShopWebhookEncryptionKey != "" {
 		if shopKey, err = adaccount.ParseKey(cfg.ShopWebhookEncryptionKey); err != nil {
-			logger.Error("SHOP_WEBHOOK_ENCRYPTION_KEY is invalid; Shopify webhooks are refused", "error", err)
+			logger.Error("SHOP_WEBHOOK_ENCRYPTION_KEY is invalid; store webhooks are refused", "error", err)
 			shopKey = nil
 		}
 	}
-	(&ShopifyWebhookHandler{
-		shops:    shopify.NewStore(db, shopKey),
+	(&ShopWebhookHandler{
+		shops:    shopconn.NewStore(db, shopKey),
 		networks: postbackHandler.networks,
 		service:  postbackHandler.service,
 		failures: limiter.Failures("shop-webhook-failures", postbackFailureLimit, postbackFailureWindow),

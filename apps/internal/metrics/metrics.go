@@ -195,9 +195,11 @@ var (
 	}, []string{"result"})
 
 	// ShopWebhooksTotal counts online stores' order webhooks (apps/tracker
-	// /shopify/{networkId}, audit UNI-4) by platform, topic (orders/paid,
-	// refunds/create, other) and result: the engine's, or why it never got
-	// there (bad_signature, unknown_network, ignored_*, internal_error).
+	// /shopify/{networkId} and /woocommerce/{networkId}, audit UNI-4) by
+	// platform, topic (orders/paid, refunds/create, order.created,
+	// order.updated, other) and result: the engine's, or why it never got
+	// there (bad_signature, unknown_network, ping, ignored_*,
+	// internal_error).
 	ShopWebhooksTotal = promauto.NewCounterVec(prometheus.CounterOpts{
 		Namespace: namespace,
 		Name:      "shop_webhooks_total",

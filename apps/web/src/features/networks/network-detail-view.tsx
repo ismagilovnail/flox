@@ -10,7 +10,7 @@ import { usePermission } from "@/hooks/use-auth";
 import { NetworkForm, type NetworkFormValues } from "@/features/networks/network-form";
 import { IncomingPostbackCard } from "@/features/networks/incoming-postback-card";
 import { BrowserConversionsCard } from "@/features/networks/browser-conversions-card";
-import { ShopifyCard } from "@/features/networks/shopify-card";
+import { ShopCard } from "@/features/networks/shop-card";
 import { isOwnSite } from "@/lib/network-templates";
 import { PostbackCheckCard } from "@/features/networks/postback-check-card";
 import { NetworkDiagnostics } from "@/features/networks/network-diagnostics";
@@ -52,7 +52,7 @@ export function NetworkDetailView({ id }: { id: string }) {
       <NetworkDiagnostics networkId={network.id} />
       <IncomingPostbackCard network={network} canWrite={canWrite} />
       {isOwnSite(network.templateKey) && <BrowserConversionsCard network={network} canWrite={canWrite} />}
-      {isOwnSite(network.templateKey) && <ShopifyCard network={network} canWrite={canWrite} />}
+      {isOwnSite(network.templateKey) && <ShopCard network={network} canWrite={canWrite} />}
       <PostbackCheckCard network={network} />
       <NetworkForm
       title={t("form.titleEdit", { name: network.name })}

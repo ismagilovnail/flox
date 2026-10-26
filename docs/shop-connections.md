@@ -1,10 +1,15 @@
-# Shop connections: Shopify (audit UNI-4 part 3)
+# Shop connections: Shopify, WooCommerce (audit UNI-4 parts 3–4)
 
 An own-site conversion source (docs/networks-offers.md "Own site") whose
-site is a Shopify store reports its orders by webhook instead of calling
-the postback URL: paid orders become purchases and repeat purchases,
-refunds take back what was paid back. WooCommerce is planned the same way
-(`shop_connections.platform`).
+site is a Shopify or WooCommerce store reports its orders by webhook
+instead of calling the postback URL: paid orders become purchases and
+repeat purchases, refunds take back what was paid back. One
+`shop_connections` row per source and platform (`internal/shopconn`: the
+settings, the order lookups; `internal/shopify`, `internal/woocommerce`:
+the webhook formats; apps/tracker `shop.go`: what both record). On the
+source's page: the "Online store" card, a tab per platform.
+
+## Shopify
 
 Written against shopify.dev (webhook delivery and HMAC verification, the
 orders/paid and refunds/create payloads, the Cart AJAX API) and the Help
@@ -13,7 +18,7 @@ the real Postgres and conversion engine; **not tried with a real store**.
 
 ## Setting it up
 
-On the source's page, the "Shopify store" card (own sites only):
+On the source's page, the "Online store" card, Shopify tab (own sites only):
 
 1. **Store domain** — `my-shop.myshopify.com` (`https://`, a path and the
    case are dropped). A webhook whose `X-Shopify-Shop-Domain` is another
@@ -32,7 +37,7 @@ On the source's page, the "Shopify store" card (own sites only):
 4. **The theme tag** on every page (theme.liquid, before `</head>`):
    `<script src="TRACKER/flox.js" async></script>`.
 
-`GET/PUT/DELETE /v1/networks/{id}/shopify` (`internal/shopify`, migration
+`GET/PUT/DELETE /v1/networks/{id}/shopify` (`internal/shopconn`, migration
 00108; not in the public API). A source that is not an own site is refused:
 the webhooks are recorded as its `purchase` / `repeat_purchase` / `refund`
 statuses.
@@ -60,8 +65,11 @@ for postbacks.
 - **orders/paid** → `purchase` with `txn_id` = the order id, `revenue` =
   `total_price` in `currency` (the shop's), `event_time` = `processed_at`.
   The click already has a purchase → `repeat_purchase` (its `txn_id` makes
-  each order its own). Two orders racing: the purchase comes back a
-  duplicate and is sent again as a repeat purchase.
+  each order its own). Two orders of one click racing: the purchase comes
+  back a duplicate and is sent again as a repeat purchase — unless the
+  order is now recorded (the same order delivered twice at once). The click
+  is looked up before the order, so such a twin always ends a duplicate
+  (`TestShopOrderRacingItself`).
 - **A replay** (Shopify may deliver a webhook twice): an order id already
   recorded as a purchase or repeat purchase of the source is answered
   `duplicate` without calling the engine — otherwise the replay of a first
@@ -81,9 +89,9 @@ recorded, duplicate, refused with its reason in the postback log — is a 200;
 only FLOX's own faults (database, a missing key: 503) are not.
 
 `flox_shop_webhooks_total{platform, topic, result}` (topic bounded to the
-two used and `other`).
+ones used and `other`).
 
-## Not done
+### Not done (Shopify)
 
 - Not tried with a real store (signing key of admin webhooks, the cart
   attribute reaching the order on every checkout).
@@ -91,4 +99,89 @@ two used and `other`).
   the refund is.
 - Multi-currency stores: amounts are taken in the shop's currency; a refund
   transaction in the buyer's currency is refused (visible in the log).
-- WooCommerce (UNI-4 part 4).
+
+## WooCommerce (audit UNI-4 part 4)
+
+Written against the WooCommerce docs and source (webhooks: delivery
+headers, the signature, the activation ping, failure handling; the REST
+API v3 order shape the webhooks carry; order attribution). Tested against
+signed payloads on the real Postgres and conversion engine and on the dev
+tracker; **not tried with a real store**.
+
+### Setting it up
+
+The "Online store" card, WooCommerce tab:
+
+1. **Site address** — WordPress › Settings › General, e.g.
+   `shop.example.com` or `example.com/shop` (scheme, case and trailing
+   slash dropped, a path kept). WooCommerce sends it as
+   `X-WC-Webhook-Source` (`home_url("/")`); a webhook from another site is
+   refused even when signed with the same secret.
+2. **Webhook secret** — WooCommerce › Settings › Advanced › Webhooks: the
+   Secret field of the webhooks (the same on both). Stored like Shopify's
+   key (`SHOP_WEBHOOK_ENCRYPTION_KEY`, last 4 characters shown).
+3. **Two webhooks** to the card's URL (`TRACKER_PUBLIC_URL/woocommerce/{id}`),
+   status Active, API version "WP REST API Integration v3": topics
+   "Order created" and "Order updated". Both: a checkout paid in the same
+   request may be delivered as either (the payload is built when it is
+   sent).
+4. **The site tag** on every page (`<script src="TRACKER/flox.js" async>`,
+   in the theme's `<head>` or a header-scripts plugin): flox.js keeps the
+   click in the first-party `flox_click_id` cookie.
+5. **The checkout snippet** (card, copyable; Code Snippets plugin or the
+   theme's functions.php): it copies that cookie into the order's
+   `flox_click_id` meta field, on `woocommerce_checkout_order_created`
+   (classic checkout) and `woocommerce_store_api_checkout_order_processed`
+   (block checkout) — before the payment is taken, so the payment's update
+   carries it.
+
+`GET/PUT/DELETE /v1/networks/{id}/woocommerce` (migration 00110; not in
+the public API).
+
+### Which click an order is
+
+1. The order meta field `flox_click_id` (the snippet).
+2. Else `click_id` in the order meta `_wc_order_attribution_session_entry`:
+   WooCommerce's order attribution (8.5+, on by default) keeps the page the
+   visit entered by; an offer link straight to the store carries it.
+3. Neither: the order still goes to the engine without a click and shows
+   in the postback log as refused.
+
+### What is recorded (apps/tracker `POST /woocommerce/{networkId}`)
+
+- **The ping** WooCommerce sends when a webhook is made active — an
+  unsigned form body `webhook_id=N` — is answered 200 (anything else shows
+  the owner a delivery error). It records nothing. The source must already
+  have its WooCommerce store connected (else 404).
+- `X-WC-Webhook-Signature` — base64 HMAC-SHA256 of the raw body with the
+  secret — is checked before anything else; refusals count toward the
+  per-IP limit, as for postbacks.
+- **order.created / order.updated** carry the whole order, with every
+  update of it:
+  - not paid (`date_paid_gmt` empty, or status pending / failed /
+    cancelled / checkout-draft) → `ignored_unpaid`. WooCommerce sets
+    `date_paid` when the payment completes — for cash on delivery when the
+    order is completed — and keeps it through a refund;
+  - paid → a `purchase` (`txn_id` = the order id, `revenue` = `total`,
+    `currency`, `event_time` = `date_paid_gmt` as UTC), or a
+    `repeat_purchase`, exactly as for Shopify; every later update of the
+    order is a `duplicate` without calling the engine;
+  - each entry of `refunds` (oldest first; its `total` is negative) →
+    a `refund` of that amount keyed by the refund's id, in the order's
+    currency. A refund already recorded is skipped before the engine, so
+    the next updates do not log a duplicate per refund. WooCommerce has no
+    refund webhook: a refund arrives as an update of its order.
+- Other topics → 200, left.
+
+WooCommerce does not retry a failed delivery and disables a webhook after
+5 failures in a row: as for Shopify everything the engine decided is a
+200; a fault on FLOX's side (database, no key: 503) loses that delivery —
+the next update of the order brings the payment and refunds again.
+
+### Not done (WooCommerce)
+
+- Not tried with a real store: the two checkout hooks, the attribution
+  meta coming through the REST payload, the ping without a signature.
+- A paid order that is later cancelled without a refund is not reversed
+  (a cancellation is not money paid back).
+- Multi-currency plugins: amounts are taken in the order's currency.

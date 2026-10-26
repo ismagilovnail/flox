@@ -22,6 +22,7 @@ import (
 	"github.com/ismagilovnail/flox/apps/internal/conversion"
 	"github.com/ismagilovnail/flox/apps/internal/idgen"
 	"github.com/ismagilovnail/flox/apps/internal/ratelimit"
+	"github.com/ismagilovnail/flox/apps/internal/shopconn"
 	"github.com/ismagilovnail/flox/apps/internal/shopify"
 )
 
@@ -57,35 +58,16 @@ func shopifyPool(t *testing.T) *pgxpool.Pool {
 // reverses what was paid back of that order; test orders, unknown orders
 // and other topics are acknowledged and left.
 func TestShopifyWebhooks(t *testing.T) {
-	pool := shopifyPool(t)
-	ctx := context.Background()
-	exec := func(sql string, args ...any) {
-		t.Helper()
-		if _, err := pool.Exec(ctx, sql, args...); err != nil {
-			t.Fatalf("%s: %v", sql, err)
-		}
-	}
-	orgID, networkID, partnerID := idgen.New(), idgen.New(), idgen.New()
-	exec(`INSERT INTO organizations (id, name) VALUES ($1, $2)`, orgID, "Org "+orgID)
-	t.Cleanup(func() { _, _ = pool.Exec(context.Background(), `DELETE FROM organizations WHERE id = $1`, orgID) })
-	exec(`INSERT INTO networks (id, organization_id, name, template_key, currency) VALUES ($1, $3, 'Shop', 'own_site', 'RUB'), ($2, $3, 'Partner', '', 'USD')`,
-		networkID, partnerID, orgID)
-	for raw, flox := range map[string]string{"purchase": "CPA_ACCEPT", "repeat_purchase": "CPA_REDEP", "refund": "CPA_DECLINE"} {
-		exec(`INSERT INTO event_mappings (id, organization_id, network_id, network_status, flox_status) VALUES ($1, $2, $3, $4, $5)`,
-			idgen.New(), orgID, networkID, raw, flox)
-	}
-
-	key := make([]byte, 32)
-	_, _ = rand.Read(key)
-	store := shopify.NewStore(pool, key)
-	settings := shopify.NewService(store, "https://t.example")
-	if _, err := settings.Put(ctx, orgID, partnerID, shopify.Input{ShopDomain: "my-shop.myshopify.com", Secret: "k"}); err == nil {
+	f := newShopFixture(t)
+	pool, ctx, orgID, networkID, partnerID, click, other := f.pool, f.ctx, f.orgID, f.networkID, f.partnerID, f.click, f.other
+	settings := shopconn.NewService(f.store, shopify.Platform, "https://t.example")
+	if _, err := settings.Put(ctx, orgID, partnerID, shopconn.Input{ShopDomain: "my-shop.myshopify.com", Secret: "k"}); err == nil {
 		t.Fatal("connected a store to a partner network")
 	}
-	if _, err := settings.Put(ctx, orgID, networkID, shopify.Input{ShopDomain: "my-shop.example.com", Secret: "k"}); err == nil {
+	if _, err := settings.Put(ctx, orgID, networkID, shopconn.Input{ShopDomain: "my-shop.example.com", Secret: "k"}); err == nil {
 		t.Fatal("took a domain that is not myshopify.com")
 	}
-	view, err := settings.Put(ctx, orgID, networkID, shopify.Input{ShopDomain: "https://My-Shop.myshopify.com/", Secret: "shpss_signing_key"})
+	view, err := settings.Put(ctx, orgID, networkID, shopconn.Input{ShopDomain: "https://My-Shop.myshopify.com/", Secret: "shpss_signing_key"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -96,33 +78,11 @@ func TestShopifyWebhooks(t *testing.T) {
 		t.Fatal("another organization read the store connection")
 	}
 
-	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	resolver, _ := clientip.New(nil, logger)
-	click, other := idgen.New(), idgen.New()
-	h := &ShopifyWebhookHandler{
-		shops:    store,
-		networks: conversion.NewPostgresNetworkLookup(pool),
-		service: conversion.NewService(conversion.NewPostgresMapper(pool), conversion.NewPostgresStore(pool), usdOnly{},
-			knownClicks{click: true, other: true}, noAttempts{}),
-		failures: ratelimit.New(nil, logger).Failures("shopify-test", 100, time.Minute),
-		clientIP: resolver,
-		logger:   logger,
-	}
-	r := chi.NewRouter()
-	h.Register(r)
 	send := func(network, topic string, payload any, secret, shop string) (int, postbackResponse) {
 		t.Helper()
 		body, _ := json.Marshal(payload)
-		req := httptest.NewRequest(http.MethodPost, "/shopify/"+network, strings.NewReader(string(body)))
-		req.RemoteAddr = "10.0.0.1:1"
-		req.Header.Set("X-Shopify-Topic", topic)
-		req.Header.Set("X-Shopify-Shop-Domain", shop)
-		req.Header.Set("X-Shopify-Hmac-Sha256", shopify.Sign(body, secret))
-		rec := httptest.NewRecorder()
-		r.ServeHTTP(rec, req)
-		var res postbackResponse
-		_ = json.Unmarshal(rec.Body.Bytes(), &res)
-		return rec.Code, res
+		return f.send("/shopify/"+network, body, map[string]string{
+			"X-Shopify-Topic": topic, "X-Shopify-Shop-Domain": shop, "X-Shopify-Hmac-Sha256": shopify.Sign(body, secret)})
 	}
 	const secret, shop = "shpss_signing_key", "my-shop.myshopify.com"
 	at := time.Now().Add(-time.Minute).UTC().Format(time.RFC3339)
@@ -135,12 +95,7 @@ func TestShopifyWebhooks(t *testing.T) {
 		return o
 	}
 	withAttr := map[string]any{"note_attributes": []map[string]any{{"name": "gift", "value": "no"}, {"name": "flox_click_id", "value": click}}}
-	rows := func(status string) (n int, revenue float64) {
-		t.Helper()
-		_ = pool.QueryRow(ctx, `SELECT count(*), coalesce(sum(revenue), 0)::float8 FROM postbacks
-			WHERE organization_id = $1 AND result = 'success' AND status = $2`, orgID, status).Scan(&n, &revenue)
-		return n, revenue
-	}
+	rows := f.rows
 
 	// Refused before anything is read.
 	if code, _ := send(networkID, shopify.TopicOrderPaid, order(1, withAttr), "wrong-key", shop); code != http.StatusUnauthorized {
@@ -212,4 +167,84 @@ func TestShopifyWebhooks(t *testing.T) {
 	if code, res := send(networkID, shopify.TopicRefundCreate, unknown, secret, shop); code != 200 || res.Message != "ignored_unknown_order" {
 		t.Fatalf("refund of an unknown order: %d %+v", code, res)
 	}
+}
+
+// shopFixture is an organization with an own-site source (the own-site
+// mapping), a partner network, two clicks the attribution knows, and the
+// store webhook handler on the real Postgres and conversion engine.
+type shopFixture struct {
+	t                           *testing.T
+	pool                        *pgxpool.Pool
+	ctx                         context.Context
+	orgID, networkID, partnerID string
+	click, other                string
+	clicks                      knownClicks // add to it to make more clicks known
+	store                       *shopconn.Store
+	router                      chi.Router
+}
+
+func newShopFixture(t *testing.T) *shopFixture {
+	t.Helper()
+	pool := shopifyPool(t)
+	ctx := context.Background()
+	exec := func(sql string, args ...any) {
+		t.Helper()
+		if _, err := pool.Exec(ctx, sql, args...); err != nil {
+			t.Fatalf("%s: %v", sql, err)
+		}
+	}
+	orgID, networkID, partnerID := idgen.New(), idgen.New(), idgen.New()
+	exec(`INSERT INTO organizations (id, name) VALUES ($1, $2)`, orgID, "Org "+orgID)
+	t.Cleanup(func() { _, _ = pool.Exec(context.Background(), `DELETE FROM organizations WHERE id = $1`, orgID) })
+	exec(`INSERT INTO networks (id, organization_id, name, template_key, currency) VALUES ($1, $3, 'Shop', 'own_site', 'RUB'), ($2, $3, 'Partner', '', 'USD')`,
+		networkID, partnerID, orgID)
+	for raw, flox := range map[string]string{"purchase": "CPA_ACCEPT", "repeat_purchase": "CPA_REDEP", "refund": "CPA_DECLINE"} {
+		exec(`INSERT INTO event_mappings (id, organization_id, network_id, network_status, flox_status) VALUES ($1, $2, $3, $4, $5)`,
+			idgen.New(), orgID, networkID, raw, flox)
+	}
+	key := make([]byte, 32)
+	_, _ = rand.Read(key)
+	store := shopconn.NewStore(pool, key)
+
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	resolver, _ := clientip.New(nil, logger)
+	click, other := idgen.New(), idgen.New()
+	clicks := knownClicks{click: true, other: true}
+	h := &ShopWebhookHandler{
+		shops:    store,
+		networks: conversion.NewPostgresNetworkLookup(pool),
+		service: conversion.NewService(conversion.NewPostgresMapper(pool), conversion.NewPostgresStore(pool), usdOnly{},
+			clicks, noAttempts{}),
+		failures: ratelimit.New(nil, logger).Failures("shop-test", 100, time.Minute),
+		clientIP: resolver,
+		logger:   logger,
+	}
+	r := chi.NewRouter()
+	h.Register(r)
+	return &shopFixture{t: t, pool: pool, ctx: ctx, orgID: orgID, networkID: networkID, partnerID: partnerID,
+		click: click, other: other, clicks: clicks, store: store, router: r}
+}
+
+// send posts body to path with the headers.
+func (f *shopFixture) send(path string, body []byte, headers map[string]string) (int, postbackResponse) {
+	f.t.Helper()
+	req := httptest.NewRequest(http.MethodPost, path, strings.NewReader(string(body)))
+	req.RemoteAddr = "10.0.0.1:1"
+	for k, v := range headers {
+		req.Header.Set(k, v)
+	}
+	rec := httptest.NewRecorder()
+	f.router.ServeHTTP(rec, req)
+	var res postbackResponse
+	_ = json.Unmarshal(rec.Body.Bytes(), &res)
+	return rec.Code, res
+}
+
+// rows is the organization's recorded postbacks of a status: how many,
+// what revenue.
+func (f *shopFixture) rows(status string) (n int, revenue float64) {
+	f.t.Helper()
+	_ = f.pool.QueryRow(f.ctx, `SELECT count(*), coalesce(sum(revenue), 0)::float8 FROM postbacks
+		WHERE organization_id = $1 AND result = 'success' AND status = $2`, f.orgID, status).Scan(&n, &revenue)
+	return n, revenue
 }

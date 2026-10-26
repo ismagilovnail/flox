@@ -21,21 +21,20 @@ referenced below as §N). What each phase did, in detail: `CHANGELOG.md`.
 ## CURRENT STATE — UPDATE THIS EVERY PHASE
 
 ```
-CURRENT PHASE : PHASE 30.90 — UNI-4 PART 3, SHOPIFY WEBHOOKS (closed)
+CURRENT PHASE : PHASE 30.91 — UNI-4 PART 4, WOOCOMMERCE WEBHOOKS (closed)
 STATUS        : Backlog = product audits 2026-10-15 and 2026-10-24
                 (docs/audit-product-*.md), tracked on the local dev panel
                 tools/devpanel (make devpanel → 127.0.0.1:8099; memory:
                 flox-audit-tracker — keep statuses current). What each
                 closed item did: CHANGELOG.md.
-                Open: UNI-4 part 4 (WooCommerce, on shop_connections);
-                OPS-1..3 (prod, restore, load — need the owner's hosting,
+                Open: OPS-1..3 (prod, restore, load — need the owner's hosting,
                 skipped by the user for now); BIZ-3 and BIZ-4 part 2 are the
                 user's. Not built: BIZ-1 autopay/discounts/invoices/staff
                 admin, Microsoft Ads upload, REL-1 disk spool (declined).
                 No third-party integration (Google Ads, Metrica, Direct, VK,
-                Shopify, YooKassa) has run against a live account: fake
-                servers + live error probes only.
-LAST COMMIT   : feat(shopify): orders and refunds by webhook (UNI-4 part 3).
+                Shopify, WooCommerce, YooKassa) has run against a live
+                account: fake servers + live error probes only.
+LAST COMMIT   : feat(woocommerce): orders and refunds by webhook (UNI-4 part 4).
 UNCOMMITTED   : docs/import-export-plan.md (INT-2, stays uncommitted).
 NEXT          : wait for the user.
                 Do not offer: GAP-2 (Google Play import, won't-do), INT-2
@@ -156,8 +155,9 @@ How the pieces meet (details: `ARCHITECTURE.md`, `docs/event-stream.md`):
 - **apps/tracker** is everything public: redirects (`/t/...`), landings and
   PWAs on tracking domains, postbacks (`/postback/{networkId}`, secret),
   page conversions (`/flox.js`, `/c/{networkId}`), store webhooks
-  (`/shopify/{networkId}`, HMAC), Telegram webhooks. It publishes click
-  events to NATS JetStream; conversions are decided synchronously by
+  (`/shopify/{networkId}`, `/woocommerce/{networkId}`, HMAC;
+  `internal/shopconn`), Telegram webhooks. It publishes click events to
+  NATS JetStream; conversions are decided synchronously by
   `internal/conversion` (Postgres) and queued for the worker.
 - **apps/worker** drains events into ClickHouse (`internal/chstore`, schema
   in `internal/chstore/schema`), delivers outgoing postbacks and pixels, and
@@ -295,6 +295,10 @@ Read the referenced section before touching related code.
   kept (`Credentials.SaveTokens`; 5 per client at most). Metrica uploads are
   never restated. `googleads.APIVersion` must move before Google sunsets it
   (~a year after release).
+- Store webhooks (apps/tracker `shop.go`): every engine decision is a 200
+  (stores drop failing URLs); a paid order looks up the click before the
+  order, or two deliveries of one order record a purchase and a repeat
+  purchase (`TestShopOrderRacingItself`).
 - Billing limits never touch the tracker. A network with postbacks cannot be
   deleted (409) — archive it.
 - Known flakes under the full parallel run (pass alone):

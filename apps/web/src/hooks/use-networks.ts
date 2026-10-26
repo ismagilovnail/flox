@@ -7,13 +7,14 @@ import {
   activateNetwork,
   archiveNetwork,
   createNetwork,
-  deleteShopify,
+  deleteShop,
   duplicateNetwork,
   getNetwork,
   getNetworkDiagnostics,
-  getShopify,
-  updateShopify,
-  type ShopifyInput,
+  getShop,
+  updateShop,
+  type ShopInput,
+  type ShopPlatform,
   listNetworks,
   pauseNetwork,
   regeneratePostbackSecret,
@@ -114,25 +115,25 @@ export function useArchiveNetwork() {
   });
 }
 
-const shopifyKey = (networkId: string) => ["networks", networkId, "shopify"] as const;
+const shopKey = (networkId: string, platform: ShopPlatform) => ["networks", networkId, platform] as const;
 
-/** An own-site source's Shopify store (audit UNI-4 part 3). */
-export function useShopify(networkId: string) {
-  return useQuery({ queryKey: shopifyKey(networkId), queryFn: () => getShopify(networkId), enabled: !!networkId });
+/** An own-site source's store on one platform (audit UNI-4). */
+export function useShop(networkId: string, platform: ShopPlatform) {
+  return useQuery({ queryKey: shopKey(networkId, platform), queryFn: () => getShop(networkId, platform), enabled: !!networkId });
 }
 
-export function useUpdateShopify(networkId: string) {
+export function useUpdateShop(networkId: string, platform: ShopPlatform) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (input: ShopifyInput) => updateShopify(networkId, input),
-    onSuccess: (data) => qc.setQueryData(shopifyKey(networkId), data),
+    mutationFn: (input: ShopInput) => updateShop(networkId, platform, input),
+    onSuccess: (data) => qc.setQueryData(shopKey(networkId, platform), data),
   });
 }
 
-export function useDeleteShopify(networkId: string) {
+export function useDeleteShop(networkId: string, platform: ShopPlatform) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: () => deleteShopify(networkId),
-    onSuccess: () => qc.invalidateQueries({ queryKey: shopifyKey(networkId) }),
+    mutationFn: () => deleteShop(networkId, platform),
+    onSuccess: () => qc.invalidateQueries({ queryKey: shopKey(networkId, platform) }),
   });
 }

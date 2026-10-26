@@ -9,8 +9,8 @@
 // conversion engine, a purchase — a repeat purchase when the click already
 // bought — or a refund of the order (part of it, by the refund's own id).
 //
-// This file is the webhook format; store.go the connection settings and
-// the order lookups; service.go the settings' validation.
+// The connection settings and the order lookups are internal/shopconn's;
+// this package is the webhook format and the store's domain.
 package shopify
 
 import (
@@ -20,9 +20,33 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/url"
+	"regexp"
 	"strconv"
 	"strings"
+
+	"github.com/ismagilovnail/flox/apps/internal/shopconn"
 )
+
+// Platform is a Shopify store's shop_connections platform: the
+// settings at /networks/{id}/shopify, the webhooks at the tracker's
+// /shopify/{networkId}.
+var Platform = shopconn.Platform{
+	Name:            "shopify",
+	Title:           "Shopify",
+	NormalizeDomain: NormalizeShopDomain,
+	ValidDomain:     shopDomainPattern.MatchString,
+	DomainHint:      "the store's myshopify.com domain, e.g. my-shop.myshopify.com",
+}
+
+var shopDomainPattern = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,99}\.myshopify\.com$`)
+
+// NormalizeShopDomain takes "https://Shop.myshopify.com/" and the like to
+// "shop.myshopify.com".
+func NormalizeShopDomain(d string) string {
+	d = strings.ToLower(strings.TrimSpace(d))
+	d = strings.TrimPrefix(strings.TrimPrefix(d, "https://"), "http://")
+	return strings.TrimSuffix(strings.SplitN(d, "/", 2)[0], ".")
+}
 
 // Topics the tracker acts on; every other topic is acknowledged and left.
 const (

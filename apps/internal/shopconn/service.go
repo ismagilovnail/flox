@@ -1,4 +1,4 @@
-package shopify
+package shopconn
 
 import (
 	"context"
@@ -6,7 +6,6 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
-	"regexp"
 	"strings"
 	"unicode"
 
@@ -30,20 +29,26 @@ const (
 	StatusRefund         = "refund"
 )
 
-var shopDomainPattern = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,99}\.myshopify\.com$`)
-
-// NormalizeShopDomain takes "https://Shop.myshopify.com/" and the like to
-// "shop.myshopify.com".
-func NormalizeShopDomain(d string) string {
-	d = strings.ToLower(strings.TrimSpace(d))
-	d = strings.TrimPrefix(strings.TrimPrefix(d, "https://"), "http://")
-	return strings.TrimSuffix(strings.SplitN(d, "/", 2)[0], ".")
+// Platform is what differs between the stores' settings.
+type Platform struct {
+	// Name is shop_connections.platform and the path segment of both the
+	// settings (/networks/{id}/{Name}) and the tracker's webhook URL
+	// (/{Name}/{networkId}).
+	Name string
+	// Title names the platform in messages ("Shopify").
+	Title string
+	// NormalizeDomain takes what was typed, or what a webhook says it is
+	// from, to the form stored and compared.
+	NormalizeDomain func(string) string
+	// ValidDomain checks a normalized domain; DomainHint is its field error.
+	ValidDomain func(string) bool
+	DomainHint  string
 }
 
 // View is Settings with where to send the webhooks.
 type View struct {
 	Settings
-	// WebhookURL: TRACKER_PUBLIC_URL + /shopify/{networkId}; "" when the
+	// WebhookURL: TRACKER_PUBLIC_URL + /{platform}/{networkId}; "" when the
 	// tracker's public URL is not configured.
 	WebhookURL string `json:"webhookUrl"`
 	// Available false: SHOP_WEBHOOK_ENCRYPTION_KEY is not set, nothing can
@@ -53,18 +58,19 @@ type View struct {
 
 type Service struct {
 	store      *Store
+	platform   Platform
 	trackerURL string
 	newID      func() string
 }
 
-func NewService(store *Store, trackerURL string) *Service {
-	return &Service{store: store, trackerURL: strings.TrimRight(trackerURL, "/"), newID: idgen.New}
+func NewService(store *Store, platform Platform, trackerURL string) *Service {
+	return &Service{store: store, platform: platform, trackerURL: strings.TrimRight(trackerURL, "/"), newID: idgen.New}
 }
 
 func (s *Service) view(networkID string, st Settings) View {
 	v := View{Settings: st, Available: s.store.key != nil}
 	if s.trackerURL != "" {
-		v.WebhookURL = s.trackerURL + "/shopify/" + networkID
+		v.WebhookURL = s.trackerURL + "/" + s.platform.Name + "/" + networkID
 	}
 	return v
 }
@@ -79,7 +85,7 @@ func (s *Service) ownSite(ctx context.Context, orgID, networkID string) error {
 	}
 	if key != OwnSiteTemplate {
 		return apierror.Validation("not an own site", map[string]string{
-			"networkId": "a Shopify store connects to an own-site conversion source, whose statuses it reports",
+			"networkId": "a " + s.platform.Title + " store connects to an own-site conversion source, whose statuses it reports",
 		})
 	}
 	return nil
@@ -91,7 +97,7 @@ func (s *Service) Get(ctx context.Context, orgID, networkID string) (View, error
 	} else if !found {
 		return View{}, apierror.NotFound("conversion source not found")
 	}
-	st, err := s.store.settings(ctx, orgID, networkID)
+	st, err := s.store.settings(ctx, orgID, networkID, s.platform.Name)
 	if err != nil {
 		return View{}, err
 	}
@@ -109,28 +115,28 @@ func (s *Service) Put(ctx context.Context, orgID, networkID string, in Input) (V
 	if err := s.ownSite(ctx, orgID, networkID); err != nil {
 		return View{}, err
 	}
-	current, err := s.store.settings(ctx, orgID, networkID)
+	current, err := s.store.settings(ctx, orgID, networkID, s.platform.Name)
 	if err != nil {
 		return View{}, err
 	}
-	in.ShopDomain = NormalizeShopDomain(in.ShopDomain)
+	in.ShopDomain = s.platform.NormalizeDomain(in.ShopDomain)
 	in.Secret = strings.TrimSpace(in.Secret)
 	fields := map[string]string{}
-	if !shopDomainPattern.MatchString(in.ShopDomain) {
-		fields["shopDomain"] = "the store's myshopify.com domain, e.g. my-shop.myshopify.com"
+	if !s.platform.ValidDomain(in.ShopDomain) {
+		fields["shopDomain"] = s.platform.DomainHint
 	}
 	switch {
 	case in.Secret == "" && !current.Connected:
-		fields["secret"] = "the key Shopify signs the webhooks with is needed to connect the store"
+		fields["secret"] = "the key " + s.platform.Title + " signs the webhooks with is needed to connect the store"
 	case len(in.Secret) > 200 || strings.ContainsFunc(in.Secret, unicode.IsSpace):
 		fields["secret"] = "the signing key: no spaces, at most 200 characters"
 	}
 	if len(fields) > 0 {
-		return View{}, apierror.Validation("invalid Shopify settings", fields)
+		return View{}, apierror.Validation("invalid "+s.platform.Title+" settings", fields)
 	}
-	if err := s.store.put(ctx, s.newID(), orgID, networkID, in.ShopDomain, in.Secret); err != nil {
+	if err := s.store.put(ctx, s.newID(), orgID, networkID, s.platform.Name, in.ShopDomain, in.Secret); err != nil {
 		if errors.Is(err, ErrNoKey) {
-			return View{}, apierror.Unavailable("Shopify stores cannot be connected here: SHOP_WEBHOOK_ENCRYPTION_KEY is not set")
+			return View{}, apierror.Unavailable(s.platform.Title + " stores cannot be connected here: SHOP_WEBHOOK_ENCRYPTION_KEY is not set")
 		}
 		return View{}, err
 	}
@@ -138,12 +144,12 @@ func (s *Service) Put(ctx context.Context, orgID, networkID string, in Input) (V
 }
 
 func (s *Service) Delete(ctx context.Context, orgID, networkID string) error {
-	ok, err := s.store.remove(ctx, orgID, networkID)
+	ok, err := s.store.remove(ctx, orgID, networkID, s.platform.Name)
 	if err != nil {
 		return err
 	}
 	if !ok {
-		return apierror.NotFound("no Shopify store connected to this conversion source")
+		return apierror.NotFound("no " + s.platform.Title + " store connected to this conversion source")
 	}
 	return nil
 }
@@ -160,13 +166,14 @@ func NewHandler(svc *Service, requireWrite func(http.Handler) http.Handler, logg
 	return &Handler{svc: svc, requireWrite: requireWrite, logger: logger}
 }
 
-// Register mounts GET/PUT/DELETE /{id}/shopify on the /networks router —
-// as plain routes, not a /{id} sub-router, which would take /networks/{id}
-// itself from the network handler.
+// Register mounts GET/PUT/DELETE /{id}/{platform} on the /networks router
+// — as plain routes, not a /{id} sub-router, which would take
+// /networks/{id} itself from the network handler.
 func (h *Handler) Register(r chi.Router) {
-	r.Get("/{id}/shopify", h.get)
-	r.With(h.requireWrite).Put("/{id}/shopify", h.put)
-	r.With(h.requireWrite).Delete("/{id}/shopify", h.delete)
+	path := "/{id}/" + h.svc.platform.Name
+	r.Get(path, h.get)
+	r.With(h.requireWrite).Put(path, h.put)
+	r.With(h.requireWrite).Delete(path, h.delete)
 }
 
 func (h *Handler) get(w http.ResponseWriter, r *http.Request) {
@@ -191,7 +198,7 @@ func (h *Handler) put(w http.ResponseWriter, r *http.Request) {
 		apierror.Write(w, h.logger, err)
 		return
 	}
-	audit.Annotate(r.Context(), audit.Entry{Action: "shop_connection.updated", EntityType: "network", EntityID: chi.URLParam(r, "id")})
+	audit.Annotate(r.Context(), audit.Entry{Action: h.svc.platform.Name + "_connection.updated", EntityType: "network", EntityID: chi.URLParam(r, "id")})
 	writeJSON(w, http.StatusOK, v)
 }
 
@@ -201,7 +208,7 @@ func (h *Handler) delete(w http.ResponseWriter, r *http.Request) {
 		apierror.Write(w, h.logger, err)
 		return
 	}
-	audit.Annotate(r.Context(), audit.Entry{Action: "shop_connection.deleted", EntityType: "network", EntityID: chi.URLParam(r, "id")})
+	audit.Annotate(r.Context(), audit.Entry{Action: h.svc.platform.Name + "_connection.deleted", EntityType: "network", EntityID: chi.URLParam(r, "id")})
 	w.WriteHeader(http.StatusNoContent)
 }
 

@@ -5,6 +5,31 @@ per-phase, matching `CLAUDE.md`'s phase protocol. The one exception is
 [Between phases], below: spec amendments and the code changes that follow from
 them land between phases and would otherwise be invisible here.
 
+## [Phase 30.91] — WooCommerce orders by webhook (UNI-4, part 4)
+
+docs/shop-connections.md "WooCommerce". An own-site source connects a WooCommerce store on the same
+`shop_connections` (migration 00110 adds the platform): site address and webhook secret, encrypted like Shopify's.
+
+- Shared layer: `internal/shopconn` (store, settings service and handler, parameterized by platform) out of
+  `internal/shopify`, which keeps the webhook format; apps/tracker `shop.go` holds what both platforms record.
+- apps/tracker `POST /woocommerce/{networkId}`: the activation ping (unsigned `webhook_id=N`) answered 200;
+  `X-WC-Webhook-Signature` checked, another site (`X-WC-Webhook-Source`) refused; `order.created` / `order.updated`
+  carry the whole order — a paid one (`date_paid_gmt`) is a purchase or repeat purchase once, each entry of `refunds`
+  a partial refund once (already recorded ones skipped before the engine, no duplicate per update).
+- The click: the order meta `flox_click_id`, copied from flox.js's cookie by a PHP checkout snippet the card gives
+  (classic and block checkout), else `click_id` in WooCommerce's order attribution entry page.
+- Fixed for both platforms: two deliveries of one first order at once could record it as a purchase and a repeat
+  purchase. The click is now looked up before the order, and a purchase that comes back a duplicate is re-checked
+  before it is retried as a repeat purchase.
+- Web: the "Shopify store" card becomes "Online store" with a Shopify and a WooCommerce tab (opens on the connected
+  one); generic `getShop`/`useShop` by platform. Audit actions are now `shopify_connection.*` /
+  `woocommerce_connection.*`.
+- Tests: signature, ping, site normalization, paid/at/click, refunds; the webhooks end to end on Postgres and the real
+  engine; a race test (20 orders delivered twice at once). Mutations caught: no re-check, lookups in the old order, no
+  refund skip. Live on the dev tracker: ping 200, wrong signature and other site 401, unpaid ignored, paid 2490 RUB,
+  its update a duplicate, a second order a repeat purchase 990 RUB, a refund 490 RUB partial, its replay nothing.
+  Not tried with a real store.
+
 ## [Phase 30.90] — Shopify orders by webhook (UNI-4, part 3)
 
 docs/shop-connections.md. An own-site source whose site is a Shopify store connects it (`shop_connections`, migration
